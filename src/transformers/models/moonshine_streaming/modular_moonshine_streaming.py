@@ -28,6 +28,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, Unpack
+from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
@@ -57,7 +58,41 @@ class MoonshineStreamingProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-class MoonshineStreamingProcessor(Wav2Vec2Processor): ...
+class MoonshineStreamingProcessor(Wav2Vec2Processor):
+    ...
+
+    @auto_docstring
+    def __call__(
+        self,
+        audio: AudioInput | None = None,
+        text: str | list[str] | TextInput | PreTokenizedInput | None = None,
+        **kwargs: Unpack[MoonshineStreamingProcessorKwargs],
+    ):
+        r"""
+        Returns:
+            This method returns the results of each `call` method. If both are used, the output is a dictionary containing the results of both.
+        """
+        if audio is None and text is None:
+            raise ValueError("You need to specify either an `audio` or `text` input to process.")
+
+        output_kwargs = self._merge_kwargs(
+            MoonshineStreamingProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
+        if audio is not None:
+            inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
+        if text is not None:
+            encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
+
+        if text is None:
+            return inputs
+        elif audio is None:
+            return encodings
+        else:
+            inputs["labels"] = encodings["input_ids"]
+            return inputs
 
 
 @auto_docstring(
@@ -409,7 +444,12 @@ class MoonshineStreamingModel(MoonshineModel):
         self.decoder = MoonshineStreamingDecoder(config)
 
 
-class MoonshineStreamingForConditionalGeneration(MoonshineForConditionalGeneration): ...
+class MoonshineStreamingForConditionalGeneration(MoonshineForConditionalGeneration):
+    ...
+
+    def __init__(self, config: MoonshineStreamingConfig):
+        super().__init__(config)
+        self.model = MoonshineStreamingModel(config)
 
 
 __all__ = [

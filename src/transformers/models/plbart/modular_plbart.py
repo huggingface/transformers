@@ -324,6 +324,10 @@ class PLBartClassificationHead(BartClassificationHead):
 
 
 class PLBartForSequenceClassification(BigBirdPegasusForSequenceClassification):
+    def __init__(self, config: PLBartConfig, **kwargs):
+        super().__init__(config, **kwargs)
+        self.model = PLBartModel(config)
+
     def forward(**super_kwargs):
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):

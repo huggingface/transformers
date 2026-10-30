@@ -13,6 +13,8 @@
 # limitations under the License.
 """PyTorch DINOv2 model."""
 
+from collections.abc import Callable
+
 import torch
 from torch import nn
 
@@ -22,6 +24,7 @@ from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_int
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
@@ -63,6 +66,7 @@ class Dinov2Embeddings(BeitEmbeddings):
             torch.randn(1, self.patch_embeddings.num_patches + 1, config.hidden_size)
         )
         self.config = config
+        self.patch_embeddings = Dinov2PatchEmbeddings(config)
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
@@ -104,7 +108,38 @@ class Dinov2Embeddings(BeitEmbeddings):
 
 
 class Dinov2Attention(ViTAttention):
-    pass
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+
+        return attn_output, attn_weights
 
 
 class Dinov2LayerScale(nn.Module):
@@ -178,10 +213,21 @@ class Dinov2Layer(GradientCheckpointingLayer):
 @auto_docstring
 class Dinov2PreTrainedModel(ViTPreTrainedModel):
     config: Dinov2Config
+    _can_record_outputs = {
+        "hidden_states": Dinov2Layer,
+        "attentions": Dinov2Attention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module) -> None:
+        """Initialize the weights"""
         super()._init_weights(module)
+        if isinstance(module, Dinov2Embeddings):
+            if module.position_embeddings is not None:
+                init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
+            init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
+            if module.mask_token is not None:
+                init.zeros_(module.mask_token)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:

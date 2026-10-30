@@ -24,13 +24,14 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...audio_utils import AudioInput, is_valid_audio
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     TransformersKwargs,
@@ -372,6 +373,11 @@ class EmbeddingGemma2EncoderLayer(Gemma3DecoderLayer):
         super().__init__(config, layer_idx)
         self.layer_scalar = nn.Buffer(torch.ones(1))
         self.ple_block = EmbeddingGemma2TextPLEBlock(config)
+        self.self_attn = EmbeddingGemma2Attention(config=config, layer_idx=layer_idx)
+        self.input_layernorm = EmbeddingGemma2RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = EmbeddingGemma2RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.pre_feedforward_layernorm = EmbeddingGemma2RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = EmbeddingGemma2RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -466,6 +472,8 @@ class EmbeddingGemma2TextModel(Gemma3TextModel):
 
         # Projecting per token is equivalent to projecting after mean pooling
         self.embedding_projection = nn.Linear(config.hidden_size, config.embedding_dim, bias=False)
+        self.norm = EmbeddingGemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = EmbeddingGemma2RotaryEmbedding(config)
 
     def forward(
         self,
@@ -574,6 +582,16 @@ class EmbeddingGemma2Model(Gemma4Model):
         # Drop inherited `vocab_size_per_layer_input` (no token-identity PLE in EmbeddingGemma 2)
         del self.vocab_size_per_layer_input
         self.post_init()
+        self.embed_vision = (
+            EmbeddingGemma2MultimodalEmbedder(config.vision_config, config.text_config)
+            if config.vision_config is not None
+            else None
+        )
+        self.embed_audio = (
+            EmbeddingGemma2MultimodalEmbedder(config.audio_config, config.text_config)
+            if config.audio_config is not None
+            else None
+        )
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
@@ -782,6 +800,9 @@ class EmbeddingGemma2VideoProcessor(Gemma4VideoProcessor):
 
     valid_kwargs = EmbeddingGemma2VideoProcessorKwargs
 
+    def __init__(self, **kwargs: Unpack[EmbeddingGemma2VideoProcessorKwargs]):
+        super().__init__(**kwargs)
+
     def sample_frames(
         self,
         metadata: VideoMetadata,
@@ -838,6 +859,14 @@ class EmbeddingGemma2VideoProcessor(Gemma4VideoProcessor):
                 )
 
         return indices
+
+    @auto_docstring
+    def preprocess(
+        self,
+        videos: VideoInput,
+        **kwargs: Unpack[EmbeddingGemma2VideoProcessorKwargs],
+    ) -> BatchFeature:
+        return super().preprocess(videos, **kwargs)
 
 
 class EmbeddingGemma2ProcessorKwargs(Gemma4ProcessorKwargs):
@@ -1010,6 +1039,88 @@ class EmbeddingGemma2Processor(Gemma4Processor):
         return " ".join(
             [f"{t} {self.boi_token}{self.video_token * num_soft_tokens}{self.eoi_token}" for t in timestamp_str]
         )
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, audio_lengths=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+            video_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
+            audio_lengths (`list[int]`, *optional*):
+                The lengths of audio inputs in number of samples. Used to dynamically
+                compute per-audio token counts.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        images_kwargs = EmbeddingGemma2ProcessorKwargs._defaults.get("images_kwargs", {})
+        images_kwargs.update(kwargs)
+        patch_size = images_kwargs.get("patch_size", None) or self.image_processor.patch_size
+        pooling_kernel_size = (
+            images_kwargs.get("pooling_kernel_size", None) or self.image_processor.pooling_kernel_size
+        )
+        max_soft_tokens = images_kwargs.get("max_soft_tokens", None) or self.image_processor.max_soft_tokens
+
+        max_patches = max_soft_tokens * pooling_kernel_size**2
+
+        vision_data = {}
+        if image_sizes is not None:
+            num_image_tokens = []
+            for image_size in image_sizes:
+                target_h, target_w = get_aspect_ratio_preserving_size(
+                    height=image_size[0],
+                    width=image_size[1],
+                    patch_size=patch_size,
+                    max_patches=max_patches,
+                    pooling_kernel_size=pooling_kernel_size,
+                )
+                patch_height = target_h // patch_size
+                patch_width = target_w // patch_size
+                num_image_tokens.append(patch_height * patch_width // pooling_kernel_size**2)
+
+            num_image_patches = [1] * len(image_sizes)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        if video_sizes is not None:
+            videos_kwargs = EmbeddingGemma2ProcessorKwargs._defaults.get("videos_kwargs", {})
+            videos_kwargs.update(kwargs)
+            patch_size = videos_kwargs.get("patch_size", None) or self.video_processor.patch_size
+            pooling_kernel_size = (
+                videos_kwargs.get("pooling_kernel_size", None) or self.video_processor.pooling_kernel_size
+            )
+            max_soft_tokens = videos_kwargs.get("max_soft_tokens", None) or self.video_processor.max_soft_tokens
+
+            max_patches = max_soft_tokens * pooling_kernel_size**2
+
+            num_video_tokens = []
+            for num_frames, height, width in video_sizes:
+                target_h, target_w = get_aspect_ratio_preserving_size(
+                    height=height,
+                    width=width,
+                    patch_size=patch_size,
+                    max_patches=max_patches,
+                    pooling_kernel_size=pooling_kernel_size,
+                )
+                patch_height = target_h // patch_size
+                patch_width = target_w // patch_size
+                num_video_tokens.append(num_frames * (patch_height * patch_width // pooling_kernel_size**2))
+            vision_data.update({"num_video_tokens": num_video_tokens})
+
+        if audio_lengths is not None:
+            # Dynamically compute per-audio token counts from sample lengths.
+            # audio_lengths are in number of samples; assume default sampling rate.
+            sampling_rate = getattr(self.feature_extractor, "sampling_rate", 16_000)
+            num_audio_tokens = [
+                self._compute_audio_num_tokens(np.zeros(length), sampling_rate) for length in audio_lengths
+            ]
+            vision_data.update({"num_audio_tokens": num_audio_tokens})
+
+        return MultiModalData(**vision_data)
 
 
 __all__ = [

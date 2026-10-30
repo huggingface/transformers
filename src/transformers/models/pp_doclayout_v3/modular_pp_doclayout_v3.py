@@ -1015,6 +1015,9 @@ class PPDocLayoutV3Model(RTDetrModel):
             config.d_model, config.d_model, config.num_prototypes, num_layers=3
         )
 
+        # Create encoder
+        self.encoder = PPDocLayoutV3HybridEncoder(config)
+
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -1329,6 +1332,7 @@ class PPDocLayoutV3ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV3Pre
         self.num_queries = config.num_queries
 
         self.post_init()
+        self.model = PPDocLayoutV3Model(config)
 
     @auto_docstring
     @can_return_tuple

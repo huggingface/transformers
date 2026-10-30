@@ -85,7 +85,9 @@ class Glm46VModel(Glm4vModel):
 
 
 class Glm46VForConditionalGeneration(Glm4vForConditionalGeneration):
-    pass
+    def __init__(self, config: Glm46VConfig):
+        super().__init__(config)
+        self.model = Glm46VModel(config)
 
 
 class Glm46VProcessor(Glm4vProcessor):

@@ -889,6 +889,7 @@ class ConditionalDetrModel(DetrModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+        self.decoder = ConditionalDetrDecoder(config)
 
     @auto_docstring
     @can_return_tuple
@@ -1025,6 +1026,9 @@ class ConditionalDetrForObjectDetection(DetrForObjectDetection):
         super().__init__(config)
         self.class_labels_classifier = nn.Linear(config.d_model, config.num_labels)
 
+        # CONDITIONAL_DETR encoder-decoder model
+        self.model = ConditionalDetrModel(config)
+
     # taken from https://github.com/Atten4Vis/conditionalDETR/blob/master/models/conditional_detr.py
     def _set_aux_loss(self, outputs_class, outputs_coord):
         return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
@@ -1147,7 +1151,11 @@ class ConditionalDetrForObjectDetection(DetrForObjectDetection):
 
 
 class ConditionalDetrForSegmentation(DetrForSegmentation):
-    pass
+    def __init__(self, config: ConditionalDetrConfig):
+        super().__init__(config)
+
+        # object detection model
+        self.conditional_detr = ConditionalDetrForObjectDetection(config)
 
 
 __all__ = [

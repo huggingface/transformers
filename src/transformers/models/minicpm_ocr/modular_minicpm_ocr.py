@@ -18,10 +18,13 @@ import torch
 from huggingface_hub.dataclasses import strict
 from PIL.Image import Resampling as PILImageResampling
 
+from ...configuration_utils import SubConfigSpec
 from ...feature_extraction_utils import BatchFeature
 from ...image_transforms import divide_to_patches, group_images_by_shape, reorder_images
-from ...image_utils import SizeDict
+from ...image_utils import ImageInput, SizeDict
+from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_cv2_available, logging, requires_backends
+from ..auto import AutoConfig
 from ..minicpmv4_6.configuration_minicpmv4_6 import MiniCPMV4_6Config, MiniCPMV4_6VisionConfig
 from ..minicpmv4_6.image_processing_minicpmv4_6 import MiniCPMV4_6ImageProcessor, MiniCPMV4_6ImageProcessorKwargs
 from ..minicpmv4_6.modeling_minicpmv4_6 import MiniCPMV4_6ForConditionalGeneration, MiniCPMV4_6Model
@@ -120,6 +123,10 @@ class MiniCPMOcrConfig(MiniCPMV4_6Config):
     downsample_mode: str = "4x"
     drop_vision_last_layer = AttributeError()
     image_size = AttributeError()
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3_5_text"),
+        "vision_config": MiniCPMOcrVisionConfig,
+    }
 
 
 class MiniCPMOcrImageProcessorKwargs(MiniCPMV4_6ImageProcessorKwargs, total=False):
@@ -153,6 +160,9 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
     downsample_mode = "4x"
     small_image_upsize = "always"
     valid_kwargs = MiniCPMOcrImageProcessorKwargs
+
+    def __init__(self, **kwargs: Unpack[MiniCPMOcrImageProcessorKwargs]):
+        super().__init__(**kwargs)
 
     def _resolve_tile_size(
         self,
@@ -308,6 +318,14 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
             tensor_type=return_tensors,
             skip_tensor_conversion=["grids", "num_patches_per_image"],
         )
+
+    @auto_docstring
+    def preprocess(
+        self,
+        images: ImageInput,
+        **kwargs: Unpack[MiniCPMOcrImageProcessorKwargs],
+    ) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
 
 class MiniCPMOcrVideoProcessorKwargs(MiniCPMV4_6VideoProcessorKwargs, total=False):

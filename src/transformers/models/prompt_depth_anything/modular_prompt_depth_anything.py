@@ -112,6 +112,11 @@ class PromptDepthAnythingFeatureFusionLayer(DepthAnythingFeatureFusionLayer):
 
 
 class PromptDepthAnythingFeatureFusionStage(DepthAnythingFeatureFusionStage):
+    def __init__(self, config: PromptDepthAnythingConfig):
+        super().__init__(config)
+        for _ in range(len(config.neck_hidden_sizes)):
+            self.layers.append(PromptDepthAnythingFeatureFusionLayer(config))
+
     def forward(self, hidden_states, size=None, prompt_depth=None):
         # reversing the hidden_states, we start from the last
         hidden_states = hidden_states[::-1]
@@ -189,10 +194,19 @@ class PromptDepthAnythingReassembleLayer(nn.Module):
 
 
 class PromptDepthAnythingReassembleStage(DepthAnythingReassembleStage):
-    pass
+    def __init__(self, config):
+        super().__init__(config)
+        for channels, factor in zip(config.neck_hidden_sizes, config.reassemble_factors):
+            self.layers.append(PromptDepthAnythingReassembleLayer(config, channels=channels, factor=factor))
 
 
 class PromptDepthAnythingNeck(DepthAnythingNeck):
+    def __init__(self, config):
+        super().__init__(config)
+
+        # fusion
+        self.fusion_stage = PromptDepthAnythingFeatureFusionStage(config)
+
     def forward(
         self,
         hidden_states: list[torch.Tensor],
@@ -228,6 +242,11 @@ class PromptDepthAnythingNeck(DepthAnythingNeck):
     """
 )
 class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
+    def __init__(self, config: PromptDepthAnythingConfig):
+        super().__init__(config)
+        self.neck = PromptDepthAnythingNeck(config)
+        self.head = PromptDepthAnythingDepthEstimationHead(config)
+
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring

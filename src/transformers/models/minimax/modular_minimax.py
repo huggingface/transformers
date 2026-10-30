@@ -434,6 +434,12 @@ class MiniMaxPreTrainedModel(MixtralPreTrainedModel):
 
 
 class MiniMaxModel(MixtralModel):
+    def __init__(self, config: MiniMaxConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [MiniMaxDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+
     @merge_with_config_defaults
     @capture_outputs
     def forward(
@@ -503,6 +509,10 @@ class MiniMaxModel(MixtralModel):
 
 
 class MiniMaxForCausalLM(MixtralForCausalLM):
+    def __init__(self, config: MiniMaxConfig):
+        super().__init__(config)
+        self.model = MiniMaxModel(config)
+
     def forward(self, **super_kwargs):
         r"""
         Example:

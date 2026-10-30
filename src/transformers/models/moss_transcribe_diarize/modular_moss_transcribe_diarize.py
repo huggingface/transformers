@@ -663,6 +663,10 @@ class MossTranscribeDiarizeCausalLMOutputWithPast(AudioFlamingo3CausalLMOutputWi
     """
 )
 class MossTranscribeDiarizeModel(AudioFlamingo3Model):
+    def __init__(self, config: MossTranscribeDiarizeConfig):
+        super().__init__(config)
+        self.multi_modal_projector = MossTranscribeDiarizeMultiModalProjector(config)
+
     @can_return_tuple
     @auto_docstring(
         custom_intro="Extract MOSS audio embeddings from log-mel features, reassembling multi-chunk audio per sample."
@@ -770,6 +774,10 @@ class MossTranscribeDiarizeModel(AudioFlamingo3Model):
 class MossTranscribeDiarizeForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
+
+    def __init__(self, config: MossTranscribeDiarizeConfig):
+        super().__init__(config)
+        self.model = MossTranscribeDiarizeModel(config)
 
     @can_return_tuple
     @auto_docstring

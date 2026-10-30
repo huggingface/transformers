@@ -28,6 +28,7 @@ from ...modeling_layers import GenericForSequenceClassification, GenericForToken
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
+from ...utils.output_capturing import OutputRecorder
 from ..clip.modeling_clip import CLIPMLP
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3RMSNorm,
@@ -261,7 +262,9 @@ class AXK2Experts(DeepseekV32Experts):
 
 
 class AXK2MoE(DeepseekV32MoE):
-    pass
+    def __init__(self, config: AXK2Config):
+        super().__init__(config)
+        self.gate = AXK2TopkRouter(config)
 
 
 class AXK2Attention(DeepseekV32Attention):
@@ -407,10 +410,16 @@ class AXK2DecoderLayer(DeepseekV32DecoderLayer):
             if config.mlp_layer_types[layer_idx] == "sparse"
             else AXK2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         )
+        self.self_attn = AXK2Attention(config, layer_idx)
 
 
 class AXK2PreTrainedModel(DeepseekV32PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["inv_freq"]
+    _can_record_outputs = {
+        "hidden_states": AXK2DecoderLayer,
+        "attentions": AXK2Attention,
+        "router_logits": OutputRecorder(AXK2TopkRouter, index=0),
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -424,7 +433,11 @@ class AXK2PreTrainedModel(DeepseekV32PreTrainedModel):
 
 
 class AXK2Model(DeepseekV32Model):
-    pass
+    def __init__(self, config: AXK2Config):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [AXK2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
 
 class AXK2ForCausalLM(DeepseekV32ForCausalLM):

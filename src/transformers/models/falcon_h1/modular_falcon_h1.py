@@ -597,6 +597,10 @@ class FalconH1Model(FalconH1PreTrainedModel):
 
 
 class FalconH1ForCausalLM(LlamaForCausalLM):
+    def __init__(self, config: FalconH1Config):
+        super().__init__(config)
+        self.model = FalconH1Model(config)
+
     @staticmethod
     def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, position_ids=None, **_):
         # Every FalconH1 decoder layer is hybrid (attention + mamba in the same block), so the layer-type

@@ -262,6 +262,7 @@ class PPOCRV5ServerRecBlock(CLIPEncoderLayer):
             in_features=self.embed_dim,
             hidden_features=int(self.embed_dim * config.mlp_ratio),
         )
+        self.self_attn = PPOCRV5ServerRecAttention(config)
 
     def forward(
         self,

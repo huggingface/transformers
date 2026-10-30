@@ -13,6 +13,7 @@
 # limitations under the License.
 import torch
 from huggingface_hub.dataclasses import strict
+from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
@@ -21,6 +22,7 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
+from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3DecoderLayer,
     DeepseekV3ForCausalLM,
@@ -169,14 +171,28 @@ class Dots1MoE(DeepseekV3MoE):
 
 
 class Dots1DecoderLayer(DeepseekV3DecoderLayer):
-    pass
+    def __init__(self, config: Dots1Config, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+        self.self_attn = Dots1Attention(config=config, layer_idx=layer_idx)
 
 
 class Dots1PreTrainedModel(DeepseekV3PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = None
+    _can_record_outputs = {
+        "hidden_states": Dots1DecoderLayer,
+        "attentions": Dots1Attention,
+        "router_logits": OutputRecorder(Dots1TopkRouter, index=0),
+    }
 
 
 class Dots1Model(Qwen3Model):
+    def __init__(self, config: Dots1Config):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [Dots1DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -239,6 +255,10 @@ class Dots1Model(Qwen3Model):
 
 
 class Dots1ForCausalLM(DeepseekV3ForCausalLM):
+    def __init__(self, config: Dots1Config):
+        super().__init__(config)
+        self.model = Dots1Model(config)
+
     def forward(
         self,
         **super_kwargs: Unpack[TransformersKwargs],

@@ -165,6 +165,8 @@ class OlmoDecoderLayer(LlamaDecoderLayer):
         self.post_attention_layernorm = OlmoLayerNorm(config.hidden_size)
         self.self_attn = OlmoAttention(config=config, layer_idx=layer_idx)
 
+        self.mlp = OlmoMLP(config)
+
 
 class OlmoModel(LlamaModel):
     def __init__(self, config: OlmoConfig):
@@ -173,10 +175,13 @@ class OlmoModel(LlamaModel):
             [OlmoDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = OlmoLayerNorm(config.hidden_size)
+        self.rotary_emb = OlmoRotaryEmbedding(config=config)
 
 
 class OlmoForCausalLM(LlamaForCausalLM):
-    pass
+    def __init__(self, config: OlmoConfig):
+        super().__init__(config)
+        self.model = OlmoModel(config)
 
 
 class OlmoForSequenceClassification(LlamaForSequenceClassification):

@@ -619,6 +619,10 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
 
 @auto_docstring
 class Kimi_K25ForConditionalGeneration(Glm4vForConditionalGeneration):
+    def __init__(self, config: Kimi_K25Config):
+        super().__init__(config)
+        self.model = Kimi_K25Model(config)
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -728,6 +732,8 @@ class Kimi_K25ProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class Kimi_K25Processor(Qwen2VLProcessor):
+    valid_processor_kwargs = Kimi_K25ProcessorKwargs
+
     def __init__(
         self,
         image_processor=None,

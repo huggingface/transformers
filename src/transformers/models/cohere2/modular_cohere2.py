@@ -213,6 +213,7 @@ class Cohere2Attention(CohereAttention):
 class Cohere2DecoderLayer(CohereDecoderLayer):
     def __init__(self, config: Cohere2Config, layer_idx: int):
         super().__init__(config, layer_idx)
+        self.self_attn = Cohere2Attention(config=config, layer_idx=layer_idx)
 
     def forward(
         self,
@@ -252,6 +253,10 @@ class Cohere2Model(Gemma2Model):
         super().__init__(config)
         self.norm = Cohere2LayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.layers = nn.ModuleList(
+            [Cohere2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.rotary_emb = Cohere2RotaryEmbedding(config)
 
     def forward(
         self,
@@ -312,7 +317,9 @@ class Cohere2Model(Gemma2Model):
 
 
 class Cohere2ForCausalLM(CohereForCausalLM):
-    pass
+    def __init__(self, config: Cohere2Config):
+        super().__init__(config)
+        self.model = Cohere2Model(config)
 
 
 __all__ = ["Cohere2Config", "Cohere2ForCausalLM", "Cohere2Model", "Cohere2PreTrainedModel"]

@@ -30,7 +30,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import slice_logits_to_keep
-from ...processing_utils import ProcessingKwargs, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack
 from ...utils import auto_docstring, logging
 from ...utils.generic import get_max_seqlen, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
@@ -101,7 +101,10 @@ class Qwen2_5_VLTextConfig(Qwen2VLTextConfig):
 
 
 class Qwen2_5_VLConfig(Qwen2VLConfig):
-    pass
+    sub_configs_defaults = {
+        "vision_config": Qwen2_5_VLVisionConfig,
+        "text_config": Qwen2_5_VLTextConfig,
+    }
 
 
 class Qwen2_5_VLRMSNorm(LlamaRMSNorm):
@@ -577,6 +580,10 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
 
+    def __init__(self, config: Qwen2_5_VLConfig):
+        super().__init__(config)
+        self.model = Qwen2_5_VLModel(config)
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -686,6 +693,8 @@ class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
 
 
 class Qwen2_5_VLProcessor(Qwen2VLProcessor):
+    valid_processor_kwargs = Qwen2_5_VLProcessorKwargs
+
     def _process_videos(self, videos: VideoInput, **kwargs):
         processed_data, video_replacements = super()._process_videos(videos, **kwargs)
         video_grid_thw = processed_data["video_grid_thw"]
@@ -707,6 +716,44 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
     @property
     def model_input_names(self):
         return super().model_input_names + ["second_per_grid_ts", "mm_token_type_ids"]
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+            video_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = Qwen2_5_VLProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
+            merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
+
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [(num_patches // merge_size**2) for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        if video_sizes is not None:
+            videos_kwargs = Qwen2_5_VLProcessorKwargs._defaults.get("videos_kwargs", {})
+            videos_kwargs.update(kwargs)
+            merge_size = videos_kwargs.get("merge_size", None) or self.video_processor.merge_size
+            num_video_patches = [
+                self.video_processor.get_num_of_video_patches(*video_size, videos_kwargs) for video_size in video_sizes
+            ]
+            num_video_tokens = [(num_patches // merge_size**2) for num_patches in num_video_patches]
+            vision_data["num_video_tokens"] = num_video_tokens
+
+        return MultiModalData(**vision_data)
 
 
 __all__ = [

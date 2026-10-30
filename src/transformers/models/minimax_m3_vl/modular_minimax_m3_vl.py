@@ -29,11 +29,11 @@ from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
-from ...processing_utils import Unpack
+from ...processing_utils import MultiModalData, Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import is_torchdynamo_compiling
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_position_ids
 from ..clip.modeling_clip import CLIPMLP, CLIPAttention, CLIPEncoderLayer
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts
@@ -627,6 +627,11 @@ class MiniMaxM3VLPreTrainedModel(MiniMaxM2PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _compatible_flash_implementations = ["MiniMaxAI/msa"]
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(MiniMaxM3VLTopKRouter, index=0),
+        "hidden_states": MiniMaxM3VLDecoderLayer,
+        "attentions": MiniMaxM3VLAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1130,6 +1135,10 @@ class MiniMaxM3VLModel(LlavaModel):
 class MiniMaxM3SparseForConditionalGeneration(LlavaForConditionalGeneration):
     config: MiniMaxM3VLConfig
 
+    def __init__(self, config: MiniMaxM3VLConfig):
+        super().__init__(config)
+        self.model = MiniMaxM3VLModel(config)
+
     def get_image_features(self, pixel_values, image_grid_thw, **kwargs):
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
@@ -1289,6 +1298,44 @@ class MiniMaxM3VLProcessor(Qwen2VLProcessor):
                 chunk += f"]<]{ts:.1f} seconds[>["
             chunk += self.VISION_START_TOKEN + self.VIDEO_TOKEN * frame_seqlen + self.VISION_END_TOKEN
         return chunk
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+            video_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = MiniMaxM3VLProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
+            merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
+
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [(num_patches // merge_size**2) for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        if video_sizes is not None:
+            videos_kwargs = MiniMaxM3VLProcessorKwargs._defaults.get("videos_kwargs", {})
+            videos_kwargs.update(kwargs)
+            merge_size = videos_kwargs.get("merge_size", None) or self.video_processor.merge_size
+            num_video_patches = [
+                self.video_processor.get_num_of_video_patches(*video_size, videos_kwargs) for video_size in video_sizes
+            ]
+            num_video_tokens = [(num_patches // merge_size**2) for num_patches in num_video_patches]
+            vision_data["num_video_tokens"] = num_video_tokens
+
+        return MultiModalData(**vision_data)
 
 
 __all__ = [

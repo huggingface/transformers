@@ -333,7 +333,9 @@ class GraniteSWAModel(GraniteModel):
 
 
 class GraniteSWAForCausalLM(GraniteForCausalLM):
-    pass
+    def __init__(self, config: GraniteSWAConfig):
+        super().__init__(config)
+        self.model = GraniteSWAModel(config)
 
 
 __all__ = ["GraniteSWAConfig", "GraniteSWAForCausalLM", "GraniteSWAModel", "GraniteSWAPreTrainedModel"]

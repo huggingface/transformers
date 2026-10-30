@@ -399,19 +399,29 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
 
 
 class UniSpeechSatForCTC(Wav2Vec2ForCTC):
-    pass
+    def __init__(self, config: UniSpeechSatConfig, target_lang: str | None = None):
+        super().__init__(config, target_lang)
+
+        self.unispeech_sat = UniSpeechSatModel(config)
 
 
 class UniSpeechSatForSequenceClassification(Wav2Vec2ForSequenceClassification):
-    pass
+    def __init__(self, config: UniSpeechSatConfig):
+        super().__init__(config)
+        self.unispeech_sat = UniSpeechSatModel(config)
 
 
 class UniSpeechSatForAudioFrameClassification(Wav2Vec2ForAudioFrameClassification):
-    pass
+    def __init__(self, config: UniSpeechSatConfig):
+        super().__init__(config)
+        self.unispeech_sat = UniSpeechSatModel(config)
 
 
 class UniSpeechSatForXVector(Wav2Vec2ForXVector):
-    pass
+    def __init__(self, config: UniSpeechSatConfig):
+        super().__init__(config)
+
+        self.unispeech_sat = UniSpeechSatModel(config)
 
 
 __all__ = [

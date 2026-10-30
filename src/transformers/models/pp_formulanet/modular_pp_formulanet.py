@@ -143,6 +143,8 @@ class PPFormulaNetProcessor(NougatProcessor):
     [`~PPFormulaNetProcessor.__call__`] and [`~PPFormulaNetProcessor.decode`] for more information.
     """
 
+    valid_processor_kwargs = PPFormulaNetProcessorKwargs
+
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
@@ -422,6 +424,10 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
 @auto_docstring
 class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
     _tied_weights_keys = {}
+
+    def __init__(self, config: PPFormulaNetConfig):
+        super().__init__(config)
+        self.model = PPFormulaNetModel(config)
 
     @can_return_tuple
     @auto_docstring

@@ -6,6 +6,7 @@ import subprocess
 import sys
 
 import libcst as cst
+from libcst import matchers as m
 
 sys.path.insert(0, "utils")
 import modular_model_converter as mmc  # noqa: E402
@@ -66,6 +67,8 @@ class Inserter(cst.CSTTransformer):
             return updated
         body = []
         for stmt in updated.body.body:
+            if isinstance(stmt, cst.BaseSmallStatement):
+                stmt = cst.SimpleStatementLine(body=[stmt])
             key = mmc._statement_key(stmt)
             if key in todo:
                 body.append(todo.pop(key))
@@ -73,7 +76,12 @@ class Inserter(cst.CSTTransformer):
                 continue
             else:
                 body.append(stmt)
-        body.extend(todo.values())
+        first_method = next((i for i, s in enumerate(body) if isinstance(s, cst.FunctionDef)), len(body))
+        early = [s for k, s in todo.items() if not isinstance(s, cst.FunctionDef) or k == "__init__"]
+        late = [s for k, s in todo.items() if isinstance(s, cst.FunctionDef) and k != "__init__"]
+        body = body[:first_method] + early + body[first_method:] + late
+        if isinstance(updated.body, cst.SimpleStatementSuite):  # one-line `class A(B): pass`
+            return updated.with_changes(body=cst.IndentedBlock(body=body))
         return updated.with_changes(body=updated.body.with_changes(body=body))
 
 
@@ -83,6 +91,29 @@ class Renamer(cst.CSTTransformer):
 
     def leave_Name(self, original, updated):
         return updated.with_changes(value=self.mapping.get(updated.value, updated.value))
+
+
+def super_init_call(func: cst.FunctionDef) -> cst.SimpleStatementLine:
+    p = func.params
+    args = [cst.Arg(cst.Name(x.name.value)) for x in [*p.posonly_params, *p.params] if x.name.value != "self"]
+    if isinstance(p.star_arg, cst.Param):
+        args.append(cst.Arg(cst.Name(p.star_arg.name.value), star="*"))
+    args += [cst.Arg(cst.Name(x.name.value), keyword=cst.Name(x.name.value)) for x in p.kwonly_params]
+    if p.star_kwarg is not None:
+        args.append(cst.Arg(cst.Name(p.star_kwarg.name.value), star="**"))
+    return cst.parse_statement(f"super().__init__({cst.Module(body=[]).code_for_node(cst.Call(func=cst.Name('f'), args=args))[2:-1]})")
+
+
+def minimal_init(generated: cst.FunctionDef, names: set[str], modular_class: cst.ClassDef) -> cst.FunctionDef:
+    """`super().__init__(...)` (or the existing modular `__init__`) + only the statements using the redefined names.
+    The converter replaces same-target `self.x = ...` assignments in place, so the generated code does not change."""
+    needed = [s for s in generated.body.body if mmc._names_in(s) & names]
+    existing = next(
+        (s for s in modular_class.body.body if isinstance(s, cst.FunctionDef) and s.name.value == "__init__"), None
+    )
+    if existing is not None:
+        return existing.with_changes(body=existing.body.with_changes(body=[*existing.body.body, *needed]))
+    return generated.with_changes(body=generated.body.with_changes(body=[super_init_call(generated), *needed]))
 
 
 def undefined_names(path):
@@ -102,15 +133,21 @@ def fix(path):
     if not mismatches:
         return 0, []
     generated = {name: entry["node"] for body in files.values() for name, entry in body.items()}
-    members = {}
-    for class_name, key, _, _ in mismatches:
-        if key is None:
-            continue
+    flagged = {}
+    for class_name, key, name, _ in mismatches:
+        if key is not None:
+            flagged.setdefault((class_name, key), set()).add(name)
+    members, manual = {}, []
+    for (class_name, key), names in flagged.items():
         stmt = next(s for s in generated[class_name].body.body if mmc._statement_key(s) == key)
+        if isinstance(stmt, cst.FunctionDef) and key == "__init__":
+            stmt = minimal_init(stmt, names, mapper.classes[class_name])
+        elif isinstance(stmt, cst.FunctionDef) and m.findall(stmt, m.Call(func=m.Attribute(value=m.Call(func=m.Name("super"))))):
+            manual.append(f"{class_name}.{key}")
         members.setdefault(class_name, {})[key] = stmt
     source = open(path).read()
-    module = cst.parse_module(source).visit(Inserter(members))
-    open(path, "w").write(module.code)
+    code = cst.parse_module(source).visit(Inserter(members)).code
+    open(path, "w").write(code)
 
     # Resolve names the copied code uses but the modular file does not define
     renamed_to_original, import_for = {}, {}
@@ -148,7 +185,7 @@ def fix(path):
         module = module.with_changes(body=[*module.body[: idx + 1], *new_nodes, *module.body[idx + 1 :]])
     code = module.code
     open(path, "w").write(code)
-    return len(mismatches), missing
+    return len(mismatches), missing + [f"super() in {x}" for x in manual]
 
 
 if __name__ == "__main__":

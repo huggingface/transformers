@@ -38,6 +38,9 @@ if TYPE_CHECKING:
 
 from torchvision.transforms.v2 import functional as tvF
 
+from ...image_utils import ImageInput
+from ...processing_utils import Unpack
+
 
 def get_resize_output_image_size(
     input_image: "torch.Tensor",
@@ -118,6 +121,9 @@ class DPTImageProcessor(BeitImageProcessor):
     do_reduce_labels = None
 
     valid_kwargs = DPTImageProcessorKwargs
+
+    def __init__(self, **kwargs: Unpack[DPTImageProcessorKwargs]):
+        super().__init__(**kwargs)
 
     def resize(
         self,
@@ -285,6 +291,19 @@ class DPTImageProcessor(BeitImageProcessor):
             results.append({"predicted_depth": depth})
 
         return results
+
+    @auto_docstring
+    def preprocess(
+        self,
+        images: ImageInput,
+        segmentation_maps: ImageInput | None = None,
+        **kwargs: Unpack[DPTImageProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        segmentation_maps (`ImageInput`, *optional*):
+            The segmentation maps to preprocess.
+        """
+        return super().preprocess(images, segmentation_maps, **kwargs)
 
 
 __all__ = ["DPTImageProcessor"]

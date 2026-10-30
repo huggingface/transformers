@@ -28,14 +28,14 @@ from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
-from ...image_utils import PILImageResampling, SizeDict
+from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, TransformersKwargs, auto_docstring, logging
 from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
@@ -66,6 +66,7 @@ from ..kimi_k25.modeling_kimi_k25 import (
     Kimi_K25VisionAttention,
     Kimi_K25VisionEncoderLayer,
     Kimi_K25VisionMLP,
+    apply_rotary_pos_emb_vision,
 )
 from ..llama.modeling_llama import eager_attention_forward
 from ..paddleocr_vl.modeling_paddleocr_vl import PaddleOCRVisionEmbeddings
@@ -132,6 +133,7 @@ class MuseGlimmerImageProcessor(Glm4vImageProcessor):
     size = None
     merge_size = 2
     max_image_tokens = 4096
+    valid_kwargs = MuseGlimmerImageProcessorKwargs
 
     def _validate_preprocess_kwargs(self, **kwargs):
         # MuseGlimmer uses aspect_ratio_preserving_resize driven by patch_size,
@@ -284,6 +286,10 @@ class MuseGlimmerImageProcessor(Glm4vImageProcessor):
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         return grid_h * grid_w
+
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[MuseGlimmerImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
 
 class MuseGlimmerVideoProcessorInitKwargs(VideosKwargs, total=False):
@@ -874,7 +880,75 @@ class MuseGlimmerTextModel(Gemma2Model):
 
 
 class MuseGlimmerVisionAttention(Kimi_K25VisionAttention):
-    pass
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cu_seqlens: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        max_seqlen: int | None = None,
+        **kwargs,
+    ) -> torch.Tensor:
+        seq_length = hidden_states.shape[0]
+
+        query_states = self.q_proj(hidden_states).reshape(1, seq_length, -1, self.head_dim)
+        key_states = self.k_proj(hidden_states).reshape(1, seq_length, -1, self.head_dim)
+        value_states = self.v_proj(hidden_states).reshape(1, seq_length, -1, self.head_dim)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
+
+        query_states = query_states.transpose(2, 1)
+        key_states = key_states.transpose(2, 1)
+        value_states = value_states.transpose(2, 1)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        if is_flash_attention_requested(self.config):
+            # Flash Attention: Use cu_seqlens for variable length attention
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
+            attn_output, _ = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask=None,
+                scaling=self.scaling,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                cu_seq_lens_q=cu_seqlens,
+                cu_seq_lens_k=cu_seqlens,
+                max_length_q=max_seqlen,
+                max_length_k=max_seqlen,
+                is_causal=False,
+                **kwargs,
+            )
+        else:
+            # Other implementations: Process each chunk separately
+            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
+            splits = [
+                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
+            ]
+
+            attn_outputs = [
+                attention_interface(
+                    self,
+                    q,
+                    k,
+                    v,
+                    attention_mask=None,
+                    scaling=self.scaling,
+                    dropout=0.0 if not self.training else self.attention_dropout,
+                    is_causal=False,
+                    **kwargs,
+                )[0]
+                for q, k, v in zip(*splits)
+            ]
+            attn_output = torch.cat(attn_outputs, dim=1)
+
+        attn_output = attn_output.reshape(seq_length, -1).contiguous()
+        attn_output = self.proj(attn_output)
+        return attn_output
 
 
 class MuseGlimmerVisionMLP(Kimi_K25VisionMLP):
@@ -1075,6 +1149,7 @@ class MuseGlimmerModel(Kimi_K25Model):
         self.vision_adapter = MuseGlimmerVisionAdapter(config)
         self.vision_projection = nn.Linear(config.projector_hidden_size, config.text_config.hidden_size, bias=False)
         self.perception_emb_norm = MuseGlimmerRMSNorm(eps=config.text_config.rms_norm_eps, with_scale=False)
+        self.vision_tower = MuseGlimmerVisionModel._from_config(config.vision_config)
 
     def get_image_features(
         self,
@@ -1098,6 +1173,10 @@ class MuseGlimmerModel(Kimi_K25Model):
 class MuseGlimmerForConditionalGeneration(Kimi_K25ForConditionalGeneration):
     input_modalities = ("image", "video", "text")
     _tp_plan = {"lm_head": "colwise_gather_output"}
+
+    def __init__(self, config: MuseGlimmerConfig):
+        super().__init__(config)
+        self.model = MuseGlimmerModel(config)
 
     def forward(
         self,

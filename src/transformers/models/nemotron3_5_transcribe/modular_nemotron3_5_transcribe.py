@@ -723,6 +723,7 @@ class Nemotron3_5TranscribeForConditionalGeneration(AudioFlamingo3ForConditional
             config.word_timestamp_config.hidden_size, config.word_timestamp_config.vocab_size, kernel_size=1
         )
         self.post_init()
+        self.model = Nemotron3_5TranscribeModel(config)
 
     @auto_docstring
     def get_audio_features(self, input_features, input_features_mask, **kwargs):

@@ -16,6 +16,7 @@
 
 import torch
 from huggingface_hub.dataclasses import strict
+from torch import nn
 
 from ... import initialization as init
 from ...modeling_outputs import MoeCausalLMOutputWithPast
@@ -167,6 +168,7 @@ class ExaoneMoeSparseMoEBlock(DeepseekV3MoE):
         self.shared_experts = ExaoneMoeMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.num_shared_experts
         )
+        self.gate = ExaoneMoeTopkRouter(config)
 
 
 class ExaoneMoeDecoderLayer(OlmoeDecoderLayer):
@@ -175,6 +177,7 @@ class ExaoneMoeDecoderLayer(OlmoeDecoderLayer):
         self.mlp = (
             ExaoneMoeSparseMoEBlock(config) if config.mlp_layer_types[layer_idx] == "sparse" else ExaoneMoeMLP(config)
         )
+        self.self_attn = ExaoneMoeAttention(config=config, layer_idx=layer_idx)
 
 
 class ExaoneMoePreTrainedModel(Exaone4PreTrainedModel):
@@ -201,10 +204,18 @@ class ExaoneMoePreTrainedModel(Exaone4PreTrainedModel):
 
 
 class ExaoneMoeModel(Dots1Model):
-    pass
+    def __init__(self, config: ExaoneMoeConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [ExaoneMoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
 
 class ExaoneMoeForCausalLM(DeepseekV3ForCausalLM):
+    def __init__(self, config: ExaoneMoeConfig):
+        super().__init__(config)
+        self.model = ExaoneMoeModel(config)
+
     def forward(
         self,
         **super_kwargs: Unpack[TransformersKwargs],

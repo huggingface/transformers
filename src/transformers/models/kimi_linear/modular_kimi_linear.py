@@ -336,6 +336,10 @@ class KimiLinearModel(Qwen3NextModel):
     def __init__(self, config: KimiLinearConfig):
         super().__init__(config)
         del self.rotary_emb
+        self.layers = nn.ModuleList(
+            [KimiLinearDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = KimiLinearRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -398,6 +402,10 @@ class KimiLinearModel(Qwen3NextModel):
 
 class KimiLinearForCausalLM(DeepseekV3ForCausalLM, GenerationMixin):
     _tied_weights_keys = {}
+
+    def __init__(self, config: KimiLinearConfig):
+        super().__init__(config)
+        self.model = KimiLinearModel(config)
 
 
 __all__ = [

@@ -20,6 +20,7 @@ from torch import nn
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, is_torch_greater_or_equal
+from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3ForCausalLM, DeepseekV3MoE
 from ..exaone4.modeling_exaone4 import Exaone4Attention
 from ..glm4.modeling_glm4 import Glm4DecoderLayer
@@ -145,16 +146,23 @@ class Kolibri1SparseMoeBlock(DeepseekV3MoE):
         super().__init__(config)
         self.gate = Kolibri1TopKRouter(config)
         self.shared_experts = Kolibri1MLP(config, intermediate_size=config.shared_expert_intermediate_size)
+        self.experts = Kolibri1Experts(config)
 
 
 class Kolibri1DecoderLayer(Glm4DecoderLayer):
     def __init__(self, config: Kolibri1Config, layer_idx: int):
         super().__init__(config, layer_idx)
         self.mlp = Kolibri1SparseMoeBlock(config)
+        self.self_attn = Kolibri1Attention(config=config, layer_idx=layer_idx)
 
 
 class Kolibri1PreTrainedModel(Qwen3MoePreTrainedModel):
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(Kolibri1TopKRouter, index=0),
+        "hidden_states": Kolibri1DecoderLayer,
+        "attentions": Kolibri1Attention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -164,10 +172,18 @@ class Kolibri1PreTrainedModel(Qwen3MoePreTrainedModel):
 
 
 class Kolibri1Model(Qwen2MoeModel):
-    pass
+    def __init__(self, config: Kolibri1Config):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [Kolibri1DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
 
 class Kolibri1ForCausalLM(DeepseekV3ForCausalLM):
+    def __init__(self, config: Kolibri1Config):
+        super().__init__(config)
+        self.model = Kolibri1Model(config)
+
     def forward(self, **super_kwargs):
         r"""
         Example:

@@ -275,6 +275,10 @@ class PerceptionLMModel(LlavaModel):
 
 @auto_docstring
 class PerceptionLMForConditionalGeneration(LlavaForConditionalGeneration):
+    def __init__(self, config: PerceptionLMConfig):
+        super().__init__(config)
+        self.model = PerceptionLMModel(config)
+
     @can_return_tuple
     @auto_docstring
     def forward(

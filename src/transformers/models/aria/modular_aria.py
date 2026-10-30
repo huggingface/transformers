@@ -751,6 +751,10 @@ class AriaPreTrainedModel(LlamaPreTrainedModel):
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (dynamic slicing)
     _supports_attention_backend = True
     input_modalities = ("image", "text")
+    _can_record_outputs = {
+        "hidden_states": AriaTextDecoderLayer,
+        "attentions": AriaTextAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -767,6 +771,7 @@ class AriaTextModel(OlmoeModel):
         )
         self.gradient_checkpointing = False
         self.post_init()
+        self.norm = AriaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 class AriaTextForCausalLM(AriaTextPreTrainedModel, DeepseekV2ForCausalLM):
@@ -902,6 +907,10 @@ class AriaModel(LlavaModel):
 )
 class AriaForConditionalGeneration(LlavaForConditionalGeneration):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+
+    def __init__(self, config: AriaConfig):
+        super().__init__(config)
+        self.model = AriaModel(config)
 
     @auto_docstring
     def get_image_features(

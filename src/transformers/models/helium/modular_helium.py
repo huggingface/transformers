@@ -13,13 +13,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
+from collections.abc import Callable
 
 import torch
 import torch.nn as nn
 
-from ...utils import logging
+from ...cache_utils import Cache
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, logging
 from ...utils.generic import no_inherit_decorator
-from ..gemma.modeling_gemma import GemmaForCausalLM, GemmaForSequenceClassification, GemmaForTokenClassification
+from ..gemma.modeling_gemma import (
+    GemmaForCausalLM,
+    GemmaForSequenceClassification,
+    GemmaForTokenClassification,
+    eager_attention_forward,
+)
 from ..granite.modeling_granite import GraniteAttention
 from ..llama.modeling_llama import LlamaDecoderLayer, LlamaMLP, LlamaModel, LlamaPreTrainedModel, LlamaRotaryEmbedding
 from .configuration_helium import HeliumConfig
@@ -98,6 +107,46 @@ class HeliumAttention(GraniteAttention):
         self.o_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.scaling = 1 / math.sqrt(self.head_dim)
 
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
 
 class HeliumDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: HeliumConfig, layer_idx: int | None = None):
@@ -107,9 +156,14 @@ class HeliumDecoderLayer(LlamaDecoderLayer):
         self.input_layernorm = HeliumRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = HeliumRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+        self.self_attn = HeliumAttention(config=config, layer_idx=layer_idx)
+
 
 class HeliumPreTrainedModel(LlamaPreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "hidden_states": HeliumDecoderLayer,
+        "attentions": HeliumAttention,
+    }
 
 
 class HeliumModel(HeliumPreTrainedModel, LlamaModel):
@@ -126,7 +180,9 @@ class HeliumModel(HeliumPreTrainedModel, LlamaModel):
 
 
 class HeliumForCausalLM(GemmaForCausalLM):
-    pass
+    def __init__(self, config: HeliumConfig):
+        super().__init__(config)
+        self.model = HeliumModel(config)
 
 
 class HeliumForSequenceClassification(GemmaForSequenceClassification):

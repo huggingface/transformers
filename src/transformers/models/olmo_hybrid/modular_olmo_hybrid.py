@@ -545,6 +545,7 @@ class OlmoHybridModel(Qwen3NextModel):
             else None
         )
         self.post_init()
+        self.norm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @merge_with_config_defaults
     @capture_outputs
@@ -613,7 +614,9 @@ class OlmoHybridModel(Qwen3NextModel):
 
 
 class OlmoHybridForCausalLM(Olmo3ForCausalLM):
-    pass
+    def __init__(self, config: OlmoHybridConfig):
+        super().__init__(config)
+        self.model = OlmoHybridModel(config)
 
 
 __all__ = [

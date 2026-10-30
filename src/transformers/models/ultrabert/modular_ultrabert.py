@@ -18,11 +18,13 @@ from typing import Literal
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import strict
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_layers import GenericForQuestionAnswering
 from ...modeling_outputs import BaseModelOutput
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
@@ -169,14 +171,39 @@ class UltrabertMLP(EuroBertMLP):
 
 
 class UltrabertDecoderLayer(EuroBertDecoderLayer):
-    pass
+    def __init__(self, config: UltrabertConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+        self.self_attn = UltrabertAttention(config=config, layer_idx=layer_idx)
+        self.input_layernorm = UltrabertRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = UltrabertRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 class UltrabertPreTrainedModel(Olmo3PreTrainedModel):
     config: UltrabertConfig
+    _can_record_outputs = {
+        "hidden_states": UltrabertDecoderLayer,
+        "attentions": UltrabertAttention,
+    }
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, UltrabertRotaryEmbedding):
+            for layer_type in module.layer_types:
+                rope_init_fn = module.compute_default_rope_parameters
+                if module.rope_type[layer_type] != "default":
+                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
+                curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
+                init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
+                init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
 
 class UltrabertModel(EuroBertModel):
+    def __init__(self, config: UltrabertConfig):
+        super().__init__(config)
+        self.norm = UltrabertRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = UltrabertRotaryEmbedding(config=config)
+
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -244,6 +271,8 @@ class UltrabertForMaskedLM(ModernBertForMaskedLM):
         self.decoder = nn.Identity()
         self.sparse_prediction = False
         self.sparse_pred_ignore_index = -100
+        self.model = UltrabertModel(config)
+        self.head = UltrabertPredictionHead(config)
 
     def get_output_embeddings(self):
         # UltraBERT doesn't normally tie embeddings, so output embeddings differ from input embeddings
@@ -259,11 +288,15 @@ class UltrabertForSequenceClassification(ModernBertForSequenceClassification):
         super().__init__(config)
         self.head = nn.Identity()
 
+        self.model = UltrabertModel(config)
+
 
 class UltrabertForTokenClassification(ModernBertForTokenClassification):
     def __init__(self, config: UltrabertConfig):
         super().__init__(config)
         self.head = nn.Identity()
+
+        self.model = UltrabertModel(config)
 
 
 class UltrabertForQuestionAnswering(GenericForQuestionAnswering, UltrabertPreTrainedModel):

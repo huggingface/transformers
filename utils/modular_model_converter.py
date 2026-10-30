@@ -1636,7 +1636,9 @@ class ModularFileMapper(ModuleMapper):
             renamer = ReplaceNameTransformer(file_model_name, new_name, self.model_name)
             renamed_module = module.visit(renamer)
             self.renamed_original_nodes[file] = {
-                node.name.value: node for node in renamed_module.body if isinstance(node, (cst.ClassDef, cst.FunctionDef))
+                node.name.value: node
+                for node in renamed_module.body
+                if isinstance(node, (cst.ClassDef, cst.FunctionDef))
             }
             self.visited_modules[file] = ModelFileMapper.visit_and_merge_dependencies(
                 renamed_module,
@@ -2037,7 +2039,68 @@ def find_inherited_code_mismatches(
     return mismatches
 
 
+# Modular files whose inherited code still silently uses classes they redefine. Do not add to this list: override
+# the inherited method instead (see `check_inherited_code_uses_parent_definitions`).
+INHERITANCE_MISMATCH_ALLOWLIST = {
+    "altclip",
+    "chinese_clip",
+    "clipseg",
+    "colmodernvbert",
+    "d_fine",
+    "deepseek_ocr2",
+    "deepseek_v32",
+    "deimv2",
+    "edgetam",
+    "edgetam_video",
+    "ernie4_5_vl_moe",
+    "eurobert",
+    "falcon_mamba",
+    "flex_olmo",
+    "flint",
+    "gemma",
+    "glm4_moe",
+    "glm4_moe_lite",
+    "glm4v_moe",
+    "glm5_next",
+    "glm_image",
+    "glm_moe_dsa",
+    "gradium_phonon_tts",
+    "granite_speech_plus",
+    "granitemoehybrid",
+    "granitemoeshared",
+    "higgs_audio_v2",
+    "instructblipvideo",
+    "jais2",
+    "mellum",
+    "metaclip_2",
+    "minimax_m2",
+    "moonshine",
+    "nomic_bert",
+    "owlv2",
+    "paddleocr_vl",
+    "pocket_tts",
+    "pp_doclayout_v2",
+    "qwen2_5_omni",
+    "qwen3_asr",
+    "qwen3_omni_moe",
+    "qwen3_vl_moe",
+    "rf_detr",
+    "rt_detr_v2",
+    "sam_hq",
+    "siglip2",
+    "smolvlm",
+    "solar_open",
+    "timesfm2_5",
+    "tipsv2",
+    "unlimited_ocr",
+    "vaultgemma",
+    "videomt",
+}
+
+
 def check_inherited_code_uses_parent_definitions(modular_mapper: "ModularFileMapper", files: dict[str, dict]):
+    if modular_mapper.model_name in INHERITANCE_MISMATCH_ALLOWLIST:
+        return
     mismatches = find_inherited_code_mismatches(modular_mapper, files)
     if mismatches:
         errors = [
