@@ -537,6 +537,39 @@ print("Response:", output_text[0][len(prompt) :])
 assert(correct_output_text == output_text)
 ```
 
+#### 4. MoE expert parameters
+
+MoE models can store expert weights as parameters such as `gate_up_proj` and `down_proj` rather than as
+`nn.Linear.weight`. Use `FqnToConfig` to select these parameters explicitly. For example, for a model whose
+expert parameters match the following names:
+
+```py
+from torchao.quantization import FqnToConfig, Int4WeightOnlyConfig
+from transformers import TorchAoConfig
+
+expert_config = Int4WeightOnlyConfig(group_size=128, int4_packing_format="plain_int32")
+quantization_config = TorchAoConfig(
+    FqnToConfig({
+        r"re:.*\.experts\.(gate_up_proj|down_proj)": expert_config,
+    })
+)
+```
+
+This configuration selects only the matching expert parameters; add entries for other parameters or modules
+to quantize them as well. The torchao backend must support both the expert tensor shapes and the operations
+used by the model. In particular, `plain_int32` packing requires a supported accelerator, not CPU quantization.
+
+When torchao exposes `config_targets_parameter`, Transformers uses it to select additional parameters
+for non-`FqnToConfig` configurations. Existing `nn.Linear.weight` selection is preserved regardless of the
+helper's availability or result, with embeddings controlled by `include_input_output_embeddings`. Explicit
+`FqnToConfig` selection remains available in either case. Module exclusions still apply.
+
+When CPU offloading is enabled, custom parameters are moved individually to the accelerator for quantization
+and returned to CPU, without moving other parameters in the same module.
+
+Allow enough device memory for loading and quantizing the full-precision weights, not just for the final
+quantized model.
+
 ## Serialization
 
 Saving the quantized model with `save_pretrained` (in [safetensors](https://huggingface.co/docs/safetensors/en/index) format) is only supported for torchao >= v0.15. For any version below, it is only possible to manually save as unsafe `.bin` checkpoints with [torch.save](https://docs.pytorch.org/docs/stable/generated/torch.save.html).
