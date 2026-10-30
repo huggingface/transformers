@@ -41,7 +41,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available
 
-from ...test_memory_cleanup_mixin import MemoryCleanupMixin
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin, with_grad
 
 
 if is_torch_available():
@@ -431,6 +431,29 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
         # Only caring about this not crashing
         _ = model.generate(**model_inputs, max_new_tokens=24)
 
+    @parameterized.expand(["eager", "grouped_mm"])
+    @with_grad
+    def test_quantized_moe_backward(self, experts_implementation):
+        """
+        Checks that the FP8 layers pass the input gradient back through their dequantized weights, so adapters can
+        train on top of them: the gradient matches the one of the dequantized model
+        """
+        model_id = "hf-internal-testing/MiniMax-M2-Tiny-FP8"
+        input_ids = torch.arange(10, 74, device=self.device_map).unsqueeze(0)
+        grads = []
+        for kwargs in [
+            {"experts_implementation": experts_implementation},
+            {"quantization_config": FineGrainedFP8Config(dequantize=True)},
+        ]:
+            model = AutoModelForCausalLM.from_pretrained(model_id, device_map=self.device_map, **kwargs)
+            inputs_embeds = model.get_input_embeddings()(input_ids).detach().requires_grad_()
+            model(inputs_embeds=inputs_embeds, labels=input_ids).loss.backward()
+            grads.append(inputs_embeds.grad.float())
+
+        grad, expected = grads
+        # The FP8 forward also quantizes the activations, hence the tolerance
+        self.assertLess(((grad - expected).norm() / expected.norm()).item(), 0.1)
+
 
 @require_torch_accelerator
 @unittest.skipIf(
@@ -464,6 +487,41 @@ class FP8LinearTest(unittest.TestCase):
 
         x_ = linear(x)
         self.assertEqual(x_.shape, (1, 5, 256))
+
+    def test_linear_backward_goes_through_dequantized_weight(self):
+        """
+        Test that FP8Linear passes the input gradient through its dequantized weight, so adapters can train on top of it.
+        """
+        from transformers.integrations import FP8Linear
+
+        linear = FP8Linear(256, 384, block_size=(128, 128)).to(self.device)
+        linear.weight.data = torch.randn(384, 256).to(self.device, torch.float8_e4m3fn)
+        linear.weight_scale_inv.data = torch.rand(3, 2).to(self.device) + 0.5
+        x = torch.randn((1, 5, 256), dtype=torch.bfloat16).to(self.device).requires_grad_()
+
+        linear(x).sum().backward()
+
+        scale = linear.weight_scale_inv.repeat_interleave(128, dim=0).repeat_interleave(128, dim=1)
+        expected = torch.ones(1, 5, 384, device=self.device) @ (linear.weight.float() * scale)
+        torch.testing.assert_close(x.grad.float(), expected, rtol=1e-2, atol=1e-1)
+
+    def test_grouped_linear_backward_goes_through_dequantized_weight(self):
+        """
+        Test that FP8GroupedLinear passes the input gradient through its dequantized weight, group by group.
+        """
+        from transformers.integrations.finegrained_fp8 import FP8GroupedLinear
+
+        linear = FP8GroupedLinear(256, 512, n_groups=2, block_size=(128, 128)).to(self.device)
+        linear.weight.data = torch.randn(512, 256).to(self.device, torch.float8_e4m3fn)
+        linear.weight_scale_inv.data = torch.rand(4, 2).to(self.device) + 0.5
+        x = torch.randn((3, 2, 256), dtype=torch.bfloat16).to(self.device).requires_grad_()
+
+        linear(x).sum().backward()
+
+        scale = linear.weight_scale_inv.repeat_interleave(128, dim=0).repeat_interleave(128, dim=1)
+        weight = (linear.weight.float() * scale).view(2, 256, 256)
+        expected = torch.ones(3, 2, 1, 256, device=self.device) @ weight
+        torch.testing.assert_close(x.grad.float(), expected.squeeze(2), rtol=1e-2, atol=1e-1)
 
 
 class FP8EmbeddingTest(unittest.TestCase):

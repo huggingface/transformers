@@ -470,11 +470,10 @@ class PermuteForRope(ConversionOps):
         self.inverse = inverse
         self.permute_layer_names = permute_layer_names
 
-    def _apply(self, tensor: torch.Tensor) -> torch.Tensor:
+    def _permute_for_rope(self, tensor: torch.Tensor, config) -> torch.Tensor:
         dim0 = tensor.shape[0]
-        config = self.config
         if self.subconfig_key is not None:
-            config = getattr(self.config, self.subconfig_key, self.config)
+            config = getattr(config, self.subconfig_key, config)
         n_heads = getattr(config, "num_attention_heads", 1)
         half_head = dim0 // n_heads // 2
 
@@ -496,20 +495,33 @@ class PermuteForRope(ConversionOps):
         config,
         **kwargs,
     ) -> dict[str, list[torch.Tensor]]:
-        self.config = config
-        output: dict[str, list[torch.Tensor]] = {}
-        for key, tensors in input_dict.items():
-            # Permute q and key weights back (skip biases) to match original RoPE implementation
-            if not any(name in key for name in self.permute_layer_names):
-                output[key] = tensors
-                continue
-
-            if isinstance(tensors, list):
-                if len(tensors) != 1:
+        output: dict[str, torch.Tensor] = {}
+        for source_pattern, tensors in input_dict.items():
+            target_pattern = self.get_target_pattern(source_pattern, source_patterns, target_patterns)
+            # If set, we actually permute only if the target_pattern matches one of the pre-expected `permute_layer_names`
+            if self.permute_layer_names is None or any(name in source_pattern for name in self.permute_layer_names):
+                if isinstance(tensors, list) and len(tensors) > 1:
                     raise ValueError("PermuteForRope expects a single tensor per key.")
-                tensors = tensors[0]
-            output[key] = self._apply(tensors)
+                tensors = tensors[0] if not isinstance(tensors, torch.Tensor) else tensors
+                output_tensor = self._permute_for_rope(tensors, config)
+            # Here we do not match one of the keys, so do not permute
+            else:
+                output_tensor = tensors
+
+            output[target_pattern] = output_tensor
         return output
+
+    def get_target_pattern(self, source_pattern: str, source_patterns: list[str], target_patterns: list[str]) -> str:
+        # Here it's the last or first operation of a chain, so return the source
+        if (len(target_patterns) > 1 and len(source_patterns) == 1) or (
+            len(target_patterns) == 1 and len(source_patterns) > 1
+        ):
+            return source_pattern
+        # Here it's the only operation, so return the target
+        elif len(target_patterns) == 1 and len(source_patterns) == 1:
+            return target_patterns[0]
+        else:
+            raise ValueError("Undefined Operation encountered!")
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -770,14 +782,14 @@ def process_target_pattern(pattern: str) -> tuple[str, str | None]:
     # Remove negative lookahead/behind if any. This is ugly but needed for reverse mapping of
     # Qwen2.5, Sam3, Ernie4.5 VL MoE! It needs to be non greedy in case there are several
     pattern = re.sub(r"\(\?.+?\)?\)", "", pattern)
-    # Remove the backslash for literal dots
-    pattern = pattern.replace(r"\.", ".")
     # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
     capturing_group_match = re.search(r"\(.+?\)", pattern)
     captured_group = None
     if capturing_group_match:
         captured_group = capturing_group_match.group(0)
         pattern = pattern.replace(captured_group, r"\1", 1)
+    # Remove the backslash for literal dots outside the capturing group. We keep them inside the group to correctly match
+    pattern = pattern.replace(r"\.", ".")
     return pattern, captured_group
 
 

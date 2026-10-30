@@ -358,11 +358,8 @@ class TimesFmModel(TimesFmPreTrainedModel):
 
         # Normalize each patch
         outputs = (inputs - mu[:, None, None]) / sigma[:, None, None]
-        outputs = torch.where(
-            torch.abs(inputs - self.config.pad_val) < self.config.tolerance,
-            torch.full((), self.config.pad_val, dtype=outputs.dtype, device=outputs.device),
-            outputs,
-        )
+        # padded positions keep their value (`pad_val`), which does not fit in fp16: no scalar to cast
+        outputs = torch.where(torch.abs(inputs - self.config.pad_val) < self.config.tolerance, inputs, outputs)
         return outputs, (mu, sigma)
 
     @merge_with_config_defaults

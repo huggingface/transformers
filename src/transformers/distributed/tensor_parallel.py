@@ -26,7 +26,7 @@ from .parallel_utils import (
     _use_local_dtensor_params,
     replace_layer_number_by_wildcard,
 )
-from .utils import _get_torch_distributed_rank
+from .utils import _get_torch_distributed_rank, _warning_once_on_rank_zero
 
 
 if TYPE_CHECKING:
@@ -620,6 +620,14 @@ class MoeIdentityParallel(TensorParallelLayer):
         return (input_tensor / mesh.size(), *args[1:]), kwargs
 
 
+class LocalParamsParallel(TensorParallelLayer):
+    """Runs the module's forward with its own sharded parameters as local tensors. For a bare `nn.Parameter` such as
+    attention sinks, which has no forward to hook: its own plan entry shards it, and this style goes on its owner."""
+
+    def should_use_local_tensors(self, module):
+        return True
+
+
 if is_torch_distributed_available():
     ALL_PARALLEL_STYLES.register("embedding_rowwise", EmbeddingParallel(shard_dim=0))
     ALL_PARALLEL_STYLES.register("embedding_colwise", EmbeddingParallel(shard_dim=1))
@@ -641,6 +649,7 @@ if is_torch_distributed_available():
     ALL_PARALLEL_STYLES.register("all_reduce", AllReduceParallel())
     ALL_PARALLEL_STYLES.register("moe_tp_experts", MoeExpertsParallel())
     ALL_PARALLEL_STYLES.register("moe_identity_expert", MoeIdentityParallel())
+    ALL_PARALLEL_STYLES.register("local_params", LocalParamsParallel())
     # Every rank keeps the full param, e.g. a per-tensor quantization scale
     ALL_PARALLEL_STYLES.register("replicate", TensorParallelLayer())
 
@@ -651,13 +660,10 @@ def resolve_parallel_plans(
     """
     Merge the `DistributedConfig` overrides into the model's plans and split them between TP and EP.
     """
-    if _get_torch_distributed_rank() == 0:
-        warnings.warn(
-            "`resolve_parallel_plans` is deprecated and will be removed in v5.23: the model resolves its plans itself "
-            "in `_resolve_parallel_plans`, which also returns the FSDP plan.",
-            FutureWarning,
-            stacklevel=2,
-        )
+    _warning_once_on_rank_zero(
+        "`resolve_parallel_plans` is deprecated and will be removed in v5.23: the model resolves its plans itself "
+        "in `_resolve_parallel_plans`, which also returns the FSDP plan."
+    )
     tp_plan, ep_plan, _ = model._resolve_parallel_plans(distributed_config)
     return tp_plan, ep_plan
 
