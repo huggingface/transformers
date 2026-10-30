@@ -21,7 +21,7 @@ from parameterized import parameterized
 
 from transformers import TorchAoConfig, set_seed
 from transformers.distributed.configuration_utils import DistributedConfig
-from transformers.distributed.tensor_parallel import _get_parameter_plan
+from transformers.distributed.parallel_utils import _get_parameter_plan
 from transformers.testing_utils import (
     SINGLE_PROCESS_DEVICES,
     is_tensor_parallel_test,
@@ -56,6 +56,7 @@ TP_DISTRIBUTED_TEST_MODEL_TYPES = {
     # Dense
     "qwen3",
     "qwen2",
+    "granite_swa",
     # MoE
     "qwen4_exp_text",
     "qwen3_moe",

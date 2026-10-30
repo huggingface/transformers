@@ -35,7 +35,6 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ..auto import AutoModel
 from .configuration_llava_onevision import LlavaOnevisionConfig
@@ -556,7 +555,6 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
 
     @merge_with_config_defaults
     @can_return_tuple
-    @deprecate_kwarg("pixel_values", version="v5.22.0", new_name="pixel_values_videos")
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower, apply multimodal projection and pooling."
     )
@@ -785,7 +783,6 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
 
     @merge_with_config_defaults
     @can_return_tuple
-    @deprecate_kwarg("pixel_values", version="v5.22.0", new_name="pixel_values_videos")
     @auto_docstring
     def get_video_features(
         self,

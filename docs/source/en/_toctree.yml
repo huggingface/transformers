@@ -1207,6 +1207,8 @@
         title: Nemotron 3 Diarization
       - local: model_doc/nemotron3_5_asr
         title: Nemotron 3.5 ASR
+      - local: model_doc/nemotron3_5_transcribe
+        title: Nemotron 3.5 Transcribe
       - local: model_doc/nemotron_asr_streaming
         title: Nemotron ASR Streaming
       - local: model_doc/neucodec
@@ -1461,6 +1463,8 @@
         title: MiniCPM-V
       - local: model_doc/minicpmv4_7
         title: MiniCPM-V 4.7
+      - local: model_doc/mistral_large4
+        title: Mistral Large 4
       - local: model_doc/mistral3
         title: Mistral3
       - local: model_doc/mistral4
