@@ -63,7 +63,7 @@ from ...utils.generic import (
     is_flash_attention_requested,
     merge_with_config_defaults,
 )
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection, capture_outputs
 from ...vision_utils import (
     get_vision_attention_seqlens,
     get_vision_interpolation_indices_and_weights,
@@ -1474,15 +1474,16 @@ class Qwen4ExpTextModel(Qwen4ExpPreTrainedModel):
         hidden_states = hidden_states.repeat(1, 1, self.config.hc_count)
 
         for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            hidden_states = decoder_layer(
-                hidden_states,
-                position_embeddings=position_embeddings,
-                attention_mask=causal_mask_mapping["indexed_attention"],
-                conv_mask=conv_mask,
-                past_key_values=past_key_values,
-                ple_input_ids=ple_input_ids,
-                **kwargs,
-            )
+            with _scope_router_output_collection():
+                hidden_states = decoder_layer(
+                    hidden_states,
+                    position_embeddings=position_embeddings,
+                    attention_mask=causal_mask_mapping["indexed_attention"],
+                    conv_mask=conv_mask,
+                    past_key_values=past_key_values,
+                    ple_input_ids=ple_input_ids,
+                    **kwargs,
+                )
 
         hidden_states = self.hyper_connection_mixer(hidden_states)
 

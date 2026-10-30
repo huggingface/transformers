@@ -39,7 +39,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection, capture_outputs
 from .configuration_nllb_moe import NllbMoeConfig
 
 
@@ -735,7 +735,8 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 continue
             else:
-                hidden_states = encoder_layer(hidden_states, attention_mask, **kwargs)
+                with _scope_router_output_collection():
+                    hidden_states = encoder_layer(hidden_states, attention_mask, **kwargs)
 
         last_hidden_state = self.layer_norm(hidden_states)
         return MoEModelOutput(last_hidden_state=last_hidden_state)
@@ -839,15 +840,16 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
             dropout_probability = torch.rand([])
             skip_the_layer = self.training and dropout_probability < self.layerdrop
             if not skip_the_layer or synced_gpus:
-                hidden_states = decoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    encoder_hidden_states,  # as a positional argument for gradient checkpointing
-                    encoder_attention_mask=encoder_attention_mask,
-                    past_key_values=past_key_values,
-                    use_cache=use_cache,
-                    **kwargs,
-                )
+                with _scope_router_output_collection():
+                    hidden_states = decoder_layer(
+                        hidden_states,
+                        attention_mask,
+                        encoder_hidden_states,  # as a positional argument for gradient checkpointing
+                        encoder_attention_mask=encoder_attention_mask,
+                        past_key_values=past_key_values,
+                        use_cache=use_cache,
+                        **kwargs,
+                    )
 
             if skip_the_layer:
                 continue

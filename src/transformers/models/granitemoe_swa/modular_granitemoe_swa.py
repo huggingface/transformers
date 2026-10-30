@@ -33,7 +33,7 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection, capture_outputs
 from ..granite_swa.modeling_granite_swa import GraniteSWAAttention
 from ..granitemoe.modeling_granitemoe import GraniteMoeMoE, GraniteMoeTopKRouter
 from ..granitemoeshared.configuration_granitemoeshared import GraniteMoeSharedConfig
@@ -223,15 +223,16 @@ class GraniteMoeSWAModel(GraniteMoeSharedModel):
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             theta = self.config.layer_rope_theta[i]
             layer_position_embeddings = position_embeddings_by_theta[theta] if theta else None
-            hidden_states = decoder_layer(
-                hidden_states,
-                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                position_embeddings=layer_position_embeddings,
-                **kwargs,
-            )
+            with _scope_router_output_collection():
+                hidden_states = decoder_layer(
+                    hidden_states,
+                    attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                    position_ids=position_ids,
+                    past_key_values=past_key_values,
+                    use_cache=use_cache,
+                    position_embeddings=layer_position_embeddings,
+                    **kwargs,
+                )
 
         hidden_states = self.norm(hidden_states)
 

@@ -42,7 +42,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection, capture_outputs
 from .configuration_switch_transformers import SwitchTransformersConfig
 
 
@@ -773,16 +773,17 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         hidden_states = self.dropout(inputs_embeds)
 
         for layer_module in self.block:
-            hidden_states, self_attention_position_bias, cross_attention_position_bias = layer_module(
-                hidden_states,
-                causal_mask,
-                position_bias,
-                encoder_hidden_states,
-                encoder_attention_mask,
-                encoder_decoder_position_bias,
-                past_key_values=past_key_values,
-                **kwargs,
-            )
+            with _scope_router_output_collection():
+                hidden_states, self_attention_position_bias, cross_attention_position_bias = layer_module(
+                    hidden_states,
+                    causal_mask,
+                    position_bias,
+                    encoder_hidden_states,
+                    encoder_attention_mask,
+                    encoder_decoder_position_bias,
+                    past_key_values=past_key_values,
+                    **kwargs,
+                )
 
             # We share the position biases between the layers - the first layer stores them
             position_bias = self_attention_position_bias

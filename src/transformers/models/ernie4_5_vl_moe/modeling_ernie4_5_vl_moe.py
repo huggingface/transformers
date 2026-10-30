@@ -45,7 +45,7 @@ from ...utils.generic import (
     maybe_autocast,
     merge_with_config_defaults,
 )
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection, capture_outputs
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from .configuration_ernie4_5_vl_moe import Ernie4_5_VLMoeConfig, Ernie4_5_VLMoeTextConfig, Ernie4_5_VLMoeVisionConfig
 
@@ -778,15 +778,16 @@ class Ernie4_5_VLMoeTextModel(Ernie4_5_VLMoePreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            hidden_states = decoder_layer(
-                hidden_states,
-                position_embeddings=position_embeddings,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                moe_mm_token_type_ids=moe_mm_token_type_ids,
-                past_key_values=past_key_values,
-                **kwargs,
-            )
+            with _scope_router_output_collection():
+                hidden_states = decoder_layer(
+                    hidden_states,
+                    position_embeddings=position_embeddings,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    moe_mm_token_type_ids=moe_mm_token_type_ids,
+                    past_key_values=past_key_values,
+                    **kwargs,
+                )
 
         hidden_states = self.norm(hidden_states)
 
