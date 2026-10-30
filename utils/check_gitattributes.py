@@ -41,19 +41,35 @@ GENERATED_HEADER = "This file was automatically generated from"
 MARKER = "# Generated files, collapsed in GitHub PR diffs. Run `make fix-repo` to update this block."
 
 
-def generated_files() -> list[str]:
-    files = []
-    for path in sorted(MODELS_DIR.rglob("*.py")):
-        with open(path, encoding="utf-8") as f:
-            head = f.read(1024)  # the header sits in the first lines
-        if GENERATED_HEADER in head:
-            files.append(path.as_posix())
-    return files
+def is_generated(path: Path) -> bool:
+    with open(path, encoding="utf-8") as f:
+        return GENERATED_HEADER in f.read(1024)  # the header sits in the first lines
+
+
+def generated_patterns() -> list[str]:
+    # `__init__.py` are all generated, and a model folder whose other files (modular/convert sources aside) are all
+    # generated gets a single glob; the negations at the end take back what those globs over-match.
+    patterns = [f"{MODELS_DIR.as_posix()}/**/__init__.py"]
+    negations = [f"{MODELS_DIR.as_posix()}/**/{glob}" for glob in ("modular_*.py", "convert_*.py")]
+    for folder in sorted({path.parent for path in MODELS_DIR.rglob("*.py")}):
+        files = [path for path in sorted(folder.glob("*.py")) if path.name != "__init__.py"]
+        sources = [path for path in files if path.name.startswith(("modular_", "convert_"))]
+        generated = [path for path in files if is_generated(path)]
+        if generated and len(generated) + len(sources) == len(files):
+            patterns.append(f"{folder.as_posix()}/*.py")
+        else:
+            patterns += [path.as_posix() for path in generated]
+        init = folder / "__init__.py"
+        if init.exists() and not is_generated(init):
+            negations.append(init.as_posix())
+    return [f"{pattern} linguist-generated=true" for pattern in patterns] + [
+        f"{pattern} linguist-generated=false" for pattern in negations
+    ]
 
 
 def expected_content(current: str) -> str:
     manual = current.split(MARKER)[0].rstrip("\n")
-    block = "\n".join(f"{path} linguist-generated=true" for path in generated_files())
+    block = "\n".join(generated_patterns())
     return f"{manual}\n\n{MARKER}\n{block}\n"
 
 
