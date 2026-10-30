@@ -183,6 +183,20 @@ class TestWeightGlobMatching(unittest.TestCase):
         # the group keeps its escapes: `gate\.` matches `gate.` only, so `gateX` stays as is
         self.assertEqual(reverse.rename_source_key("model.mlp.gateX.w")[0], "model.mlp.gateX.w")
 
+    def test_reverse_anchored_patterns(self):
+        renaming = WeightRenaming(
+            source_patterns=r"^mask_embedding$",
+            target_patterns="model.depth_decoder.mask_embedding",
+        )
+        reverse = renaming.reverse_transform()
+        renamed_key, source_pattern = reverse.rename_source_key("model.depth_decoder.mask_embedding")
+        self.assertEqual(renamed_key, "mask_embedding")
+        self.assertEqual(source_pattern, "^model.depth_decoder.mask_embedding$")
+        self.assertEqual(
+            reverse.rename_source_key("model.depth_decoder.mask_embedding_extra")[0],
+            "model.depth_decoder.mask_embedding_extra",
+        )
+
 
 class DummyParamModule(nn.Module):
     def __init__(self, shape):
