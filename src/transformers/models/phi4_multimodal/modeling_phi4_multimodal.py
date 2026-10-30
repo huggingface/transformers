@@ -1578,7 +1578,7 @@ class Phi4MultimodalForCausalLM(Phi4MultimodalPreTrainedModel, GenerationMixin):
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: Phi4MultimodalConfig):
         super().__init__(config)
         self.model = Phi4MultimodalModel(config)
         self.vocab_size = config.vocab_size

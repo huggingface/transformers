@@ -28,7 +28,7 @@ from ...image_utils import (
     make_list_of_images,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, logging, requires_backends
+from ...utils import TensorType, auto_docstring, is_torch_available, logging
 from ...utils.import_utils import requires
 
 
@@ -330,9 +330,6 @@ class FuyuImageProcessorPil(PilBackend):
             patch_size (`dict[str, int]`, *optional*):
                 Size of the patches.
         """
-        requires_backends(self, ["torch"])
-        import torch
-
         logger.warning("`image_processor.preprocess_with_tokenizer_info` is deprecated and will be removed in v5.20.")
 
         if patch_size is None:

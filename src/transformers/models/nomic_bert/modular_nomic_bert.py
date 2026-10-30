@@ -140,7 +140,7 @@ class NomicBertPreTrainedModel(BertPreTrainedModel):
 
 @auto_docstring
 class NomicBertModel(JinaEmbeddingsV3Model):
-    def __init__(self, config, add_pooling_layer=False):
+    def __init__(self, config: NomicBertConfig, add_pooling_layer=False):
         r"""
         add_pooling_layer (`bool`, *optional*, defaults to `False`):
             Whether to add a pooling layer.
@@ -226,7 +226,7 @@ class NomicBertOnlyMLMHead(BertOnlyMLMHead):
 
 @auto_docstring
 class NomicBertForMaskedLM(BertForMaskedLM):
-    def __init__(self, config):
+    def __init__(self, config: NomicBertConfig):
         PreTrainedModel.__init__(self, config)
 
         self.nomic_bert = NomicBertModel(config)
@@ -274,7 +274,7 @@ class NomicBertForMaskedLM(BertForMaskedLM):
 
 
 class NomicBertForSequenceClassification(BertForSequenceClassification):
-    def __init__(self, config):
+    def __init__(self, config: NomicBertConfig):
         super().__init__(config)
         self.nomic_bert = NomicBertModel(config, add_pooling_layer=True)
 

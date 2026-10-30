@@ -1163,7 +1163,7 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
     config: Cosmos3EdgeConfig
     accepts_loss_kwargs = False
 
-    def __init__(self, config):
+    def __init__(self, config: Cosmos3EdgeConfig):
         super().__init__(config)
         self.model = Cosmos3EdgeModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)

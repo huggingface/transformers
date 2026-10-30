@@ -484,7 +484,7 @@ class GPT2DoubleHeadsModelOutput(ModelOutput):
 
 @auto_docstring
 class GPT2Model(GPT2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPT2Config):
         super().__init__(config)
 
         self.embed_dim = config.hidden_size
@@ -636,7 +636,7 @@ class GPT2Model(GPT2PreTrainedModel):
 class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: GPT2Config):
         super().__init__(config)
         self.transformer = GPT2Model(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
@@ -727,7 +727,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
 class GPT2DoubleHeadsModel(GPT2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: GPT2Config):
         super().__init__(config)
         config.num_labels = 1
         self.transformer = GPT2Model(config)
@@ -856,7 +856,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel, GenerationMixin):
     """
 )
 class GPT2ForSequenceClassification(GPT2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPT2Config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = GPT2Model(config)
@@ -962,7 +962,7 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
 
 @auto_docstring
 class GPT2ForTokenClassification(GPT2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPT2Config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1042,7 +1042,7 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
 
 @auto_docstring
 class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPT2Config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = GPT2Model(config)

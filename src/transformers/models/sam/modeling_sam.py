@@ -1017,6 +1017,7 @@ class SamPreTrainedModel(PreTrainedModel):
 
 
 class SamVisionEncoder(SamPreTrainedModel):
+    config: SamVisionConfig
     _can_record_outputs = {"hidden_states": SamVisionLayer, "attentions": SamVisionAttention}
 
     def __init__(self, config: SamVisionConfig):
