@@ -507,7 +507,7 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin):
             # 1s audio chunks that follow this frame before the next one
             end_sec = frame_seconds[i + 1] if i < num_frames - 1 else total_seconds
             for sec in range(frame_sec, end_sec):
-                if audio_tokens[sec] > 0:
+                if audio_tokens.get(sec, 0) > 0:
                     segments.append(
                         f"{self.timestamp_fmt(sec)} {self.boa_token}{self.audio_token * audio_tokens[sec]}{self.eoa_token}"
                     )
