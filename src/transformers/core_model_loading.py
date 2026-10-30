@@ -1189,6 +1189,52 @@ class PrefixChange(WeightRenaming):
         return result
 
 
+class LayerPairCollapse(WeightRenaming):
+    """
+    Loads checkpoints that store each decoder layer as two consecutive blocks, `layers.{2i}` and `layers.{2i+1}`, into a
+    single `layers.{i}`. `first_block`/`second_block` rename the submodules of each block, e.g. with
+    `first_block={"mixer": "self_attn"}` and `second_block={"mixer": "mlp"}`:
+
+        layers.0.mixer.q_proj.weight -> layers.0.self_attn.q_proj.weight
+        layers.1.mixer.up_proj.weight -> layers.0.mlp.up_proj.weight
+        layers.2.mixer.q_proj.weight -> layers.1.self_attn.q_proj.weight
+    """
+
+    __slots__ = ("first_block", "second_block", "collapse", "pattern")
+
+    def __init__(self, first_block: dict[str, str], second_block: dict[str, str], collapse: bool = True):
+        self.first_block = first_block
+        self.second_block = second_block
+        self.collapse = collapse
+        names = {*first_block, *second_block} if collapse else {*first_block.values(), *second_block.values()}
+        self.pattern = re.compile(rf"layers\.(?P<index>\d+)\.(?P<name>{'|'.join(sorted(names))})(?=\.|$)")
+        super().__init__(source_patterns=r"layers\.(\d+)", target_patterns=r"layers.\1")
+
+    def rename_source_key(self, source_key: str) -> tuple[str, str | None]:
+        match = self.pattern.search(source_key)
+        if match is None:
+            return source_key, None
+        layer_index, name = int(match["index"]), match["name"]
+        if self.collapse:
+            block = self.second_block if layer_index % 2 else self.first_block
+            if name not in block:
+                return source_key, None
+            renamed = f"layers.{layer_index // 2}.{block[name]}"
+        else:
+            is_second_block = name in self.second_block.values()
+            block = self.second_block if is_second_block else self.first_block
+            original_name = next(key for key, value in block.items() if value == name)
+            renamed = f"layers.{2 * layer_index + is_second_block}.{original_name}"
+        self._was_used = True
+        return source_key[: match.start()] + renamed + source_key[match.end() :], self.source_patterns[0]
+
+    def reverse_transform(self) -> WeightTransform:
+        result = LayerPairCollapse(self.first_block, self.second_block, collapse=not self.collapse)
+        result.scope_prefix = self.scope_prefix
+        result.base_model_prefix = self.base_model_prefix
+        return result
+
+
 # List of classes that are known to be able to use m:n
 _INTERNAL_MANY_TO_MANY_CONVERSIONS = (
     ErnieFuseAndSplitTextVisionExperts,
