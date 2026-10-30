@@ -27,10 +27,10 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..afmoe.modeling_afmoe import AfmoeAttention
+from ..gemma2.modeling_gemma2 import Gemma2DecoderLayer
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..llama.modeling_llama import (
-    LlamaAttention,
-    LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaMLP,
     LlamaModel,
@@ -38,25 +38,15 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..llama4.modeling_llama4 import Llama4TextL2Norm
 from .configuration_dory import DoryConfig
 
 
-def l2_normalize(hidden_states: torch.Tensor) -> torch.Tensor:
-    hidden_states_fp32 = hidden_states.float()
-    normalized = hidden_states_fp32 * torch.rsqrt(hidden_states_fp32.pow(2).sum(-1, keepdim=True) + 1e-6)
-    return normalized.to(hidden_states.dtype)
+class DoryL2Norm(Llama4TextL2Norm):
+    """Projects onto the unit sphere: nGPT keeps every hidden state at norm 1, not RMS 1."""
 
-
-def normalized_residual_update(
-    hidden_states: torch.Tensor, update: torch.Tensor, alpha: torch.Tensor, alpha_scale: float
-) -> torch.Tensor:
-    """nGPT residual: move `hidden_states` towards `update` on the unit sphere, at a learned per-channel rate."""
-    hidden_states_fp32 = l2_normalize(hidden_states).float()
-    update_fp32 = l2_normalize(update).float()
-    interpolation_rate = (alpha.float() * alpha_scale).abs()
-    return l2_normalize(hidden_states_fp32 + interpolation_rate * (update_fp32 - hidden_states_fp32)).to(
-        hidden_states.dtype
-    )
+    def _norm(self, x):
+        return x * torch.rsqrt(x.pow(2).sum(-1, keepdim=True) + self.eps)
 
 
 class DoryRotaryEmbedding(Gemma3RotaryEmbedding):
@@ -69,18 +59,20 @@ class DoryRotaryEmbedding(Gemma3RotaryEmbedding):
         return super().compute_default_rope_parameters(config, layer_type)
 
 
-class DoryAttention(LlamaAttention):
-    """Llama attention with normalized queries/keys (scaled by `sqk`), a sigmoid output gate, and one cache slot per loop."""
+class DoryAttention(AfmoeAttention):
+    """
+    Afmoe attention with nGPT details: unit-norm queries and keys, queries rescaled per channel by `sqk` after rope,
+    a learned scale `s_gate` inside the output gate, and one cache slot per recurrent loop.
+    """
 
     def __init__(self, config: DoryConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.g_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.q_norm = DoryL2Norm()
+        self.k_norm = DoryL2Norm()
         self.sqk = nn.Parameter(torch.full((config.num_attention_heads * self.head_dim,), config.initializer_range))
         self.s_gate = nn.Parameter(torch.full((config.num_attention_heads * self.head_dim,), config.initializer_range))
         self.sqk_scale = self.head_dim**0.5 / config.initializer_range
         self.s_gate_scale = config.hidden_size**0.25 / config.initializer_range
-        # CODEPATH: every 4th layer is full attention in all released checkpoints, the others slide
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
     def forward(
         self,
@@ -94,16 +86,19 @@ class DoryAttention(LlamaAttention):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        gate = self.g_proj(hidden_states)
+        query_states = self.q_proj(hidden_states).view(hidden_shape)
+        key_states = self.k_proj(hidden_states).view(hidden_shape)
+        value_states = self.v_proj(hidden_states).view(hidden_shape)
+        gate_states = self.gate_proj(hidden_states)
+
+        query_states = self.q_norm(query_states).transpose(1, 2)
+        key_states = self.k_norm(key_states).transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-        sqk = (self.sqk.float() * self.sqk_scale).view(1, -1, 1, self.head_dim)
-        query_states = (sqk.square() * l2_normalize(query_states).float()).to(query_states.dtype)
-        key_states = l2_normalize(key_states)
+        query_scale = (self.sqk * self.sqk_scale).view(-1, 1, self.head_dim)
+        query_states = query_states * query_scale.square()
 
         if past_key_values is not None:
             # The recurrent layers run once per loop, each loop has its own cache slot
@@ -113,22 +108,21 @@ class DoryAttention(LlamaAttention):
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-        attn_output, attn_weights = attention_interface(
+        output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
             value_states,
-            attention_mask,
+            attention_mask=attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        s_gate = (self.s_gate.float() * self.s_gate_scale).square()
-        attn_output = (attn_output.float() * torch.sigmoid(gate.float() * s_gate)).to(attn_output.dtype)
-        attn_output = self.o_proj(l2_normalize(attn_output))
+        output = output.view(*input_shape, -1).contiguous()
+        output = output * torch.sigmoid(gate_states * (self.s_gate * self.s_gate_scale).square())
+        attn_output = self.o_proj(output)
         return attn_output, attn_weights
 
 
@@ -140,23 +134,27 @@ class DoryMLP(LlamaMLP):
         self.suv_scale = config.hidden_size**0.5
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        gate = self.gate_proj(hidden_states).float() * (self.suv_gate.float() * self.suv_scale)
-        up = self.up_proj(hidden_states).float() * (self.suv_up.float() * self.suv_scale)
-        hidden_states = (self.act_fn(gate) * up).to(hidden_states.dtype)
-        return self.down_proj(l2_normalize(hidden_states))
+        gate = self.gate_proj(hidden_states) * (self.suv_gate * self.suv_scale)
+        up = self.up_proj(hidden_states) * (self.suv_up * self.suv_scale)
+        return self.down_proj(self.act_fn(gate) * up)
 
 
-class DoryDecoderLayer(LlamaDecoderLayer):
-    """Llama layer where nGPT normalized updates (`lambda_1`, `lambda_2`) replace norms + residual adds."""
+class DoryDecoderLayer(Gemma2DecoderLayer):
+    """
+    Gemma2 sandwich layer on the unit sphere: the residual is an interpolation towards the normalized update, at a
+    learned per-channel rate (`lambda_1`, `lambda_2`), instead of an addition.
+    """
 
     def __init__(self, config: DoryConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.attention_type = config.layer_types[layer_idx]
+        self.input_layernorm = DoryL2Norm()
+        self.post_attention_layernorm = DoryL2Norm()
+        self.pre_feedforward_layernorm = DoryL2Norm()
+        self.post_feedforward_layernorm = DoryL2Norm()
         self.lambda_1 = nn.Parameter(torch.full((config.hidden_size,), config.initializer_range))
         self.lambda_2 = nn.Parameter(torch.full((config.hidden_size,), config.initializer_range))
-        self.alpha_scale = config.ngpt_alpha_init / config.initializer_range
-        del self.input_layernorm
-        del self.post_attention_layernorm
+        self.lambda_scale = config.ngpt_alpha_init / config.initializer_range
 
     def forward(
         self,
@@ -166,6 +164,7 @@ class DoryDecoderLayer(LlamaDecoderLayer):
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
+        hidden_states = self.input_layernorm(hidden_states)
         attn_output, _ = self.self_attn(
             hidden_states,
             attention_mask=attention_mask,
@@ -173,9 +172,14 @@ class DoryDecoderLayer(LlamaDecoderLayer):
             past_key_values=past_key_values,
             **kwargs,
         )
-        hidden_states = normalized_residual_update(hidden_states, attn_output, self.lambda_1, self.alpha_scale)
-        mlp_output = self.mlp(hidden_states)
-        hidden_states = normalized_residual_update(hidden_states, mlp_output, self.lambda_2, self.alpha_scale)
+        attn_output = self.post_attention_layernorm(attn_output)
+        attention_rate = (self.lambda_1 * self.lambda_scale).abs()
+        hidden_states = hidden_states + attention_rate * (attn_output - hidden_states)
+
+        hidden_states = self.pre_feedforward_layernorm(hidden_states)
+        mlp_output = self.post_feedforward_layernorm(self.mlp(hidden_states))
+        mlp_rate = (self.lambda_2 * self.lambda_scale).abs()
+        hidden_states = hidden_states + mlp_rate * (mlp_output - hidden_states)
         return hidden_states
 
 
@@ -217,7 +221,7 @@ class DoryPreTrainedModel(LlamaPreTrainedModel):
 class DoryModel(LlamaModel):
     def __init__(self, config: DoryConfig):
         super().__init__(config)
-        del self.norm
+        self.norm = DoryL2Norm()
 
     def create_cache(self) -> DynamicCache:
         """One cache slot per layer and per loop: the recurrent layers attend to their own history in each loop."""
@@ -282,9 +286,10 @@ class DoryModel(LlamaModel):
                 hidden_states, past_key_values=past_key_values, **layer_inputs[decoder_layer.attention_type], **kwargs
             )
 
-        input_hidden_states = hidden_states
+        # Each loop restarts from the input section's output
+        input_hidden_states = self.norm(hidden_states)
         for loop_idx in range(self.config.n_recurrent_loops):
-            hidden_states = l2_normalize(hidden_states + input_hidden_states)
+            hidden_states = self.norm(hidden_states) + input_hidden_states
             for decoder_layer in self.layers[recurrent_start:recurrent_end]:
                 hidden_states = decoder_layer(
                     hidden_states,
@@ -293,13 +298,13 @@ class DoryModel(LlamaModel):
                     **layer_inputs[decoder_layer.attention_type],
                     **kwargs,
                 )
-            hidden_states = l2_normalize(hidden_states)
 
         for decoder_layer in self.layers[recurrent_end:]:
             hidden_states = decoder_layer(
                 hidden_states, past_key_values=past_key_values, **layer_inputs[decoder_layer.attention_type], **kwargs
             )
 
+        hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
 
 

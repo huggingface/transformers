@@ -162,6 +162,7 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightRenaming(r"^backbone\.", "model."),
             WeightRenaming(r"model\.embeddings", "model.embed_tokens"),
+            WeightRenaming(r"self_attn\.g_proj", "self_attn.gate_proj"),
         ],
         "hy_v4": [
             # General HC prefix which is dropped
