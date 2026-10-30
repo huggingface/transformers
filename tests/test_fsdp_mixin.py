@@ -28,7 +28,6 @@ from contextlib import contextmanager
 from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, is_torch_available
-from transformers.distributed.utils import get_distributed_backend
 from transformers.testing_utils import (
     SINGLE_PROCESS_DEVICES,
     backend_device_count,
@@ -40,6 +39,13 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.trainer_utils import set_seed
+
+from .distributed_testing_utils import (
+    _get_distributed_backend,
+    _get_distributed_device_type,
+    _get_rank_device,
+    _set_rank_device,
+)
 
 
 logger = logging.getLogger("transformers.training_test")
@@ -53,7 +59,7 @@ if is_torch_available():
 
     from transformers.distributed import DistributedConfig
     from transformers.distributed.checkpoint import load_optimizer_distributed, save_optimizer_distributed
-    from transformers.distributed.fsdp import _resolve_tied_embed_lm_head_plan, expand_fsdp_plan
+    from transformers.distributed.fsdp import _resolve_tied_embed_lm_head_plan
     from transformers.distributed.utils import gather_full_state_dict
 
 
@@ -84,28 +90,6 @@ FSDP_DISTRIBUTED_TEST_MODEL_TYPES = {
 # =============================================================================
 # Distributed helpers (top-level for pickling by mp.spawn)
 # =============================================================================
-
-
-def _get_distributed_device_type():
-    device_type = torch._C._get_accelerator().type
-    return "cpu" if device_type == "mps" else device_type
-
-
-def _get_distributed_backend():
-    return get_distributed_backend(_get_distributed_device_type()) or "gloo"
-
-
-def _get_rank_device(rank):
-    device_type = _get_distributed_device_type()
-    if device_type == "cpu":
-        return torch.device("cpu")
-    return torch.device(device_type, rank)
-
-
-def _set_rank_device(rank, backend=None):
-    # gloo ranks run on CPU, and there may be fewer devices than ranks
-    if _get_distributed_device_type() != "cpu" and backend != "gloo":
-        torch.accelerator.set_device_index(rank)
 
 
 def _get_available_fsdp_workers():
@@ -423,9 +407,8 @@ def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_wor
         model = AutoModelForCausalLM.from_pretrained(init_dir, distributed_config=distributed_config)
         dist.barrier()
 
-        adapted_fsdp_plan = _resolve_tied_embed_lm_head_plan(model._fsdp_plan, model)
-        reshard_targets, no_reshard_targets = expand_fsdp_plan(model, adapted_fsdp_plan)
-        expected_targets = {""} | {name for name, _ in reshard_targets + no_reshard_targets}
+        fsdp_plan = _resolve_tied_embed_lm_head_plan(model._fsdp_plan, model)
+        expected_targets = {""} | model._expand_parallel_plan(fsdp_plan).keys()
         actual_targets = {name for name, module in model.named_modules() if type(module).__name__.startswith("FSDP")}
 
         if rank == 0:

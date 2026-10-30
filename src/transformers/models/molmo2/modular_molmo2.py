@@ -1315,7 +1315,7 @@ class Molmo2VisionEncoderLayer(Siglip2EncoderLayer):
 
 @auto_docstring
 class Molmo2VisionModel(Molmo2PreTrainedModel):
-    config_class = Molmo2VisionConfig
+    config: Molmo2VisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = ["Molmo2VisionEncoderLayer"]
@@ -1364,7 +1364,7 @@ class Molmo2ImageProjectorMLP(LlamaMLP):
     """
 )
 class Molmo2Adapter(Molmo2PreTrainedModel):
-    config_class = Molmo2AdapterConfig
+    config: Molmo2AdapterConfig
     input_modalities = ("image",)
     _no_split_modules = ["Molmo2VisionAttention"]
     _can_record_outputs = {"attentions": Molmo2VisionAttention}
