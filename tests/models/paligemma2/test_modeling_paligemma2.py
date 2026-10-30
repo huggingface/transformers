@@ -211,6 +211,20 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             _ = model(input_ids=input_ids, pixel_values=pixel_values)
 
+    def test_final_logit_softcapping(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.text_config.final_logit_softcapping = 0.1
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**input_dict)
+
+            cap = outputs.logits.new_tensor(config.text_config.final_logit_softcapping).item()
+            self.assertLessEqual(outputs.logits.abs().max().item(), cap)
+
     @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
         super().test_training_gradient_checkpointing()
