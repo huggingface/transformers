@@ -405,6 +405,10 @@ class Emu3IntegrationTest(unittest.TestCase):
                     "USER: 64*64Describe what do you see here? ASSISTANT: The image features a close-up view of a black dog with a shiny black coat, lying on a wooden surface. The dog's eyes are open and it is looking directly at the camera, giving an",
                     "USER: 64*64What can you say about the image? ASSISTANT: The image shows a desert landscape with a large sand dune and some desert vegetation. The sand dune is prominent in the background, while the desert vegetation is more prominent in the foreground.",
                 ],
+                ("xpu", 5): [
+                    "USER: 64*64Describe what do you see here? ASSISTANT: The image features a close-up view of a black dog with a shiny black coat, lying on a wooden surface. The dog's eyes are open and it is looking directly at the camera, giving an",
+                    "USER: 64*64What can you say about the image? ASSISTANT: The image shows a desert landscape with a large sand dune and some bushes in the foreground. The sand dune is tall and has a smooth, curved shape. The sky is clear and blue,",
+                ],
             }
         )  # fmt: skip
         EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()

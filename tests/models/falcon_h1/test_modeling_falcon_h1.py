@@ -524,11 +524,33 @@ class FalconH1ModelIntegrationTest(unittest.TestCase):
             3. **"""
         )
 
+        EXPECTED_TEXT_BMG = textwrap.dedent(
+            """\
+            user
+            Tell me about the french revolution.
+            assistant
+            The French Revolution (1789–1799) was a period of radical social and political upheaval in France that fundamentally transformed the nation and had profound effects on the rest of Europe and the world. Here are the key aspects of the revolution:
+
+            ### **Causes**
+            1. **Economic Crisis**: France was in severe financial trouble due to costly wars (the American Revolution and the Seven Years' War), extravagant spending by the monarchy, and inefficient taxation.
+            2. **Social Inequality**: The rigid class system (the Ancien Régime) divided society into the privileged nobility and clergy (First Estate) and the commoners (Third Estate), who bore the brunt of taxation and had few rights.
+            3. **Enlightenment Ideas**: Philosophers like Rousseau, Voltaire, and Montesquieu inspired ideas of liberty, equality, and popular sovereignty.
+            4. **Settlement of 1789**: The Estates-General convened to address the financial crisis, leading to the Third Estate's declaration of itself as the National Assembly, marking the start of the revolution.
+
+            ### **Key Events**
+            1. **Storming of the Bastille (July 14, 1789)**: A symbol of royal tyranny, the Bastille fortress was stormed by revolutionaries, sparking widespread rebellion.
+            2. **Declaration of the Rights of Man and of the Citizen (1789)**: A foundational document proclaiming liberty, equality, and fraternity.
+            3. **Reign of Terror (1793–1794)**: Led by Maximilien Robespierre and the Committee of Public Safety, thousands were executed by guillotine for alleged counter-revolutionary activities.
+            4. **Rise and Fall of Robespierre**: Robespierre's radical rule ended with his execution in July 1794, leading to a more moderate phase known as the Thermidorian Reaction.
+            5. **Execution of Louis XVI (July 1793)**: The king was guillot"""
+        )
+
         expected_texts = Expectations(
             {
                 ("cuda", (8, 0)): EXPECTED_TEXT_A100,
                 ("cuda", (8, 6)): EXPECTED_TEXT_A10,
                 ("xpu", None): EXPECTED_TEXT_XPU,
+                ("xpu", 5): EXPECTED_TEXT_BMG,
             }
         )
         EXPECTED_TEXT = expected_texts.get_expectation()
