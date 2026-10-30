@@ -69,6 +69,7 @@ class DoryAttention(AfmoeAttention):
         super().__init__(config, layer_idx)
         self.q_norm = DoryL2Norm()
         self.k_norm = DoryL2Norm()
+        self.attn_sub_norm = DoryL2Norm()
         self.sqk = nn.Parameter(torch.full((config.num_attention_heads * self.head_dim,), config.initializer_range))
         self.s_gate = nn.Parameter(torch.full((config.num_attention_heads * self.head_dim,), config.initializer_range))
         self.sqk_scale = self.head_dim**0.5 / config.initializer_range
@@ -122,7 +123,7 @@ class DoryAttention(AfmoeAttention):
 
         output = output.view(*input_shape, -1).contiguous()
         output = output * torch.sigmoid(gate_states * (self.s_gate * self.s_gate_scale).square())
-        attn_output = self.o_proj(output)
+        attn_output = self.o_proj(self.attn_sub_norm(output))
         return attn_output, attn_weights
 
 
@@ -132,11 +133,12 @@ class DoryMLP(LlamaMLP):
         self.suv_gate = nn.Parameter(torch.ones(config.intermediate_size))
         self.suv_up = nn.Parameter(torch.ones(config.intermediate_size))
         self.suv_scale = config.hidden_size**0.5
+        self.ffn_sub_norm = DoryL2Norm()
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         gate = self.gate_proj(hidden_states) * (self.suv_gate * self.suv_scale)
         up = self.up_proj(hidden_states) * (self.suv_up * self.suv_scale)
-        return self.down_proj(self.act_fn(gate) * up)
+        return self.down_proj(self.ffn_sub_norm(self.act_fn(gate) * up))
 
 
 class DoryDecoderLayer(Gemma2DecoderLayer):
