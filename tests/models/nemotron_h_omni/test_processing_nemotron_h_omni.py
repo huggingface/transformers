@@ -107,6 +107,23 @@ class NemotronH_Omni_Reasoning_V3ProcessorTest(unittest.TestCase):
         self.assertEqual(num_placeholders, int(out["image_grid_hw"].prod()) // 4)
         self.assertGreater(num_placeholders, 1)
 
+    def test_video_token_is_expanded(self):
+        import torch
+
+        processor = self._processor()
+        video = torch.randint(0, 256, (3, 3, 64, 96), dtype=torch.uint8)
+        out = processor(text="<video> describe this picture", videos=[video], return_tensors="pt")
+
+        self.assertEqual(set(out.keys()), {"input_ids", "attention_mask", "pixel_values_videos"})
+        # one video of 3 frames, packed into 2 tubelets (the last one padded with the last frame)
+        num_videos, num_tubelets, channels, height, width = out["pixel_values_videos"].shape
+        self.assertEqual((num_videos, num_tubelets, channels), (1, 2, 2 * 3))
+        # one `<img>` chunk of post-pixel-shuffle tokens (2x2 patches each) per tubelet
+        num_placeholders = int((out["input_ids"][0] == processor.image_token_id).sum())
+        self.assertEqual(
+            num_placeholders, num_tubelets * (height // self.patch_size) * (width // self.patch_size) // 4
+        )
+
     def test_only_model_inputs_are_returned(self):
         processor = self._processor()
         image = Image.new("RGB", (128, 96))
