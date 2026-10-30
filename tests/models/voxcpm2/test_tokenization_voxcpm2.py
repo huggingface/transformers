@@ -12,9 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import unittest
+
 from transformers.models.llama.tokenization_llama import LlamaTokenizer
 from transformers.models.voxcpm2.tokenization_voxcpm2 import VoxCPM2Tokenizer
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import require_tokenizers
+
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 def get_tiny_voxcpm2_tokenizer() -> VoxCPM2Tokenizer:
@@ -33,53 +37,42 @@ def get_tiny_voxcpm2_tokenizer() -> VoxCPM2Tokenizer:
         "AB": 11,
         "▁AB": 12,
     }
+    for character in map(chr, range(33, 127)):
+        if character not in vocab:
+            vocab[character] = len(vocab)
+    for byte in range(256):
+        vocab[f"<0x{byte:02X}>"] = len(vocab)
     merges = [("你", "好"), ("▁", "你好"), ("A", "B"), ("▁", "AB")]
     return VoxCPM2Tokenizer(vocab=vocab, merges=merges, pad_token="<pad>")
 
 
-def test_chinese_characters_are_split_before_bpe_merges():
-    tokenizer = get_tiny_voxcpm2_tokenizer()
-    base_tokenizer = LlamaTokenizer(
-        vocab=tokenizer._vocab,
-        merges=tokenizer._merges,
-        pad_token="<pad>",
-        add_prefix_space=True,
-    )
+@require_tokenizers
+class VoxCPM2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    tokenizer_class = VoxCPM2Tokenizer
 
-    assert base_tokenizer("你好", add_special_tokens=False).input_ids == [8]
-    assert tokenizer("你好", add_special_tokens=False).input_ids == [4, 5, 6]
-    assert tokenizer.tokenize("你好") == ["▁", "你", "好"]
-    assert (
-        tokenizer("AB", add_special_tokens=False).input_ids == base_tokenizer("AB", add_special_tokens=False).input_ids
-    )
+    @classmethod
+    def setUpClass(cls):
+        cls.from_pretrained_id = []
+        super().setUpClass()
+        tokenizer = get_tiny_voxcpm2_tokenizer()
+        tokenizer.save_pretrained(cls.tmpdirname)
+        cls.from_pretrained_id = [cls.tmpdirname]
+        cls.tokenizers_list = [(cls.tokenizer_class, cls.tmpdirname, {})]
 
-
-@require_torch
-def test_chinese_splitting_preserves_batch_padding_and_tensor_conversion():
-    tokenizer = get_tiny_voxcpm2_tokenizer()
-    expected_input_ids = [[4, 5, 6], [3, 3, 12]]
-    expected_attention_mask = [[1, 1, 1], [0, 0, 1]]
-
-    list_batch = tokenizer(["你好", "AB"], add_special_tokens=False, padding=True)
-    assert list_batch.input_ids == expected_input_ids
-    assert list_batch.attention_mask == expected_attention_mask
-
-    for tensor_type in ("np", "pt"):
-        tensor_batch = tokenizer(
-            ["你好", "AB"],
-            add_special_tokens=False,
-            padding=True,
-            return_tensors=tensor_type,
+    def test_han_characters_are_split_before_bpe_merges(self):
+        tokenizer = self.get_tokenizer()
+        base_tokenizer = LlamaTokenizer(
+            vocab=tokenizer._vocab,
+            merges=tokenizer._merges,
+            pad_token="<pad>",
+            add_prefix_space=True,
         )
-        assert tensor_batch.input_ids.tolist() == expected_input_ids
-        assert tensor_batch.attention_mask.tolist() == expected_attention_mask
 
+        self.assertEqual(base_tokenizer.encode("你好", add_special_tokens=False), [8])
+        self.assertEqual(tokenizer.encode("你好", add_special_tokens=False), [4, 5, 6])
+        self.assertEqual(tokenizer.tokenize("你好"), ["▁", "你", "好"])
 
-def test_tokenizer_save_and_load_preserves_chinese_splitting(tmp_path):
-    tokenizer = get_tiny_voxcpm2_tokenizer()
-    tokenizer.save_pretrained(tmp_path)
-
-    restored_tokenizer = VoxCPM2Tokenizer.from_pretrained(tmp_path)
-
-    assert restored_tokenizer("你好", add_special_tokens=False).input_ids == [4, 5, 6]
-    assert restored_tokenizer("AB", add_special_tokens=False).input_ids == [12]
+        self.assertEqual(
+            tokenizer.encode("AB", add_special_tokens=False),
+            base_tokenizer.encode("AB", add_special_tokens=False),
+        )

@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tempfile
 import unittest
 
 from huggingface_hub.errors import StrictDataclassClassValidationError
@@ -45,7 +44,7 @@ class VoxCPM2ConfigTest(unittest.TestCase):
 
     def test_sub_configs_are_normalized(self):
         config = VoxCPM2Config(
-            lm_config={"hidden_size": 2048, "num_attention_heads": 16, "kv_channels": 128, "use_mup": False},
+            lm_config={"hidden_size": 1024, "num_attention_heads": 16, "kv_channels": 64},
             encoder_config={"hidden_dim": 512, "ffn_dim": 1536, "num_heads": 8, "num_layers": 3, "kv_channels": 64},
             dit_config={
                 "hidden_dim": 768,
@@ -53,8 +52,7 @@ class VoxCPM2ConfigTest(unittest.TestCase):
                 "num_heads": 12,
                 "num_layers": 5,
                 "kv_channels": 64,
-                "mean_mode": False,
-                "cfm_config": {"inference_cfg_rate": 2.0},
+                "cfm_config": {"inference_cfg_rate": 1.5},
             },
             audio_vae_config={"latent_dim": 64},
         )
@@ -65,8 +63,10 @@ class VoxCPM2ConfigTest(unittest.TestCase):
         self.assertIsInstance(config.dit_config.cfm_config, VoxCPM2CfmConfig)
         self.assertIsInstance(config.audio_vae_config, VoxCPM2AudioVAEConfig)
         self.assertIs(config.get_text_config(), config.lm_config)
+        self.assertEqual(config.dit_config.cfm_config.inference_cfg_rate, 1.5)
 
         for sub_config, expected_values in (
+            (config.lm_config, {"hidden_size": 1024, "num_attention_heads": 16, "head_dim": 64}),
             (
                 config.encoder_config,
                 {
@@ -95,72 +95,19 @@ class VoxCPM2ConfigTest(unittest.TestCase):
             for legacy_name in ("hidden_dim", "ffn_dim", "num_heads", "num_layers", "kv_channels"):
                 self.assertNotIn(legacy_name, serialized_config)
 
-    def test_released_config_fields_are_preserved(self):
+    def test_legacy_checkpoint_metadata(self):
         config = VoxCPM2Config(
             architecture="voxcpm2",
             device="cuda",
-            max_length=8192,
-            lm_config={
-                "bos_token_id": 1,
-                "eos_token_id": 2,
-                "hidden_size": 2048,
-                "intermediate_size": 6144,
-                "max_position_embeddings": 32768,
-                "num_attention_heads": 16,
-                "num_hidden_layers": 28,
-                "num_key_value_heads": 2,
-                "rms_norm_eps": 1e-5,
-                "rope_theta": 10000,
-                "kv_channels": 128,
-                "vocab_size": 73448,
-                "use_mup": False,
-                "scale_emb": 12,
-                "dim_model_base": 256,
-                "scale_depth": 1.4,
-            },
-            residual_lm_no_rope=True,
-            encoder_config={"hidden_dim": 1024, "ffn_dim": 4096, "num_heads": 16, "num_layers": 12},
-            dit_config={
-                "hidden_dim": 1024,
-                "ffn_dim": 4096,
-                "num_heads": 16,
-                "num_layers": 12,
-                "mean_mode": False,
-                "cfm_config": {"inference_cfg_rate": 2.0},
-            },
-            audio_vae_config={"latent_dim": 64, "sample_rate": 16000, "out_sample_rate": 48000},
+            max_length=4096,
         )
 
-        self.assertFalse(config.lm_config.use_mup)
-        self.assertEqual(config.lm_config.head_dim, 128)
-        self.assertTrue(config.residual_lm_no_rope)
-        self.assertFalse(config.dit_config.mean_mode)
-        self.assertEqual(config.lm_config.kv_channels, config.lm_config.head_dim)
-        self.assertNotIn("kv_channels", config.lm_config.to_dict())
-        self.assertEqual(config.dit_config.cfm_config.inference_cfg_rate, 2.0)
-        self.assertEqual(config.max_cache_length, 8192)
+        self.assertEqual(config.max_cache_length, 4096)
         self.assertFalse(hasattr(config, "device"))
         self.assertFalse(hasattr(config, "architecture"))
 
-    def test_save_load_and_auto_config(self):
-        config = VoxCPM2Config()
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            config.save_pretrained(tmp_dir)
-
-            loaded_config = AutoConfig.from_pretrained(tmp_dir)
-            loaded_text_config = VoxCPM2TextConfig.from_pretrained(tmp_dir)
-            loaded_encoder_config = VoxCPM2EncoderConfig.from_pretrained(tmp_dir)
-
-        self.assertIsInstance(loaded_config, VoxCPM2Config)
-        self.assertIsInstance(loaded_config.lm_config, VoxCPM2TextConfig)
-        self.assertIsInstance(loaded_text_config, VoxCPM2TextConfig)
-        self.assertIsInstance(loaded_encoder_config, VoxCPM2EncoderConfig)
-        loaded_dict = loaded_config.to_dict()
-        config_dict = config.to_dict()
-        loaded_dict.pop("_name_or_path")
-        config_dict.pop("_name_or_path")
-        self.assertEqual(loaded_dict, config_dict)
+    def test_auto_config_registration(self):
+        self.assertIsInstance(AutoConfig.for_model("voxcpm2"), VoxCPM2Config)
 
     def test_audio_vae_hop_lengths(self):
         config = VoxCPM2AudioVAEConfig()

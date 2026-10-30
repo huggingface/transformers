@@ -12,1811 +12,383 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
+import copy
+import unittest
+from unittest.mock import patch
 
 import numpy as np
-import pytest
 
-from transformers import (
-    AutoModel,
-    AutoModelForTextToWaveform,
-    GenerationConfig,
-    TextToAudioPipeline,
-    VoxCPM2AudioVAEConfig,
-    VoxCPM2Config,
-    VoxCPM2TextConfig,
-    is_torch_available,
-)
-from transformers.testing_utils import require_torch
+from transformers import GenerationConfig, VoxCPM2Config, is_torch_available, set_seed
+from transformers.testing_utils import require_torch, torch_device
+
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from .test_processing_voxcpm2 import get_tiny_voxcpm2_processor
 
 
 if is_torch_available():
     import torch
 
-    from transformers.models.voxcpm2.modeling_voxcpm2 import (
-        VoxCPM2Attention,
-        VoxCPM2AudioDecoder,
-        VoxCPM2AudioEncoder,
-        VoxCPM2AudioVAE,
-        VoxCPM2BackboneModel,
-        VoxCPM2CausalConv1d,
-        VoxCPM2CausalConvTranspose1d,
-        VoxCPM2CausalDecoderBlock,
-        VoxCPM2CausalEncoderBlock,
-        VoxCPM2CausalResidualUnit,
-        VoxCPM2ConditionalFlowMatching,
-        VoxCPM2DecoderLayer,
-        VoxCPM2GenerationOutput,
-        VoxCPM2LocalDiT,
-        VoxCPM2LocalEncoder,
-        VoxCPM2Model,
-        VoxCPM2ModelOutput,
-        VoxCPM2NoiseBlock,
-        VoxCPM2PreTrainedModel,
-        VoxCPM2RMSNorm,
-        VoxCPM2RotaryEmbedding,
-        VoxCPM2SampleRateConditionLayer,
-        VoxCPM2ScalarQuantizationLayer,
-        VoxCPM2SinusoidalPositionEmbedding,
-        VoxCPM2Snake1d,
-        VoxCPM2TimestepEmbedding,
-    )
-
-    all_model_classes = (VoxCPM2Model,)
-
-from .test_processing_voxcpm2 import get_tiny_voxcpm2_processor
-
-
-def get_tiny_voxcpm2_config() -> VoxCPM2Config:
-    return VoxCPM2Config(
-        lm_config={
-            "vocab_size": 32,
-            "hidden_size": 8,
-            "intermediate_size": 16,
-            "num_hidden_layers": 1,
-            "num_attention_heads": 2,
-            "num_key_value_heads": 1,
-            "head_dim": 4,
-            "kv_channels": 4,
-            "no_rope": True,
-            "rope_parameters": None,
-        },
-        encoder_config={"hidden_dim": 8, "ffn_dim": 16, "num_heads": 2, "num_layers": 1, "kv_channels": 4},
-        dit_config={
-            "hidden_dim": 8,
-            "ffn_dim": 16,
-            "num_heads": 2,
-            "num_layers": 1,
-            "kv_channels": 4,
-            "cfm_config": {"training_cfg_rate": 0.0, "t_scheduler": "uniform"},
-        },
-        audio_vae_config={
-            "encoder_dim": 4,
-            "encoder_rates": (2,),
-            "latent_dim": 4,
-            "decoder_dim": 8,
-            "decoder_rates": (2,),
-            "depthwise": True,
-            "sr_bin_boundaries": (10000, 20000),
-        },
-        feat_dim=4,
-        patch_size=2,
-        residual_lm_num_layers=1,
-        scalar_quantization_latent_dim=4,
-    )
-
-
-@require_torch
-def test_pretrained_model_metadata():
-    model = VoxCPM2PreTrainedModel(VoxCPM2Config())
-
-    assert model.main_input_name == "input_ids"
-    assert model.input_modalities == ("audio", "text")
-    assert model._supports_sdpa
-    assert not model.supports_gradient_checkpointing
-    assert "VoxCPM2DecoderLayer" in model._no_split_modules
-    assert model._get_dtype_plan(torch.float16)["audio_vae"] == torch.float32
-    assert model._get_dtype_plan(torch.bfloat16)["audio_vae"] == torch.float32
-
-
-@require_torch
-def test_pretrained_model_initialization():
-    model = VoxCPM2PreTrainedModel(VoxCPM2Config())
-    convolution = torch.nn.utils.parametrizations.weight_norm(VoxCPM2CausalConv1d(2, 3, 3))
-    with torch.no_grad():
-        convolution.parametrizations.weight.original0.zero_()
-        convolution.parametrizations.weight.original1.zero_()
-
-    model._init_weights(convolution)
-
-    weight_magnitude = convolution.parametrizations.weight.original0
-    weight_vector = convolution.parametrizations.weight.original1
-    expected_magnitude = torch.linalg.vector_norm(weight_vector, dim=(1, 2), keepdim=True)
-    torch.testing.assert_close(weight_magnitude, expected_magnitude)
-    assert torch.count_nonzero(weight_vector)
-
-    condition = VoxCPM2SampleRateConditionLayer(input_dim=4, num_sample_rate_buckets=3)
-    model._init_weights(condition)
-    torch.testing.assert_close(condition.scale_embed.weight, torch.ones_like(condition.scale_embed.weight))
-    torch.testing.assert_close(condition.bias_embed.weight, torch.zeros_like(condition.bias_embed.weight))
-
-
-@require_torch
-def test_model_constructor_and_state_dict_layout():
-    config = get_tiny_voxcpm2_config()
-    model = VoxCPM2Model(config)
-
-    assert model.base_lm.config._attn_implementation == "sdpa"
-    assert model.residual_lm.config._attn_implementation == "sdpa"
-    assert model.feat_encoder.encoder.config._attn_implementation == "sdpa"
-    assert model.feat_decoder.estimator.decoder.config._attn_implementation == "sdpa"
-    assert model.base_model is model
-    assert model.can_generate()
-    assert model.generation_config is not None
-    assert model.chunk_size == 2
-    assert model._decode_chunk_size == 2
-    assert model.audio_start_token == 101
-    assert model.ref_audio_end_token == 104
-
-    state_keys = set(model.state_dict())
-    expected_keys = {
-        "base_lm.embed_tokens.weight",
-        "residual_lm.norm.weight",
-        "feat_encoder.special_token",
-        "feat_decoder.estimator.in_proj.weight",
-        "fsq_layer.in_proj.weight",
-        "audio_vae.encoder.fc_mu.parametrizations.weight.original0",
-    }
-    assert expected_keys.issubset(state_keys)
-    assert not any(key.startswith("model.") for key in state_keys)
-
-    assert model.get_input_embeddings() is model.base_lm.embed_tokens
-    replacement_embeddings = torch.nn.Embedding(32, 8)
-    model.set_input_embeddings(replacement_embeddings)
-    assert model.get_input_embeddings() is replacement_embeddings
-
-
-@require_torch
-def test_auto_model_registration():
-    config = get_tiny_voxcpm2_config()
-
-    assert isinstance(AutoModel.from_config(config), VoxCPM2Model)
-    assert isinstance(AutoModelForTextToWaveform.from_config(config), VoxCPM2Model)
-
-
-@require_torch
-def test_text_to_audio_pipeline_zero_shot():
-    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
-    processor = get_tiny_voxcpm2_processor()
-    speech_generator = TextToAudioPipeline(
-        model=model,
-        processor=processor,
-        device=-1,
-        min_new_tokens=1,
-        max_new_tokens=1,
-    )
-
-    output = speech_generator(
-        "A",
-        generate_kwargs={"num_inference_steps": 1},
-    )
-
-    assert speech_generator.generation_config.min_new_tokens == 1
-    assert speech_generator.generation_config.max_new_tokens == 1
-    assert isinstance(output["audio"], np.ndarray)
-    assert output["audio"].shape == (model.patch_size * model._decode_chunk_size,)
-    assert output["sampling_rate"] == model.config.sample_rate
-    assert "'output_modalities': ('audio',)" in repr(speech_generator)
-
-
-@require_torch
-def test_model_training_forward_and_diagnostic_sampling():
-    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
-    input_ids = torch.tensor([[1, 2, 3]])
-    text_mask = torch.tensor([[1, 1, 0]])
-    audio_mask = 1 - text_mask
-    audio_features = torch.randn(1, 3, 2, 4, requires_grad=True)
-    loss_mask = torch.tensor([[0, 0, 1]], dtype=torch.float32)
-    labels = torch.tensor([[0, 0, 1]])
-
-    torch.manual_seed(7)
-    output = model(
-        input_ids=input_ids,
-        text_mask=text_mask,
-        audio_features=audio_features,
-        audio_mask=audio_mask,
-        loss_mask=loss_mask,
-        labels=labels,
-        sample_generate=True,
-        num_inference_steps=2,
-    )
-
-    assert isinstance(output, VoxCPM2ModelOutput)
-    assert output.loss.ndim == 0
-    assert output.diffusion_loss.ndim == 0
-    assert output.stop_loss.ndim == 0
-    torch.testing.assert_close(output.loss, output.diffusion_loss + output.stop_loss)
-    assert output.stop_logits.shape == (1, 3, 2)
-    assert output.latent_features.shape == (1, 4, 6)
-    assert output.generated_latent_features.shape == (1, 4, 6)
-    expected_latent_features = audio_features.reshape(1, 6, 4).transpose(1, 2).contiguous()
-    torch.testing.assert_close(output.latent_features, expected_latent_features)
-
-    output.loss.backward()
-    assert audio_features.grad is not None
-    assert model.stop_head.weight.grad is not None
-
-    tuple_output = model(
-        input_ids=input_ids,
-        text_mask=text_mask,
-        audio_features=audio_features.detach(),
-        audio_mask=audio_mask,
-        return_dict=False,
-    )
-    assert isinstance(tuple_output, tuple)
-    assert tuple_output[0].shape == (1, 3, 2)
-    assert tuple_output[1].shape == (1, 4, 6)
-
-    with pytest.raises(ValueError, match="loss_mask"):
-        model(input_ids, text_mask, audio_features.detach(), audio_mask, labels=labels)
-
-
-@require_torch
-def test_generation_input_validation():
-    model = VoxCPM2Model(get_tiny_voxcpm2_config())
-    input_ids = torch.ones(1, 3, dtype=torch.long)
-    text_mask = torch.ones_like(input_ids)
-    audio_features = torch.zeros(1, 3, 2, 4)
-    audio_mask = torch.zeros_like(input_ids)
-
-    model._validate_generation_inputs(
-        input_ids,
-        text_mask,
-        audio_features,
-        audio_mask,
-        min_new_audio_patches=2,
-        max_new_audio_patches=2,
-        num_inference_steps=1,
-    )
-
-    with pytest.raises(ValueError, match="batch size of 1"):
-        model._validate_generation_inputs(
-            input_ids.repeat(2, 1),
-            text_mask.repeat(2, 1),
-            audio_features.repeat(2, 1, 1, 1),
-            audio_mask.repeat(2, 1),
-            min_new_audio_patches=0,
-            max_new_audio_patches=2,
-            num_inference_steps=1,
-        )
-    with pytest.raises(ValueError, match="patches with shape"):
-        model._validate_generation_inputs(
-            input_ids,
-            text_mask,
-            torch.zeros(1, 3, 3, 4),
-            audio_mask,
-            min_new_audio_patches=0,
-            max_new_audio_patches=2,
-            num_inference_steps=1,
-        )
-    with pytest.raises(ValueError, match="greater than"):
-        model._validate_generation_inputs(
-            input_ids,
-            text_mask,
-            audio_features,
-            audio_mask,
-            min_new_audio_patches=3,
-            max_new_audio_patches=2,
-            num_inference_steps=1,
-        )
-
-
-@require_torch
-def test_generation_audio_extraction_uses_attention_mask():
-    model = VoxCPM2Model(get_tiny_voxcpm2_config())
-    input_values = torch.tensor([[[0.0, 0.0, 2.0, 0.0, 3.0, 0.0]]])
-
-    left_padded = model._extract_generation_audio(input_values, torch.tensor([[0, 0, 1, 1, 1, 1]]))
-    right_padded = model._extract_generation_audio(input_values, torch.tensor([[1, 1, 1, 1, 0, 0]]))
-
-    assert left_padded.tolist() == [[[2.0, 0.0, 3.0, 0.0]]]
-    assert right_padded.tolist() == [[[0.0, 0.0, 2.0, 0.0]]]
-    torch.testing.assert_close(model._extract_generation_audio(input_values[:, 0]), input_values)
-
-    with pytest.raises(ValueError, match="contiguous"):
-        model._extract_generation_audio(input_values, torch.tensor([[1, 0, 1, 0, 0, 0]]))
-    with pytest.raises(ValueError, match="zeros and ones"):
-        model._extract_generation_audio(input_values, torch.tensor([[1, 2, 1, 0, 0, 0]]))
-    with pytest.raises(ValueError, match="unmasked sample"):
-        model._extract_generation_audio(input_values, torch.zeros(1, 6))
-    with pytest.raises(ValueError, match="shape"):
-        model._extract_generation_audio(torch.zeros(1, 2, 6))
-    with pytest.raises(ValueError, match="one audio sample"):
-        model._extract_generation_audio(torch.zeros(2, 1, 6))
-
-
-@require_torch
-def test_generation_audio_encoding_applies_role_specific_padding():
-    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
-    input_values = torch.tensor([[[1.0, 2.0, 3.0, 0.0]]])
-    attention_mask = torch.tensor([[1, 1, 1, 0]])
-
-    left_padded_features = model._encode_generation_audio_features(input_values, attention_mask, "left")
-    right_padded_features = model._encode_generation_audio_features(input_values, attention_mask, "right")
-
-    manual_left_padding = torch.nn.functional.pad(input_values[..., :3], (1, 0))
-    expected_left_features = model.audio_vae.encode(manual_left_padding, sampling_rate=16000)
-    expected_left_features = expected_left_features.transpose(1, 2).reshape(1, 1, 2, 4)
-    manual_right_padding = torch.nn.functional.pad(input_values[..., :3], (0, 1))
-    expected_right_features = model.audio_vae.encode(manual_right_padding, sampling_rate=16000)
-    expected_right_features = expected_right_features.transpose(1, 2).reshape(1, 1, 2, 4)
-
-    torch.testing.assert_close(left_padded_features, expected_left_features, rtol=0, atol=0)
-    torch.testing.assert_close(right_padded_features, expected_right_features, rtol=0, atol=0)
-    assert not torch.equal(left_padded_features, right_padded_features)
-
-    with pytest.raises(ValueError, match="padding_side"):
-        model._encode_generation_audio_features(input_values, attention_mask, "middle")
-
-
-@require_torch
-def test_generation_audio_feature_alignment_preserves_prompt_order():
-    model = VoxCPM2Model(get_tiny_voxcpm2_config())
-    input_ids = torch.ones(1, 5, dtype=torch.long)
-    reference_features = torch.stack((torch.ones(2, 4), torch.full((2, 4), 2.0))).unsqueeze(0)
-    prompt_features = torch.full((1, 1, 2, 4), 3.0)
-
-    aligned_features = model._align_generation_audio_features(
-        input_ids,
-        audio_mask=torch.tensor([[0, 1, 1, 0, 1]]),
-        reference_features=reference_features,
-        prompt_features=prompt_features,
-    )
-
-    torch.testing.assert_close(aligned_features[0, 1], reference_features[0, 0])
-    torch.testing.assert_close(aligned_features[0, 2], reference_features[0, 1])
-    torch.testing.assert_close(aligned_features[0, 4], prompt_features[0, 0])
-    assert torch.count_nonzero(aligned_features[0, [0, 3]]) == 0
-
-    zero_shot_features = model._align_generation_audio_features(
-        input_ids[:, :2],
-        audio_mask=torch.zeros(1, 2),
-    )
-    assert zero_shot_features.shape == (1, 2, 2, 4)
-    assert torch.count_nonzero(zero_shot_features) == 0
-
-    with pytest.raises(ValueError, match="received 2 patches"):
-        model._align_generation_audio_features(
-            input_ids,
-            audio_mask=torch.tensor([[0, 1, 0, 0, 0]]),
-            reference_features=reference_features,
-        )
-
-
-@require_torch
-def test_generation_audio_feature_preparation_supports_raw_and_precomputed_inputs():
-    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
-    input_ids = torch.ones(1, 4, dtype=torch.long)
-    audio_mask = torch.tensor([[0, 1, 0, 1]])
-    reference_values = torch.tensor([[[1.0, 2.0, 3.0, 0.0]]])
-    prompt_values = torch.tensor([[[4.0, 5.0, 6.0, 0.0]]])
-    attention_mask = torch.tensor([[1, 1, 1, 0]])
-
-    prepared_features = model._prepare_generation_audio_features(
-        input_ids,
-        audio_mask,
-        prompt_input_values=prompt_values,
-        prompt_attention_mask=attention_mask,
-        reference_input_values=reference_values,
-        reference_attention_mask=attention_mask,
-    )
-    reference_features = model._encode_generation_audio_features(reference_values, attention_mask, "right")
-    prompt_features = model._encode_generation_audio_features(prompt_values, attention_mask, "left")
-    expected_features = model._align_generation_audio_features(
-        input_ids,
-        audio_mask,
-        reference_features=reference_features,
-        prompt_features=prompt_features,
-    )
-    torch.testing.assert_close(prepared_features, expected_features, rtol=0, atol=0)
-
-    precomputed_features = torch.randn(1, 4, 2, 4)
-    returned_features = model._prepare_generation_audio_features(input_ids, audio_mask, precomputed_features)
-    assert returned_features is precomputed_features
-
-    zero_shot_features = model._prepare_generation_audio_features(input_ids[:, :2], torch.zeros(1, 2))
-    assert torch.count_nonzero(zero_shot_features) == 0
-
-    with pytest.raises(ValueError, match="cannot be combined"):
-        model._prepare_generation_audio_features(
-            input_ids,
-            audio_mask,
-            precomputed_features,
-            prompt_input_values=prompt_values,
-        )
-    with pytest.raises(ValueError, match="requires"):
-        model._prepare_generation_audio_features(
-            input_ids,
-            audio_mask,
-            prompt_attention_mask=attention_mask,
-        )
-
-
-@require_torch
-def test_generation_prefill_matches_full_backbones():
-    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
-    input_ids = torch.tensor([[1, 2, 3]])
-    text_mask = torch.tensor([[1, 1, 0]])
-    audio_mask = 1 - text_mask
-    audio_features = torch.randn(1, 3, 2, 4)
-
-    lm_hidden_states, residual_hidden_states, conditioning_features, base_cache, residual_cache = (
-        model._prefill_generation(input_ids, text_mask, audio_features, audio_mask)
-    )
-
-    encoded_features = model.enc_to_lm_proj(model.feat_encoder(audio_features))
-    text_embeddings = model.base_lm.embed_tokens(input_ids)
-    inputs_embeds = text_mask.unsqueeze(-1) * text_embeddings + audio_mask.unsqueeze(-1) * encoded_features
-    base_states = model.base_lm(inputs_embeds=inputs_embeds).last_hidden_state
-    expected_encoded_states = model.fsq_layer(base_states) * audio_mask.unsqueeze(-1)
-    expected_encoded_states += base_states * text_mask.unsqueeze(-1)
-    residual_inputs = model.fusion_concat_proj(
-        torch.cat((expected_encoded_states, audio_mask.unsqueeze(-1) * encoded_features), dim=-1)
-    )
-    expected_residual_states = model.residual_lm(inputs_embeds=residual_inputs).last_hidden_state
-
-    torch.testing.assert_close(lm_hidden_states, expected_encoded_states[:, -1], rtol=0, atol=0)
-    torch.testing.assert_close(residual_hidden_states, expected_residual_states[:, -1], rtol=0, atol=0)
-    torch.testing.assert_close(conditioning_features, audio_features[:, -1], rtol=0, atol=0)
-    assert base_cache is not residual_cache
-    assert base_cache.get_seq_length() == input_ids.shape[1]
-    assert residual_cache.get_seq_length() == input_ids.shape[1]
-
-
-@require_torch
-def test_generation_audio_patch_sampling():
-    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
-
-    class RecordingFlowMatcher(torch.nn.Module):
-        def forward(self, mu, num_inference_steps, patch_size, conditioning, **kwargs):
-            self.call = (mu, num_inference_steps, patch_size, conditioning, kwargs)
-            return conditioning
-
-    flow_matcher = RecordingFlowMatcher()
-    model.feat_decoder = flow_matcher
-    lm_hidden_states = torch.randn(1, 8)
-    residual_hidden_states = torch.randn(1, 8)
-    conditioning_features = torch.randn(1, 2, 4)
-
-    generated_features = model._sample_audio_patch(
-        lm_hidden_states,
-        residual_hidden_states,
-        conditioning_features,
-        num_inference_steps=3,
-        guidance_scale=2.5,
-        temperature=0.8,
-        sway_sampling_coefficient=0.4,
-        use_cfg_zero_star=False,
-    )
-
-    mu, num_inference_steps, patch_size, conditioning, kwargs = flow_matcher.call
-    expected_mu = torch.cat(
-        (model.lm_to_dit_proj(lm_hidden_states), model.res_to_dit_proj(residual_hidden_states)), dim=-1
-    )
-    torch.testing.assert_close(mu, expected_mu)
-    torch.testing.assert_close(conditioning, conditioning_features.transpose(1, 2))
-    torch.testing.assert_close(generated_features, conditioning_features)
-    assert num_inference_steps == 3
-    assert patch_size == 2
-    assert kwargs == {
-        "temperature": 0.8,
-        "cfg_value": 2.5,
-        "sway_sampling_coefficient": 0.4,
-        "use_cfg_zero_star": False,
-    }
-
-    generator = torch.Generator().manual_seed(7)
-    model._sample_audio_patch(
-        lm_hidden_states,
-        residual_hidden_states,
-        conditioning_features,
-        num_inference_steps=3,
-        guidance_scale=2.5,
-        temperature=0.8,
-        sway_sampling_coefficient=0.4,
-        use_cfg_zero_star=False,
-        generator=generator,
-    )
-    assert flow_matcher.call[-1]["generator"] is generator
-
-
-@require_torch
-def test_generation_cache_update_matches_full_recomputation():
-    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
-    input_ids = torch.tensor([[1, 2, 3]])
-    text_mask = torch.tensor([[1, 1, 0]])
-    audio_mask = 1 - text_mask
-    audio_features = torch.randn(1, 3, 2, 4)
-    generated_features = torch.randn(1, 2, 4)
-
-    _, _, _, base_cache, residual_cache = model._prefill_generation(input_ids, text_mask, audio_features, audio_mask)
-    lm_hidden_states, residual_hidden_states, base_cache, residual_cache = model._update_generation_cache(
-        generated_features, base_cache, residual_cache
-    )
-
-    encoded_features = model.enc_to_lm_proj(model.feat_encoder(audio_features))
-    text_embeddings = model.base_lm.embed_tokens(input_ids)
-    prompt_embeddings = text_mask.unsqueeze(-1) * text_embeddings + audio_mask.unsqueeze(-1) * encoded_features
-    base_prompt_states = model.base_lm(inputs_embeds=prompt_embeddings).last_hidden_state
-    mixed_base_prompt_states = model.fsq_layer(base_prompt_states) * audio_mask.unsqueeze(-1)
-    mixed_base_prompt_states += base_prompt_states * text_mask.unsqueeze(-1)
-    encoded_patch = model.enc_to_lm_proj(model.feat_encoder(generated_features.unsqueeze(1)))
-    full_base_inputs = torch.cat((prompt_embeddings, encoded_patch), dim=1)
-    expected_lm_hidden_states = model.base_lm(inputs_embeds=full_base_inputs).last_hidden_state[:, -1]
-    expected_lm_hidden_states = model.fsq_layer(expected_lm_hidden_states)
-
-    residual_prompt_inputs = model.fusion_concat_proj(
-        torch.cat((mixed_base_prompt_states, audio_mask.unsqueeze(-1) * encoded_features), dim=-1)
-    )
-    residual_patch_input = model.fusion_concat_proj(
-        torch.cat((expected_lm_hidden_states, encoded_patch[:, 0]), dim=-1)
-    ).unsqueeze(1)
-    full_residual_inputs = torch.cat((residual_prompt_inputs, residual_patch_input), dim=1)
-    expected_residual_hidden_states = model.residual_lm(inputs_embeds=full_residual_inputs).last_hidden_state[:, -1]
-
-    torch.testing.assert_close(lm_hidden_states, expected_lm_hidden_states, rtol=1e-5, atol=1e-6)
-    torch.testing.assert_close(residual_hidden_states, expected_residual_hidden_states, rtol=1e-5, atol=1e-6)
-    assert base_cache.get_seq_length() == input_ids.shape[1] + 1
-    assert residual_cache.get_seq_length() == input_ids.shape[1] + 1
-
-
-@require_torch
-def test_generation_stop_prediction():
-    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
-    hidden_states = torch.randn(3, 8)
-
-    stop_logits, stop_flags = model._get_stop_flags(hidden_states)
-
-    expected_logits = model.stop_head(model.stop_actn(model.stop_proj(hidden_states)))
-    torch.testing.assert_close(stop_logits, expected_logits)
-    torch.testing.assert_close(stop_flags, expected_logits.argmax(dim=-1).bool())
-    assert stop_logits.shape == (3, 2)
-    assert stop_flags.dtype == torch.bool
-
-
-@require_torch
-def test_generation_decoder_context_uses_trailing_audio_only():
-    model = VoxCPM2Model(get_tiny_voxcpm2_config())
-    audio_features = torch.arange(1 * 5 * 2 * 4).reshape(1, 5, 2, 4)
-
-    context = model._prepare_decoder_context(
-        audio_features, audio_mask=torch.tensor([[1, 0, 0, 1, 1]]), decoder_context_patches=3
-    )
-    torch.testing.assert_close(context, audio_features[:, -2:])
-
-    empty_context = model._prepare_decoder_context(
-        audio_features, audio_mask=torch.tensor([[1, 0, 0, 1, 0]]), decoder_context_patches=3
-    )
-    assert empty_context.shape == (1, 0, 2, 4)
-
-    zero_context = model._prepare_decoder_context(
-        audio_features, audio_mask=torch.ones(1, 5), decoder_context_patches=0
-    )
-    assert zero_context.shape == (1, 0, 2, 4)
-
-    with pytest.raises(ValueError, match="non-negative"):
-        model._prepare_decoder_context(audio_features, torch.ones(1, 5), decoder_context_patches=-1)
-
-
-@require_torch
-def test_autoregressive_audio_feature_generation():
-    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
-    input_ids = torch.tensor([[1, 2, 3]])
-    text_mask = torch.ones_like(input_ids)
-    audio_mask = torch.zeros_like(input_ids)
-    audio_features = torch.zeros(1, 3, 2, 4)
-    model._get_stop_flags = lambda hidden_states: (
-        torch.tensor([[0.0, 1.0]], device=hidden_states.device),
-        torch.tensor([True], device=hidden_states.device),
-    )
-
-    output = model._generate_audio_features(
-        input_ids,
-        text_mask,
-        audio_features,
-        audio_mask,
-        min_new_audio_patches=4,
-        max_new_audio_patches=5,
-        num_inference_steps=1,
-        generator=torch.Generator().manual_seed(7),
-    )
-
-    assert isinstance(output, VoxCPM2GenerationOutput)
-    assert output.num_generated_patches == 4
-    assert output.audio_features.shape == (1, 4, 2, 4)
-    assert output.latent_features.shape == (1, 4, 8)
-    assert output.stop_logits.shape == (1, 4, 2)
-    expected_latent_features = output.audio_features.reshape(1, 8, 4).transpose(1, 2).contiguous()
-    torch.testing.assert_close(output.latent_features, expected_latent_features)
-
-    repeated_output = model._generate_audio_features(
-        input_ids,
-        text_mask,
-        audio_features,
-        audio_mask,
-        min_new_audio_patches=4,
-        max_new_audio_patches=5,
-        num_inference_steps=1,
-        generator=torch.Generator().manual_seed(7),
-    )
-    different_output = model._generate_audio_features(
-        input_ids,
-        text_mask,
-        audio_features,
-        audio_mask,
-        min_new_audio_patches=4,
-        max_new_audio_patches=5,
-        num_inference_steps=1,
-        generator=torch.Generator().manual_seed(8),
-    )
-    torch.testing.assert_close(output.audio_features, repeated_output.audio_features, rtol=0, atol=0)
-    assert not torch.equal(output.audio_features, different_output.audio_features)
-
-    with pytest.raises(ValueError, match="max_cache_length"):
-        model._generate_audio_features(
-            input_ids,
-            text_mask,
-            audio_features,
-            audio_mask,
-            min_new_audio_patches=4,
-            max_new_audio_patches=model.config.max_cache_length,
-            num_inference_steps=1,
-        )
-
-
-@require_torch
-def test_waveform_generation_and_decoder_context_crop():
-    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
-    input_ids = torch.tensor([[1, 0, 0]])
-    text_mask = torch.tensor([[1, 0, 0]])
-    audio_mask = 1 - text_mask
-    audio_features = torch.randn(1, 3, 2, 4)
-    model._get_stop_flags = lambda hidden_states: (
-        torch.tensor([[0.0, 1.0]], device=hidden_states.device),
-        torch.tensor([True], device=hidden_states.device),
-    )
-    generation_config = GenerationConfig(min_new_tokens=2, max_new_tokens=2, return_dict_in_generate=True)
-
-    output = model.generate(
-        input_ids,
-        text_mask,
-        audio_features,
-        audio_mask,
-        generation_config=generation_config,
-        num_inference_steps=1,
-        decoder_context_patches=1,
-        generator=torch.Generator().manual_seed(7),
-    )
-
-    assert isinstance(output, VoxCPM2GenerationOutput)
-    assert "audio" in output
-    assert output.audio.shape == (1, 8)
-    decoder_context = audio_features[:, -1:]
-    decoder_features = torch.cat((decoder_context, output.audio_features), dim=1)
-    decoder_features = decoder_features.reshape(1, 6, 4).transpose(1, 2).contiguous()
-    expected_audio = model.audio_vae.decode(decoder_features).squeeze(1)
-    expected_audio = expected_audio[:, model.patch_size * model._decode_chunk_size :]
-    torch.testing.assert_close(output.audio, expected_audio)
-
-    waveform = model.generate(
-        input_ids,
-        text_mask,
-        audio_features,
-        audio_mask,
-        min_new_audio_patches=2,
-        max_new_audio_patches=2,
-        num_inference_steps=1,
-        generator=torch.Generator().manual_seed(7),
-    )
-    assert isinstance(waveform, torch.Tensor)
-    assert waveform.shape == (1, 8)
-
-
-@require_torch
-def test_raw_prompt_generation_matches_precomputed_audio_features():
-    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
-    processor = get_tiny_voxcpm2_processor()
-    model._get_stop_flags = lambda hidden_states: (
-        torch.tensor([[0.0, 1.0]], device=hidden_states.device),
-        torch.tensor([True], device=hidden_states.device),
-    )
-    model_inputs = processor(
-        text="A",
-        audio=np.array([4.0, 5.0, 6.0], dtype=np.float32),
-        prompt_text="B",
-        reference_audio=np.array([1.0, 2.0, 3.0], dtype=np.float32),
-        sampling_rate=16000,
-        return_tensors="pt",
-    )
-    aligned_features = model._prepare_generation_audio_features(
-        model_inputs.input_ids,
-        model_inputs.audio_mask,
-        prompt_input_values=model_inputs.prompt_input_values,
-        prompt_attention_mask=model_inputs.prompt_attention_mask,
-        reference_input_values=model_inputs.reference_input_values,
-        reference_attention_mask=model_inputs.reference_attention_mask,
-    )
-    generation_kwargs = {
-        "min_new_audio_patches": 2,
-        "max_new_audio_patches": 2,
-        "num_inference_steps": 1,
-        "decoder_context_patches": 1,
-    }
-
-    precomputed_waveform = model.generate(
-        model_inputs.input_ids,
-        model_inputs.text_mask,
-        aligned_features,
-        model_inputs.audio_mask,
-        generator=torch.Generator().manual_seed(7),
-        **generation_kwargs,
-    )
-    raw_waveform = model.generate(
-        **model_inputs,
-        generator=torch.Generator().manual_seed(7),
-        **generation_kwargs,
-    )
-
-    torch.testing.assert_close(raw_waveform, precomputed_waveform, rtol=0, atol=0)
-
-
-@require_torch
-def test_raw_prompt_streaming_matches_precomputed_audio_features():
-    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
-    processor = get_tiny_voxcpm2_processor()
-    model._get_stop_flags = lambda hidden_states: (
-        torch.tensor([[0.0, 1.0]], device=hidden_states.device),
-        torch.tensor([True], device=hidden_states.device),
-    )
-    model_inputs = processor(
-        text="A",
-        audio=np.array([4.0, 5.0, 6.0], dtype=np.float32),
-        prompt_text="B",
-        reference_audio=np.array([1.0, 2.0, 3.0], dtype=np.float32),
-        sampling_rate=16000,
-        return_tensors="pt",
-    )
-    aligned_features = model._prepare_generation_audio_features(
-        model_inputs.input_ids,
-        model_inputs.audio_mask,
-        prompt_input_values=model_inputs.prompt_input_values,
-        prompt_attention_mask=model_inputs.prompt_attention_mask,
-        reference_input_values=model_inputs.reference_input_values,
-        reference_attention_mask=model_inputs.reference_attention_mask,
-    )
-    generation_kwargs = {
-        "min_new_audio_patches": 2,
-        "max_new_audio_patches": 2,
-        "num_inference_steps": 1,
-        "decoder_context_patches": 1,
-    }
-
-    precomputed_chunks = list(
-        model.generate_streaming(
-            model_inputs.input_ids,
-            model_inputs.text_mask,
-            aligned_features,
-            model_inputs.audio_mask,
-            generator=torch.Generator().manual_seed(7),
-            **generation_kwargs,
-        )
-    )
-    raw_chunks = list(
-        model.generate_streaming(
-            **model_inputs,
-            generator=torch.Generator().manual_seed(7),
-            **generation_kwargs,
-        )
-    )
-
-    assert len(raw_chunks) == len(precomputed_chunks) == 2
-    for raw_chunk, precomputed_chunk in zip(raw_chunks, precomputed_chunks):
-        torch.testing.assert_close(raw_chunk, precomputed_chunk, rtol=0, atol=0)
-
-
-@require_torch
-def test_streaming_waveform_generation_matches_non_streaming_generation():
-    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
-    input_ids = torch.tensor([[1, 0, 0]])
-    text_mask = torch.tensor([[1, 0, 0]])
-    audio_mask = 1 - text_mask
-    audio_features = torch.randn(1, 3, 2, 4)
-    model._get_stop_flags = lambda hidden_states: (
-        torch.tensor([[0.0, 1.0]], device=hidden_states.device),
-        torch.tensor([True], device=hidden_states.device),
-    )
-    generation_kwargs = {
-        "min_new_audio_patches": 2,
-        "max_new_audio_patches": 2,
-        "num_inference_steps": 1,
-        "decoder_context_patches": 1,
-    }
-
-    waveform = model.generate(
-        input_ids,
-        text_mask,
-        audio_features,
-        audio_mask,
-        generator=torch.Generator().manual_seed(7),
-        **generation_kwargs,
-    )
-    streamed_chunks = list(
-        model.generate_streaming(
-            input_ids,
-            text_mask,
-            audio_features,
-            audio_mask,
-            generator=torch.Generator().manual_seed(7),
-            **generation_kwargs,
-        )
-    )
-
-    assert len(streamed_chunks) == 2
-    assert all(chunk.shape == (1, 4) for chunk in streamed_chunks)
-    torch.testing.assert_close(torch.cat(streamed_chunks, dim=-1), waveform, rtol=1e-5, atol=1e-6)
-
-    structured_chunks = list(
-        model.generate_streaming(
-            input_ids,
-            text_mask,
-            audio_features,
-            audio_mask,
-            generator=torch.Generator().manual_seed(7),
-            return_dict_in_generate=True,
-            **generation_kwargs,
-        )
-    )
-    assert all(isinstance(chunk, VoxCPM2GenerationOutput) for chunk in structured_chunks)
-    assert [chunk.num_generated_patches for chunk in structured_chunks] == [1, 2]
-    assert all(chunk.audio.shape == (1, 4) for chunk in structured_chunks)
-
-
-@require_torch
-def test_streaming_audio_features_match_non_streaming_generation():
-    model = VoxCPM2Model(get_tiny_voxcpm2_config()).eval()
-    input_ids = torch.tensor([[1, 2, 3]])
-    text_mask = torch.ones_like(input_ids)
-    audio_mask = torch.zeros_like(input_ids)
-    audio_features = torch.zeros(1, 3, 2, 4)
-    model._get_stop_flags = lambda hidden_states: (
-        torch.tensor([[0.0, 1.0]], device=hidden_states.device),
-        torch.tensor([True], device=hidden_states.device),
-    )
-
-    chunks = list(
-        model._generate_audio_features_streaming(
-            input_ids,
-            text_mask,
-            audio_features,
-            audio_mask,
-            min_new_audio_patches=4,
-            max_new_audio_patches=5,
-            num_inference_steps=1,
-            generator=torch.Generator().manual_seed(7),
-        )
-    )
-    full_output = model._generate_audio_features(
-        input_ids,
-        text_mask,
-        audio_features,
-        audio_mask,
-        min_new_audio_patches=4,
-        max_new_audio_patches=5,
-        num_inference_steps=1,
-        generator=torch.Generator().manual_seed(7),
-    )
-
-    assert len(chunks) == 4
-    assert [chunk.num_generated_patches for chunk in chunks] == [1, 2, 3, 4]
-    assert all(chunk.audio_features.shape == (1, 1, 2, 4) for chunk in chunks)
-    streamed_features = torch.cat([chunk.audio_features for chunk in chunks], dim=1)
-    torch.testing.assert_close(streamed_features, full_output.audio_features, rtol=0, atol=0)
-
-
-@require_torch
-def test_generation_parameter_resolution():
-    model = VoxCPM2Model(get_tiny_voxcpm2_config())
-
-    defaults = model._resolve_generation_parameters(None, None, None, None, None, None, {})
-    assert defaults == (4, 2000, 2.0, 1.0, False)
-
-    generation_config = GenerationConfig(
-        min_new_tokens=2,
-        max_new_tokens=3,
-        guidance_scale=1.5,
-        temperature=0.7,
-        return_dict_in_generate=True,
-    )
-    resolved = model._resolve_generation_parameters(generation_config, None, None, None, None, None, {})
-    assert resolved == (2, 3, 1.5, 0.7, True)
-
-    updated = model._resolve_generation_parameters(None, None, None, None, None, None, {"max_new_tokens": 6})
-    assert updated[1] == 6
-    with pytest.raises(ValueError, match="Unsupported generation arguments"):
-        model._resolve_generation_parameters(None, None, None, None, None, None, {"not_supported": True})
-
-
-@require_torch
-def test_scalar_quantization_matches_reference():
-    config = VoxCPM2Config()
-    config.lm_config.hidden_size = 2
-    config.scalar_quantization_latent_dim = 3
-    config.scalar_quantization_scale = 4
-    layer = VoxCPM2ScalarQuantizationLayer(config)
-
-    with torch.no_grad():
-        layer.in_proj.weight.copy_(torch.tensor([[1.0, 0.0], [0.0, 1.0], [0.5, -0.5]]))
-        layer.in_proj.bias.zero_()
-        layer.out_proj.weight.copy_(torch.tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 1.0]]))
-        layer.out_proj.bias.zero_()
-
-    assert set(layer.state_dict()) == {"in_proj.weight", "in_proj.bias", "out_proj.weight", "out_proj.bias"}
-    assert layer.in_proj.weight.shape == (3, 2)
-    assert layer.out_proj.weight.shape == (2, 3)
-
-    hidden_states = torch.tensor([[[-1.0, 0.25], [0.5, 1.0]]])
-    projected_states = torch.tanh(layer.in_proj(hidden_states))
-    quantized_states = torch.round(projected_states * layer.scale) / layer.scale
-    expected_output = layer.out_proj(quantized_states)
-
-    layer.eval()
-    torch.testing.assert_close(layer(hidden_states), expected_output, rtol=0, atol=0)
-
-    layer.train()
-    training_input = hidden_states.clone().requires_grad_()
-    training_output = layer(training_input)
-    torch.testing.assert_close(training_output, expected_output, rtol=0, atol=0)
-    training_output.sum().backward()
-
-    reference_input = hidden_states.clone().requires_grad_()
-    layer.out_proj(torch.tanh(layer.in_proj(reference_input))).sum().backward()
-    torch.testing.assert_close(training_input.grad, reference_input.grad, rtol=0, atol=0)
-
-
-@require_torch
-def test_snake_activation_matches_reference():
-    layer = VoxCPM2Snake1d(3)
-    with torch.no_grad():
-        layer.alpha.copy_(torch.tensor([[[0.5], [1.0], [2.0]]]))
-
-    assert list(layer.state_dict()) == ["alpha"]
-    assert layer.alpha.shape == (1, 3, 1)
-
-    hidden_states = torch.randn(2, 3, 4, 5, requires_grad=True)
-    output = layer(hidden_states)
-    reshaped_states = hidden_states.reshape(2, 3, -1)
-    expected_output = reshaped_states + (layer.alpha + 1e-9).reciprocal() * torch.sin(
-        layer.alpha * reshaped_states
-    ).pow(2)
-    expected_output = expected_output.reshape_as(hidden_states)
-    torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
-
-    output.sum().backward()
-    output_gradient = hidden_states.grad.clone()
-    hidden_states.grad = None
-    expected_output.sum().backward()
-    torch.testing.assert_close(output_gradient, hidden_states.grad, rtol=0, atol=0)
-
-
-@require_torch
-def test_causal_convolution_matches_reference():
-    layer = VoxCPM2CausalConv1d(2, 4, kernel_size=6, stride=3, padding=2, output_padding=1)
-    assert list(layer.state_dict()) == ["weight", "bias"]
-    assert layer.padding == (0,)
-    assert layer.causal_padding == 3
-
-    hidden_states = torch.randn(2, 2, 19, requires_grad=True)
-    output = layer(hidden_states)
-
-    reference_input = hidden_states.detach().clone().requires_grad_()
-    padded_states = torch.nn.functional.pad(reference_input, (layer.causal_padding, 0))
-    expected_output = torch.nn.functional.conv1d(
-        padded_states,
-        layer.weight,
-        layer.bias,
-        stride=layer.stride,
-        dilation=layer.dilation,
-        groups=layer.groups,
-    )
-    torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
-
-    output.sum().backward()
-    expected_output.sum().backward()
-    torch.testing.assert_close(hidden_states.grad, reference_input.grad, rtol=0, atol=0)
-
-
-@require_torch
-def test_causal_residual_unit_matches_reference():
-    layer = VoxCPM2CausalResidualUnit(hidden_dim=4, dilation=3, groups=2)
-    assert set(layer.state_dict()) == {
-        "block.0.alpha",
-        "block.1.bias",
-        "block.1.parametrizations.weight.original0",
-        "block.1.parametrizations.weight.original1",
-        "block.2.alpha",
-        "block.3.bias",
-        "block.3.parametrizations.weight.original0",
-        "block.3.parametrizations.weight.original1",
-    }
-
-    hidden_states = torch.randn(2, 4, 19, requires_grad=True)
-    output = layer(hidden_states)
-    expected_output = hidden_states + layer.block(hidden_states)
-    torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
-
-    output.sum().backward()
-    assert hidden_states.grad is not None
-
-
-@require_torch
-def test_causal_encoder_block_matches_reference():
-    layer = VoxCPM2CausalEncoderBlock(output_dim=8, input_dim=4, stride=3, groups=2)
-    state_keys = set(layer.state_dict())
-    assert len(state_keys) == 28
-    assert "block.0.block.1.parametrizations.weight.original0" in state_keys
-    assert "block.4.parametrizations.weight.original1" in state_keys
-
-    hidden_states = torch.randn(2, 4, 31, requires_grad=True)
-    output = layer(hidden_states)
-    expected_output = layer.block(hidden_states)
-    assert output.shape == (2, 8, 10)
-    torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
-
-    output.sum().backward()
-    assert hidden_states.grad is not None
-
-
-@require_torch
-def test_audio_encoder_matches_reference():
-    config = VoxCPM2AudioVAEConfig(
-        encoder_dim=4,
-        encoder_rates=(2, 3),
-        latent_dim=3,
-        decoder_dim=16,
-        decoder_rates=(2, 2),
-        depthwise=True,
-    )
-    model = VoxCPM2AudioEncoder(config)
-    assert len(model.state_dict()) == 65
-    assert model.encoder_dim == 16
-    assert "block.0.parametrizations.weight.original0" in model.state_dict()
-    assert "fc_mu.parametrizations.weight.original1" in model.state_dict()
-
-    input_values = torch.randn(2, 1, 36, requires_grad=True)
-    output = model(input_values)
-    hidden_states = model.block(input_values)
-    assert output["hidden_state"].shape == (2, 16, 6)
-    assert output["mu"].shape == (2, 3, 6)
-    assert output["logvar"].shape == (2, 3, 6)
-    torch.testing.assert_close(output["hidden_state"], hidden_states, rtol=0, atol=0)
-    torch.testing.assert_close(output["mu"], model.fc_mu(hidden_states), rtol=0, atol=0)
-    torch.testing.assert_close(output["logvar"], model.fc_logvar(hidden_states), rtol=0, atol=0)
-
-    output["mu"].sum().backward()
-    assert input_values.grad is not None
-
-
-@require_torch
-def test_decoder_noise_block_matches_reference():
-    layer = VoxCPM2NoiseBlock(4)
-    assert set(layer.state_dict()) == {
-        "linear.parametrizations.weight.original0",
-        "linear.parametrizations.weight.original1",
-    }
-
-    hidden_states = torch.randn(2, 4, 9)
-    torch.manual_seed(7)
-    noise = torch.randn(2, 1, 9)
-    expected_output = hidden_states + noise * layer.linear(hidden_states)
-    torch.manual_seed(7)
-    output = layer(hidden_states)
-    torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
-
-
-@require_torch
-def test_causal_decoder_block_matches_reference():
-    layer = VoxCPM2CausalDecoderBlock(input_dim=8, output_dim=4, stride=3, groups=2)
-    state_keys = set(layer.state_dict())
-    assert len(state_keys) == 28
-    assert "block.1.parametrizations.weight.original0" in state_keys
-    assert "block.2.block.1.parametrizations.weight.original1" in state_keys
-
-    hidden_states = torch.randn(2, 8, 10, requires_grad=True)
-    output = layer(hidden_states)
-    expected_output = layer.block(hidden_states)
-    assert output.shape == (2, 4, 30)
-    torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
-
-    output.sum().backward()
-    assert hidden_states.grad is not None
-
-    noise_layer = VoxCPM2CausalDecoderBlock(8, 4, stride=3, groups=2, use_noise_block=True)
-    assert len(noise_layer.state_dict()) == 30
-
-
-@require_torch
-def test_sample_rate_conditioning_matches_reference():
-    hidden_states = torch.randn(2, 4, 5)
-    sample_rate_ids = torch.tensor([0, 2])
-
-    scale_bias_layer = VoxCPM2SampleRateConditionLayer(4, 3)
-    assert set(scale_bias_layer.state_dict()) == {"scale_embed.weight", "bias_embed.weight"}
-    torch.testing.assert_close(scale_bias_layer(hidden_states, sample_rate_ids), hidden_states, rtol=0, atol=0)
-
-    add_layer = VoxCPM2SampleRateConditionLayer(4, 3, conditioning_type="add")
-    expected_add_output = hidden_states + add_layer.cond_embed(sample_rate_ids).unsqueeze(-1)
-    torch.testing.assert_close(add_layer(hidden_states, sample_rate_ids), expected_add_output, rtol=0, atol=0)
-
-    concat_layer = VoxCPM2SampleRateConditionLayer(
-        4, 3, conditioning_type="concat", conditioning_dim=2, use_output_layer=True
-    )
-    assert concat_layer(hidden_states, sample_rate_ids).shape == hidden_states.shape
-    with pytest.raises(ValueError, match="use_output_layer"):
-        VoxCPM2SampleRateConditionLayer(4, 3, conditioning_type="concat")
-
-
-@require_torch
-def test_audio_decoder_matches_reference():
-    config = VoxCPM2AudioVAEConfig(
-        encoder_dim=4,
-        encoder_rates=(2, 3),
-        latent_dim=3,
-        decoder_dim=16,
-        decoder_rates=(3, 2),
-        depthwise=True,
-        sr_bin_boundaries=(10, 20),
-    )
-    model = VoxCPM2AudioDecoder(config)
-    assert len(model.state_dict()) == 71
-    torch.testing.assert_close(model.state_dict()["sr_bin_boundaries"], torch.tensor([10, 20], dtype=torch.int32))
-
-    sample_rate = torch.tensor([8, 25], dtype=torch.int32)
-    torch.testing.assert_close(model.get_sample_rate_ids(sample_rate), torch.tensor([0, 2]))
-    hidden_states = torch.randn(2, 3, 4)
-    output = model(hidden_states, sample_rate)
-    expected_output = hidden_states
-    for layer in model.model:
-        expected_output = layer(expected_output)
-    assert output.shape == (2, 1, 24)
-    torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
-
-    unconditioned_config = VoxCPM2AudioVAEConfig(**{**config.to_dict(), "sr_bin_boundaries": None})
-    unconditioned_model = VoxCPM2AudioDecoder(unconditioned_config)
-    assert isinstance(unconditioned_model.model, torch.nn.Sequential)
-    assert unconditioned_model(hidden_states).shape == (2, 1, 24)
-
-
-@require_torch
-def test_audio_vae_encode_decode():
-    config = VoxCPM2AudioVAEConfig(
-        encoder_dim=4,
-        encoder_rates=(2, 3),
-        latent_dim=3,
-        decoder_dim=16,
-        decoder_rates=(3, 2),
-        depthwise=True,
-        sr_bin_boundaries=(10000, 20000),
-        sample_rate=16000,
-        out_sample_rate=24000,
-    )
-    model = VoxCPM2AudioVAE(config)
-    assert len(model.state_dict()) == 136
-    assert model.chunk_size == 6
-    assert model.decode_chunk_size == 6
-
-    input_values = torch.randn(2, 13)
-    latent_features = model.encode(input_values, sampling_rate=16000)
-    assert latent_features.shape == (2, 3, 3)
-    output_values = model.decode(latent_features)
-    assert output_values.shape == (2, 1, 18)
-
-    with pytest.raises(ValueError, match="expects 16000 Hz"):
-        model.encode(input_values, sampling_rate=8000)
-
-
-@require_torch
-def test_audio_vae_streaming_decode_matches_full_decode():
-    config = VoxCPM2AudioVAEConfig(
-        encoder_dim=4,
-        encoder_rates=(2, 3),
-        latent_dim=3,
-        decoder_dim=16,
-        decoder_rates=(3, 2),
-        depthwise=True,
-        sr_bin_boundaries=(10000, 20000),
-        out_sample_rate=24000,
-    )
-    model = VoxCPM2AudioVAE(config).eval()
-    latent_chunks = [torch.randn(2, 3, 4), torch.randn(2, 3, 4)]
-    expected_output = model.decode(torch.cat(latent_chunks, dim=-1))
-
-    streaming_decoder = model.streaming_decode()
-    with streaming_decoder:
-        output = torch.cat([streaming_decoder.decode_chunk(chunk) for chunk in latent_chunks], dim=-1)
-
-    torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
-    assert not streaming_decoder.states
-    torch.testing.assert_close(model.decode(torch.cat(latent_chunks, dim=-1)), expected_output, rtol=0, atol=0)
-
-
-@require_torch
-def test_causal_transposed_convolution_matches_reference():
-    layer = VoxCPM2CausalConvTranspose1d(4, 2, kernel_size=6, stride=3, padding=2, output_padding=1)
-    assert list(layer.state_dict()) == ["weight", "bias"]
-    assert layer.padding == (0,)
-    assert layer.output_padding == (0,)
-    assert layer.causal_trim == 3
-
-    hidden_states = torch.randn(2, 4, 7, requires_grad=True)
-    output = layer(hidden_states)
-
-    reference_input = hidden_states.detach().clone().requires_grad_()
-    expected_output = torch.nn.functional.conv_transpose1d(
-        reference_input,
-        layer.weight,
-        layer.bias,
-        stride=layer.stride,
-        groups=layer.groups,
-        dilation=layer.dilation,
-    )
-    expected_output = expected_output[..., : -layer.causal_trim]
-    torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
-
-    output.sum().backward()
-    expected_output.sum().backward()
-    torch.testing.assert_close(hidden_states.grad, reference_input.grad, rtol=0, atol=0)
-
-    zero_trim_layer = VoxCPM2CausalConvTranspose1d(2, 3, kernel_size=3)
-    zero_trim_input = torch.randn(1, 2, 5)
-    zero_trim_output = zero_trim_layer(zero_trim_input)
-    expected_zero_trim_output = torch.nn.functional.conv_transpose1d(
-        zero_trim_input, zero_trim_layer.weight, zero_trim_layer.bias
-    )
-    torch.testing.assert_close(zero_trim_output, expected_zero_trim_output, rtol=0, atol=0)
-
-
-@require_torch
-def test_sinusoidal_timestep_embedding_matches_reference():
-    layer = VoxCPM2SinusoidalPositionEmbedding(8)
-    assert not layer.state_dict()
-
-    for timesteps in (torch.tensor(0.25), torch.tensor([0.0, 0.25, 1.0])):
-        output = layer(timesteps)
-        normalized_timesteps = timesteps.reshape(-1)
-        exponent = math.log(10000) / 3
-        frequencies = torch.exp(torch.arange(4, dtype=timesteps.dtype) * -exponent)
-        embeddings = 1000.0 * normalized_timesteps.unsqueeze(1) * frequencies.unsqueeze(0)
-        expected_output = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
-        torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
-
-    assert layer(torch.tensor(0.5)).shape == (1, 8)
-    assert layer(torch.tensor([0.5, 1.0])).shape == (2, 8)
-
-
-@require_torch
-def test_timestep_projection_matches_reference():
-    layer = VoxCPM2TimestepEmbedding(4, 6, output_dim=5)
-    assert list(layer.state_dict()) == [
-        "linear_1.weight",
-        "linear_1.bias",
-        "linear_2.weight",
-        "linear_2.bias",
-    ]
-    assert layer.linear_1.weight.shape == (6, 4)
-    assert layer.linear_2.weight.shape == (5, 6)
-
-    hidden_states = torch.randn(3, 4, requires_grad=True)
-    output = layer(hidden_states)
-
-    reference_input = hidden_states.detach().clone().requires_grad_()
-    expected_output = torch.nn.functional.linear(reference_input, layer.linear_1.weight, layer.linear_1.bias)
-    expected_output = torch.nn.functional.silu(expected_output)
-    expected_output = torch.nn.functional.linear(expected_output, layer.linear_2.weight, layer.linear_2.bias)
-    torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
-
-    output.sum().backward()
-    expected_output.sum().backward()
-    torch.testing.assert_close(hidden_states.grad, reference_input.grad, rtol=0, atol=0)
-
-    default_output_layer = VoxCPM2TimestepEmbedding(4, 6)
-    assert default_output_layer(torch.randn(2, 4)).shape == (2, 6)
-
-
-@require_torch
-@pytest.mark.parametrize("dtype", ["float32", "bfloat16"])
-def test_attention_matches_reference(dtype):
-    dtype = getattr(torch, dtype)
-    for is_causal, use_rope in ((True, False), (False, False), (True, True)):
-        config = VoxCPM2TextConfig(
-            vocab_size=32,
-            hidden_size=6,
-            intermediate_size=12,
-            num_hidden_layers=2,
-            num_attention_heads=2,
-            num_key_value_heads=1,
-            head_dim=4,
-            kv_channels=4,
-            no_rope=not use_rope,
-            use_bidirectional_attention=not is_causal,
-            rope_parameters=None,
-        )
-        config._attn_implementation = "sdpa"
-        layer = VoxCPM2Attention(config, layer_idx=0).eval().to(dtype=dtype)
-
-        assert list(layer.state_dict()) == ["q_proj.weight", "k_proj.weight", "v_proj.weight", "o_proj.weight"]
-        assert layer.q_proj.weight.shape == (8, 6)
-        assert layer.k_proj.weight.shape == (4, 6)
-        assert layer.o_proj.weight.shape == (6, 8)
-
-        hidden_states = torch.randn(1, 4, 6, dtype=dtype)
-        angles = torch.randn(1, 4, 4)
-        position_embeddings = (angles.cos(), angles.sin()) if use_rope else None
-        output, _ = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None)
-
-        query_states = layer.q_proj(hidden_states).view(1, 4, 2, 4).transpose(1, 2)
-        key_states = layer.k_proj(hidden_states).view(1, 4, 1, 4).transpose(1, 2)
-        value_states = layer.v_proj(hidden_states).view(1, 4, 1, 4).transpose(1, 2)
-        if position_embeddings is not None:
-            cos, sin = (embedding.unsqueeze(1) for embedding in position_embeddings)
-            rotated_query = torch.cat((-query_states[..., 2:], query_states[..., :2]), dim=-1)
-            rotated_key = torch.cat((-key_states[..., 2:], key_states[..., :2]), dim=-1)
-            query_states = (query_states.float() * cos + rotated_query.float() * sin).to(dtype)
-            key_states = (key_states.float() * cos + rotated_key.float() * sin).to(dtype)
-
-        expected_output = torch.nn.functional.scaled_dot_product_attention(
-            query_states,
-            key_states,
-            value_states,
-            is_causal=is_causal,
-            enable_gqa=True,
-            scale=layer.scaling,
-        )
-        expected_output = expected_output.transpose(1, 2).reshape(1, 4, 8)
-        expected_output = layer.o_proj(expected_output)
-        torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
-
-
-@require_torch
-def test_decoder_layer_residual_connections():
-    config = VoxCPM2TextConfig(
-        vocab_size=32,
-        hidden_size=6,
-        intermediate_size=12,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        num_key_value_heads=1,
-        head_dim=4,
-        kv_channels=4,
-        no_rope=True,
-        use_bidirectional_attention=True,
-        rope_parameters=None,
-    )
-    layer = VoxCPM2DecoderLayer(config, layer_idx=0)
-    expected_keys = {
-        "self_attn.q_proj.weight",
-        "self_attn.k_proj.weight",
-        "self_attn.v_proj.weight",
-        "self_attn.o_proj.weight",
-        "mlp.gate_proj.weight",
-        "mlp.up_proj.weight",
-        "mlp.down_proj.weight",
-        "input_layernorm.weight",
-        "post_attention_layernorm.weight",
-    }
-    assert set(layer.state_dict()) == expected_keys
-
-    layer.input_layernorm = torch.nn.Identity()
-    layer.post_attention_layernorm = torch.nn.Identity()
-    layer.self_attn = torch.nn.Identity()
-    layer.self_attn.forward = lambda hidden_states, **kwargs: (hidden_states, None)
-    layer.mlp = torch.nn.Identity()
-
-    hidden_states = torch.randn(1, 3, 6)
-    output = layer(hidden_states, position_embeddings=None)
-    expected_output = hidden_states + hidden_states
-    expected_output = expected_output + expected_output
-    torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
-
-
-@require_torch
-def test_rms_normalization_matches_reference():
-    layer = VoxCPM2RMSNorm(6, eps=1e-5)
-    with torch.no_grad():
-        layer.weight.copy_(torch.tensor([0.5, 0.75, 1.0, 1.25, 1.5, 2.0]))
-
-    assert list(layer.state_dict()) == ["weight"]
-    hidden_states = torch.randn(2, 3, 6)
-    variance = hidden_states.float().pow(2).mean(dim=-1, keepdim=True)
-    expected_output = layer.weight * (hidden_states * torch.rsqrt(variance + layer.variance_epsilon))
-    torch.testing.assert_close(layer(hidden_states), expected_output, rtol=0, atol=0)
-
-
-@require_torch
-def test_rotary_embedding_matches_reference():
-    config = VoxCPM2TextConfig(
+    from transformers import TextToAudioPipeline, VoxCPM2Model
+    from transformers.models.voxcpm2.modeling_voxcpm2 import VoxCPM2GenerationOutput
+
+
+class VoxCPM2ModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=2,
+        seq_length=3,
+        is_training=True,
         vocab_size=32,
         hidden_size=8,
-        intermediate_size=16,
         num_hidden_layers=1,
         num_attention_heads=2,
-        num_key_value_heads=1,
-        head_dim=4,
-        kv_channels=4,
-        max_position_embeddings=8,
-        rope_parameters={
-            "rope_type": "longrope",
-            "rope_theta": 10000.0,
-            "long_factor": [1.0, 2.0],
-            "short_factor": [1.0, 2.0],
-            "original_max_position_embeddings": 8,
-        },
-    )
-    layer = VoxCPM2RotaryEmbedding(config)
-    assert not layer.state_dict()
-
-    position_ids = torch.tensor([[0, 1, 3]])
-    cosine, sine = layer(torch.zeros(1, 3, 8), position_ids)
-    inverse_frequencies = torch.tensor([1.0, 0.01]) / torch.tensor([1.0, 2.0])
-    frequencies = position_ids.float().unsqueeze(-1) * inverse_frequencies
-    expected_angles = torch.cat((frequencies, frequencies), dim=-1)
-    torch.testing.assert_close(cosine, expected_angles.cos(), rtol=0, atol=0)
-    torch.testing.assert_close(sine, expected_angles.sin(), rtol=0, atol=0)
-
-
-@require_torch
-def test_transformer_backbone_embeddings_and_cache():
-    config = VoxCPM2TextConfig(
-        vocab_size=32,
-        hidden_size=8,
         intermediate_size=16,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        num_key_value_heads=1,
-        head_dim=4,
-        kv_channels=4,
-        use_mup=False,
-        no_rope=True,
-        rope_parameters=None,
-    )
-    config._attn_implementation = "sdpa"
-    model = VoxCPM2BackboneModel(config).eval()
+        feat_dim=4,
+        patch_size=2,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.feat_dim = feat_dim
+        self.patch_size = patch_size
 
-    layer_keys = {
-        f"layers.{layer_index}.{name}"
-        for layer_index in range(2)
-        for name in (
-            "self_attn.q_proj.weight",
-            "self_attn.k_proj.weight",
-            "self_attn.v_proj.weight",
-            "self_attn.o_proj.weight",
-            "mlp.gate_proj.weight",
-            "mlp.up_proj.weight",
-            "mlp.down_proj.weight",
-            "input_layernorm.weight",
-            "post_attention_layernorm.weight",
-        )
-    }
-    expected_keys = {"embed_tokens.weight", "norm.weight", *layer_keys}
-    assert set(model.state_dict()) == expected_keys
-
-    input_ids = torch.tensor([[1, 2, 3, 4]])
-    inputs_embeds = model.embed_tokens(input_ids)
-    embedding_output = model(inputs_embeds=inputs_embeds).last_hidden_state
-
-    changed_embeds = inputs_embeds.clone()
-    changed_embeds[:, -1] += 10
-    changed_causal_output = model(inputs_embeds=changed_embeds).last_hidden_state
-    torch.testing.assert_close(changed_causal_output[:, :-1], embedding_output[:, :-1], rtol=0, atol=0)
-    bidirectional_config = VoxCPM2TextConfig(**{**config.to_dict(), "use_bidirectional_attention": True})
-    bidirectional_config._attn_implementation = "sdpa"
-    bidirectional_model = VoxCPM2BackboneModel(bidirectional_config).eval()
-    bidirectional_model.load_state_dict(model.state_dict())
-    bidirectional_output = bidirectional_model(inputs_embeds=inputs_embeds).last_hidden_state
-    changed_bidirectional_output = bidirectional_model(inputs_embeds=changed_embeds).last_hidden_state
-    assert not torch.allclose(changed_bidirectional_output[:, :-1], bidirectional_output[:, :-1])
-
-    prefill = model(inputs_embeds=inputs_embeds[:, :3], use_cache=True)
-    cached_output = model(
-        inputs_embeds=inputs_embeds[:, 3:], past_key_values=prefill.past_key_values, use_cache=True
-    ).last_hidden_state
-    torch.testing.assert_close(cached_output, embedding_output[:, -1:], rtol=1e-5, atol=1e-6)
-
-    residual_config = VoxCPM2TextConfig(**{**config.to_dict(), "vocab_size": 0})
-    residual_config._attn_implementation = "sdpa"
-    residual_model = VoxCPM2BackboneModel(residual_config)
-    assert set(residual_model.state_dict()) == expected_keys - {"embed_tokens.weight"}
-    assert residual_model.embed_tokens is None
-    assert residual_model(inputs_embeds=inputs_embeds).last_hidden_state.shape == inputs_embeds.shape
-
-
-@require_torch
-def test_local_encoder_matches_reference_layout():
-    config = VoxCPM2Config(
-        lm_config={
-            "vocab_size": 32,
-            "hidden_size": 8,
-            "intermediate_size": 16,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 2,
-            "num_key_value_heads": 1,
-            "head_dim": 4,
-            "kv_channels": 4,
-            "max_position_embeddings": 8,
-            "use_mup": False,
-            "rope_parameters": {
-                "rope_type": "longrope",
-                "rope_theta": 10000.0,
-                "long_factor": [1.0, 1.0],
-                "short_factor": [1.0, 1.0],
-                "original_max_position_embeddings": 8,
+    def get_config(self):
+        return VoxCPM2Config(
+            lm_config={
+                "vocab_size": self.vocab_size,
+                "hidden_size": self.hidden_size,
+                "intermediate_size": self.intermediate_size,
+                "num_hidden_layers": self.num_hidden_layers,
+                "num_attention_heads": self.num_attention_heads,
+                "num_key_value_heads": 1,
+                "head_dim": self.hidden_size // self.num_attention_heads,
+                "max_position_embeddings": 32,
             },
-        },
-        encoder_config={"hidden_dim": 8, "ffn_dim": 16, "num_heads": 2, "num_layers": 2, "kv_channels": 4},
-        feat_dim=4,
-        audio_vae_config={"latent_dim": 4},
-    )
-    config.lm_config._attn_implementation = "sdpa"
-    model = VoxCPM2LocalEncoder(config)
-
-    layer_keys = {
-        f"encoder.layers.{layer_index}.{name}"
-        for layer_index in range(2)
-        for name in (
-            "self_attn.q_proj.weight",
-            "self_attn.k_proj.weight",
-            "self_attn.v_proj.weight",
-            "self_attn.o_proj.weight",
-            "mlp.gate_proj.weight",
-            "mlp.up_proj.weight",
-            "mlp.down_proj.weight",
-            "input_layernorm.weight",
-            "post_attention_layernorm.weight",
-        )
-    }
-    expected_keys = {"special_token", "in_proj.weight", "in_proj.bias", "encoder.norm.weight", *layer_keys}
-    assert set(model.state_dict()) == expected_keys
-
-    audio_features = torch.randn(2, 3, 4, 4)
-    output = model(audio_features)
-    projected_features = model.in_proj(audio_features)
-    special_tokens = model.special_token.expand(2, 3, 1, -1)
-    encoder_input = torch.cat((special_tokens, projected_features), dim=2).reshape(6, 5, 8)
-    expected_output = model.encoder(inputs_embeds=encoder_input).last_hidden_state[:, 0]
-    expected_output = expected_output.reshape(2, 3, 8)
-    torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
-
-    output.sum().backward()
-    assert model.special_token.grad is not None
-
-
-@require_torch
-def test_local_dit_matches_reference_layout():
-    config = VoxCPM2Config(
-        lm_config={
-            "vocab_size": 32,
-            "hidden_size": 8,
-            "intermediate_size": 16,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 2,
-            "num_key_value_heads": 1,
-            "head_dim": 4,
-            "kv_channels": 4,
-            "use_mup": False,
-            "no_rope": True,
-            "rope_parameters": None,
-        },
-        dit_config={"hidden_dim": 8, "ffn_dim": 16, "num_heads": 2, "num_layers": 2, "kv_channels": 4},
-        feat_dim=4,
-        audio_vae_config={"latent_dim": 4},
-    )
-    config.lm_config._attn_implementation = "sdpa"
-    model = VoxCPM2LocalDiT(config)
-
-    layer_keys = {
-        f"decoder.layers.{layer_index}.{name}"
-        for layer_index in range(2)
-        for name in (
-            "self_attn.q_proj.weight",
-            "self_attn.k_proj.weight",
-            "self_attn.v_proj.weight",
-            "self_attn.o_proj.weight",
-            "mlp.gate_proj.weight",
-            "mlp.up_proj.weight",
-            "mlp.down_proj.weight",
-            "input_layernorm.weight",
-            "post_attention_layernorm.weight",
-        )
-    }
-    projection_keys = {
-        f"{name}.{parameter}"
-        for name in (
-            "in_proj",
-            "cond_proj",
-            "out_proj",
-            "time_mlp.linear_1",
-            "time_mlp.linear_2",
-            "delta_time_mlp.linear_1",
-            "delta_time_mlp.linear_2",
-        )
-        for parameter in ("weight", "bias")
-    }
-    assert set(model.state_dict()) == {"decoder.norm.weight", *projection_keys, *layer_keys}
-
-    sample = torch.randn(2, 4, 3)
-    mu = torch.randn(2, 16)
-    timestep = torch.tensor([0.2, 0.7])
-    conditioning = torch.randn(2, 4, 2)
-    delta_timestep = torch.tensor([0.1, 0.1])
-    output = model(sample, mu, timestep, conditioning, delta_timestep)
-
-    sample_hidden_states = model.in_proj(sample.transpose(1, 2))
-    conditioning_hidden_states = model.cond_proj(conditioning.transpose(1, 2))
-    timestep_hidden_states = model.time_mlp(model.time_embeddings(timestep))
-    timestep_hidden_states += model.delta_time_mlp(model.time_embeddings(delta_timestep))
-    mu_hidden_states = mu.reshape(2, 2, 8)
-    decoder_input = torch.cat(
-        (mu_hidden_states, timestep_hidden_states.unsqueeze(1), conditioning_hidden_states, sample_hidden_states),
-        dim=1,
-    )
-    assert decoder_input.shape == (2, 8, 8)
-    decoder_output = model.decoder(inputs_embeds=decoder_input).last_hidden_state
-    expected_output = model.out_proj(decoder_output[:, 5:]).transpose(1, 2).contiguous()
-    torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
-
-
-@require_torch
-def test_conditional_flow_matching_euler_steps():
-    config = VoxCPM2Config(
-        lm_config={
-            "hidden_size": 8,
-            "intermediate_size": 16,
-            "num_hidden_layers": 1,
-            "num_attention_heads": 2,
-            "num_key_value_heads": 1,
-            "head_dim": 4,
-            "kv_channels": 4,
-            "no_rope": True,
-            "rope_parameters": None,
-        },
-        dit_config={"hidden_dim": 8, "ffn_dim": 16, "num_heads": 2, "num_layers": 1, "kv_channels": 4},
-        feat_dim=4,
-        audio_vae_config={"latent_dim": 4},
-    )
-    model = VoxCPM2ConditionalFlowMatching(config)
-    assert len(model.state_dict()) == 24
-    assert all(key.startswith("estimator.") for key in model.state_dict())
-
-    estimator = torch.nn.Identity()
-    estimator.forward = (
-        lambda sample, mu, timestep, conditioning, delta_timestep: mu[:, :4].unsqueeze(-1).expand_as(sample)
-    )
-    model.estimator = estimator
-
-    sample = torch.randn(2, 4, 3)
-    mu = torch.randn(2, 4)
-    conditioning = torch.randn(2, 4, 3)
-    timestep_span = torch.tensor([1.0, 0.5, 0.0])
-    derivative = mu.unsqueeze(-1).expand_as(sample)
-
-    output = model.solve_euler(sample.clone(), timestep_span, mu, conditioning, cfg_value=1.5, use_cfg_zero_star=False)
-    torch.testing.assert_close(output, sample - 1.5 * derivative, rtol=1e-6, atol=1e-6)
-
-    zero_star_output = model.solve_euler(
-        sample.clone(), timestep_span, mu, conditioning, cfg_value=1.5, use_cfg_zero_star=True
-    )
-    torch.testing.assert_close(zero_star_output, sample - 0.75 * derivative, rtol=1e-6, atol=1e-6)
-
-    torch.manual_seed(7)
-    initial_sample = torch.randn_like(sample) * 0.5
-    torch.manual_seed(7)
-    generated_sample = model(
-        mu,
-        num_inference_steps=2,
-        patch_size=3,
-        conditioning=conditioning,
-        temperature=0.5,
-        cfg_value=1.5,
-        sway_sampling_coefficient=0.0,
-        use_cfg_zero_star=False,
-    )
-    torch.testing.assert_close(generated_sample, initial_sample - 1.5 * derivative, rtol=1e-6, atol=1e-6)
-
-
-@require_torch
-def test_conditional_flow_matching_generator():
-    model = VoxCPM2ConditionalFlowMatching(get_tiny_voxcpm2_config()).eval()
-    mu = torch.randn(2, 16)
-    conditioning = torch.randn(2, 4, 2)
-
-    first_output = model(
-        mu,
-        num_inference_steps=1,
-        patch_size=2,
-        conditioning=conditioning,
-        generator=torch.Generator().manual_seed(7),
-    )
-    repeated_output = model(
-        mu,
-        num_inference_steps=1,
-        patch_size=2,
-        conditioning=conditioning,
-        generator=torch.Generator().manual_seed(7),
-    )
-    different_output = model(
-        mu,
-        num_inference_steps=1,
-        patch_size=2,
-        conditioning=conditioning,
-        generator=torch.Generator().manual_seed(8),
-    )
-
-    torch.testing.assert_close(first_output, repeated_output, rtol=0, atol=0)
-    assert not torch.equal(first_output, different_output)
-
-
-@require_torch
-def test_conditional_flow_matching_loss():
-    config = VoxCPM2Config(
-        lm_config={
-            "hidden_size": 8,
-            "intermediate_size": 16,
-            "num_hidden_layers": 1,
-            "num_attention_heads": 2,
-            "num_key_value_heads": 1,
-            "head_dim": 4,
-            "kv_channels": 4,
-            "no_rope": True,
-            "rope_parameters": None,
-        },
-        dit_config={
-            "hidden_dim": 8,
-            "ffn_dim": 16,
-            "num_heads": 2,
-            "num_layers": 1,
-            "kv_channels": 4,
-            "cfm_config": {
-                "t_scheduler": "uniform",
-                "training_cfg_rate": 0.0,
-                "noise_cond_prob_range": (0.0, 0.0),
-                "noise_cond_scale": 0.0,
+            encoder_config={
+                "hidden_size": self.hidden_size,
+                "intermediate_size": self.intermediate_size,
+                "num_hidden_layers": self.num_hidden_layers,
+                "num_attention_heads": self.num_attention_heads,
+                "head_dim": self.hidden_size // self.num_attention_heads,
             },
-        },
-        feat_dim=4,
-        audio_vae_config={"latent_dim": 4},
-    )
-    model = VoxCPM2ConditionalFlowMatching(config)
-    estimator = torch.nn.Identity()
-    estimator.forward = lambda sample, mu, timestep, conditioning, delta_timestep: torch.zeros_like(sample)
-    model.estimator = estimator
+            dit_config={
+                "hidden_size": self.hidden_size,
+                "intermediate_size": self.intermediate_size,
+                "num_hidden_layers": self.num_hidden_layers,
+                "num_attention_heads": self.num_attention_heads,
+                "head_dim": self.hidden_size // self.num_attention_heads,
+                "cfm_config": {"training_cfg_rate": 0.0},
+            },
+            audio_vae_config={
+                "encoder_dim": 4,
+                "encoder_rates": [2],
+                "latent_dim": self.feat_dim,
+                "decoder_dim": 8,
+                "decoder_rates": [2],
+                "sr_bin_boundaries": [10000, 20000],
+            },
+            feat_dim=self.feat_dim,
+            patch_size=self.patch_size,
+            residual_lm_num_layers=1,
+            scalar_quantization_latent_dim=4,
+            audio_start_token_id=13,
+            audio_end_token_id=14,
+            reference_audio_start_token_id=15,
+            reference_audio_end_token_id=16,
+        )
 
-    target = torch.randn(2, 4, 3)
-    mu = torch.randn(2, 4)
-    conditioning = torch.randn(2, 4, 3)
-    target_mask = torch.tensor([[[1.0, 1.0, 0.0]], [[1.0, 0.0, 0.0]]])
+    def prepare_config_and_inputs_for_common(self):
+        config = self.get_config()
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        text_mask = torch.ones_like(input_ids)
+        text_mask[:, -1] = 0
+        audio_features = torch.randn(
+            self.batch_size, self.seq_length, self.patch_size, self.feat_dim, device=torch_device
+        )
+        return config, {
+            "input_ids": input_ids,
+            "text_mask": text_mask,
+            "audio_features": audio_features,
+            "audio_mask": 1 - text_mask,
+        }
 
-    torch.manual_seed(11)
-    torch.rand(2)
-    torch.randn_like(conditioning)
-    torch.rand(2)
-    torch.rand(2)
-    torch.rand(2)
-    noise = torch.randn_like(target)
-    target_velocity = noise - target
-    losses = torch.nn.functional.mse_loss(torch.zeros_like(target_velocity), target_velocity, reduction="none").mean(
-        dim=1
-    )
-    expected_loss = (losses * target_mask.squeeze(1)).sum() / target_mask.sum()
 
-    torch.manual_seed(11)
-    loss = model.compute_loss(target, mu, conditioning, target_mask=target_mask)
-    torch.testing.assert_close(loss, expected_loss, rtol=0, atol=0)
+@require_torch
+class VoxCPM2ModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (VoxCPM2Model,) if is_torch_available() else ()
+    _is_composite = True
+    has_attentions = False
+    test_resize_embeddings = False
+
+    @property
+    def all_generative_model_classes(self):
+        # The waveform generator has no token sequences; its public paths are tested below.
+        return ()
+
+    def setUp(self):
+        self.model_tester = VoxCPM2ModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=VoxCPM2Config, has_text_modality=False)
+        if self._testMethodName.startswith("test_eager_matches_sdpa_inference"):
+            self.skipTest(
+                "The common comparison reads hidden states; test_attention_backends_match checks stop logits."
+            )
+
+    def get_model(self, processor=None):
+        config = self.model_tester.get_config()
+        if processor is not None:
+            config.lm_config.vocab_size = len(processor.tokenizer)
+            config.audio_start_token_id = processor.audio_start_token_id
+            config.reference_audio_start_token_id = processor.reference_audio_start_token_id
+            config.reference_audio_end_token_id = processor.reference_audio_end_token_id
+        return VoxCPM2Model(config).to(torch_device).eval()
+
+    def get_generation_inputs(self):
+        _, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        return {key: value[:1] for key, value in inputs.items()}
+
+    def get_stop_outputs(self, stop=True):
+        return (
+            torch.tensor([[0.0, 1.0]], device=torch_device),
+            torch.tensor([stop], device=torch_device),
+        )
+
+    @unittest.skip("VoxCPM2 exposes stop logits and audio latents, without top-level hidden states.")
+    def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip("VoxCPM2 does not return top-level hidden states or attentions to retain gradients on.")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip("The four backbones use derived configurations with different dimensions and attention modes.")
+    def test_internal_model_config_and_subconfig_are_same(self):
+        pass
+
+    def test_model_base_model_prefix(self):
+        # The public model contains the complete speech stack, rather than a separate LM head wrapper.
+        model = self.get_model()
+        self.assertIs(model.base_model, model)
+
+    def test_model(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = VoxCPM2Model(config).to(torch_device).eval()
+        with torch.no_grad():
+            outputs = model(**inputs)
+        self.assertEqual(outputs.stop_logits.shape, (self.model_tester.batch_size, self.model_tester.seq_length, 2))
+        self.assertEqual(
+            outputs.latent_features.shape,
+            (
+                self.model_tester.batch_size,
+                self.model_tester.feat_dim,
+                self.model_tester.seq_length * self.model_tester.patch_size,
+            ),
+        )
+
+    def test_training(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = VoxCPM2Model(config).to(torch_device).train()
+        inputs["audio_features"].requires_grad_()
+        outputs = model(
+            **inputs,
+            loss_mask=inputs["audio_mask"].float(),
+            labels=inputs["audio_mask"],
+            sample_generate=True,
+            num_inference_steps=2,
+        )
+        self.assertEqual(outputs.loss.ndim, 0)
+        self.assertTrue(torch.isfinite(outputs.loss))
+        torch.testing.assert_close(outputs.loss, outputs.diffusion_loss + outputs.stop_loss)
+        self.assertEqual(outputs.generated_latent_features.shape, outputs.latent_features.shape)
+        outputs.loss.backward()
+        self.assertIsNotNone(model.stop_head.weight.grad)
+        self.assertIsNotNone(inputs["audio_features"].grad)
+
+    def test_attention_backends_match(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        config._attn_implementation = "eager"
+        eager = VoxCPM2Model(config).to(torch_device).eval()
+        sdpa_config = copy.deepcopy(config)
+        sdpa_config._attn_implementation = "sdpa"
+        sdpa = VoxCPM2Model(sdpa_config).to(torch_device).eval()
+        sdpa.load_state_dict(eager.state_dict())
+        with torch.no_grad():
+            expected = eager(**inputs)
+            actual = sdpa(**inputs)
+        torch.testing.assert_close(actual.stop_logits, expected.stop_logits, rtol=1e-5, atol=1e-6)
+
+    def test_generate(self):
+        model = self.get_model()
+        inputs = self.get_generation_inputs()
+        generation_config = GenerationConfig(min_new_tokens=2, max_new_tokens=2, return_dict_in_generate=True)
+        kwargs = {"generation_config": generation_config, "num_inference_steps": 2, "decoder_context_patches": 1}
+        with patch.object(model, "_get_stop_flags", return_value=self.get_stop_outputs()):
+            set_seed(7)
+            outputs = model.generate(**inputs, **kwargs)
+            set_seed(7)
+            repeated = model.generate(**inputs, **kwargs)
+            set_seed(7)
+            waveform = model.generate(**inputs, **{**kwargs, "return_dict_in_generate": False})
+        self.assertIsInstance(outputs, VoxCPM2GenerationOutput)
+        self.assertEqual(outputs.num_generated_patches, 2)
+        self.assertEqual(outputs.audio.shape, (1, 2 * model.patch_size * model._decode_chunk_size))
+        self.assertEqual(outputs.audio_features.shape, (1, 2, model.patch_size, model.feat_dim))
+        torch.testing.assert_close(repeated.audio, outputs.audio, rtol=0, atol=0)
+        torch.testing.assert_close(waveform, outputs.audio, rtol=0, atol=0)
+
+    def test_generate_stopping(self):
+        model = self.get_model()
+        inputs = self.get_generation_inputs()
+        for stop, minimum, maximum, expected in [(True, 3, 5, 3), (False, 0, 2, 2)]:
+            with (
+                self.subTest(stop=stop),
+                patch.object(model, "_get_stop_flags", return_value=self.get_stop_outputs(stop)),
+            ):
+                outputs = model.generate(
+                    **inputs,
+                    min_new_audio_patches=minimum,
+                    max_new_audio_patches=maximum,
+                    num_inference_steps=1,
+                    return_dict_in_generate=True,
+                )
+                self.assertEqual(outputs.num_generated_patches, expected)
+
+    def test_raw_and_precomputed_conditioning_match(self):
+        processor = get_tiny_voxcpm2_processor()
+        model = self.get_model(processor)
+        inputs = processor(
+            text="A",
+            audio=np.array([0.1, 0.2, 0.3], dtype=np.float32),
+            prompt_text="B",
+            reference_audio=np.array([0.4, 0.5, 0.6], dtype=np.float32),
+            sampling_rate=16000,
+            return_tensors="pt",
+        ).to(torch_device)
+        aligned = model._prepare_generation_audio_features(
+            inputs.input_ids,
+            inputs.audio_mask,
+            prompt_input_values=inputs.prompt_input_values,
+            prompt_attention_mask=inputs.prompt_attention_mask,
+            reference_input_values=inputs.reference_input_values,
+            reference_attention_mask=inputs.reference_attention_mask,
+        )
+        kwargs = {"min_new_audio_patches": 2, "max_new_audio_patches": 2, "num_inference_steps": 1}
+        set_seed(7)
+        expected = model.generate(
+            input_ids=inputs.input_ids,
+            text_mask=inputs.text_mask,
+            audio_features=aligned,
+            audio_mask=inputs.audio_mask,
+            **kwargs,
+        )
+        set_seed(7)
+        actual = model.generate(**inputs, **kwargs)
+        torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+    def test_streaming_matches_full_generation(self):
+        model = self.get_model()
+        inputs = self.get_generation_inputs()
+        kwargs = {
+            "min_new_audio_patches": 2,
+            "max_new_audio_patches": 2,
+            "num_inference_steps": 1,
+            "decoder_context_patches": 1,
+        }
+        set_seed(7)
+        expected = model.generate(**inputs, **kwargs)
+        set_seed(7)
+        chunks = list(model.generate_streaming(**inputs, return_dict_in_generate=True, **kwargs))
+        self.assertEqual([chunk.num_generated_patches for chunk in chunks], [1, 2])
+        self.assertTrue(all(isinstance(chunk, VoxCPM2GenerationOutput) for chunk in chunks))
+        torch.testing.assert_close(
+            torch.cat([chunk.audio for chunk in chunks], dim=-1), expected, rtol=1e-5, atol=1e-6
+        )
+
+    def test_generation_caches_match_full_context(self):
+        model = self.get_model()
+        inputs = self.get_generation_inputs()
+        next_patch = torch.randn(1, model.patch_size, model.feat_dim, device=torch_device)
+        _, _, _, base_cache, residual_cache = model._prefill_generation(**inputs)
+        actual_base, actual_residual, base_cache, residual_cache = model._update_generation_cache(
+            next_patch, base_cache, residual_cache
+        )
+
+        encoded_audio = model.enc_to_lm_proj(model.feat_encoder(inputs["audio_features"]))
+        text_embeddings = model.base_lm.embed_tokens(inputs["input_ids"])
+        text_mask = inputs["text_mask"].unsqueeze(-1)
+        audio_mask = inputs["audio_mask"].unsqueeze(-1)
+        prompt = text_mask * text_embeddings + audio_mask * encoded_audio
+        encoded_patch = model.enc_to_lm_proj(model.feat_encoder(next_patch.unsqueeze(1)))
+        base_inputs = torch.cat((prompt, encoded_patch), dim=1)
+        base_states = model.base_lm(inputs_embeds=base_inputs).last_hidden_state
+        expected_base = model.fsq_layer(base_states[:, -1])
+        prompt_states = text_mask * base_states[:, :-1] + audio_mask * model.fsq_layer(base_states[:, :-1])
+        residual_prompt = model.fusion_concat_proj(torch.cat((prompt_states, audio_mask * encoded_audio), dim=-1))
+        residual_patch = model.fusion_concat_proj(torch.cat((expected_base, encoded_patch[:, 0]), dim=-1)).unsqueeze(1)
+        residual_inputs = torch.cat((residual_prompt, residual_patch), dim=1)
+        expected_residual = model.residual_lm(inputs_embeds=residual_inputs).last_hidden_state[:, -1]
+
+        torch.testing.assert_close(actual_base, expected_base, rtol=1e-5, atol=1e-6)
+        torch.testing.assert_close(actual_residual, expected_residual, rtol=1e-5, atol=1e-6)
+        self.assertEqual(base_cache.get_seq_length(), inputs["input_ids"].shape[1] + 1)
+        self.assertEqual(residual_cache.get_seq_length(), inputs["input_ids"].shape[1] + 1)
+
+    def test_generation_input_validation(self):
+        model = self.get_model()
+        inputs = self.get_generation_inputs()
+        with self.assertRaisesRegex(ValueError, "batch size of 1"):
+            model.generate(**{key: value.repeat_interleave(2, dim=0) for key, value in inputs.items()})
+        with self.assertRaisesRegex(ValueError, "greater than"):
+            model.generate(**inputs, min_new_audio_patches=3, max_new_audio_patches=2)
+        with self.assertRaisesRegex(ValueError, "Unsupported generation arguments"):
+            model.generate(**inputs, unsupported_argument=True)
+        with self.assertRaisesRegex(ValueError, "patches with shape"):
+            model.generate(**{**inputs, "audio_features": inputs["audio_features"][:, :, :1]})
+
+    def test_audio_vae_streaming(self):
+        audio_vae = self.get_model().audio_vae
+        values = torch.randn(2, 13, device=torch_device)
+        latents = audio_vae.encode(values, sampling_rate=16000)
+        self.assertEqual(latents.shape, (2, self.model_tester.feat_dim, 7))
+        expected = audio_vae.decode(latents)
+        self.assertEqual(expected.shape, (2, 1, 14))
+        with audio_vae.streaming_decode() as decoder:
+            actual = torch.cat([decoder.decode_chunk(chunk) for chunk in latents.split([3, 4], dim=-1)], dim=-1)
+        torch.testing.assert_close(actual, expected, rtol=1e-5, atol=1e-6)
+        with self.assertRaisesRegex(ValueError, "expects 16000 Hz"):
+            audio_vae.encode(values, sampling_rate=8000)
+
+    def test_flow_euler_constant_velocity(self):
+        class ConstantVelocity(torch.nn.Module):
+            def forward(self, sample, mu, timestep, conditioning, delta_timestep):
+                return torch.full_like(sample, 0.25)
+
+        flow = self.get_model().feat_decoder
+        flow.estimator = ConstantVelocity()
+        sample = torch.ones(1, self.model_tester.feat_dim, self.model_tester.patch_size, device=torch_device)
+        output = flow.solve_euler(
+            sample,
+            torch.tensor([1.0, 0.5, 0.0], device=torch_device),
+            torch.zeros(1, 2 * self.model_tester.hidden_size, device=torch_device),
+            torch.zeros_like(sample),
+            use_cfg_zero_star=False,
+        )
+        torch.testing.assert_close(output, torch.full_like(output, 0.75), rtol=0, atol=0)
+
+    def test_text_to_audio_pipeline(self):
+        processor = get_tiny_voxcpm2_processor()
+        model = self.get_model(processor)
+        speech_generator = TextToAudioPipeline(model=model, processor=processor, device=torch_device)
+        outputs = speech_generator(
+            "A",
+            generate_kwargs={"min_new_audio_patches": 1, "max_new_audio_patches": 1, "num_inference_steps": 1},
+        )
+        self.assertEqual(outputs["sampling_rate"], model.sample_rate)
+        self.assertEqual(outputs["audio"].shape[-1], model.patch_size * model._decode_chunk_size)

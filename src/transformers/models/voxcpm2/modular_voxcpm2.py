@@ -1014,6 +1014,8 @@ class VoxCPM2DecoderLayer(LlamaDecoderLayer):
 
 class VoxCPM2BackboneModel(LlamaModel):
     def __init__(self, config: VoxCPM2TextConfig):
+        if config.vocab_size == 0:
+            config.pad_token_id = None
         super().__init__(config)
         # CODEPATH: VoxCPM2 residual LM / local encoder / local DiT take embeddings from the base LM, no vocab.
         if config.vocab_size == 0:
