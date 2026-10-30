@@ -186,11 +186,19 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # query axis symbolic. Backend-agnostic (it's in the shared decomposition). Static generate, which
     # captures a single-token decode with no merge, still runs.
     "generate.dynamic": {
+        "GradiumPhononTTSForConditionalGeneration": (
+            "Same per-frame `audio_latents` limitation as `PocketTTSForConditionalGeneration`."
+        ),
         "MllamaForConditionalGeneration": (
             "Cross-attention decode indexes `cross_attention_mask[:, :, arange(seq) + past_seen_tokens]`; "
             "the multi-token merge grows the query axis but not the captured cross-attention mask, so the "
             "index runs past it (out of bounds → CUDA device-side assert). Single-token static generate is fine. "
             "TODO: grow `cross_attention_mask` in `_merge_decode_calls`."
+        ),
+        "PocketTTSForConditionalGeneration": (
+            "Each decode step feeds one audio latent per placeholder token; the multi-token merge "
+            "concatenates `input_ids` but not the per-frame `audio_latents`, so the placeholder count no "
+            "longer matches the number of latents (`4` vs `2`). Single-token static generate is fine."
         ),
         "ReformerModelWithLMHead": (
             "Chunked local attention assumes a chunk-aligned query length; the merged multi-token query "
