@@ -18,11 +18,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin
-from ...utils import TensorType, auto_docstring
+from ...utils import auto_docstring
+from ...utils.deprecation import deprecate_attr
 from ..auto import AutoTokenizer
 
 
-class AriaImagesKwargs(ImagesKwargs, total=False):
+class DeprecatedAriaImagesKwargs(ImagesKwargs, total=False):
     """
     split_image (`bool`, *optional*, defaults to `False`):
         Whether to split large images into multiple crops. When enabled, images exceeding the maximum size are
@@ -43,25 +44,16 @@ class AriaImagesKwargs(ImagesKwargs, total=False):
     min_image_size: int
 
 
-class AriaProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: AriaImagesKwargs
-
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-        "images_kwargs": {
-            "max_image_size": 980,
-            "split_image": False,
-        },
-        "return_tensors": TensorType.PYTORCH,
-    }
+class DeprecatedAriaProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: DeprecatedAriaImagesKwargs
 
 
 @auto_docstring
 class AriaProcessor(ProcessorMixin):
-    valid_processor_kwargs = AriaProcessorKwargs
+    images_kwargs = {
+        "max_image_size": 980,
+        "split_image": False,
+    }
 
     def __init__(
         self,
@@ -103,8 +95,7 @@ class AriaProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = AriaProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
 
             max_size = images_kwargs.get("max_image_size", None) or self.image_processor.max_image_size
             num_image_patches = [
@@ -120,5 +111,13 @@ class AriaProcessor(ProcessorMixin):
     def unused_input_names(self) -> list[str]:
         return ["num_crops"]
 
+
+__getattr__ = deprecate_attr(
+    __name__,
+    remove={
+        "AriaImagesKwargs": (DeprecatedAriaImagesKwargs, "5.29.0"),
+        "AriaProcessorKwargs": (DeprecatedAriaProcessorKwargs, "5.29.0"),
+    },
+)
 
 __all__ = ["AriaProcessor"]

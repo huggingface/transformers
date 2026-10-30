@@ -26,6 +26,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import is_nagisa_available, is_soynlp_available
 
 
@@ -328,26 +329,19 @@ def _detect_and_fix_repetitions(text, threshold=20):
     return text
 
 
-class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "left",
-        },
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "padding": True,
-            "truncation": False,
-            "return_attention_mask": True,
-            "n_window": 50,  # should match config.n_window
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
-
-
 @auto_docstring
 class Qwen3ASRProcessor(ProcessorMixin):
-    valid_processor_kwargs = Qwen3ASRProcessorKwargs
+    text_kwargs = {
+        "padding": True,
+        "padding_side": "left",
+        "return_tensors": "pt",
+    }
+    audio_kwargs = {
+        "sampling_rate": 16000,
+        "padding": True,
+        "return_attention_mask": True,
+        "n_window": 50,  # should match config.n_window
+    }
 
     def __init__(
         self,
@@ -375,7 +369,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
         text: TextInput | list[TextInput],
         audio: AudioInput,
         output_labels: bool | None = False,
-        **kwargs: Unpack[Qwen3ASRProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         output_labels (bool, *optional*, default=False):
@@ -442,7 +436,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
         audio: AudioInput | list[AudioInput],
         language: str | list[str] | None = None,
         prompt: str | list[str] | None = None,
-        **kwargs: Unpack[Qwen3ASRProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         """
         Prepare inputs for automatic speech recognition without manually writing the chat template.
@@ -775,5 +769,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
     def audio_token_ids(self):
         return [self.audio_token_id, self.audio_bos_token_id, self.audio_eos_token_id]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Qwen3ASRProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Qwen3ASRProcessor"]

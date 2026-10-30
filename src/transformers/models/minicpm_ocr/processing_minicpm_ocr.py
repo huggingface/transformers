@@ -25,27 +25,39 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
 from ...video_utils import VideoInput, make_batched_videos
 
 
+logger = logging.get_logger(__name__)
+
+
 class MiniCPMOcrProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "common_kwargs": {
-            "return_tensors": "pt",
-        },
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "left",
-            "return_mm_token_type_ids": False,
-            "return_text_replacement_offsets": False,
-        },
-    }
+    """
+    use_image_id (`bool`, *optional*):
+        Whether to prepend an image-id tag (``<image_id>N</image_id>``) before
+        each image placeholder. If unset, defaults to the image processor's `use_image_id`.
+    """
+
+    use_image_id: bool | None
 
 
 @auto_docstring
 class MiniCPMOcrProcessor(ProcessorMixin):
     valid_processor_kwargs = MiniCPMOcrProcessorKwargs
+
+    text_kwargs = {
+        "padding": True,
+        "padding_side": "left",
+        "return_tensors": "pt",
+    }
+    videos_kwargs = {
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "return_tensors": "pt",
+    }
+    use_image_id: bool | None = None
 
     def __init__(self, image_processor=None, video_processor=None, tokenizer=None, chat_template=None, **kwargs):
         super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template, **kwargs)
@@ -73,7 +85,7 @@ class MiniCPMOcrProcessor(ProcessorMixin):
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         videos: VideoInput | None = None,
-        **kwargs: Unpack[ProcessingKwargs],
+        **kwargs: Unpack[MiniCPMOcrProcessorKwargs],
     ):
         # MiniCPM needs to override `__call__` due to `_prepend_local_ids`, i.e. we add local image id inside text
         # Current `replace_image_tokens` API assumes that each image-placeholder doesn't depend on the other!
@@ -81,11 +93,18 @@ class MiniCPMOcrProcessor(ProcessorMixin):
         self.validate_inputs(images=images, text=text, videos=videos, **kwargs)
 
         merged_kwargs = self._merge_kwargs(
-            self.valid_processor_kwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
             **kwargs,
         )
-        use_image_id = merged_kwargs["images_kwargs"].pop("use_image_id", None)
+
+        if "use_image_id" in merged_kwargs["images_kwargs"]:
+            logger.warning_once(
+                "Passing `use_image_id` in `images_kwargs` is deprecated "
+                "and will be removed in v5.29.0. Pass it directly to the processor instead."
+            )
+
+        # "images_kwargs" has priority for backwards compatibility
+        use_image_id = merged_kwargs["images_kwargs"].pop("use_image_id", merged_kwargs["use_image_id"])
         use_image_id = use_image_id if use_image_id is not None else self.default_use_image_id
 
         processed_images = processed_videos = {}
@@ -98,9 +117,20 @@ class MiniCPMOcrProcessor(ProcessorMixin):
         text_inputs = {}
         return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
         if text is not None:
-            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+            for key in ("return_mm_token_type_ids", "return_text_replacement_offsets"):
+                if key in merged_kwargs["text_kwargs"]:
+                    logger.warning_once(
+                        f"Passing `{key}` in `text_kwargs` is deprecated "
+                        "and will be removed in v5.29.0. "
+                        "Pass it directly to the processor instead."
+                    )
+            # return_mm_token_type_ids in text_kwargs has priority for backwards compatibility
+            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop(
+                "return_mm_token_type_ids", merged_kwargs["return_mm_token_type_ids"]
+            )
+            # return_text_replacement_offsets in text_kwargs has priority for backwards compatibility
             return_text_replacement_offsets = merged_kwargs["text_kwargs"].pop(
-                "return_text_replacement_offsets", False
+                "return_text_replacement_offsets", merged_kwargs["return_text_replacement_offsets"]
             )
 
             if images_replacements and use_image_id:

@@ -42,8 +42,6 @@ class PocketTTSAudioKwargs(AudioKwargs, total=False):
 
 class PocketTTSProcessorKwargs(ProcessingKwargs, total=False):
     audio_kwargs: PocketTTSAudioKwargs
-    # call defaults (`padding`, `padding_side`, `return_tensors`) ship in the checkpoint's `tokenizer_config.json`
-    _defaults = {}
 
 
 @requires(backends=("torch",))
@@ -132,9 +130,7 @@ class PocketTTSProcessor(ProcessorMixin):
             for generation `frames_after_eos` (frames generated after the end-of-speech frame, by text length), for
             training `labels` and `labels_mask`.
         """
-        output_kwargs = self._merge_kwargs(
-            PocketTTSProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
-        )
+        output_kwargs = self._merge_kwargs(tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs)
         return_tensors = output_kwargs["text_kwargs"].get("return_tensors", None)
 
         if return_tensors != "pt":

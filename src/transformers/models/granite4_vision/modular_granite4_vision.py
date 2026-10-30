@@ -28,8 +28,9 @@ from ...image_processing_utils import select_best_resolution
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import slice_logits_to_keep
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import merge_with_config_defaults
 from ..auto import AutoConfig, AutoModel
 from ..granite.configuration_granite import GraniteConfig
@@ -803,6 +804,8 @@ class Granite4VisionForConditionalGeneration(LlavaNextForConditionalGeneration):
 
         return mm_encoder_output
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Granite4VisionProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "Granite4VisionConfig",
