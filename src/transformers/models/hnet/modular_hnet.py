@@ -11,8 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from collections.abc import Callable
-
 import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
@@ -70,8 +68,6 @@ class HNetConfig(PreTrainedConfig):
         Whether the Mamba2 projections have a bias.
     use_conv_bias (`bool`, *optional*, defaults to `True`):
         Whether the Mamba2 convolution has a bias.
-    use_mamba_kernels (`bool`, *optional*, defaults to `True`):
-        Deprecated and has no effect. The fast Mamba kernels are used automatically when available.
 
     Each stage is wider than the previous one: `hidden_size` and the sizes derived from it are the outermost stage's,
     and `per_layer_config` holds the inner stages'. Instead of `per_layer_config`, the stages can be given as lists,
@@ -95,7 +91,6 @@ class HNetConfig(PreTrainedConfig):
     hidden_size: int = 1024
     intermediate_size: int = 0
     num_attention_heads: int = 16
-    num_key_value_heads: int | None = None
     head_dim: int | None = None
     n_mamba_heads: int | None = None
     sliding_window: int | None = 1024
@@ -113,7 +108,6 @@ class HNetConfig(PreTrainedConfig):
     time_step_min: float = 0.0
     add_bias_linear: bool = False
     use_conv_bias: bool = True
-    use_mamba_kernels: bool = True
     hidden_act: str = "silu"
     mlp_bias: bool = False
     max_position_embeddings: int = 1_048_576
@@ -162,7 +156,6 @@ class HNetConfig(PreTrainedConfig):
                     "hidden_size": hidden_size,
                     "intermediate_size": intermediate_size,
                     "num_attention_heads": num_heads,
-                    "num_key_value_heads": num_heads,
                     "head_dim": hidden_size // num_heads,
                     "n_mamba_heads": self.mamba_expand * hidden_size // self.mamba_headdim,
                     "sliding_window": sliding_window,
@@ -318,17 +311,6 @@ class HNetDecoderLayer(GradientCheckpointingLayer):
         return hidden_states + self.mlp(self.post_attention_layernorm(hidden_states))
 
 
-def sliding_window_over_positions(positions: torch.Tensor, sliding_window: int | None) -> Callable | None:
-    """Sliding window over the positions of each sequence rather than over cache slots, which include padding."""
-    if sliding_window is None:
-        return None
-
-    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        return positions[batch_idx, kv_idx] > positions[batch_idx, q_idx] - sliding_window
-
-    return inner_mask
-
-
 class HNetStack(nn.Module):
     """
     Mamba2 / attention layers running at the width of one stage: an encoder, decoder or main network. `layer_ids`
@@ -372,23 +354,29 @@ class HNetStack(nn.Module):
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
                 position_ids=position_ids,
-                and_mask_function=sliding_window_over_positions(kv_positions, self.sliding_window),
+                # Sliding window over the positions of each sequence, not over cache slots (which include padding)
+                and_mask_function=None
+                if self.sliding_window is None
+                else lambda batch_idx, head_idx, q_idx, kv_idx: (
+                    kv_positions[batch_idx, kv_idx] > kv_positions[batch_idx, q_idx] - self.sliding_window
+                ),
                 layer_idx=self.first_attention_idx,
             )
         mamba_mask = create_recurrent_attention_mask(self.config, hidden_states, attention_mask)
 
         # Decoding a batch where some sequences close no chunk: their step is padding, and must not move their state
-        skipped = None
+        saved_states, skipped = [], None
         if past_key_values is not None and seq_len == 1 and attention_mask is not None:
             skipped = ~attention_mask[:, -1]
-            mamba_states = {
-                layer.mixer.layer_idx: (
-                    past_key_values.get_conv_state(layer.mixer.layer_idx).clone(),
-                    past_key_values.get_recurrent_state(layer.mixer.layer_idx).clone(),
-                )
+            saved_states = [
+                (state, state.clone())
                 for layer in self.layers
-                if layer.is_mamba and skipped.any()
-            }
+                if layer.is_mamba
+                for state in (
+                    past_key_values.get_conv_state(layer.mixer.layer_idx),
+                    past_key_values.get_recurrent_state(layer.mixer.layer_idx),
+                )
+            ]
 
         for layer in self.layers:
             hidden_states = layer(
@@ -399,13 +387,8 @@ class HNetStack(nn.Module):
                 **kwargs,
             )
 
-        if skipped is not None:
-            for layer_idx, (conv_state, recurrent_state) in mamba_states.items():
-                for state, previous in (
-                    (past_key_values.get_conv_state(layer_idx), conv_state),
-                    (past_key_values.get_recurrent_state(layer_idx), recurrent_state),
-                ):
-                    state.copy_(torch.where(skipped.view(-1, *[1] * (state.dim() - 1)), previous, state))
+        for state, previous in saved_states:
+            state.copy_(torch.where(skipped.view(-1, *[1] * (state.dim() - 1)), previous, state))
         return self.norm_f(hidden_states)
 
 
@@ -621,8 +604,6 @@ class HNetModel(HNetPreTrainedModel):
                 step_mask = new_mask[:, None, :, None].float()
                 stage_mask = past_key_values.update(step_mask, step_mask, self.chunk_mask_ids[stage_idx])[0]
                 stage_mask = stage_mask[:, 0, :, 0].bool()
-            elif new_mask.all():
-                stage_mask = None
         else:
             hidden_states = self.widen(hidden_states, len(self.encoders))
             hidden_states = self.main_network(hidden_states, stage_mask, past_key_values, **kwargs)
@@ -635,8 +616,6 @@ class HNetModel(HNetPreTrainedModel):
                 new_mask
                 if stage_idx == len(boundaries) - 1
                 else stage_masks[stage_idx + 1][:, -hidden_states.shape[1] :]
-                if stage_masks[stage_idx + 1] is not None
-                else torch.ones(hidden_states.shape[:2], dtype=torch.bool, device=hidden_states.device)
             )
             dechunk_idx = self.dechunk_ids[stage_idx]
             hidden_states = dechunk(

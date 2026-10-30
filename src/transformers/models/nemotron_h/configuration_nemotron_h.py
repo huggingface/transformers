@@ -152,6 +152,12 @@ class NemotronHConfig(PreTrainedConfig):
     rescale_prenorm_residual: bool = True
 
     def __post_init__(self, **kwargs):
+        if not self.use_mamba_kernels:
+            logger.warning_once(
+                "`use_mamba_kernels=False` is deprecated and has no effect. The implementation is selected "
+                "automatically: Hub kernels when loading with `use_kernels=True`, otherwise the `mamba-ssm` and "
+                "`causal-conv1d` packages if installed, otherwise the PyTorch implementation."
+            )
         # Backward compatibility; configs expect different names for these fields when init
         # but they have to be renamed when creating/saving the config.
         self.n_groups = kwargs.pop("mamba_n_groups") if "mamba_n_groups" in kwargs else self.n_groups

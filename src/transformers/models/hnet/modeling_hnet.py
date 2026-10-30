@@ -35,11 +35,8 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from .configuration_hnet import HNetConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -523,12 +520,6 @@ class HNetMambaMixer(nn.Module):
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.add_bias_linear)
 
         self.layer_type = config.layer_types[layer_idx]
-        if not config.use_mamba_kernels:
-            logger.warning_once(
-                "`use_mamba_kernels=False` is deprecated and has no effect. The implementation is selected "
-                "automatically: Hub kernels when loading with `use_kernels=True`, otherwise the `mamba-ssm` and "
-                "`causal-conv1d` packages if installed, otherwise the PyTorch implementation."
-            )
 
     @torch.no_grad()
     def init_hnet_weights(self):
@@ -867,17 +858,6 @@ class HNetDecoderLayer(GradientCheckpointingLayer):
         return hidden_states + self.mlp(self.post_attention_layernorm(hidden_states))
 
 
-def sliding_window_over_positions(positions: torch.Tensor, sliding_window: int | None) -> Callable | None:
-    """Sliding window over the positions of each sequence rather than over cache slots, which include padding."""
-    if sliding_window is None:
-        return None
-
-    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        return positions[batch_idx, kv_idx] > positions[batch_idx, q_idx] - sliding_window
-
-    return inner_mask
-
-
 class HNetStack(nn.Module):
     """
     Mamba2 / attention layers running at the width of one stage: an encoder, decoder or main network. `layer_ids`
@@ -921,23 +901,29 @@ class HNetStack(nn.Module):
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
                 position_ids=position_ids,
-                and_mask_function=sliding_window_over_positions(kv_positions, self.sliding_window),
+                # Sliding window over the positions of each sequence, not over cache slots (which include padding)
+                and_mask_function=None
+                if self.sliding_window is None
+                else lambda batch_idx, head_idx, q_idx, kv_idx: (
+                    kv_positions[batch_idx, kv_idx] > kv_positions[batch_idx, q_idx] - self.sliding_window
+                ),
                 layer_idx=self.first_attention_idx,
             )
         mamba_mask = create_recurrent_attention_mask(self.config, hidden_states, attention_mask)
 
         # Decoding a batch where some sequences close no chunk: their step is padding, and must not move their state
-        skipped = None
+        saved_states, skipped = [], None
         if past_key_values is not None and seq_len == 1 and attention_mask is not None:
             skipped = ~attention_mask[:, -1]
-            mamba_states = {
-                layer.mixer.layer_idx: (
-                    past_key_values.get_conv_state(layer.mixer.layer_idx).clone(),
-                    past_key_values.get_recurrent_state(layer.mixer.layer_idx).clone(),
-                )
+            saved_states = [
+                (state, state.clone())
                 for layer in self.layers
-                if layer.is_mamba and skipped.any()
-            }
+                if layer.is_mamba
+                for state in (
+                    past_key_values.get_conv_state(layer.mixer.layer_idx),
+                    past_key_values.get_recurrent_state(layer.mixer.layer_idx),
+                )
+            ]
 
         for layer in self.layers:
             hidden_states = layer(
@@ -948,13 +934,8 @@ class HNetStack(nn.Module):
                 **kwargs,
             )
 
-        if skipped is not None:
-            for layer_idx, (conv_state, recurrent_state) in mamba_states.items():
-                for state, previous in (
-                    (past_key_values.get_conv_state(layer_idx), conv_state),
-                    (past_key_values.get_recurrent_state(layer_idx), recurrent_state),
-                ):
-                    state.copy_(torch.where(skipped.view(-1, *[1] * (state.dim() - 1)), previous, state))
+        for state, previous in saved_states:
+            state.copy_(torch.where(skipped.view(-1, *[1] * (state.dim() - 1)), previous, state))
         return self.norm_f(hidden_states)
 
 
@@ -1170,8 +1151,6 @@ class HNetModel(HNetPreTrainedModel):
                 step_mask = new_mask[:, None, :, None].float()
                 stage_mask = past_key_values.update(step_mask, step_mask, self.chunk_mask_ids[stage_idx])[0]
                 stage_mask = stage_mask[:, 0, :, 0].bool()
-            elif new_mask.all():
-                stage_mask = None
         else:
             hidden_states = self.widen(hidden_states, len(self.encoders))
             hidden_states = self.main_network(hidden_states, stage_mask, past_key_values, **kwargs)
@@ -1184,8 +1163,6 @@ class HNetModel(HNetPreTrainedModel):
                 new_mask
                 if stage_idx == len(boundaries) - 1
                 else stage_masks[stage_idx + 1][:, -hidden_states.shape[1] :]
-                if stage_masks[stage_idx + 1] is not None
-                else torch.ones(hidden_states.shape[:2], dtype=torch.bool, device=hidden_states.device)
             )
             dechunk_idx = self.dechunk_ids[stage_idx]
             hidden_states = dechunk(

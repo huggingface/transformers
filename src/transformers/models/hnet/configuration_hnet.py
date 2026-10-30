@@ -54,8 +54,6 @@ class HNetConfig(PreTrainedConfig):
         Whether the Mamba2 projections have a bias.
     use_conv_bias (`bool`, *optional*, defaults to `True`):
         Whether the Mamba2 convolution has a bias.
-    use_mamba_kernels (`bool`, *optional*, defaults to `True`):
-        Deprecated and has no effect. The fast Mamba kernels are used automatically when available.
 
     Each stage is wider than the previous one: `hidden_size` and the sizes derived from it are the outermost stage's,
     and `per_layer_config` holds the inner stages'. Instead of `per_layer_config`, the stages can be given as lists,
@@ -79,7 +77,6 @@ class HNetConfig(PreTrainedConfig):
     hidden_size: int = 1024
     intermediate_size: int = 0
     num_attention_heads: int = 16
-    num_key_value_heads: int | None = None
     head_dim: int | None = None
     n_mamba_heads: int | None = None
     sliding_window: int | None = 1024
@@ -97,7 +94,6 @@ class HNetConfig(PreTrainedConfig):
     time_step_min: float = 0.0
     add_bias_linear: bool = False
     use_conv_bias: bool = True
-    use_mamba_kernels: bool = True
     hidden_act: str = "silu"
     mlp_bias: bool = False
     max_position_embeddings: int = 1_048_576
@@ -146,7 +142,6 @@ class HNetConfig(PreTrainedConfig):
                     "hidden_size": hidden_size,
                     "intermediate_size": intermediate_size,
                     "num_attention_heads": num_heads,
-                    "num_key_value_heads": num_heads,
                     "head_dim": hidden_size // num_heads,
                     "n_mamba_heads": self.mamba_expand * hidden_size // self.mamba_headdim,
                     "sliding_window": sliding_window,
