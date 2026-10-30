@@ -160,6 +160,7 @@ BITSANDBYTES_MIN_VERSION = "0.46.1"
 SCHEDULEFREE_MIN_VERSION = "1.2.6"
 FSDP_MIN_VERSION = "1.12.0"
 GGUF_MIN_VERSION = "0.10.0"
+DALI_MIN_VERSION = "2.0.0"
 XLA_FSDPV2_MIN_VERSION = "2.2.0"
 HQQ_MIN_VERSION = "0.2.1"
 VPTQ_MIN_VERSION = "0.0.4"
@@ -794,6 +795,20 @@ def is_kernels_available(MIN_VERSION: str = KERNELS_MIN_VERSION, MAX_VERSION: st
 @_make_compile_constant
 def is_cv2_available() -> bool:
     return _is_package_available("cv2")[0]
+
+
+@lru_cache
+@_make_compile_constant
+def is_dali_available() -> bool:
+    if not (_is_package_available("nvidia")[0] and _is_package_available("nvidia.dali")[0]):
+        return False
+    dali_distributions = [
+        name for name in PACKAGE_DISTRIBUTION_MAPPING.get("nvidia", []) if name.startswith("nvidia-dali")
+    ]
+    return any(
+        version.parse(importlib.metadata.version(name)) >= version.parse(DALI_MIN_VERSION)
+        for name in dali_distributions
+    )
 
 
 @lru_cache
@@ -2023,6 +2038,15 @@ Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
+DALI_IMPORT_ERROR = """
+{0} requires the NVIDIA DALI library but it was not found in your environment. You can install it with:
+```
+pip install nvidia-dali-cuda130
+```
+Pick the wheel that matches your CUDA version. Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
 CV2_IMPORT_ERROR = """
 {0} requires the OpenCV library but it was not found in your environment. You can install it with:
 ```
@@ -2340,6 +2364,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("av", (is_av_available, AV_IMPORT_ERROR)),
         ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
         ("cv2", (is_cv2_available, CV2_IMPORT_ERROR)),
+        ("dali", (is_dali_available, DALI_IMPORT_ERROR)),
         ("datasets", (is_datasets_available, DATASETS_IMPORT_ERROR)),
         ("decord", (is_decord_available, DECORD_IMPORT_ERROR)),
         ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
@@ -3013,6 +3038,7 @@ _TORCHVISION_BACKEND_SUBCLASS = re.compile(r"^class\s+\w+\s*\([^)]*\bTorchvision
 BASE_FILE_REQUIREMENTS = {
     lambda name, content: "modeling_" in name: ("torch",),
     lambda name, content: "tokenization_" in name and name.endswith("_fast"): ("tokenizers",),
+    lambda name, content: "image_processing_dali_" in name: ("vision", "torch", "dali"),
     lambda name, content: "image_processing_" in name and _TORCHVISION_BACKEND_SUBCLASS.search(content): (
         "vision",
         "torch",
