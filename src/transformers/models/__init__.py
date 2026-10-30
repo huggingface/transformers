@@ -558,6 +558,7 @@ if TYPE_CHECKING:
     from .yolos import *
     from .yoso import *
     from .youtu import *
+    from .yue2_acoustic_tokenizer import *
     from .zamba import *
     from .zamba2 import *
     from .zaya import *
