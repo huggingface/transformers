@@ -120,13 +120,6 @@ task_to_pipeline_and_spec_mapping = {
     "zero-shot-image-classification": (ZeroShotImageClassificationPipeline, ZeroShotImageClassificationInput),
 }
 
-for task_info in pipeline_test_mapping.values():
-    test = task_info["test"]
-    task_info["mapping"] = {
-        "pt": getattr(test, "model_mapping", None),
-    }
-
-
 # The default value `hf-internal-testing` is for running the pipeline testing against the tiny models on the Hub.
 # For debugging purpose, we can specify a local path which is the `output_path` argument of a previous run of
 # `utils/create_dummy_models.py`.
