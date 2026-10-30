@@ -257,3 +257,6 @@ class FillMaskPipeline(Pipeline):
         if isinstance(inputs, list) and len(inputs) == 1:
             return outputs[0]
         return outputs
+
+
+assert 1 == 1  # noqa: S101
