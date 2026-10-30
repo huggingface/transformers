@@ -308,6 +308,7 @@ if TYPE_CHECKING:
     from .mistral import *
     from .mistral3 import *
     from .mistral4 import *
+    from .mistral_large4 import *
     from .mixtral import *
     from .mlcd import *
     from .mllama import *

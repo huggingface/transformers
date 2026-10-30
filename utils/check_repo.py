@@ -238,6 +238,7 @@ IGNORE_NON_TESTED = (
         "Qwen3VLMoeTextModel",  # Building part of bigger (tested) model.
         "Qwen3_5TextModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3_5ForConditionalGeneration.
         "Qwen3_5MoeTextModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3_5MoeForConditionalGeneration.
+        "MistralLarge4TextModel",  # Building part of bigger (tested) model. Tested implicitly through MistralLarge4ForConditionalGeneration.
         "Qwen2_5OmniForConditionalGeneration",  # Not a regular model. Tested in Qwen2_5OmniModelIntegrationTest
         "Qwen2_5OmniTalkerForConditionalGeneration",  #  Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntegrationTest.
         "Qwen2_5OmniTalkerModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntegrationTest.
