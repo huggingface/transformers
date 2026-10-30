@@ -1,17 +1,17 @@
-# Experimental transformers CI image for AMD Ryzen "Strix Halo" (gfx1151).
+# transformers CI image for AMD Ryzen AI Max "Strix Halo" (gfx1151) and Radeon
+# AI Pro R9700 (gfx1201); GPU_ARCH below picks the GPU.
 #
 # Base is plain Ubuntu 24.04 (system python 3.12, matching the cp312 wheels
-# below). No ROCm in the base: the torch wheels pull their own ROCm userspace
-# from pip (rocm-sdk-core / rocm-sdk-libraries), so a ROCm base image would only
-# add ~20 GB of unused libraries. The host still supplies the amdgpu/KFD kernel
-# driver; run with --device=/dev/kfd --device=/dev/dri (see the CI workflow).
+# below). No ROCm in the base: the torch wheels (AMD's ROCm 10.1 build by
+# default) pull their own ROCm userspace from pip (rocm-sdk-core /
+# rocm-sdk-libraries), so a ROCm base image would only add ~20 GB of unused
+# libraries. The host still supplies the amdgpu/KFD kernel driver; run with
+# --device=/dev/kfd --device=/dev/dri (see the CI workflow).
 #
 # The ROCm userspace does NOT need to match the pool's driver. This image runs
-# on the pool as-is (inbox amdgpu in the 6.17 OEM kernel, 7.2.1-era host, no
-# amdgpu-dkms). `hipErrorInvalidImage` on gfx1151 means missing gfx1151 device
-# code in the wheels, not driver skew. download.pytorch.org/whl/rocm7.14 now
-# includes gfx1151, and on ROCm 7.14 the flash / efficient SDPA backends run
-# instead of falling back to math.
+# on the pool as-is (inbox amdgpu in the 6.17 OEM kernel, no amdgpu-dkms).
+# `hipErrorInvalidImage` means the wheels lack device code for this GPU, not
+# driver skew.
 FROM ubuntu:24.04
 LABEL maintainer="Hugging Face"
 
@@ -46,12 +46,31 @@ ENV PATH=${VIRTUAL_ENV}/bin:${PATH}
 RUN pip install --no-cache-dir --upgrade pip \
     numpy importlib-metadata setuptools wheel ninja pytesseract "itsdangerous<2.1.0"
 
-# gfx1151 torch stack, from PyTorch's own ROCm 7.14 channel (cp312, matching
-# the base image's python 3.12). torchvision includes libpng/libjpeg, so
-# torchvision.io.decode_image works.
-ARG TORCH_INDEX=https://download.pytorch.org/whl/rocm7.14
-ARG TORCH_VERSION=2.14.0+rocm7.14
-ARG TORCHVISION_VERSION=0.29.0+rocm7.14
+# The GPU this image runs on (gfx1151 Strix Halo, gfx1201 Radeon AI Pro R9700).
+# Declared here because the torch stack below picks its device code from it.
+ARG GPU_ARCH=gfx1151
+
+# torch stack: AMD's ROCm 10.1 wheels (cp312, matching the base image's python
+# 3.12), the stack this file was validated on for gfx1151 and gfx1201 (full
+# fast and slow suites, 2026-10-26). AMD splits its index into product trees,
+# torch in one and rocm-sdk-* in another, so it needs an extra index, and its
+# torch pulls the GPU's device code through an extra such as [device-gfx1201]
+# rather than requiring rocm[device-all].
+#
+# PyTorch's own ROCm 7.14 channel also works but was last validated before the
+# kernel and pin changes in this file: build it with
+#   --build-arg TORCH_INDEX=https://download.pytorch.org/whl/rocm7.14
+#   --build-arg TORCH_EXTRA_INDEX= --build-arg TORCH_DEVICE_EXTRA=
+#   --build-arg TORCH_VERSION=2.14.0+rocm7.14 --build-arg TORCHVISION_VERSION=0.29.0+rocm7.14
+#   --build-arg TORCHAUDIO_INDEX=https://repo.amd.com/rocm/whl-multi-arch/
+#   --build-arg TORCHAUDIO_VERSION=2.11.0+rocm7.14.1
+# On that index, do not move to torchaudio 2.11.0.2 without testing: its GPU
+# kernels do not include gfx1151.
+ARG TORCH_INDEX=https://stable.repo.amd.com/rocm/pytorch/whl-next/
+ARG TORCH_EXTRA_INDEX=https://stable.repo.amd.com/rocm/core/whl-next/
+ARG TORCH_DEVICE_EXTRA=[device-${GPU_ARCH}]
+ARG TORCH_VERSION=2.14.0+rocm10.1.0
+ARG TORCHVISION_VERSION=0.29.0a0+rocm10.1.0
 
 # --- Keep only one GPU architecture (saves ~10 GB) ---------------------------
 # torch requires rocm[device-all], which installs ROCm libraries for all 25
@@ -60,14 +79,14 @@ ARG TORCHVISION_VERSION=0.29.0+rocm7.14
 # rocm-sdk-device-* package except GPU_ARCH. Their metadata is kept, so later
 # pip calls still see torch's requirements as met. This has to happen in the
 # same RUN as the install: deleting in a later RUN would not shrink the image.
-#   GPU_ARCH           must match the GPU this image runs on. For another GPU,
-#                      also change FA_WHEEL below, which is built for gfx1151.
+#   GPU_ARCH           (above) must match the GPU this image runs on.
 #   TRIM_OTHER_ARCHS   1 = keep only GPU_ARCH (default); 0 = keep all 25.
 #                      Any other value fails the build.
-ARG GPU_ARCH=gfx1151
 ARG TRIM_OTHER_ARCHS=1
 RUN python3 -m pip install --no-cache-dir --index-url ${TORCH_INDEX} \
-      "torch==${TORCH_VERSION}" "torchvision==${TORCHVISION_VERSION}" && \
+      ${TORCH_EXTRA_INDEX:+--extra-index-url ${TORCH_EXTRA_INDEX}} \
+      "torch${TORCH_DEVICE_EXTRA}==${TORCH_VERSION}" \
+      "torchvision${TORCH_DEVICE_EXTRA}==${TORCHVISION_VERSION}" && \
     case "${TRIM_OTHER_ARCHS}" in \
     0) echo "TRIM_OTHER_ARCHS=0: keeping device code for all architectures" ;; \
     1) python3 -c "import glob, os, re, sysconfig; \
@@ -86,11 +105,10 @@ list(map(os.remove, paths))" ;; \
 
 # torchaudio: 2.11 is its final release and works with every later torch. The
 # PyPI wheel is built for CUDA and fails to load here, so this is AMD's ROCm
-# build (download.pytorch.org has none for rocm7.14). --no-deps so it cannot
-# pull a different torch. Do not bump to 2.11.0.2 without testing: its GPU
-# kernels do not include gfx1151.
-ARG TORCHAUDIO_INDEX=https://repo.amd.com/rocm/whl-multi-arch/
-ARG TORCHAUDIO_VERSION=2.11.0+rocm7.14.1
+# build, from the same tree as torch. --no-deps so it cannot pull a different
+# torch.
+ARG TORCHAUDIO_INDEX=https://stable.repo.amd.com/rocm/pytorch/whl-next/
+ARG TORCHAUDIO_VERSION=2.11.0+rocm10.1.0
 RUN python3 -m pip install --no-cache-dir --no-deps --index-url ${TORCHAUDIO_INDEX} \
       "torchaudio==${TORCHAUDIO_VERSION}"
 
@@ -100,11 +118,20 @@ RUN python3 -m pip install --no-cache-dir --no-deps --index-url ${TORCHAUDIO_IND
 RUN printf 'torch==%s\ntorchvision==%s\n' "${TORCH_VERSION}" "${TORCHVISION_VERSION}" > /opt/rocm-constraints.txt
 ENV PIP_CONSTRAINT=/opt/rocm-constraints.txt
 
-# Flash-Attention (Triton-AMD wheel for gfx1151). --no-deps so it cannot pull a
-# non-gfx1151 torch over the one installed above. Pinned to the torch/ROCm ABI
-# of the wheels above; bumping the stack generally needs a matching FA wheel.
-ARG FA_WHEEL=https://rocm.frameworks-nightlies.amd.com/whl/gfx1151/flash_attn-2.8.3-py3-none-any.whl
-RUN python3 -m pip install --no-cache-dir --no-deps ${FA_WHEEL}
+# Flash-Attention wheel: off by default. Without the flash_attn package,
+# transformers serves attn_implementation="flash_attention_2" from the
+# kernels-community/aiter-flash-attn hub kernel (through the `kernels` package)
+# ("You do not have `flash_attn` installed, using ... aiter-flash-attn"). On
+# Llama-3.1-8B fp16 it matched SDPA's output, and its decode and 4k-token prefill
+# speed, within ~2% on gfx1151 and gfx1201 (probe 2026-10-27).
+# To use AMD's Triton wheel instead (gfx1151 only; the nightlies have no gfx1201
+# build), pass FA_WHEEL=https://rocm.frameworks-nightlies.amd.com/whl/gfx1151/flash_attn-2.8.3-py3-none-any.whl
+# --no-deps so it cannot pull a different torch; it is pinned to a torch/ROCm
+# ABI, so check it against the stack above before using it.
+ARG FA_WHEEL=
+RUN if [ -n "${FA_WHEEL}" ]; then \
+      python3 -m pip install --no-cache-dir --no-deps "${FA_WHEEL}"; \
+    else echo "FA_WHEEL empty: no flash-attn in this image"; fi
 
 ARG REF=main
 WORKDIR /
