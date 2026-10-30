@@ -241,13 +241,20 @@ RUN python3 -m pip install --no-cache-dir einops blobfile num2words timm \
 
 # Media decoders needed by audio/video model tests:
 #  - PyAV (`av`): torchvision video ops
-#  - torchcodec: audio/video decoding (pinned to the torch 2.14 ABI; --no-deps
-#    so it can't drag in a different torch). Best-effort: a torchcodec mismatch
-#    must not fail the whole image build.
+#  - torchcodec: audio/video decoding. Since 0.12 one release supports every
+#    torch >= 2.11, so it need not move with torch. The CPU build, from
+#    PyTorch's cpu index: PyPI's wheels are CUDA builds from 0.14 on (they link
+#    libcudart/libnvrtc and fail to load here); 0.13 on PyPI happened to be
+#    +cpu. --no-deps so it can't drag in a different torch. Best-effort, but
+#    checked by decoding-library import: a wheel that installs and cannot load
+#    is recorded as missing rather than shipped silently.
+ARG TORCHCODEC_INDEX=https://download.pytorch.org/whl/cpu
 RUN python3 -m pip install --no-cache-dir av
-RUN python3 -m pip install --no-cache-dir --no-deps torchcodec==0.13.0 || \
-    python3 -m pip install --no-cache-dir --no-deps torchcodec || \
-    echo "torchcodec install skipped"
+RUN { python3 -m pip install --no-cache-dir --no-deps --index-url ${TORCHCODEC_INDEX} \
+        "torchcodec==0.17.0+cpu" \
+      && python3 -c "from torchcodec.decoders import AudioDecoder"; } || \
+    { echo "torchcodec unusable"; python3 -m pip uninstall -y torchcodec || true; \
+      echo torchcodec >> /etc/hf-ci-optional-missing; }
 
 # transformers' [audio] extra, which upstream's AMD image installs and [testing]
 # does not: phonemizer (wav2vec2_phoneme, and one wav2vec2 tokenizer test that
