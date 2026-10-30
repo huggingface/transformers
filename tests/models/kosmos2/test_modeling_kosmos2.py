@@ -542,9 +542,9 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
             torch.concat(scores[1:4])[:3, :3].to("cpu").numpy(),
             np.array(
                 [
-                    [-1.5672581195831299, -5.007406711578369, 4.36448860168457],
-                    [-2.147017002105713, -4.966302871704102, 4.592559337615967],
-                    [-0.9352350831031799, -4.688288688659668, 6.240612983703613],
+                    [-1.5671477317810059, -5.007861137390137, 4.363498210906982],
+                    [-2.146806240081787, -4.966701984405518, 4.591914653778076],
+                    [-0.9352192878723145, -4.688364505767822, 6.2391180992126465],
                 ]
             ),
             atol=atol,
@@ -553,9 +553,9 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
             torch.concat(scores[-3:])[-3:, -3:].to("cpu").numpy(),
             np.array(
                 [
-                    [2.9916205406188965, 2.481820583343506, 4.646594524383545],
-                    [-2.8381078243255615, -2.9687185287475586, -2.6926779747009277],
-                    [-2.8909168243408203, -3.2228589057922363, -1.7056822776794434],
+                    [2.9931235313415527, 2.483426094055176, 4.648161888122559],
+                    [-2.8374814987182617, -2.968021869659424, -2.691683292388916],
+                    [-2.8913841247558594, -3.223571300506592, -1.704697847366333],
                 ]
             ),
             atol=1e-5,
@@ -600,9 +600,9 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
             torch.concat(scores[1:4])[:3, :3].to("cpu").numpy(),
             np.array(
                 [
-                    [-0.9093570113182068, -4.578373908996582, 5.96360969543457],
-                    [2.452126979827881, -4.090598106384277, 8.738677024841309],
-                    [-0.7624598741531372, -4.771658897399902, 6.576295852661133],
+                    [-0.9066156148910522, -4.577853202819824, 5.964805603027344],
+                    [2.453021764755249, -4.090046405792236, 8.738329887390137],
+                    [-0.7618225812911987, -4.771708011627197, 6.576147556304932],
                 ]
             ),
             atol=atol,
@@ -611,9 +611,9 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
             torch.concat(scores[-3:])[-3:, -3:].to("cpu").numpy(),
             np.array(
                 [
-                    [-1.673659086227417, -2.162452220916748, -1.95430588722229],
-                    [-2.006824493408203, -2.2038745880126953, -1.24686861038208],
-                    [-3.2783470153808594, -2.814181089401245, -1.390632152557373],
+                    [-0.9908435344696045, -1.2352672815322876, -1.30216646194458],
+                    [-2.6381492614746094, -2.5162341594696045, -1.9107370376586914],
+                    [-3.098954439163208, -2.910688638687134, -1.501033067703247],
                 ]
             ),
             atol=1e-5,
@@ -627,10 +627,10 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
                 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 64004, 64012, 34645, 247, 38, 1648, 12, 3391, 55,
                 24, 1648, 1338, 10, 43867, 1280, 32, 64007, 10, 30879, 64008, 64009, 64018, 65020, 64010, 12, 5, 1842,
                 4, 71, 17, 1679, 64007, 10, 3958, 64008, 64009, 64061, 64263, 64010, 6, 64007, 15719, 64008, 64009,
-                64253, 64617, 64010, 6, 8, 64007, 9626, 64008, 64009, 64413, 64545, 64010, 6, 23, 64007, 10, 4363,
-                64008, 64009, 64623, 64885, 64010, 2255, 8, 64007, 10, 3486, 64008, 64009, 64809, 65036, 64010, 1560,
-                2255, 4, 24, 43867, 1684, 7, 27, 3774, 5, 10356, 9, 5, 646, 6, 8, 22, 1684, 7, 30, 10, 2007, 8, 16239,
-                4337, 4, 2
+                64253, 64617, 64010, 6, 8, 64007, 9626, 64008, 64009, 64413, 64545, 64010, 6, 8, 17, 4371, 32, 64007,
+                10, 217, 17846, 64008, 64009, 64623, 64885, 64011, 64809, 65036, 64010, 8, 64007, 10, 4886, 64008,
+                64009, 64841, 65004, 64010, 4, 24, 43867, 1684, 7, 27, 3774, 5, 10356, 9, 5, 646, 6, 2305, 4082, 16, 10,
+                1946, 4825, 4, 2,
             ]
         ]
         # fmt: on
@@ -641,17 +641,17 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
             "</phrase><object><patch_index_0005><patch_index_1007></object> in the snow. He is wearing<phrase> a hat"
             "</phrase><object><patch_index_0048><patch_index_0250></object>,<phrase> scarf</phrase><object>"
             "<patch_index_0240><patch_index_0604></object>, and<phrase> gloves</phrase><object><patch_index_0400>"
-            "<patch_index_0532></object>, with<phrase> a pot</phrase><object><patch_index_0610><patch_index_0872>"
-            "</object> nearby and<phrase> a cup</phrase><object><patch_index_0796><patch_index_1023></object> placed "
-            "nearby. The snowman appears to be enjoying the warmth of the fire, and it appears to have a warm and cozy "
-            "atmosphere."
+            "<patch_index_0532></object>, and is surrounded by<phrase> a few pots</phrase><object><patch_index_0610>"
+            "<patch_index_0872></delimiter_of_multi_objects/><patch_index_0796><patch_index_1023></object> and"
+            "<phrase> a bowl</phrase><object><patch_index_0828><patch_index_0991></object>. The snowman appears to "
+            "be enjoying the warmth of the fire, possibly preparing for a winter adventure."
         )
         self.assertEqual(processed_text, EXPECTED_PROCESSED_TEXT_LONG)
 
         EXPECTED_FINAL_TEXT_LONG = (
             "Describe this image in detail: The image features a snowman sitting by a campfire in the snow. He is "
-            "wearing a hat, scarf, and gloves, with a pot nearby and a cup placed nearby. The snowman appears to be "
-            "enjoying the warmth of the fire, and it appears to have a warm and cozy atmosphere."
+            "wearing a hat, scarf, and gloves, and is surrounded by a few pots and a bowl. The snowman appears to be "
+            "enjoying the warmth of the fire, possibly preparing for a winter adventure."
         )
         self.assertEqual(final_text, EXPECTED_FINAL_TEXT_LONG)
 
@@ -660,8 +660,12 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
             ("a hat", (109, 114), [(0.515625, 0.046875, 0.828125, 0.234375)]),
             ("scarf", (116, 121), [(0.515625, 0.234375, 0.890625, 0.578125)]),
             ("gloves", (127, 133), [(0.515625, 0.390625, 0.640625, 0.515625)]),
-            ("a pot", (140, 145), [(0.078125, 0.609375, 0.265625, 0.859375)]),
-            ("a cup", (157, 162), [(0.890625, 0.765625, 0.984375, 0.984375)]),
+            (
+                "a few pots",
+                (156, 166),
+                [(0.078125, 0.609375, 0.265625, 0.859375), (0.890625, 0.765625, 0.984375, 0.984375)],
+            ),
+            ("a bowl", (171, 177), [(0.890625, 0.796875, 0.984375, 0.953125)]),
         ]
         self.assertListEqual(entities, EXPECTED_ENTITIES_LONG)
 
@@ -685,27 +689,26 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         all_final_text = [x[0] for x in final_text_with_entities]
         all_entities = [x[1] for x in final_text_with_entities]
 
-        # left padding gives identical results as non-padding
         EXPECTED_PROCESSED_TEXT_0 = (
             "<grounding> Describe this image in detail: The image features a snowman sitting by<phrase> a campfire"
             "</phrase><object><patch_index_0005><patch_index_1007></object> in the snow. He is wearing<phrase> a hat"
             "</phrase><object><patch_index_0048><patch_index_0250></object>,<phrase> scarf</phrase><object>"
             "<patch_index_0240><patch_index_0604></object>, and<phrase> gloves</phrase><object><patch_index_0400>"
-            "<patch_index_0532></object>, with<phrase> a pot</phrase><object><patch_index_0610><patch_index_0872>"
-            "</object> nearby and<phrase> a cup</phrase><object><patch_index_0796><patch_index_1023></object> placed "
-            "nearby. The snowman appears to be enjoying the warmth of the fire, and it appears to have a warm and cozy "
-            "atmosphere."
+            "<patch_index_0532></object>, and is surrounded by<phrase> a few pots</phrase><object><patch_index_0610>"
+            "<patch_index_0872></delimiter_of_multi_objects/><patch_index_0796><patch_index_1023></object> and"
+            "<phrase> a bowl</phrase><object><patch_index_0828><patch_index_0991></object>. The snowman appears to "
+            "be enjoying the warmth of the fire, possibly preparing for a winter adventure."
         )
         EXPECTED_PROCESSED_TEXT_1 = (
             "<grounding> An image of<phrase> a snowman</phrase><object><patch_index_0044><patch_index_0863></object> "
-            "warming himself by<phrase> a fire</phrase><object><patch_index_0005><patch_index_0911></object>."
+            "warming himself by<phrase> a fire</phrase><object><patch_index_0006><patch_index_0878></object>."
         )
         self.assertListEqual(processed_text, [EXPECTED_PROCESSED_TEXT_0, EXPECTED_PROCESSED_TEXT_1])
 
         EXPECTED_FINAL_TEXT_0 = (
             "Describe this image in detail: The image features a snowman sitting by a campfire in the snow. He is "
-            "wearing a hat, scarf, and gloves, with a pot nearby and a cup placed nearby. The snowman appears to be "
-            "enjoying the warmth of the fire, and it appears to have a warm and cozy atmosphere."
+            "wearing a hat, scarf, and gloves, and is surrounded by a few pots and a bowl. The snowman appears to be "
+            "enjoying the warmth of the fire, possibly preparing for a winter adventure."
         )
         EXPECTED_FINAL_TEXT_1 = "An image of a snowman warming himself by a fire."
         self.assertListEqual(all_final_text, [EXPECTED_FINAL_TEXT_0, EXPECTED_FINAL_TEXT_1])
@@ -715,12 +718,16 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
             ("a hat", (109, 114), [(0.515625, 0.046875, 0.828125, 0.234375)]),
             ("scarf", (116, 121), [(0.515625, 0.234375, 0.890625, 0.578125)]),
             ("gloves", (127, 133), [(0.515625, 0.390625, 0.640625, 0.515625)]),
-            ("a pot", (140, 145), [(0.078125, 0.609375, 0.265625, 0.859375)]),
-            ("a cup", (157, 162), [(0.890625, 0.765625, 0.984375, 0.984375)]),
+            (
+                "a few pots",
+                (156, 166),
+                [(0.078125, 0.609375, 0.265625, 0.859375), (0.890625, 0.765625, 0.984375, 0.984375)],
+            ),
+            ("a bowl", (171, 177), [(0.890625, 0.796875, 0.984375, 0.953125)]),
         ]
         EXPECTED_ENTITIES_1 = [
             ("a snowman", (12, 21), [(0.390625, 0.046875, 0.984375, 0.828125)]),
-            ("a fire", (41, 47), [(0.171875, 0.015625, 0.484375, 0.890625)]),
+            ("a fire", (41, 47), [(0.203125, 0.015625, 0.453125, 0.859375)]),
         ]
         self.assertListEqual(all_entities, [EXPECTED_ENTITIES_0, EXPECTED_ENTITIES_1])
 
@@ -768,7 +775,7 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[0.9148, -1.4148, 3.8040], [3.3443, 1.9478, 0.2080], [1.6604, 2.8184, -0.3618]]
+            [[0.9034, -1.3949, 3.8234], [2.8205, 0.6170, -0.5784], [1.6527, 2.8456, -0.4376]]
         ).to(torch_device)
 
         torch.testing.assert_close(

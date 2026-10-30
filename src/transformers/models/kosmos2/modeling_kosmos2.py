@@ -107,10 +107,6 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, Kosmos2ImageToTextProjection):
             init.normal_(module.dense.weight, std=std)
             init.normal_(module.latent_query)
-        elif isinstance(module, Kosmos2TextTransformer):
-            init.normal_(module.embed_tokens.weight, mean=0.0, std=std)
-            if module.embed_tokens.padding_idx is not None:
-                init.zeros_(module.embed_tokens.weight[module.embed_tokens.padding_idx])
         elif isinstance(module, Kosmos2TextSinusoidalPositionalEmbedding):
             emb_weights = module.get_embedding(
                 module.num_positions + module.offset, module.embedding_dim, module.padding_idx
