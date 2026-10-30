@@ -118,6 +118,54 @@ RUN python3 -m pip install --no-cache-dir --no-deps --index-url ${TORCHAUDIO_IND
 RUN printf 'torch==%s\ntorchvision==%s\n' "${TORCH_VERSION}" "${TORCHVISION_VERSION}" > /opt/rocm-constraints.txt
 ENV PIP_CONSTRAINT=/opt/rocm-constraints.txt
 
+# torchvision image codecs. PyTorch's rocm7.14 channel ships them; AMD's ROCm
+# 10.x torchvision (a TheRock build) is built without libPNG, so decode_png
+# raises "torchvision not compiled with libPNG support" and every fast image
+# processor test fails (transformers has no PIL fallback there). The codecs are
+# their own extension, separate from the ops and the device package (the GPU
+# kernels), so building just that one against the installed torch and dropping
+# it in leaves the GPU code untouched. Built from the commit the wheel records (an a0
+# version has no release tag), and only when a real PNG fails to decode, so
+# the PyTorch-channel build is unchanged.
+#
+# Only the image extension is built: setup.py's list is cut to make_image*.
+# Building _C as well fails to link against ROCm torch (hipify adds a
+# vision_hip.cpp beside vision.cpp, both defining cuda_version), and it is
+# not needed. The extension was image.so up to 0.28 and is image_stable.so in
+# 0.29, hence the glob. TV_DIR is resolved before cd: inside the checkout,
+# `import torchvision` finds the unbuilt source tree, not the installed one.
+RUN probe='import torch, struct, zlib; from torchvision.io import decode_image, ImageReadMode; \
+c=lambda t,d: struct.pack(">I",len(d))+t+d+struct.pack(">I",zlib.crc32(t+d)&0xffffffff); \
+png=b"\x89PNG\r\n\x1a\n"+c(b"IHDR",struct.pack(">IIBBBBB",1,1,8,2,0,0,0))+c(b"IDAT",zlib.compress(b"\x00\xff\x00\x00"))+c(b"IEND",b""); \
+o=decode_image(torch.frombuffer(bytearray(png),dtype=torch.uint8),mode=ImageReadMode.RGB); \
+assert o.flatten().tolist()==[255,0,0], o; print("torchvision libPNG ok")' && \
+    if python3 -c "$probe" 2>/dev/null; then \
+      echo "torchvision already decodes PNG; not rebuilding its image extension"; \
+    else \
+      TV_SHA="$(python3 -c 'import torchvision.version as v; print(v.git_version)')" && \
+      TV_VER="$(python3 -c 'import torchvision; print(torchvision.__version__.split("+")[0])')" && \
+      TV_DIR="$(python3 -c 'import torchvision, os; print(os.path.dirname(torchvision.__file__))')" && \
+      echo "rebuilding the torchvision image extension from ${TV_SHA} (${TV_VER})" && \
+      apt-get update && apt-get install -y --no-install-recommends \
+        libpng-dev libjpeg-turbo8-dev zlib1g-dev && \
+      git init -q /tmp/vision && cd /tmp/vision && \
+      git fetch -q --depth 1 https://github.com/pytorch/vision.git "${TV_SHA}" && \
+      git checkout -q FETCH_HEAD && \
+      python3 -c "import re; s=open('setup.py').read(); \
+m=re.search(r'extensions = \[(.*?)\]', s, re.S); assert m, 'no extensions list'; \
+keep=[e for e in m.group(1).split(',') if 'make_image' in e]; assert len(keep)==1, keep; \
+open('setup.py','w').write(s[:m.start(1)]+keep[0]+','+s[m.end(1):])" && \
+      TORCHVISION_USE_PNG=1 TORCHVISION_USE_JPEG=1 \
+      TORCHVISION_USE_NVJPEG=0 TORCHVISION_USE_VIDEO_CODEC=0 \
+      FORCE_CUDA=0 USE_ROCM=0 MAX_JOBS=16 BUILD_VERSION="${TV_VER}" \
+        python3 setup.py build_ext --inplace && \
+      so="$(ls torchvision/image*.so)" && [ "$(echo "$so" | wc -l)" = 1 ] && \
+      cp "$so" "${TV_DIR}/" && \
+      cd / && rm -rf /tmp/vision && \
+      apt-get clean && rm -rf /var/lib/apt/lists/* && \
+      python3 -c "$probe"; \
+    fi
+
 # Flash-Attention wheel: off by default. Without the flash_attn package,
 # transformers serves attn_implementation="flash_attention_2" from the
 # kernels-community/aiter-flash-attn hub kernel (through the `kernels` package)
