@@ -18,9 +18,7 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    pass
-    # Add models to deprecate like:
-    # from .XXX import *
+    from .bridgetower import *
 else:
     import sys
 

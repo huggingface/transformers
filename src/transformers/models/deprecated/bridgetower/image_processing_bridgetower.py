@@ -13,11 +13,16 @@
 # limitations under the License.
 """Image processor class for BridgeTower."""
 
-import numpy as np
+from typing import Union
 
-from ...image_processing_backends import PilBackend
-from ...image_processing_utils import BatchFeature
-from ...image_utils import (
+import numpy as np
+import torch
+from torchvision.transforms.v2 import functional as tvF
+
+from ....image_processing_backends import TorchvisionBackend
+from ....image_processing_utils import BatchFeature
+from ....image_transforms import group_images_by_shape, reorder_images
+from ....image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     ChannelDimension,
@@ -25,24 +30,21 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
 )
-from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring
+from ....processing_utils import ImagesKwargs, Unpack
+from ....utils import TensorType, auto_docstring, is_torch_available
 
 
-# Adapted from transformers.models.bridgetower.image_processing_bridgetower.BridgeTowerImageProcessorKwargs
-class BridgeTowerImageProcessorKwargs(ImagesKwargs, total=False):
-    size_divisor: int
-
-
-# adapted from transformers.models.bridgetower.image_processing_bridgetower.get_resize_output_image_size
 def get_resize_output_image_size(
-    input_image: np.ndarray,
+    input_image: Union[np.ndarray, "torch.Tensor"],
     shorter: int = 800,
     longer: int = 1333,
     size_divisor: int = 32,
 ) -> tuple[int, int]:
     """Get output image size after resizing with size_divisor."""
-    input_height, input_width = get_image_size(input_image, channel_dim=ChannelDimension.FIRST)
+    if is_torch_available() and isinstance(input_image, torch.Tensor):
+        input_height, input_width = input_image.shape[-2:]
+    else:
+        input_height, input_width = get_image_size(input_image, channel_dim=ChannelDimension.FIRST)
 
     min_size, max_size = shorter, longer
     scale = min_size / min(input_height, input_width)
@@ -66,9 +68,13 @@ def get_resize_output_image_size(
     return new_height, new_width
 
 
+class BridgeTowerImageProcessorKwargs(ImagesKwargs, total=False):
+    size_divisor: int
+
+
 @auto_docstring
-class BridgeTowerImageProcessorPil(PilBackend):
-    """PIL backend for BridgeTower with custom resize and center_crop."""
+class BridgeTowerImageProcessor(TorchvisionBackend):
+    """Torchvision backend for BridgeTower with custom resize and center_crop."""
 
     valid_kwargs = BridgeTowerImageProcessorKwargs
     model_input_names = ["pixel_values", "pixel_mask"]
@@ -91,14 +97,13 @@ class BridgeTowerImageProcessorPil(PilBackend):
 
     def resize(
         self,
-        image: np.ndarray,
+        image: "torch.Tensor",
         size: SizeDict,
-        resample: "PILImageResampling | None",
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         size_divisor: int = 32,
         **kwargs,
-    ) -> np.ndarray:
+    ) -> "torch.Tensor":
         """Resize with size_divisor support."""
-
         if not size.shortest_edge:
             raise ValueError(f"The `size` dictionary must contain the key `shortest_edge`. Got {size.keys()}")
         shorter = size.shortest_edge
@@ -107,7 +112,7 @@ class BridgeTowerImageProcessorPil(PilBackend):
             image, shorter=shorter, longer=longer, size_divisor=size_divisor
         )
         return super().resize(
-            image,
+            image=image,
             size=SizeDict(height=output_height, width=output_width),
             resample=resample,
             **kwargs,
@@ -115,10 +120,10 @@ class BridgeTowerImageProcessorPil(PilBackend):
 
     def _preprocess(
         self,
-        images: list[np.ndarray],
+        images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | None",
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -128,30 +133,41 @@ class BridgeTowerImageProcessorPil(PilBackend):
         image_std: float | list[float] | None,
         do_pad: bool | None,
         pad_size: SizeDict | None,
+        disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         size_divisor: int = 32,
         **kwargs,
     ) -> BatchFeature:
         """Custom preprocessing for BridgeTower."""
-        processed_images = []
-        for image in images:
+        # Group images by size for batched resizing
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
             if do_resize:
-                image = self.resize(image, size, resample, size_divisor)
+                stacked_images = self.resize(stacked_images, size=size, resample=resample, size_divisor=size_divisor)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+
+        # Group images by size for further processing
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
             if do_center_crop:
-                image = self.center_crop(
-                    image, size=SizeDict(height=crop_size.shortest_edge, width=crop_size.shortest_edge)
+                stacked_images = self.center_crop(
+                    stacked_images, size=SizeDict(height=crop_size.shortest_edge, width=crop_size.shortest_edge)
                 )
-            if do_rescale:
-                image = self.rescale(image, rescale_factor)
-            if do_normalize:
-                image = self.normalize(image, image_mean, image_std)
-            processed_images.append(image)
+            # Use fused rescale and normalize
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = stacked_images
+
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         data = {}
         if do_pad:
             processed_images, processed_masks = self.pad(
-                processed_images,
-                return_mask=True,
+                processed_images, return_mask=True, disable_grouping=disable_grouping
             )
             data["pixel_mask"] = processed_masks
 
@@ -160,4 +176,4 @@ class BridgeTowerImageProcessorPil(PilBackend):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 
-__all__ = ["BridgeTowerImageProcessorPil"]
+__all__ = ["BridgeTowerImageProcessor"]

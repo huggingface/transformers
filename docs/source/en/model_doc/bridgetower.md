@@ -17,6 +17,14 @@ rendered properly in your Markdown viewer.
 
 # BridgeTower
 
+<Tip warning={true}>
+
+This model is in maintenance mode only; we don't accept new PRs changing its code.
+If you encounter issues, use Transformers v4.57.6: `pip install -U transformers==4.57.6`.
+This version supports loading and preprocessing the original `BridgeTower/*` checkpoints.
+
+</Tip>
+
 
 ## Overview
 

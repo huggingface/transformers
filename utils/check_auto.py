@@ -131,10 +131,12 @@ def build_processor_mapping(
         module = model_type.replace("-", "_")
         processor_name = None
 
-        if os.path.exists(f"src/transformers/models/{module}/{processor_filename}_{module}.py"):
-            with open(
-                f"src/transformers/models/{module}/{processor_filename}_{module}.py", "r", encoding="utf-8"
-            ) as f:
+        processor_path = f"src/transformers/models/{module}/{processor_filename}_{module}.py"
+        if not os.path.exists(processor_path):
+            processor_path = f"src/transformers/models/deprecated/{module}/{processor_filename}_{module}.py"
+
+        if os.path.exists(processor_path):
+            with open(processor_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
             tree = ast.parse(content)
