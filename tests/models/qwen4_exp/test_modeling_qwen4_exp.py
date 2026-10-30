@@ -45,7 +45,7 @@ if is_torch_available():
         Qwen4ExpVisionConfig,
         StaticCache,
     )
-    from transformers.distributed.fsdp import verify_fsdp_plan
+    from transformers.distributed.fsdp import ALL_FSDP_STYLES
     from transformers.integrations import FP8Embedding
     from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 
@@ -526,8 +526,8 @@ class Qwen4ExpVisionText2TextModelTest(VLMModelTest, unittest.TestCase):
     def test_fsdp_plan_has_no_unused_rules(self):
         with torch.device("meta"):
             model = Qwen4ExpForConditionalGeneration(self.model_tester.get_config())
-        with self.assertNoLogs("transformers.distributed.fsdp", level="WARNING"):
-            verify_fsdp_plan([name for name, _ in model.named_modules()], model._fsdp_plan)
+        with self.assertNoLogs("transformers.distributed.mixin", level="WARNING"):
+            model._validate_parallel_plan(model.fsdp_plan, ALL_FSDP_STYLES, "fsdp_plan")
 
     def test_generate_with_ple_and_inputs_embeds(self):
         config = self.model_tester.get_config()
