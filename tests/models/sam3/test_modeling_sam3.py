@@ -1575,3 +1575,40 @@ class Sam3SinePositionEmbeddingTest(unittest.TestCase):
 
         self.assertEqual(compiled.dtype, torch.bfloat16)
         torch.testing.assert_close(compiled, eager, atol=2e-2, rtol=2e-2)
+
+    def test_sam3_vit_layer_position_ids_fp32(self):
+        """Regression test for #49938: Sam3ViTLayer.position_ids buffer must remain in float32
+        across model casting and initialization in bfloat16/half so RoPE angles maintain precision."""
+        from transformers.models.sam3.configuration_sam3 import Sam3ViTConfig
+        from transformers.models.sam3.modeling_sam3 import Sam3ViTLayer
+
+        config = Sam3ViTConfig(window_size=8, image_size=24, patch_size=2)
+        # Global attention layer (fractional position scaling)
+        layer = Sam3ViTLayer(config, window_size=0)
+        self.assertEqual(layer.position_ids.dtype, torch.float32)
+
+        ref_pos = layer.precompute_positions(config, window_size=0)
+        x = torch.zeros(1)
+        ref_cos, ref_sin = layer.rotary_emb(x, ref_pos)
+
+        layer.to(torch.bfloat16)
+        self.assertEqual(layer.position_ids.dtype, torch.float32)
+        cos_bf16, sin_bf16 = layer.rotary_emb(x, layer.position_ids)
+        torch.testing.assert_close(cos_bf16.float(), ref_cos.float(), atol=1e-2, rtol=1e-2)
+        torch.testing.assert_close(sin_bf16.float(), ref_sin.float(), atol=1e-2, rtol=1e-2)
+
+        # Also test half precision
+        layer.half()
+        self.assertEqual(layer.position_ids.dtype, torch.float32)
+
+        # Test under default bfloat16 context
+        prev_dtype = torch.get_default_dtype()
+        try:
+            torch.set_default_dtype(torch.bfloat16)
+            layer_bf16 = Sam3ViTLayer(config, window_size=0)
+            self.assertEqual(layer_bf16.position_ids.dtype, torch.float32)
+            cos_init_bf16, sin_init_bf16 = layer_bf16.rotary_emb(x, layer_bf16.position_ids)
+            torch.testing.assert_close(cos_init_bf16.float(), ref_cos.float(), atol=1e-2, rtol=1e-2)
+            torch.testing.assert_close(sin_init_bf16.float(), ref_sin.float(), atol=1e-2, rtol=1e-2)
+        finally:
+            torch.set_default_dtype(prev_dtype)
