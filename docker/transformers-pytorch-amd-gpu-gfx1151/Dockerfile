@@ -305,6 +305,67 @@ ENV FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE
 # Container /tmp (overlay, disk-backed) is fine. If a dedicated cache is wanted
 # later, create it at runtime inside whatever is mounted.
 
+# --- Hub kernels the ROCm 10.1 loader rejects by tag ---------------------------
+# kernels 0.17.2 picks the backend tag from torch.version.hip, so on ROCm 10.1
+# (HIP 7.16) it wants a "rocm716" build, and no Hub kernel publishes one: every
+# compiled kernel fails with "Cannot find a build variant for this system", even
+# where a rocm72 build exists and runs correctly here. LOCAL_KERNELS points the
+# loader at a variant directory and skips that check (resolver.py at v0.17.2).
+# Measured on gfx1151 for Atlas-Inference/gdn: qwen3_5 and qwen3_5_moe's
+# kernel-load tests 0/4 -> 4/4, and the layer matches transformers' own forward
+# to <1% relative L2. This section goes away once kernels matches ROCm builds by
+# HIP major version (rocm72 and rocm101 are both HIP 7), or the Hub publishes
+# builds for ROCm 10.1 with these GPUs in them.
+#
+# gdn is the only Hub build used as-is, and only on gfx1151, because only that
+# pairing has a build with our code objects in it: transformers maps gdn to ROCm
+# capability 115 at this revision, and its rocm72 build carries gfx1151 alone.
+# megablocks' ROCm builds carry gfx942/gfx950 and activation's stop at gfx1101,
+# so pointing the loader at them would only trade one error for another; those
+# builds with the RDNA archs added, as megablocks has below.
+# The revision is read from the transformers checked out at REF, because
+# LOCAL_KERNELS overrides by repo name and ignores the revision transformers
+# asks for: a revision written here goes stale silently when REF moves (it did,
+# dff7b2f -> 13462bf). It takes the entry covering gfx1151's capability (115),
+# so a later mapping for another ROCm GPU doesn't break this build. If
+# transformers stops mapping gdn for gfx1151, the build fails here rather than
+# shipping an override nothing uses.
+# The ENV is set on every arch: Dockerfiles cannot set one conditionally, and on
+# gfx1201 nothing asks for gdn, so the override is never consulted there.
+RUN if [ "${GPU_ARCH}" = "gfx1151" ]; then \
+      rev="$(python3 -c "import transformers.integrations.hub_kernels as h; \
+r=[x for d, x in h._build_kernel_mapping()['Qwen3_5GatedDeltaNet'].items() if getattr(d, 'type', d) == 'rocm' \
+   and getattr(getattr(d, 'properties', None), 'min_capability', 0) <= 115 <= getattr(getattr(d, 'properties', None), 'max_capability', 0)]; \
+assert len(r) == 1, r; print(r[0]._revision)")" \
+      && echo "gdn revision from transformers: ${rev}" \
+      && python3 -c "from huggingface_hub import snapshot_download; snapshot_download('Atlas-Inference/gdn', repo_type='kernel', revision='${rev}', allow_patterns=['build/torch214-cxx11-rocm72-x86_64-linux/*'], local_dir='/opt/hub-kernels/gdn')" \
+      && test -f /opt/hub-kernels/gdn/build/torch214-cxx11-rocm72-x86_64-linux/metadata.json; \
+    fi
+
+# megablocks (gpt_oss) is a build AMD made: the Hub's ROCm builds carry
+# gfx942/gfx950 only. Built with kernel-builder from kernels-community/megablocks
+# 460047c with gfx1151 and gfx1201 added to build.toml's rocm-archs; the tar holds
+# SOURCE-kernels-community-rev.txt and the build.toml diff, and the hash pins
+# exactly that artefact. Measured on gfx1151: gpt_oss's two
+# kernel tests 0/2 -> 2/2, nothing else changes. Unlike aiter it needs compiling,
+# so it is downloaded, from HF_KERNELS_URL. That has no default on purpose: this
+# file names no host of AMD's. Leave it empty (HF's builders) and the step is
+# skipped: those two tests fail as they do upstream, and nothing else changes.
+# The fix belongs on the Hub (gfx1151/gfx1201 in megablocks' rocm-archs).
+ARG HF_KERNELS_URL=
+ARG MEGABLOCKS_SHA256=83be38ac204da9a1e61b056a66f90e9b35c152dea1e6098af38d5a040e48a57c
+RUN if [ -n "${HF_KERNELS_URL}" ]; then \
+      curl -fsSL --retry 5 --retry-all-errors -o /tmp/megablocks.tar.gz \
+        "${HF_KERNELS_URL}/megablocks/megablocks-torch214-rocm714-gfx1151-gfx1201.tar.gz" \
+      && echo "${MEGABLOCKS_SHA256}  /tmp/megablocks.tar.gz" | sha256sum -c - \
+      && mkdir -p /opt/hub-kernels && tar -xzf /tmp/megablocks.tar.gz -C /opt/hub-kernels \
+      && rm /tmp/megablocks.tar.gz \
+      && python3 -c "import json; a=json.load(open('/opt/hub-kernels/megablocks/torch214-rocm714-x86_64-linux/metadata.json'))['backend']['archs']; assert '${GPU_ARCH}' in a, a"; \
+    else echo "HF_KERNELS_URL empty: no local megablocks build"; fi
+# megablocks is named only when it was fetched: an entry for a missing directory
+# would replace the Hub lookup with a failing local one.
+ENV LOCAL_KERNELS=Atlas-Inference/gdn=/opt/hub-kernels/gdn/build/torch214-cxx11-rocm72-x86_64-linux${HF_KERNELS_URL:+:kernels-community/megablocks=/opt/hub-kernels/megablocks/torch214-rocm714-x86_64-linux}
+
 # Last: urllib3 must still be 2.x (pinned on the kernels step above, against
 # transformers[testing]'s <2) and kernels must still import. A later step that
 # resolved deps would silently move urllib3 back to 1.26 and break kernels' tuf.
