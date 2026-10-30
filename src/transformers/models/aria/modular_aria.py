@@ -770,8 +770,8 @@ class AriaTextModel(OlmoeModel):
             [AriaTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.gradient_checkpointing = False
-        self.post_init()
         self.norm = AriaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_init()
 
 
 class AriaTextForCausalLM(AriaTextPreTrainedModel, DeepseekV2ForCausalLM):

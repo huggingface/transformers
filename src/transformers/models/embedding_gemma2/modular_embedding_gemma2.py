@@ -581,7 +581,6 @@ class EmbeddingGemma2Model(Gemma4Model):
         super().__init__(config)
         # Drop inherited `vocab_size_per_layer_input` (no token-identity PLE in EmbeddingGemma 2)
         del self.vocab_size_per_layer_input
-        self.post_init()
         self.embed_vision = (
             EmbeddingGemma2MultimodalEmbedder(config.vision_config, config.text_config)
             if config.vision_config is not None
@@ -592,6 +591,7 @@ class EmbeddingGemma2Model(Gemma4Model):
             if config.audio_config is not None
             else None
         )
+        self.post_init()
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")

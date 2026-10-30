@@ -886,10 +886,10 @@ class ConditionalDetrModel(DetrModel):
     def __init__(self, config: ConditionalDetrConfig):
         super().__init__(config)
         self.query_position_embeddings = nn.Embedding(config.num_queries, config.d_model)
+        self.decoder = ConditionalDetrDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
-        self.decoder = ConditionalDetrDecoder(config)
 
     @auto_docstring
     @can_return_tuple

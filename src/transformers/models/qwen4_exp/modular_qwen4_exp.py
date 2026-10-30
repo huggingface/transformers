@@ -14,7 +14,6 @@
 """PyTorch Qwen4-Exp model."""
 
 import math
-from collections.abc import Callable
 
 import torch
 import torch.nn.functional as F
@@ -28,7 +27,7 @@ from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
@@ -41,7 +40,6 @@ from ..qwen3_5.modeling_qwen3_5 import (
     apply_mask_to_padding_states,
     causal_conv1d_fn,
     causal_conv1d_update,
-    eager_attention_forward,
     rotate_half,
     torch_chunk_gated_delta_rule,
     torch_recurrent_gated_delta_rule,
@@ -504,44 +502,14 @@ class Qwen4ExpTextAttention(Qwen3_5Attention):
 
         # The cos/sin are the full positions here due to the indexer, so we need to slice to get current positions
         position_embeddings = (x[:, -hidden_states.shape[1] :, :] for x in position_embeddings)
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states, gate = torch.chunk(
-            self.q_proj(hidden_states).view(*input_shape, -1, self.head_dim * 2), 2, dim=-1
-        )
-        gate = gate.reshape(*input_shape, -1)
-
-        query_states = self.q_norm(query_states.view(hidden_shape)).transpose(1, 2)
-        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
+        return super().forward(
+            hidden_states=hidden_states,
+            position_embeddings=position_embeddings,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
             **kwargs,
         )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = attn_output * torch.sigmoid(gate)
-
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
 
 
 class Qwen4ExpTextMLP(Qwen3NextMLP):

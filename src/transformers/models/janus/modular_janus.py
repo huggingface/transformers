@@ -632,11 +632,11 @@ class JanusVQVAE(ChameleonVQVAE):
         self.decoder = JanusVQVAEDecoder(config)
         self.gradient_checkpointing = False
 
-        # Initialize the VQVAE model.
-        self.post_init()
-
         self.encoder = JanusVQVAEEncoder(config)
         self.quantize = JanusVQVAEVectorQuantizer(config)
+
+        # Initialize the VQVAE model.
+        self.post_init()
 
     def decode(self, image_tokens: torch.LongTensor) -> torch.FloatTensor:
         """

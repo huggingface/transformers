@@ -18,7 +18,6 @@ from functools import lru_cache
 import numpy as np
 import torch
 from torch import nn
-from torchvision.transforms.v2 import functional as tvF
 
 from transformers.models.aya_vision.modeling_aya_vision import (
     AyaVisionCausalLMOutputWithPast,
@@ -30,7 +29,6 @@ from transformers.models.aya_vision.modeling_aya_vision import (
 from transformers.models.got_ocr2.image_processing_got_ocr2 import GotOcr2ImageProcessor
 
 from ...cache_utils import Cache
-from ...image_utils import PILImageResampling, SizeDict
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import slice_logits_to_keep
@@ -337,106 +335,6 @@ class Cohere2VisionImageProcessor(GotOcr2ImageProcessor):
     crop_to_patches = True
     patch_size = 16
     valid_kwargs = Cohere2VisionImageProcessorKwargs
-
-    def crop_image_to_patches(
-        self,
-        images: "torch.Tensor",
-        min_patches: int,
-        max_patches: int,
-        use_thumbnail: bool = True,
-        patch_size: SizeDict | None = None,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
-    ):
-        """
-        Crop the images to patches and return a list of cropped images.
-        The number of patches and their grid arrangement are determined by the original image size,
-        the target patch size and the minimum and maximum number of patches.
-        The aspect ratio of the patches grid is chosen to be the closest to the original image aspect ratio.
-
-        Args:
-            images (`torch.Tensor`):
-                The images to be cropped.
-            min_patches (`int`):
-                The minimum number of patches to be extracted from the image.
-            max_patches (`int`):
-                The maximum number of patches to be extracted from the image.
-            use_thumbnail (`bool`, *optional*, defaults to `True`):
-                Whether to add a thumbnail image to the list of cropped patches.
-            patch_size (`SizeDict`, *optional*):
-                The size of the output patches.
-            resample (`PILImageResampling | tvF.InterpolationMode | int | None`, *optional*):
-                Resampling filter to use when resizing.
-        """
-        patch_size_height, patch_size_width = patch_size.height, patch_size.width
-        original_height, original_width = images.shape[-2:]
-        # find the closest aspect ratio to the target
-        num_columns, num_rows = get_optimal_tiled_canvas(
-            (original_height, original_width), (patch_size_height, patch_size_width), min_patches, max_patches
-        )
-
-        # calculate the target width and height
-        target_width = patch_size_width * num_columns
-        target_height = patch_size_height * num_rows
-        num_blocks = num_columns * num_rows
-
-        # resize the image so that each patch is of patch_size
-        resized_image = self.resize(images, SizeDict(height=target_height, width=target_width), resample=resample)
-        # split the image into patches
-        processed_images = []
-        for i in range(num_blocks):
-            column = i % num_columns
-            row = i // num_columns
-            box = (
-                column * patch_size_width,
-                row * patch_size_height,
-                (column + 1) * patch_size_width,
-                (row + 1) * patch_size_height,
-            )
-            # split the image
-            patch_image = resized_image[..., box[1] : box[3], box[0] : box[2]]
-            processed_images.append(patch_image)
-
-        if use_thumbnail and len(processed_images) != 1:
-            thumbnail_img = self.resize(images, patch_size, resample=resample)
-            processed_images.append(thumbnail_img)
-
-        processed_images = torch.stack(processed_images, dim=0).transpose(0, 1).contiguous()
-
-        return processed_images
-
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
-        """
-        A utility that returns number patches for a given image size.
-
-        Args:
-            height (`int`):
-                Height of the input image.
-            width (`int`):
-                Width of the input image.
-            images_kwargs (`dict`, *optional*)
-                Any kwargs to override defaults of the image processor.
-        Returns:
-            `int`: Number of patches per image.
-        """
-        images_kwargs = images_kwargs or {}
-        min_patches = images_kwargs.get("min_patches", self.min_patches)
-        max_patches = images_kwargs.get("max_patches", self.max_patches)
-        patch_size = images_kwargs.get("patch_size", self.size)
-        crop_to_patches = images_kwargs.get("crop_to_patches", self.crop_to_patches)
-
-        num_patches = 1
-        if crop_to_patches and max_patches > 1:
-            if isinstance(patch_size, dict):
-                patch_height, patch_width = patch_size["height"], patch_size["width"]
-            else:
-                patch_height, patch_width = patch_size.height, patch_size.width
-            num_columns, num_rows = get_optimal_tiled_canvas(
-                (height, width), (patch_height, patch_width), min_patches, max_patches
-            )
-            if num_columns * num_rows > 1:
-                num_patches += num_columns * num_rows
-
-        return num_patches
 
 
 __all__ = [

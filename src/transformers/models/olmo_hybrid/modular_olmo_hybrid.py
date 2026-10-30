@@ -544,8 +544,8 @@ class OlmoHybridModel(Qwen3NextModel):
             and config.rope_parameters.get("rope_theta") is not None
             else None
         )
-        self.post_init()
         self.norm = OlmoHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_init()
 
     @merge_with_config_defaults
     @capture_outputs

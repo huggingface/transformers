@@ -2014,7 +2014,8 @@ def find_inherited_code_mismatches(
     Returns `(class_name, member, used_name, parent_class)` for each such case.
     """
     generated = {name: entry["node"] for body in files.values() for name, entry in body.items()}
-    modular_defined = set(modular_mapper.classes) | set(modular_mapper.functions)
+    # ponytail: classes only; redefined functions are looked up in module globals, the usual modular pattern
+    modular_defined = set(modular_mapper.classes)
     mismatches = []
     for class_name, modular_node in modular_mapper.classes.items():
         bases = [

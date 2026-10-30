@@ -112,7 +112,9 @@ def minimal_init(generated: cst.FunctionDef, names: set[str], modular_class: cst
         (s for s in modular_class.body.body if isinstance(s, cst.FunctionDef) and s.name.value == "__init__"), None
     )
     if existing is not None:
-        return existing.with_changes(body=existing.body.with_changes(body=[*existing.body.body, *needed]))
+        body = list(existing.body.body)
+        post_init = next((i for i, s in enumerate(body) if "post_init" in cst.Module(body=[s]).code), len(body))
+        return existing.with_changes(body=existing.body.with_changes(body=[*body[:post_init], *needed, *body[post_init:]]))
     return generated.with_changes(body=generated.body.with_changes(body=[super_init_call(generated), *needed]))
 
 

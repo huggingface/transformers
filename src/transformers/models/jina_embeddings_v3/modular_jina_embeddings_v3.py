@@ -255,10 +255,10 @@ class JinaEmbeddingsV3Model(XLMRobertaModel):
         self.layers = nn.ModuleList([JinaEmbeddingsV3Layer(config) for _ in range(config.num_hidden_layers)])
         del self.encoder
 
+        self.embeddings = JinaEmbeddingsV3Embeddings(config)
+
         # Initialize weights and apply final processing
         self.post_init()
-
-        self.embeddings = JinaEmbeddingsV3Embeddings(config)
 
     @merge_with_config_defaults
     @capture_outputs

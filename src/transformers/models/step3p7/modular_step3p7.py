@@ -598,40 +598,7 @@ class Step3p7VisionMLP(MiniMaxM3VLVisionMLP):
 
 
 class Step3p7VisionAttention(MiniMaxM3VLVisionAttention):
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """Input shape: Batch x Time x Channel"""
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        queries = self.q_proj(hidden_states).view(hidden_shape)
-        keys = self.k_proj(hidden_states).view(hidden_shape)
-        values = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        cos, sin = position_embeddings
-        queries, keys = apply_rotary_pos_emb_vision(queries, keys, cos, sin)
-        queries, keys = queries.transpose(1, 2), keys.transpose(1, 2)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-        attn_output, attn_weights = attention_interface(
-            self,
-            queries,
-            keys,
-            values,
-            attention_mask,
-            scaling=self.scale,
-            dropout=0.0 if not self.training else self.dropout,
-            **kwargs,
-        )
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        return self.out_proj(attn_output), attn_weights
+    pass
 
 
 class Step3p7VisionEncoderLayer(GradientCheckpointingLayer):

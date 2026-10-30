@@ -1330,9 +1330,9 @@ class PPDocLayoutV3ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV3Pre
 
         self.model.denoising_class_embed = nn.Embedding(config.num_labels, config.d_model)
         self.num_queries = config.num_queries
+        self.model = PPDocLayoutV3Model(config)
 
         self.post_init()
-        self.model = PPDocLayoutV3Model(config)
 
     @auto_docstring
     @can_return_tuple
