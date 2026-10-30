@@ -80,7 +80,8 @@ RUN uv pip install pretty_midi essentia resampy Levenshtein av phonemizer invisi
 RUN uv pip install gguf hqq fp-quant compressed_tensors bitsandbytes --no-cache-dir --extra-index-url https://download.pytorch.org/whl/xpu "torch==2.14.1+xpu" "triton==3.8.0"
 RUN uv pip install gptqmodel --no-cache-dir
 RUN uv pip install auto-round --no-cache-dir
-RUN uv pip install hf_transfer optimum-quanto optimum hf-doc-builder transformers[dev] diffusers trl sentence_transformers pytorch_msssim --no-cache-dir
+RUN uv pip install hf_transfer optimum-quanto optimum hf-doc-builder transformers[dev] trl sentence_transformers pytorch_msssim --no-cache-dir
+RUN uv pip install --upgrade --no-deps diffusers
 RUN uv pip install pydantic openai uvicorn fastapi --no-cache-dir
 
 # install liger-kernel
