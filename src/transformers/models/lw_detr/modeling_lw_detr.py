@@ -987,12 +987,16 @@ class LwDetrPreTrainedModel(PreTrainedModel):
         if hasattr(module, "refpoint_embed") and module.refpoint_embed is not None:
             init.constant_(module.refpoint_embed.weight, 0)
         if hasattr(module, "class_embed") and module.class_embed is not None:
-            prior_prob = 0.01
-            bias_value = -math.log((1 - prior_prob) / prior_prob)
-            init.constant_(module.class_embed.bias, bias_value)
+            init.constant_(module.class_embed.bias, -math.log(99))
         if hasattr(module, "bbox_embed") and module.bbox_embed is not None:
             init.constant_(module.bbox_embed.layers[-1].weight, 0)
             init.constant_(module.bbox_embed.layers[-1].bias, 0)
+        # The original deep-copies the initialized `class_embed` / `bbox_embed` into the encoder heads
+        if isinstance(module, LwDetrModel):
+            for class_head, bbox_head in zip(module.enc_out_class_embed, module.enc_out_bbox_embed):
+                init.constant_(class_head.bias, -math.log(99))
+                init.zeros_(bbox_head.layers[-1].weight)
+                init.zeros_(bbox_head.layers[-1].bias)
 
 
 @auto_docstring(
