@@ -640,18 +640,6 @@ class MiMoV2VLMoE(nn.Module):
 
 
 class MiMoV2VLAttention(MiMoV2FlashAttention):
-    def __init__(self, config: MiMoV2VLTextConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        del self.sinks
-        use_sink = (
-            config.add_swa_attention_sink_bias
-            if self.sliding_window is not None
-            else config.add_full_attention_sink_bias
-        )
-        # Same sinks as Flash, stored under the original checkpoint name.
-        num_heads = self.q_proj.out_features // self.head_dim
-        self.attention_sink_bias = nn.Parameter(torch.zeros(num_heads)) if use_sink else None
-
     def forward(self, hidden_states, position_embeddings, attention_mask=None, past_key_values=None, **kwargs):
         batch_size, sequence_length, _ = hidden_states.shape
         qk_shape = (batch_size, sequence_length, -1, self.head_dim)
@@ -673,8 +661,8 @@ class MiMoV2VLAttention(MiMoV2FlashAttention):
             key,
             value,
             attention_mask,
-            self.attention_sink_bias,
-            dropout=self.config.attention_dropout if self.training else 0.0,
+            self.sinks,
+            dropout=self.attention_dropout if self.training else 0.0,
             implementation=self.config._attn_implementation,
             window_size=(self.sliding_window - 1, 0) if self.sliding_window is not None else None,
         )
@@ -722,9 +710,7 @@ class MiMoV2VLPreTrainedModel(PreTrainedModel):
             init.zeros_(module.cluster_size)
             init.zeros_(module.embed)
             init.zeros_(module.embed_avg)
-        elif isinstance(module, MiMoV2VLAttention) and module.attention_sink_bias is not None:
-            init.zeros_(module.attention_sink_bias)
-        elif isinstance(module, MiMoV2VLVisionAttention) and module.sinks is not None:
+        elif isinstance(module, (MiMoV2VLAttention, MiMoV2VLVisionAttention)) and module.sinks is not None:
             init.zeros_(module.sinks)
 
 

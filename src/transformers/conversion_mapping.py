@@ -1969,6 +1969,8 @@ def _build_checkpoint_conversion_mapping():
     mapping["mimo_v2_flash"] += [
         WeightRenaming("self_attn.attention_sink_bias", "self_attn.sinks"),
     ]
+    # MiMo V2 VL keeps one module per expert, so only the attention sink name is converted.
+    mapping["mimo_v2_vl_text"] = [WeightRenaming("self_attn.attention_sink_bias", "self_attn.sinks")]
     # HYV3: qwen2_moe expert fusion + attribute renames for MiniMaxM2-style inheritance
     mapping["hy_v3"] = mapping["qwen2_moe"].copy()
     mapping["hy_v3"] += [

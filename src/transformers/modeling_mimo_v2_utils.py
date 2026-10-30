@@ -129,8 +129,9 @@ def split_interleaved_qkv(weight, config, layer_idx, tp_size, scales=None, block
 
 
 def _native_key(name, is_multimodal=True):
+    name = name.replace(".attention_sink_bias", ".sinks")
     if not is_multimodal:
-        return name.replace(".attention_sink_bias", ".sinks")
+        return name
     for prefix in ("visual.merger.", "audio_encoder.projection."):
         name = name.replace(prefix + "mlp.0.", prefix + "linear_fc1.")
         name = name.replace(prefix + "mlp.2.", prefix + "linear_fc2.")

@@ -11,13 +11,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert original MiMo V2 series checkpoints to native, dequantized Transformers checkpoints."""
+"""
+Convert an original MiMo V2 checkpoint (TP-interleaved QKV, FP8/MXFP4 weights and, for multimodal checkpoints, the
+`audio_tokenizer` directory) into a native, dequantized Transformers checkpoint with its processor or tokenizer.
+
+Sample usage:
+    python src/transformers/models/mimo_v2_vl/convert_mimo_v2_vl_weights_to_hf.py \
+        --checkpoint /path/to/XiaomiMiMo--MiMo-V2.6-Flash-RL --output /path/to/MiMo-V2.6-Flash-RL-hf
+"""
 
 import argparse
 
-from ...modeling_mimo_v2_utils import load_original_checkpoint
-from ...tokenization_utils_tokenizers import TokenizersBackend
-from .processing_mimo_v2_vl import MiMoV2VLProcessor
+from transformers import MiMoV2VLProcessor, TokenizersBackend
+from transformers.modeling_mimo_v2_utils import load_original_checkpoint
 
 
 def main():

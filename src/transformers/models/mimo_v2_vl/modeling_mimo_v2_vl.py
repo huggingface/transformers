@@ -347,7 +347,7 @@ def attention_forward(
 class MiMoV2VLAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: MiMoV2VLTextConfig, layer_idx: int):
+    def __init__(self, config: MiMoV2VLConfig, layer_idx: int):
         is_swa = config.layer_types[layer_idx] == "sliding_attention"
         num_key_value_heads = config.swa_num_key_value_heads if is_swa else config.num_key_value_heads
         num_attention_heads = config.swa_num_attention_heads if is_swa else config.num_attention_heads
@@ -366,15 +366,9 @@ class MiMoV2VLAttention(nn.Module):
         self.k_proj = nn.Linear(config.hidden_size, num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(config.hidden_size, num_key_value_heads * self.v_head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(num_attention_heads * self.v_head_dim, config.hidden_size, bias=False)
-        use_sink = (
-            config.add_swa_attention_sink_bias
-            if self.sliding_window is not None
-            else config.add_full_attention_sink_bias
-        )
+        use_sink = config.add_swa_attention_sink_bias if is_swa else config.add_full_attention_sink_bias
+        self.sinks = nn.Parameter(torch.empty(num_attention_heads)) if use_sink else None
         self.v_scale = config.attention_value_scale if config.attention_value_scale is not None else 1.0
-        # Same sinks as Flash, stored under the original checkpoint name.
-        num_heads = self.q_proj.out_features // self.head_dim
-        self.attention_sink_bias = nn.Parameter(torch.zeros(num_heads)) if use_sink else None
 
     def forward(
         self, hidden_states, position_embeddings, attention_mask=None, past_key_values=None, **kwargs
@@ -399,8 +393,8 @@ class MiMoV2VLAttention(nn.Module):
             key,
             value,
             attention_mask,
-            self.attention_sink_bias,
-            dropout=self.config.attention_dropout if self.training else 0.0,
+            self.sinks,
+            dropout=self.attention_dropout if self.training else 0.0,
             implementation=self.config._attn_implementation,
             window_size=(self.sliding_window - 1, 0) if self.sliding_window is not None else None,
         )
@@ -487,9 +481,7 @@ class MiMoV2VLPreTrainedModel(PreTrainedModel):
             init.zeros_(module.cluster_size)
             init.zeros_(module.embed)
             init.zeros_(module.embed_avg)
-        elif isinstance(module, MiMoV2VLAttention) and module.attention_sink_bias is not None:
-            init.zeros_(module.attention_sink_bias)
-        elif isinstance(module, MiMoV2VLVisionAttention) and module.sinks is not None:
+        elif isinstance(module, (MiMoV2VLAttention, MiMoV2VLVisionAttention)) and module.sinks is not None:
             init.zeros_(module.sinks)
 
 
