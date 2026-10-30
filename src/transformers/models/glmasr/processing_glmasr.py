@@ -206,14 +206,16 @@ class GlmAsrProcessor(ProcessorMixin):
                 Custom prompt(s) to include in the user turn. A list must be the same length as the batch. When `None`,
                 each sample uses `"Transcribe the input speech."`.
             tokenize (`bool`, *optional*, defaults to `True`):
-                Whether to process the formatted prompts. When `False`, the formatted prompts are returned as
-                text so that they can be processed later together with the audio.
+                Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
+                the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
+                audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
+                `tokenize=True`.
             **kwargs:
                 Additional keyword arguments forwarded to [`~GlmAsrProcessor.apply_chat_template`] (for example
                 `text_kwargs`, `audio_kwargs`, ...).
 
         Returns:
-            [`BatchFeature`] or `list[str]`: The formatted prompts when `tokenize=False`, otherwise processor
+            [`BatchFeature`] or `list[str]`: One prompt per audio when `tokenize=False`, otherwise processor
             outputs ready to be passed to [`GlmAsrForConditionalGeneration.generate`].
 
         """
