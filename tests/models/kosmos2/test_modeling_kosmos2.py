@@ -367,7 +367,6 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 self.assertEqual(infos["missing_keys"], set())
 
     def test_image_to_text_projection_sdpa_matches_eager(self):
-        # The projection's latent queries cross-attend to every image feature, so SDPA must not apply `is_causal`
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = Kosmos2Model(config).to(torch_device).eval()
         outputs = {}
