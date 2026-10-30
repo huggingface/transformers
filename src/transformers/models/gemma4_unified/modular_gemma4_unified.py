@@ -714,6 +714,7 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
         )
         self.norm = Gemma4UnifiedRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.unique_layer_types = set(self.config.layer_types)
+        self.first_kv_shared_layer_idx = config.num_hidden_layers - config.num_kv_shared_layers
 
     def forward(
         self,
@@ -723,6 +724,7 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4UnifiedTextModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -748,6 +750,11 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
                 "attention_mask": attention_mask,
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
+                "allow_is_causal_skip": isinstance(logits_to_keep, int)
+                and (
+                    logits_to_keep == 0
+                    or (logits_to_keep == 1 and not getattr(past_key_values, "is_compileable", False))
+                ),
             }
             # Create the masks
             causal_mask_mapping = {
@@ -768,6 +775,15 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
 
         # decoder layers
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            if i == self.first_kv_shared_layer_idx:
+                hidden_states, position_embeddings, causal_mask_mapping = self._maybe_slice_kv_shared_inputs(
+                    hidden_states,
+                    position_embeddings,
+                    causal_mask_mapping,
+                    logits_to_keep,
+                    **kwargs,
+                )
+
             hidden_states = decoder_layer(
                 hidden_states,
                 shared_kv_states=shared_kv_states,
@@ -785,6 +801,58 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
             past_key_values=past_key_values,
             shared_kv_states=shared_kv_states if kwargs.get("return_shared_kv_states", False) else None,
         )
+
+    def _maybe_slice_kv_shared_inputs(
+        self,
+        hidden_states,
+        position_embeddings,
+        causal_mask_mapping,
+        logits_to_keep,
+        **kwargs,
+    ):
+        """
+        Slices sequence-length inputs to the `logits_to_keep` token positions before entering the
+        KV-shared layers. Because KV-shared layers reuse keys and values computed by earlier non-shared
+        layers and do not write to the KV cache, unselected prompt positions do not need to be computed
+        through these layers unless full-sequence intermediate states (e.g. `output_hidden_states`,
+        `output_attentions`) are requested.
+        """
+        seq_len = hidden_states.shape[1]
+        can_slice = (
+            0 < logits_to_keep < seq_len
+            if isinstance(logits_to_keep, int)
+            else logits_to_keep.dtype != torch.bool and 0 < logits_to_keep.shape[-1] < seq_len
+        )
+        masks_valid = all(
+            (m is None and isinstance(logits_to_keep, int) and logits_to_keep == 1)
+            or (isinstance(m, torch.Tensor) and m.ndim == 4)
+            for m in causal_mask_mapping.values()
+        )
+
+        if (
+            not can_slice
+            or not masks_valid
+            or any(
+                kwargs.get(k) or getattr(self.config, k, False) for k in ("output_hidden_states", "output_attentions")
+            )
+        ):
+            return hidden_states, position_embeddings, causal_mask_mapping
+
+        batch_size = hidden_states.shape[0]
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        position_embeddings = {
+            k: (
+                slice_logits_to_keep(cos.expand(batch_size, -1, -1), logits_to_keep),
+                slice_logits_to_keep(sin.expand(batch_size, -1, -1), logits_to_keep),
+            )
+            for k, (cos, sin) in position_embeddings.items()
+        }
+        causal_mask_mapping = {
+            k: slice_logits_to_keep(v.squeeze(1), logits_to_keep).unsqueeze(1) if v is not None else None
+            for k, v in causal_mask_mapping.items()
+        }
+
+        return hidden_states, position_embeddings, causal_mask_mapping
 
 
 class Gemma4UnifiedForCausalLM(Gemma4ForCausalLM):
@@ -825,11 +893,13 @@ class Gemma4UnifiedForCausalLM(Gemma4ForCausalLM):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            logits_to_keep=logits_to_keep,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        if hidden_states.shape[1] == (input_ids if input_ids is not None else inputs_embeds).shape[1]:
+            hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
         if self.config.final_logit_softcapping is not None:
             logits = logits / self.config.final_logit_softcapping
@@ -1280,12 +1350,14 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
             image_position_ids=image_position_ids,
             video_position_ids=video_position_ids,
             mm_encoder_outputs=mm_encoder_outputs,
+            logits_to_keep=logits_to_keep,
             return_dict=True,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        if hidden_states.shape[1] == (input_ids if input_ids is not None else inputs_embeds).shape[1]:
+            hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
         if (final_logit_softcapping := self.config.get_text_config().final_logit_softcapping) is not None:
             logits = logits / final_logit_softcapping
