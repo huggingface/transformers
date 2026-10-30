@@ -2526,7 +2526,6 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_gather_output"}
     accepts_loss_kwargs = False
     base_model_prefix = "model"
-    _token_types_read_by_position = ("mm_token_type_ids",)
 
     def __init__(self, config: Gemma4Config):
         super().__init__(config)
@@ -2678,7 +2677,10 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
         model_inputs = super().prepare_inputs_for_generation(
             input_ids, use_cache=use_cache, is_first_iteration=is_first_iteration, **kwargs
         )
-        if not (is_first_iteration or not use_cache):
+        if is_first_iteration or not use_cache:
+            # The bidirectional mask reads them by position, so a prefill chunk needs them from the start of the sequence
+            model_inputs["mm_token_type_ids"] = kwargs.get("mm_token_type_ids")
+        else:
             # Don't pass to not apply bidirectional mask on top
             model_inputs["mm_token_type_ids"] = None
         # If `per_layer_inputs` was provided along with `inputs_embeds` for first forward, drop it for subsequent forwards

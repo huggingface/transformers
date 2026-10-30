@@ -922,7 +922,6 @@ class Gemma3Model(Gemma3PreTrainedModel):
 class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
-    _token_types_read_by_position = ("token_type_ids",)
 
     def __init__(self, config: Gemma3Config):
         super().__init__(config)
@@ -1035,7 +1034,10 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         model_inputs = super().prepare_inputs_for_generation(
             input_ids, use_cache=use_cache, is_first_iteration=is_first_iteration, **kwargs
         )
-        if not (is_first_iteration or not use_cache):
+        if is_first_iteration or not use_cache:
+            # The bidirectional mask reads them by position, so a prefill chunk needs them from the start of the sequence
+            model_inputs["token_type_ids"] = kwargs.get("token_type_ids")
+        else:
             # Don't pass to not apply bidirectional mask on top
             model_inputs["token_type_ids"] = None
 

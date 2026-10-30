@@ -701,11 +701,12 @@ class GenerationMixin(ContinuousMixin):
         position_ids_key = "decoder_position_ids" if self.config.is_encoder_decoder else "position_ids"
         if (position_ids := kwargs.pop(position_ids_key, None)) is not None:
             model_inputs[position_ids_key] = position_ids
-        if (token_type_ids := kwargs.pop("token_type_ids", None)) is not None:
-            model_inputs["token_type_ids"] = token_type_ids
+        for token_type_key in ("token_type_ids", "mm_token_type_ids", "moe_mm_token_type_ids"):
+            if (token_type := kwargs.pop(token_type_key, None)) is not None:
+                model_inputs[token_type_key] = token_type
 
         # 3. Slice model inputs if it's an input that should have the same length as `input_ids`
-        for model_input_name in [position_ids_key, "token_type_ids", "mm_token_type_ids"]:
+        for model_input_name in [position_ids_key, "token_type_ids", "mm_token_type_ids", "moe_mm_token_type_ids"]:
             model_input = model_inputs.get(model_input_name)
             if model_input is not None and model_input.shape[-1] != sequence_length:
                 # Input can be 2D or 3D, and we always slice on `seq-length` (last dim)
@@ -4329,6 +4330,10 @@ class GenerationMixin(ContinuousMixin):
                 if model_kwargs.get(key) is not None
             }
             mm_encoder_outputs = model_kwargs.pop("mm_encoder_outputs", None)
+            # Every chunk is part of the first iteration, but only the first one encodes the raw multimodal inputs
+            raw_mm_inputs = {
+                key: model_kwargs.pop(key) for key in MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL if key in model_kwargs
+            }
 
             # Pre-encoded features are consumed in placeholder order over (batch, seq): feature row `i` of a modality
             # fills its `i`-th placeholder token, so each chunk gets the rows of the placeholders it contains
@@ -4355,19 +4360,15 @@ class GenerationMixin(ContinuousMixin):
                 if position_ids is not None:
                     # Always slice on `seq-length` (last dim)
                     model_kwargs["position_ids"] = position_ids[..., past_length:current_length]
+                # Up to the chunk end like the attention mask, for the models that read them by position
                 for key, token_type in token_types.items():
-                    model_kwargs[key] = token_type[..., past_length:current_length]
+                    model_kwargs[key] = token_type[..., :current_length]
                 model_inputs = self.prepare_inputs_for_generation(
-                    input_chunk, is_first_iteration=is_first_iteration and chunk_idx == 0, **model_kwargs
+                    input_chunk,
+                    is_first_iteration=is_first_iteration,
+                    **model_kwargs,
+                    **(raw_mm_inputs if chunk_idx == 0 else {}),
                 )
-                # Models drop their token types outside the first iteration as decoding does not need them, but every
-                # prefill chunk does: the chunk's own, or all of them up to its end for the models that read them by
-                # position (e.g. the bidirectional image mask of Gemma3). Keys a model pops are never passed back
-                if is_first_iteration:
-                    for key, token_type in token_types.items():
-                        if key in model_inputs:
-                            start = 0 if key in self._token_types_read_by_position else past_length
-                            model_inputs[key] = token_type[..., start:current_length]
 
                 if chunk_mm_encoder_outputs[chunk_idx]:
                     model_inputs["mm_encoder_outputs"] = chunk_mm_encoder_outputs[chunk_idx]
@@ -4381,6 +4382,7 @@ class GenerationMixin(ContinuousMixin):
             model_kwargs["attention_mask"] = attention_mask
             model_kwargs["position_ids"] = position_ids
             model_kwargs.update(token_types)
+            model_kwargs.update(raw_mm_inputs)
             if mm_encoder_outputs is not None:
                 model_kwargs["mm_encoder_outputs"] = mm_encoder_outputs
 

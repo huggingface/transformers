@@ -145,7 +145,6 @@ class GenerativePreTrainedModel(Protocol):
     main_input_name: str
     base_model_prefix: str
     _is_stateful: bool
-    _token_types_read_by_position: tuple[str, ...]
     hf_quantizer: Any
     encoder: Any
     hf_device_map: dict[str, Any]
