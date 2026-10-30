@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import functools
+import math
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -1137,20 +1138,33 @@ class Fp8Dequantize(ConversionOps):
         else:
             quantized_fp32 = quantized.to(torch.float32)
         rows, cols = quantized_fp32.shape[-2:]
-        # Derive block size from the scale grid rather than the global config: MoE experts
-        # ship MXFP4 with a ``[1, 32]`` block, dense linears ship FP8 with ``[128, 128]``,
-        # and the same dequant has to handle both within one checkpoint.
+
         try:
             scale_rows, scale_cols = scales.shape[-2:]
         except Exception:
             # scale can be a single tensor in extreme cases where it was not wrapped properly but is [1,0].
             scale_rows, scale_cols = 1, 1
-        if rows % scale_rows or cols % scale_cols:
+
+        # Determine block size: check quantization config block size first if it matches
+        # the ceil convention (supporting partial last blocks like DeepSeek MLA kv_a_proj),
+        # falling back to grid division for exact divisions (mixed block shapes like MXFP4).
+        block = None
+        if self.hf_quantizer is not None and getattr(self.hf_quantizer, "quantization_config", None) is not None:
+            block = getattr(self.hf_quantizer.quantization_config, "weight_block_size", None)
+
+        if (
+            block is not None
+            and len(block) == 2
+            and (scale_rows, scale_cols) == (math.ceil(rows / block[0]), math.ceil(cols / block[1]))
+        ):
+            block_m, block_n = block
+        elif rows % scale_rows == 0 and cols % scale_cols == 0:
+            block_m, block_n = rows // scale_rows, cols // scale_cols
+        else:
             raise ValueError(
-                f"Weight shape ({rows}, {cols}) not divisible by scale grid ({scale_rows}, {scale_cols})."
+                f"Weight shape ({rows}, {cols}) not divisible by scale grid ({scale_rows}, {scale_cols}) and does not match weight_block_size {block}."
             )
-        block_m = rows // scale_rows
-        block_n = cols // scale_cols
+
         # ``ue8m0`` (``float8_e8m0fnu``) scales have no CUDA ``mul`` kernel, and casting
         # the FP8 weight to that dtype loses precision. Promote both sides to fp32 for
         # the math; prefer the destination parameter's dtype when known so eager modules
@@ -1166,10 +1180,11 @@ class Fp8Dequantize(ConversionOps):
             s_fp32 = (scales.to(torch.float32) - 127.0).exp2()
         else:
             s_fp32 = scales.to(torch.float32)
+
         original_shape = quantized_fp32.shape
-        q = quantized_fp32.reshape(-1, scale_rows, block_m, scale_cols, block_n)
-        s = s_fp32.reshape(-1, scale_rows, scale_cols).unsqueeze(-1).unsqueeze(2)
-        return (q * s).to(output_dtype).reshape(original_shape)
+        # Expand scales via repeat_interleave and crop to exact weight dimensions to support partial blocks
+        s = s_fp32.repeat_interleave(block_m, dim=-2).repeat_interleave(block_n, dim=-1)[..., :rows, :cols]
+        return (quantized_fp32 * s).to(output_dtype).reshape(original_shape)
 
     def _get_target_dtype(self, model: torch.nn.Module | None, full_layer_name: str | None) -> torch.dtype | None:
         if model is None or full_layer_name is None:
