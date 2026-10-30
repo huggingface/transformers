@@ -454,7 +454,7 @@ class HiggsAudioV2TokenizerResidualVectorQuantization(nn.Module):
 @requires(backends=("torchaudio",))
 @auto_docstring(custom_intro="""The HiggsAudioV2Tokenizer neural audio codec model.""")
 class HiggsAudioV2TokenizerModel(HiggsAudioV2TokenizerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: HiggsAudioV2TokenizerConfig):
         super().__init__(config)
         self.config = config
         self.pad = config.hop_length // 2

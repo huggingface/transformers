@@ -340,7 +340,7 @@ class LwDetrViTEncoder(LwDetrViTPreTrainedModel):
 
 @auto_docstring()
 class LwDetrViTBackbone(BackboneMixin, LwDetrViTPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LwDetrViTConfig):
         super().__init__(config)
 
         self.embeddings = LwDetrViTEmbeddings(config)

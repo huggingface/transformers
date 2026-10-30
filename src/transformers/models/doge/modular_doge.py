@@ -617,7 +617,7 @@ def load_balancing_loss_func(
 
 
 class DogeForCausalLM(MixtralForCausalLM):
-    def __init__(self, config):
+    def __init__(self, config: DogeConfig):
         super().__init__(config)
         self.model = DogeModel(config)
         self.num_experts = config.num_experts

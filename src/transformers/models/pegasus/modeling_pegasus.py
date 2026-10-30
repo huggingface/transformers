@@ -1004,7 +1004,7 @@ class PegasusDecoderWrapper(PegasusPreTrainedModel):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: PegasusConfig):
         super().__init__(config)
         self.decoder = PegasusDecoder(config)
         self.post_init()
@@ -1018,7 +1018,7 @@ class PegasusForCausalLM(PegasusPreTrainedModel, GenerationMixin):
         "lm_head.weight": "model.decoder.embed_tokens.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: PegasusConfig):
         config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False

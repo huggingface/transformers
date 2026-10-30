@@ -417,7 +417,7 @@ class Phi3ForCausalLM(Phi3PreTrainedModel, GenerationMixin):
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: Phi3Config):
         super().__init__(config)
         self.model = Phi3Model(config)
         self.vocab_size = config.vocab_size

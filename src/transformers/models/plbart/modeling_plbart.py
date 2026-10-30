@@ -1034,7 +1034,7 @@ class PLBartDecoderWrapper(PLBartPreTrainedModel):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: PLBartConfig):
         super().__init__(config)
         self.decoder = PLBartDecoder(config)
         self.post_init()
@@ -1053,7 +1053,7 @@ class PLBartForCausalLM(PLBartPreTrainedModel, GenerationMixin):
         "lm_head.weight": "model.decoder.embed_tokens.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: PLBartConfig):
         config.is_decoder = True
         config.is_encoder_decoder = False
         super().__init__(config)

@@ -471,7 +471,7 @@ class RfDetrDinov2Encoder(RfDetrDinov2PreTrainedModel):
     """
 )
 class RfDetrDinov2Backbone(BackboneMixin, RfDetrDinov2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RfDetrDinov2Config):
         super().__init__(config)
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.embeddings = RfDetrDinov2Embeddings(config)
