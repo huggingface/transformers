@@ -41,6 +41,15 @@ def _bool(text: str, args: dict) -> bool:
 # Sentinel characters for lax-JSON string pre-extraction — ASCII control chars
 # that should never appear in real LLM output.
 _LAX_OPEN, _LAX_CLOSE = "\x01", "\x02"
+# A standard double-quoted JSON string, matched alongside `string_delims` so that a delimiter
+# inside one (e.g. the `'` in `"don't"`) doesn't open a custom-delimited string.
+_JSON_STRING = r'"(?:[^"\\]|\\.)*"'
+_ESCAPES = {"n": "\n", "r": "\r", "t": "\t", "'": "'", '"': '"', "\\": "\\"}
+
+
+def _unescape(text: str) -> str:
+    """Decode backslash escapes Python-style; unknown escapes (e.g. `\\d`) are kept as written."""
+    return re.sub(r"\\(.)", lambda m: _ESCAPES.get(m.group(1), m.group(0)), text, flags=re.DOTALL)
 
 
 def _json(text: str, args: dict) -> Any:
@@ -50,9 +59,13 @@ def _json(text: str, args: dict) -> Any:
       - `unquoted_keys` (bool): quote bare-identifier keys before parsing.
       - `string_delims` ([[open, close], ...]): strings delimited by these
         custom markers are pre-extracted, then restored as standard JSON strings.
+        Markers inside standard `"..."` strings are ignored.
+      - `backslash_escapes` (bool): `string_delims` strings use backslash escapes. An escaped
+        character never closes a string, and escapes are decoded (see `_unescape`).
       - `allow_non_json` (bool): return stripped text if parsing fails.
     """
     string_delims = args.get("string_delims", [])
+    backslash_escapes = args.get("backslash_escapes", False)
     unquoted_keys = args.get("unquoted_keys", False)
 
     if string_delims and (_LAX_OPEN in text or _LAX_CLOSE in text):
@@ -60,11 +73,19 @@ def _json(text: str, args: dict) -> Any:
 
     working = text
     captured: list[str] = []
-    for open_d, close_d in string_delims:
-        pattern = re.escape(open_d) + r"(.*?)" + re.escape(close_d)
+    if string_delims:
+        body = r"((?:\\.|[^\\])*?)" if backslash_escapes else r"(.*?)"
+        # One left-to-right pass, so delimiters inside an earlier string are left alone. Standard JSON
+        # strings go last so that a custom delimiter starting with `"` takes precedence.
+        pattern = "|".join([re.escape(o) + body + re.escape(c) for o, c in string_delims] + [_JSON_STRING])
 
         def _capture(m: Any) -> str:
-            captured.append(m.group(1))
+            if m.lastindex is None:
+                # Standard JSON string: restored verbatim, which also shields it from `unquoted_keys`.
+                captured.append(m.group(0))
+            else:
+                s = m.group(m.lastindex)
+                captured.append(json.dumps(_unescape(s) if backslash_escapes else s))
             return f"{_LAX_OPEN}{len(captured) - 1}{_LAX_CLOSE}"
 
         working = re.sub(pattern, _capture, working, flags=re.DOTALL)
@@ -73,7 +94,7 @@ def _json(text: str, args: dict) -> Any:
         working = re.sub(r"(?<=[{,])(\w+):", r'"\1":', working)
 
     for i, s in enumerate(captured):
-        working = working.replace(f"{_LAX_OPEN}{i}{_LAX_CLOSE}", json.dumps(s))
+        working = working.replace(f"{_LAX_OPEN}{i}{_LAX_CLOSE}", s)
 
     try:
         return json.loads(working)
