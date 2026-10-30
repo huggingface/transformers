@@ -47,47 +47,88 @@ from transformers.testing_utils import (
 )
 from transformers.utils import direct_transformers_import, logging
 
+
 # Pipeline test classes are stored as dotted-path strings and resolved lazily at test execution time
 # to avoid importing the 24 test_pipelines_*.py files during pytest collection — each of those files
 # imports specific model classes at top level, dragging ~30 model source files into the collection phase.
 pipeline_test_mapping = {
-    "audio-classification": {"test": "tests.pipelines.test_pipelines_audio_classification.AudioClassificationPipelineTests"},
-    "automatic-speech-recognition": {"test": "tests.pipelines.test_pipelines_automatic_speech_recognition.AutomaticSpeechRecognitionPipelineTests"},
+    "audio-classification": {
+        "test": "tests.pipelines.test_pipelines_audio_classification.AudioClassificationPipelineTests"
+    },
+    "automatic-speech-recognition": {
+        "test": "tests.pipelines.test_pipelines_automatic_speech_recognition.AutomaticSpeechRecognitionPipelineTests"
+    },
     "depth-estimation": {"test": "tests.pipelines.test_pipelines_depth_estimation.DepthEstimationPipelineTests"},
-    "document-question-answering": {"test": "tests.pipelines.test_pipelines_document_question_answering.DocumentQuestionAnsweringPipelineTests"},
+    "document-question-answering": {
+        "test": "tests.pipelines.test_pipelines_document_question_answering.DocumentQuestionAnsweringPipelineTests"
+    },
     "feature-extraction": {"test": "tests.pipelines.test_pipelines_feature_extraction.FeatureExtractionPipelineTests"},
     "fill-mask": {"test": "tests.pipelines.test_pipelines_fill_mask.FillMaskPipelineTests"},
-    "image-classification": {"test": "tests.pipelines.test_pipelines_image_classification.ImageClassificationPipelineTests"},
-    "image-feature-extraction": {"test": "tests.pipelines.test_pipelines_image_feature_extraction.ImageFeatureExtractionPipelineTests"},
+    "image-classification": {
+        "test": "tests.pipelines.test_pipelines_image_classification.ImageClassificationPipelineTests"
+    },
+    "image-feature-extraction": {
+        "test": "tests.pipelines.test_pipelines_image_feature_extraction.ImageFeatureExtractionPipelineTests"
+    },
     "image-segmentation": {"test": "tests.pipelines.test_pipelines_image_segmentation.ImageSegmentationPipelineTests"},
     "image-text-to-text": {"test": "tests.pipelines.test_pipelines_image_text_to_text.ImageTextToTextPipelineTests"},
     "mask-generation": {"test": "tests.pipelines.test_pipelines_mask_generation.MaskGenerationPipelineTests"},
     "any-to-any": {"test": "tests.pipelines.test_pipelines_any_to_any.AnyToAnyPipelineTests"},
     "object-detection": {"test": "tests.pipelines.test_pipelines_object_detection.ObjectDetectionPipelineTests"},
     "table-question-answering": {"test": "tests.pipelines.test_pipelines_table_question_answering.TQAPipelineTests"},
-    "text-classification": {"test": "tests.pipelines.test_pipelines_text_classification.TextClassificationPipelineTests"},
+    "text-classification": {
+        "test": "tests.pipelines.test_pipelines_text_classification.TextClassificationPipelineTests"
+    },
     "text-generation": {"test": "tests.pipelines.test_pipelines_text_generation.TextGenerationPipelineTests"},
     "text-to-audio": {"test": "tests.pipelines.test_pipelines_text_to_audio.TextToAudioPipelineTests"},
-    "token-classification": {"test": "tests.pipelines.test_pipelines_token_classification.TokenClassificationPipelineTests"},
-    "video-classification": {"test": "tests.pipelines.test_pipelines_video_classification.VideoClassificationPipelineTests"},
+    "token-classification": {
+        "test": "tests.pipelines.test_pipelines_token_classification.TokenClassificationPipelineTests"
+    },
+    "video-classification": {
+        "test": "tests.pipelines.test_pipelines_video_classification.VideoClassificationPipelineTests"
+    },
     "zero-shot": {"test": "tests.pipelines.test_pipelines_zero_shot.ZeroShotClassificationPipelineTests"},
-    "zero-shot-audio-classification": {"test": "tests.pipelines.test_pipelines_zero_shot_audio_classification.ZeroShotAudioClassificationPipelineTests"},
-    "zero-shot-image-classification": {"test": "tests.pipelines.test_pipelines_zero_shot_image_classification.ZeroShotImageClassificationPipelineTests"},
-    "zero-shot-object-detection": {"test": "tests.pipelines.test_pipelines_zero_shot_object_detection.ZeroShotObjectDetectionPipelineTests"},
+    "zero-shot-audio-classification": {
+        "test": "tests.pipelines.test_pipelines_zero_shot_audio_classification.ZeroShotAudioClassificationPipelineTests"
+    },
+    "zero-shot-image-classification": {
+        "test": "tests.pipelines.test_pipelines_zero_shot_image_classification.ZeroShotImageClassificationPipelineTests"
+    },
+    "zero-shot-object-detection": {
+        "test": "tests.pipelines.test_pipelines_zero_shot_object_detection.ZeroShotObjectDetectionPipelineTests"
+    },
 }
 
 task_to_pipeline_and_spec_mapping = {
     # Adding a task to this list will cause its pipeline input signature to be checked against the corresponding
     # task spec in the HF Hub. Pipeline classes are dotted-path strings resolved lazily at test execution time
     # to avoid importing pipelines/__init__.py (eager, loads all 28 pipeline source files) during collection.
-    "audio-classification": ("transformers.pipelines.audio_classification.AudioClassificationPipeline", AudioClassificationInput),
-    "automatic-speech-recognition": ("transformers.pipelines.automatic_speech_recognition.AutomaticSpeechRecognitionPipeline", AutomaticSpeechRecognitionInput),
+    "audio-classification": (
+        "transformers.pipelines.audio_classification.AudioClassificationPipeline",
+        AudioClassificationInput,
+    ),
+    "automatic-speech-recognition": (
+        "transformers.pipelines.automatic_speech_recognition.AutomaticSpeechRecognitionPipeline",
+        AutomaticSpeechRecognitionInput,
+    ),
     "depth-estimation": ("transformers.pipelines.depth_estimation.DepthEstimationPipeline", DepthEstimationInput),
-    "image-classification": ("transformers.pipelines.image_classification.ImageClassificationPipeline", ImageClassificationInput),
-    "image-segmentation": ("transformers.pipelines.image_segmentation.ImageSegmentationPipeline", ImageSegmentationInput),
+    "image-classification": (
+        "transformers.pipelines.image_classification.ImageClassificationPipeline",
+        ImageClassificationInput,
+    ),
+    "image-segmentation": (
+        "transformers.pipelines.image_segmentation.ImageSegmentationPipeline",
+        ImageSegmentationInput,
+    ),
     "object-detection": ("transformers.pipelines.object_detection.ObjectDetectionPipeline", ObjectDetectionInput),
-    "video-classification": ("transformers.pipelines.video_classification.VideoClassificationPipeline", VideoClassificationInput),
-    "zero-shot-image-classification": ("transformers.pipelines.zero_shot_image_classification.ZeroShotImageClassificationPipeline", ZeroShotImageClassificationInput),
+    "video-classification": (
+        "transformers.pipelines.video_classification.VideoClassificationPipeline",
+        VideoClassificationInput,
+    ),
+    "zero-shot-image-classification": (
+        "transformers.pipelines.zero_shot_image_classification.ZeroShotImageClassificationPipeline",
+        ZeroShotImageClassificationInput,
+    ),
 }
 
 # The default value `hf-internal-testing` is for running the pipeline testing against the tiny models on the Hub.
