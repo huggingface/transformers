@@ -22,7 +22,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...masking_utils import create_causal_mask
@@ -199,8 +199,8 @@ class Ernie4_5_VLMoeConfig(PreTrainedConfig):
     model_type = "ernie4_5_vl_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Ernie4_5_VLMoeVisionConfig),
-        "text_config": SubConfigSpec(config_class=Ernie4_5_VLMoeTextConfig),
+        "vision_config": Ernie4_5_VLMoeVisionConfig,
+        "text_config": Ernie4_5_VLMoeTextConfig,
     }
 
     text_config: dict | PreTrainedConfig | None = None
@@ -648,7 +648,7 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPretr
         "attentions": Ernie4_5_VLMoeVisionAttention,
     }
 
-    def __init__(self, config) -> None:
+    def __init__(self, config: Ernie4_5_VLMoeVisionConfig) -> None:
         super().__init__(config)
 
         del self.merger
@@ -1046,7 +1046,7 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
 
 
 class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, GenerationMixin):
-    def __init__(self, config):
+    def __init__(self, config: Ernie4_5_VLMoeConfig):
         super().__init__(config)
 
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
@@ -1237,6 +1237,8 @@ class Ernie4_5_VL_MoeVisionConfig(Ernie4_5_VLMoeVisionConfig):
 
 
 class Ernie4_5_VL_MoePreTrainedModel(Ernie4_5_VLMoePreTrainedModel):
+    config: Ernie4_5_VLMoeConfig
+
     def post_init(self):
         logger.warning_once(
             "`Ernie4_5_VL_MoePreTrainedModel` is deprecated; please use `Ernie4_5_VLMoePreTrainedModel` instead.",

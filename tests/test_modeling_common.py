@@ -137,7 +137,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING
-    from transformers.distributed.tensor_parallel import _get_parameter_plan
+    from transformers.distributed.parallel_utils import _get_parameter_plan
     from transformers.integrations.accelerate import compute_module_sizes
     from transformers.modeling_utils import load_state_dict
     from transformers.pytorch_utils import id_tensor_storage
@@ -756,6 +756,8 @@ class ModelTesterMixin(ExportTesterMixin):
     test_torch_exportable = True
     # Used in `check_training_gradient_checkpointing` to NOT check all params having gradient (e.g. for some MOE models)
     test_all_params_have_gradient = True
+    # Models added before 2023 skip `test_can_init_all_missing_weights` unless they set this once their `_init_weights` is fixed
+    test_can_init_all_missing_weights_before_2023 = False
     is_encoder_decoder = False
     has_attentions = True
     _is_composite = False
@@ -866,6 +868,7 @@ class ModelTesterMixin(ExportTesterMixin):
             # Nothing we can't do
             "Gemma3nTextModelTest": 4,  # need to test KV shared layer for both types: `full_attention` and `sliding_attention`
             "Gemma3nVision2TextModelTest": 4,  # need to test KV shared layer for both types: `full_attention` and `sliding_attention`
+            "MistralLarge4ModelTest": 4,  # need to test KV shared layer for both types: RoPE and NoPE
             "BeitModelTest": 4,  # BeitForSemanticSegmentation requires config.out_indices to be a list of 4 integers
             "ZambaModelTest": 5,  # The minimum number to test beyond the initial ["mamba", "mamba", "hybrid"] in `ZambaConfig._layers_block_type`
             "Wav2Vec2BertModelTest": 4,
@@ -1283,7 +1286,7 @@ class ModelTesterMixin(ExportTesterMixin):
             addition_year = int(match_object.group(1))
         # For now, skip everything older than 2023 and "important models" (too many models to patch otherwise)
         # TODO: relax this as we patch more and more models
-        if addition_year < 2023:
+        if addition_year < 2023 and not self.test_can_init_all_missing_weights_before_2023:
             self.skipTest(reason="Not a prioritized model for now.")
 
         for model_class in self.all_model_classes:
@@ -2570,6 +2573,7 @@ class ModelTesterMixin(ExportTesterMixin):
     @require_torch_accelerator
     def test_resize_tokens_embeddings_with_deepspeed(self):
         ds_config = {
+            "train_micro_batch_size_per_gpu": 1,
             "zero_optimization": {
                 "stage": 3,
                 "offload_param": {"device": "cpu", "pin_memory": True},
@@ -2582,6 +2586,7 @@ class ModelTesterMixin(ExportTesterMixin):
     @require_torch_multi_accelerator
     def test_resize_tokens_embeddings_with_deepspeed_multi_gpu(self):
         ds_config = {
+            "train_micro_batch_size_per_gpu": 1,
             "zero_optimization": {
                 "stage": 3,
             },
@@ -2684,6 +2689,7 @@ class ModelTesterMixin(ExportTesterMixin):
     @require_torch_accelerator
     def test_resize_embeddings_untied_with_deepspeed(self):
         ds_config = {
+            "train_micro_batch_size_per_gpu": 1,
             "zero_optimization": {
                 "stage": 3,
                 "offload_param": {"device": "cpu", "pin_memory": True},
@@ -2696,6 +2702,7 @@ class ModelTesterMixin(ExportTesterMixin):
     @require_torch_multi_accelerator
     def test_resize_embeddings_untied_with_deepspeed_multi_gpu(self):
         ds_config = {
+            "train_micro_batch_size_per_gpu": 1,
             "zero_optimization": {
                 "stage": 3,
             },
@@ -3568,6 +3575,8 @@ class ModelTesterMixin(ExportTesterMixin):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
+        dtype = torch.bfloat16
+
         # This flag is used to know if the test was skipped for all `self.all_model_classes` or not
         _has_run_at_least_one_model = False
 
@@ -3611,7 +3620,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     main_input = main_input[:1]
                     # Fix the dtype
                     if torch.is_floating_point(main_input):
-                        main_input = main_input.to(torch.bfloat16)
+                        main_input = main_input.to(dtype)
                 first_inputs = {model.main_input_name: main_input, "output_hidden_states": True}
                 # Some models have main input name which is different from input_ids, but require input_ids... e.g. BarkFine
                 if model.main_input_name != "input_ids" and "input_ids" in inputs_dict:
@@ -3621,7 +3630,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     # NOTE: this fixes qwen2_5_vl/omni because test break w/ pixel values
                     if "image_grid_thw" in inputs_dict:
                         continue
-                    first_inputs["pixel_values"] = inputs_dict["pixel_values"][:1].to(torch.bfloat16)
+                    first_inputs["pixel_values"] = inputs_dict["pixel_values"][:1].to(dtype)
                 # Some VLMs require image_sizes alongside pixel_values, e.g. lighton_ocr, llava_onevision
                 if "image_sizes" in inputs_dict:
                     first_inputs["image_sizes"] = inputs_dict["image_sizes"][:1]
@@ -3630,6 +3639,8 @@ class ModelTesterMixin(ExportTesterMixin):
                 for key in getattr(self, "additional_model_inputs", []):
                     if key in inputs_dict:
                         first_inputs[key] = inputs_dict[key][:1]
+                        if torch.is_tensor(first_inputs[key]) and torch.is_floating_point(first_inputs[key]):
+                            first_inputs[key] = first_inputs[key].to(dtype)
 
                 if model.config.is_encoder_decoder:
                     decoder_input_ids = inputs_dict.get("decoder_input_ids", first_inputs.get("input_ids"))
@@ -3665,7 +3676,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 }
 
                 model = model_class.from_pretrained(
-                    tmpdirname, dtype=torch.bfloat16, attn_implementation="eager", device_map=torch_device
+                    tmpdirname, dtype=dtype, attn_implementation="eager", device_map=torch_device
                 )
 
                 def _get_output_logits(outputs):
@@ -3690,7 +3701,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 # Switch to FA
                 del model
                 model = model_class.from_pretrained(
-                    tmpdirname, dtype=torch.bfloat16, attn_implementation=attn_implementation, device_map=torch_device
+                    tmpdirname, dtype=dtype, attn_implementation=attn_implementation, device_map=torch_device
                 )
                 outputs = model(**first_inputs)
                 logits_1_fa = _get_output_logits(outputs)
@@ -4208,6 +4219,10 @@ class ModelTesterMixin(ExportTesterMixin):
         for model_class in self.all_generative_model_classes:  # TODO: this test should run on all classes instead
             if not model_class._supports_flash_attn:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+            # This test is about the `flash_attn` package: skip models that can't use it
+            valid_fa_implementations = model_class._compatible_flash_implementations
+            if valid_fa_implementations is not None and "flash_attention_2" not in valid_fa_implementations:
+                self.skipTest(f"{model_class.__name__} only supports {valid_fa_implementations}")
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
             if not all(

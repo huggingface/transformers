@@ -1024,6 +1024,11 @@ class WhisperGenerationMixin(GenerationMixin):
                         generate_kwargs["encoder_outputs"], (0, 0, 0, 0, 0, batch_size - cur_bsz), value=0
                     )
 
+            if attention_mask is None and generate_kwargs.get("past_key_values") is not None:
+                # This will force slicing of decoder_input_ids = decoder_input_ids[:, cache_length:] as the first tokens
+                # are already in the cache, but we do not have an `attention_mask` to give this info to `generate`
+                generation_config._mask_length = decoder_input_ids.shape[-1]
+
             seek_outputs = super().generate(
                 segment_input,
                 generation_config=generation_config,

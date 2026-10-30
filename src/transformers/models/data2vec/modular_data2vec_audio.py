@@ -165,6 +165,10 @@ class Data2VecAudioPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 init.uniform_(module.bias, a=-k, b=k)
+        elif isinstance(module, Data2VecAudioModel) and hasattr(module, "masked_spec_embed"):
+            init.uniform_(module.masked_spec_embed)
+        elif isinstance(module, AMSoftmaxLoss):  # noqa: F821
+            init.normal_(module.weight)
 
     def _get_adapters(self):
         raise AttributeError("Not needed for Data2VecAudio")
@@ -209,7 +213,7 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel, Wav2Vec2Model):
 
 
 class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel, Wav2Vec2ForCTC):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecAudioConfig):
         r"""
         config ([`Data2VecAudioForCTC`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not

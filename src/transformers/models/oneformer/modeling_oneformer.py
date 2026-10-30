@@ -38,7 +38,6 @@ from ...utils import (
     requires_backends,
     torch_compilable_check,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast
 from .configuration_oneformer import OneFormerConfig
 
@@ -1152,7 +1151,6 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
         self.layers = nn.ModuleList([OneFormerPixelDecoderEncoderLayer(config) for _ in range(config.encoder_layers)])
 
     @staticmethod
-    @deprecate_kwarg("spatial_shapes", version="5.22", new_name="spatial_shapes_list")
     def get_reference_points(spatial_shapes_list, valid_ratios, device):
         """
         Get reference points for each feature map. Used in decoder.
@@ -3193,7 +3191,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
                 class_labels=class_labels,
                 text_queries=text_queries,
                 auxiliary_predictions=auxiliary_predictions,
-                calculate_contrastive_loss=self.config.contrastive_temperature is not None,
+                calculate_contrastive_loss=self.config.is_training and self.config.contrastive_temperature is not None,
             )
             loss = self.get_loss(loss_dict)
 

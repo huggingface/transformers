@@ -26,7 +26,7 @@ from torch.nn import functional as F
 from ... import initialization as init
 from ...backbone_utils import filter_output_hidden_states
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
@@ -258,9 +258,9 @@ class Molmo2Config(PreTrainedConfig):
     model_type = "molmo2"
     attribute_map = {"image_token_id": "image_patch_id", "video_token_id": "image_patch_id"}
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Molmo2TextConfig),
-        "vision_config": SubConfigSpec(config_class=Molmo2VisionConfig),
-        "adapter_config": SubConfigSpec(config_class=Molmo2AdapterConfig),
+        "text_config": Molmo2TextConfig,
+        "vision_config": Molmo2VisionConfig,
+        "adapter_config": Molmo2AdapterConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -1315,7 +1315,7 @@ class Molmo2VisionEncoderLayer(Siglip2EncoderLayer):
 
 @auto_docstring
 class Molmo2VisionModel(Molmo2PreTrainedModel):
-    config_class = Molmo2VisionConfig
+    config: Molmo2VisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = ["Molmo2VisionEncoderLayer"]
@@ -1364,7 +1364,7 @@ class Molmo2ImageProjectorMLP(LlamaMLP):
     """
 )
 class Molmo2Adapter(Molmo2PreTrainedModel):
-    config_class = Molmo2AdapterConfig
+    config: Molmo2AdapterConfig
     input_modalities = ("image",)
     _no_split_modules = ["Molmo2VisionAttention"]
     _can_record_outputs = {"attentions": Molmo2VisionAttention}

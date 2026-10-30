@@ -214,7 +214,7 @@ class CTRLPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class CTRLModel(CTRLPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CTRLConfig):
         super().__init__(config)
 
         self.d_model_size = config.n_embd
@@ -346,7 +346,7 @@ class CTRLModel(CTRLPreTrainedModel):
 class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "transformer.w.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: CTRLConfig):
         super().__init__(config)
         self.transformer = CTRLModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=True)
@@ -463,7 +463,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
     """
 )
 class CTRLForSequenceClassification(CTRLPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CTRLConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = CTRLModel(config)

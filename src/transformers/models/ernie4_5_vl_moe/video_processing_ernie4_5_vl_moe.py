@@ -45,7 +45,7 @@ from ...utils import (
     safe_load_json_file,
 )
 from ...utils.hub import cached_file, resolve_revision
-from ...utils.import_utils import is_torchvision_available, is_tracing, requires
+from ...utils.import_utils import is_torchvision_available, is_tracing
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import (
     VideoInput,
@@ -93,7 +93,6 @@ class Ernie4_5_VLMoeVideoProcessorInitKwargs(VideosKwargs, total=False):
 
 
 @auto_docstring
-@requires(backends=("torchvision",))
 class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 299 * 28 * 28, "longest_edge": 1196 * 28 * 28}

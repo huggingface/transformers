@@ -881,7 +881,7 @@ class HYV4ForCausalLM(HYV4PreTrainedModel, GenerationMixin):
         "lm_head",
     ]
 
-    def __init__(self, config):
+    def __init__(self, config: HYV4Config):
         super().__init__(config)
         self.model = HYV4Model(config)
         self.vocab_size = config.vocab_size

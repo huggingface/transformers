@@ -23,7 +23,7 @@ from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images, to_channel_dimension_format
 from ...image_utils import (
@@ -41,7 +41,6 @@ from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
-from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..deepseek_v2.configuration_deepseek_v2 import DeepseekV2Config
 from ..deepseek_v2.modeling_deepseek_v2 import (
@@ -317,7 +316,6 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
         return num_patches
 
 
-@requires(backends=("vision",))
 @auto_docstring
 class DeepseekOcr2ImageProcessorPil(GotOcr2ImageProcessorPil):
     image_mean = IMAGENET_STANDARD_MEAN
@@ -547,8 +545,8 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
     model_type = "deepseek_ocr2_vision"
     base_config_key = "vision_config"
     sub_configs_defaults = {
-        "sam_config": SubConfigSpec(config_class=DeepseekOcr2SamVisionConfig),
-        "encoder_config": SubConfigSpec(config_class=DeepseekOcr2VisionEncoderConfig),
+        "sam_config": DeepseekOcr2SamVisionConfig,
+        "encoder_config": DeepseekOcr2VisionEncoderConfig,
     }
     sam_config: dict | PreTrainedConfig | None = None
     encoder_config: dict | PreTrainedConfig | None = None
@@ -612,8 +610,8 @@ class DeepseekOcr2Config(PreTrainedConfig):
 
     model_type = "deepseek_ocr2"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=DeepseekOcr2VisionConfig),
-        "text_config": SubConfigSpec(config_class=DeepseekOcr2TextConfig),
+        "vision_config": DeepseekOcr2VisionConfig,
+        "text_config": DeepseekOcr2TextConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -721,6 +719,7 @@ class DeepseekOcr2SamVisionProj(nn.Module):
 
 class DeepseekOcr2SamVisionEncoder(SamVisionEncoder, DeepseekOcr2PreTrainedModel):
     _input_embed_layer = "patch_embed"
+    config: DeepseekOcr2SamVisionConfig
 
     def __init__(self, config: DeepseekOcr2SamVisionConfig):
         super().__init__(config)
@@ -790,8 +789,9 @@ class DeepseekOcr2VisionEncoder(Qwen2Model, DeepseekOcr2PreTrainedModel):
         "hidden_states": DeepseekOcr2VisionEncoderLayer,
         "attentions": DeepseekOcr2VisionAttention,
     }
+    config: DeepseekOcr2VisionConfig
 
-    def __init__(self, config):
+    def __init__(self, config: DeepseekOcr2VisionConfig):
         super().__init__(config)
         del self.embed_tokens
         self.layers = nn.ModuleList(
@@ -845,6 +845,8 @@ class DeepseekOcr2VisionEncoder(Qwen2Model, DeepseekOcr2PreTrainedModel):
 
 @auto_docstring(custom_intro="Vision pipeline: SAM ViT-B (with neck)")
 class DeepseekOcr2VisionModel(DeepseekOcr2PreTrainedModel):
+    config: DeepseekOcr2VisionConfig
+
     def __init__(self, config: DeepseekOcr2VisionConfig):
         super().__init__(config)
         self.sam_encoder = DeepseekOcr2SamVisionEncoder(config.sam_config)
@@ -909,7 +911,7 @@ class DeepseekOcr2TextDecoderLayer(DeepseekV2DecoderLayer):
 
 
 class DeepseekOcr2TextPreTrainedModel(DeepseekV2PreTrainedModel):
-    pass
+    config: DeepseekOcr2TextConfig
 
 
 class DeepseekOcr2TextModel(DeepseekV2Model):

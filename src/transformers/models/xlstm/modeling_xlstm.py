@@ -737,8 +737,6 @@ else:
         This module wraps the xLSTM kernels and provides a high-level interface for training and inference.
         """
 
-        config_class = xLSTMConfig
-
         def __init__(self, config: xLSTMConfig):
             super().__init__()
             self.config = config
@@ -1234,7 +1232,7 @@ class xLSTMPreTrainedModel(PreTrainedModel):
     An abstract class for an interface to loading a pre-trained xLSTM model.
     """
 
-    config_class = xLSTMConfig
+    config: xLSTMConfig
     base_model_prefix = "backbone"
     _no_split_modules = ["xLSTMBlock"]
     supports_gradient_checkpointing = True
@@ -1394,7 +1392,7 @@ class xLSTMOutput(ModelOutput):
 
 @auto_docstring
 class xLSTMModel(xLSTMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: xLSTMConfig):
         super().__init__(config)
         # use embedding_dim and num_blocks once here to make use of them
         self.embeddings = nn.Embedding(config.vocab_size, config.embedding_dim)
@@ -1517,7 +1515,7 @@ class xLSTMCausalLMOutput(ModelOutput):
 
 @auto_docstring
 class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
-    def __init__(self, config):
+    def __init__(self, config: xLSTMConfig):
         super().__init__(config)
         self.backbone = xLSTMModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)

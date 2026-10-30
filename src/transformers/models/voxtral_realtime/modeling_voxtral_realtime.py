@@ -514,7 +514,7 @@ class VoxtralRealtimeEncoder(VoxtralRealtimePreTrainedModel):
         "hidden_states": VoxtralRealtimeEncoderLayer,
     }
 
-    def __init__(self, config):
+    def __init__(self, config: VoxtralRealtimeEncoderConfig):
         super().__init__(config)
         self.embedder = VoxtralRealtimeEmbedder(config)
         self.layers = nn.ModuleList(
@@ -750,7 +750,7 @@ class VoxtralRealtimeTextPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class VoxtralRealtimeTextModel(VoxtralRealtimeTextPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: VoxtralRealtimeTextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -861,7 +861,7 @@ class VoxtralRealtimeMultiModalProjector(nn.Module):
     """
 )
 class VoxtralRealtimeModel(VoxtralRealtimePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: VoxtralRealtimeConfig):
         super().__init__(config)
         self.audio_tower = VoxtralRealtimeEncoder(config.audio_config)
         self.language_model = VoxtralRealtimeTextModel(config.text_config)
@@ -1012,7 +1012,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
-    def __init__(self, config):
+    def __init__(self, config: VoxtralRealtimeConfig):
         super().__init__(config)
         self.model = VoxtralRealtimeModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)

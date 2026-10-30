@@ -42,7 +42,6 @@ CHECKER_CONFIG = {
         "utils/**/*.py",
         "scripts/**/*.py",
         ".circleci/create_circleci_config.py",
-        "benchmark/**/*.py",
         "benchmark_v2/**/*.py",
         "setup.py",
         "conftest.py",
@@ -64,7 +63,6 @@ DEFAULT_TARGETS = [
     "utils",
     "scripts",
     ".circleci/create_circleci_config.py",
-    "benchmark",
     "benchmark_v2",
     "setup.py",
     "conftest.py",
@@ -434,6 +432,11 @@ def _file_line_blames(path: Path) -> dict[int, LineBlame]:
     except ValueError:
         return {}
 
+    # Partial clone (`--filter=blob:none`): the blobs blame walks are absent, and it fetches
+    # them one by one over the network (~12s/file, minutes for long histories). Failing fast
+    # instead is safe: a nonzero exit already means "no blame info", so the filters below can
+    # only keep a finding, never hide one. A full clone has every object and never hits this.
+    env = {**os.environ, "GIT_NO_LAZY_FETCH": "1"}
     result = subprocess.run(
         [
             "git",
@@ -446,6 +449,7 @@ def _file_line_blames(path: Path) -> dict[int, LineBlame]:
         ],
         capture_output=True,
         text=True,
+        env=env,
     )
     if result.returncode != 0:
         return {}
