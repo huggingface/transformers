@@ -41,7 +41,7 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
 
-class MiMoV2ImageProcessorKwargs(ImagesKwargs, total=False):
+class MiMoV2VLImageProcessorKwargs(ImagesKwargs, total=False):
     """
     min_pixels (`int`, *optional*, defaults to `4 * 28 * 28`):
         Minimum image pixel budget. Prefer `size["shortest_edge"]`.
@@ -121,7 +121,7 @@ def normalize_frames(processor, frames, do_rescale, rescale_factor, do_normalize
     custom_intro="Constructs an image processor for the MiMo V2 VL series.",
     checkpoint="XiaomiMiMo/MiMo-V2.6-Flash-RL",
 )
-class MiMoV2ImageProcessor(TorchvisionBackend):
+class MiMoV2VLImageProcessor(TorchvisionBackend):
     do_resize = True
     resample = PILImageResampling.BILINEAR
     size = {"shortest_edge": 4 * 28 * 28, "longest_edge": 4096 * 28 * 28}
@@ -134,10 +134,10 @@ class MiMoV2ImageProcessor(TorchvisionBackend):
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
-    valid_kwargs = MiMoV2ImageProcessorKwargs
+    valid_kwargs = MiMoV2VLImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw"]
 
-    def __init__(self, **kwargs: Unpack[MiMoV2ImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[MiMoV2VLImageProcessorKwargs]):
         # backward compatibility: override size with min_pixels and max_pixels if they are provided
         size = kwargs.pop("size", None)
         size = dict(self.size) if size is None else size
@@ -175,7 +175,7 @@ class MiMoV2ImageProcessor(TorchvisionBackend):
     def preprocess(
         self,
         images: ImageInput,
-        **kwargs: Unpack[MiMoV2ImageProcessorKwargs],
+        **kwargs: Unpack[MiMoV2VLImageProcessorKwargs],
     ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
@@ -320,4 +320,4 @@ class MiMoV2ImageProcessor(TorchvisionBackend):
         return normalize_frames(self, images, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
 
 
-__all__ = ["MiMoV2ImageProcessor"]
+__all__ = ["MiMoV2VLImageProcessor"]

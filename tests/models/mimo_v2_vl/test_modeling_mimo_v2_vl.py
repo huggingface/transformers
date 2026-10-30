@@ -37,7 +37,7 @@ from transformers.testing_utils import require_accelerate, require_torch, requir
 from transformers.utils import is_torch_available
 
 from ...generation.test_utils import GenerationTesterMixin
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
@@ -185,14 +185,51 @@ class MiMoV2VLCommonModelTest(MiMoV2VLCommonTestMixin, ModelTesterMixin, Generat
             self.assertEqual(layer.keys.shape, (batch_size, num_heads, length, key_dim))
             self.assertEqual(layer.values.shape, (batch_size, num_heads, length, value_dim))
 
-    def _image_features_prepare_config_and_inputs(self):
-        self.skipTest("MiMo feature helpers return fused tensors, covered by test_modal_embeddings_are_fused.")
+    # Audio features are grouped codec frames, not one sequence per input.
+    skip_test_audio_features_output_shape = True
 
-    def _audio_features_prepare_config_and_inputs(self):
-        self.skipTest("MiMo feature helpers return fused tensors, covered by test_modal_embeddings_are_fused.")
+    def _feature_config(self):
+        config = self.model_tester.get_config()
+        # The shape checks compare the vision tower width with `out_hidden_size`.
+        config.vision_config.hidden_size = config.vision_config.out_hidden_size
+        return config
+
+    def _image_features_prepare_config_and_inputs(self):
+        grid_thw = torch.tensor([[1, 2, 2], [1, 2, 4]], device=torch_device)
+        pixel_values = floats_tensor([int(grid_thw.prod(-1).sum()), 24]).to(torch_device)
+        return self._feature_config(), {"pixel_values": pixel_values, "image_grid_thw": grid_thw}
 
     def _video_features_prepare_config_and_inputs(self):
-        self.skipTest("MiMo feature helpers return fused tensors, covered by test_modal_embeddings_are_fused.")
+        grid_thw = torch.tensor([[2, 2, 2], [1, 2, 2]], device=torch_device)
+        pixel_values = floats_tensor([int(grid_thw.prod(-1).sum()), 24]).to(torch_device)
+        return self._feature_config(), {"pixel_values_videos": pixel_values, "video_grid_thw": grid_thw}
+
+    def _audio_features_prepare_config_and_inputs(self):
+        codes = ids_tensor([self.model_tester.batch_size, 3, 2, 4], 15).to(torch_device)
+        return self._feature_config(), {"input_audio_codes": codes}
+
+    def test_generate_from_multimodal_encoder_outputs_and_raw_data(self):
+        # The common inputs are text-only; add one image per sample so that `mm_encoder_outputs` are exercised.
+        prepare_text_inputs = self.prepare_config_and_inputs_for_generate
+
+        def prepare_image_inputs(batch_size=2):
+            config, inputs = prepare_text_inputs(batch_size)
+            inputs["input_ids"][:, 1] = config.image_token_id
+            inputs["pixel_values"] = floats_tensor([batch_size * 4, 24]).to(torch_device)
+            inputs["image_grid_thw"] = torch.tensor([[1, 2, 2]] * batch_size, device=torch_device)
+            return config, inputs
+
+        with patch.object(self, "prepare_config_and_inputs_for_generate", prepare_image_inputs):
+            super().test_generate_from_multimodal_encoder_outputs_and_raw_data()
+
+    def _image_features_get_expected_num_attentions(self, model_tester=None):
+        return self._feature_config().vision_config.depth
+
+    def _video_features_get_expected_num_attentions(self, model_tester=None):
+        return self._feature_config().vision_config.depth
+
+    def _audio_features_get_expected_num_attentions(self, model_tester=None):
+        return self._feature_config().audio_config.input_local_layers
 
 
 @require_torch
@@ -527,11 +564,11 @@ class MiMoV2VLModelTest(unittest.TestCase):
             torch.testing.assert_close(actual_gradient, expected_gradient, atol=2e-6, rtol=1e-5)
 
     def test_segmented_audio_token_count_and_left_padding(self):
-        from transformers import MiMoV2FeatureExtractor
+        from transformers import MiMoV2VLFeatureExtractor
 
         model = self.model.model
         model.config.audio_config.audio_segment_size = 9
-        extractor = MiMoV2FeatureExtractor(audio_segment_size=9, audio_group_size=2)
+        extractor = MiMoV2VLFeatureExtractor(audio_segment_size=9, audio_group_size=2)
         length = extractor._get_audio_token_length(27)
         self.assertEqual(length, 5)
         features = torch.randn(1, 27, 4)
@@ -539,12 +576,12 @@ class MiMoV2VLModelTest(unittest.TestCase):
         with torch.no_grad():
             expected = model.get_audio_features(
                 input_features=features, feature_attention_mask=mask, audio_feature_lens=[length]
-            )
+            ).pooler_output
             padded = torch.nn.functional.pad(features, (0, 0, 5, 0))
             padded_mask = torch.nn.functional.pad(mask, (5, 0))
             actual = model.get_audio_features(
                 input_features=padded, feature_attention_mask=padded_mask, audio_feature_lens=[length]
-            )
+            ).pooler_output
         torch.testing.assert_close(actual, expected)
 
     def test_bfloat16_save_load_preserves_codebook_precision(self):

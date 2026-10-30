@@ -61,12 +61,12 @@ def _get_spectral_constants(
     )
 
 
-class MiMoV2FeatureExtractor(SequenceFeatureExtractor):
+class MiMoV2VLFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs an audio feature extractor for the MiMo V2 VL series.
 
     Extracts the natural logarithm of magnitude mel spectrograms from mono waveforms, or groups pre-tokenized
-    audio codec IDs. Use `MiMoV2Processor.from_pretrained("XiaomiMiMo/MiMo-V2.6-Flash-RL")` to load the
+    audio codec IDs. Use `MiMoV2VLProcessor.from_pretrained("XiaomiMiMo/MiMo-V2.6-Flash-RL")` to load the
     checkpoint's audio settings together with its tokenizer and visual processors.
 
     This feature extractor inherits from [`SequenceFeatureExtractor`], which provides feature padding and serialization.
@@ -363,4 +363,4 @@ class MiMoV2FeatureExtractor(SequenceFeatureExtractor):
         )
 
 
-__all__ = ["MiMoV2FeatureExtractor"]
+__all__ = ["MiMoV2VLFeatureExtractor"]

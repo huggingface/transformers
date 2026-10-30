@@ -17,7 +17,7 @@ import argparse
 
 from ...modeling_mimo_v2_utils import load_original_checkpoint
 from ...tokenization_utils_tokenizers import TokenizersBackend
-from .processing_mimo_v2_vl import MiMoV2Processor
+from .processing_mimo_v2_vl import MiMoV2VLProcessor
 
 
 def main():
@@ -28,7 +28,7 @@ def main():
     args = parser.parse_args()
     model = load_original_checkpoint(args.checkpoint, device_map=args.device)
     model.save_pretrained(args.output, max_shard_size="5GB")
-    processor_class = MiMoV2Processor if model.config.model_type == "mimo_v2_vl" else TokenizersBackend
+    processor_class = MiMoV2VLProcessor if model.config.model_type == "mimo_v2_vl" else TokenizersBackend
     processor_class.from_pretrained(args.checkpoint).save_pretrained(args.output)
 
 

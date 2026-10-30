@@ -16,16 +16,16 @@ import unittest
 
 import numpy as np
 
-from transformers import MiMoV2ImageProcessor
+from transformers import MiMoV2VLImageProcessor
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 
 
 @require_torch
 @require_torchvision
 @require_vision
-class MiMoV2ImageProcessorTest(unittest.TestCase):
+class MiMoV2VLImageProcessorTest(unittest.TestCase):
     def test_grouping_preserves_mixed_size_batch_order(self):
-        processor = MiMoV2ImageProcessor(patch_size=2, merge_size=2, size={"shortest_edge": 16, "longest_edge": 256})
+        processor = MiMoV2VLImageProcessor(patch_size=2, merge_size=2, size={"shortest_edge": 16, "longest_edge": 256})
         rng = np.random.default_rng(0)
         images = [
             rng.integers(0, 256, (3, height, width), dtype=np.uint8) for height, width in [(7, 11), (11, 7), (7, 11)]
@@ -39,7 +39,7 @@ class MiMoV2ImageProcessorTest(unittest.TestCase):
         )
 
     def test_resize_uses_float_pixels_without_antialiasing(self):
-        processor = MiMoV2ImageProcessor(
+        processor = MiMoV2VLImageProcessor(
             patch_size=2,
             merge_size=2,
             size={"shortest_edge": 16, "longest_edge": 16},
@@ -54,7 +54,7 @@ class MiMoV2ImageProcessorTest(unittest.TestCase):
         np.testing.assert_array_equal(output.image_grid_thw, [[1, 2, 2]])
 
     def test_small_image_is_scaled_to_a_merge_block(self):
-        processor = MiMoV2ImageProcessor(patch_size=2, merge_size=2, size={"shortest_edge": 16, "longest_edge": 256})
+        processor = MiMoV2VLImageProcessor(patch_size=2, merge_size=2, size={"shortest_edge": 16, "longest_edge": 256})
         image = np.zeros((3, 1, 5), dtype=np.uint8)
         output = processor(image, input_data_format="channels_first", return_tensors="np")
         np.testing.assert_array_equal(output.image_grid_thw, [[1, 2, 10]])
@@ -63,7 +63,7 @@ class MiMoV2ImageProcessorTest(unittest.TestCase):
     def test_float32_normalization_independent_of_default_dtype(self):
         import torch
 
-        processor = MiMoV2ImageProcessor(patch_size=2, merge_size=2, do_resize=False)
+        processor = MiMoV2VLImageProcessor(patch_size=2, merge_size=2, do_resize=False)
         image = np.arange(3 * 4 * 8, dtype=np.uint8).reshape(3, 4, 8)
         kwargs = {"input_data_format": "channels_first", "return_tensors": "pt"}
         expected = processor(image, **kwargs).pixel_values
@@ -77,7 +77,7 @@ class MiMoV2ImageProcessorTest(unittest.TestCase):
         torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
     def test_spatial_merge_and_repeated_temporal_patch_order(self):
-        processor = MiMoV2ImageProcessor(
+        processor = MiMoV2VLImageProcessor(
             patch_size=2, merge_size=2, temporal_patch_size=2, do_resize=False, do_rescale=False, do_normalize=False
         )
         image = np.arange(3 * 4 * 8, dtype=np.float32).reshape(3, 4, 8)

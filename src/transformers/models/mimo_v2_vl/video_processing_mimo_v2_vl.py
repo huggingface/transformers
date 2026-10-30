@@ -39,7 +39,7 @@ from ...video_utils import (
 )
 
 
-class MiMoV2VideoProcessorInitKwargs(VideosKwargs, total=False):
+class MiMoV2VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     """
     min_pixels (`int`, *optional*, defaults to `4 * 28 * 28`):
         Minimum frame pixel budget. Prefer `size["shortest_edge"]`.
@@ -142,7 +142,7 @@ def get_video_frame_size(size: SizeDict, num_frames: int, temporal_factor: int, 
     custom_intro="Constructs a video processor for the MiMo V2 VL series.",
     checkpoint="XiaomiMiMo/MiMo-V2.6-Flash-RL",
 )
-class MiMoV2VideoProcessor(BaseVideoProcessor):
+class MiMoV2VLVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BILINEAR
     size = {"shortest_edge": 4 * 28 * 28, "longest_edge": 4096 * 28 * 28}
     image_mean = OPENAI_CLIP_MEAN
@@ -157,7 +157,7 @@ class MiMoV2VideoProcessor(BaseVideoProcessor):
     min_frames = 8
     max_frames = 256
     do_sample_frames = True
-    valid_kwargs = MiMoV2VideoProcessorInitKwargs
+    valid_kwargs = MiMoV2VLVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
     default_to_square = False
     temporal_compression_ratio = 1
@@ -165,7 +165,7 @@ class MiMoV2VideoProcessor(BaseVideoProcessor):
     fps = 2
     num_frames: int | None = None
 
-    def __init__(self, **kwargs: Unpack[MiMoV2VideoProcessorInitKwargs]):
+    def __init__(self, **kwargs: Unpack[MiMoV2VLVideoProcessorInitKwargs]):
         # backward compatibility: override size with min_pixels and max_pixels if they are provided
         size = kwargs.pop("size", None)
         size = dict(self.size) if size is None else size
@@ -413,7 +413,7 @@ class MiMoV2VideoProcessor(BaseVideoProcessor):
         )
 
     @auto_docstring
-    def preprocess(self, videos: VideoInput, **kwargs: Unpack[MiMoV2VideoProcessorInitKwargs]) -> BatchFeature:
+    def preprocess(self, videos: VideoInput, **kwargs: Unpack[MiMoV2VLVideoProcessorInitKwargs]) -> BatchFeature:
         if kwargs.get("num_frames") is not None and "fps" not in kwargs:
             kwargs["fps"] = None
         elif kwargs.get("fps") is not None and "num_frames" not in kwargs:
@@ -426,4 +426,4 @@ class MiMoV2VideoProcessor(BaseVideoProcessor):
         return normalize_frames(self, images, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
 
 
-__all__ = ["MiMoV2VideoProcessor"]
+__all__ = ["MiMoV2VLVideoProcessor"]

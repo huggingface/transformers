@@ -69,7 +69,7 @@ else:
             ("lasr_ctc", "LasrProcessor"),
             ("lasr_encoder", "LasrProcessor"),
             ("metaclip_2", "CLIPProcessor"),
-            ("mimo_v2_vl", "MiMoV2Processor"),
+            ("mimo_v2_vl", "MiMoV2VLProcessor"),
             ("mistral3", "PixtralProcessor"),
             ("mm-grounding-dino", "GroundingDinoProcessor"),
             ("modernvbert", "Idefics3Processor"),
@@ -329,7 +329,7 @@ class AutoProcessor:
             if model_type == "mimo_v2_vl" or (
                 model_type == "mimo_v2" and _get_mimo_v2_model_type(model_config_dict) == "mimo_v2_vl"
             ):
-                processor_class = "MiMoV2Processor"
+                processor_class = "MiMoV2VLProcessor"
 
         if processor_class is not None:
             processor_class = processor_class_from_name(processor_class)

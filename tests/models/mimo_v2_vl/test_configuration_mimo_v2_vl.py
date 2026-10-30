@@ -26,11 +26,11 @@ from transformers import (
     AutoProcessor,
     MiMoV2FlashConfig,
     MiMoV2FlashForCausalLM,
-    MiMoV2Processor,
     MiMoV2VLAudioConfig,
     MiMoV2VLAudioTokenizerConfig,
     MiMoV2VLConfig,
     MiMoV2VLForConditionalGeneration,
+    MiMoV2VLProcessor,
     MiMoV2VLTextConfig,
     MiMoV2VLVisionConfig,
 )
@@ -229,7 +229,7 @@ class MiMoV2AutoSelectionTest(unittest.TestCase):
                 encoding="utf-8",
             )
             processor = AutoProcessor.from_pretrained(directory, trust_remote_code=False, local_files_only=True)
-            self.assertIsInstance(processor, MiMoV2Processor)
+            self.assertIsInstance(processor, MiMoV2VLProcessor)
             self.assertEqual(processor.image_processor.patch_size, 2)
             Path(directory, "processor_config.json").write_text(
                 json.dumps({"processor_class": "Qwen2_5_VLProcessor"}), encoding="utf-8"

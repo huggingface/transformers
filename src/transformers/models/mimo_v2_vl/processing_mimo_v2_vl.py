@@ -28,12 +28,12 @@ from ...tokenization_utils_base import TextInput
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import CONFIG_NAME, auto_docstring, cached_file
 from ...video_utils import VideoInput, VideoMetadata
-from .feature_extraction_mimo_v2_vl import MiMoV2FeatureExtractor
-from .image_processing_mimo_v2_vl import MiMoV2ImageProcessor
-from .video_processing_mimo_v2_vl import MiMoV2VideoProcessor
+from .feature_extraction_mimo_v2_vl import MiMoV2VLFeatureExtractor
+from .image_processing_mimo_v2_vl import MiMoV2VLImageProcessor
+from .video_processing_mimo_v2_vl import MiMoV2VLVideoProcessor
 
 
-class MiMoV2AudioKwargs(AudioKwargs, total=False):
+class MiMoV2VLAudioKwargs(AudioKwargs, total=False):
     """
     is_tokenized (`bool`, *optional*, defaults to `False`):
         Interpret audio inputs as integer codec arrays instead of waveforms.
@@ -42,7 +42,7 @@ class MiMoV2AudioKwargs(AudioKwargs, total=False):
     is_tokenized: bool
 
 
-class MiMoV2VideosKwargs(VideosKwargs, total=False):
+class MiMoV2VLVideosKwargs(VideosKwargs, total=False):
     """
     use_audio_in_video (`bool` or `list[bool]`, *optional*, defaults to `False`):
         Whether each video has an audio input. Audio inputs must be supplied in the
@@ -58,9 +58,9 @@ class MiMoV2VideosKwargs(VideosKwargs, total=False):
     use_per_grid_t_timestamps: bool
 
 
-class MiMoV2ProcessorKwargs(ProcessingKwargs, total=False):
-    audio_kwargs: MiMoV2AudioKwargs
-    videos_kwargs: MiMoV2VideosKwargs
+class MiMoV2VLProcessorKwargs(ProcessingKwargs, total=False):
+    audio_kwargs: MiMoV2VLAudioKwargs
+    videos_kwargs: MiMoV2VLVideosKwargs
     _defaults = {}
 
 
@@ -68,8 +68,8 @@ class MiMoV2ProcessorKwargs(ProcessingKwargs, total=False):
     custom_intro="Constructs a multimodal processor for the MiMo V2 VL series.",
     checkpoint="XiaomiMiMo/MiMo-V2.6-Flash-RL",
 )
-class MiMoV2Processor(ProcessorMixin):
-    valid_processor_kwargs = MiMoV2ProcessorKwargs
+class MiMoV2VLProcessor(ProcessorMixin):
+    valid_processor_kwargs = MiMoV2VLProcessorKwargs
     _special_token_names = (
         "image",
         "video",
@@ -102,12 +102,12 @@ class MiMoV2Processor(ProcessorMixin):
         use_per_grid_t_timestamps=False,
     ):
         r"""
-        image_processor ([`MiMoV2ImageProcessor`], *optional*):
-            Image processor. Defaults to a new `MiMoV2ImageProcessor` when unset.
-        video_processor ([`MiMoV2VideoProcessor`], *optional*):
-            Video processor. Defaults to a new `MiMoV2VideoProcessor` when unset.
-        feature_extractor ([`MiMoV2FeatureExtractor`], *optional*):
-            Audio feature extractor. Defaults to a new `MiMoV2FeatureExtractor` when unset.
+        image_processor ([`MiMoV2VLImageProcessor`], *optional*):
+            Image processor. Defaults to a new `MiMoV2VLImageProcessor` when unset.
+        video_processor ([`MiMoV2VLVideoProcessor`], *optional*):
+            Video processor. Defaults to a new `MiMoV2VLVideoProcessor` when unset.
+        feature_extractor ([`MiMoV2VLFeatureExtractor`], *optional*):
+            Audio feature extractor. Defaults to a new `MiMoV2VLFeatureExtractor` when unset.
         chat_template (`str`, *optional*):
             Jinja template for chat messages. Defaults to the tokenizer's chat template when available.
         image_token (`str`, *optional*, defaults to `"<|image_pad|>"`):
@@ -134,9 +134,9 @@ class MiMoV2Processor(ProcessorMixin):
         use_per_grid_t_timestamps (`bool`, *optional*, defaults to `False`):
             Emit a timestamp for every video and audio grid rather than once per group.
         """
-        image_processor = image_processor if image_processor is not None else MiMoV2ImageProcessor()
-        video_processor = video_processor if video_processor is not None else MiMoV2VideoProcessor()
-        feature_extractor = feature_extractor if feature_extractor is not None else MiMoV2FeatureExtractor()
+        image_processor = image_processor if image_processor is not None else MiMoV2VLImageProcessor()
+        video_processor = video_processor if video_processor is not None else MiMoV2VLVideoProcessor()
+        feature_extractor = feature_extractor if feature_extractor is not None else MiMoV2VLFeatureExtractor()
         if chat_template is None:
             chat_template = getattr(tokenizer, "chat_template", None)
         super().__init__(image_processor, video_processor, feature_extractor, tokenizer, chat_template=chat_template)
@@ -198,14 +198,14 @@ class MiMoV2Processor(ProcessorMixin):
         audio_config = config.get("audio_config") or {}
         spatial_config = {
             "patch_size": processor_config.get(
-                "patch_size", vision_config.get("patch_size", MiMoV2ImageProcessor.patch_size)
+                "patch_size", vision_config.get("patch_size", MiMoV2VLImageProcessor.patch_size)
             ),
             "merge_size": processor_config.get(
-                "merge_size", vision_config.get("spatial_merge_size", MiMoV2ImageProcessor.merge_size)
+                "merge_size", vision_config.get("spatial_merge_size", MiMoV2VLImageProcessor.merge_size)
             ),
             "temporal_patch_size": processor_config.get(
                 "temporal_patch_size",
-                vision_config.get("temporal_patch_size", MiMoV2ImageProcessor.temporal_patch_size),
+                vision_config.get("temporal_patch_size", MiMoV2VLImageProcessor.temporal_patch_size),
             ),
         }
         factor = spatial_config["patch_size"] * spatial_config["merge_size"]
@@ -220,13 +220,13 @@ class MiMoV2Processor(ProcessorMixin):
             }
         processor_dict["video_processor"].update(
             temporal_compression_ratio=processor_config.get(
-                "temporal_compression_ratio", MiMoV2VideoProcessor.temporal_compression_ratio
+                "temporal_compression_ratio", MiMoV2VLVideoProcessor.temporal_compression_ratio
             ),
             total_max_pixels=processor_config.get("video_total_max_pixels", 16384 * factor**2),
-            fps=processor_config.get("fps", MiMoV2VideoProcessor.fps),
+            fps=processor_config.get("fps", MiMoV2VLVideoProcessor.fps),
             num_frames=processor_config.get("num_frames"),
-            min_frames=processor_config.get("min_frames") or MiMoV2VideoProcessor.min_frames,
-            max_frames=processor_config.get("max_frames") or MiMoV2VideoProcessor.max_frames,
+            min_frames=processor_config.get("min_frames") or MiMoV2VLVideoProcessor.min_frames,
+            max_frames=processor_config.get("max_frames") or MiMoV2VLVideoProcessor.max_frames,
         )
         # Checkpoint `audio_*` settings, renamed to the feature extractor arguments where they differ.
         audio_config_mapping = {
@@ -282,9 +282,9 @@ class MiMoV2Processor(ProcessorMixin):
                 raise ValueError(f"Checkpoint {key}={token_id} is not a single token in the tokenizer.")
             processor_dict[token_name] = token
         return [
-            MiMoV2ImageProcessor.from_dict(processor_dict["image_processor"], **component_kwargs),
-            MiMoV2VideoProcessor.from_dict(processor_dict["video_processor"], **component_kwargs),
-            MiMoV2FeatureExtractor.from_dict(processor_dict["feature_extractor"], **component_kwargs),
+            MiMoV2VLImageProcessor.from_dict(processor_dict["image_processor"], **component_kwargs),
+            MiMoV2VLVideoProcessor.from_dict(processor_dict["video_processor"], **component_kwargs),
+            MiMoV2VLFeatureExtractor.from_dict(processor_dict["feature_extractor"], **component_kwargs),
             tokenizer,
         ]
 
@@ -325,7 +325,7 @@ class MiMoV2Processor(ProcessorMixin):
         images: ImageInput | None = None,
         videos: VideoInput | None = None,
         audio: AudioInput | None = None,
-        **kwargs: Unpack[MiMoV2ProcessorKwargs],
+        **kwargs: Unpack[MiMoV2VLProcessorKwargs],
     ) -> BatchFeature:
         """
         Args:
@@ -615,4 +615,4 @@ class MiMoV2Processor(ProcessorMixin):
         )
 
 
-__all__ = ["MiMoV2Processor"]
+__all__ = ["MiMoV2VLProcessor"]

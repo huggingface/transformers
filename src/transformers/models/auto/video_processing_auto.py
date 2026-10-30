@@ -60,7 +60,7 @@ else:
             ("exaone4_5", {"torchvision": "Qwen2VLVideoProcessor"}),
             ("hyperclovax_vision_v2", {"torchvision": "Qwen2VLVideoProcessor"}),
             ("instructblip", {"torchvision": "InstructBlipVideoVideoProcessor"}),
-            ("mimo_v2_vl", {"torchvision": "MiMoV2VideoProcessor"}),
+            ("mimo_v2_vl", {"torchvision": "MiMoV2VLVideoProcessor"}),
             ("minicpmv4_7", {"torchvision": "MiniCPMV4_6VideoProcessor"}),
             ("pe_audio_video", {"torchvision": "PeVideoVideoProcessor"}),
             ("qwen2_5_omni", {"torchvision": "Qwen2VLVideoProcessor"}),

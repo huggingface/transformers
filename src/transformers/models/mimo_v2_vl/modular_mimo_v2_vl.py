@@ -32,7 +32,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ChannelDimension, ImageInput, PILImageResampling, SizeDict
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_mimo_v2_utils import load_original_checkpoint_if_needed
-from ...modeling_outputs import CausalLMOutputWithPast, MoeModelOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -43,6 +43,7 @@ from ...utils import (
     is_torch_greater_or_equal,
     logging,
 )
+from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import (
     VideoInput,
@@ -686,8 +687,9 @@ class MiMoV2VLDecoderLayer(MiMoV2FlashDecoderLayer):
 
 @auto_docstring
 class MiMoV2VLPreTrainedModel(PreTrainedModel):
-    config_class = MiMoV2VLConfig
+    config: MiMoV2VLConfig
     base_model_prefix = "model"
+    input_modalities = ("image", "video", "audio", "text")
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _no_split_modules = [
@@ -745,7 +747,8 @@ class MiMoV2VLTextRotaryEmbedding(nn.Module):
 
 @auto_docstring
 class MiMoV2VLTextModel(MiMoV2FlashModel):
-    config_class = MiMoV2VLTextConfig
+    config: MiMoV2VLTextConfig
+    input_modalities = ("text",)
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
 
     def __init__(self, config):
@@ -825,14 +828,20 @@ class MiMoV2VLVisionPatchMerger(nn.Module):
         return self.linear_fc2(F.gelu(self.linear_fc1(hidden_states)))
 
 
-class MiMoV2VLVisionModel(nn.Module):
+@auto_docstring
+class MiMoV2VLVisionModel(MiMoV2VLPreTrainedModel):
+    config: MiMoV2VLVisionConfig
+    input_modalities = ("image", "video")
+    _no_split_modules = ["MiMoV2VLVisionBlock"]
+    _can_record_outputs = {"hidden_states": MiMoV2VLVisionBlock}
+
     def __init__(self, config):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
         self.patch_embed = MiMoV2VLVisionPatchEmbed(config)
         self.rotary_pos_emb = MiMoV2VLRotaryEmbedding(config.qk_channels // 2, 10000.0)
         self.blocks = nn.ModuleList([MiMoV2VLVisionBlock(config, index) for index in range(config.depth)])
         self.merger = MiMoV2VLVisionPatchMerger(config)
+        self.post_init()
 
     def _get_positions_and_order(self, grid_thw, device):
         merge_size = self.config.spatial_merge_size
@@ -856,7 +865,15 @@ class MiMoV2VLVisionModel(nn.Module):
             sequence_lengths.extend([height * width] * time)
         return torch.cat(positions), torch.cat(column_indices), sequence_lengths
 
-    def forward(self, pixel_values, grid_thw):
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self, pixel_values: torch.Tensor, grid_thw: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
+            Temporal, height and width patch grid of each image or video.
+        """
         hidden_states = self.patch_embed(pixel_values)
         device = hidden_states.device
         positions, column_indices, sequence_lengths = self._get_positions_and_order(grid_thw, device)
@@ -884,7 +901,8 @@ class MiMoV2VLVisionModel(nn.Module):
             hidden_states = block(hidden_states, column_positions if use_columns else row_positions, sequence_lengths)
         if in_column_order:
             hidden_states = reorder(hidden_states, inverse_indices)
-        return self.merger(hidden_states)
+        # Hidden states of column-ordered blocks are recorded in their traversal order.
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=self.merger(hidden_states))
 
 
 class MiMoV2VLAudioLocalAttention(nn.Module):
@@ -955,9 +973,14 @@ class MiMoV2VLAudioProjection(nn.Module):
         return self.linear_fc2(F.gelu(self.linear_fc1(hidden_states)))
 
 
-class MiMoV2VLAudioEncoder(nn.Module):
+class MiMoV2VLAudioEncoder(MiMoV2VLPreTrainedModel):
+    config: MiMoV2VLAudioConfig
+    input_modalities = "audio"
+    _no_split_modules = ["MiMoV2VLAudioLocalLayer"]
+    _can_record_outputs = {"hidden_states": MiMoV2VLAudioLocalLayer}
+
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         self.input_local_transformer = MiMoV2VLAudioLocalTransformer(config)
         input_size = config.input_local_dim * config.group_size
         self.projection = (
@@ -965,10 +988,21 @@ class MiMoV2VLAudioEncoder(nn.Module):
             if config.projection_layers == 1
             else MiMoV2VLAudioProjection(input_size, config.out_hidden_size)
         )
+        self.post_init()
 
-    def forward(self, speech_embeddings):
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self, speech_embeddings: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        speech_embeddings (`torch.Tensor` of shape `(num_groups, group_size, input_local_dim)`):
+            Summed codec-channel embeddings of each group of codec frames.
+        """
         hidden_states = self.input_local_transformer(speech_embeddings)
-        return self.projection(hidden_states.flatten(1))
+        return BaseModelOutputWithPooling(
+            last_hidden_state=hidden_states, pooler_output=self.projection(hidden_states.flatten(1))
+        )
 
 
 class MiMoV2VLCodebook(EncodecEuclideanCodebook):
@@ -1197,14 +1231,27 @@ class MiMoV2VLModel(MiMoV2VLPreTrainedModel):
         self.audio_tokenizer = MiMoV2VLAudioTokenizerModel(config.audio_tokenizer_config)
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
-    def get_image_features(self, pixel_values: torch.Tensor, image_grid_thw: torch.Tensor) -> torch.Tensor:
-        return self.visual(pixel_values, image_grid_thw)
+    def get_image_features(
+        self, pixel_values: torch.Tensor, image_grid_thw: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        vision_outputs = self.visual(pixel_values, image_grid_thw, return_dict=True, **kwargs)
+        split_sizes = (image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2).tolist()
+        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
+        return vision_outputs
 
+    @can_return_tuple
     @auto_docstring
-    def get_video_features(self, pixel_values_videos: torch.Tensor, video_grid_thw: torch.Tensor) -> torch.Tensor:
-        return self.visual(pixel_values_videos, video_grid_thw)
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.Tensor,
+        video_grid_thw: torch.LongTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        return self.get_image_features(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
+    @can_return_tuple
     @auto_docstring(custom_args=_MULTIMODAL_ARGS)
     def get_audio_features(
         self,
@@ -1213,7 +1260,8 @@ class MiMoV2VLModel(MiMoV2VLPreTrainedModel):
         audio_segment_offsets: torch.LongTensor | None = None,
         input_features: torch.FloatTensor | None = None,
         feature_attention_mask: torch.Tensor | None = None,
-    ) -> torch.Tensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         config = self.config.audio_config
         group_shape = (config.group_size, config.audio_channels)
         if (input_audio_codes is None) == (input_features is None):
@@ -1259,7 +1307,7 @@ class MiMoV2VLModel(MiMoV2VLPreTrainedModel):
         speech_embeddings = self.speech_embeddings[0](codes[..., 0].long())
         for channel, embedding in enumerate(self.speech_embeddings[1:], start=1):
             speech_embeddings = speech_embeddings + embedding(codes[..., channel].long()).to(speech_embeddings.device)
-        return self.audio_encoder(speech_embeddings)
+        return self.audio_encoder(speech_embeddings, return_dict=True, **kwargs)
 
     def get_multimodal_embeddings(
         self,
@@ -1274,21 +1322,31 @@ class MiMoV2VLModel(MiMoV2VLPreTrainedModel):
         audio_feature_lens: torch.LongTensor | None = None,
         feature_attention_mask: torch.Tensor | None = None,
         audio_segment_offsets: torch.LongTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
     ) -> torch.FloatTensor:
         """Encode every supplied modality and scatter it into the matching placeholder tokens."""
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
-        modality_features = []
+        mm_encoder_outputs = dict(mm_encoder_outputs or {})
         if pixel_values is not None:
             if image_grid_thw is None:
                 raise ValueError("image_grid_thw is required with pixel_values.")
-            image_features = self.get_image_features(pixel_values, image_grid_thw)
-            modality_features.append(("Image", self.config.image_token_id, image_features))
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_grid_thw, return_dict=True)
         if pixel_values_videos is not None:
             if video_grid_thw is None:
                 raise ValueError("video_grid_thw is required with pixel_values_videos.")
-            video_features = self.get_video_features(pixel_values_videos, video_grid_thw)
-            modality_features.append(("Video", self.config.video_token_id, video_features))
+            mm_encoder_outputs["video"] = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True
+            )
+        modality_features = [
+            (modality.capitalize(), getattr(self.config, f"{modality}_token_id"), torch.cat(outputs.pooler_output))
+            for modality, outputs in mm_encoder_outputs.items()
+            if outputs is not None
+        ]
         if input_audio_codes is not None or input_features is not None:
             audio_features = self.get_audio_features(
                 input_audio_codes=input_audio_codes,
@@ -1296,7 +1354,8 @@ class MiMoV2VLModel(MiMoV2VLPreTrainedModel):
                 audio_segment_offsets=audio_segment_offsets,
                 input_features=input_features,
                 feature_attention_mask=feature_attention_mask,
-            )
+                return_dict=True,
+            ).pooler_output
             modality_features.append(("Audio", self.config.audio_token_id, audio_features))
         for modality, token_id, features in modality_features:
             if input_ids is None:
@@ -1330,6 +1389,7 @@ class MiMoV2VLModel(MiMoV2VLPreTrainedModel):
         feature_attention_mask: torch.Tensor | None = None,
         audio_feature_lens: torch.LongTensor | None = None,
         audio_segment_offsets: torch.LongTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         inputs_embeds = self.get_multimodal_embeddings(
@@ -1344,6 +1404,7 @@ class MiMoV2VLModel(MiMoV2VLPreTrainedModel):
             audio_feature_lens=audio_feature_lens,
             feature_attention_mask=feature_attention_mask,
             audio_segment_offsets=audio_segment_offsets,
+            mm_encoder_outputs=mm_encoder_outputs,
         )
         return self.language_model(
             inputs_embeds=inputs_embeds,
@@ -1360,7 +1421,7 @@ class MiMoV2VLModel(MiMoV2VLPreTrainedModel):
 class MiMoV2VLForConditionalGeneration(VoxtralForConditionalGeneration):
     """Generate text from text, images, videos, and audio using the MiMo V2 VL architecture.
 
-    Pass the tensors returned by `MiMoV2Processor` directly to `forward` or `generate`. Both waveform mel features
+    Pass the tensors returned by `MiMoV2VLProcessor` directly to `forward` or `generate`. Both waveform mel features
     and grouped codec IDs are supported. The learned audio tokenizer is part of the native model checkpoint.
     """
 
@@ -1376,10 +1437,23 @@ class MiMoV2VLForConditionalGeneration(VoxtralForConditionalGeneration):
         "feature_attention_mask",
         "audio_feature_lens",
         "audio_segment_offsets",
+        "mm_encoder_outputs",
     )
 
-    def get_audio_features(self, *args, **kwargs):
-        raise AttributeError("Feature extraction is exposed by the multimodal base model.")
+    @auto_docstring
+    def get_image_features(
+        self, pixel_values: torch.Tensor, image_grid_thw: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
+
+    @auto_docstring
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.Tensor,
+        video_grid_thw: torch.LongTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring(custom_args=_MULTIMODAL_ARGS)
@@ -1402,6 +1476,7 @@ class MiMoV2VLForConditionalGeneration(VoxtralForConditionalGeneration):
         feature_attention_mask: torch.Tensor | None = None,
         audio_feature_lens: torch.LongTensor | None = None,
         audio_segment_offsets: torch.LongTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         """Run the MiMo V2 VL language-model head."""
@@ -1414,6 +1489,7 @@ class MiMoV2VLForConditionalGeneration(VoxtralForConditionalGeneration):
             feature_attention_mask=feature_attention_mask,
             audio_feature_lens=audio_feature_lens,
             audio_segment_offsets=audio_segment_offsets,
+            mm_encoder_outputs=mm_encoder_outputs,
             return_dict=True,
         )
         return super().forward(past_key_values=past_key_values, use_cache=use_cache, **kwargs)
@@ -1432,8 +1508,10 @@ class MiMoV2VLForConditionalGeneration(VoxtralForConditionalGeneration):
         return model_inputs
 
     def _expand_inputs_for_generation(self, expand_size=1, is_encoder_decoder=False, input_ids=None, **model_kwargs):
-        if expand_size > 1 and any(model_kwargs.get(name) is not None for name in self._multimodal_input_names):
-            # Encode once before beam expansion so flattened patches and audio offsets retain sample boundaries.
+        audio_inputs = (model_kwargs.get("input_audio_codes"), model_kwargs.get("input_features"))
+        if expand_size > 1 and any(value is not None for value in audio_inputs):
+            # Audio segment offsets index whole audio sequences, so fuse all media before expanding the batch.
+            # Images and videos alone are pre-encoded into `mm_encoder_outputs` and expanded by `generate`.
             multimodal_inputs = {
                 name: model_kwargs.pop(name) for name in self._multimodal_input_names if name in model_kwargs
             }
@@ -1500,7 +1578,7 @@ def normalize_frames(processor, frames, do_rescale, rescale_factor, do_normalize
     return frames
 
 
-class MiMoV2ImageProcessorKwargs(Qwen2VLImageProcessorKwargs, total=False):
+class MiMoV2VLImageProcessorKwargs(Qwen2VLImageProcessorKwargs, total=False):
     """
     min_pixels (`int`, *optional*, defaults to `4 * 28 * 28`):
         Minimum image pixel budget. Prefer `size["shortest_edge"]`.
@@ -1519,10 +1597,10 @@ class MiMoV2ImageProcessorKwargs(Qwen2VLImageProcessorKwargs, total=False):
     custom_intro="Constructs an image processor for the MiMo V2 VL series.",
     checkpoint="XiaomiMiMo/MiMo-V2.6-Flash-RL",
 )
-class MiMoV2ImageProcessor(Qwen2VLImageProcessor):
+class MiMoV2VLImageProcessor(Qwen2VLImageProcessor):
     size = {"shortest_edge": 4 * 28 * 28, "longest_edge": 4096 * 28 * 28}
     resample = PILImageResampling.BILINEAR
-    valid_kwargs = MiMoV2ImageProcessorKwargs
+    valid_kwargs = MiMoV2VLImageProcessorKwargs
 
     def process_image(
         self,
@@ -1575,7 +1653,7 @@ def get_video_frame_size(size: SizeDict, num_frames: int, temporal_factor: int, 
     return SizeDict(shortest_edge=size.shortest_edge, longest_edge=max_pixels)
 
 
-class MiMoV2VideoProcessorInitKwargs(Qwen2VLVideoProcessorInitKwargs, total=False):
+class MiMoV2VLVideoProcessorInitKwargs(Qwen2VLVideoProcessorInitKwargs, total=False):
     """
     min_pixels (`int`, *optional*, defaults to `4 * 28 * 28`):
         Minimum frame pixel budget. Prefer `size["shortest_edge"]`.
@@ -1607,7 +1685,7 @@ class MiMoV2VideoProcessorInitKwargs(Qwen2VLVideoProcessorInitKwargs, total=Fals
     custom_intro="Constructs a video processor for the MiMo V2 VL series.",
     checkpoint="XiaomiMiMo/MiMo-V2.6-Flash-RL",
 )
-class MiMoV2VideoProcessor(Qwen2VLVideoProcessor):
+class MiMoV2VLVideoProcessor(Qwen2VLVideoProcessor):
     size = {"shortest_edge": 4 * 28 * 28, "longest_edge": 4096 * 28 * 28}
     default_to_square = False
     resample = PILImageResampling.BILINEAR
@@ -1618,7 +1696,7 @@ class MiMoV2VideoProcessor(Qwen2VLVideoProcessor):
     num_frames: int | None = None
     min_frames = 8
     max_frames = 256
-    valid_kwargs = MiMoV2VideoProcessorInitKwargs
+    valid_kwargs = MiMoV2VLVideoProcessorInitKwargs
     cap_pixels_per_frame = AttributeError()
     max_video_tokens = AttributeError()
 
@@ -1654,7 +1732,7 @@ class MiMoV2VideoProcessor(Qwen2VLVideoProcessor):
         )
 
     @auto_docstring
-    def preprocess(self, videos: VideoInput, **kwargs: Unpack[MiMoV2VideoProcessorInitKwargs]) -> BatchFeature:
+    def preprocess(self, videos: VideoInput, **kwargs: Unpack[MiMoV2VLVideoProcessorInitKwargs]) -> BatchFeature:
         if kwargs.get("num_frames") is not None and "fps" not in kwargs:
             kwargs["fps"] = None
         elif kwargs.get("fps") is not None and "num_frames" not in kwargs:
@@ -1812,6 +1890,6 @@ __all__ = [
     "MiMoV2VLTextModel",
     "MiMoV2VLModel",
     "MiMoV2VLForConditionalGeneration",
-    "MiMoV2ImageProcessor",
-    "MiMoV2VideoProcessor",
+    "MiMoV2VLImageProcessor",
+    "MiMoV2VLVideoProcessor",
 ]

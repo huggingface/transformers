@@ -42,7 +42,7 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
-    "MiMoV2VLConfig": ["processor_config"],  # Used by MiMoV2Processor when loading legacy checkpoints.
+    "MiMoV2VLConfig": ["processor_config"],  # Used by MiMoV2VLProcessor when loading legacy checkpoints.
     "NemotronH_Omni_Reasoning_V3_Config": [
         "sound_context_token",  # used by the processor for `<audio>` placeholder expansion
     ],

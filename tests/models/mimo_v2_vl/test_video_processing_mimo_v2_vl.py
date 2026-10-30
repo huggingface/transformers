@@ -17,14 +17,14 @@ import unittest
 import numpy as np
 from parameterized import parameterized
 
-from transformers import MiMoV2VideoProcessor
+from transformers import MiMoV2VLVideoProcessor
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 
 
 @require_torch
 @require_torchvision
 @require_vision
-class MiMoV2VideoProcessorTest(unittest.TestCase):
+class MiMoV2VLVideoProcessorTest(unittest.TestCase):
     @parameterized.expand(
         [
             (0, 8, 12, {}),
@@ -37,12 +37,12 @@ class MiMoV2VideoProcessorTest(unittest.TestCase):
         ]
     )
     def test_patch_count_rejects_invalid_dimensions(self, frames, height, width, kwargs):
-        processor = MiMoV2VideoProcessor()
+        processor = MiMoV2VLVideoProcessor()
         with self.assertRaisesRegex(ValueError, "positive"):
             processor.get_num_of_video_patches(frames, height, width, kwargs)
 
     def test_grouping_preserves_variable_length_video_order(self):
-        processor = MiMoV2VideoProcessor(
+        processor = MiMoV2VLVideoProcessor(
             patch_size=2,
             merge_size=2,
             temporal_patch_size=2,
@@ -62,7 +62,7 @@ class MiMoV2VideoProcessorTest(unittest.TestCase):
         np.testing.assert_array_equal(actual.video_grid_thw, [[2, 4, 6], [4, 4, 6], [2, 4, 6]])
 
     def test_patch_count_respects_budget_and_temporal_compression(self):
-        processor = MiMoV2VideoProcessor(
+        processor = MiMoV2VLVideoProcessor(
             patch_size=2,
             merge_size=2,
             temporal_patch_size=2,
@@ -77,7 +77,7 @@ class MiMoV2VideoProcessorTest(unittest.TestCase):
         self.assertEqual(output.pixel_values_videos.shape[0], 16)
 
     def test_temporal_patches_keep_frame_order_and_repeat_last_frame(self):
-        processor = MiMoV2VideoProcessor(
+        processor = MiMoV2VLVideoProcessor(
             patch_size=2,
             merge_size=2,
             temporal_patch_size=2,

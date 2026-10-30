@@ -29,10 +29,10 @@ from transformers import (
     AutoImageProcessor,
     AutoProcessor,
     AutoVideoProcessor,
-    MiMoV2FeatureExtractor,
-    MiMoV2ImageProcessor,
-    MiMoV2Processor,
-    MiMoV2VideoProcessor,
+    MiMoV2VLFeatureExtractor,
+    MiMoV2VLImageProcessor,
+    MiMoV2VLProcessor,
+    MiMoV2VLVideoProcessor,
     PreTrainedTokenizerFast,
 )
 from transformers.testing_utils import (
@@ -100,13 +100,13 @@ def make_processor(**kwargs):
         additional_special_tokens=SPECIAL_TOKENS,
     )
     size = {"shortest_edge": 16, "longest_edge": 256}
-    return MiMoV2Processor(
+    return MiMoV2VLProcessor(
         tokenizer=tokenizer,
-        image_processor=MiMoV2ImageProcessor(patch_size=2, merge_size=2, size=size),
-        video_processor=MiMoV2VideoProcessor(
+        image_processor=MiMoV2VLImageProcessor(patch_size=2, merge_size=2, size=size),
+        video_processor=MiMoV2VLVideoProcessor(
             patch_size=2, merge_size=2, size=size, total_max_pixels=1024, min_frames=2, max_frames=16
         ),
-        feature_extractor=MiMoV2FeatureExtractor(),
+        feature_extractor=MiMoV2VLFeatureExtractor(),
         **kwargs,
     )
 
@@ -114,7 +114,7 @@ def make_processor(**kwargs):
 @require_torch
 @require_torchvision
 @require_vision
-class MiMoV2ProcessorTest(unittest.TestCase):
+class MiMoV2VLProcessorTest(unittest.TestCase):
     def setUp(self):
         self.processor = make_processor()
         self.image = np.arange(4 * 8 * 3, dtype=np.uint8).reshape(4, 8, 3)
@@ -321,7 +321,7 @@ class MiMoV2ProcessorTest(unittest.TestCase):
             p(text=p.audio_token, audio=np.zeros(24000), sampling_rate=16000)
 
     def test_numpy_feature_extraction_fallback(self):
-        extractor = MiMoV2FeatureExtractor(win_length=480)
+        extractor = MiMoV2VLFeatureExtractor(win_length=480)
         waveform = np.random.default_rng(0).standard_normal(24000).astype(np.float32) * 0.1
         expected = extractor(waveform, return_tensors="np")
         with patch(
@@ -369,14 +369,14 @@ class MiMoV2ProcessorTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             p.save_pretrained(directory)
             restored = AutoProcessor.from_pretrained(directory, local_files_only=True)
-            self.assertIsInstance(restored, MiMoV2Processor)
+            self.assertIsInstance(restored, MiMoV2VLProcessor)
             self.assertEqual(restored.video_audio_interleave_length, 3)
             self.assertTrue(restored.use_per_grid_t_timestamps)
             self.assertEqual(restored.chat_template, template)
             for auto_class, expected_class in [
-                (AutoImageProcessor, MiMoV2ImageProcessor),
-                (AutoVideoProcessor, MiMoV2VideoProcessor),
-                (AutoFeatureExtractor, MiMoV2FeatureExtractor),
+                (AutoImageProcessor, MiMoV2VLImageProcessor),
+                (AutoVideoProcessor, MiMoV2VLVideoProcessor),
+                (AutoFeatureExtractor, MiMoV2VLFeatureExtractor),
             ]:
                 self.assertIsInstance(auto_class.from_pretrained(directory, local_files_only=True), expected_class)
             expected = p(text=p.image_token, images=self.image, return_tensors="pt")
@@ -426,7 +426,7 @@ class MiMoV2ProcessorTest(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            p = MiMoV2Processor.from_pretrained(directory, local_files_only=True)
+            p = MiMoV2VLProcessor.from_pretrained(directory, local_files_only=True)
             self.assertEqual(p.image_processor.patch_size, 16)
             self.assertEqual(p.image_processor.size, {"shortest_edge": 8192, "longest_edge": 8388608})
             self.assertEqual(p.video_processor.total_max_pixels, 268435456)
@@ -441,7 +441,7 @@ class MiMoV2ProcessorTest(unittest.TestCase):
             tokenizer_config = Path(directory, "tokenizer_config.json").read_bytes()
             p.to_json_file(Path(directory, "processor_config.json"))
             auto = AutoProcessor.from_pretrained(directory, local_files_only=True, trust_remote_code=False)
-            self.assertIsInstance(auto, MiMoV2Processor)
+            self.assertIsInstance(auto, MiMoV2VLProcessor)
             self.assertEqual(auto.image_processor.patch_size, 16)
             self.assertEqual(auto.feature_extractor.audio_channels, 20)
             self.assertEqual(Path(directory, "preprocessor_config.json").read_bytes(), legacy_config)
@@ -460,7 +460,7 @@ class MiMoV2ProcessorTest(unittest.TestCase):
             tokenizer_config = json.loads(config_path.read_text(encoding="utf-8"))
             tokenizer_config["tokenizer_class"] = "Qwen2Tokenizer"
             config_path.write_text(json.dumps(tokenizer_config), encoding="utf-8")
-            p = MiMoV2Processor.from_pretrained(directory, local_files_only=True)
+            p = MiMoV2VLProcessor.from_pretrained(directory, local_files_only=True)
             self.assertEqual(p(text="BEFORE TEXT").input_ids, tokenizer(["BEFORE TEXT"]).input_ids)
             serialized = json.loads(p.tokenizer.backend_tokenizer.to_str())
             self.assertEqual(serialized["model"]["type"], "WordLevel")
@@ -486,7 +486,7 @@ class MiMoV2ProcessorTest(unittest.TestCase):
             }
             Path(directory, "config.json").write_text(json.dumps(checkpoint_config), encoding="utf-8")
 
-            restored = MiMoV2Processor.from_pretrained(directory, local_files_only=True)
+            restored = MiMoV2VLProcessor.from_pretrained(directory, local_files_only=True)
             self.assertEqual(restored.image_processor.patch_size, 16 if missing_component == "image_processor" else 2)
             self.assertEqual(restored.video_processor.patch_size, 16 if missing_component == "video_processor" else 2)
             self.assertEqual(
@@ -503,7 +503,7 @@ class MiMoV2ProcessorTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             tokenizer.save_pretrained(directory)
             Path(directory, "config.json").write_text(json.dumps({"model_type": "mimo_v2_flash"}), encoding="utf-8")
-            p = MiMoV2Processor.from_pretrained(directory, local_files_only=True)
+            p = MiMoV2VLProcessor.from_pretrained(directory, local_files_only=True)
             self.assertEqual(p(text="text").input_ids, tokenizer(["text"]).input_ids)
             self.assertEqual(p.apply_chat_template([{"role": "user", "content": "text"}], tokenize=True), [[1]])
             with self.assertRaisesRegex(ValueError, "missing.*audio"):
@@ -628,7 +628,7 @@ class MiMoV2ProcessorTest(unittest.TestCase):
         original = extractor(waveform, return_tensors="np").input_features
         extractor.f_max = 8000
         changed = extractor(waveform, return_tensors="np").input_features
-        expected = MiMoV2FeatureExtractor(f_max=8000)(waveform, return_tensors="np").input_features
+        expected = MiMoV2VLFeatureExtractor(f_max=8000)(waveform, return_tensors="np").input_features
         np.testing.assert_array_equal(changed, expected)
         self.assertFalse(np.array_equal(original, changed))
         with tempfile.TemporaryDirectory() as directory:
@@ -783,7 +783,7 @@ class MiMoV2ProcessorTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             processor.save_pretrained(directory)
             restored = AutoProcessor.from_pretrained(directory, local_files_only=True)
-            self.assertIsInstance(restored, MiMoV2Processor)
+            self.assertIsInstance(restored, MiMoV2VLProcessor)
             self.assertEqual(restored.chat_template, processor.chat_template)
             actual = restored(**kwargs)
         self.assertEqual(set(actual), set(expected))
@@ -796,7 +796,7 @@ class MiMoV2ProcessorTest(unittest.TestCase):
 @require_torchvision
 @require_vision
 @require_torchcodec
-class MiMoV2ProcessorIntegrationTest(unittest.TestCase):
+class MiMoV2VLProcessorIntegrationTest(unittest.TestCase):
     """Exercise real Hub downloads and media decoders without downloading model weights."""
 
     model_id = "XiaomiMiMo/MiMo-V2.6-Flash-RL"
@@ -832,7 +832,7 @@ class MiMoV2ProcessorIntegrationTest(unittest.TestCase):
 
     @parameterized.expand([("url", False), ("url", True), ("alias", False), ("nested_alias", False)])
     def test_mixed_media_urls_match_files_and_saved_processor(self, content_format, batched):
-        self.assertIsInstance(self.processor, MiMoV2Processor)
+        self.assertIsInstance(self.processor, MiMoV2VLProcessor)
         url_content = []
         for modality, (repo_id, filename) in MEDIA_FIXTURES.items():
             url = hf_hub_url(repo_id, filename, repo_type="dataset")
@@ -899,7 +899,7 @@ class MiMoV2ProcessorIntegrationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             self.processor.save_pretrained(directory)
             restored = AutoProcessor.from_pretrained(directory, local_files_only=True)
-            self.assertIsInstance(restored, MiMoV2Processor)
+            self.assertIsInstance(restored, MiMoV2VLProcessor)
             self.assertEqual(restored.chat_template, self.processor.chat_template)
             reloaded = restored.apply_chat_template(path_messages, **kwargs)
             self.assertEqual(set(reloaded), set(expected))
@@ -911,8 +911,8 @@ class MiMoV2ProcessorIntegrationTest(unittest.TestCase):
 @require_torchcodec
 @require_torchvision
 @require_vision
-class MiMoV2ProcessorCommonTest(ProcessorTesterMixin, unittest.TestCase):
-    processor_class = MiMoV2Processor
+class MiMoV2VLProcessorCommonTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = MiMoV2VLProcessor
 
     @staticmethod
     def prepare_processor_dict():

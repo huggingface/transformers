@@ -12,6 +12,12 @@ specific language governing permissions and limitations under the License.
 ⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 -->
+*This model was contributed to Hugging Face Transformers on 2026-10-30.*
+
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
 
 # MiMo V2 VL
 
@@ -260,6 +266,9 @@ call `processor.save_pretrained()`; the resulting directory can be loaded with [
 - The returned model inputs include `pixel_values` / `image_grid_thw` for images, `pixel_values_videos` /
   `video_grid_thw` for videos, and `input_features` / `feature_attention_mask` for waveforms. `audio_feature_lens`
   counts grouped audio tokens, and `audio_segment_offsets` aligns them with the prompt.
+- `get_image_features`, `get_video_features` and `get_audio_features` return [`~modeling_outputs.BaseModelOutputWithPooling`].
+  `pooler_output` contains the features scattered into the prompt placeholders, split per image or video for the
+  visual methods. Precomputed visual features can be passed to `generate()` through `mm_encoder_outputs`.
 - Audio lengths and segment offsets must contain integers. `feature_attention_mask` must match the batch and mel
   time dimensions of `input_features` and contain only zeros and ones; boolean and floating-point binary masks
   are also accepted.
@@ -310,22 +319,22 @@ call `processor.save_pretrained()`; the resulting directory can be loaded with [
 [[autodoc]] MiMoV2VLForConditionalGeneration
     - forward
 
-## MiMoV2Processor
+## MiMoV2VLProcessor
 
-[[autodoc]] MiMoV2Processor
+[[autodoc]] MiMoV2VLProcessor
     - __call__
 
-## MiMoV2ImageProcessor
+## MiMoV2VLImageProcessor
 
-[[autodoc]] MiMoV2ImageProcessor
+[[autodoc]] MiMoV2VLImageProcessor
     - preprocess
 
-## MiMoV2VideoProcessor
+## MiMoV2VLVideoProcessor
 
-[[autodoc]] MiMoV2VideoProcessor
+[[autodoc]] MiMoV2VLVideoProcessor
     - preprocess
 
-## MiMoV2FeatureExtractor
+## MiMoV2VLFeatureExtractor
 
-[[autodoc]] MiMoV2FeatureExtractor
+[[autodoc]] MiMoV2VLFeatureExtractor
     - __call__
