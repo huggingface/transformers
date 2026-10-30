@@ -15,13 +15,12 @@ from __future__ import annotations
 
 import inspect
 import os
-import warnings
 from typing import TYPE_CHECKING, Any
 
 from ..utils import is_torch_available, is_torch_distributed_available, logging, strtobool
 from ..utils.quantization_config import QuantizationMethod
 from .parallel_utils import replace_layer_number_by_wildcard
-from .utils import _get_torch_distributed_rank, _is_torch_distributed_initialized
+from .utils import _is_torch_distributed_initialized, _warning_once_on_rank_zero
 
 
 if TYPE_CHECKING:
@@ -151,13 +150,10 @@ def expand_fsdp_plan(model: nn.Module, fsdp_plan: dict[str, str]) -> dict[str, s
     """
     Expand FSDP plan patterns to concrete module FQNs and their reshard policies.
     """
-    if _get_torch_distributed_rank() == 0:
-        warnings.warn(
-            "`expand_fsdp_plan` is deprecated and will be removed in v5.23: the model expands its plans itself in "
-            "`_resolve_parallel_plans`.",
-            FutureWarning,
-            stacklevel=2,
-        )
+    _warning_once_on_rank_zero(
+        "`expand_fsdp_plan` is deprecated and will be removed in v5.23: the model expands its plans itself in "
+        "`_resolve_parallel_plans`."
+    )
     fsdp_plan = _resolve_tied_embed_lm_head_plan(fsdp_plan, model)
 
     expanded_plan = {}
@@ -173,13 +169,10 @@ def verify_fsdp_plan(module_names: list[str], fsdp_plan: dict[str, str] | None) 
     """
     Verify the FSDP plan of the model, log a warning if plan keys were not applied or strategies are invalid.
     """
-    if _get_torch_distributed_rank() == 0:
-        warnings.warn(
-            "`verify_fsdp_plan` is deprecated and will be removed in v5.23: the model validates its plans itself when "
-            "they are set and in `_resolve_parallel_plans`.",
-            FutureWarning,
-            stacklevel=2,
-        )
+    _warning_once_on_rank_zero(
+        "`verify_fsdp_plan` is deprecated and will be removed in v5.23: the model validates its plans itself when "
+        "they are set and in `_resolve_parallel_plans`."
+    )
     if not fsdp_plan:
         return
 
