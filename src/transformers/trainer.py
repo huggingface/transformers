@@ -79,7 +79,8 @@ from .models.auto.modeling_auto import (
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
 )
-from .optimization import GreedyLR, get_scheduler
+from .optimization import SST, GreedyLR, get_scheduler
+from .optimization_sst import SST_STATE_NAME
 from .processing_utils import ProcessorMixin
 from .tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
 from .trainer_callback import (
@@ -335,6 +336,11 @@ class Trainer:
             by this function will be reflected in the predictions received by `compute_metrics`.
 
             Note that the labels (second parameter) will be `None` if the dataset does not have them.
+        optimizer_wrapper (`tuple[Type[torch.optim.Optimizer], dict[str, Any]]`, *optional*):
+            A wrapper class and its keyword arguments. The wrapper receives the prepared optimizer and `model=` after
+            distributed setup, before scheduler construction. For example, `(SST, {"rank_fraction": 0.99})` wraps the
+            optimizer selected by `TrainingArguments.optim` without replacing it. Use this entry point with FSDP or
+            DeepSpeed instead of passing a prebuilt wrapper in `optimizers`.
 
     Important attributes:
 
@@ -395,6 +401,7 @@ class Trainer:
         optimizers: tuple[torch.optim.Optimizer | None, torch.optim.lr_scheduler.LambdaLR | None] = (None, None),
         optimizer_cls_and_kwargs: tuple[type[torch.optim.Optimizer], dict[str, Any]] | None = None,
         preprocess_logits_for_metrics: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] | None = None,
+        optimizer_wrapper: tuple[type[torch.optim.Optimizer], dict[str, Any]] | None = None,
     ):
         # Init flow:
         #   1. Args & seed               – defaults, determinism
@@ -579,6 +586,7 @@ class Trainer:
         # Optimizer & scheduler
         self.optimizer, self.lr_scheduler = optimizers
         self.optimizer_cls_and_kwargs = optimizer_cls_and_kwargs
+        self.optimizer_wrapper = optimizer_wrapper
 
         self._validate_args()
 
@@ -692,6 +700,22 @@ class Trainer:
         # --- Optimizer validations ---
         if self.optimizer_cls_and_kwargs is not None and self.optimizer is not None:
             raise RuntimeError("Passing both `optimizers` and `optimizer_cls_and_kwargs` arguments is incompatible.")
+        if self.optimizer_wrapper is not None:
+            if not isinstance(self.optimizer_wrapper, tuple) or len(self.optimizer_wrapper) != 2:
+                raise TypeError("optimizer_wrapper must be a (wrapper_class, kwargs) tuple.")
+            wrapper_cls, wrapper_kwargs = self.optimizer_wrapper
+            if not isinstance(wrapper_cls, type) or not issubclass(wrapper_cls, torch.optim.Optimizer):
+                raise TypeError("The optimizer wrapper must be a torch.optim.Optimizer subclass.")
+            if not isinstance(wrapper_kwargs, dict):
+                raise TypeError("Optimizer wrapper keyword arguments must be a dictionary.")
+            if "model" in wrapper_kwargs:
+                raise ValueError("Trainer supplies the prepared model to the optimizer wrapper automatically.")
+            if issubclass(wrapper_cls, SST) and (self.is_fsdp_xla_enabled or is_sagemaker_mp_enabled()):
+                raise NotImplementedError(
+                    "SST currently supports PyTorch distributed backends, not XLA or SageMaker MP."
+                )
+        if self.is_deepspeed_enabled and isinstance(self.optimizer, SST):
+            raise ValueError("Use optimizer_wrapper=(SST, kwargs) so SST wraps DeepSpeed after engine preparation.")
         if self.model_init is not None and (self.optimizer is not None or self.lr_scheduler is not None):
             raise RuntimeError(
                 "Passing a `model_init` is incompatible with providing the `optimizers` argument. "
@@ -1695,6 +1719,20 @@ class Trainer:
 
         return epochs_trained, steps_trained_in_current_epoch
 
+    def _wrap_optimizer_for_training(self, model, resume_from_checkpoint):
+        """Attach update wrappers after distributed preparation, without replacing the selected optimizer."""
+        if self.optimizer_wrapper is None:
+            return
+        wrapper_cls, wrapper_kwargs = self.optimizer_wrapper
+        if isinstance(self.optimizer, wrapper_cls):
+            if isinstance(self.optimizer, SST):
+                self.optimizer.model = model
+            return
+        wrapper_kwargs = wrapper_kwargs.copy()
+        if issubclass(wrapper_cls, SST):
+            wrapper_kwargs["initialize"] = resume_from_checkpoint is None
+        self.optimizer = wrapper_cls(self.optimizer, model=model, **wrapper_kwargs)
+
     def _prepare_for_training(self, max_steps, train_dataloader, resume_from_checkpoint):
         """Wrap model, create optimizer and scheduler, and run accelerator.prepare. Returns (model, train_dataloader)."""
         delay_optimizer_creation = is_sagemaker_mp_enabled() or self.is_fsdp_xla_enabled or self.is_fsdp_enabled
@@ -1749,6 +1787,8 @@ class Trainer:
         else:
             self.optimizer = self.accelerator.prepare(self.optimizer)
 
+        self._wrap_optimizer_for_training(model, resume_from_checkpoint)
+
         # Create scheduler now that the optimizer won't change anymore
         self.create_scheduler(num_training_steps=max_steps)
 
@@ -1790,6 +1830,23 @@ class Trainer:
                 self._load_from_checkpoint(resume_from_checkpoint, self.model_wrapped)
 
             self._load_optimizer_and_scheduler(resume_from_checkpoint)
+            if isinstance(self.optimizer, SST):
+                if self.is_fsdp_enabled or self.is_deepspeed_enabled:
+                    rank_path = os.path.join(resume_from_checkpoint, f"sst_state_rank_{self.args.process_index}.pt")
+                    path = (
+                        rank_path
+                        if os.path.isfile(rank_path)
+                        else os.path.join(resume_from_checkpoint, SST_STATE_NAME)
+                    )
+                    if not os.path.isfile(path):
+                        raise FileNotFoundError(
+                            f"SST's active basis is missing at {path}. Resume requires a full SST checkpoint."
+                        )
+                    self.optimizer.load_sst_state_dict(torch.load(path, map_location="cpu", weights_only=True))
+                if not self.optimizer.is_initialized:
+                    raise ValueError(
+                        "This checkpoint has no SST optimizer state; the active basis cannot be restored."
+                    )
             self._load_scaler(resume_from_checkpoint)
 
         # Update the references for the callback_handler
@@ -3520,11 +3577,23 @@ class Trainer:
                 self.accelerator.state.fsdp_plugin, self.accelerator, self.model, output_dir, **get_fsdp_ckpt_kwargs()
             )
             save_fsdp_optimizer(
-                self.accelerator.state.fsdp_plugin, self.accelerator, self.optimizer, self.model, output_dir
+                self.accelerator.state.fsdp_plugin,
+                self.accelerator,
+                self.optimizer.optimizer if isinstance(self.optimizer, SST) else self.optimizer,
+                self.model,
+                output_dir,
             )
         elif self.args.should_save:
             # deepspeed.save_checkpoint above saves model/optim/sched
             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
+
+        if isinstance(self.optimizer, SST) and (self.is_fsdp_enabled or self.is_deepspeed_enabled):
+            # The engine's optimizer checkpoint conversion retains only its own state.
+            basis_state = self.optimizer.sst_state_dict()
+            if basis_state["topology"] is not None:
+                torch.save(basis_state, os.path.join(output_dir, f"sst_state_rank_{self.args.process_index}.pt"))
+            elif self.args.should_save:
+                torch.save(basis_state, os.path.join(output_dir, SST_STATE_NAME))
 
         # Save SCHEDULER & SCALER
         is_deepspeed_custom_scheduler = self.is_deepspeed_enabled and not isinstance(
@@ -3927,14 +3996,7 @@ class Trainer:
                         self.args.device if self.args.world_size > 1 and self.args.device.type != "cpu" else "cpu"
                     )
                     if self.is_fsdp_enabled:
-                        load_fsdp_optimizer(
-                            self.accelerator.state.fsdp_plugin,
-                            self.accelerator,
-                            self.optimizer,
-                            self.model,
-                            checkpoint,
-                            **get_fsdp_ckpt_kwargs(),
-                        )
+                        self._load_fsdp_optimizer(checkpoint)
                     else:
                         check_torch_load_is_safe()
                         self.optimizer.load_state_dict(
@@ -3948,6 +4010,40 @@ class Trainer:
                         torch.load(os.path.join(checkpoint, SCHEDULER_NAME), weights_only=True)
                     )
                 reissue_pt_warnings(caught_warnings)
+
+    def _load_fsdp_optimizer(self, checkpoint):
+        plugin = self.accelerator.state.fsdp_plugin
+        optimizer = self.optimizer.optimizer if isinstance(self.optimizer, SST) else self.optimizer
+        checkpoint_kwargs = get_fsdp_ckpt_kwargs()
+        from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+        from torch.distributed.fsdp import StateDictType
+
+        if (
+            isinstance(self.optimizer, SST)
+            and plugin.fsdp_version == 1
+            and plugin.state_dict_type == StateDictType.SHARDED_STATE_DICT
+            and checkpoint_kwargs.get("use_dcp", True)
+        ):
+            from torch.distributed.checkpoint import FileSystemReader
+            from torch.distributed.checkpoint.optimizer import load_sharded_optimizer_state_dict
+
+            # A fresh optimizer has no state tensors for the default DCP planner to fill. Allocate from saved
+            # metadata instead; taking an optimizer step to create buffers would mutate arbitrary inner optimizers.
+            self.accelerator.wait_for_everyone()
+            with FSDP.state_dict_type(
+                self.model, plugin.state_dict_type, plugin.state_dict_config, plugin.optim_state_dict_config
+            ):
+                state = load_sharded_optimizer_state_dict(
+                    model_state_dict=self.model.state_dict(),
+                    optimizer_key="optimizer",
+                    storage_reader=FileSystemReader(os.path.join(checkpoint, "optimizer_0")),
+                )["optimizer"]
+                # DCP does not emit an entry for an empty container (for example, SGD without momentum).
+                state.setdefault("state", {})
+                optimizer.load_state_dict(FSDP.optim_state_dict_to_load(self.model, optimizer, state))
+            self.accelerator.wait_for_everyone()
+        else:
+            load_fsdp_optimizer(plugin, self.accelerator, optimizer, self.model, checkpoint, **checkpoint_kwargs)
 
     def _load_scaler(self, checkpoint: str | None) -> None:
         """If scaler state exists, load it."""

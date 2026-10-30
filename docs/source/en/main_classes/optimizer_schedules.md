@@ -26,6 +26,22 @@ The `.optimization` module provides:
 
 [[autodoc]] Adafactor
 
+## Subspace Tuning (SST)
+
+Wrap an existing optimizer with SST to constrain its applied updates without
+changing its gradient or optimizer-state calculation. See the
+[optimizer guide](../optimizers#subspace-tuning-sst) for Trainer and distributed usage.
+
+[[autodoc]] SST
+    - step
+    - initialize
+    - refresh
+    - project
+    - sst_state_dict
+    - load_sst_state_dict
+    - state_dict
+    - load_state_dict
+
 ## Schedules
 
 ### SchedulerType
