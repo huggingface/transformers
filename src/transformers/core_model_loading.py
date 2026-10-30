@@ -767,6 +767,7 @@ def process_target_pattern(pattern: str) -> tuple[str, str | None]:
 
     This handles several edge cases in checkpoint conversion mappings:
     - Removes the `^` prefix (start of string anchor)
+    - Removes the `$` suffix (end of string anchor)
     - Removes negative lookahead/lookbehind assertions
     - Detects capturing groups and replaces them with `\\1` backreference
 
@@ -779,6 +780,8 @@ def process_target_pattern(pattern: str) -> tuple[str, str | None]:
     """
     # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
     pattern = pattern.removeprefix("^")
+    # Some mapping contains `$` to notify end of string when matching -> remove it during reverse mapping
+    pattern = pattern.removesuffix("$")
     # Remove negative lookahead/behind if any. This is ugly but needed for reverse mapping of
     # Qwen2.5, Sam3, Ernie4.5 VL MoE! It needs to be non greedy in case there are several
     pattern = re.sub(r"\(\?.+?\)?\)", "", pattern)
@@ -803,6 +806,8 @@ def process_source_pattern(source_pattern: str, target_pattern: str) -> str:
     """
     if target_pattern.startswith("^"):
         source_pattern = f"^{source_pattern}" if not source_pattern.startswith("^") else source_pattern
+    if target_pattern.endswith("$"):
+        source_pattern = f"{source_pattern}$" if not source_pattern.endswith("$") else source_pattern
 
     return source_pattern
 
