@@ -405,7 +405,7 @@ class Emu3VQVAEMiddleBlock(nn.Module):
             quant_channels=quant_channels,
         )
 
-    def forward(self, hidden_states: torch.FloatTensor, quant_states: torch.FloatTensor | None = None):
+    def forward(self, hidden_states: torch.Tensor, quant_states: torch.Tensor | None = None):
         hidden_states = self.block_1(hidden_states, quant_states)
         residual = hidden_states
         hidden_states = self.attn_norm(hidden_states, quant_states)
@@ -456,7 +456,7 @@ class Emu3VQVAEDownBlock(nn.Module):
                 down.downsample = Emu3VQVAEEncoderConvDownsample(block_in)
             self.down.append(down)
 
-    def forward(self, hidden_states: torch.FloatTensor):
+    def forward(self, hidden_states: torch.Tensor):
         for i_level, blocks in enumerate(self.down):
             for i_block in range(self.num_res_blocks):
                 hidden_states = blocks.block[i_block](hidden_states)
@@ -515,7 +515,7 @@ class Emu3VQVAEUpBlock(nn.Module):
 
             self.up.insert(0, up)
 
-    def forward(self, hidden_states: torch.FloatTensor, quant_states: torch.FloatTensor):
+    def forward(self, hidden_states: torch.Tensor, quant_states: torch.Tensor):
         for i_level, blocks in enumerate(self.up[::-1]):
             for i_block in range(self.num_res_blocks + 1):
                 hidden_states = blocks.block[i_block](hidden_states, quant_states)
@@ -928,14 +928,14 @@ class Emu3Model(Emu3PreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.set_input_embeddings(value)
 
-    def get_image_tokens(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor) -> torch.LongTensor:
+    def get_image_tokens(self, pixel_values: torch.Tensor, image_sizes: torch.LongTensor) -> torch.LongTensor:
         """
         Tokenizes images into discrete tokens with VQGAN module. Converts
         obtained image tokens into BPE tokens and wraps with "boi" and "eoi"
         special tokens.
 
         Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
                 The tensors corresponding to the input images.
             image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`):
                 The sizes of the images in the batch, being (height, width) for each image.
@@ -952,10 +952,10 @@ class Emu3Model(Emu3PreTrainedModel):
         custom_intro="Tokenizes images into discrete tokens with VQGAN module and embeds them with text embeddings layer"
     )
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
+        self, pixel_values: torch.Tensor, image_sizes: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | Emu3VQVAEModelOutput:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)):
             The tensors corresponding to the input images.
         """
         vqmodel_outputs: Emu3VQVAEModelOutput = self.vqmodel.encode(
@@ -993,7 +993,7 @@ class Emu3Model(Emu3PreTrainedModel):
         return image
 
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -1021,12 +1021,12 @@ class Emu3Model(Emu3PreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         image_sizes: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1104,12 +1104,12 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         image_sizes: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         labels: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,

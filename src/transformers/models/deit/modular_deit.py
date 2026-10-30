@@ -240,21 +240,21 @@ class DeiTForImageClassification(ViTForImageClassification):
 @dataclass
 class DeiTForImageClassificationWithTeacherOutput(ModelOutput):
     r"""
-    logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+    logits (`torch.Tensor` of shape `(batch_size, config.num_labels)`):
         Prediction scores as the average of the cls_logits and distillation logits.
-    cls_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+    cls_logits (`torch.Tensor` of shape `(batch_size, config.num_labels)`):
         Prediction scores of the classification head (i.e. the linear layer on top of the final hidden state of the
         class token).
-    distillation_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+    distillation_logits (`torch.Tensor` of shape `(batch_size, config.num_labels)`):
         Prediction scores of the distillation head (i.e. the linear layer on top of the final hidden state of the
         distillation token).
     """
 
-    logits: torch.FloatTensor | None = None
-    cls_logits: torch.FloatTensor | None = None
-    distillation_logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    logits: torch.Tensor | None = None
+    cls_logits: torch.Tensor | None = None
+    distillation_logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(

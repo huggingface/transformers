@@ -156,7 +156,7 @@ class NomicBertModel(JinaEmbeddingsV3Model):
         attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPooling:
         if (input_ids is None) ^ (inputs_embeds is not None):

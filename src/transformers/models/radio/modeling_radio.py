@@ -41,21 +41,21 @@ from .configuration_radio import RadioConfig
 @dataclass
 class RadioModelOutput(ModelOutput):
     r"""
-    summary (`torch.FloatTensor` of shape `(batch_size, num_summary_idxs * hidden_size)`):
+    summary (`torch.Tensor` of shape `(batch_size, num_summary_idxs * hidden_size)`):
         Flattened summary embedding, gathered from the cls tokens selected by `config.summary_idxs`.
-    features (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`):
+    features (`torch.Tensor` of shape `(batch_size, num_patches, hidden_size)`):
         Dense spatial patch features. For packed inputs (`image_grid_hw` given), the patch features of all images
         concatenated, of shape `(total_patches, hidden_size)`.
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Full token sequence (prefix tokens + patches) from the final encoder layer. For packed inputs, the
         sequences of all images concatenated, of shape `(total_sequence_length, hidden_size)`.
     """
 
-    summary: torch.FloatTensor | None = None
-    features: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    summary: torch.Tensor | None = None
+    features: torch.Tensor | None = None
+    last_hidden_state: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 class RadioInputConditioner(nn.Module):

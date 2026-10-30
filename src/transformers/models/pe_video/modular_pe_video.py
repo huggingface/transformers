@@ -43,13 +43,13 @@ from .configuration_pe_video import PeVideoConfig, PeVideoEncoderConfig
 @dataclass
 class PeVideoOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*):
         Contrastive loss computed between video and text representations.
-    logits_video_text (`torch.FloatTensor` of shape `(batch_size, batch_size)`, *optional*):
+    logits_video_text (`torch.Tensor` of shape `(batch_size, batch_size)`, *optional*):
         Similarity logits between video and text embeddings.
-    text_video_embeds (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*):
+    text_video_embeds (`torch.Tensor` of shape `(batch_size, hidden_size)`, *optional*):
         Text embeddings projected to the video-text space.
-    video_embeds (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*):
+    video_embeds (`torch.Tensor` of shape `(batch_size, hidden_size)`, *optional*):
         Video embeddings projected to the video-text space.
     text_outputs (`BaseModelOutputWithPooling`, *optional*):
         Model outputs for the text encoder, including last hidden state and pooled output.
@@ -57,10 +57,10 @@ class PeVideoOutput(ModelOutput):
         Model outputs for the video encoder, including last hidden state and pooled output.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits_video_text: torch.FloatTensor | None = None
-    text_video_embeds: torch.FloatTensor | None = None
-    video_embeds: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits_video_text: torch.Tensor | None = None
+    text_video_embeds: torch.Tensor | None = None
+    video_embeds: torch.Tensor | None = None
     text_outputs: BaseModelOutputWithPooling = None
     video_outputs: BaseModelOutputWithPooling = None
 

@@ -624,25 +624,25 @@ class DeepseekOcr2Config(PreTrainedConfig):
 @dataclass
 class DeepseekOcr2ModelOutputWithPooling(BaseModelOutputWithPooling):
     r"""
-    local_last_hidden_state (`torch.FloatTensor` of shape `(total_local_patches, sequence_length, hidden_size)`, *optional*):
+    local_last_hidden_state (`torch.Tensor` of shape `(total_local_patches, sequence_length, hidden_size)`, *optional*):
         Last hidden state from the vision encoder for local (cropped) patches.
-    local_hidden_states (`torch.FloatTensor`, *optional*):
+    local_hidden_states (`torch.Tensor`, *optional*):
         Hidden states from all layers of the vision encoder for local patches.
-    local_attentions (`torch.FloatTensor`, *optional*):
+    local_attentions (`torch.Tensor`, *optional*):
         Attention weights from all layers of the vision encoder for local patches.
     """
 
-    local_last_hidden_state: torch.FloatTensor | None = None
-    local_hidden_states: torch.FloatTensor | None = None
-    local_attentions: torch.FloatTensor | None = None
+    local_last_hidden_state: torch.Tensor | None = None
+    local_hidden_states: torch.Tensor | None = None
+    local_attentions: torch.Tensor | None = None
 
 
 class DeepseekOcr2ModelOutputWithPast(LlavaNextModelOutputWithPast):
-    router_logits: tuple[torch.FloatTensor] | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
 
 class DeepseekOcr2CausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
-    router_logits: tuple[torch.FloatTensor] | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
 
 class DeepseekOcr2PreTrainedModel(LlavaNextPreTrainedModel):
@@ -745,7 +745,7 @@ class DeepseekOcr2SamVisionEncoder(SamVisionEncoder, DeepseekOcr2PreTrainedModel
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
-    def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> BaseModelOutput:
+    def forward(self, pixel_values: torch.Tensor, **kwargs) -> BaseModelOutput:
         hidden_states = self.patch_embed(pixel_values)
         if self.pos_embed is not None:
             hidden_states = hidden_states + self.interpolate_pos_encoding(
@@ -803,7 +803,7 @@ class DeepseekOcr2VisionEncoder(Qwen2Model, DeepseekOcr2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        inputs_embeds: torch.FloatTensor,
+        inputs_embeds: torch.Tensor,
         num_patches: int,
         position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -944,13 +944,13 @@ class DeepseekOcr2Model(LlavaNextModel):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
-        pixel_values_local: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor,
+        pixel_values_local: torch.Tensor | None = None,
         num_local_patches: list[int] | torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
-        pixel_values_local (`torch.FloatTensor` of shape `(total_patches, 3, height, width)`, *optional*):
+        pixel_values_local (`torch.Tensor` of shape `(total_patches, 3, height, width)`, *optional*):
             All local patches flattened across the batch, or `None` if no local views.
         num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
             Number of local patches per image, e.g. `[6, 0, 4]`.
@@ -1001,19 +1001,19 @@ class DeepseekOcr2Model(LlavaNextModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        pixel_values_local: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_local: torch.Tensor | None = None,
         num_local_patches: list[int] | torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | DeepseekOcr2ModelOutputWithPast:
         r"""
-        pixel_values_local (`torch.FloatTensor`, *optional*):
+        pixel_values_local (`torch.Tensor`, *optional*):
             Local patch pixel values of shape `(total_patches, 3, H, W)`.
         num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
             Number of local patches per image in the batch.
@@ -1065,15 +1065,15 @@ class DeepseekOcr2ForConditionalGeneration(LlavaNextForConditionalGeneration):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
-        pixel_values_local: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor,
+        pixel_values_local: torch.Tensor | None = None,
         num_local_patches: list[int] | torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, 3, height, width)`):
             The tensors corresponding to the global view input images.
-        pixel_values_local (`torch.FloatTensor` of shape `(total_patches, 3, height, width)`, *optional*):
+        pixel_values_local (`torch.Tensor` of shape `(total_patches, 3, height, width)`, *optional*):
             All local patches flattened across the batch, or `None` if no local views.
         num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
             Number of local patches per image, e.g. `[6, 0, 4]`.
@@ -1090,13 +1090,13 @@ class DeepseekOcr2ForConditionalGeneration(LlavaNextForConditionalGeneration):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        pixel_values_local: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_local: torch.Tensor | None = None,
         num_local_patches: list[int] | torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -1104,7 +1104,7 @@ class DeepseekOcr2ForConditionalGeneration(LlavaNextForConditionalGeneration):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | DeepseekOcr2CausalLMOutputWithPast:
         r"""
-        pixel_values_local (`torch.FloatTensor`, *optional*):
+        pixel_values_local (`torch.Tensor`, *optional*):
             Local patch pixel values of shape `(total_patches, 3, H, W)`.
         num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
             Number of local patches per image in the batch.

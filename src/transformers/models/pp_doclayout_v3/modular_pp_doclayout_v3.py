@@ -296,7 +296,7 @@ class PPDocLayoutV3ImageProcessor(TorchvisionBackend):
         and determines the order sequences by ranking the votes derived from the scores.
 
         Args:
-            order_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_queries)`):
+            order_logits (`torch.Tensor` of shape `(batch_size, num_queries, num_queries)`):
                 Stacked order logits.
 
         Returns:
@@ -607,28 +607,28 @@ def mask_to_box_coordinate(mask, dtype):
 @dataclass
 class PPDocLayoutV3DecoderOutput(RTDetrDecoderOutput):
     r"""
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+    intermediate_hidden_states (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
         Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, config.num_labels)`):
+    intermediate_logits (`torch.Tensor` of shape `(batch_size, config.decoder_layers, sequence_length, config.num_labels)`):
         Stacked intermediate logits (logits of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
+    intermediate_reference_points (`torch.Tensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
         Stacked intermediate reference points (reference points of each layer of the decoder).
-    intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+    intermediate_predicted_corners (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
-    initial_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+    initial_reference_points (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked initial reference points (initial reference points of each layer of the decoder).
-    cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    cross_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
         used to compute the weighted average in the cross-attention heads.
-    decoder_out_order_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, config.num_queries, config.num_queries)`):
+    decoder_out_order_logits (`torch.Tensor` of shape `(batch_size, config.decoder_layers, config.num_queries, config.num_queries)`):
         Stacked order logits (order logits of each layer of the decoder).
-    decoder_out_masks (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, config.num_queries, 200, 200)`):
+    decoder_out_masks (`torch.Tensor` of shape `(batch_size, config.decoder_layers, config.num_queries, 200, 200)`):
         Stacked masks (masks of each layer of the decoder).
     """
 
-    decoder_out_order_logits: torch.FloatTensor | None = None
-    decoder_out_masks: torch.FloatTensor | None = None
+    decoder_out_order_logits: torch.Tensor | None = None
+    decoder_out_masks: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -639,42 +639,42 @@ class PPDocLayoutV3DecoderOutput(RTDetrDecoderOutput):
 @dataclass
 class PPDocLayoutV3ModelOutput(RTDetrModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+    intermediate_hidden_states (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
         Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, config.num_labels)`):
+    intermediate_logits (`torch.Tensor` of shape `(batch_size, config.decoder_layers, sequence_length, config.num_labels)`):
         Stacked intermediate logits (logits of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+    intermediate_reference_points (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked intermediate reference points (reference points of each layer of the decoder).
-    intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+    intermediate_predicted_corners (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
-    initial_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+    initial_reference_points (`torch.Tensor` of shape `(batch_size, num_queries, 4)`):
         Initial reference points used for the first decoder layer.
-    init_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+    init_reference_points (`torch.Tensor` of shape `(batch_size, num_queries, 4)`):
         Initial reference points sent through the Transformer decoder.
-    enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
+    enc_topk_logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.num_labels)`):
         Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
         picked as region proposals in the encoder stage. Output of bounding box binary classification (i.e.
         foreground and background).
-    enc_topk_bboxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`):
+    enc_topk_bboxes (`torch.Tensor` of shape `(batch_size, sequence_length, 4)`):
         Logits of predicted bounding boxes coordinates in the encoder stage.
-    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+    enc_outputs_class (`torch.Tensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
         Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
         picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
         foreground and background).
-    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+    enc_outputs_coord_logits (`torch.Tensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
         Logits of predicted bounding boxes coordinates in the first stage.
     denoising_meta_values (`dict`):
         Extra dictionary for the denoising related values.
-    out_order_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, config.num_queries, config.num_queries)`):
+    out_order_logits (`torch.Tensor` of shape `(batch_size, config.decoder_layers, config.num_queries, config.num_queries)`):
         Stacked order logits (order logits of each layer of the decoder).
-    out_masks (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, config.num_queries, 200, 200)`):
+    out_masks (`torch.Tensor` of shape `(batch_size, config.decoder_layers, config.num_queries, 200, 200)`):
         Stacked masks (masks of each layer of the decoder).
     """
 
-    out_order_logits: torch.FloatTensor | None = None
-    out_masks: torch.FloatTensor | None = None
+    out_order_logits: torch.Tensor | None = None
+    out_masks: torch.Tensor | None = None
 
 
 class PPDocLayoutV3MLPPredictionHead(RTDetrMLPPredictionHead):
@@ -798,7 +798,7 @@ class PPDocLayoutV3HybridEncoder(RTDetrHybridEncoder):
     ):
         r"""
         Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
         """
         feature_maps = inputs_embeds
@@ -876,9 +876,9 @@ class PPDocLayoutV3Decoder(RTDetrDecoder):
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`):
             The query embeddings that are passed into the decoder.
-        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        encoder_hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
             of the decoder.
         encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -886,9 +886,9 @@ class PPDocLayoutV3Decoder(RTDetrDecoder):
             in `[0, 1]`:
             - 1 for pixels that are real (i.e. **not masked**),
             - 0 for pixels that are padding (i.e. **masked**).
-        reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
+        reference_points (`torch.Tensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
             Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
-        spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
+        spatial_shapes (`torch.Tensor` of shape `(num_feature_levels, 2)`):
             Spatial shapes of the feature maps.
         spatial_shapes_list (`list[tuple[int, int]]`, *optional*):
             Spatial shapes of the feature maps as a list, kept alongside `spatial_shapes` so that the deformable
@@ -903,7 +903,7 @@ class PPDocLayoutV3Decoder(RTDetrDecoder):
             Prediction head mapping the decoder hidden states to mask queries for the per-layer mask generation.
         norm (`nn.LayerNorm`, *optional*):
             Layer norm applied to the decoder hidden states before the mask, classification and order heads.
-        mask_feat (`torch.FloatTensor` of shape `(batch_size, num_prototypes, mask_height, mask_width)`, *optional*):
+        mask_feat (`torch.Tensor` of shape `(batch_size, num_prototypes, mask_height, mask_width)`, *optional*):
             Mask feature map from the encoder, dot-producted with the mask queries to produce the per-layer masks.
         """
         if inputs_embeds is not None:
@@ -1019,18 +1019,18 @@ class PPDocLayoutV3Model(RTDetrModel):
     @can_return_tuple
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         pixel_mask: torch.LongTensor | None = None,
-        encoder_outputs: torch.FloatTensor | None = None,
+        encoder_outputs: torch.Tensor | None = None,
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | PPDocLayoutV3ModelOutput:
+    ) -> tuple[torch.Tensor] | PPDocLayoutV3ModelOutput:
         r"""
         labels (`list[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
             following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
             respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
+            in the image,)` and the boxes a `torch.Tensor` of shape `(number of bounding boxes in the image, 4)`.
 
         Examples:
 
@@ -1235,77 +1235,77 @@ class PPDocLayoutV3Model(RTDetrModel):
 @dataclass
 class PPDocLayoutV3HybridEncoderOutput(BaseModelOutput):
     r"""
-    mask_feat (`torch.FloatTensor` of shape `(batch_size, config.num_queries, 200, 200)`):
+    mask_feat (`torch.Tensor` of shape `(batch_size, config.num_queries, 200, 200)`):
         Mask features for each query in the batch.
     """
 
-    mask_feat: torch.FloatTensor = None
+    mask_feat: torch.Tensor = None
 
 
 @auto_docstring
 @dataclass
 class PPDocLayoutV3ForObjectDetectionOutput(ModelOutput):
     r"""
-    logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
+    logits (`torch.Tensor` of shape `(batch_size, num_queries, num_classes + 1)`):
         Classification logits (including no-object) for all queries.
-    pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+    pred_boxes (`torch.Tensor` of shape `(batch_size, num_queries, 4)`):
         Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
         values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
         possible padding). You can use [`~PPDocLayoutV3ImageProcessor.post_process_object_detection`] to retrieve the
         unnormalized (absolute) bounding boxes.
-    order_logits (`tuple` of `torch.FloatTensor` of shape `(batch_size, num_queries, num_queries)`):
+    order_logits (`tuple` of `torch.Tensor` of shape `(batch_size, num_queries, num_queries)`):
         Order logits of the final layer of the decoder.
-    out_masks (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, height, width)`):
+    out_masks (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, height, width)`):
         Masks of the final layer of the decoder.
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+    intermediate_hidden_states (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
         Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, config.num_labels)`):
+    intermediate_logits (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, config.num_labels)`):
         Stacked intermediate logits (logits of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+    intermediate_reference_points (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked intermediate reference points (reference points of each layer of the decoder).
-    intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+    intermediate_predicted_corners (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
-    initial_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+    initial_reference_points (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked initial reference points (initial reference points of each layer of the decoder).
-    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+    init_reference_points (`torch.Tensor` of shape  `(batch_size, num_queries, 4)`):
         Initial reference points sent through the Transformer decoder.
-    enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+    enc_topk_logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
         Logits of predicted bounding boxes coordinates in the encoder.
-    enc_topk_bboxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+    enc_topk_bboxes (`torch.Tensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
         Logits of predicted bounding boxes coordinates in the encoder.
-    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+    enc_outputs_class (`torch.Tensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
         Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
         picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
         foreground and background).
-    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+    enc_outputs_coord_logits (`torch.Tensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
         Logits of predicted bounding boxes coordinates in the first stage.
     denoising_meta_values (`dict`):
         Extra dictionary for the denoising related values
     """
 
-    logits: torch.FloatTensor | None = None
-    pred_boxes: torch.FloatTensor | None = None
-    order_logits: torch.FloatTensor | None = None
-    out_masks: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    intermediate_hidden_states: torch.FloatTensor | None = None
-    intermediate_logits: torch.FloatTensor | None = None
-    intermediate_reference_points: torch.FloatTensor | None = None
-    intermediate_predicted_corners: torch.FloatTensor | None = None
-    initial_reference_points: torch.FloatTensor | None = None
-    decoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    decoder_attentions: tuple[torch.FloatTensor] | None = None
-    cross_attentions: tuple[torch.FloatTensor] | None = None
-    encoder_last_hidden_state: torch.FloatTensor | None = None
-    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    encoder_attentions: tuple[torch.FloatTensor] | None = None
-    init_reference_points: tuple[torch.FloatTensor] | None = None
-    enc_topk_logits: torch.FloatTensor | None = None
-    enc_topk_bboxes: torch.FloatTensor | None = None
-    enc_outputs_class: torch.FloatTensor | None = None
-    enc_outputs_coord_logits: torch.FloatTensor | None = None
+    logits: torch.Tensor | None = None
+    pred_boxes: torch.Tensor | None = None
+    order_logits: torch.Tensor | None = None
+    out_masks: torch.Tensor | None = None
+    last_hidden_state: torch.Tensor | None = None
+    intermediate_hidden_states: torch.Tensor | None = None
+    intermediate_logits: torch.Tensor | None = None
+    intermediate_reference_points: torch.Tensor | None = None
+    intermediate_predicted_corners: torch.Tensor | None = None
+    initial_reference_points: torch.Tensor | None = None
+    decoder_hidden_states: tuple[torch.Tensor] | None = None
+    decoder_attentions: tuple[torch.Tensor] | None = None
+    cross_attentions: tuple[torch.Tensor] | None = None
+    encoder_last_hidden_state: torch.Tensor | None = None
+    encoder_hidden_states: tuple[torch.Tensor] | None = None
+    encoder_attentions: tuple[torch.Tensor] | None = None
+    init_reference_points: tuple[torch.Tensor] | None = None
+    enc_topk_logits: torch.Tensor | None = None
+    enc_topk_bboxes: torch.Tensor | None = None
+    enc_outputs_class: torch.Tensor | None = None
+    enc_outputs_coord_logits: torch.Tensor | None = None
     denoising_meta_values: dict | None = None
 
 
@@ -1334,12 +1334,12 @@ class PPDocLayoutV3ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV3Pre
     @can_return_tuple
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         pixel_mask: torch.LongTensor | None = None,
-        encoder_outputs: torch.FloatTensor | None = None,
+        encoder_outputs: torch.Tensor | None = None,
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | PPDocLayoutV3ForObjectDetectionOutput:
+    ) -> tuple[torch.Tensor] | PPDocLayoutV3ForObjectDetectionOutput:
         r"""
         Examples:
 

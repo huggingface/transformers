@@ -177,9 +177,9 @@ class ColQwen2PreTrainedModel(ColPaliPreTrainedModel):
 @dataclass
 class ColQwen2ForRetrievalOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    embeddings (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         The embeddings of the model.
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
@@ -188,11 +188,11 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
         `past_key_values` input) to speed up sequential decoding.
     """
 
-    loss: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
     embeddings: torch.Tensor | None = None
     past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(
@@ -223,7 +223,7 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         labels: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,

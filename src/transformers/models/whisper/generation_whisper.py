@@ -430,7 +430,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`,
                 *e.g.*  via the torchcodec library (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
                 To prepare the array into `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel
-                features, padding and conversion into a tensor of type `torch.FloatTensor`.
+                features, padding and conversion into a tensor of type `torch.Tensor`.
                 See [`~WhisperFeatureExtractor.__call__`] for details.
             generation_config ([`~generation.GenerationConfig`], *optional*):
                 The generation configuration to be used as base parametrization for the generation call. `**kwargs`
@@ -1624,8 +1624,8 @@ class WhisperGenerationMixin(GenerationMixin):
 
     def detect_language(
         self,
-        input_features: torch.FloatTensor | None = None,
-        encoder_outputs: torch.FloatTensor | BaseModelOutput | None = None,
+        input_features: torch.Tensor | None = None,
+        encoder_outputs: torch.Tensor | BaseModelOutput | None = None,
         generation_config: GenerationConfig | None = None,
         num_segment_frames: int = 3000,
     ) -> torch.Tensor:
@@ -1638,8 +1638,8 @@ class WhisperGenerationMixin(GenerationMixin):
                 loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via
                 the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
                 [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
-                tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`] for details.
-            encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
+                tensor of type `torch.Tensor`. See [`~WhisperFeatureExtractor.__call__`] for details.
+            encoder_outputs (`tuple(tuple(torch.Tensor)`, *optional*):
                 Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
                 `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
                 hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
