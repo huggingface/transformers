@@ -187,6 +187,7 @@ class BaseImageProcessor(ImageProcessingMixin):
     """
 
     valid_kwargs = ImagesKwargs
+    use_kernels = False
 
     default_to_square = True
     rescale_factor = 1 / 255

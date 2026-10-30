@@ -40,6 +40,7 @@ from ...utils.generic import (
     get_max_seqlen,
     is_flash_attention_requested,
     merge_with_config_defaults,
+    no_inherit_decorator,
 )
 from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
@@ -845,6 +846,7 @@ class VideoLlama3ImageProcessor(Qwen2VLImageProcessor):
         "image_merge_sizes",
     ]
 
+    @no_inherit_decorator
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -1027,6 +1029,10 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
             resample=resample,
         )
 
+    def _resized_size(self):
+        raise AttributeError("Not needed for VideoLLaMA3")
+
+    @no_inherit_decorator
     def _preprocess(
         self,
         videos: list["torch.Tensor"],

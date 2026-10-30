@@ -1853,6 +1853,7 @@ class ProcessorMixin(PushToHubMixin):
         processor_dict = processor_dict if processor_dict is not None else {}
         # Remove subfolder from kwargs to avoid duplicate keyword arguments
         subfolder = kwargs.pop("subfolder", "")
+        use_kernels = kwargs.pop("use_kernels", None)
 
         # get args from processor init signature
         sub_processors = cls.get_attributes()
@@ -1886,8 +1887,11 @@ class ProcessorMixin(PushToHubMixin):
                         f"which is deprecated. Register the correct mapping in `{auto_processor_class.__name__}` instead.",
                     )
                     auto_processor_class = cls.get_possibly_dynamic_module(sub_processor_class_name)
+                sub_processor_kwargs = dict(kwargs)
+                if use_kernels is not None and modality in ("image_processor", "video_processor"):
+                    sub_processor_kwargs["use_kernels"] = use_kernels
                 sub_processor = auto_processor_class.from_pretrained(
-                    pretrained_model_name_or_path, subfolder=subfolder, **kwargs
+                    pretrained_model_name_or_path, subfolder=subfolder, **sub_processor_kwargs
                 )
                 args.append(sub_processor)
 

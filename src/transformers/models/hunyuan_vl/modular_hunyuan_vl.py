@@ -344,6 +344,11 @@ class HunYuanVLImageProcessor(Qwen2VLImageProcessor):
     spatial_patch_size = 1
     valid_kwargs = HunYuanVLImageProcessorKwargs
 
+    @property
+    def patch_block_size(self):
+        """Patches are written row by row, not in `merge_size` blocks."""
+        return 1
+
     def resize(
         self,
         images: "torch.Tensor",
@@ -353,17 +358,7 @@ class HunYuanVLImageProcessor(Qwen2VLImageProcessor):
         **kwargs,
     ) -> "torch.Tensor":
         """Resize dynamically based on input image aspect ratio."""
-        if not size.shortest_edge or not size.longest_edge:
-            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
-
-        height, width = images.shape[-2:]
-        resized_height, resized_width = smart_resize(
-            height,
-            width,
-            factor=factor,
-            min_pixels=size.shortest_edge,
-            max_pixels=size.longest_edge,
-        )
+        resized_height, resized_width = self._resized_size(*images.shape[-2:], size, factor)
         return TorchvisionBackend.resize(
             self,
             image=images,
@@ -384,22 +379,14 @@ class HunYuanVLImageProcessor(Qwen2VLImageProcessor):
         """Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."""
         batch_size, channel, resized_height, resized_width = images.shape
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-        patches = images.reshape(
-            batch_size,
-            channel,
-            grid_h // merge_size,
-            merge_size,
-            patch_size,
-            grid_w // merge_size,
-            merge_size,
-            patch_size,
-        )
-        # Flatten patches in row-major order in comparison to Qwen
-        patches = patches.permute(0, 2, 3, 5, 6, 1, 4, 7)
+        # Patches in plain row-major order, unlike Qwen2-VL's `merge_size` x `merge_size` blocks. The original code
+        # split rows and columns by `merge_size` and the permute joined them back, which gave this same order.
+        patches = images.reshape(batch_size, channel, grid_h, patch_size, grid_w, patch_size)
+        patches = patches.permute(0, 2, 4, 1, 3, 5)
 
         flatten_patches = (
-            patches.unsqueeze(6)
-            .expand(-1, -1, -1, -1, -1, -1, temporal_patch_size, -1, -1)
+            patches.unsqueeze(4)
+            .expand(-1, -1, -1, -1, temporal_patch_size, -1, -1)
             .reshape(
                 batch_size,
                 grid_h * grid_w,
@@ -493,22 +480,15 @@ class HunYuanVLImageProcessorPil(Qwen2VLImageProcessorPil):
         channel, resized_height, resized_width = image.shape
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
 
-        patches = image.reshape(
-            channel,
-            grid_h // merge_size,
-            merge_size,
-            patch_size,
-            grid_w // merge_size,
-            merge_size,
-            patch_size,
-        )
-        # Flatten patches in row-major order - (gh, mh, gw, mw, C, ph, pw)
-        patches = np.transpose(patches, (1, 2, 4, 5, 0, 3, 6))
+        # Patches in plain row-major order, unlike Qwen2-VL's `merge_size` x `merge_size` blocks. The original code
+        # split rows and columns by `merge_size` and the transpose joined them back, which gave this same order.
+        patches = image.reshape(channel, grid_h, patch_size, grid_w, patch_size)
+        patches = np.transpose(patches, (1, 3, 0, 2, 4))
 
         # expand temporal_patch_size as a broadcast (zero-copy)
         patches = np.broadcast_to(
-            patches[:, :, :, :, :, None, :, :],
-            (*patches.shape[:5], temporal_patch_size, *patches.shape[5:]),
+            patches[:, :, :, None, :, :],
+            (*patches.shape[:3], temporal_patch_size, *patches.shape[3:]),
         )
 
         flatten_patches = patches.reshape(
