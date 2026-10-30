@@ -386,6 +386,7 @@ if TYPE_CHECKING:
     from .phimoe import *
     from .phobert import *
     from .pi0 import *
+    from .pi05 import *
     from .pix2struct import *
     from .pixio import *
     from .pixtral import *

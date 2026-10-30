@@ -4011,6 +4011,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 "parakeet_encoder",
                 "parakeet_ctc",
                 "pi0",
+                "pi05",
                 "pixtral",
                 "sam",
                 "sam_hq",
