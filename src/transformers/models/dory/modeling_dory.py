@@ -66,16 +66,30 @@ class DoryL2Norm(torch.nn.Module):
 
 class DoryRecurrentLayerMixin:
     """
-    Cache of a recurrent layer, which runs once per loop. With `per_loop` caching every loop keeps its own history:
-    `update` stores loop 0 in this layer, and loops 1, 2, ... in `later_loops`, each a layer of the same kind.
+    Cache of a recurrent layer, which runs once per loop. Each `update` passes the `loop_idx`:
+
+        per_loop:  every loop keeps its own history, loop 0 in this layer and loops 1, 2, ... in `later_loops`
+        last_loop: (`share_across_loops=True`) only the last loop is cached; earlier loops `read` the cache and
+                   their own tokens without writing, like KV-shared layers, so memory does not grow with the loops
     """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.later_loops = []
 
-    def update(self, key_states, value_states, *args, loop_idx: int = 0, **kwargs):
-        if loop_idx == 0:
+    def update(
+        self,
+        key_states,
+        value_states,
+        *args,
+        loop_idx: int = 0,
+        is_last_loop: bool = True,
+        share_across_loops: bool = False,
+        **kwargs,
+    ):
+        if share_across_loops and not is_last_loop:
+            return self.read(key_states, value_states)
+        if share_across_loops or loop_idx == 0:
             return super().update(key_states, value_states, *args, **kwargs)
         while len(self.later_loops) < loop_idx:
             self.later_loops.append(self.new_loop_layer())
@@ -112,12 +126,26 @@ class DoryRecurrentLayer(DoryRecurrentLayerMixin, DynamicLayer):
     def new_loop_layer(self) -> DynamicLayer:
         return DynamicLayer()
 
+    def read(self, key_states: torch.Tensor, value_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        if not self.is_initialized:
+            return key_states, value_states
+        return torch.cat([self.keys, key_states], dim=-2), torch.cat([self.values, value_states], dim=-2)
+
 
 class DoryRecurrentSlidingWindowLayer(DoryRecurrentLayerMixin, DynamicSlidingWindowLayer):
     _layer_type = "recurrent_sliding_attention"
 
     def new_loop_layer(self) -> DynamicSlidingWindowLayer:
         return DynamicSlidingWindowLayer(self.sliding_window)
+
+    def read(self, key_states: torch.Tensor, value_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        if not self.is_initialized:
+            return key_states, value_states
+        # The cache may hold more than the window if past recording is on
+        num_visible = self.sliding_window - 1 + key_states.shape[-2]
+        key_states = torch.cat([self.keys, key_states], dim=-2)[..., -num_visible:, :]
+        value_states = torch.cat([self.values, value_states], dim=-2)[..., -num_visible:, :]
+        return key_states, value_states
 
 
 class DoryStaticRecurrentLayer(DoryRecurrentLayerMixin, StaticLayer):
@@ -126,6 +154,13 @@ class DoryStaticRecurrentLayer(DoryRecurrentLayerMixin, StaticLayer):
     def new_loop_layer(self) -> StaticLayer:
         return StaticLayer(self.max_cache_len)
 
+    def read(self, key_states: torch.Tensor, value_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        # Write at the next positions without moving past them: the last loop overwrites the same slots
+        kv_length = key_states.shape[-2]
+        key_states, value_states = StaticLayer.update(self, key_states, value_states)
+        self.cumulative_length.sub_(kv_length)
+        return key_states, value_states
+
 
 class DoryStaticRecurrentSlidingWindowLayer(DoryRecurrentLayerMixin, StaticSlidingWindowLayer):
     _layer_type = "recurrent_sliding_attention"
@@ -133,6 +168,24 @@ class DoryStaticRecurrentSlidingWindowLayer(DoryRecurrentLayerMixin, StaticSlidi
     def new_loop_layer(self) -> StaticSlidingWindowLayer:
         # `max_cache_len` is already the effective window
         return StaticSlidingWindowLayer(self.max_cache_len, self.max_cache_len)
+
+    def read(self, key_states: torch.Tensor, value_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        # Same states `update` returns, without rolling the window
+        kv_length = key_states.shape[-2]
+        current_length = self.cumulative_length_int
+        if current_length >= self.max_cache_len:
+            key_states = torch.cat([self.keys[:, :, 1:, :], key_states], dim=-2)
+            value_states = torch.cat([self.values[:, :, 1:, :], value_states], dim=-2)
+        elif current_length + kv_length > self.max_cache_len:
+            if current_length > 0:
+                key_states = torch.cat([self.keys[:, :, :current_length, :], key_states], dim=-2)
+                value_states = torch.cat([self.values[:, :, :current_length, :], value_states], dim=-2)
+        else:
+            # Room left: write at the next positions without moving past them, the last loop overwrites them
+            key_states, value_states = StaticSlidingWindowLayer.update(self, key_states, value_states)
+            self.cumulative_length_int -= kv_length
+            self.cumulative_length.sub_(kv_length)
+        return key_states, value_states
 
 
 class DoryRotaryEmbedding(nn.Module):
@@ -334,19 +387,16 @@ class DoryAttention(nn.Module):
         query_scale = (self.sqk * self.sqk_scale).view(-1, 1, self.head_dim)
         query_states = query_states * query_scale.square()
 
-        # CODEPATH: released configs use `per_loop`, every loop keeps its own history. `last_loop` (opt-in, see the
-        # model card) caches only the last loop: like Gemma4's KV-shared layers, earlier loops read the cache without
-        # writing it, so cache memory does not grow with the number of loops.
-        if past_key_values is not None and self.config.recurrent_kv_cache_mode == "last_loop" and not is_last_loop:
-            cache_layer = past_key_values.layers[self.layer_idx]
-            if cache_layer.is_initialized:
-                cached_length = cache_layer.get_mask_sizes(0)[0]
-                key_states = torch.cat([cache_layer.keys[..., -cached_length:, :], key_states], dim=-2)
-                value_states = torch.cat([cache_layer.values[..., -cached_length:, :], value_states], dim=-2)
-        elif past_key_values is not None:
-            cache_loop_idx = 0 if self.config.recurrent_kv_cache_mode == "last_loop" else loop_idx
+        if past_key_values is not None:
+            # CODEPATH: released configs use `per_loop`, every loop keeps its own history. `last_loop` (opt-in, see
+            # the model card) only caches the last loop, so cache memory does not grow with the number of loops.
             key_states, value_states = past_key_values.update(
-                key_states, value_states, self.layer_idx, loop_idx=cache_loop_idx
+                key_states,
+                value_states,
+                self.layer_idx,
+                loop_idx=loop_idx,
+                is_last_loop=is_last_loop,
+                share_across_loops=self.config.recurrent_kv_cache_mode == "last_loop",
             )
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
