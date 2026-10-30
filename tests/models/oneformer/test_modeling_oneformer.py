@@ -334,8 +334,6 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         self.assertTrue(outputs.loss is not None)
 
     def test_model_with_labels_not_training(self):
-        # With `is_training=False` there is no text mapper, so no text queries: the contrastive term must be skipped
-        # (released checkpoints ship `is_training=False` together with a `contrastive_temperature`).
         config, pixel_values, task_inputs, _, pixel_mask, mask_labels, class_labels = (
             self.model_tester.prepare_config_and_inputs()
         )

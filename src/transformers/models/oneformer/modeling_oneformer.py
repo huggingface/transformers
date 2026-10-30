@@ -3185,9 +3185,6 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         text_queries = outputs.text_queries
 
         if mask_labels is not None and class_labels is not None:
-            # The text mapper (and hence `text_queries`) only exists when `config.is_training=True`, as in the original
-            # OneFormer, where the query-text contrastive loss is a training-only component.
-            calculate_contrastive_loss = self.config.contrastive_temperature is not None and text_queries is not None
             loss_dict: dict[str, Tensor] = self.get_loss_dict(
                 masks_queries_logits=masks_queries_logits,
                 class_queries_logits=class_queries_logits,
@@ -3196,7 +3193,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
                 class_labels=class_labels,
                 text_queries=text_queries,
                 auxiliary_predictions=auxiliary_predictions,
-                calculate_contrastive_loss=calculate_contrastive_loss,
+                calculate_contrastive_loss=self.config.is_training and self.config.contrastive_temperature is not None,
             )
             loss = self.get_loss(loss_dict)
 
