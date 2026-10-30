@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
+from collections.abc import Callable
 
 from ..models.auto.configuration_auto import AutoConfig
 from ..utils import logging
@@ -44,6 +45,8 @@ from ..utils.quantization_config import (
     SpQRConfig,
     TorchAoConfig,
     VptqConfig,
+    convert_modelopt_schema,
+    convert_mxfp8_schema,
 )
 from .base import HfQuantizer
 from .quantizer_aqlm import AqlmHfQuantizer
@@ -137,6 +140,13 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "gemma": GemmaQuantizationConfig,
 }
 
+# Convert another tool's quantization schema into a Transformers config, by `quant_method`. `None` leaves the checkpoint
+# to the method's own config class, e.g. a plain MXFP8 one.
+AUTO_QUANTIZATION_SCHEMA_CONVERTERS: dict[str, Callable[[dict], QuantizationConfigMixin | None]] = {
+    "modelopt": convert_modelopt_schema,
+    "mxfp8": convert_mxfp8_schema,
+}
+
 LOADING_ATTRIBUTES_CONFIG_TYPES = (
     GPTQConfig,
     AwqConfig,
@@ -146,6 +156,7 @@ LOADING_ATTRIBUTES_CONFIG_TYPES = (
     Mxfp4Config,
     MetalConfig,
     FineGrainedFP8Config,
+    NVFP4Config,
 )
 
 logger = logging.get_logger(__name__)
@@ -168,6 +179,10 @@ class AutoQuantizationConfig:
             raise ValueError(
                 "The model's quantization config from the arguments has no `quant_method` attribute. Make sure that the model has been correctly quantized"
             )
+
+        converter = AUTO_QUANTIZATION_SCHEMA_CONVERTERS.get(quant_method)
+        if converter is not None and (config := converter(quantization_config_dict)) is not None:
+            return config
 
         if quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING:
             raise ValueError(
@@ -293,7 +308,10 @@ class AutoHfQuantizer:
                 "The model's quantization config from the arguments has no `quant_method` attribute. Make sure that the model has been correctly quantized"
             )
 
-        if quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING:
+        if (
+            quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING
+            and quant_method not in AUTO_QUANTIZATION_SCHEMA_CONVERTERS
+        ):
             logger.warning(
                 f"Unknown quantization type, got {quant_method} - supported types are:"
                 f" {list(AUTO_QUANTIZER_MAPPING.keys())}. Hence, we will skip the quantization. "

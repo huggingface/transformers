@@ -56,8 +56,16 @@ def get_keys_to_not_convert(model) -> list:
         for name, module in model.named_modules()
         if output_emb_module is not None and id(module) == id(output_emb_module)
     }
-    modules_to_not_convert = tied_keys | last_module_key | output_emb_keys
 
+    # remove MoE routers
+    router_keys = {
+        f"{name.removesuffix('.experts')}.{router}"
+        for name, _ in model.named_modules()
+        if name.endswith(".experts")
+        for router in ("gate", "router")
+    }
+
+    modules_to_not_convert = tied_keys | last_module_key | output_emb_keys | router_keys
     modules_to_not_convert = list({k.removesuffix(".weight") for k in modules_to_not_convert})
 
     return list(modules_to_not_convert)

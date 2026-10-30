@@ -16,38 +16,29 @@ rendered properly in your Markdown viewer.
 
 # NVFP4
 
-NVFP4 quantization packs full-precision linear weights into NVIDIA's 4-bit floating-point format while a model is
-loaded. [`NVFP4Config`] replaces eligible bias-free `torch.nn.Linear` modules, whose `in_features` and `out_features` are both divisible by 16, with an NVFP4 linear implementation from
-the [NVFP4 Hub kernel](https://huggingface.co/kernels-community/nvfp4-gemm). The model's attention and MLP interfaces are
-not replaced.
+NVFP4 is NVIDIA's 4-bit floating-point format. Transformers runs NVFP4 linears and MoE experts on the
+[finegrained-kernels](https://huggingface.co/kernels-community/finegrained-kernels) Hub kernel.
 
 > [!TIP]
-> NVFP4 requires a Blackwell GPU with compute capability 10.0 or newer, a compatible CUDA-enabled PyTorch build, and
-> the [kernels](https://github.com/huggingface/kernels) package.
-
-Install Accelerate and a compatible version of `kernels`.
+> NVFP4 needs the [kernels](https://github.com/huggingface/kernels) package and a GPU with FP8 support: an NVIDIA GPU
+> with compute capability 8.9 or newer, an AMD GPU or an Intel XPU.
 
 ```bash
 pip install --upgrade accelerate kernels
 ```
 
-Pass [`NVFP4Config`] to [`~PreTrainedModel.from_pretrained`] with a single CUDA device. Weights are quantized as they
-are loaded, so the source checkpoint should contain floating-point weights.
+## Load a pre-quantized checkpoint
+
+NVIDIA ModelOpt exports load without a quantization config.
 
 ```py
 import torch
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, NVFP4Config
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
-model_id = "meta-llama/Llama-3.2-1B"
-quantization_config = NVFP4Config()
-model = AutoModelForCausalLM.from_pretrained(
-    model_id,
-    dtype=torch.bfloat16,
-    device_map="cuda",
-    quantization_config=quantization_config,
-)
+model_id = "nvidia/Qwen3-30B-A3B-NVFP4"
+model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map="cuda")
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 inputs = tokenizer("NVFP4 is", return_tensors="pt").to(model.device)
@@ -55,19 +46,58 @@ output = model.generate(**inputs, max_new_tokens=20)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-Use `modules_to_not_convert` to keep selected modules in their original precision.
+## Quantize while loading
+
+Pass [`NVFP4Config`] to quantize a full-precision checkpoint as it loads.
 
 ```py
-quantization_config = NVFP4Config(modules_to_not_convert=["vision", "lm_head"])
+import torch
+
+from transformers import AutoModelForCausalLM, NVFP4Config
+
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-30B-A3B", dtype=torch.bfloat16, device_map="cuda", quantization_config=NVFP4Config()
+)
 ```
 
-NVFP4 linear modules support `torch.compile`. The first compiled invocation includes graph compilation time, so warm up
-the model before measuring generation throughput.
+## MoE experts
+
+`experts_implementation="grouped_mm"` runs the experts with the fused MoE kernels, and is the fastest for prefill.
+`"batched_mm"` is the fastest for decode.
+
+```py
+model = AutoModelForCausalLM.from_pretrained(
+    "nvidia/Qwen3-30B-A3B-NVFP4", dtype=torch.bfloat16, device_map="cuda", experts_implementation="grouped_mm"
+)
+```
+
+On several GPUs, use expert parallelism: each GPU holds whole experts. Launch the script with
+`torchrun --nproc_per_node 8 script.py`.
+
+```py
+import torch
+
+from transformers import AutoModelForCausalLM
+from transformers.distributed import DistributedConfig
+
+
+model = AutoModelForCausalLM.from_pretrained(
+    "nvidia/Qwen3-30B-A3B-NVFP4",
+    dtype=torch.bfloat16,
+    distributed_config=DistributedConfig(tp_size=8, ep_size=8),
+)
+```
+
+## Saving
+
+An NVFP4 model saves and reloads like any other, including one quantized while loading.
+
+```py
+model.save_pretrained("Qwen3-30B-A3B-NVFP4-local")
+```
 
 ## Current limitations
 
-- Only one CUDA device is supported. Tensor parallelism and multi-device `device_map` configurations are rejected until
-  the sharding behavior of the NVFP4 scale metadata is defined.
 - CPU and disk offload are not supported.
-- Pre-quantized NVFP4 checkpoints are not supported.
-- NVFP4 models cannot currently be serialized with [`~PreTrainedModel.save_pretrained`] or trained.
+- NVFP4 models cannot be trained.
