@@ -18,6 +18,7 @@ Shared types, constants, and utilities for the serving layer.
 import asyncio
 import copy
 import enum
+import inspect
 import json
 import threading
 from abc import ABC, abstractmethod
@@ -36,8 +37,10 @@ if TYPE_CHECKING:
     import pydantic
     import tokenizers
     import torch
+    from openai.types.audio import TranscriptionDiarizedSegment
 
     from transformers import (
+        BatchFeature,
         ContinuousBatchingConfig,
         GenerationConfig,
         PreTrainedModel,
@@ -552,6 +555,146 @@ class DirectStreamer:
         self._cancelled.set()
 
 
+def _decode_transcription(
+    token_ids: "torch.Tensor | list[list[int]]", processor: "ProcessorMixin | PreTrainedTokenizerFast"
+) -> list[str]:
+    """Decode the generated tokens into one transcript per chunk of audio, without the framing of audio LLMs."""
+    # Audio LLMs such as Qwen3-ASR write a prefix before the transcript, which `transcription_only` removes
+    if "return_format" in inspect.signature(processor.decode).parameters:
+        texts = processor.decode(token_ids, return_format="transcription_only")
+    else:
+        texts = processor.decode(token_ids, skip_special_tokens=True)
+    return [text.strip() for text in texts]
+
+
+def speaker_labels(words: list[dict]) -> list[str]:
+    """The speaker label of each word: as OpenAI does, speakers are labeled `A`, `B`, ... in order of first
+    appearance."""
+    labels = {}
+    return [labels.setdefault(word["speaker"], chr(ord("A") + len(labels))) for word in words]
+
+
+def words_to_diarized_segments(words: list[dict], max_gap: float = 1.0) -> list["TranscriptionDiarizedSegment"]:
+    """Group the words into speaker turns, labeled as by `speaker_labels`. A turn goes on while its speaker's next word
+    starts within `max_gap` seconds, even if someone else talks in between: overlapping speech is timed word by word,
+    so cutting at every change of speaker in time order splits the turns into single words."""
+    from openai.types.audio import TranscriptionDiarizedSegment
+
+    segments, turns = [], {}
+    for word, speaker in zip(words, speaker_labels(words)):
+        start, end = word["timestamp"]
+        turn = turns.get(speaker)
+        if turn is not None and start - turn.end <= max_gap:
+            turn.end = round(end, 3)
+            turn.text += f" {word['text']}"
+        else:
+            turns[speaker] = TranscriptionDiarizedSegment(
+                id=f"seg_{len(segments)}",
+                type="transcript.text.segment",
+                start=round(start, 3),
+                end=round(end, 3),
+                speaker=speaker,
+                text=word["text"],
+            )
+            segments.append(turns[speaker])
+    return segments
+
+
+class TranscriptionStreamer:
+    """Streamer for speech-to-text ``model.generate()`` on a batch of chunks of audio.
+
+    Each chunk is decoded incrementally via the Rust ``DecodeStream`` (O(1) per token), as in :class:`DirectStreamer`.
+    The chunks are generated together and their text is pushed to an asyncio.Queue in order: the first chunk as it is
+    generated, each next one once the chunks before it are done, joined by a space as in the full response.
+    """
+
+    def __init__(
+        self,
+        processor: "ProcessorMixin | PreTrainedTokenizerFast",
+        num_chunks: int,
+        eos_token_id: "int | list[int] | None",
+        loop: asyncio.AbstractEventLoop,
+        queue: asyncio.Queue,
+    ):
+        from tokenizers.decoders import DecodeStream
+
+        self._processor = processor
+        # ProcessorMixin exposes the fast tokenizer as .tokenizer; PreTrainedTokenizerFast is already one.
+        self._tokenizer = getattr(processor, "tokenizer", processor)._tokenizer  # type: ignore[union-attr]
+        self._eos_token_ids = set(eos_token_id if isinstance(eos_token_id, list) else [eos_token_id])
+        # Audio LLMs such as Qwen3-ASR write `language English<asr_text>` before the transcript
+        self._prefixed = "return_format" in inspect.signature(processor.decode).parameters
+        self._loop = loop
+        self._queue = queue
+        self._first = True
+        self._cancelled = threading.Event()
+        self._sent = ""
+        # One of each per chunk of audio. A prefixed chunk's text is held back until its prefix is over, or until it
+        # ends: then the model wrote no prefix and its text is the whole output
+        self._token_ids = [[] for _ in range(num_chunks)]
+        self._decode_streams = [DecodeStream([], skip_special_tokens=True) for _ in range(num_chunks)]
+        self._texts = ["" for _ in range(num_chunks)]
+        self._held = [self._prefixed for _ in range(num_chunks)]
+        self._finished = [False for _ in range(num_chunks)]
+
+    def _enqueue(self, item) -> None:
+        self._loop.call_soon_threadsafe(self._queue.put_nowait, item)
+
+    def _send(self) -> None:
+        """Send what the transcript adds to the text sent so far: the done chunks, then the first one generating."""
+        texts = []
+        for text, held, finished in zip(self._texts, self._held, self._finished):
+            if held:
+                break
+            texts.append(text.strip())
+            if not finished:
+                break
+        text = " ".join(texts)
+        # Sent text cannot be taken back: only send text that extends it
+        if text.startswith(self._sent) and text != self._sent:
+            self._enqueue(text[len(self._sent) :])
+            self._sent = text
+
+    def put(self, value: "torch.Tensor") -> None:
+        """Called by ``model.generate()`` after each decode step with new token(s), one per chunk of audio."""
+        if self._cancelled.is_set():
+            raise _GenerationCancelled()
+        # The first put() contains the prompt tokens — skip since we only stream generated tokens.
+        if self._first:
+            self._first = False
+            return
+        for chunk, token_id in enumerate(value.tolist()):
+            if self._finished[chunk]:
+                continue
+            if token_id in self._eos_token_ids:
+                self._finished[chunk], self._held[chunk] = True, False
+                continue
+            self._token_ids[chunk].append(token_id)
+            text = self._decode_streams[chunk].step(self._tokenizer, token_id)
+            if text is None:
+                continue
+            self._texts[chunk] += text
+            if self._held[chunk]:
+                # Hacky way to spot the end of the prefix we don't stream (e.g. Qwen3-ASR's
+                # `language English<asr_text>`): until it is generated, `transcription_only` has nothing to cut and
+                # returns the text decoded so far
+                transcript = _decode_transcription([self._token_ids[chunk]], self._processor)[0]
+                if transcript != self._texts[chunk].strip():
+                    self._texts[chunk], self._held[chunk] = transcript, False
+        self._send()
+
+    def end(self) -> None:
+        """Called by ``model.generate()`` when generation is complete: send what is left, then the EOS sentinel."""
+        self._finished = [True for _ in self._finished]
+        self._held = [False for _ in self._held]
+        self._send()
+        self._enqueue(None)
+
+    def cancel(self) -> None:
+        """Signal cancellation. The next ``put()`` call will raise and abort ``model.generate()``."""
+        self._cancelled.set()
+
+
 class CBStreamer:
     """Streamer for continuous batching (used by :class:`CBGenerateManager`).
 
@@ -792,6 +935,67 @@ class GenerateManager(BaseGenerateManager):
 
         self.submit(_run)
         return queue, streamer
+
+    def generate_transcription_streaming(
+        self,
+        model: "PreTrainedModel",
+        processor: "ProcessorMixin | PreTrainedTokenizerFast",
+        inputs: dict,
+        num_chunks: int,
+        gen_config: "GenerationConfig",
+    ) -> tuple[asyncio.Queue, TranscriptionStreamer]:
+        """Start streaming a transcript via ``model.generate()`` on the inference thread, from a batch of chunks."""
+        import torch
+
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue = asyncio.Queue()
+        streamer = TranscriptionStreamer(processor, num_chunks, gen_config.eos_token_id, loop, queue)
+
+        def _run() -> None:
+            try:
+                with torch.inference_mode():
+                    model.generate(**inputs, generation_config=gen_config, streamer=streamer)
+            except _GenerationCancelled:
+                loop.call_soon_threadsafe(queue.put_nowait, None)
+            except Exception as e:
+                loop.call_soon_threadsafe(queue.put_nowait, _StreamError(str(e)))
+
+        self.submit(_run)
+        return queue, streamer
+
+    async def generate_transcription_non_streaming(
+        self,
+        model: "PreTrainedModel",
+        processor: "ProcessorMixin | PreTrainedTokenizerFast",
+        inputs: "BatchFeature",
+        gen_config: "GenerationConfig",
+        word_timestamps: bool = False,
+    ) -> tuple[str, list[dict]]:
+        """Run transcription to completion via ``model.generate()`` on the inference thread. With `word_timestamps`,
+        the model's word timestamp head (e.g. Nemotron 3.5 Transcribe's) also runs, and
+        ``processor.align_word_timestamps`` times each word and attributes it to a speaker.
+
+        Returns:
+            `tuple[str, list[dict]]`: The transcript, the chunks of audio joined by a space, and with `word_timestamps`
+            its words as `{"text", "timestamp", "speaker"}` in time order, `speaker` being the `N` of the model's
+            `<spk:N>` tags.
+        """
+        generate_kwargs = {"return_word_timestamp_logits": True} if word_timestamps else {}
+        outputs = await self.async_submit(model.generate, **inputs, generation_config=gen_config, **generate_kwargs)
+        sequences = outputs.sequences if word_timestamps else outputs
+        if "input_ids" in inputs:
+            sequences = sequences[:, inputs.input_ids.shape[-1] :]
+        text = " ".join(_decode_transcription(sequences, processor))
+        if not word_timestamps or not text:
+            return text, []
+        timestamps = await self.async_submit(
+            processor.align_word_timestamps,  # type: ignore[union-attr]
+            processor.decode(sequences[0], skip_special_tokens=False),
+            outputs.word_timestamp_logits,
+            inputs.input_features_mask,
+            outputs.speaker_logits,
+        )
+        return text, timestamps["chunks"]
 
     async def generate_non_streaming(
         self,
