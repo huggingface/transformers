@@ -1464,7 +1464,14 @@ class GenerationMixin(ContinuousMixin):
                     UserWarning,
                 )
         if generation_config.repetition_penalty is not None and generation_config.repetition_penalty != 1.0:
-            processors.append(RepetitionPenaltyLogitsProcessor(penalty=generation_config.repetition_penalty))
+            mask = (model_kwargs or {}).get(
+                "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
+            )
+            if mask is not None and mask.shape[1] != input_ids_seq_length:
+                mask = None
+            processors.append(
+                RepetitionPenaltyLogitsProcessor(generation_config.repetition_penalty, attention_mask=mask)
+            )
             if not self.config.is_encoder_decoder and (input_ids_seq_length is None or input_ids_seq_length == 0):
                 warnings.warn(
                     "Passing `repetition_penalty` with `inputs_embeds` and without `input_ids` to `generate` will "

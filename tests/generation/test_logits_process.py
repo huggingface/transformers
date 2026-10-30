@@ -210,6 +210,61 @@ class LogitsProcessorTest(unittest.TestCase):
         # processor should not change logits in-place
         self.assertFalse(torch.all(scores == processed_scores))
 
+    @parameterized.expand([(real, p) for real in (False, True) for p in (1, 13, 32)])
+    def test_repetition_penalty_masked_padding(self, real_eos, padding):
+        valid = [0, 1, 2] if real_eos else [1, 2]
+        ids = torch.tensor([[0] * padding + valid], device=torch_device)
+        mask = torch.tensor([[0] * padding + [1] * len(valid)], device=torch_device)
+        scores = torch.tensor([[3.0, -2.0, -2.0, 2.5]], device=torch_device)
+        proc = RepetitionPenaltyLogitsProcessor(2.0, attention_mask=mask)
+        expected = RepetitionPenaltyLogitsProcessor(2.0)(torch.tensor([valid], device=torch_device), scores.clone())
+        torch.testing.assert_close(proc(ids, scores.clone()), expected)
+        assert proc(torch.cat((ids, ids.new_zeros((1, 1))), dim=1), scores.clone())[0, 0] == 1.5
+
+    def test_repetition_penalty_masked_padding_generate(self):
+        from transformers import GPT2Config, GPT2LMHeadModel
+
+        torch.manual_seed(7)
+        model = (
+            GPT2LMHeadModel(
+                GPT2Config(
+                    vocab_size=32,
+                    n_positions=32,
+                    n_embd=32,
+                    n_layer=1,
+                    n_head=4,
+                    bos_token_id=1,
+                    eos_token_id=0,
+                    pad_token_id=0,
+                )
+            )
+            .to(torch_device)
+            .eval()
+        )
+        ids = torch.tensor([[0, 1, 2], [0, 4, 5]], device=torch_device)
+        mask = torch.tensor([[0, 1, 1], [1, 1, 1]], device=torch_device)
+
+        for opts in ({}, {"do_sample": True, "num_return_sequences": 2}, {"num_beams": 2}):
+            with torch.no_grad():
+                out = model.generate(
+                    ids,
+                    attention_mask=mask,
+                    repetition_penalty=2.0,
+                    max_new_tokens=1,
+                    output_scores=True,
+                    output_logits=True,
+                    return_dict_in_generate=True,
+                    **opts,
+                )
+            raw = out.logits[0].float()
+            if opts.get("num_beams", 1) > 1:
+                raw = raw.log_softmax(-1)
+            copies = max(opts.get("num_beams", 1), opts.get("num_return_sequences", 1))
+            torch.testing.assert_close(out.scores[0][:copies, 0], raw[:copies, 0], atol=1e-5, rtol=0)
+            real = raw[copies:, 0]
+            expected = torch.where(real < 0, real * 2, real / 2)
+            torch.testing.assert_close(out.scores[0][copies:, 0], expected, atol=1e-5, rtol=0)
+
     def test_repetition_penalty_dist_process_exclusion_no_new_input_ids(self):
         input_ids = torch.tensor([[0, 1], [5, 0]], device=torch_device, dtype=torch.long)
         vocab_size = 10
