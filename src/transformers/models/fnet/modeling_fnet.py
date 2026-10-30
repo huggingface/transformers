@@ -406,7 +406,7 @@ class FNetModel(FNetPreTrainedModel):
 
     """
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: FNetConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -512,7 +512,7 @@ class FNetForPreTraining(FNetPreTrainedModel):
         "cls.predictions.decoder.weight": "fnet.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: FNetConfig):
         super().__init__(config)
 
         self.fnet = FNetModel(config)
@@ -606,7 +606,7 @@ class FNetForMaskedLM(FNetPreTrainedModel):
         "cls.predictions.decoder.weight": "fnet.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: FNetConfig):
         super().__init__(config)
 
         self.fnet = FNetModel(config)
@@ -666,7 +666,7 @@ class FNetForMaskedLM(FNetPreTrainedModel):
     """
 )
 class FNetForNextSentencePrediction(FNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: FNetConfig):
         super().__init__(config)
 
         self.fnet = FNetModel(config)
@@ -749,7 +749,7 @@ class FNetForNextSentencePrediction(FNetPreTrainedModel):
     """
 )
 class FNetForSequenceClassification(FNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: FNetConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.fnet = FNetModel(config)
@@ -818,7 +818,7 @@ class FNetForSequenceClassification(FNetPreTrainedModel):
 
 @auto_docstring
 class FNetForMultipleChoice(FNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: FNetConfig):
         super().__init__(config)
 
         self.fnet = FNetModel(config)
@@ -907,7 +907,7 @@ class FNetForMultipleChoice(FNetPreTrainedModel):
 
 @auto_docstring
 class FNetForTokenClassification(FNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: FNetConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -962,7 +962,7 @@ class FNetForTokenClassification(FNetPreTrainedModel):
 
 @auto_docstring
 class FNetForQuestionAnswering(FNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: FNetConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels

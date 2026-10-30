@@ -379,7 +379,7 @@ def generate_block_attention_mask(patch_embeds_list, tensor):
 class PixtralVisionModel(PixtralPreTrainedModel):
     base_model_prefix = "vision_encoder"
 
-    def __init__(self, config):
+    def __init__(self, config: PixtralVisionConfig):
         super().__init__(config)
         self.config = config
         self.patch_conv = nn.Conv2d(

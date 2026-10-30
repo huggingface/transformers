@@ -708,7 +708,7 @@ class Swin2SRPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class Swin2SRModel(Swin2SRPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Swin2SRConfig):
         super().__init__(config)
         self.config = config
 
@@ -941,7 +941,7 @@ class PixelShuffleAuxUpsampler(nn.Module):
     """
 )
 class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Swin2SRConfig):
         super().__init__(config)
 
         self.swin2sr = Swin2SRModel(config)

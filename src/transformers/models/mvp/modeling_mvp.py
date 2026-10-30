@@ -1339,7 +1339,7 @@ class MvpForSequenceClassification(MvpPreTrainedModel):
 
 @auto_docstring
 class MvpForQuestionAnswering(MvpPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MvpConfig):
         super().__init__(config)
 
         config.num_labels = 2
@@ -1500,7 +1500,7 @@ class MvpDecoderWrapper(MvpPreTrainedModel):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: MvpConfig):
         super().__init__(config)
         self.decoder = MvpDecoder(config)
         self.post_init()
@@ -1512,7 +1512,7 @@ class MvpDecoderWrapper(MvpPreTrainedModel):
 class MvpForCausalLM(MvpPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.decoder.embed_tokens.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: MvpConfig):
         config.is_decoder = True
         config.is_encoder_decoder = False
         super().__init__(config)
