@@ -25,6 +25,7 @@ if is_torch_available():
     from transformers import (
         DiffusionGemmaGenerationConfig,
         DiffusionGemmaGenerationMixin,
+        DiffusionSampler,
         EntropyBoundSampler,
         EntropyBoundSamplerConfig,
         GenerationConfig,
@@ -176,6 +177,30 @@ class DiffusionGemmaGenerationClassesTester(unittest.TestCase):
         num_not_renoised_canvas = (renoised_canvas == accepted_canvas).sum().item()
         self.assertGreaterEqual(num_not_renoised_canvas, 10)  # can be >10 if the same token is sampled in the same pos
         self.assertTrue((accepted_canvas[0, :9] == renoised_canvas[0, :9]).all())
+
+    def test_eb_sampler_is_a_diffusion_sampler(self):
+        self.assertIsInstance(_get_eb_sampler(), DiffusionSampler)
+
+    def test_eb_sampler_step(self):
+        """
+        `step` samples, accepts and renoises in one call: low-entropy positions keep the sampled token, and
+        `return_dict=False` gives the same canvas as a one-item tuple.
+        """
+        sampler = _get_eb_sampler(entropy_bound=1e-1)
+        current_canvas = sampler.initialize_canvas(batch_size=1, device=torch_device)
+        logits = torch.zeros((1, 256, 10000), device=torch_device)  # [bsz, canvas_len, vocab_size]
+        logits[0, :9, 0] = 1e6  # entropy 0 -> sampled token 0, accepted
+
+        torch.manual_seed(0)
+        prev_sample = sampler.step(model_output=logits, timestep=None, sample=current_canvas).prev_sample
+        self.assertTrue((prev_sample[0, :9] == 0).all())
+        self.assertGreaterEqual(sampler.accepted_token_mask.sum().item(), 10)  # the first token above the bound too
+
+        torch.manual_seed(0)
+        (prev_sample_tuple,) = sampler.step(
+            model_output=logits, timestep=None, sample=current_canvas, return_dict=False
+        )
+        self.assertTrue(torch.equal(prev_sample, prev_sample_tuple))
 
     def test_linear_temperature_schedule(self):
         t_min = 0.4
