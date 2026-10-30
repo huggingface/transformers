@@ -50,8 +50,8 @@ print(bytes(output[0, 1:].tolist()).decode(errors="replace"))
 ```
 
 The cache stores Mamba and attention states per stage, plus the last routing input and EMA value of each stage.
-Cached decoding works with batch size 1. Each sequence closes chunks at different steps, so batched `generate` recomputes
-the full sequence at every step.
+Batched generation is supported: chunks are left-padded like the bytes, and a sequence that closes no chunk at a
+decoding step gets a padding position in the inner stages, without moving its state.
 
 ## HNetConfig
 

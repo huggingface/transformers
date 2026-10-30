@@ -128,17 +128,14 @@ class HNetConfig(PreTrainedConfig):
             }
 
         # Flat view of every cached layer in forward order: Mamba layers and the routing / dechunk states are
-        # recurrent, attention layers keep keys and values
+        # recurrent, attention layers keep keys and values, and each chunked level keeps its padding mask the same way.
+        # Sliding windows count chunks, not cache slots (sequences that close no chunk add padding slots), so every
+        # attention layer keeps its full cache and the window is a per-layer mask
         layer_stages = [stage_idx for _, stage_idx, layer_types in self.stack_layout for _ in layer_types]
         if self.layer_types is None:
-            if len({window for window in sliding_windows if window is not None}) > 1:
-                raise ValueError(f"All sliding stages must share one window, got `sliding_windows={sliding_windows}`.")
-            self.sliding_window = next((window for window in sliding_windows if window is not None), None)
             self.layer_types = [
-                "linear_attention"
-                if layer_type in ("mamba", "state")
-                else ("sliding_attention" if sliding_windows[stage_idx] else "full_attention")
-                for _, stage_idx, layer_types in self.stack_layout
+                "linear_attention" if layer_type in ("mamba", "state") else "full_attention"
+                for _, _, layer_types in self.stack_layout
                 for layer_type in layer_types
             ]
         self.num_hidden_layers = len(self.layer_types)
@@ -152,9 +149,10 @@ class HNetConfig(PreTrainedConfig):
                     "num_key_value_heads": num_heads,
                     "head_dim": hidden_size // num_heads,
                     "n_mamba_heads": self.mamba_expand * hidden_size // self.mamba_headdim,
+                    "sliding_window": sliding_window,
                 }
-                for hidden_size, intermediate_size, num_heads in zip(
-                    hidden_sizes, intermediate_sizes, num_heads_per_stage
+                for hidden_size, intermediate_size, num_heads, sliding_window in zip(
+                    hidden_sizes, intermediate_sizes, num_heads_per_stage, sliding_windows
                 )
             ]
             for attribute, value in stage_configs[0].items():
@@ -172,7 +170,11 @@ class HNetConfig(PreTrainedConfig):
         num_outer_stages = len(self.encoder_layer_types)
         layout = []
         for stage_idx in range(num_outer_stages):
-            layout += [("encoder", stage_idx, self.encoder_layer_types[stage_idx]), ("routing", stage_idx, ["state"])]
+            layout += [
+                ("encoder", stage_idx, self.encoder_layer_types[stage_idx]),
+                ("routing", stage_idx, ["state"]),
+                ("chunk_mask", stage_idx + 1, ["chunk_mask"]),
+            ]
         layout.append(("main", num_outer_stages, self.main_layer_types))
         for stage_idx in reversed(range(num_outer_stages)):
             layout += [("dechunk", stage_idx, ["state"]), ("decoder", stage_idx, self.decoder_layer_types[stage_idx])]
