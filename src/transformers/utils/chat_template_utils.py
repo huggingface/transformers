@@ -52,7 +52,8 @@ ChatType = list[dict[str, Any]]
 # Private-use characters that `mark_control_tokens` wraps around control tokens in user input
 _CONTROL_TOKEN_START = "\U000f0000"
 _CONTROL_TOKEN_END = "\U000f0001"
-
+_CONTROL_TOKEN_START_ESCAPED = ascii(_CONTROL_TOKEN_START)[1:-1]
+_CONTROL_TOKEN_END_ESCAPED = ascii(_CONTROL_TOKEN_END)[1:-1]
 
 BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
 # Extracts the initial segment of the docstring, containing the function description
@@ -436,8 +437,10 @@ def _get_control_token_patterns(control_tokens: tuple[str, ...]) -> tuple[re.Pat
     """
     longest_first = sorted(control_tokens, key=len, reverse=True)
     control_tokens_re = re.compile("|".join(map(re.escape, longest_first)) or "(?!)")  # (?!) never matches
-    start, end = _CONTROL_TOKEN_START, _CONTROL_TOKEN_END
-    markers_re = re.compile(f"{start}({control_tokens_re.pattern}){end}|[{start}{end}]")
+    start = f"(?:{_CONTROL_TOKEN_START}|{re.escape(_CONTROL_TOKEN_START_ESCAPED)})"
+    end = f"(?:{_CONTROL_TOKEN_END}|{re.escape(_CONTROL_TOKEN_END_ESCAPED)})"
+    lone = f"(?:[{_CONTROL_TOKEN_START}{_CONTROL_TOKEN_END}]|{re.escape(_CONTROL_TOKEN_START_ESCAPED)}|{re.escape(_CONTROL_TOKEN_END_ESCAPED)})"
+    markers_re = re.compile(f"{start}({control_tokens_re.pattern}){end}|{lone}")
     return control_tokens_re, markers_re
 
 
@@ -453,7 +456,12 @@ def mark_control_tokens(obj: Any, control_tokens_re: re.Pattern) -> Any:
     """
     if isinstance(obj, str):
         # Drop any markers already in the string first, so they can't be used to forge a marked token
-        obj = obj.replace(_CONTROL_TOKEN_START, "").replace(_CONTROL_TOKEN_END, "")
+        obj = (
+            obj.replace(_CONTROL_TOKEN_START, "")
+            .replace(_CONTROL_TOKEN_END, "")
+            .replace(_CONTROL_TOKEN_START_ESCAPED, "")
+            .replace(_CONTROL_TOKEN_END_ESCAPED, "")
+        )
         return control_tokens_re.sub(f"{_CONTROL_TOKEN_START}\\g<0>{_CONTROL_TOKEN_END}", obj)
     if isinstance(obj, dict):
         return {key: mark_control_tokens(value, control_tokens_re) for key, value in obj.items()}
