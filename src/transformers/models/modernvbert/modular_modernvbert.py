@@ -112,10 +112,6 @@ class ModernVBertMaskedLMOutput(MaskedLMOutput):
         image_hidden_states of the model produced by the vision encoder
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
     image_hidden_states: torch.FloatTensor | None = None
 
 

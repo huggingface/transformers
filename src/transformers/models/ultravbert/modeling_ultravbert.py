@@ -59,17 +59,13 @@ class UltraVBertBaseModelOutput(BaseModelOutput):
 @auto_docstring
 @dataclass
 class UltraVBertMaskedLMOutput(MaskedLMOutput):
-    """
+    r"""
     image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
         Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
         sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
     image_hidden_states: torch.FloatTensor | None = None
 
 
