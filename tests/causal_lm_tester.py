@@ -280,11 +280,24 @@ class CausalLMModelTest(
     ExpertParallelTesterMixin,
     FSDPTesterMixin,
 ):
+    # MIGRATION NOTE: __test__ = False tells pytest NOT to collect this class directly.
+    # Without this, adding `python_classes = ["Test*", "*Test"]` to pyproject.toml (needed
+    # so that pure-pytest classes like BertModelTest are collected after unittest.TestCase is
+    # removed) would cause pytest to collect CausalLMModelTest as a standalone test class
+    # from every one of the 97 files that import it. That produces thousands of spurious
+    # ERRORs because model_tester_class is None on the base class.
+    # Concrete subclasses (FalconModelTest, etc.) do NOT inherit __test__ = False — pytest
+    # collects them normally via their own class name matching.
+    # TODO: remove __test__ = False once all subclasses have had unittest.TestCase removed,
+    # at which point the python_classes pattern matching is the only collection mechanism and
+    # CausalLMModelTest (starting with a capital C, not "Test*") would not be matched anyway.
+    __test__ = False
+
     model_tester_class = None
     all_model_classes = None
     pipeline_model_mapping = None
 
-    def setUp(self):
+    def setup_method(self):
         if self.model_tester_class is None:
             raise ValueError(
                 "You have inherited from CausalLMModelTest but did not set the model_tester_class attribute."
@@ -305,6 +318,19 @@ class CausalLMModelTest(
 
         if self.all_model_classes is None:
             self.all_model_classes = self.model_tester.all_model_classes
+
+    def setUp(self):
+        # MIGRATION NOTE: transition alias — keeps unmigrated subclasses working.
+        # When a concrete subclass still inherits unittest.TestCase (e.g. FalconModelTest),
+        # pytest uses its unittest compatibility layer and calls setUp (camelCase), NOT
+        # setup_method. We renamed setUp → setup_method here earlier so that pure-pytest
+        # subclasses (llama, gpt2) work. But that broke all unmigrated subclasses because
+        # setUp no longer existed.
+        # This alias delegates to setup_method so BOTH call paths work during the transition:
+        #   - unittest.TestCase subclasses → pytest calls setUp → delegates to setup_method ✓
+        #   - pure-pytest subclasses → pytest calls setup_method directly ✓
+        # TODO: remove this alias once all subclasses have had unittest.TestCase removed.
+        self.setup_method()
 
     def test_config(self):
         self.config_tester.run_common_tests()

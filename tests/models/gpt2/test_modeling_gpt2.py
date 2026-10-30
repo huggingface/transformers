@@ -143,7 +143,7 @@ class GPT2ModelTester(CausalLMModelTester):
 
 
 @require_torch
-class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
+class GPT2ModelTest(CausalLMModelTest):
     # `all_model_classes` is overwritten because of `GPT2DoubleHeadsModel`
     all_model_classes = (
         (

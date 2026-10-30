@@ -74,6 +74,13 @@ INTEGRATION_TEXT_PROMPT_TEMPLATE = "a video of {}."
 
 
 class VideoPrismModelTest(ModelTesterMixin):
+    # MIGRATION NOTE: prevents pytest from collecting this base class as standalone.
+    # python_classes = ["Test*", "*Test"] causes pytest to collect any *Test class from every
+    # file that imports it. VideoPrismModelTest is a local base class with no model_tester set;
+    # only its concrete subclasses (VideoPrismVisionModelTest, VideoPrismTextModelTest) should run.
+    # pytest checks __dict__ only (not MRO), so concrete subclasses are unaffected.
+    __test__ = False
+
     def flash_attn_inference_equivalence(
         self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
     ) -> None:
