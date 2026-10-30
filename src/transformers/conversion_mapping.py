@@ -2318,6 +2318,71 @@ def _build_checkpoint_conversion_mapping():
         ),
     ]
 
+    mapping["mistral_large4"] = [
+        # Dispatch the root vision_encoder to the vision model
+        WeightRenaming(r"^vision_encoder\.", "model.vision_tower."),
+        # Dispatch the root language modules to the language model
+        WeightRenaming(r"^tok_embeddings\.", "model.language_model.embed_tokens."),
+        WeightRenaming(r"^lerope\.alpha", "model.language_model.rotary_emb.alpha"),
+        WeightRenaming(r"^layers\.", "model.language_model.layers."),
+        WeightRenaming(r"^norm\.", "model.language_model.norm."),
+        # And the rest to the multi-modal projector
+        WeightRenaming(r"^output\.", "lm_head."),
+        WeightRenaming(r"^pre_mm_projector_norm\.", "model.multi_modal_projector.norm."),
+        WeightRenaming(r"^patch_merger\.", "model.multi_modal_projector.patch_merger."),
+        WeightRenaming(r"^vision_language_adapter\.w_in\.", "model.multi_modal_projector.linear_1."),
+        WeightRenaming(r"^vision_language_adapter\.w_out\.", "model.multi_modal_projector.linear_2."),
+        # Rename the attention projections shared by both towers: value and output
+        WeightRenaming(r"\.wv\.", ".v_proj."),
+        WeightRenaming(r"\.wo\.", ".o_proj."),
+        # Same for up, down and gate projection weights (except for routed experts' which will be handled by converters)
+        WeightRenaming(r"\.(feed_forward|shared_experts)\.w1\.", r".\1.gate_proj."),
+        WeightRenaming(r"\.(feed_forward|shared_experts)\.w2\.", r".\1.down_proj."),
+        WeightRenaming(r"\.(feed_forward|shared_experts)\.w3\.", r".\1.up_proj."),
+        # Vision model Q and K projectors: saved for interleaved RoPE, Pixtral expects rotate-half
+        WeightConverter(
+            source_patterns=r"attention\.wq\.",
+            target_patterns="attention.q_proj.",
+            operations=[PermuteForRope(subconfig_key="vision_config")],
+        ),
+        WeightConverter(
+            source_patterns=r"attention\.wk\.",
+            target_patterns="attention.k_proj.",
+            operations=[PermuteForRope(subconfig_key="vision_config")],
+        ),
+    ]
+    mapping["mistral_large4_text"] = [
+        # Rename attention modules (the indexer keeps wk, wq_b, and weights_proj)
+        WeightRenaming(r"\.attention\.", r"\.self_attn\."),
+        WeightRenaming(r"\.wq\.", ".q_proj."),
+        WeightRenaming(r"\.wkv_a_with_mqa\.", r"\.kv_a_proj_with_mqa\."),
+        WeightRenaming(r"\.wkv_b\.", ".kv_b_proj."),
+        # Rename the norms
+        WeightRenaming(r"\.attention_norm\.", r"\.input_layernorm\."),
+        WeightRenaming(r"\.ffn_norm\.", r"\.post_attention_layernorm\."),
+        WeightRenaming(r"\.kv_a_norm\.", r"\.kv_a_layernorm\."),
+        # Rename MLPs and MoEs to the "mlp" prefix
+        WeightRenaming(r"\.feed_forward\.", r"\.mlp\."),
+        WeightRenaming(r"\.gate\.", r"\.mlp.gate\."),
+        WeightRenaming(r"\.experts\.", r"\.mlp.experts\."),
+        WeightRenaming(r"\.shared_experts\.", r"\.mlp.shared_experts\."),
+        # Rename softmax scaling module
+        WeightRenaming(r"\.ssmax_scaling.s", r"\.softmax_scaling.scale"),
+        WeightRenaming(r"\.ssmax_scaling.b", r"\.softmax_scaling.bias"),
+        # Concatenate w1 (gate) and w3 (up) weights into a single weight and merge across experts
+        WeightConverter(
+            source_patterns=[r"\.experts.*.w1.weight", r"\.experts.*.w3.weight"],
+            target_patterns=r"\.experts.gate_up_proj",
+            operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+        ),
+        # Merge w2 (down) weights across experts
+        WeightConverter(
+            source_patterns=r"\.experts.*.w2.weight",
+            target_patterns=r"\.experts.down_proj",
+            operations=[MergeModulelist(dim=0)],
+        ),
+    ]
+
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:
             continue

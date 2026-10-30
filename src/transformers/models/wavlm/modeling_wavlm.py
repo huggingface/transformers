@@ -551,6 +551,29 @@ class WavLMGumbelVectorQuantizer(nn.Module):
         return codevectors, perplexity
 
 
+class AMSoftmaxLoss(nn.Module):
+    def __init__(self, input_dim, num_labels, scale=30.0, margin=0.4):
+        super().__init__()
+        self.scale = scale
+        self.margin = margin
+        self.num_labels = num_labels
+        self.weight = nn.Parameter(torch.randn(input_dim, num_labels), requires_grad=True)
+        self.loss = nn.CrossEntropyLoss()
+
+    def forward(self, hidden_states, labels):
+        labels = labels.flatten()
+        weight = nn.functional.normalize(self.weight, dim=0)
+        hidden_states = nn.functional.normalize(hidden_states, dim=1)
+        cos_theta = torch.mm(hidden_states, weight)
+        psi = cos_theta - self.margin
+
+        onehot = nn.functional.one_hot(labels, self.num_labels)
+        logits = self.scale * torch.where(onehot.bool(), psi, cos_theta)
+        loss = self.loss(logits, labels)
+
+        return loss
+
+
 @auto_docstring
 class WavLMPreTrainedModel(PreTrainedModel):
     config: WavLMConfig
@@ -592,6 +615,12 @@ class WavLMPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 init.uniform_(module.bias, a=-k, b=k)
+        elif isinstance(module, WavLMModel) and hasattr(module, "masked_spec_embed"):
+            init.uniform_(module.masked_spec_embed)
+        elif isinstance(module, WavLMAttention):
+            init.ones_(module.gru_rel_pos_const)
+        elif isinstance(module, AMSoftmaxLoss):  # noqa: F821
+            init.normal_(module.weight)
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor | int, add_adapter: bool | None = None):
         """
@@ -1346,29 +1375,6 @@ class WavLMForAudioFrameClassification(WavLMPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-
-class AMSoftmaxLoss(nn.Module):
-    def __init__(self, input_dim, num_labels, scale=30.0, margin=0.4):
-        super().__init__()
-        self.scale = scale
-        self.margin = margin
-        self.num_labels = num_labels
-        self.weight = nn.Parameter(torch.randn(input_dim, num_labels), requires_grad=True)
-        self.loss = nn.CrossEntropyLoss()
-
-    def forward(self, hidden_states, labels):
-        labels = labels.flatten()
-        weight = nn.functional.normalize(self.weight, dim=0)
-        hidden_states = nn.functional.normalize(hidden_states, dim=1)
-        cos_theta = torch.mm(hidden_states, weight)
-        psi = cos_theta - self.margin
-
-        onehot = nn.functional.one_hot(labels, self.num_labels)
-        logits = self.scale * torch.where(onehot.bool(), psi, cos_theta)
-        loss = self.loss(logits, labels)
-
-        return loss
 
 
 class TDNNLayer(nn.Module):
