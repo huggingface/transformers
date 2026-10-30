@@ -103,9 +103,9 @@ Grounding DINO를 시작하는 데 도움이 되는 공식 Hugging Face 및 커�
 [[autodoc]] GroundingDinoImageProcessor
     - preprocess
 
-## GroundingDinoImageProcessor
+## GroundingDinoImageProcessorPil
 
-[[autodoc]] GroundingDinoImageProcessor
+[[autodoc]] GroundingDinoImageProcessorPil
     - preprocess
     - post_process_object_detection
 

@@ -60,9 +60,9 @@ ConvNeXT の使用を開始するのに役立つ公式 Hugging Face およびコ
 [[autodoc]] ConvNextImageProcessor
     - preprocess
 
-## ConvNextImageProcessor
+## ConvNextImageProcessorPil
 
-[[autodoc]] ConvNextImageProcessor
+[[autodoc]] ConvNextImageProcessorPil
     - preprocess
 
 

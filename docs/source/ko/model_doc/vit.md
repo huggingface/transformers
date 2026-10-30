@@ -115,9 +115,9 @@ ViT의 추론 및 커스텀 데이터에 대한 미세 조정과 관련된 데�
 [[autodoc]] ViTImageProcessor
     - preprocess
 
-## ViTImageProcessor [[transformers.ViTImageProcessor]]
+## ViTImageProcessorPil [[transformers.ViTImageProcessorPil]]
 
-[[autodoc]] ViTImageProcessor
+[[autodoc]] ViTImageProcessorPil
     - preprocess
 
 

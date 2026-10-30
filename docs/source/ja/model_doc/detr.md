@@ -184,9 +184,9 @@ DETR の使用を開始するのに役立つ公式 Hugging Face およびコミ�
     - post_process_instance_segmentation
     - post_process_panoptic_segmentation
 
-## DetrImageProcessor
+## DetrImageProcessorPil
 
-[[autodoc]] DetrImageProcessor
+[[autodoc]] DetrImageProcessorPil
     - preprocess
     - post_process_object_detection
     - post_process_semantic_segmentation

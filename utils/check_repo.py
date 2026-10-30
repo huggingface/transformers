@@ -210,6 +210,25 @@ IGNORE_NON_TESTED = (
         "PPOCRV6SmallRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6SmallRecForTextRecognition.
         "PPOCRV6SmallRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6SmallRecForTextRecognition.
         "PPOCRV6TinyRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6TinyRecForTextRecognition.
+        "PPLCNetModel",  # Building part of bigger (tested) model. Tested implicitly through PPLCNetForImageClassification.
+        "PaddleOCRVLModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
+        "PaddleOCRVisionModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
+        "PaddleOCRVisionTransformer",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
+        "PaddleOCRTextModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
+        "Qwen2VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2VLForConditionalGeneration.
+        "Qwen2_5_VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5_VLForConditionalGeneration.
+        "MiniCPMV4_7VisionModel",  # Building part of bigger (tested) model - FIXME: raushan; adding each VLM backbone here is annoying!
+        "MiniCPMOcrVisionModel",  # Building part of bigger (tested) model. Tested implicitly through MiniCPMOcrForConditionalGeneration.
+        "MiniMaxM3VLForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through MiniMaxM3SparseForConditionalGeneration.
+        "MiniMaxM3VLTextModel",  # Building part of bigger (tested) model. Tested implicitly through MiniMaxM3SparseForConditionalGeneration.
+        "MiniMaxM3VLVisionModel",  # Building part of bigger (tested) model. Tested implicitly through MiniMaxM3SparseForConditionalGeneration.
+        "Qwen3VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3VLForConditionalGeneration.
+        "Qwen3VLMoeModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3VLMoeForConditionalGeneration.
+        "Qwen3VLTextModel",  # Building part of bigger (tested) model.
+        "Qwen3VLMoeTextModel",  # Building part of bigger (tested) model.
+        "Qwen3_5TextModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3_5ForConditionalGeneration.
+        "Qwen3_5MoeTextModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3_5MoeForConditionalGeneration.
+        "MistralLarge4TextModel",  # Building part of bigger (tested) model. Tested implicitly through MistralLarge4ForConditionalGeneration.
         "Qwen2_5OmniForConditionalGeneration",  # Not a regular model. Tested in Qwen2_5OmniModelIntegrationTest
         "Qwen2_5OmniTalkerForConditionalGeneration",  #  Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntegrationTest.
         "Qwen2_5OmniTalkerModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntegrationTest.

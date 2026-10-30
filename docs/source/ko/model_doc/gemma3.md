@@ -226,9 +226,9 @@ visualizer("<img>What is shown in this image?")
 
 [[autodoc]] Gemma3ImageProcessor
 
-## Gemma3ImageProcessor
+## Gemma3ImageProcessorPil
 
-[[autodoc]] Gemma3ImageProcessor
+[[autodoc]] Gemma3ImageProcessorPil
 
 ## Gemma3Processor
 

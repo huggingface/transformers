@@ -129,9 +129,9 @@ CLIP を使い始めるのに役立つ公式 Hugging Face およびコミュニ�
 [[autodoc]] CLIPImageProcessor
     - preprocess
 
-## CLIPImageProcessor
+## CLIPImageProcessorPil
 
-[[autodoc]] CLIPImageProcessor
+[[autodoc]] CLIPImageProcessorPil
     - preprocess
 
 ## CLIPProcessor
