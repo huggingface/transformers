@@ -61,6 +61,9 @@ class Ernie4_5_VLMoeImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class Ernie4_5_VLMoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    # Pillow >= 13 can reverse bicubic resize passes, increasing isolated pixel differences.
+    backend_equivalence_atol = 0.5
+
     image_processor_tester_class = Ernie4_5_VLMoeImageProcessingTester
 
     def test_select_best_resolution(self):
@@ -229,10 +232,8 @@ class Ernie4_5_VLMoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
         encoding_pil = image_processor_pil(dummy_image, return_tensors="pt")
         encoding_torchvision = image_processor_torchvision(dummy_image, return_tensors="pt")
 
-        self._assert_tensors_equivalence(encoding_pil.pixel_values, encoding_torchvision.pixel_values)
-        self.assertEqual(encoding_pil.image_grid_thw.dtype, encoding_torchvision.image_grid_thw.dtype)
-        self._assert_tensors_equivalence(
-            encoding_pil.image_grid_thw.float(), encoding_torchvision.image_grid_thw.float()
+        self._assert_encodings_equivalence(
+            encoding_pil, encoding_torchvision, "pil", "torchvision", atol=self.backend_equivalence_atol
         )
 
     @require_vision
@@ -254,10 +255,8 @@ class Ernie4_5_VLMoeImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
         encoding_pil = image_processor_pil(dummy_images, return_tensors="pt")
         encoding_torchvision = image_processor_torchvision(dummy_images, return_tensors="pt")
 
-        self._assert_tensors_equivalence(encoding_pil.pixel_values, encoding_torchvision.pixel_values)
-        self.assertEqual(encoding_pil.image_grid_thw.dtype, encoding_torchvision.image_grid_thw.dtype)
-        self._assert_tensors_equivalence(
-            encoding_pil.image_grid_thw.float(), encoding_torchvision.image_grid_thw.float()
+        self._assert_encodings_equivalence(
+            encoding_pil, encoding_torchvision, "pil", "torchvision", atol=self.backend_equivalence_atol
         )
 
     def test_get_num_patches_without_images(self):

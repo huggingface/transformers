@@ -645,6 +645,14 @@ class MoeIdentityParallel(TensorParallelLayer):
         return (input_tensor / mesh.size(), *args[1:]), kwargs
 
 
+class LocalParamsParallel(TensorParallelLayer):
+    """Runs the module's forward with its own sharded parameters as local tensors. For a bare `nn.Parameter` such as
+    attention sinks, which has no forward to hook: its own plan entry shards it, and this style goes on its owner."""
+
+    def should_use_local_tensors(self, module):
+        return True
+
+
 if is_torch_distributed_available():
     ALL_PARALLEL_STYLES.register("embedding_rowwise", EmbeddingParallel(shard_dim=0))
     ALL_PARALLEL_STYLES.register("embedding_colwise", EmbeddingParallel(shard_dim=1))
@@ -666,6 +674,7 @@ if is_torch_distributed_available():
     ALL_PARALLEL_STYLES.register("all_reduce", AllReduceParallel())
     ALL_PARALLEL_STYLES.register("moe_tp_experts", MoeExpertsParallel())
     ALL_PARALLEL_STYLES.register("moe_identity_expert", MoeIdentityParallel())
+    ALL_PARALLEL_STYLES.register("local_params", LocalParamsParallel())
     # Every rank keeps the full param, e.g. a per-tensor quantization scale
     ALL_PARALLEL_STYLES.register("replicate", TensorParallelLayer())
 
