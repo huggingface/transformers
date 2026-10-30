@@ -175,7 +175,7 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for key in ("actions", "timestep"):
             inputs_dict.pop(key)
-        model = PI0ForConditionalGeneration(config).eval().to(torch_device)
+        model = self.all_model_classes[0](config).eval().to(torch_device)
 
         with torch.no_grad():
             expected = model.sample_actions(**inputs_dict, num_steps=3)
@@ -194,7 +194,7 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_loss_per_sample(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.loss_reduction = "none"  # check that loss per sample is returned
-        model = PI0ForConditionalGeneration(config).eval().to(device=torch_device)
+        model = self.all_model_classes[0](config).eval().to(device=torch_device)
         with torch.no_grad():
             outputs = model(**inputs_dict)
         self.assertEqual(outputs.loss.shape, (self.model_tester.batch_size, config.chunk_size, config.max_action_dim))
@@ -324,7 +324,7 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
         torch.manual_seed(0)
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.loss_reduction = "none"  # check with loss per sample is returned
-        model = PI0ForConditionalGeneration(config).to(device=torch_device).eval()
+        model = self.all_model_classes[0](config).to(device=torch_device).eval()
 
         with torch.no_grad():
             outputs = model(**inputs_dict)
