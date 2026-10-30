@@ -162,6 +162,7 @@ FSDP_MIN_VERSION = "1.12.0"
 GGUF_MIN_VERSION = "0.10.0"
 XLA_FSDPV2_MIN_VERSION = "2.2.0"
 HQQ_MIN_VERSION = "0.2.1"
+ENTROPACK_MIN_VERSION = "0.1.3"
 VPTQ_MIN_VERSION = "0.0.4"
 TORCHAO_MIN_VERSION = "0.15.0"
 COMPRESSED_TENSORS_MIN_VERSION = "0.15.0"
@@ -835,6 +836,13 @@ def is_hadamard_available() -> bool:
 def is_hqq_available(min_version: str = HQQ_MIN_VERSION) -> bool:
     is_available, hqq_version = _is_package_available("hqq", return_version=True)
     return is_available and version.parse(hqq_version) >= version.parse(min_version)
+
+
+@lru_cache
+@_make_compile_constant
+def is_entropack_available(min_version: str = ENTROPACK_MIN_VERSION) -> bool:
+    is_available, entropack_version = _is_package_available("entropack", return_version=True)
+    return is_available and version.parse(entropack_version) >= version.parse(min_version)
 
 
 @lru_cache
