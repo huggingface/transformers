@@ -509,8 +509,17 @@ class MiMoV2ProcessorTest(unittest.TestCase):
             p.save_pretrained(directory)
             self.assertEqual(AutoProcessor.from_pretrained(directory)(text="text").input_ids, [[1]])
 
+    @staticmethod
+    def prompt_ordered_codes(out):
+        """Rebuild the prompt-ordered codec frames selected by `audio_segment_offsets`."""
+        codes = np.asarray(out["input_audio_codes"])
+        segments = [
+            codes[index][start : start + length] for index, start, length in np.asarray(out["audio_segment_offsets"])
+        ]
+        return np.concatenate(segments).reshape(-1, codes.shape[-1])
+
     @parameterized.expand([("pt",), ("np",)])
-    def test_prepare_model_inputs_unpads_and_aligns_audio(self, tensor_type):
+    def test_audio_segment_offsets_unpad_and_align_audio(self, tensor_type):
         p = self.processor
         out = p(
             text=[p.audio_token, p.video_token],
@@ -522,18 +531,9 @@ class MiMoV2ProcessorTest(unittest.TestCase):
             return_tensors=tensor_type,
             **self.video_kwargs(),
         )
-        inputs = p.prepare_model_inputs(out)
-        self.assertEqual(
-            set(inputs), {"input_ids", "attention_mask", "video_pixel_values", "video_grid_thw", "audio_codes"}
-        )
         expected = np.concatenate([self.codes[:5], np.repeat(self.codes[4:5], 3, axis=0), self.codes[:60]])
-        np.testing.assert_array_equal(inputs.audio_codes, expected)
-        self.assertEqual(np.asarray(inputs.input_ids).tolist()[1].count(p.audio_token_id), 15)
-
-    def test_prepare_model_inputs_preserves_waveform_features(self):
-        out = self.processor(text=self.processor.audio_token, audio=np.zeros(24000), return_tensors="pt")
-        prepared = self.processor.prepare_model_inputs(out)
-        torch.testing.assert_close(prepared.input_features, out.input_features)
+        np.testing.assert_array_equal(self.prompt_ordered_codes(out), expected)
+        self.assertEqual(np.asarray(out.input_ids).tolist()[1].count(p.audio_token_id), 15)
 
     def test_single_frame_video_and_empty_final_audio_segment(self):
         p = self.processor
@@ -556,7 +556,7 @@ class MiMoV2ProcessorTest(unittest.TestCase):
             **self.video_kwargs(),
         )
         self.assertEqual(out.audio_segment_offsets[-1].tolist(), [0, 12, 0])
-        self.assertEqual(p.prepare_model_inputs(out).audio_codes.shape, (48, 8))
+        self.assertEqual(self.prompt_ordered_codes(out).shape, (48, 8))
 
     @parameterized.expand([("list",), ("tuple",), ("numpy",), ("torch",)])
     def test_batched_codec_input_containers(self, container):
@@ -635,63 +635,6 @@ class MiMoV2ProcessorTest(unittest.TestCase):
             np.testing.assert_array_equal(
                 restored.feature_extractor(waveform, return_tensors="np").input_features, changed
             )
-
-    @parameterized.expand(
-        [
-            ("negative_start", [[0, -1, 1]]),
-            ("negative_length", [[0, 0, -1]]),
-            ("invalid_audio_index", [[2, 0, 1]]),
-            ("padding_is_not_audio", [[0, 2, 1]]),
-            ("fractional_offset", [[0, 0.5, 1]]),
-            ("invalid_row", [[0, 1]]),
-            ("scalar_row", [0]),
-            ("empty_offsets", []),
-        ]
-    )
-    def test_invalid_audio_segment_offsets(self, _, offsets):
-        features = self.processor.feature_extractor(
-            [self.codes[:5], self.codes[:9]], is_tokenized=True, return_tensors="pt"
-        )
-        features["audio_segment_offsets"] = offsets
-        with self.assertRaises(ValueError):
-            self.processor.prepare_model_inputs(features)
-
-    @parameterized.expand(
-        [
-            ("missing", None),
-            ("scalar", 2),
-            ("wrong_batch_size", [2]),
-            ("fractional", [1.5, 3]),
-            ("negative", [-1, 3]),
-            ("out_of_bounds", [2, 4]),
-        ]
-    )
-    def test_invalid_audio_feature_lengths(self, _, lengths):
-        features = self.processor.feature_extractor(
-            [self.codes[:5], self.codes[:9]], is_tokenized=True, return_tensors="pt"
-        )
-        if lengths is None:
-            features.pop("audio_feature_lens")
-        else:
-            features["audio_feature_lens"] = lengths
-        with self.assertRaisesRegex(ValueError, "audio_feature_lens"):
-            self.processor.prepare_model_inputs(features)
-
-    @parameterized.expand([(None,), ("np",), ("pt",)])
-    def test_prepare_model_inputs_without_offsets(self, tensor_type):
-        features = self.processor.feature_extractor(
-            [self.codes[:5], self.codes[:9]], is_tokenized=True, return_tensors=tensor_type
-        )
-        inputs = self.processor.prepare_model_inputs(features)
-        expected = np.concatenate(
-            [
-                self.codes[:5],
-                np.repeat(self.codes[4:5], 3, axis=0),
-                self.codes[:9],
-                np.repeat(self.codes[8:9], 3, axis=0),
-            ]
-        )
-        np.testing.assert_array_equal(inputs.audio_codes, expected)
 
     def test_reversed_waveform(self):
         waveform = np.random.default_rng(0).standard_normal(2400).astype(np.float32)[::-1]

@@ -247,10 +247,10 @@ call `processor.save_pretrained()`; the resulting directory can be loaded with [
 
 - Legacy text and multimodal checkpoints may both declare `model_type="mimo_v2"`. [`AutoConfig`] selects
   `mimo_v2_vl` when a nonempty vision/audio encoder configuration is present, and `mimo_v2_flash` otherwise.
-- When customizing the text configuration before constructing a model, use `layer_types` and `sliding_window`.
-  Serialization synchronizes the legacy attention-pattern and window fields with these values. If both window
-  fields are supplied in a native `text_config`, `sliding_window` must equal `sliding_window_size + 1`.
-  Original flat checkpoints are normalized from their `sliding_window_size` preceding-token count.
+- [`MiMoV2VLTextConfig`] shares the MiMo V2 text-family settings of [`MiMoV2FlashConfig`]. Customize it with
+  `layer_types`, `mlp_layer_types`, `rope_parameters` and `sliding_window`. The original flat fields
+  (`hybrid_layer_pattern`, `moe_layer_freq`, `rope_theta`, `swa_rope_theta`, `partial_rotary_factor` and the
+  preceding-token count `sliding_window_size`) are accepted and normalized to these fields.
 - [`AutoProcessor`] recognizes legacy MiMo V2 VL checkpoints whose `preprocessor_config.json` still declares a
   Qwen processor. An explicit `processor_config.json` takes precedence.
 - For individual components of a legacy checkpoint, load [`AutoProcessor`] first and access its `image_processor`,
@@ -266,7 +266,7 @@ call `processor.save_pretrained()`; the resulting directory can be loaded with [
 - The original `generation_config.json` supplies EOS IDs and generation defaults. When enabling sampling, pass
   the desired options explicitly, such as `do_sample=True, temperature=1.0, top_p=0.95`.
 - Pre-tokenized audio uses `is_tokenized=True` with `(time, codec_channels)` integer arrays. The native model accepts
-  the resulting `input_audio_codes` directly. `prepare_model_inputs()` is an optional adapter for legacy input names.
+  the resulting `input_audio_codes` directly.
 - Decoded video arrays require `video_metadata` containing the source frame rate and frame indices. Use
   `do_sample_frames=False` for already-sampled frames.
 - Video blocks process frames by default. To interleave a video's soundtrack, provide the decoded track through
@@ -315,7 +315,6 @@ call `processor.save_pretrained()`; the resulting directory can be loaded with [
 
 [[autodoc]] MiMoV2Processor
     - __call__
-    - prepare_model_inputs
 
 ## MiMoV2ImageProcessor
 

@@ -17,7 +17,6 @@ import json
 import math
 import re
 from itertools import groupby
-from operator import index as integer_index
 
 import numpy as np
 
@@ -27,7 +26,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import TextInput
 from ...tokenization_utils_tokenizers import TokenizersBackend
-from ...utils import CONFIG_NAME, auto_docstring, cached_file, is_torch_tensor
+from ...utils import CONFIG_NAME, auto_docstring, cached_file
 from ...video_utils import VideoInput, VideoMetadata
 from .feature_extraction_mimo_v2 import MiMoV2FeatureExtractor
 from .image_processing_mimo_v2_vl import MiMoV2ImageProcessor
@@ -599,82 +598,6 @@ class MiMoV2Processor(ProcessorMixin):
             output.extend(("".join(video_tokens), self.audio_start_token, "".join(audio_tokens), self.audio_end_token))
         output.append(self.video_end_token)
         return "".join(output), audio_segment_offsets
-
-    def prepare_model_inputs(self, features: BatchFeature | dict) -> BatchFeature:
-        """Adapt processor outputs to the legacy input names of `XiaomiMiMo/MiMo-V2.6-Flash-RL`.
-
-        Args:
-            features ([`BatchFeature`] or `dict`):
-                Processor outputs. Codec inputs require `audio_feature_lens` to exclude padding and are reordered
-                using `audio_segment_offsets` when present. Waveform features are preserved for the native model's
-                learned audio tokenizer. The native `MiMoV2VLForConditionalGeneration` also accepts processor
-                outputs directly, without calling this method.
-
-        Returns:
-            [`BatchFeature`]: Text and vision inputs, with `pixel_values_videos` renamed to `video_pixel_values` and
-            audio codecs concatenated into two-dimensional `audio_codes` in prompt order.
-        """
-        if "input_features" in features:
-            return BatchFeature({key: value for key, value in features.items() if key in self.model_input_names})
-        inputs = {key: features[key] for key in self.tokenizer.model_input_names if key in features}
-        for source, target in (
-            ("pixel_values", "pixel_values"),
-            ("image_grid_thw", "image_grid_thw"),
-            ("pixel_values_videos", "video_pixel_values"),
-            ("video_grid_thw", "video_grid_thw"),
-        ):
-            if source in features:
-                inputs[target] = features[source]
-        if "input_audio_codes" in features:
-            inputs["audio_codes"] = self._prepare_audio_codes(
-                features["input_audio_codes"],
-                audio_feature_lens=features.get("audio_feature_lens"),
-                audio_segment_offsets=features.get("audio_segment_offsets"),
-            )
-        return BatchFeature(inputs)
-
-    def _prepare_audio_codes(self, audio_codes, audio_feature_lens, audio_segment_offsets=None):
-        """Validate and concatenate unpadded codec segments without changing their tensor backend or device."""
-        if is_torch_tensor(audio_feature_lens):
-            audio_feature_lens = audio_feature_lens.tolist()
-        try:
-            audio_feature_lens = [integer_index(length) for length in audio_feature_lens]
-        except TypeError as error:
-            raise ValueError("audio_feature_lens must contain one integer length per codec sequence.") from error
-        if len(audio_feature_lens) != len(audio_codes):
-            raise ValueError("audio_feature_lens must contain one length per codec sequence.")
-        if any(length < 0 or length > len(sample) for length, sample in zip(audio_feature_lens, audio_codes)):
-            raise ValueError("audio_feature_lens must be nonnegative and not exceed the codec sequence lengths.")
-
-        if audio_segment_offsets is None:
-            audio_segment_offsets = [(index, 0, length) for index, length in enumerate(audio_feature_lens)]
-        elif is_torch_tensor(audio_segment_offsets):
-            audio_segment_offsets = audio_segment_offsets.tolist()
-        audio_segments = []
-        for row in audio_segment_offsets:
-            try:
-                audio_index, start, length = map(integer_index, row)
-            except (TypeError, ValueError) as error:
-                raise ValueError(
-                    "Audio segment offsets must contain integer (audio_index, start, length) rows."
-                ) from error
-            if (
-                not 0 <= audio_index < len(audio_codes)
-                or start < 0
-                or length < 0
-                or start + length > audio_feature_lens[audio_index]
-            ):
-                raise ValueError("Audio segment offsets extend outside the codec sequence.")
-            audio_segments.append(audio_codes[audio_index][start : start + length])
-        if not audio_segments:
-            raise ValueError("At least one audio segment is required for codec inputs.")
-        if is_torch_tensor(audio_segments[0]):
-            import torch
-
-            audio_codes = torch.cat(audio_segments)
-        else:
-            audio_codes = np.concatenate(audio_segments)
-        return audio_codes.reshape(-1, self.feature_extractor.audio_channels)
 
     @property
     def model_input_names(self):

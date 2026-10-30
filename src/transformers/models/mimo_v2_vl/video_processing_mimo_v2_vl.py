@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import math
 import warnings
 
@@ -321,8 +320,6 @@ class MiMoV2VideoProcessor(BaseVideoProcessor):
         **kwargs,
     ) -> BatchFeature:
         temporal_factor = temporal_patch_size * temporal_compression_ratio
-        if min(temporal_patch_size, temporal_compression_ratio, total_max_pixels) <= 0:
-            raise ValueError("Temporal factors and total_max_pixels must be positive.")
         grouped_videos, grouped_indices = group_videos_by_shape(videos)
         processed_videos, processed_grids = {}, {}
         for shape, stacked_videos in grouped_videos.items():

@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import math
 
 import torch
@@ -32,11 +31,12 @@ from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_mimo_v2_utils import load_original_checkpoint_if_needed
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import CausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_greater_or_equal, logging
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_mimo_v2_vl import MiMoV2VLConfig, MiMoV2VLTextConfig
 
@@ -241,6 +241,18 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
 def apply_rotary_pos_emb_fp32(query, key, cos, sin):
     """Apply GLM's rotation in FP32, then restore Q/K dtypes without rounding their unrotated tails."""
     rotary_dim = cos.shape[-1]
@@ -256,10 +268,8 @@ def _attention_forward(query, key, value, attention_mask=None, sinks=None, dropo
     """Grouped-query attention with an optional zero-valued sink in the softmax denominator."""
     if attention_mask is not None and attention_mask.dtype == torch.bool:
         attention_mask = torch.zeros_like(attention_mask, dtype=query.dtype).masked_fill(~attention_mask, -torch.inf)
-    groups = query.shape[1] // key.shape[1]
-    if groups != 1:
-        key = key.repeat_interleave(groups, dim=1)
-        value = value.repeat_interleave(groups, dim=1)
+    key = repeat_kv(key, query.shape[1] // key.shape[1])
+    value = repeat_kv(value, query.shape[1] // value.shape[1])
     if sinks is not None:
         batch_size, num_heads, query_length, _ = query.shape
         if attention_mask is None:
@@ -362,10 +372,9 @@ class MiMoV2VLAttention(nn.Module):
             else config.add_full_attention_sink_bias
         )
         self.v_scale = config.attention_value_scale if config.attention_value_scale is not None else 1.0
-        self.num_heads = self.q_proj.out_features // self.head_dim
-        self.num_key_value_heads = self.k_proj.out_features // self.head_dim
-        self.window_size = (self.sliding_window - 1, 0) if self.sliding_window is not None else None
-        self.attention_sink_bias = nn.Parameter(torch.zeros(self.num_heads)) if use_sink else None
+        # Same sinks as Flash, stored under the original checkpoint name.
+        num_heads = self.q_proj.out_features // self.head_dim
+        self.attention_sink_bias = nn.Parameter(torch.zeros(num_heads)) if use_sink else None
 
     def forward(
         self, hidden_states, position_embeddings, attention_mask=None, past_key_values=None, **kwargs
@@ -375,10 +384,8 @@ class MiMoV2VLAttention(nn.Module):
         v_shape = (batch_size, sequence_length, -1, self.v_head_dim)
         query = self.q_proj(hidden_states).view(qk_shape).transpose(1, 2)
         key = self.k_proj(hidden_states).view(qk_shape).transpose(1, 2)
-        value = self.v_proj(hidden_states).view(v_shape).transpose(1, 2)
+        value = self.v_proj(hidden_states).view(v_shape).transpose(1, 2) * self.v_scale
         query, key = apply_rotary_pos_emb_fp32(query, key, *position_embeddings)
-        if self.config.attention_value_scale is not None:
-            value = value * self.config.attention_value_scale
         if past_key_values is not None:
             key, value = past_key_values.update(key, value, self.layer_idx)
         if attention_mask is None and sequence_length > 1:
@@ -395,21 +402,21 @@ class MiMoV2VLAttention(nn.Module):
             self.attention_sink_bias,
             dropout=self.config.attention_dropout if self.training else 0.0,
             implementation=self.config._attn_implementation,
-            window_size=self.window_size,
+            window_size=(self.sliding_window - 1, 0) if self.sliding_window is not None else None,
         )
         return self.o_proj(output.transpose(1, 2).reshape(batch_size, sequence_length, -1)), None
 
 
 class MiMoV2VLDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config, layer_idx):
+    def __init__(self, config: MiMoV2VLConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = MiMoV2VLAttention(config, layer_idx)
-        self.mlp = MiMoV2VLMoE(config) if config.moe_layer_freq[layer_idx] else MiMoV2VLMLP(config)
+
+        self.mlp = MiMoV2VLMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else MiMoV2VLMLP(config)
 
         self.input_layernorm = MiMoV2VLRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_layernorm = MiMoV2VLRMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.layer_type = config.layer_types[layer_idx]
 
     def forward(
         self,
@@ -467,26 +474,39 @@ class MiMoV2VLPreTrainedModel(PreTrainedModel):
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
     def _init_weights(self, module):
+        # Linear, convolution, embedding and norm layers use the standard initialization.
         super()._init_weights(module)
-        std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
-        if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv3d, nn.Embedding)):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if isinstance(module, nn.Embedding) and module.padding_idx is not None:
-                init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, MiMoV2VLTopkRouter):
-            init.normal_(module.weight, mean=0.0, std=std)
+        if isinstance(module, MiMoV2VLTopkRouter):
+            init.normal_(module.weight, mean=0.0, std=self.config.get_text_config().initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, MiMoV2VLRotaryEmbedding):
-            inv_freq, _ = module.compute_default_rope_parameters(module.dim, module.theta)
-            init.copy_(module.inv_freq, inv_freq)
+            init.copy_(module.inv_freq, module.compute_default_rope_parameters(module.dim, module.theta)[0])
         elif isinstance(module, MiMoV2VLCodebook):
             init.ones_(module.inited)
             init.zeros_(module.cluster_size)
             init.zeros_(module.embed)
             init.zeros_(module.embed_avg)
-        for name in ("sinks", "attention_sink_bias"):
-            if getattr(module, name, None) is not None:
-                init.zeros_(getattr(module, name))
+        elif isinstance(module, MiMoV2VLAttention) and module.attention_sink_bias is not None:
+            init.zeros_(module.attention_sink_bias)
+        elif isinstance(module, MiMoV2VLVisionAttention) and module.sinks is not None:
+            init.zeros_(module.sinks)
+
+
+class MiMoV2VLTextRotaryEmbedding(nn.Module):
+    """Full and sliding attention layers use different rotary dimensions and bases."""
+
+    def __init__(self, config: MiMoV2VLTextConfig):
+        super().__init__()
+        full, sliding = config.rope_parameters["full_attention"], config.rope_parameters["sliding_attention"]
+        self.full_attention = MiMoV2VLRotaryEmbedding(
+            int(config.head_dim * full.get("partial_rotary_factor", 0.334)), full["rope_theta"]
+        )
+        self.sliding_attention = MiMoV2VLRotaryEmbedding(
+            int(config.swa_head_dim * sliding.get("partial_rotary_factor", 0.334)), sliding["rope_theta"]
+        )
+
+    def forward(self, x, position_ids, layer_type):
+        return getattr(self, layer_type)(x, position_ids)
 
 
 @auto_docstring
@@ -504,17 +524,13 @@ class MiMoV2VLTextModel(MiMoV2VLPreTrainedModel):
             [MiMoV2VLDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = MiMoV2VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = MiMoV2VLRotaryEmbedding(
-            int(config.head_dim * config.partial_rotary_factor), config.rope_theta
-        )
+        self.rotary_emb = MiMoV2VLTextRotaryEmbedding(config)
         self.gradient_checkpointing = False
-        self.swa_rotary_emb = MiMoV2VLRotaryEmbedding(
-            int(config.swa_head_dim * config.partial_rotary_factor), config.swa_rope_theta
-        )
 
         # Initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
     def forward(
@@ -526,25 +542,27 @@ class MiMoV2VLTextModel(MiMoV2VLPreTrainedModel):
         inputs_embeds=None,
         use_cache=None,
         **kwargs,
-    ) -> BaseModelOutputWithPast:
-        if (input_ids is None) == (inputs_embeds is None):
-            raise ValueError("Specify exactly one of input_ids or inputs_embeds.")
-        use_cache = self.config.use_cache if use_cache is None else use_cache
+    ) -> MoeModelOutputWithPast:
+        if position_ids is None and isinstance(attention_mask, torch.Tensor) and attention_mask.ndim == 2:
+            # Direct left-padded calls use the same positions as generation.
+            sequence_length = (input_ids if inputs_embeds is None else inputs_embeds).shape[1]
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids = position_ids.masked_fill(attention_mask == 0, 0)[:, -sequence_length:]
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-        if self.gradient_checkpointing and self.training:
-            use_cache = False
+
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
+
         if position_ids is None:
-            if attention_mask is not None and not isinstance(attention_mask, dict) and attention_mask.ndim == 2:
-                position_ids = attention_mask.long().cumsum(-1) - 1
-                position_ids = position_ids.masked_fill(attention_mask == 0, 0)[:, -inputs_embeds.shape[1] :]
-            else:
-                past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-                position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device)[None] + past_length
-        masks = attention_mask
-        if not isinstance(masks, dict):
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
+
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
@@ -552,22 +570,32 @@ class MiMoV2VLTextModel(MiMoV2VLPreTrainedModel):
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
-            masks = {"full_attention": create_causal_mask(**mask_kwargs)}
-            if "sliding_attention" in self.config.layer_types:
-                masks["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
-        position_embeddings = self.rotary_emb(inputs_embeds, position_ids)
-        sliding_position_embeddings = self.swa_rotary_emb(inputs_embeds, position_ids)
+            mask_creation_functions = {
+                "full_attention": lambda: create_causal_mask(**mask_kwargs),
+                "sliding_attention": lambda: create_sliding_window_causal_mask(**mask_kwargs),
+            }
+            causal_mask_mapping = {}
+            for layer_type in set(self.config.layer_types):
+                causal_mask_mapping[layer_type] = mask_creation_functions[layer_type]()
+
         hidden_states = inputs_embeds
-        for layer in self.layers:
-            rotary = sliding_position_embeddings if layer.layer_type == "sliding_attention" else position_embeddings
-            hidden_states = layer(
+        position_embeddings = {}
+        for layer_type in set(self.config.layer_types):
+            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
+
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            hidden_states = decoder_layer(
                 hidden_states,
-                position_embeddings=rotary,
-                attention_mask=masks[layer.layer_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                position_embeddings=position_embeddings[self.config.layer_types[i]],
+                position_ids=position_ids,
                 past_key_values=past_key_values,
+                **kwargs,
             )
+
         hidden_states = self.norm(hidden_states)
-        return BaseModelOutputWithPast(
+
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
         )
@@ -576,6 +604,7 @@ class MiMoV2VLTextModel(MiMoV2VLPreTrainedModel):
 class MiMoV2VLVisionPatchEmbed(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
+        # Named locals let the converter inline Qwen's constructor with MiMo config values.
         patch_size = config.patch_size
         temporal_patch_size = config.temporal_patch_size
         in_channels = config.in_channels
@@ -589,7 +618,6 @@ class MiMoV2VLVisionPatchEmbed(nn.Module):
         self.proj = nn.Conv3d(in_channels, embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = hidden_states.contiguous()
         target_dtype = self.proj.weight.dtype
         hidden_states = hidden_states.view(
             -1, self.in_channels, self.temporal_patch_size, self.patch_size, self.patch_size
@@ -619,18 +647,13 @@ class MiMoV2VLVisionAttention(nn.Module):
         key = key.view(1, -1, config.num_key_value_heads, config.qk_channels).transpose(1, 2)
         value = value.view(1, -1, config.num_key_value_heads, config.qk_channels).transpose(1, 2)
         query, key = apply_rotary_pos_emb_fp32(query, key, *position_embeddings)
-        outputs = []
-        for query_chunk, key_chunk, value_chunk in zip(
-            query.split(sequence_lengths, 2), key.split(sequence_lengths, 2), value.split(sequence_lengths, 2)
-        ):
-            window_size = (
-                (config.visual_token_window_size,) * 2
-                if not self.full_attention and config.visual_token_window_size > 0
-                else None
-            )
-            outputs.append(
-                attention_forward(query_chunk, key_chunk, value_chunk, sinks=self.sinks, window_size=window_size)
-            )
+        window = config.visual_token_window_size
+        window_size = (window, window) if not self.full_attention and window > 0 else None
+        # Each image/frame attends only within itself.
+        outputs = [
+            attention_forward(*chunks, sinks=self.sinks, window_size=window_size)
+            for chunks in zip(*(states.split(sequence_lengths, 2) for states in (query, key, value)))
+        ]
         output = torch.cat(outputs, dim=2).transpose(1, 2).reshape(hidden_states.shape[0], -1)
         return self.proj(output)
 
@@ -1044,25 +1067,19 @@ class MiMoV2VLAudioTokenizerModel(nn.Module):
             # Mel segments have variable lengths and are grouped outside compiled decoder execution.
             # trf-ignore: TRF056
             lengths = feature_attention_mask.sum(-1, dtype=torch.long).tolist()
-        sequences = []
-        segment_counts = []
+        sequences, segment_counts = [], []
         for index, (features, length) in enumerate(zip(input_features, lengths)):
             if length <= 0:
                 raise ValueError("Each audio input must contain at least one valid mel frame.")
             if feature_attention_mask is not None:
                 features = features[feature_attention_mask[index].to(device=features.device, dtype=torch.bool)]
-            segments = list(features[:length].split(segment_size, dim=0))
+            segments = features[:length].split(segment_size, dim=0)
             sequences.extend(segments)
             segment_counts.append(len(segments))
         segment_lengths = torch.tensor([len(segment) for segment in sequences], device=device)
         padded = nn.utils.rnn.pad_sequence(sequences, batch_first=True).to(device)
-        code_segments = self.encoder(padded, segment_lengths)
-        outputs = []
-        offset = 0
-        for count in segment_counts:
-            outputs.append(torch.cat(code_segments[offset : offset + count]))
-            offset += count
-        return outputs
+        code_segments = iter(self.encoder(padded, segment_lengths))
+        return [torch.cat([next(code_segments) for _ in range(count)]) for count in segment_counts]
 
 
 _MULTIMODAL_ARGS = r"""
@@ -1074,11 +1091,10 @@ audio_feature_lens (`torch.LongTensor`, *optional*):
     Valid grouped-token length of each audio sequence before batch padding.
 audio_segment_offsets (`torch.LongTensor`, *optional*):
     `(audio_index, start, length)` rows aligning audio features with prompt spans.
-audio_codes (`torch.LongTensor`, *optional*):
-    Legacy unpadded, prompt-ordered codec IDs of shape `(time, audio_channels)`.
-video_pixel_values (`torch.Tensor`, *optional*):
-    Legacy alias for `pixel_values_videos`. Specify only one of these inputs.
 """
+
+
+_INTEGER_DTYPES = (torch.uint8, torch.int8, torch.int16, torch.int32, torch.int64)
 
 
 def as_integer_audio_metadata(values, name: str, ndim: int) -> torch.Tensor:
@@ -1087,13 +1103,7 @@ def as_integer_audio_metadata(values, name: str, ndim: int) -> torch.Tensor:
         values = torch.as_tensor(values)
     except (TypeError, ValueError, RuntimeError) as error:
         raise ValueError(f"{name} must be a {ndim}-dimensional integer array.") from error
-    if (
-        values.ndim != ndim
-        or values.is_floating_point()
-        or values.is_complex()
-        or values.is_quantized
-        or values.dtype == torch.bool
-    ):
+    if values.ndim != ndim or values.dtype not in _INTEGER_DTYPES:
         raise ValueError(f"{name} must be a {ndim}-dimensional integer array.")
     return values
 
@@ -1133,37 +1143,26 @@ class MiMoV2VLModel(MiMoV2VLPreTrainedModel):
         audio_segment_offsets=None,
         input_features=None,
         feature_attention_mask=None,
-        audio_codes=None,
     ):
         config = self.config.audio_config
-        if sum(value is not None for value in (input_audio_codes, input_features, audio_codes)) != 1:
-            raise ValueError("Specify exactly one of input_features, input_audio_codes, or audio_codes.")
+        group_shape = (config.group_size, config.audio_channels)
+        if (input_audio_codes is None) == (input_features is None):
+            raise ValueError("Specify exactly one of input_features or input_audio_codes.")
         if input_features is not None:
-            sequences = self.audio_tokenizer(input_features, feature_attention_mask, config.audio_segment_size)
             grouped = []
-            for codes in sequences:
+            for codes in self.audio_tokenizer(input_features, feature_attention_mask, config.audio_segment_size):
+                # Repeat the final frame to complete the last group.
                 if pad_length := -len(codes) % config.group_size:
                     codes = torch.cat((codes, codes[-1:].expand(pad_length, -1)))
-                grouped.append(codes[:, : config.audio_channels].reshape(-1, config.group_size, config.audio_channels))
-        elif audio_codes is not None:
-            if (
-                audio_codes.ndim != 2
-                or audio_codes.shape[1] != config.audio_channels
-                or len(audio_codes) % config.group_size
-            ):
-                raise ValueError("audio_codes must have shape (grouped_time * group_size, audio_channels).")
-            grouped = [audio_codes.reshape(-1, config.group_size, config.audio_channels)]
+                grouped.append(codes[:, : config.audio_channels].reshape(-1, *group_shape))
         else:
-            if input_audio_codes.ndim != 4 or tuple(input_audio_codes.shape[-2:]) != (
-                config.group_size,
-                config.audio_channels,
-            ):
+            if input_audio_codes.ndim != 4 or tuple(input_audio_codes.shape[-2:]) != group_shape:
                 raise ValueError(
                     "input_audio_codes must have shape (batch, grouped_time, group_size, audio_channels)."
                 )
             grouped = list(input_audio_codes)
         lengths = [len(sequence) for sequence in grouped]
-        if audio_feature_lens is not None and audio_codes is None:
+        if audio_feature_lens is not None:
             supplied_lengths = as_integer_audio_metadata(audio_feature_lens, "audio_feature_lens", ndim=1).tolist()
             if len(supplied_lengths) != len(grouped) or any(
                 length < 0 or length > maximum for length, maximum in zip(supplied_lengths, lengths)
@@ -1172,7 +1171,7 @@ class MiMoV2VLModel(MiMoV2VLPreTrainedModel):
             if input_features is not None and supplied_lengths != lengths:
                 raise ValueError("Audio tokenizer output lengths differ from the processor's audio_feature_lens.")
             lengths = supplied_lengths
-        if audio_segment_offsets is None or audio_codes is not None:
+        if audio_segment_offsets is None:
             audio_segment_offsets = [(index, 0, length) for index, length in enumerate(lengths)]
         audio_segment_offsets = as_integer_audio_metadata(audio_segment_offsets, "audio_segment_offsets", ndim=2)
         if audio_segment_offsets.shape[1] != 3:
@@ -1185,7 +1184,7 @@ class MiMoV2VLModel(MiMoV2VLPreTrainedModel):
         if not segments:
             raise ValueError("At least one audio segment is required.")
         codes = torch.cat(segments)
-        if codes.is_floating_point() or codes.is_complex() or codes.is_quantized or codes.dtype == torch.bool:
+        if codes.dtype not in _INTEGER_DTYPES:
             raise ValueError("Audio codec IDs must be integers.")
         speech_embeddings = self.speech_embeddings[0](codes[..., 0].long())
         for channel, embedding in enumerate(self.speech_embeddings[1:], start=1):
@@ -1200,54 +1199,46 @@ class MiMoV2VLModel(MiMoV2VLPreTrainedModel):
         image_grid_thw=None,
         pixel_values_videos=None,
         video_grid_thw=None,
-        video_pixel_values=None,
         input_audio_codes=None,
-        audio_codes=None,
         input_features=None,
         audio_feature_lens=None,
         feature_attention_mask=None,
         audio_segment_offsets=None,
     ):
+        """Encode every supplied modality and scatter it into the matching placeholder tokens."""
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
-        if pixel_values_videos is not None and video_pixel_values is not None:
-            raise ValueError("Specify only one of pixel_values_videos or video_pixel_values.")
-        pixel_values_videos = pixel_values_videos if pixel_values_videos is not None else video_pixel_values
-
-        def merge_embeddings(token_id, features, modality):
-            nonlocal inputs_embeds
-            if input_ids is None:
-                raise ValueError("input_ids are required to locate multimodal placeholders.")
-            mask = input_ids.to(inputs_embeds.device) == token_id
-            if int(mask.sum()) != features.shape[0]:
-                raise ValueError(
-                    f"{modality} features and placeholder tokens do not match: {features.shape[0]} features, {int(mask.sum())} tokens."
-                )
-            features = features.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(mask.unsqueeze(-1), features)
-
+        modality_features = []
         if pixel_values is not None:
             if image_grid_thw is None:
                 raise ValueError("image_grid_thw is required with pixel_values.")
-            merge_embeddings(
-                self.config.image_token_id, self.get_image_features(pixel_values, image_grid_thw), "Image"
-            )
+            image_features = self.get_image_features(pixel_values, image_grid_thw)
+            modality_features.append(("Image", self.config.image_token_id, image_features))
         if pixel_values_videos is not None:
             if video_grid_thw is None:
                 raise ValueError("video_grid_thw is required with pixel_values_videos.")
-            merge_embeddings(
-                self.config.video_token_id, self.get_video_features(pixel_values_videos, video_grid_thw), "Video"
-            )
-        if any(value is not None for value in (input_audio_codes, input_features, audio_codes)):
+            video_features = self.get_video_features(pixel_values_videos, video_grid_thw)
+            modality_features.append(("Video", self.config.video_token_id, video_features))
+        if input_audio_codes is not None or input_features is not None:
             audio_features = self.get_audio_features(
                 input_audio_codes=input_audio_codes,
                 audio_feature_lens=audio_feature_lens,
                 audio_segment_offsets=audio_segment_offsets,
                 input_features=input_features,
                 feature_attention_mask=feature_attention_mask,
-                audio_codes=audio_codes,
             )
-            merge_embeddings(self.config.audio_token_id, audio_features, "Audio")
+            modality_features.append(("Audio", self.config.audio_token_id, audio_features))
+        for modality, token_id, features in modality_features:
+            if input_ids is None:
+                raise ValueError("input_ids are required to locate multimodal placeholders.")
+            mask = input_ids.to(inputs_embeds.device) == token_id
+            if int(mask.sum()) != features.shape[0]:
+                raise ValueError(
+                    f"{modality} features and placeholder tokens do not match: "
+                    f"{features.shape[0]} features, {int(mask.sum())} tokens."
+                )
+            features = features.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(mask.unsqueeze(-1), features)
         return inputs_embeds
 
     @can_return_tuple
@@ -1269,8 +1260,6 @@ class MiMoV2VLModel(MiMoV2VLPreTrainedModel):
         feature_attention_mask=None,
         audio_feature_lens=None,
         audio_segment_offsets=None,
-        video_pixel_values=None,
-        audio_codes=None,
         **kwargs,
     ):
         inputs_embeds = self.get_multimodal_embeddings(
@@ -1280,9 +1269,7 @@ class MiMoV2VLModel(MiMoV2VLPreTrainedModel):
             image_grid_thw=image_grid_thw,
             pixel_values_videos=pixel_values_videos,
             video_grid_thw=video_grid_thw,
-            video_pixel_values=video_pixel_values,
             input_audio_codes=input_audio_codes,
-            audio_codes=audio_codes,
             input_features=input_features,
             audio_feature_lens=audio_feature_lens,
             feature_attention_mask=feature_attention_mask,
@@ -1313,9 +1300,7 @@ class MiMoV2VLForConditionalGeneration(MiMoV2VLPreTrainedModel, GenerationMixin)
         "image_grid_thw",
         "pixel_values_videos",
         "video_grid_thw",
-        "video_pixel_values",
         "input_audio_codes",
-        "audio_codes",
         "input_features",
         "feature_attention_mask",
         "audio_feature_lens",
@@ -1349,8 +1334,6 @@ class MiMoV2VLForConditionalGeneration(MiMoV2VLPreTrainedModel, GenerationMixin)
         feature_attention_mask=None,
         audio_feature_lens=None,
         audio_segment_offsets=None,
-        video_pixel_values=None,
-        audio_codes=None,
         **kwargs,
     ) -> tuple | CausalLMOutputWithPast:
         """Run the MiMo V2 VL language-model head."""
@@ -1363,8 +1346,6 @@ class MiMoV2VLForConditionalGeneration(MiMoV2VLPreTrainedModel, GenerationMixin)
             feature_attention_mask=feature_attention_mask,
             audio_feature_lens=audio_feature_lens,
             audio_segment_offsets=audio_segment_offsets,
-            video_pixel_values=video_pixel_values,
-            audio_codes=audio_codes,
             return_dict=True,
         )
         outputs = self.model(
@@ -1404,34 +1385,20 @@ class MiMoV2VLForConditionalGeneration(MiMoV2VLPreTrainedModel, GenerationMixin)
         return load_original_checkpoint(pretrained_model_name_or_path, **kwargs)
 
     def prepare_inputs_for_generation(self, input_ids, is_first_iteration=False, **kwargs):
+        use_cache = kwargs.get("use_cache", True)
         cache = kwargs.get("past_key_values")
-        if kwargs.get("use_cache", True) and (cache is None or cache.get_seq_length() == 0):
-            is_first_iteration = True
+        # Media is encoded while prefilling an empty cache; cached decoding steps no longer need it.
+        is_first_iteration = is_first_iteration or (use_cache and (cache is None or cache.get_seq_length() == 0))
         model_inputs = super().prepare_inputs_for_generation(
             input_ids, is_first_iteration=is_first_iteration, **kwargs
         )
-        if (
-            not is_first_iteration
-            and kwargs.get("use_cache", True)
-            and cache is not None
-            and cache.get_seq_length() > 0
-        ):
+        if use_cache and not is_first_iteration:
             for name in self._multimodal_input_names:
                 model_inputs.pop(name, None)
         return model_inputs
 
     def _expand_inputs_for_generation(self, expand_size=1, is_encoder_decoder=False, input_ids=None, **model_kwargs):
-        if expand_size > 1 and any(
-            model_kwargs.get(name) is not None
-            for name in (
-                "pixel_values",
-                "pixel_values_videos",
-                "video_pixel_values",
-                "input_audio_codes",
-                "audio_codes",
-                "input_features",
-            )
-        ):
+        if expand_size > 1 and any(model_kwargs.get(name) is not None for name in self._multimodal_input_names):
             # Encode once before beam expansion so flattened patches and audio offsets retain sample boundaries.
             multimodal_inputs = {
                 name: model_kwargs.pop(name) for name in self._multimodal_input_names if name in model_kwargs

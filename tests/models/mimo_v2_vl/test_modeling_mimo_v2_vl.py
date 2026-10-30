@@ -43,6 +43,7 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
     import torch
 
+    from transformers import modeling_mimo_v2_utils
     from transformers.modeling_mimo_v2_utils import dequantize_mxfp4, split_interleaved_qkv
     from transformers.models.mimo_v2_vl.modeling_mimo_v2_vl import attention_forward
 
@@ -65,14 +66,17 @@ def get_config():
             swa_num_key_value_heads=4,
             swa_head_dim=8,
             swa_v_head_dim=4,
-            partial_rotary_factor=1.0,
-            sliding_window_size=3,
+            rope_parameters={
+                "full_attention": {"rope_type": "default", "rope_theta": 10000000.0, "partial_rotary_factor": 1.0},
+                "sliding_attention": {"rope_type": "default", "rope_theta": 10000.0, "partial_rotary_factor": 1.0},
+            },
+            sliding_window=4,
             n_routed_experts=4,
             num_experts_per_tok=2,
             moe_intermediate_size=16,
             moe_router_dtype="float32",
-            hybrid_layer_pattern=[0, 1],
-            moe_layer_freq=[0, 1],
+            layer_types=["full_attention", "sliding_attention"],
+            mlp_layer_types=["dense", "sparse"],
             pad_token_id=0,
             eos_token_id=3,
         ),
@@ -146,6 +150,10 @@ class MiMoV2VLCommonTestMixin:
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     @unittest.skip("MiMo currently supports default RoPE only; unsupported scaling is tested explicitly.")
     def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
+
+    @unittest.skip("MiMo currently supports default RoPE only; unsupported scaling is tested explicitly.")
+    def test_model_rope_scaling_frequencies(self):
         pass
 
     @unittest.skip("MiMo's rotary module takes dimensions rather than a config; partial RoPE has dedicated tests.")
@@ -313,8 +321,7 @@ class MiMoV2VLModelTest(unittest.TestCase):
         config = get_config()
         config.text_config.sliding_window = 9
         config.text_config.layer_types = ["sliding_attention", "full_attention"]
-        config.text_config.rope_parameters = {"rope_type": "default", "rope_theta": 10000.0}
-        config.text_config.rope_theta = 20000.0
+        config.text_config.rope_parameters["full_attention"]["rope_theta"] = 20000.0
         model = MiMoV2VLForConditionalGeneration(config).eval()
         inputs = {"input_ids": torch.tensor([[2, 7, 8, 9]])}
         with tempfile.TemporaryDirectory() as directory, torch.no_grad():
@@ -323,7 +330,7 @@ class MiMoV2VLModelTest(unittest.TestCase):
             restored = AutoModelForImageTextToText.from_pretrained(directory, local_files_only=True).eval()
             self.assertEqual(restored.config.text_config.sliding_window, 9)
             self.assertEqual(restored.config.text_config.layer_types, config.text_config.layer_types)
-            self.assertEqual(restored.config.text_config.rope_theta, 20000.0)
+            self.assertEqual(restored.config.text_config.rope_parameters, config.text_config.rope_parameters)
             torch.testing.assert_close(restored(**inputs, use_cache=False).logits, expected, rtol=0, atol=0)
 
     @parameterized.expand(
@@ -569,22 +576,27 @@ class MiMoV2VLModelTest(unittest.TestCase):
         prepared = self.model.prepare_inputs_for_generation(**inputs, past_key_values=cache, use_cache=True)
         self.assertNotIn("pixel_values", prepared)
 
-    def test_native_text_config_fields(self):
+    def test_legacy_text_config_fields(self):
         config = MiMoV2VLTextConfig(
             num_hidden_layers=2,
-            layer_types=["sliding_attention", "full_attention"],
-            sliding_window=17,
-            rope_parameters={"rope_type": "default", "rope_theta": 20000, "partial_rotary_factor": 0.5},
+            hybrid_layer_pattern=[1, 0],
+            moe_layer_freq=[0, 1],
+            sliding_window_size=16,
+            rope_theta=20000,
+            swa_rope_theta=30000,
+            partial_rotary_factor=0.5,
         )
-        self.assertEqual(config.hybrid_layer_pattern, [1, 0])
+        self.assertEqual(config.layer_types, ["sliding_attention", "full_attention"])
+        self.assertEqual(config.mlp_layer_types, ["dense", "sparse"])
         self.assertEqual(config.sliding_window, 17)
-        self.assertEqual(config.sliding_window_size, 16)
-        self.assertEqual(config.rope_theta, 20000)
-        self.assertEqual(config.partial_rotary_factor, 0.5)
-        restored = MiMoV2VLTextConfig.from_dict(config.to_dict())
-        self.assertEqual(restored.to_dict(), config.to_dict())
-        with self.assertRaisesRegex(ValueError, "same attention"):
-            MiMoV2VLTextConfig(num_hidden_layers=2, layer_types=["full_attention"] * 2, hybrid_layer_pattern=[0, 1])
+        self.assertEqual(config.rope_parameters["full_attention"]["rope_theta"], 20000)
+        self.assertEqual(config.rope_parameters["sliding_attention"]["rope_theta"], 30000)
+        self.assertEqual(config.rope_parameters["sliding_attention"]["partial_rotary_factor"], 0.5)
+        serialized = config.to_dict()
+        self.assertFalse(
+            {"hybrid_layer_pattern", "moe_layer_freq", "sliding_window_size", "rope_theta"} & set(serialized)
+        )
+        self.assertEqual(MiMoV2VLTextConfig.from_dict(serialized).to_dict(), serialized)
         with self.assertRaisesRegex(ValueError, "default RoPE"):
             MiMoV2VLTextConfig(rope_parameters={"rope_type": "linear", "factor": 2})
 
@@ -661,7 +673,8 @@ class MiMoV2VLModelTest(unittest.TestCase):
     def test_bfloat16_gpu_round_trip_at_long_positions(self):
         config = get_config()
         config.text_config.head_dim = config.text_config.swa_head_dim = 192
-        config.text_config.partial_rotary_factor = 0.334
+        for parameters in config.text_config.rope_parameters.values():
+            parameters["partial_rotary_factor"] = 0.334
         model = MiMoV2VLForConditionalGeneration(config).eval()
         for name, parameter in model.named_parameters():
             if not name.endswith("e_score_correction_bias"):
@@ -716,9 +729,7 @@ class MiMoV2VLModelTest(unittest.TestCase):
             Path(directory, "config.json").write_text(
                 json.dumps({"model_type": "mimo_v2", "vision_config": {"depth": 1}, **dtype_config}), encoding="utf-8"
             )
-            with patch(
-                "transformers.modeling_mimo_v2_utils.load_original_checkpoint", return_value=self.model
-            ) as load:
+            with patch.object(modeling_mimo_v2_utils, "load_original_checkpoint", return_value=self.model) as load:
                 MiMoV2VLForConditionalGeneration.from_pretrained(directory, dtype="auto", local_files_only=True)
             self.assertEqual(load.call_args.kwargs["dtype"], getattr(torch, expected_dtype))
 

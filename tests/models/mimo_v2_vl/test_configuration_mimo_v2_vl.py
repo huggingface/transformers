@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import json
 import tempfile
 import unittest
@@ -42,42 +41,18 @@ from .test_processing_mimo_v2 import make_processor
 
 
 class MiMoV2VLConfigValidationTest(unittest.TestCase):
-    @parameterized.expand([(None,), ("flat",), ("per_layer",)])
-    def test_updated_native_settings_survive_serialization(self, rope_format):
-        parameters = None
-        if rope_format == "flat":
-            parameters = {"rope_type": "default", "rope_theta": 10000.0}
-        elif rope_format == "per_layer":
-            parameters = {
-                "full_attention": {"rope_type": "default", "rope_theta": 10000.0},
-                "sliding_attention": {"rope_type": "default", "rope_theta": 1000.0},
-            }
-        config = MiMoV2VLTextConfig(
-            num_hidden_layers=2, hybrid_layer_pattern=[0, 1], sliding_window=4, rope_parameters=parameters
-        )
+    def test_updated_native_settings_survive_serialization(self):
+        config = MiMoV2VLTextConfig(num_hidden_layers=2, sliding_window_size=3)
         config.sliding_window = 9
         config.layer_types = ["sliding_attention", "full_attention"]
-        config.rope_theta = 20000.0
-        config.swa_rope_theta = 30000.0
-        config.partial_rotary_factor = 0.5
-        original_parameters = copy.deepcopy(config.rope_parameters)
+        config.rope_parameters["sliding_attention"]["rope_theta"] = 30000.0
         serialized = config.to_dict()
-        self.assertEqual(config.rope_parameters, original_parameters)
+        self.assertNotIn("sliding_window_size", serialized)
         restored = MiMoV2VLTextConfig.from_dict(serialized)
         self.assertEqual(restored.sliding_window, 9)
-        self.assertEqual(restored.sliding_window_size, 8)
         self.assertEqual(restored.layer_types, config.layer_types)
-        self.assertEqual(restored.hybrid_layer_pattern, [1, 0])
-        self.assertEqual(restored.rope_theta, 20000.0)
-        self.assertEqual(restored.swa_rope_theta, 30000.0)
-        self.assertEqual(restored.partial_rotary_factor, 0.5)
+        self.assertEqual(restored.rope_parameters, config.rope_parameters)
         self.assertEqual(restored.to_dict(), serialized)
-
-    def test_conflicting_window_fields_raise(self):
-        with self.assertRaisesRegex(ValueError, "sliding_window_size"):
-            MiMoV2VLTextConfig(sliding_window=9, sliding_window_size=3)
-        config = MiMoV2VLTextConfig(sliding_window=1, sliding_window_size=0)
-        self.assertEqual(config.sliding_window, 1)
 
     def test_legacy_flat_window_fields_are_normalized(self):
         config = AutoConfig.for_model(
@@ -85,7 +60,6 @@ class MiMoV2VLConfigValidationTest(unittest.TestCase):
         )
         self.assertIsInstance(config, MiMoV2VLConfig)
         self.assertEqual(config.text_config.sliding_window, 129)
-        self.assertEqual(config.text_config.sliding_window_size, 128)
         restored = MiMoV2VLConfig.from_dict(config.to_dict())
         self.assertEqual(restored.text_config.sliding_window, 129)
 

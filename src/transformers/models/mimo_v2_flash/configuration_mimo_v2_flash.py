@@ -177,8 +177,9 @@ class MiMoV2FlashConfig(PreTrainedConfig):
         if self.routed_scaling_factor is None:
             self.routed_scaling_factor = 1.0
         # The reference SGLang implementation attends to `sliding_window_size` previous tokens plus the query.
-        if kwargs.get("sliding_window_size") is not None:
-            self.sliding_window = kwargs["sliding_window_size"] + 1
+        # It is not kept as a separate attribute, so later `sliding_window` updates are serialized consistently.
+        if (sliding_window_size := kwargs.pop("sliding_window_size", None)) is not None:
+            self.sliding_window = sliding_window_size + 1
 
         super().__post_init__(**kwargs)
 
