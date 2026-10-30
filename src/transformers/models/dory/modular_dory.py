@@ -370,34 +370,50 @@ class DoryModel(DoryPreTrainedModel):
             kind: self.rotary_emb(hidden_states, position_ids, kind) for kind in self.rotary_emb.layer_types
         }
 
-        def apply_layers(state, begin, end, loop_idx=0, final_loop=True):
-            for index in range(begin, end):
-                layer = self.layers[index]
-                state = layer(
-                    state,
-                    position_embeddings=position_embeddings.get(self.config.layer_types[index]),
+        input_end = self.config.n_input_layers
+        recurrent_end = input_end + self.config.n_recurrent_layers
+        for layer in self.layers[:input_end]:
+            hidden_states = layer(
+                hidden_states,
+                position_embeddings=position_embeddings.get(layer.layer_type),
+                position_ids=position_ids,
+                attention_mask=masks.get(layer.layer_type),
+                past_key_values=past_key_values,
+                start_position=start,
+                loop_idx=0,
+                final_loop=True,
+                **kwargs,
+            )
+        input_hidden = hidden_states
+        for loop_idx in range(self.config.n_recurrent_loops):
+            final_loop = loop_idx == self.config.n_recurrent_loops - 1
+            # This residual addition is outside Accelerate's layer hooks when the model is split across devices.
+            hidden_states = l2_normalize(hidden_states + input_hidden.to(hidden_states.device))
+            for layer in self.layers[input_end:recurrent_end]:
+                hidden_states = layer(
+                    hidden_states,
+                    position_embeddings=position_embeddings.get(layer.layer_type),
                     position_ids=position_ids,
-                    attention_mask=masks.get(self.config.layer_types[index]),
+                    attention_mask=masks.get(layer.layer_type),
                     past_key_values=past_key_values,
                     start_position=start,
                     loop_idx=loop_idx,
                     final_loop=final_loop,
                     **kwargs,
                 )
-            return state
-
-        input_end = self.config.n_input_layers
-        recurrent_end = input_end + self.config.n_recurrent_layers
-        input_hidden = apply_layers(hidden_states, 0, input_end)
-        state = input_hidden
-        for loop_idx in range(self.config.n_recurrent_loops):
-            final_loop = loop_idx == self.config.n_recurrent_loops - 1
-            state = l2_normalize(
-                apply_layers(
-                    l2_normalize(state + input_hidden.to(state.device)), input_end, recurrent_end, loop_idx, final_loop
-                )
+            hidden_states = l2_normalize(hidden_states)
+        for layer in self.layers[recurrent_end : recurrent_end + self.config.n_output_layers]:
+            hidden_states = layer(
+                hidden_states,
+                position_embeddings=position_embeddings.get(layer.layer_type),
+                position_ids=position_ids,
+                attention_mask=masks.get(layer.layer_type),
+                past_key_values=past_key_values,
+                start_position=start,
+                loop_idx=0,
+                final_loop=True,
+                **kwargs,
             )
-        hidden_states = apply_layers(state, recurrent_end, recurrent_end + self.config.n_output_layers)
         return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
 
 

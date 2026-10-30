@@ -25,13 +25,13 @@ class DoryConfig(PreTrainedConfig):
     r"""
     ngpt_alpha_init (`float`, *optional*, defaults to 0.05):
         Initial interpolation rate for the normalized residual updates.
-    n_input_layers (`int`, *optional*, defaults to 0):
+    n_input_layers (`int`, *optional*, defaults to 16):
         Number of physical blocks before the recurrent section.
     n_recurrent_layers (`int`, *optional*):
         Number of shared blocks in the recurrent section. Defaults to the remaining blocks.
-    n_output_layers (`int`, *optional*, defaults to 0):
+    n_output_layers (`int`, *optional*, defaults to 16):
         Number of physical blocks after the recurrent section.
-    n_recurrent_loops (`int`, *optional*, defaults to 1):
+    n_recurrent_loops (`int`, *optional*, defaults to 2):
         Number of passes through the shared recurrent blocks.
     recurrent_kv_cache_mode (`str`, *optional*, defaults to `"per_loop"`):
         `"per_loop"` keeps independent KV histories for each recurrent pass. `"last_loop"` shares
@@ -64,15 +64,15 @@ class DoryConfig(PreTrainedConfig):
     eos_token_id: int | list[int] | None = None
     tie_word_embeddings: bool = False
     # Also normalizes the learned nGPT scales at inference time.
-    initializer_range: float = 0.02
+    initializer_range: float = 0.0177
     sliding_window: int | None = 1024
     rope_parameters: dict | None = None
     layer_types: list[str] | None = None
     ngpt_alpha_init: float = 0.05
-    n_input_layers: int = 0
+    n_input_layers: int = 16
     n_recurrent_layers: int | None = None
-    n_output_layers: int = 0
-    n_recurrent_loops: int = 1
+    n_output_layers: int = 16
+    n_recurrent_loops: int = 2
     # "last_loop" reuses one cache, overwritten by each recurrent loop.
     recurrent_kv_cache_mode: str = "per_loop"
 
@@ -98,6 +98,7 @@ class DoryConfig(PreTrainedConfig):
             self.rope_parameters = {
                 kind: {
                     "rope_type": "default",
+                    "rope_theta": 10_000_000.0 if kind == "full_attention" else 10_000.0,
                 }
                 for kind in ("sliding_attention", "full_attention")
                 if kind in self.layer_types

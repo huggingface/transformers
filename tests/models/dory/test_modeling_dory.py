@@ -46,24 +46,6 @@ def make_model(cache_mode="per_loop", loops=3, attn_implementation="eager", **ov
     ).eval()
 
 
-@pytest.mark.parametrize("loops", [1, 3])
-@torch.no_grad()
-def test_per_loop_chunked_prefill_and_decode_match_full_forward(loops):
-    """Separate loop histories must reproduce a full causal forward across a window boundary."""
-    model = make_model(loops=loops)
-    tokens = torch.tensor([[1, 3, 5, 7, 9, 11, 13]])
-    expected = model(tokens, use_cache=False).logits
-    cache = None
-    actual = []
-    for start, end in [(0, 3), (3, 6), (6, 7)]:
-        output = model(tokens[:, start:end], use_cache=True, past_key_values=cache)
-        cache = output.past_key_values
-        actual.append(output.logits)
-        assert cache.get_seq_length() == end
-    torch.testing.assert_close(torch.cat(actual, dim=1), expected, atol=1e-6, rtol=1e-5)
-    assert sum(layer.is_initialized for layer in cache.layers) == 2 + 2 * loops
-
-
 def test_last_loop_cache_replaces_current_positions_and_keeps_history():
     """Later loops overwrite the current chunk without duplicating tokens or touching the prefix."""
     cache = DoryCache()
@@ -428,13 +410,40 @@ class DoryModelTester(CausalLMModelTester):
     base_model_class = DoryModel
 
     def __init__(self, parent, **kwargs):
-        super().__init__(parent, n_recurrent_loops=2, sliding_window=16, **kwargs)
+        super().__init__(parent, n_input_layers=0, n_output_layers=0, n_recurrent_loops=2, sliding_window=16, **kwargs)
         self.expected_num_hidden_layers = self.num_hidden_layers * self.n_recurrent_loops + 1
 
 
 class DoryModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = DoryModelTester
     model_split_percents = [0.5, 0.8, 0.9]
+
+    def test_config_defaults_match_released_4b(self):
+        config = DoryConfig()
+        self.assertEqual(config.num_hidden_layers, 72)
+        self.assertEqual((config.n_input_layers, config.n_recurrent_layers, config.n_output_layers), (16, 40, 16))
+        self.assertEqual(config.n_recurrent_loops, 2)
+        self.assertEqual(config.initializer_range, 0.0177)
+        self.assertEqual(config.layer_types, (["sliding_attention", "mlp"] * 3 + ["full_attention", "mlp"]) * 9)
+        self.assertEqual(config.rope_parameters["sliding_attention"]["rope_theta"], 10_000.0)
+        self.assertEqual(config.rope_parameters["full_attention"]["rope_theta"], 10_000_000.0)
+
+    @parameterized.expand([(1,), (3,)])
+    @torch.no_grad()
+    def test_per_loop_chunked_prefill_and_decode_match_full_forward(self, loops):
+        """Separate loop histories must reproduce a full causal forward across a window boundary."""
+        model = make_model(loops=loops)
+        tokens = torch.tensor([[1, 3, 5, 7, 9, 11, 13]])
+        expected = model(tokens, use_cache=False).logits
+        cache = None
+        actual = []
+        for start, end in [(0, 3), (3, 6), (6, 7)]:
+            output = model(tokens[:, start:end], use_cache=True, past_key_values=cache)
+            cache = output.past_key_values
+            actual.append(output.logits)
+            assert cache.get_seq_length() == end
+        torch.testing.assert_close(torch.cat(actual, dim=1), expected, atol=1e-6, rtol=1e-5)
+        assert sum(layer.is_initialized for layer in cache.layers) == 2 + 2 * loops
 
     @parameterized.expand([("cpu",), ("none",)])
     @require_deepspeed
