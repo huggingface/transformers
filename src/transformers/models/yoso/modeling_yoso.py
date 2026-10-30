@@ -614,7 +614,7 @@ class YosoPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class YosoModel(YosoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: YosoConfig):
         super().__init__(config)
         self.config = config
 
@@ -706,7 +706,7 @@ class YosoForMaskedLM(YosoPreTrainedModel):
         "cls.predictions.decoder.weight": "yoso.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: YosoConfig):
         super().__init__(config)
 
         self.yoso = YosoModel(config)
@@ -797,7 +797,7 @@ class YosoClassificationHead(nn.Module):
     """
 )
 class YosoForSequenceClassification(YosoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: YosoConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.yoso = YosoModel(config)
@@ -872,7 +872,7 @@ class YosoForSequenceClassification(YosoPreTrainedModel):
 
 @auto_docstring
 class YosoForMultipleChoice(YosoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: YosoConfig):
         super().__init__(config)
 
         self.yoso = YosoModel(config)
@@ -973,7 +973,7 @@ class YosoForMultipleChoice(YosoPreTrainedModel):
 
 @auto_docstring
 class YosoForTokenClassification(YosoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: YosoConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1044,7 +1044,7 @@ class YosoForTokenClassification(YosoPreTrainedModel):
 
 @auto_docstring
 class YosoForQuestionAnswering(YosoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: YosoConfig):
         super().__init__(config)
 
         config.num_labels = 2

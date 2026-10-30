@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 from dataclasses import dataclass
 
 import torch
@@ -438,7 +439,7 @@ class Deimv2PreTrainedModel(DFinePreTrainedModel):
 
 # This follows DFineConvEncoder, with optional projections added after the backbone features.
 class Deimv2ConvEncoder(Deimv2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Deimv2Config):
         super().__init__(config)
 
         backbone = load_backbone(config)
@@ -898,8 +899,8 @@ class Deimv2ForObjectDetection(DFineForObjectDetection):
                 ]
             )
 
-        self.model.decoder.class_embed = self.class_embed
-        self.model.decoder.bbox_embed = self.bbox_embed
+        self.model.decoder.class_embed = copy.deepcopy(self.class_embed)
+        self.model.decoder.bbox_embed = copy.deepcopy(self.bbox_embed)
         self.post_init()
 
     def forward(**super_kwargs):

@@ -226,7 +226,7 @@ class PPDocLayoutV2Config(PreTrainedConfig):
                 "out_features": ["stage2", "stage3", "stage4"],
             },
         ),
-        "reading_order_config": SubConfigSpec(config_class=PPDocLayoutV2ReadingOrderConfig),
+        "reading_order_config": PPDocLayoutV2ReadingOrderConfig,
     }
 
     layer_types = ("basic", "bottleneck")
@@ -642,7 +642,7 @@ class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
     _supports_attention_backend = False
     _supports_flex_attn = False
 
-    def __init__(self, config):
+    def __init__(self, config: PPDocLayoutV2Config):
         super().__init__(config)
         self.embeddings = PPDocLayoutV2TextEmbeddings(config)
         self.label_embeddings = nn.Embedding(config.num_classes, config.hidden_size)

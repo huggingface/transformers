@@ -632,7 +632,7 @@ class UMT5PreTrainedModel(PreTrainedModel):
 
 
 class UMT5Stack(UMT5PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: UMT5Config):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
         self.is_decoder = config.is_decoder
@@ -758,7 +758,7 @@ class UMT5Model(UMT5PreTrainedModel):
         "decoder.embed_tokens.weight": "shared.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: UMT5Config):
         super().__init__(config)
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
@@ -920,7 +920,7 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel, GenerationMixin):
         "lm_head.weight": "shared.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: UMT5Config):
         super().__init__(config)
         self.model_dim = config.d_model
 
@@ -1104,12 +1104,11 @@ class UMT5EncoderModel(UMT5PreTrainedModel):
     ```"""
 
     model_type = "umt5"
-    # config_class = UMT5Config
     _tied_weights_keys = {
         "encoder.embed_tokens.weight": "shared.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: UMT5Config):
         super().__init__(config)
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
@@ -1388,7 +1387,7 @@ class UMT5ForQuestionAnswering(UMT5PreTrainedModel):
         "decoder.embed_tokens.weight": "shared.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: UMT5Config):
         super().__init__(config)
         self.model_dim = config.d_model
 

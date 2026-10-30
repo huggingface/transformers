@@ -1,3 +1,4 @@
+# Copyright 2026 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,16 +13,14 @@
 # limitations under the License.
 import copy
 import os
-import socket
 import tempfile
 from abc import ABC, abstractmethod
-from itertools import product
 
 from parameterized import parameterized
 
 from transformers import TorchAoConfig, set_seed
 from transformers.distributed.configuration_utils import DistributedConfig
-from transformers.distributed.tensor_parallel import _get_parameter_plan
+from transformers.distributed.parallel_utils import _get_parameter_plan
 from transformers.testing_utils import (
     SINGLE_PROCESS_DEVICES,
     is_tensor_parallel_test,
@@ -30,7 +29,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_greater_or_equal, is_torchao_available
 
-from .test_fsdp_mixin import _get_distributed_backend, _set_rank_device
+from .distributed_testing_utils import run_distributed
 
 
 if is_torchao_available():
@@ -41,9 +40,7 @@ if is_torchao_available():
 if is_torch_available():
     import torch
     import torch.distributed as dist
-    import torch.multiprocessing as mp
     from torch.distributed.tensor import DTensor
-    from torch.multiprocessing.spawn import ProcessRaisedException
 
 
 # =============================================================================
@@ -56,6 +53,7 @@ TP_DISTRIBUTED_TEST_MODEL_TYPES = {
     # Dense
     "qwen3",
     "qwen2",
+    "granite_swa",
     # MoE
     "qwen4_exp_text",
     "qwen3_moe",
@@ -75,16 +73,8 @@ TP_DISTRIBUTED_TEST_MODEL_TYPES = {
 
 
 # =============================================================================
-# Distributed helpers (top-level for pickling by mp.spawn)
+# Distributed helpers (top-level for pickling to the ranks)
 # =============================================================================
-
-
-def _find_free_port():
-    """Find a free port by binding a socket and releasing it."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind(("localhost", 0))
-        return s.getsockname()[1]
 
 
 def get_packed_grad_shard(grad, world_size, rank, dim):
@@ -111,55 +101,6 @@ def get_packed_grad_shard(grad, world_size, rank, dim):
 
     # Select along the sharded dimension
     return grad.index_select(dim, torch.tensor(indices, device=grad.device))
-
-
-def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs):
-    """Wrapper to set up distributed environment and run the test function."""
-
-    def setup_dist_env(rank, world_size, port):
-        os.environ["WORLD_SIZE"] = str(world_size)
-        os.environ["RANK"] = str(rank)
-        os.environ["LOCAL_RANK"] = str(rank)
-        os.environ["MASTER_ADDR"] = "localhost"
-        os.environ["MASTER_PORT"] = str(port)
-
-    world_size = tp
-    setup_dist_env(rank, world_size, port)
-
-    # some backends, e.g. tpu, require the rank to be set before initializing the process group
-    _set_rank_device(rank, backend)
-
-    dist.init_process_group(backend=backend, rank=rank, world_size=world_size)
-
-    func(rank, *func_args, **func_kwargs)
-
-    dist.barrier()
-    dist.destroy_process_group()
-
-
-def _init_distributed(tp: int, max_retries: int = 5, backend: str | None = None):
-    """Decorator to initialize distributed environment and spawn processes."""
-    # default to the current accelerator's backend, as "gloo" cannot carry every accelerator's tensors
-    if backend is None:
-        backend = _get_distributed_backend()
-
-    def _init_distributed_inner(func):
-        def wrapper(*args, **kwargs):
-            world_size = tp
-            for attempt in range(max_retries):
-                port = _find_free_port()
-                spawn_args = (func, tp, port, backend, args, kwargs)
-                try:
-                    mp.spawn(_global_wrapper, args=spawn_args, nprocs=world_size)
-                    return
-                except ProcessRaisedException as e:
-                    if "EADDRINUSE" in str(e) and attempt < max_retries - 1:
-                        continue
-                    raise
-
-        return wrapper
-
-    return _init_distributed_inner
 
 
 def _get_expert_weight_names(model):
@@ -225,6 +166,20 @@ def _verify_tp_sharding(rank, model_tp, model_ref):
                     break
 
     return sharded_params
+
+
+def _reference_grad_shard(name, grad, local_grad, rank, world_size, tp_plan, expert_weights=()):
+    """The slice of the unsharded reference gradient `grad` that this rank holds as `local_grad`."""
+    # Expert weights hold this rank's experts along dim 0 (`grouped_gemm`), whatever `_tp_plan` still says for them
+    if name in expert_weights:
+        return grad.narrow(0, rank * local_grad.size(0), local_grad.size(0))
+    for dim in range(grad.ndim):
+        if grad.size(dim) != local_grad.size(dim):
+            if _get_parameter_plan(name, tp_plan, is_weight=True) in ("packed_colwise", "packed_rowwise"):
+                return get_packed_grad_shard(grad, world_size, rank, dim)
+            # regular slicing: every shard but the last is ceil(size / world_size) long
+            return grad.narrow(dim, rank * -(-grad.size(dim) // world_size), local_grad.size(dim))
+    return grad
 
 
 def _test_tp_forward_impl(_rank, model_path, model_class, atol, rtol):
@@ -293,19 +248,7 @@ def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
             if isinstance(grad_tp, DTensor):
                 grad_tp = grad_tp.to_local()
 
-            # Slice reference gradient to match local shard if parameter is sharded
-            if grad.shape != grad_tp.shape:
-                for dim in range(grad.ndim):
-                    if grad.size(dim) != grad_tp.size(dim):
-                        param_plan = _get_parameter_plan(name, model_tp._tp_plan, is_weight=True)
-                        if param_plan in ("packed_colwise", "packed_rowwise"):
-                            # interleaved slicing
-                            grad = get_packed_grad_shard(grad, world_size, rank, dim)
-                        else:
-                            # regular slicing: every shard but the last is ceil(size / world_size) long
-                            start = rank * -(-grad.size(dim) // world_size)
-                            grad = grad.narrow(dim, start, grad_tp.size(dim))
-                        break
+            grad = _reference_grad_shard(name, grad, grad_tp, rank, world_size, model_tp._tp_plan)
 
             if not torch.allclose(grad.cpu(), grad_tp.cpu(), atol=atol, rtol=rtol):
                 failed_grads[name] = (grad.cpu() - grad_tp.cpu()).abs().max().item()
@@ -418,78 +361,6 @@ def _test_tp_generation_quantized_impl(_rank, model_path, model_class, max_new_t
     dist.barrier()
 
 
-def _load_ep_and_reference_models(model_path, model_class):
-    """Load EP model and non-EP reference model for comparison."""
-    model_ep = model_class.from_pretrained(
-        model_path,
-        distributed_config=DistributedConfig(tp_size=dist.get_world_size(), ep_size=dist.get_world_size()),
-    )
-    dist.barrier()
-
-    device = model_ep.device
-    model_ref = model_class.from_pretrained(model_path)
-    model_ref = model_ref.to(device)
-
-    return model_ep, model_ref, device
-
-
-def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol, experts_implementation):
-    """Implementation for comparing EP and non-EP model outputs."""
-    set_seed(0)
-
-    model_ep, model_ref, device = _load_ep_and_reference_models(model_path, model_class)
-
-    model_ep.eval()
-    model_ref.eval()
-
-    model_ep.set_experts_implementation(experts_implementation)
-    model_ref.set_experts_implementation(experts_implementation)
-
-    vocab_size = model_ref.config.get_text_config().vocab_size
-    input_ids = torch.randint(0, vocab_size, (2, 64)).to(device)
-
-    with torch.no_grad():
-        logits_ref = model_ref(input_ids).logits
-        logits_ep = model_ep(input_ids).logits
-
-    diff = (logits_ref - logits_ep).abs()
-    assert torch.allclose(logits_ref, logits_ep, atol=atol, rtol=rtol), (
-        f"EP and non-EP model outputs differ. Max diff: {diff.max().item()} | Min diff: {diff.min().item()}"
-    )
-
-    dist.barrier()
-
-
-def _test_ep_backward_impl(_rank, model_path, model_class, atol, rtol, experts_implementation):
-    """Implementation for comparing EP and non-EP model backward passes."""
-    set_seed(0)
-
-    model_ep, model_ref, device = _load_ep_and_reference_models(model_path, model_class)
-    model_ep.train()
-    model_ref.train()
-
-    model_ep.set_experts_implementation(experts_implementation)
-    model_ref.set_experts_implementation(experts_implementation)
-
-    vocab_size = model_ref.config.get_text_config().vocab_size
-    input_ids = torch.randint(0, vocab_size, (2, 64)).to(device)
-    labels = torch.randint(0, vocab_size, (2, 64)).to(device)
-
-    loss_ref = model_ref(input_ids, labels=labels).loss
-    loss_ref.backward()
-
-    loss_ep = model_ep(input_ids, labels=labels).loss
-    loss_ep.backward()
-
-    assert torch.allclose(loss_ref, loss_ep, atol=atol, rtol=rtol), (
-        f"EP and non-EP model losses differ. "
-        f"Non-EP loss: {loss_ref.item()}, EP loss: {loss_ep.item()}, "
-        f"Diff: {(loss_ref - loss_ep).abs().item()}"
-    )
-
-    dist.barrier()
-
-
 class TensorParallelTesterMixin(ABC):
     """
     Mixin for tensor parallel tests. Add to model test classes alongside ModelTesterMixin.
@@ -517,18 +388,13 @@ class TensorParallelTesterMixin(ABC):
     # ============================================================
     # Helper methods
     # ============================================================
-    def _has_ep_plan(self) -> bool:
-        """Check if model has an expert parallel plan defined."""
-        config = self.model_tester.get_config().get_text_config()
-        return hasattr(config, "base_model_ep_plan") and config.base_model_ep_plan is not None
-
     def _has_tp_plan(self) -> bool:
         """Check if model has a tensor parallel plan defined."""
         config = self.model_tester.get_config().get_text_config()
         return hasattr(config, "base_model_tp_plan") and config.base_model_tp_plan is not None
 
     def _skip_if_tp_distributed_not_enabled(self):
-        """Skip expensive distributed TP/EP tests for models outside the allowlist."""
+        """Skip expensive distributed TP tests for models outside the allowlist."""
         config = self.model_tester.get_config()
         if TP_DISTRIBUTED_TEST_MODEL_TYPES is not None and config.model_type not in TP_DISTRIBUTED_TEST_MODEL_TYPES:
             self.skipTest(
@@ -560,9 +426,8 @@ class TensorParallelTesterMixin(ABC):
                 config.tie_word_embeddings = tie_word_embeddings
         return config
 
-    def _skip_if_not_supported(self, expert_parallel: bool = False):
-        """Check and skip the test if tensor/expert parallel is not supported for this model/environment."""
-        parallelism = "Expert" if expert_parallel else "Tensor"
+    def _skip_if_distributed_not_supported(self, parallelism: str = "Tensor"):
+        """Skip when the environment can't run the multi-process CPU tests (torch version, device, CPUs, model tester)."""
         if not is_torch_greater_or_equal("2.9"):
             self.skipTest(f"{parallelism} parallel tests require torch >= 2.9")
 
@@ -580,10 +445,11 @@ class TensorParallelTesterMixin(ABC):
         if self._get_tp_model_class() is None:
             self.skipTest("Model tester has neither causal_lm_class nor conditional_generation_class")
 
-        if expert_parallel:
-            if not self._has_ep_plan():
-                self.skipTest("Model does not have an expert parallel plan (base_model_ep_plan)")
-        elif not self._has_tp_plan():
+    def _skip_if_not_supported(self):
+        """Check and skip the test if tensor parallel is not supported for this model/environment."""
+        self._skip_if_distributed_not_supported()
+
+        if not self._has_tp_plan():
             self.skipTest("Model does not have a tensor parallel plan (base_model_tp_plan)")
 
         self._skip_if_tp_distributed_not_enabled()
@@ -647,7 +513,9 @@ class TensorParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
-            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_forward_impl)(tmp_dir, model_class, atol, rtol)
+            run_distributed(world_size=self.tensor_parallel_size)(_test_tp_forward_impl)(
+                tmp_dir, model_class, atol, rtol
+            )
 
     @is_tensor_parallel_test
     def test_tp_backward(self):
@@ -663,7 +531,9 @@ class TensorParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
-            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_backward_impl)(tmp_dir, model_class, atol, rtol)
+            run_distributed(world_size=self.tensor_parallel_size)(_test_tp_backward_impl)(
+                tmp_dir, model_class, atol, rtol
+            )
 
     @is_tensor_parallel_test
     def test_tp_generation(self):
@@ -681,7 +551,7 @@ class TensorParallelTesterMixin(ABC):
             set_seed(42)
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
-            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_generation_impl)(
+            run_distributed(world_size=self.tensor_parallel_size)(_test_tp_generation_impl)(
                 tmp_dir, model_class, atol, rtol, max_new_tokens
             )
 
@@ -701,51 +571,6 @@ class TensorParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
-            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_generation_quantized_impl)(
+            run_distributed(world_size=self.tensor_parallel_size)(_test_tp_generation_quantized_impl)(
                 tmp_dir, model_class, max_new_tokens
-            )
-
-    @parameterized.expand(
-        list(
-            product(
-                [False, True],  # tie_word_embeddings
-                ["eager", "grouped_mm", "batched_mm"],  # experts_implementation
-            )
-        )
-    )
-    @is_tensor_parallel_test
-    def test_ep_forward(self, tie_word_embeddings, experts_implementation):
-        self._skip_if_not_supported(expert_parallel=True)
-
-        config = self._get_tp_config(tie_word_embeddings=tie_word_embeddings)
-        model_class = self._get_tp_model_class()
-        atol = self.tensor_parallel_atol
-        rtol = self.tensor_parallel_rtol
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            set_seed(42)
-            model = model_class(config)
-            model.save_pretrained(tmp_dir, save_original_format=True)
-
-            _init_distributed(tp=self.tensor_parallel_size)(_test_ep_forward_impl)(
-                tmp_dir, model_class, atol, rtol, experts_implementation
-            )
-
-    @parameterized.expand([("eager",), ("grouped_mm",), ("batched_mm",)])
-    @is_tensor_parallel_test
-    def test_ep_backward(self, experts_implementation):
-        self._skip_if_not_supported(expert_parallel=True)
-
-        config = self._get_tp_config()
-        model_class = self._get_tp_model_class()
-        atol = self.tensor_parallel_atol
-        rtol = self.tensor_parallel_rtol
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            set_seed(42)
-            model = model_class(config)
-            model.save_pretrained(tmp_dir, save_original_format=True)
-
-            _init_distributed(tp=self.tensor_parallel_size)(_test_ep_backward_impl)(
-                tmp_dir, model_class, atol, rtol, experts_implementation
             )

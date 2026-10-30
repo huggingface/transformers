@@ -33,7 +33,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
 from ...utils.generic import (
@@ -617,7 +617,6 @@ class Cosmos3EdgePreTrainedModel(PreTrainedModel):
     # Packed, variable-length visual inputs use Python-level per-grid reshaping and cannot be compiled fullgraph.
     _can_compile_fullgraph = False
     _supports_attention_backend = True
-    config_class = Cosmos3EdgeConfig
     _can_record_outputs = {
         "hidden_states": [Cosmos3EdgeTextDecoderLayer, Cosmos3EdgeVisionEncoderLayer],
         "attentions": Cosmos3EdgeTextAttention,
@@ -627,7 +626,7 @@ class Cosmos3EdgePreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class Cosmos3EdgeTextModel(Cosmos3EdgePreTrainedModel):
-    config_class = Cosmos3EdgeTextConfig
+    config: Cosmos3EdgeTextConfig
     input_modalities = ("text",)
 
     def __init__(self, config: Cosmos3EdgeTextConfig):
@@ -706,7 +705,7 @@ class Cosmos3EdgeTextModel(Cosmos3EdgePreTrainedModel):
 
 @auto_docstring(custom_intro="Packed variable-resolution SigLIP2 vision tower used by Cosmos3 Edge.")
 class Cosmos3EdgeVisionModel(Cosmos3EdgePreTrainedModel):
-    config_class = Cosmos3EdgeVisionConfig
+    config: Cosmos3EdgeVisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image", "video")
 
@@ -769,7 +768,7 @@ class Cosmos3EdgeModelOutputWithPast(BaseModelOutputWithPast):
 class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
     base_model_prefix = "model"
     accepts_loss_kwargs = False
-    config_class = Cosmos3EdgeConfig
+    config: Cosmos3EdgeConfig
 
     def __init__(self, config: Cosmos3EdgeConfig):
         super().__init__(config)
@@ -1161,10 +1160,10 @@ class Cosmos3EdgeCausalLMOutputWithPast(CausalLMOutputWithPast):
 class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {}
     _tp_plan = {"lm_head": "colwise_gather_output"}
-    config_class = Cosmos3EdgeConfig
+    config: Cosmos3EdgeConfig
     accepts_loss_kwargs = False
 
-    def __init__(self, config):
+    def __init__(self, config: Cosmos3EdgeConfig):
         super().__init__(config)
         self.model = Cosmos3EdgeModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
@@ -1272,9 +1271,8 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

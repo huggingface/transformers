@@ -5744,6 +5744,64 @@ class GenerationIntegrationTests(unittest.TestCase):
         output = tokenizer.decode(output[0], skip_special_tokens=True)
         self.assertEqual(output, EXPECTED_TEXT)
 
+    def test_encoder_outputs_without_input_ids_with_encoder_penalties(self):
+        """
+        Tests that when precomputed `encoder_outputs` are passed without `input_ids`,
+        `encoder_repetition_penalty` and `encoder_no_repeat_ngram_size` emit the intended UserWarning
+        indicating that input_ids are required, and generation completes successfully instead of crashing.
+        See #49695.
+        """
+        model = AutoModelForSeq2SeqLM.from_pretrained("hf-internal-testing/tiny-random-t5")
+        model.eval()
+        input_ids = torch.tensor([[3, 4, 5]])
+        with torch.no_grad():
+            encoder_outputs = model.get_encoder()(input_ids=input_ids, return_dict=True)
+
+        # 1. encoder_repetition_penalty with encoder_outputs only: must warn and generate without crashing
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            out = model.generate(encoder_outputs=encoder_outputs, encoder_repetition_penalty=1.5, max_new_tokens=5)
+            self.assertEqual(out.shape, (1, 6))
+            warn_msgs = [str(item.message) for item in w if issubclass(item.category, UserWarning)]
+            self.assertTrue(
+                any(
+                    "Passing `encoder_repetition_penalty` requires some form of `input_ids`" in msg
+                    for msg in warn_msgs
+                ),
+                f"Expected warning for encoder_repetition_penalty not found in {warn_msgs}",
+            )
+
+        # 2. encoder_no_repeat_ngram_size with encoder_outputs only: must warn and generate without crashing
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            out = model.generate(encoder_outputs=encoder_outputs, encoder_no_repeat_ngram_size=2, max_new_tokens=5)
+            self.assertEqual(out.shape, (1, 6))
+            warn_msgs = [str(item.message) for item in w if issubclass(item.category, UserWarning)]
+            self.assertTrue(
+                any(
+                    "Passing `encoder_no_repeat_ngram_size` requires some form of `input_ids`" in msg
+                    for msg in warn_msgs
+                ),
+                f"Expected warning for encoder_no_repeat_ngram_size not found in {warn_msgs}",
+            )
+
+        # 3. Control: passing input_ids alongside encoder_outputs must succeed without missing-input_ids warning
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            out = model.generate(
+                input_ids=input_ids,
+                encoder_outputs=encoder_outputs,
+                encoder_repetition_penalty=1.5,
+                encoder_no_repeat_ngram_size=2,
+                max_new_tokens=5,
+            )
+            self.assertEqual(out.shape, (1, 6))
+            warn_msgs = [str(item.message) for item in w if issubclass(item.category, UserWarning)]
+            self.assertFalse(
+                any("requires some form of `input_ids`" in msg for msg in warn_msgs),
+                f"Unexpected warning when input_ids are provided: {warn_msgs}",
+            )
+
 
 @require_torch
 class TokenHealingTestCase(unittest.TestCase):

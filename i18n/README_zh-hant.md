@@ -79,7 +79,7 @@ Transformers 是一個為最先進的機器學習模型（涵蓋文字、電腦�
 
 ## 安裝
 
-Transformers 支援 Python 3.10+ 和 [PyTorch](https://pytorch.org/get-started/locally/) 2.4+。
+Transformers 支援 Python 3.11+ 和 [PyTorch](https://pytorch.org/get-started/locally/) 2.4+。
 
 使用 [venv](https://docs.python.org/3/library/venv.html) 或基於 Rust 的高速 Python 套件及專案管理器 [uv](https://docs.astral.sh/uv/) 來建立並啟用虛擬環境。
 

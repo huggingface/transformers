@@ -26,6 +26,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
+from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple
@@ -39,6 +40,7 @@ from ..roberta.modeling_roberta import (
     RobertaModel,
     RobertaPreTrainedModel,
 )
+from .configuration_xlm_roberta import XLMRobertaConfig
 
 
 @auto_docstring
@@ -62,7 +64,7 @@ class XLMRobertaForCausalLM(RobertaForCausalLM):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: XLMRobertaConfig):
         super().__init__(config)
         del self.xlm_roberta
         self.roberta = XLMRobertaModel(config, add_pooling_layer=False)
@@ -133,9 +135,8 @@ class XLMRobertaForCausalLM(RobertaForCausalLM):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -158,7 +159,7 @@ class XLMRobertaForMaskedLM(RobertaForMaskedLM):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: XLMRobertaConfig):
         super().__init__(config)
         del self.xlm_roberta
 
@@ -225,7 +226,7 @@ class XLMRobertaForMaskedLM(RobertaForMaskedLM):
     """
 )
 class XLMRobertaForSequenceClassification(RobertaForSequenceClassification):
-    def __init__(self, config):
+    def __init__(self, config: XLMRobertaConfig):
         super().__init__(config)
         del self.xlm_roberta
 
@@ -301,7 +302,7 @@ class XLMRobertaForSequenceClassification(RobertaForSequenceClassification):
 
 @auto_docstring
 class XLMRobertaForMultipleChoice(RobertaForMultipleChoice):
-    def __init__(self, config):
+    def __init__(self, config: XLMRobertaConfig):
         super().__init__(config)
         del self.xlm_roberta
 
@@ -390,7 +391,7 @@ class XLMRobertaForMultipleChoice(RobertaForMultipleChoice):
 
 @auto_docstring
 class XLMRobertaForTokenClassification(RobertaForTokenClassification):
-    def __init__(self, config):
+    def __init__(self, config: XLMRobertaConfig):
         super().__init__(config)
         del self.xlm_roberta
 
@@ -451,7 +452,7 @@ class XLMRobertaForTokenClassification(RobertaForTokenClassification):
 
 @auto_docstring
 class XLMRobertaForQuestionAnswering(RobertaForQuestionAnswering):
-    def __init__(self, config):
+    def __init__(self, config: XLMRobertaConfig):
         super().__init__(config)
         del self.xlm_roberta
 
