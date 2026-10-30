@@ -105,16 +105,16 @@ class DistributedMixin:
     @property
     def tp_plan(self) -> dict[str, str]:
         """The full tensor parallel plan for the model's modules."""
-        return self._tp_plan if self._tp_plan is not None else {}
+        return self._tp_plan
 
     @property
     def ep_plan(self) -> dict[str, str]:
         """The full expert parallel plan for the model's modules, kept separate from `tp_plan`."""
-        return self._ep_plan if self._ep_plan is not None else {}
+        return self._ep_plan
 
     @property
     def fsdp_plan(self) -> dict[str, str]:
-        return self._fsdp_plan if self._fsdp_plan is not None else {}
+        return self._fsdp_plan
 
     @property
     def pp_plan(self) -> dict[str, tuple[str, str]]:
