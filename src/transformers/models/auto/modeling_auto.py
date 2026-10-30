@@ -83,6 +83,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("camembert", "CamembertModel"),
         ("canary", "CanaryModel"),
         ("canine", "CanineModel"),
+        ("cellpose", "CellposeModel"),
+        ("cellpose_dino", "CellposeDinoModel"),
         ("chameleon", "ChameleonModel"),
         ("chinese_clip", "ChineseCLIPModel"),
         ("chinese_clip_vision_model", "ChineseCLIPVisionModel"),
@@ -1103,6 +1105,8 @@ MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Instance Segmentation mapping
         # MaskFormerForInstanceSegmentation can be removed from this mapping in v5
+        ("cellpose", "CellposeForInstanceSegmentation"),
+        ("cellpose_dino", "CellposeDinoForInstanceSegmentation"),
         ("maskformer", "MaskFormerForInstanceSegmentation"),
         ("rf_detr", "RfDetrForInstanceSegmentation"),
     ]

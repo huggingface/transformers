@@ -168,7 +168,9 @@ class DINOv3ViTRopePositionEmbedding(nn.Module):
         self.num_patches_h = image_height // patch_height
         self.num_patches_w = image_width // patch_width
 
-        inv_freq = 1 / self.base ** torch.arange(0, 1, 4 / self.head_dim, dtype=torch.float32)  # (head_dim / 4,)
+        # The original checkpoints store bf16 periods (`rope_embed.periods`): rounding them matches the original model
+        periods = self.base ** torch.arange(0, 1, 4 / self.head_dim, dtype=torch.float32)  # (head_dim / 4,)
+        inv_freq = 1 / periods.bfloat16().float()
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -487,8 +489,8 @@ class DINOv3ViTPreTrainedModel(PreTrainedModel):
         elif isinstance(module, DINOv3ViTLayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
         elif isinstance(module, DINOv3ViTRopePositionEmbedding):
-            inv_freq = 1 / module.base ** torch.arange(0, 1, 4 / module.head_dim, dtype=torch.float32)
-            init.copy_(module.inv_freq, inv_freq)
+            periods = module.base ** torch.arange(0, 1, 4 / module.head_dim, dtype=torch.float32)
+            init.copy_(module.inv_freq, 1 / periods.bfloat16().float())
 
 
 class DINOv3ViTEncoder(DINOv3ViTPreTrainedModel):
