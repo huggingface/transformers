@@ -29,7 +29,6 @@ from ...utils import auto_docstring
 @strict
 class Step3p7VisionConfig(PreTrainedConfig):
     r"""
-
     Example:
 
     ```python

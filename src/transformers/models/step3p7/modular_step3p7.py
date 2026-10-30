@@ -90,6 +90,22 @@ __all__ = [
 @auto_docstring(checkpoint="stepfun-ai/Step-3.7-Flash")
 @strict
 class Step3p7VisionConfig(SiglipVisionConfig):
+    r"""
+    Example:
+
+    ```python
+    >>> from transformers import Step3p7VisionConfig, Step3p7VisionModel
+
+    >>> # Initializing a Step3p7VisionConfig with google/step3p7-base-patch16-224 style configuration
+    >>> configuration = Step3p7VisionConfig()
+
+    >>> # Initializing a Step3p7VisionModel (with random weights) from the google/step3p7-base-patch16-224 style configuration
+    >>> model = Step3p7VisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "step3p5_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"

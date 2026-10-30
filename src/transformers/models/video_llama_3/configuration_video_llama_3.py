@@ -28,7 +28,6 @@ from ..auto import AutoConfig
 @strict
 class VideoLlama3VisionConfig(PreTrainedConfig):
     r"""
-
     Example:
 
     ```python

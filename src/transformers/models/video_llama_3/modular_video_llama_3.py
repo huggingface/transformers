@@ -76,6 +76,22 @@ logger = logging.get_logger(__name__)
 @auto_docstring(checkpoint="lkhl/VideoLLaMA3-2B-Image-HF")
 @strict
 class VideoLlama3VisionConfig(SiglipVisionConfig):
+    r"""
+    Example:
+
+    ```python
+    >>> from transformers import VideoLlama3VisionConfig, VideoLlama3VisionModel
+
+    >>> # Initializing a VideoLlama3VisionConfig with google/video_llama_3-base-patch16-224 style configuration
+    >>> configuration = VideoLlama3VisionConfig()
+
+    >>> # Initializing a VideoLlama3VisionModel (with random weights) from the google/video_llama_3-base-patch16-224 style configuration
+    >>> model = VideoLlama3VisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "video_llama_3_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
