@@ -438,6 +438,7 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
         audio: str | list[str] | AudioInput,
         prompt: str | list[str] | None = None,
         keywords: str | list[str] | list[list[str]] | None = None,
+        tokenize: bool = True,
         **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         """
@@ -454,6 +455,11 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
                 Hotwords/domain terms (e.g. proper nouns) to bias transcription toward the correct spelling. A
                 string or flat list of strings is shared across the batch; a nested list supplies separate
                 keywords per audio sample.
+            tokenize (`bool`, *optional*, defaults to `True`):
+                Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
+                the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
+                audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
+                `tokenize=True`.
             **kwargs:
                 Additional keyword arguments forwarded to [`~MossTranscribeDiarizeProcessor.apply_chat_template`].
         """
@@ -478,7 +484,7 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
 
         return self.apply_chat_template(
             conversations,
-            tokenize=True,
+            tokenize=tokenize,
             add_generation_prompt=True,
             return_dict=True,
             **kwargs,
@@ -491,6 +497,9 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
         `MM:SS` / `HH:MM:SS` string (`"1:23"`, `"01:02:03"`), for MOSS-Transcribe-Diarize's diarization output.
         """
         return sum(float(part) * 60**i for i, part in enumerate(reversed(value.strip().split(":"))))
+
+    def _decode_complete_segments(self, *args, **kwargs):
+        raise AttributeError("Not needed for MossTranscribeDiarize")
 
     def extract_speaker_dict(self, text: str | list[str]) -> list[dict] | str | list[list[dict] | str]:
         """

@@ -171,6 +171,7 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
         self,
         audio: str | list[str] | AudioInput,
         prompt: str | list[str] | None = None,
+        tokenize: bool = True,
         **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         """
@@ -183,12 +184,18 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
             prompt (`str` or `list[str]`, *optional*):
                 Custom prompt(s) to include in the user turn as extra context. A list must be the same length as the
                 batch. When `None`, no additional context is provided.
+            tokenize (`bool`, *optional*, defaults to `True`):
+                Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
+                the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
+                audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
+                `tokenize=True`.
             **kwargs:
                 Additional keyword arguments forwarded to [`~VibeVoiceAsrProcessor.apply_chat_template`] (for example
                 `text_kwargs`, `audio_kwargs`, ...).
 
         Returns:
-            [`BatchFeature`]: Processor outputs ready to be passed to [`VibeVoiceAsrForConditionalGeneration.generate`].
+            [`BatchFeature`] or `list[str]`: One prompt per audio when `tokenize=False`, otherwise processor
+            outputs ready to be passed to [`VibeVoiceAsrForConditionalGeneration.generate`].
         """
 
         audio_items: list[str | np.ndarray] = list(make_list_of_audio_chat_template(audio))
@@ -210,7 +217,7 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
 
         return self.apply_chat_template(
             conversations,
-            tokenize=True,
+            tokenize=tokenize,
             add_generation_prompt=True,
             return_dict=True,
             **kwargs,
@@ -251,6 +258,22 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
             decoded = self.extract_transcription(decoded)
         return decoded
 
+    @staticmethod
+    def _decode_complete_segments(text: str) -> list:
+        """Decode the complete elements of a JSON array which is missing its end."""
+        decoder = json.JSONDecoder()
+        separator = re.compile(r"[\s,]*")
+        segments = []
+        pos = separator.match(text, 1).end()
+        while pos < len(text):
+            try:
+                segment, pos = decoder.raw_decode(text, pos)
+            except json.JSONDecodeError:
+                break
+            segments.append(segment)
+            pos = separator.match(text, pos).end()
+        return segments
+
     def extract_speaker_dict(self, text: str | list[str]) -> list[dict] | str | list[list[dict] | str]:
         """
         Extract speaker dictionary from raw output, returning original text on failure.
@@ -278,7 +301,17 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
                 speaker_dict.append(t)
                 continue
 
-            segments = json.loads(t)
+            try:
+                segments = json.loads(t)
+            except json.JSONDecodeError:
+                # e.g. generation stopped by `max_new_tokens`, so keep the complete segments
+                segments = self._decode_complete_segments(t)
+                if not segments:
+                    logger.warning("Output is not valid JSON.")
+                    speaker_dict.append(t)
+                    continue
+                logger.warning("Output is truncated, only its complete segments are kept.")
+
             if not isinstance(segments, list):
                 logger.warning(f"Expected list, got {type(segments).__name__}.")
                 speaker_dict.append(t)

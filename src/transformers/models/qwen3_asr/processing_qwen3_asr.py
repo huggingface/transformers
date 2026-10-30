@@ -436,6 +436,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
         audio: AudioInput | list[AudioInput],
         language: str | list[str] | None = None,
         prompt: str | list[str] | None = None,
+        tokenize: bool = True,
         **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         """
@@ -456,12 +457,18 @@ class Qwen3ASRProcessor(ProcessorMixin):
                 Context/hotwords to include as the system prompt, e.g. domain-specific words or
                 phrases to bias the transcription towards. A list must be the same length as the
                 audio batch. When `None`, the system prompt is left empty.
+            tokenize (`bool`, *optional*, defaults to `True`):
+                Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
+                the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
+                audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
+                `tokenize=True`.
             **kwargs:
                 Additional keyword arguments forwarded to [`~Qwen3ASRProcessor.apply_chat_template`]
                 and the underlying processor call (for example `text_kwargs`, `audio_kwargs`, ...).
 
         Returns:
-            [`BatchFeature`]: Processor outputs ready to be passed to
+            [`BatchFeature`] or `list[str]`: One prompt per audio when `tokenize=False`, otherwise processor
+            outputs ready to be passed to
             [`Qwen3ASRForConditionalGeneration.generate`].
         """
         audio_items = list(make_list_of_audio_chat_template(audio))
@@ -488,7 +495,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
             messages.append({"role": "assistant", "content": [{"type": "text", "text": prefill}]})
         return self.apply_chat_template(
             conversations,
-            tokenize=True,
+            tokenize=tokenize,
             return_dict=True,
             continue_final_message=True,
             **kwargs,
