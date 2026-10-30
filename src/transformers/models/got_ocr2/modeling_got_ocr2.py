@@ -396,6 +396,7 @@ class GotOcr2VisionNeck(nn.Module):
 
 
 class GotOcr2VisionEncoder(GotOcr2PreTrainedModel):
+    config: GotOcr2VisionConfig
     _can_record_outputs = {"hidden_states": GotOcr2VisionLayer, "attentions": GotOcr2VisionAttention}
     input_modalities = ("image",)
 

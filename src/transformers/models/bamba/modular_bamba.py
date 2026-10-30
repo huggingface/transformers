@@ -350,7 +350,7 @@ class BambaModel(BambaPreTrainedModel):
 
 
 class BambaForCausalLM(LlamaForCausalLM):
-    def __init__(self, config):
+    def __init__(self, config: BambaConfig):
         super().__init__(config)
         self.z_loss_coefficient = config.z_loss_coefficient
 

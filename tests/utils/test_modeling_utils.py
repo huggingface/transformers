@@ -2747,18 +2747,24 @@ class ModelUtilsTest(TestCasePlus):
 class ModelOnTheFlyConversionTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.user = "huggingface-hub-ci"
-        cls.token = os.getenv("HUGGINGFACE_PRODUCTION_USER_TOKEN", None)
+        cls.org = "hf-ci-ephemeral-repos"
+        # Requires a fine-grained token with repo create/delete + discussion access on cls.org
+        cls.token = os.getenv("HF_CI_EPHEMERAL_REPO_MANIPULATION_TOKEN") or os.getenv("HF_TOKEN")
 
-        if cls.token is None:
-            raise ValueError("Cannot run tests as secret isn't setup.")
+        if not cls.token:
+            raise unittest.SkipTest("HF_CI_EPHEMERAL_REPO_MANIPULATION_TOKEN (or HF_TOKEN) not set, skipping.")
 
         cls.api = HfApi(token=cls.token)
 
     def setUp(self) -> None:
-        self.repo_name = f"{self.user}/test-model-on-the-fly-{uuid.uuid4()}"
+        self.repo_name = f"{self.org}/test-model-on-the-fly-{uuid.uuid4()}"
+        # conftest.py disables conversion globally to avoid Hub traffic in regular tests;
+        # this class specifically tests conversion, so we re-enable it.
+        self._prev_disable = os.environ.pop("DISABLE_SAFETENSORS_CONVERSION", None)
 
     def tearDown(self) -> None:
+        if self._prev_disable is not None:
+            os.environ["DISABLE_SAFETENSORS_CONVERSION"] = self._prev_disable
         self.api.delete_repo(self.repo_name)
 
     def test_safetensors_on_the_fly_conversion(self):
@@ -2802,9 +2808,10 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         with self.subTest("PR was open with the safetensors account"):
             discussions = self.api.get_repo_discussions(self.repo_name, token=self.token)
             discussion = next(discussions)
-            self.assertEqual(discussion.author, self.user)
+            self.assertEqual(discussion.author, "hf-transformers-bot")
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
+    @unittest.skip(reason="SFconvertbot cannot agree to gating on dynamically-created repos")
     def test_safetensors_on_the_fly_conversion_gated(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -2869,9 +2876,10 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         with self.subTest("PR was open with the safetensors account"):
             discussions = self.api.get_repo_discussions(self.repo_name)
             discussion = next(discussions)
-            self.assertEqual(discussion.author, self.user)
+            self.assertEqual(discussion.author, "hf-transformers-bot")
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
+    @unittest.skip(reason="SFconvertbot cannot agree to gating on dynamically-created repos")
     def test_safetensors_on_the_fly_sharded_conversion_gated(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -2915,7 +2923,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         with self.subTest("PR was open with the safetensors account"):
             discussions = self.api.get_repo_discussions(self.repo_name)
             discussion = next(discussions)
-            self.assertEqual(discussion.author, self.user)
+            self.assertEqual(discussion.author, "hf-transformers-bot")
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
         # We now switch the repo visibility to public
@@ -2976,8 +2984,10 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         BertModel.from_pretrained(self.repo_name, token=self.token)
 
         for thread in threading.enumerate():
-            if thread.name == "Thread-autoconversion":
-                thread.join(timeout=10)
+            if thread.name == "Thread-auto_conversion":
+                # The conversion is spawned as a background thread by from_pretrained. Wait up to 60s for
+                # it to finish (it makes an API call to the conversion Space, which can take several seconds).
+                thread.join(timeout=60)
 
         discussions = self.api.get_repo_discussions(self.repo_name)
 

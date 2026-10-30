@@ -1076,7 +1076,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
     """
 )
 class BeitBackbone(BackboneMixin, BeitPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BeitConfig):
         super().__init__(config)
 
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]

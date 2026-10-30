@@ -664,7 +664,7 @@ class MptForTokenClassification(MptPreTrainedModel):
 
 @auto_docstring
 class MptForQuestionAnswering(MptPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MptConfig):
         super().__init__(config)
         self.transformer = MptModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)

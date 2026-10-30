@@ -382,7 +382,7 @@ class Gemma2Model(GemmaModel):
 
 
 class Gemma2ForCausalLM(GemmaForCausalLM):
-    def __init__(self, config):
+    def __init__(self, config: Gemma2Config):
         super().__init__(config)
         self.model = Gemma2Model(config)
         self.post_init()
