@@ -1223,7 +1223,7 @@ class ZoeDepthPreTrainedModel(PreTrainedModel):
     """
 )
 class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ZoeDepthConfig):
         super().__init__(config)
 
         self.backbone = load_backbone(config)

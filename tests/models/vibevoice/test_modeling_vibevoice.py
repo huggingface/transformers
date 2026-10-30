@@ -453,7 +453,7 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_speech = generated_speech[0].cpu().float()
 
         # Compare against expected results
-        with open(fixtures_path, "r") as f:
+        with open(fixtures_path, "r", encoding="utf-8") as f:
             expected_results = json.load(f)
         expected_speech = torch.tensor(expected_results["speech_outputs"])
         generated_speech = generated_speech[..., : expected_speech.shape[-1]]
@@ -530,7 +530,7 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_speech = generated_speech[0].cpu().float()
 
         # Compare against expected results
-        with open(fixtures_path, "r") as f:
+        with open(fixtures_path, "r", encoding="utf-8") as f:
             expected_results = json.load(f)
         expected_speech = torch.tensor(expected_results["speech_outputs"])
         generated_speech = generated_speech[..., : expected_speech.shape[-1]]

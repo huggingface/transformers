@@ -29,6 +29,7 @@ from ..encodec.feature_extraction_encodec import EncodecFeatureExtractor
 from ..llama.modeling_llama import LlamaForCausalLM
 from ..mimi.modeling_mimi import MimiConv1dPaddingCache
 from ..moshi.modeling_moshi import MoshiModel, MoshiPreTrainedModel
+from .configuration_kyutai_speech_to_text import KyutaiSpeechToTextConfig
 
 
 logger = logging.get_logger(__name__)
@@ -251,7 +252,7 @@ class KyutaiSpeechToTextEmbeddings(nn.Module):
 
 
 class KyutaiSpeechToTextModel(MoshiModel):
-    def __init__(self, config):
+    def __init__(self, config: KyutaiSpeechToTextConfig):
         super().__init__(config)
         self.embed_tokens = KyutaiSpeechToTextEmbeddings(config)
 
@@ -261,7 +262,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
     _keep_in_fp32_modules_strict = ["codec_model"]
     output_modalities = ("audio", "text")
 
-    def __init__(self, config):
+    def __init__(self, config: KyutaiSpeechToTextConfig):
         super().__init__(config)
         self.codec_model = AutoModel.from_config(config.codec_config)
 
@@ -369,18 +370,18 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
 
         # initialize the padding cache for the codec model
         per_layer_padding, per_layer_padding_mode, per_layer_in_channels = [], [], []
-        for layer_name in self.codec_model.encoder._mimiconv1d_layer_names:
-            per_layer_padding.append(self.codec_model.encoder.get_submodule(layer_name).padding_total)
-            per_layer_padding_mode.append(self.codec_model.encoder.get_submodule(layer_name).pad_mode)
-            per_layer_in_channels.append(self.codec_model.encoder.get_submodule(layer_name).in_channels)
+        for layer_name in self.codec_model.encoder.encoder_seanet._conv1d_layer_names:
+            per_layer_padding.append(self.codec_model.encoder.encoder_seanet.get_submodule(layer_name).padding_total)
+            per_layer_padding_mode.append(self.codec_model.encoder.encoder_seanet.get_submodule(layer_name).pad_mode)
+            per_layer_in_channels.append(self.codec_model.encoder.encoder_seanet.get_submodule(layer_name).in_channels)
 
         # downsample layer
-        per_layer_padding.append(self.codec_model.downsample.padding_total)
-        per_layer_padding_mode.append(self.codec_model.downsample.pad_mode)
-        per_layer_in_channels.append(self.codec_model.downsample.in_channels)
+        per_layer_padding.append(self.codec_model.encoder.downsample.padding_total)
+        per_layer_padding_mode.append(self.codec_model.encoder.downsample.pad_mode)
+        per_layer_in_channels.append(self.codec_model.encoder.downsample.in_channels)
 
         model_kwargs["padding_cache"] = KyutaiSpeechToTextConv1dPaddingCache(
-            num_layers=len(self.codec_model.encoder._mimiconv1d_layer_names) + 1,
+            num_layers=len(self.codec_model.encoder.encoder_seanet._conv1d_layer_names) + 1,
             per_layer_padding=per_layer_padding,
             per_layer_padding_mode=per_layer_padding_mode,
             per_layer_in_channels=per_layer_in_channels,

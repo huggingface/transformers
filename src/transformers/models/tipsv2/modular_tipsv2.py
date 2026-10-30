@@ -273,24 +273,14 @@ class Tipsv2Config(PreTrainedConfig):
     ```"""
 
     model_type = "tipsv2"
-    sub_configs = {"text_config": Tipsv2TextConfig, "vision_config": Tipsv2VisionConfig}
+    sub_configs_defaults = {
+        "text_config": Tipsv2TextConfig,
+        "vision_config": Tipsv2VisionConfig,
+    }
 
     text_config: dict | Tipsv2TextConfig | None = None
     vision_config: dict | Tipsv2VisionConfig | None = None
     temperature_init_value: float = 0.005065968260169029
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"]()
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         super().validate_architecture()
@@ -412,8 +402,12 @@ class Tipsv2VisionModel(Dinov2WithRegistersModel):
 
 
 class Tipsv2VisionBackbone(Dinov2WithRegistersBackbone):
+    # trf-ignore: TRF055
+    config: Tipsv2VisionConfig
+
     def __init__(self, config: "Tipsv2Config | Tipsv2VisionConfig"):
         # reassign config to vision_config for compatibility with AutoBackbone
+        # FIXME raushan should not happen in practice!
         if isinstance(config, Tipsv2Config):
             config = config.vision_config
             super().__init__(config)

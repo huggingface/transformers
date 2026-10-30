@@ -590,7 +590,7 @@ class FocalNetPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class FocalNetModel(FocalNetPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
+    def __init__(self, config: FocalNetConfig, add_pooling_layer=True, use_mask_token=False):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -670,17 +670,10 @@ class FocalNetModel(FocalNetPreTrainedModel):
     FocalNet Model with a decoder on top for masked image modeling.
 
     This follows the same implementation as in [SimMIM](https://huggingface.co/papers/2111.09886).
-
-    <Tip>
-
-    Note that we provide a script to pre-train this model on custom data in our [examples
-    directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-
-    </Tip>
     """
 )
 class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: FocalNetConfig):
         super().__init__(config)
 
         self.focalnet = FocalNetModel(config, add_pooling_layer=False, use_mask_token=True)
@@ -788,7 +781,7 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
 )
 class FocalNetForImageClassification(FocalNetPreTrainedModel):
     # Copied from transformers.models.swin.modeling_swin.SwinForImageClassification.__init__ with Swin->FocalNet, swin->focalnet
-    def __init__(self, config):
+    def __init__(self, config: FocalNetConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels

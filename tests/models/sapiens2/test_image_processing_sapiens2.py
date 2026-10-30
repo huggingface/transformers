@@ -44,47 +44,14 @@ if is_torch_available():
 
 
 class Sapiens2ImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_normalize=True,
-        image_mean=[0.485, 0.456, 0.406],
-        image_std=[0.229, 0.224, 0.225],
-        do_reduce_labels=False,
-        num_labels=5,
-    ):
-        super().__init__()
-        size = size if size is not None else {"height": 20, "width": 18}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_reduce_labels = do_reduce_labels
-        self.num_labels = num_labels
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_labels", 5)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_reduce_labels": self.do_reduce_labels,
-        }
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 20, "width": 18})
+
+        super().__init__(**kwargs)
 
 
 @require_torch
@@ -92,35 +59,7 @@ class Sapiens2ImageProcessingTester(ImageProcessingTester):
 class Sapiens2ImageProcessingTest(
     ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase
 ):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Sapiens2ImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "size"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_reduce_labels"))
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"height": 20, "width": 18})
-            self.assertEqual(image_processor.do_reduce_labels, False)
-
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, size={"height": 42, "width": 42}, do_reduce_labels=True
-            )
-            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
-            self.assertEqual(image_processor.do_reduce_labels, True)
+    image_processor_tester_class = Sapiens2ImageProcessingTester
 
     def test_call_segmentation_maps(self):
         for image_processing_class in self.image_processing_classes.values():

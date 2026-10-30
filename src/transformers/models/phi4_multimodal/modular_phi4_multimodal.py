@@ -32,7 +32,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ...utils.generic import (
@@ -210,7 +210,10 @@ class Phi4MultimodalConfig(Phi3Config):
     >>> configuration = model.config
     ```"""
 
-    sub_configs = {"audio_config": Phi4MultimodalAudioConfig, "vision_config": Phi4MultimodalVisionConfig}
+    sub_configs_defaults = {
+        "audio_config": Phi4MultimodalAudioConfig,
+        "vision_config": Phi4MultimodalVisionConfig,
+    }
 
     vocab_size: int = 200064
     num_key_value_heads: int | None = 8
@@ -223,17 +226,8 @@ class Phi4MultimodalConfig(Phi3Config):
     audio_config: dict | PreTrainedConfig | None = None
 
     def __post_init__(self, **kwargs):
-        self.eos_token_id = self.eos_token_id or [199999, 200020]
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Phi4MultimodalVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = Phi4MultimodalVisionConfig()
-
-        if isinstance(self.audio_config, dict):
-            self.audio_config = Phi4MultimodalAudioConfig(**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = Phi4MultimodalAudioConfig()
         super().__post_init__(**kwargs)
+        self.eos_token_id = self.eos_token_id or [199999, 200020]
 
 
 class Phi4MultimodalVisionMLP(SiglipMLP):
@@ -426,9 +420,6 @@ class Phi4MultimodalVisionEmbeddings(SiglipVisionEmbeddings):
 
         fractional_coords_h = torch.clamp(fractional_coords_h, max=(1.0 - 1e-6))
         fractional_coords_w = torch.clamp(fractional_coords_w, max=(1.0 - 1e-6))
-
-        fractional_coords_h = fractional_coords_h.to(pixel_values.dtype)
-        fractional_coords_w = fractional_coords_w.to(pixel_values.dtype)
 
         bucket_coords_h = torch.bucketize(fractional_coords_h, boundaries, right=True)
         bucket_coords_w = torch.bucketize(fractional_coords_w, boundaries, right=True)
@@ -1370,7 +1361,7 @@ class Phi4MultimodalModel(Phi3Model):
 class Phi4MultimodalForCausalLM(Phi3ForCausalLM):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: Phi4MultimodalConfig):
         super().__init__(config)
         self.model = Phi4MultimodalModel(config)
         self.vocab_size = config.vocab_size
@@ -1446,9 +1437,8 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

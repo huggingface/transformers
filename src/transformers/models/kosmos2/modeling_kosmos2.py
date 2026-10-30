@@ -34,9 +34,17 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     CausalLMOutputWithCrossAttentions,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torchdynamo_compiling,
+    logging,
+    torch_int,
+)
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_kosmos2 import Kosmos2Config, Kosmos2TextConfig, Kosmos2VisionConfig
@@ -99,10 +107,6 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, Kosmos2ImageToTextProjection):
             init.normal_(module.dense.weight, std=std)
             init.normal_(module.latent_query)
-        elif isinstance(module, Kosmos2TextTransformer):
-            init.normal_(module.embed_tokens.weight, mean=0.0, std=std)
-            if module.embed_tokens.padding_idx is not None:
-                init.zeros_(module.embed_tokens.weight[module.embed_tokens.padding_idx])
         elif isinstance(module, Kosmos2TextSinusoidalPositionalEmbedding):
             emb_weights = module.get_embedding(
                 module.num_positions + module.offset, module.embedding_dim, module.padding_idx
@@ -501,6 +505,7 @@ class Kosmos2VisionEncoder(nn.Module):
 
 # Similar to `transformers.models.clip.modeling_clip.CLIPVisionModel` but without docstring for `forward`
 class Kosmos2VisionTransformer(Kosmos2PreTrainedModel):
+    config: Kosmos2VisionConfig
     _can_record_outputs = {
         "hidden_states": Kosmos2VisionEncoderLayer,
         "attentions": Kosmos2VisionAttention,
@@ -615,7 +620,10 @@ class Kosmos2TextSinusoidalPositionalEmbedding(nn.Module):
 
         # expand embeddings if needed
         max_pos = self.padding_idx + 1 + seq_len + past_key_values_length
-        if max_pos > self.weights.size(0):
+        # a compileable cache makes `past_key_values_length` a tensor, which this check cannot branch on.
+        # `is_torchdynamo_compiling()` alone is not enough: tracing with a non-compileable cache keeps it an
+        # int, and the table must still be allowed to grow there.
+        if not (is_torchdynamo_compiling() and torch.is_tensor(max_pos)) and max_pos > self.weights.size(0):
             self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
 
         return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, self.weights.shape[-1]).detach()
@@ -671,6 +679,7 @@ class KosmosTextAttention(nn.Module):
         add_inner_attn_layernorm: bool | None = False,
         bias: bool | None = True,
         layer_idx: bool | None = None,
+        is_causal: bool = False,
     ):
         super().__init__()
         self.config = config
@@ -678,7 +687,7 @@ class KosmosTextAttention(nn.Module):
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
-        self.is_causal = True
+        self.is_causal = is_causal
 
         if (self.head_dim * num_heads) != self.embed_dim:
             raise ValueError(
@@ -807,6 +816,7 @@ class Kosmos2TextBlock(GradientCheckpointingLayer):
             is_decoder=True,
             add_inner_attn_layernorm=True,
             layer_idx=layer_idx,
+            is_causal=True,
         )
         self.dropout = config.dropout
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
@@ -1232,9 +1242,8 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

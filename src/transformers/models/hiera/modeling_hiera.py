@@ -351,18 +351,27 @@ class HieraMaskUnitAttention(nn.Module):
         batch_size, seq_len, _ = hidden_states.shape
 
         num_windows = 1
+        tokens_per_window = seq_len
         if self.use_mask_unit_attn:
             num_windows = seq_len // (self.query_stride * self.window_size)
+            tokens_per_window = self.query_stride * self.window_size
 
         qkv = self.qkv(hidden_states)
-        qkv = qkv.reshape(batch_size, -1, num_windows, 3, self.num_heads, self.head_dim)
+        qkv = qkv.reshape(batch_size, tokens_per_window, num_windows, 3, self.num_heads, self.head_dim)
         qkv = qkv.permute(3, 0, 4, 2, 1, 5)
 
         query, key, value = qkv.unbind(0)
 
         if self.query_stride > 1:
             # Refer to unroll to see how this performs a maxpool-Nd
-            query = query.view(batch_size, self.num_heads, num_windows, self.query_stride, -1, self.head_dim)
+            query = query.view(
+                batch_size,
+                self.num_heads,
+                num_windows,
+                self.query_stride,
+                tokens_per_window // self.query_stride,
+                self.head_dim,
+            )
             query = query.max(dim=3).values
 
         attn_weights = (query * self.scale) @ key.transpose(-1, -2)
@@ -1049,13 +1058,6 @@ class HieraMultiScaleHead(nn.Module):
 @auto_docstring(
     custom_intro="""
     The Hiera Model transformer with the decoder on top for self-supervised pre-training.
-
-    <Tip>
-
-    Note that we provide a script to pre-train this model on custom data in our [examples
-    directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-
-    </Tip>
     """
 )
 class HieraForPreTraining(HieraPreTrainedModel):

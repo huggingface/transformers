@@ -89,6 +89,7 @@ else:
             ("dinov2", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
             ("donut-swin", {"torchvision": "DonutImageProcessor", "pil": "DonutImageProcessorPil"}),
             ("edgetam", {"torchvision": "Sam2ImageProcessor"}),
+            ("embedding_gemma2", {"pil": "Gemma4ImageProcessorPil", "torchvision": "Gemma4ImageProcessor"}),
             ("emu3", {"pil": "Emu3ImageProcessor"}),
             ("eomt_dinov3", {"torchvision": "EomtImageProcessor", "pil": "EomtImageProcessorPil"}),
             ("exaone4_5", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
@@ -117,6 +118,7 @@ else:
             ("mgp-str", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("minicpmv4_7", {"pil": "MiniCPMV4_6ImageProcessorPil", "torchvision": "MiniCPMV4_6ImageProcessor"}),
             ("mistral3", {"torchvision": "PixtralImageProcessor", "pil": "PixtralImageProcessorPil"}),
+            ("mistral_large4", {"torchvision": "PixtralImageProcessor", "pil": "PixtralImageProcessorPil"}),
             ("mlcd", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             (
                 "mm-grounding-dino",
@@ -126,6 +128,7 @@ else:
                 },
             ),
             ("mobilevitv2", {"torchvision": "MobileViTImageProcessor", "pil": "MobileViTImageProcessorPil"}),
+            ("muse_spark", {"torchvision": "MuseGlimmerImageProcessor"}),
             ("omdet-turbo", {"torchvision": "DetrImageProcessor", "pil": "DetrImageProcessorPil"}),
             ("paligemma", {"torchvision": "SiglipImageProcessor", "pil": "SiglipImageProcessorPil"}),
             ("pixio", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
@@ -438,13 +441,13 @@ def _find_mapping_for_image_processor(base_class_name: str) -> dict | None:
             return getattr(val, "__name__", None) == name
         return False
 
-    for mapping_dict in IMAGE_PROCESSOR_MAPPING_NAMES.values():
-        if any(_value_matches(v, base_class_name) for v in mapping_dict.values()):
-            return mapping_dict
-
     for content in IMAGE_PROCESSOR_MAPPING._extra_content.values():
         if any(_value_matches(v, base_class_name) for v in content.values()):
             return content
+
+    for mapping_dict in IMAGE_PROCESSOR_MAPPING_NAMES.values():
+        if any(_value_matches(v, base_class_name) for v in mapping_dict.values()):
+            return mapping_dict
 
     return None
 
@@ -759,7 +762,7 @@ class AutoImageProcessor:
             )
 
         # Avoid resetting existing processors if we are passing partial updates
-        if config_class in IMAGE_PROCESSOR_MAPPING._extra_content:
+        if config_class in IMAGE_PROCESSOR_MAPPING:
             existing_mapping = IMAGE_PROCESSOR_MAPPING[config_class]
             existing_mapping.update(image_processor_classes)
             image_processor_classes = existing_mapping

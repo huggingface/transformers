@@ -38,7 +38,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_megatron_bert import MegatronBertConfig
@@ -556,7 +556,7 @@ class MegatronBertModel(MegatronBertPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: MegatronBertConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -689,7 +689,7 @@ class MegatronBertForPreTraining(MegatronBertPreTrainedModel):
         "cls.predictions.decoder.bias": "cls.predictions.bias",
     }
 
-    def __init__(self, config, add_binary_head=True):
+    def __init__(self, config: MegatronBertConfig, add_binary_head=True):
         r"""
         add_binary_head (`bool`, *optional*, defaults to `True`):
             Whether or not to add a binary head.
@@ -798,7 +798,7 @@ class MegatronBertForCausalLM(MegatronBertPreTrainedModel, GenerationMixin):
         "cls.predictions.decoder.bias": "cls.predictions.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: MegatronBertConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -876,9 +876,8 @@ class MegatronBertForCausalLM(MegatronBertPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.cls(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.cls(hidden_states)
 
         loss = None
         if labels is not None:
@@ -905,7 +904,7 @@ class MegatronBertForMaskedLM(MegatronBertPreTrainedModel):
         "cls.predictions.decoder.bias": "cls.predictions.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: MegatronBertConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -984,7 +983,7 @@ class MegatronBertForMaskedLM(MegatronBertPreTrainedModel):
     """
 )
 class MegatronBertForNextSentencePrediction(MegatronBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MegatronBertConfig):
         super().__init__(config)
 
         self.bert = MegatronBertModel(config)
@@ -1074,7 +1073,7 @@ class MegatronBertForNextSentencePrediction(MegatronBertPreTrainedModel):
     """
 )
 class MegatronBertForSequenceClassification(MegatronBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MegatronBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1153,7 +1152,7 @@ class MegatronBertForSequenceClassification(MegatronBertPreTrainedModel):
 
 @auto_docstring
 class MegatronBertForMultipleChoice(MegatronBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MegatronBertConfig):
         super().__init__(config)
 
         self.bert = MegatronBertModel(config)
@@ -1252,7 +1251,7 @@ class MegatronBertForMultipleChoice(MegatronBertPreTrainedModel):
 
 @auto_docstring
 class MegatronBertForTokenClassification(MegatronBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MegatronBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1314,7 +1313,7 @@ class MegatronBertForTokenClassification(MegatronBertPreTrainedModel):
 
 @auto_docstring
 class MegatronBertForQuestionAnswering(MegatronBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MegatronBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

@@ -30,7 +30,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import TransformersKwargs, can_return_tuple, logging
@@ -466,7 +466,7 @@ class BlipTextModel(BlipTextPreTrainedModel):
     `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: BlipTextConfig, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
@@ -585,7 +585,7 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
         "cls.predictions.decoder.weight": "bert.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: BlipTextConfig):
         super().__init__(config)
 
         self.bert = BlipTextModel(config, add_pooling_layer=False)
@@ -667,9 +667,8 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        prediction_scores = self.cls(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        prediction_scores = self.cls(hidden_states)
 
         if return_logits:
             return prediction_scores[:, :-1, :].contiguous()

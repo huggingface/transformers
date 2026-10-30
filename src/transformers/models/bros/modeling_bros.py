@@ -465,7 +465,7 @@ class BrosPreTrainedModel(PreTrainedModel):
 
 
 class BrosEncoder(BrosPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BrosConfig):
         super().__init__(config)
         self.layer = nn.ModuleList([BrosLayer(config) for _ in range(config.num_hidden_layers)])
         self.post_init()
@@ -498,7 +498,7 @@ class BrosEncoder(BrosPreTrainedModel):
 
 @auto_docstring
 class BrosModel(BrosPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: BrosConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -620,7 +620,7 @@ class BrosModel(BrosPreTrainedModel):
 class BrosForTokenClassification(BrosPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    def __init__(self, config):
+    def __init__(self, config: BrosConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -720,7 +720,7 @@ class BrosForTokenClassification(BrosPreTrainedModel):
 class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    def __init__(self, config):
+    def __init__(self, config: BrosConfig):
         super().__init__(config)
         self.config = config
         self.num_labels = config.num_labels
@@ -816,7 +816,7 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         subsequent_token_logits = subsequent_token_logits.masked_fill(
             invalid_token_mask[:, None, :], torch.finfo(subsequent_token_logits.dtype).min
         )
-        self_token_mask = torch.eye(max_seq_length, max_seq_length + 1).to(device=device, dtype=torch.bool)
+        self_token_mask = torch.eye(max_seq_length, max_seq_length + 1, device=device, dtype=torch.bool)
         subsequent_token_logits = subsequent_token_logits.masked_fill(
             self_token_mask[None, :, :], torch.finfo(subsequent_token_logits.dtype).min
         )
@@ -863,7 +863,7 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
 class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    def __init__(self, config):
+    def __init__(self, config: BrosConfig):
         super().__init__(config)
         self.config = config
         self.num_labels = config.num_labels
@@ -940,7 +940,7 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
             batch_size, max_seq_length = attention_mask.shape
             device = attention_mask.device
 
-            self_token_mask = torch.eye(max_seq_length, max_seq_length + 1).to(device=device, dtype=torch.bool)
+            self_token_mask = torch.eye(max_seq_length, max_seq_length + 1, device=device, dtype=torch.bool)
 
             mask = bbox_first_token_mask.view(-1)
             bbox_first_token_mask = torch.cat(

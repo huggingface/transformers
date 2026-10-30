@@ -315,13 +315,12 @@ class MPNetEncoder(nn.Module):
             context_position = position_ids[:, :, None]
             memory_position = position_ids[:, None, :]
         else:
-            context_position = torch.arange(qlen, dtype=torch.long)[:, None]
-            memory_position = torch.arange(klen, dtype=torch.long)[None, :]
+            context_position = torch.arange(qlen, dtype=torch.long, device=x.device)[:, None]
+            memory_position = torch.arange(klen, dtype=torch.long, device=x.device)[None, :]
 
         relative_position = memory_position - context_position
 
         rp_bucket = self.relative_position_bucket(relative_position, num_buckets=num_buckets)
-        rp_bucket = rp_bucket.to(x.device)
         values = self.relative_attention_bias(rp_bucket)
         values = values.permute([2, 0, 1]).unsqueeze(0)
         values = values.expand((bsz, -1, qlen, klen)).contiguous()
@@ -366,7 +365,7 @@ class MPNetPooler(nn.Module):
 
 @auto_docstring
 class MPNetModel(MPNetPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: MPNetConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -445,7 +444,7 @@ class MPNetForMaskedLM(MPNetPreTrainedModel):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: MPNetConfig):
         super().__init__(config)
 
         self.mpnet = MPNetModel(config, add_pooling_layer=False)
@@ -535,7 +534,7 @@ class MPNetLMHead(nn.Module):
     """
 )
 class MPNetForSequenceClassification(MPNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MPNetConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -608,7 +607,7 @@ class MPNetForSequenceClassification(MPNetPreTrainedModel):
 
 @auto_docstring
 class MPNetForMultipleChoice(MPNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MPNetConfig):
         super().__init__(config)
 
         self.mpnet = MPNetModel(config)
@@ -696,7 +695,7 @@ class MPNetForMultipleChoice(MPNetPreTrainedModel):
 
 @auto_docstring
 class MPNetForTokenClassification(MPNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MPNetConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -775,7 +774,7 @@ class MPNetClassificationHead(nn.Module):
 
 @auto_docstring
 class MPNetForQuestionAnswering(MPNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MPNetConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels

@@ -673,7 +673,7 @@ class LxmertPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class LxmertModel(LxmertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LxmertConfig):
         super().__init__(config)
         self.embeddings = LxmertEmbeddings(config)
         self.encoder = LxmertEncoder(config)
@@ -829,7 +829,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         "cls.predictions.decoder.weight": "lxmert.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: LxmertConfig):
         super().__init__(config)
         # Configuration
         self.config = config
@@ -1121,7 +1121,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
     """
 )
 class LxmertForQuestionAnswering(LxmertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LxmertConfig):
         super().__init__(config)
         # Configuration
         self.config = config

@@ -36,11 +36,10 @@ from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_zamba2 import Zamba2Config
 
@@ -90,8 +89,7 @@ class Zamba2RMSNorm(nn.Module):
 
 
 class Zamba2RotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: Zamba2Config, device=None):
+    def __init__(self, config: Zamba2Config):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -102,14 +100,13 @@ class Zamba2RotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(config: Zamba2Config, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: Zamba2Config, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -125,23 +122,15 @@ class Zamba2RotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        # Disable any outside autocast context if any, to really force fp32
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -714,6 +703,12 @@ class Zamba2MambaMixer(nn.Module):
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.add_bias_linear)
 
         self.layer_type = config.layer_types[layer_idx]
+        if not config.use_mamba_kernels:
+            logger.warning_once(
+                "`use_mamba_kernels=False` is deprecated and has no effect. The implementation is selected "
+                "automatically: Hub kernels when loading with `use_kernels=True`, otherwise the `mamba-ssm` and "
+                "`causal-conv1d` packages if installed, otherwise the PyTorch implementation."
+            )
 
     @torch.no_grad()
     def init_zamba2_weights(self):
@@ -732,7 +727,12 @@ class Zamba2MambaMixer(nn.Module):
     ):
         batch_size, seq_len, _ = hidden_states.shape
         dtype = hidden_states.dtype
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+        # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
+        if cache_params is not None:
+            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
+        else:
+            conv_state, recurrent_state = None, None
 
         # 1. Gated MLP's linear projection
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
@@ -769,13 +769,9 @@ class Zamba2MambaMixer(nn.Module):
             [self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
         )
 
-        if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
-            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
-
         # 2. Convolution sequence transformation
         hidden_states_B_C = hidden_states_B_C.transpose(1, 2)
-        if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
+        if conv_state is not None and seq_len == 1 and not cache_params.is_recording_past(self.layer_idx):
             hidden_states_B_C = causal_conv1d_update(
                 hidden_states_B_C,
                 conv_state,
@@ -811,7 +807,7 @@ class Zamba2MambaMixer(nn.Module):
         )
 
         # Recurrent form
-        if use_precomputed_states and seq_len == 1:
+        if recurrent_state is not None and seq_len == 1:
             hidden_states = hidden_states.view(batch_size, self.num_heads, self.head_dim)
             dt = dt.transpose(1, 2).expand(-1, -1, self.head_dim)
             A = A[:, None, None].expand(-1, self.head_dim, self.ssm_state_size)
@@ -850,7 +846,7 @@ class Zamba2MambaMixer(nn.Module):
                 return_final_states=output_final_state,
                 dt_bias=self.dt_bias,
                 dt_softplus=True,
-                initial_states=recurrent_state if use_precomputed_states else None,
+                initial_states=recurrent_state,
                 dt_limit=self.time_step_limit,
                 **kwargs,
             )
@@ -1317,9 +1313,8 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

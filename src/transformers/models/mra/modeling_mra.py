@@ -21,7 +21,6 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithCrossAttentions,
@@ -567,7 +566,10 @@ class MraSelfAttention(nn.Module):
         )
 
         # revert changes made by float mask
-        attention_mask = 1.0 + attention_mask / 10000.0
+        if attention_mask.ndim == 4 and attention_mask.is_floating_point():
+            # (B, 1, Q, K) additive -> (B, K) with 1 = real-token, 0 = pad
+            attention_mask = (attention_mask[:, 0, -1, :] == 0).int()
+
         attention_mask = (
             attention_mask.squeeze()
             .repeat(1, self.num_attention_heads, 1)
@@ -800,7 +802,7 @@ class MraPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class MraModel(MraPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MraConfig):
         super().__init__(config)
         self.config = config
 
@@ -864,14 +866,6 @@ class MraModel(MraPreTrainedModel):
             inputs_embeds=inputs_embeds,
         )
 
-        attention_mask = create_bidirectional_mask(
-            config=self.config,
-            inputs_embeds=embedding_output[:, 0:1, :],  # Force q_len == 1
-            attention_mask=attention_mask,
-            # Always materialize the mask; the encoder below consumes it as a tensor.
-            allow_is_bidirectional_skip=False,
-        )
-
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=attention_mask,
@@ -898,7 +892,7 @@ class MraForMaskedLM(MraPreTrainedModel):
         "cls.predictions.decoder.weight": "mra.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: MraConfig):
         super().__init__(config)
 
         self.mra = MraModel(config)
@@ -988,7 +982,7 @@ class MraClassificationHead(nn.Module):
     """
 )
 class MraForSequenceClassification(MraPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MraConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.mra = MraModel(config)
@@ -1061,7 +1055,7 @@ class MraForSequenceClassification(MraPreTrainedModel):
 
 @auto_docstring
 class MraForMultipleChoice(MraPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MraConfig):
         super().__init__(config)
 
         self.mra = MraModel(config)
@@ -1160,7 +1154,7 @@ class MraForMultipleChoice(MraPreTrainedModel):
 
 @auto_docstring
 class MraForTokenClassification(MraPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MraConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1229,7 +1223,7 @@ class MraForTokenClassification(MraPreTrainedModel):
 
 @auto_docstring
 class MraForQuestionAnswering(MraPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MraConfig):
         super().__init__(config)
 
         config.num_labels = 2

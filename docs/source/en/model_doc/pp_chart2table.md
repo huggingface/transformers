@@ -184,6 +184,10 @@ print(result)
 
 [[autodoc]] PPChart2TableConfig
 
+## PPChart2TableVisionConfig
+
+[[autodoc]] PPChart2TableVisionConfig
+
 ## PPChart2TableImageProcessor
 
 [[autodoc]] PPChart2TableImageProcessor

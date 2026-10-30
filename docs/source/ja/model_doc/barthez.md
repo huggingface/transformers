@@ -45,12 +45,6 @@ BARThez の実装は、トークン化を除いて BART と同じです。詳細
 
 </Tip>
 
-### Resources
-
-- BARThez は、BART と同様の方法でシーケンス間のタスクを微調整できます。以下を確認してください。
-  [examples/pytorch/summarization/](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization/README.md)。
-
-
 ## BarthezTokenizer
 
 [[autodoc]] BarthezTokenizer

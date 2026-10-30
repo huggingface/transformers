@@ -30,7 +30,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPooling, Seq2SeqLMOutput, Seq2SeqModelOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -486,7 +486,7 @@ class Florence2VisionBlock(nn.Module):
 
 @auto_docstring
 class Florence2VisionPreTrainedModel(PreTrainedModel):
-    config_class = Florence2VisionConfig
+    config: Florence2VisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _supports_sdpa = True
@@ -643,7 +643,6 @@ class Florence2PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
 
     _supports_attention_backend = False
-    config_class = Florence2Config
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -774,7 +773,7 @@ class Florence2Model(Florence2PreTrainedModel):
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=image_features if encoder_outputs is None and pixel_values is not None else None,
         )
 
     def get_encoder(self, modality=None):
@@ -809,6 +808,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
     _tied_weights_keys = {
         "lm_head.weight": "model.language_model.shared.weight",
     }
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: Florence2Config):
         super().__init__(config)
@@ -891,9 +891,8 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -925,7 +924,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
             input_ids=input_ids, inputs_embeds=inputs_embeds, image_features=image_features
         )
 
-    def _prepare_encoder_decoder_kwargs_for_generation(
+    def _maybe_prepare_encoder_kwargs_for_generation(
         self,
         inputs_tensor: torch.Tensor,
         model_kwargs,
@@ -933,23 +932,30 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         generation_config,
     ) -> dict[str, Any]:
         # override to handle merging image and text embeddings before passing to language encoder
-        inputs_embeds = model_kwargs.pop("inputs_embeds", None)
-        pixel_values = model_kwargs.pop("pixel_values", None)
+        if model_kwargs.get("encoder_outputs") is not None:
+            return model_kwargs
 
+        inputs_embeds = model_kwargs.pop("inputs_embeds", None)
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(inputs_tensor)
 
-        if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values).pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+        model_kwargs = self._prepare_multimodal_encoder_kwargs_for_generation(model_kwargs)
+        if (image_outputs := model_kwargs.pop("mm_encoder_outputs", {}).get("image")) is not None:
+            if model_kwargs.get("pixel_values") is not None:
+                raise ValueError("You cannot pass both: raw pixels and pre-computed embeddings for input images")
+
+            image_features = image_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 inputs_tensor, inputs_embeds=inputs_embeds, image_features=image_features
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         model_kwargs["inputs_embeds"] = inputs_embeds
-        model_kwargs = super()._prepare_encoder_decoder_kwargs_for_generation(
-            None, model_kwargs, model_input_name, generation_config
+        model_kwargs = self._prepare_text_encoder_decoder_kwargs_for_generation(
+            inputs_tensor=None,
+            model_kwargs=model_kwargs,
+            model_input_name=model_input_name,
+            generation_config=generation_config,
         )
         model_kwargs.pop("inputs_embeds", None)
         return model_kwargs

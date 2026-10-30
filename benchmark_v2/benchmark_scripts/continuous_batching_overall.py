@@ -194,7 +194,8 @@ class BenchmarkResults:
     def cleanup(self) -> None:
         torch.cuda.empty_cache()
         gc.collect()
-        torch.cuda.reset_peak_memory_stats()
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
 
     def _get_model(self) -> Any:
         self.cleanup()
@@ -295,7 +296,7 @@ class BenchmarkResults:
             "attn_impl": self.attn_impl,
             "entries": [asdict(e) for e in self.entries],
         }
-        with open(filename, "w") as f:
+        with open(filename, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2)
         print(f"\nResults saved to {filename}")
         return filename

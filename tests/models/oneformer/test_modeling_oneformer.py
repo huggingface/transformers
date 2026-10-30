@@ -235,7 +235,6 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     is_encoder_decoder = False
 
     test_missing_keys = False
-    test_torch_exportable = False  # detection head uses data-dependent filtering
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
@@ -333,6 +332,27 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         model = OneFormerForUniversalSegmentation(config).to(torch_device)
         outputs = model(**inputs)
         self.assertTrue(outputs.loss is not None)
+
+    def test_model_with_labels_not_training(self):
+        config, pixel_values, task_inputs, _, pixel_mask, mask_labels, class_labels = (
+            self.model_tester.prepare_config_and_inputs()
+        )
+        config.is_training = False
+        self.assertIsNotNone(config.contrastive_temperature)
+
+        model = OneFormerForUniversalSegmentation(config).to(torch_device).eval()
+        with torch.no_grad():
+            outputs = model(
+                pixel_values=pixel_values,
+                task_inputs=task_inputs,
+                pixel_mask=pixel_mask,
+                mask_labels=mask_labels,
+                class_labels=class_labels,
+            )
+
+        self.assertIsNone(outputs.text_queries)
+        self.assertIsNotNone(outputs.loss)
+        self.assertTrue(torch.isfinite(outputs.loss).all())
 
     def test_hidden_states_output(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()

@@ -37,7 +37,6 @@ from dataclasses import dataclass
 import torch
 
 from ..utils import logging
-from ..utils.deprecation import deprecate_kwarg
 from ..utils.import_utils import (
     is_kernels_available,
     maybe_import_error,
@@ -107,7 +106,7 @@ def _get_nvcc_version() -> tuple[int, int] | None:
     version_json = os.path.join(cuda_home, "version.json")
     if os.path.isfile(version_json):
         try:
-            with open(version_json) as f:
+            with open(version_json, encoding="utf-8") as f:
                 components = json.load(f)
             version = components.get("cuda_nvcc", components.get("cuda", {})).get("version", "")
             major, minor = version.split(".")[:2]
@@ -118,7 +117,7 @@ def _get_nvcc_version() -> tuple[int, int] | None:
     version_txt = os.path.join(cuda_home, "version.txt")
     if os.path.isfile(version_txt):
         try:
-            with open(version_txt) as f:
+            with open(version_txt, encoding="utf-8") as f:
                 match = re.search(r"CUDA Version (\d+)\.(\d+)", f.read())
             if match:
                 return int(match.group(1)), int(match.group(2))
@@ -129,7 +128,7 @@ def _get_nvcc_version() -> tuple[int, int] | None:
     cuda_h = os.path.join(cuda_home, "include", "cuda.h")
     if os.path.isfile(cuda_h):
         try:
-            with open(cuda_h) as f:
+            with open(cuda_h, encoding="utf-8") as f:
                 match = re.search(r"#define CUDA_VERSION (\d+)", f.read())
             if match:
                 cuda_version = int(match.group(1))
@@ -577,14 +576,12 @@ def _combine_routed_output(
 # ── Public dispatches ──────────────────────────────────────────────────────────
 
 
-@deprecate_kwarg("output_dtype", version="v5.16")
 def deepgemm_fp8_fp4_linear(
     input: torch.Tensor,
     weight: torch.Tensor,
     weight_scale_inv: torch.Tensor,
     bias: torch.Tensor | None = None,
     block_size: tuple[int, int] | None = None,
-    output_dtype: torch.dtype | None = None,
     activation_scale: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """End-to-end DeepGEMM linear: per-token activation quant + FP8/FP4 matmul.
@@ -630,6 +627,8 @@ def deepgemm_bf16_experts_forward(
 ) -> torch.Tensor:
     if hidden_states.dtype != torch.bfloat16:
         raise ValueError(f"DeepGEMM experts path requires bfloat16 hidden states, got {hidden_states.dtype}")
+    if self.has_post_expert_norm:
+        raise ValueError("The `deepgemm` experts implementation does not support experts with a post-expert norm.")
 
     deepgemm = load_deepgemm_kernel()
     # Non-transposed weights (E, N, K) → NT kernel; transposed (E, K, N) → NN kernel.

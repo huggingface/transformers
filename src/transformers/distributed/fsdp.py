@@ -17,25 +17,29 @@ import inspect
 import os
 from typing import TYPE_CHECKING, Any
 
-from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal, logging, strtobool
+from ..utils import is_torch_available, is_torch_distributed_available, logging, strtobool
 from ..utils.quantization_config import QuantizationMethod
-from .tensor_parallel import replace_layer_number_by_wildcard
-from .utils import _is_torch_distributed_initialized
+from .parallel_utils import replace_layer_number_by_wildcard
+from .utils import _is_torch_distributed_initialized, _warning_once_on_rank_zero
 
 
 if TYPE_CHECKING:
     import torch.nn as nn
 
     from .configuration_utils import DistributedConfig
+    from .utils import TransformersDeviceMesh
 
 if is_torch_available():
     import torch
 
-if is_torch_distributed_available() and is_torch_greater_or_equal("2.6"):
+if is_torch_distributed_available():
     from torch.distributed._composable.fsdp import fully_shard
     from torch.distributed.fsdp import CPUOffloadPolicy, MixedPrecisionPolicy
 
 logger = logging.get_logger(__name__)
+
+# FSDP plan styles: whether a module frees its full weight after forward (and re-gathers it for backward) or keeps it.
+ALL_FSDP_STYLES = ("free_full_weight", "keep_full_weight")
 
 
 def is_fsdp_enabled() -> bool:
@@ -142,29 +146,14 @@ def _resolve_tied_embed_lm_head_plan(
     return adapted_plan
 
 
-def expand_fsdp_plan(
-    model: nn.Module,
-    fsdp_plan: dict[str, str],
-) -> tuple[list[tuple[str, nn.Module]], list[tuple[str, nn.Module]]]:
-    """Expand plan keys into reshard and no-reshard ``(module_name, module)`` shard targets."""
-    reshard_targets: list[tuple[str, nn.Module]] = []
-    no_reshard_targets: list[tuple[str, nn.Module]] = []
-
-    for module_name, module in model.named_modules():
-        plan_key = module_name if module_name in fsdp_plan else replace_layer_number_by_wildcard(module_name)
-        if plan_key in fsdp_plan:
-            if fsdp_plan[plan_key] == "keep_full_weight":
-                no_reshard_targets.append((module_name, module))
-            else:
-                reshard_targets.append((module_name, module))
-
-    return reshard_targets, no_reshard_targets
-
-
 def verify_fsdp_plan(module_names: list[str], fsdp_plan: dict[str, str] | None) -> None:
     """
     Verify the FSDP plan of the model, log a warning if plan keys were not applied or strategies are invalid.
     """
+    _warning_once_on_rank_zero(
+        "`verify_fsdp_plan` is deprecated and will be removed in v5.23: the model validates its plans itself when "
+        "they are set and in `_resolve_parallel_plans`."
+    )
     if not fsdp_plan:
         return
 
@@ -185,39 +174,51 @@ def verify_fsdp_plan(module_names: list[str], fsdp_plan: dict[str, str] | None) 
 
 
 def apply_fully_sharded_data_parallelism(
-    model: nn.Module, fsdp_mesh: torch.distributed.device_mesh.DeviceMesh
+    model: nn.Module,
+    mesh_manager: TransformersDeviceMesh,
+    fsdp_plan: dict[str, str],
+    ep_plan: dict[str, str],
 ) -> nn.Module:
     """
-    Apply FSDP2 (fully_shard) to a model.
+    Apply FSDP2 (fully_shard) to a model: dispatched experts on `efsdp` and the rest of the modules on `fsdp`.
 
     Torch availability, distributed initialization and the version requirement
     are asserted upstream by `initialize_distributed_mesh`.
     """
-    fsdp_plan = dict(getattr(model, "_fsdp_plan", None) or {})
-    if not fsdp_plan:
-        raise ValueError(
-            f"{type(model).__name__} does not have a FSDP2 plan declared. Set "
-            "`base_model_fsdp_plan` on the config and `_fsdp_plan` on the head class."
-        )
-
     distributed_config = getattr(model.config, "distributed_config", None)
+    fsdp_mesh = mesh_manager.get_mesh("fsdp")
     fsdp_policy_kwargs = _get_fsdp_policy_kwargs(distributed_config)
 
-    adapted_fsdp_plan = _resolve_tied_embed_lm_head_plan(fsdp_plan, model)
-    reshard_targets, no_reshard_targets = expand_fsdp_plan(model, adapted_fsdp_plan)
+    if distributed_config is not None and distributed_config.ep_size > 1:
+        expert_mesh = mesh_manager.get_mesh("efsdp")
+        for module_name, module in model.named_modules():
+            if ep_plan.get(module_name) == "ep_dispatch_experts":
+                fully_shard(module, mesh=expert_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
+                # an EP group holds ep_size / tp_size distinct batches
+                # the efsdp reduce the sums on efsdp_size copies of that expert.
+                # The expert gradient therefore covers ep_size / tp_size * efsdp_size = fsdp_size batches
+                # not efsdp_size batches (the relationship is efsdp_size = fsdp_size * tp_size / ep_size)
+                module.set_gradient_divide_factor(float(distributed_config.fsdp_size))
+                # FSDP2 applies a divide factor other than the group size through PREMUL_SUM, which non-NCCL backends
+                # reject and NCCL zeroes in bfloat16 up to torch 2.13 (pytorch/pytorch#190747): sum, divide locally.
+                module.set_force_sum_reduction_for_comms(True)
 
-    for module_name, module in reshard_targets:
+    reshard_targets, no_reshard_targets = [], []
+    for name, style in fsdp_plan.items():
+        if style == "keep_full_weight":
+            no_reshard_targets.append((name, model.get_submodule(name)))
+        else:
+            reshard_targets.append((name, model.get_submodule(name)))
+
+    for name, module in reshard_targets:
         fully_shard(module, mesh=fsdp_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
-        logger.debug(f"Applied fully_shard to {module_name} (reshard=True)")
+        logger.debug(f"Applied fully_shard to {name} (reshard=True)")
 
     # Optimization: when the keep buffer is exactly the (final_norm, lm_head/embed)
     # tail pair, bundle them into one fully_shard so that we dont need to do all-gather during backward pass.
     if is_norm_and_head_pair(no_reshard_targets, model):
-        names, modules = [], []
-        for name, module in no_reshard_targets:
-            names.append(name)
-            modules.append(module)
-        fully_shard(modules, mesh=fsdp_mesh, reshard_after_forward=False, **fsdp_policy_kwargs)
+        names, modules = zip(*no_reshard_targets)
+        fully_shard(list(modules), mesh=fsdp_mesh, reshard_after_forward=False, **fsdp_policy_kwargs)
         logger.debug(f"Grouped tail {names} (reshard=False)")
     else:
         for name, module in no_reshard_targets:

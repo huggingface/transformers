@@ -16,10 +16,11 @@
 import logging as stdlib_logging
 import math
 import unittest
+import warnings
 
 from parameterized import parameterized
 
-from transformers import Gemma3TextConfig, LlamaConfig
+from transformers import Gemma3TextConfig, LlamaConfig, PreTrainedConfig
 from transformers.testing_utils import CaptureLogger, is_torch_available, require_torch, torch_device
 from transformers.utils import logging as transformers_logging
 
@@ -38,6 +39,46 @@ if is_torch_available():
 
 @require_torch
 class RopeTest(unittest.TestCase):
+    def test_rope_scaling_setter_is_deprecated(self):
+        config = LlamaConfig(rope_theta=500000.0)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            config.rope_scaling = {
+                "type": "yarn",
+                "factor": 4.0,
+                "rope_theta": 500000.0,
+                "original_max_position_embeddings": 4096,
+            }
+        self.assertTrue(any(issubclass(w.category, FutureWarning) for w in caught))
+        self.assertEqual(config.rope_parameters["rope_type"], "yarn")
+        LlamaRotaryEmbedding(config)
+
+    def test_rope_scaling_setter_during_init(self):
+        # Mimics remote code (e.g. Phi-3) that sets and validates `rope_scaling` before the rest of the config
+        class RemoteConfig(PreTrainedConfig):
+            model_type = "remote"
+
+            def __init__(self, rope_scaling=None, rope_theta=10000.0, **kwargs):
+                self.rope_scaling = rope_scaling
+                if set(self.rope_scaling) != {"type", "factor"}:
+                    raise ValueError(f"Unexpected `rope_scaling`: {self.rope_scaling}")
+                self.rope_theta = rope_theta
+                super().__init__(**kwargs)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            config = RemoteConfig(rope_scaling={"type": "dynamic", "factor": 2.0})
+        self.assertEqual(config.rope_parameters["rope_type"], "dynamic")
+        self.assertEqual(config.rope_parameters["rope_theta"], 10000.0)
+
+    def test_rope_scaling_setter_accepts_none(self):
+        config = LlamaConfig(rope_theta=500000.0)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            config.rope_scaling = None
+        self.assertTrue(any(issubclass(w.category, FutureWarning) for w in caught))
+        self.assertIsNone(config.rope_parameters)
+
     def get_config_with_rope_parameters(
         self, rope_params: dict, is_nested: bool = False, same_rope_per_layer: bool = False
     ):
@@ -263,6 +304,17 @@ class RopeTest(unittest.TestCase):
         )
         config.rope_parameters["original_max_position_embeddings"] = 4096
 
+        config.validate_rope()
+
+    def test_odd_rotary_dim_validation(self):
+        # A fully-rotated odd head_dim (#48101) should fail at config validation, not with a shape mismatch in forward
+        config = self.get_config_with_rope_parameters(rope_params={"rope_type": "default", "rope_theta": 10000.0})
+        config.head_dim = 65
+        with self.assertRaises(ValueError):
+            config.validate_rope()
+
+        # Partial rotary dims are rounded up to the next even number and fit in the head, so they are allowed
+        config.rope_parameters["partial_rotary_factor"] = 0.5
         config.validate_rope()
 
     def test_default_rope_numerically(self):

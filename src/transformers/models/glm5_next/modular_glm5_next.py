@@ -44,8 +44,13 @@ from ...integrations import (
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    MoeCausalLMOutputWithPast,
+    MoeModelOutputWithPast,
+)
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
@@ -284,7 +289,10 @@ class Glm5NextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "glm5_next"
-    sub_configs = {"vision_config": Glm5NextVisionConfig, "text_config": Glm5NextTextConfig}
+    sub_configs_defaults = {
+        "vision_config": Glm5NextVisionConfig,
+        "text_config": Glm5NextTextConfig,
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -298,18 +306,10 @@ class Glm5NextConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
+        if self.text_config is None:
             # Flat (text-only) GLM-5.3-Flash checkpoints store the text fields at the
             # top level; forward them so `text_config` is populated for BC.
-            self.text_config = self.sub_configs["text_config"](**kwargs)
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
+            self.text_config = kwargs
         super().__post_init__(**kwargs)
 
 
@@ -662,13 +662,14 @@ class Glm5NextTextLinearAttention(nn.Module):
         ).transpose(1, 2)
 
         # Acts for normal prefill but also for multi-token prefill continue
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
-        if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
-            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
+        if cache_params is not None:
+            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
+        else:
+            conv_state, recurrent_state = None, None
 
         # Single token decode path
-        if use_precomputed_states and seq_len == 1:
+        if conv_state is not None and seq_len == 1:
             mixed_qkv = causal_conv1d_update(
                 mixed_qkv,
                 conv_state,
@@ -710,7 +711,7 @@ class Glm5NextTextLinearAttention(nn.Module):
         beta = torch.sigmoid(self.b_proj(hidden_states))
 
         # KDA
-        if use_precomputed_states and seq_len == 1:
+        if recurrent_state is not None and seq_len == 1:
             core_attn_out, last_recurrent_state = recurrent_kimi_delta_attention(
                 query,
                 key,
@@ -729,7 +730,7 @@ class Glm5NextTextLinearAttention(nn.Module):
                 value,
                 g=g,
                 beta=beta,
-                initial_state=recurrent_state if use_precomputed_states else None,
+                initial_state=recurrent_state,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
                 **kwargs,
@@ -1280,7 +1281,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
 class Glm5NextTextModel(Glm5NextPreTrainedModel):
     config: Glm5NextTextConfig
 
-    def __init__(self, config):
+    def __init__(self, config: Glm5NextTextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -1403,7 +1404,7 @@ class Glm5NextVisionBlock(GlmOcrVisionBlock):
 
 @auto_docstring
 class Glm5NextVisionModel(GlmOcrVisionModel):
-    def __init__(self, config) -> None:
+    def __init__(self, config: Glm5NextVisionConfig) -> None:
         super().__init__(config)
         self.blocks = nn.ModuleList([Glm5NextVisionBlock(config) for _ in range(config.depth)])
         self.merger = Glm5NextVisionPatchMerger(
@@ -1417,7 +1418,7 @@ class Glm5NextVisionModel(GlmOcrVisionModel):
 class Glm5NextModel(Exaone4_5_Model, Glm5NextPreTrainedModel):
     config: Glm5NextConfig
 
-    def __init__(self, config):
+    def __init__(self, config: Glm5NextConfig):
         super().__init__(config)
         self.visual = Glm5NextVisionModel._from_config(config.vision_config)
         self.language_model = Glm5NextTextModel._from_config(config.text_config)
@@ -1510,25 +1511,44 @@ class Glm5NextModel(Exaone4_5_Model, Glm5NextPreTrainedModel):
         pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw, **kwargs).pooler_output
-            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"] = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, **kwargs).pooler_output
-            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+        if mm_encoder_outputs.get("video") is not None:
+            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
@@ -1560,7 +1580,9 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
     Main Glm5Next conditional generation class.
     """
 
-    def __init__(self, config):
+    input_modalities = ("image", "video", "text")
+
+    def __init__(self, config: Glm5NextConfig):
         super().__init__(config)
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
         self.num_experts = config.text_config.num_local_experts
@@ -1584,6 +1606,7 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
         output_router_logits: bool | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MoeCausalLMOutputWithPast:
         r"""
@@ -1634,12 +1657,13 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_router_logits=output_router_logits,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -2190,7 +2214,6 @@ class Glm5NextVideoProcessor(GlmgaVideoProcessor):
     def _preprocess(
         self,
         videos: list[torch.Tensor],
-        do_convert_rgb: bool = True,
         do_resize: bool = True,
         size: SizeDict | None = None,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None" = PILImageResampling.BICUBIC,
@@ -2212,8 +2235,6 @@ class Glm5NextVideoProcessor(GlmgaVideoProcessor):
         resized_videos_grouped = {}
 
         for shape, stacked_videos in grouped_videos.items():
-            if do_convert_rgb:
-                stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
                 # New resize requires new kwargs to be passed downstream
                 stacked_videos = self.resize(
@@ -2298,6 +2319,43 @@ class Glm5NextVideoProcessor(GlmgaVideoProcessor):
             )
 
         return tvF.pad(videos, [0, 0, target_width - content_width, target_height - content_height], fill=0)
+
+    def get_num_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
+        """
+        A utility that returns number of video patches a given video size.
+
+        Args:
+            num_frames (`int`):
+                Number of frames in the input video.
+            height (`int`):
+                Height of the input video.
+            width (`int`):
+                Width of the input video.
+            videos_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the video processor.
+        Returns:
+            `int`: Number of video patches per video.
+        """
+        videos_kwargs = videos_kwargs if videos_kwargs is not None else {}
+        patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
+        merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
+        temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
+        patch_expand_factor = videos_kwargs.get("patch_expand_factor", None) or self.patch_expand_factor
+        min_image_tokens = videos_kwargs.get("min_image_tokens", None) or self.min_image_tokens
+        max_image_tokens = videos_kwargs.get("max_image_tokens", None) or self.max_image_tokens
+
+        resized_height, resized_width = smart_resize(
+            height=height,
+            width=width,
+            num_frames=num_frames,
+            factor=patch_size * merge_size * patch_expand_factor,
+            temporal_factor=temporal_patch_size,
+            min_pixels=min_image_tokens,
+            max_pixels=max_image_tokens,
+        )
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        grid_t = (num_frames + -num_frames % temporal_patch_size) // temporal_patch_size
+        return grid_t * grid_h * grid_w
 
 
 __all__ = [

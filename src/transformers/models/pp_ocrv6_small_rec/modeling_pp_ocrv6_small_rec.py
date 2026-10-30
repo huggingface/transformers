@@ -232,6 +232,7 @@ class PPOCRV6SmallRecPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+    input_modalities = ("image",)
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
@@ -239,7 +240,6 @@ class PPOCRV6SmallRecPreTrainedModel(PreTrainedModel):
         "hidden_states": PPOCRV6SmallRecBlock,
     }
     main_input_name = "pixel_values"
-    input_modalities = ("image",)
 
 
 class PPOCRV6SmallRecEncoderWithSVTR(PPOCRV6SmallRecPreTrainedModel):
@@ -250,7 +250,7 @@ class PPOCRV6SmallRecEncoderWithSVTR(PPOCRV6SmallRecPreTrainedModel):
 
     def __init__(
         self,
-        config,
+        config: PPOCRV6SmallRecConfig,
     ):
         super().__init__(config)
         in_channels = config.backbone_config.block_configs[-1][-1][2]

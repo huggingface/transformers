@@ -71,9 +71,11 @@ class LlamaIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         """
         expected_texts = Expectations(
             {
+                ("rocm", (9, 4)): 'Tell me about the french revolution. The french revolution was a period of radical political and social upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the First French Republic.\nThe revolution began in 1789 with the Estates-General, a representative assembly that had not met since 1614. The Third Estate, which represented the common people, demanded greater representation and eventually broke away to form the National Assembly. This marked the beginning of the end of the absolute monarchy and the feudal system.\nThe National Assembly',
                 ("rocm", (9, 5)): 'Tell me about the french revolution. The french revolution was a period of radical social and political upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the First French Republic.\nThe revolution began in 1789 with the Estates-General, a representative assembly that had not met since 1614. The Third Estate, which represented the common people, demanded greater representation and eventually broke away to form the National Assembly. This marked the beginning of the end of the absolute monarchy and the rise of the middle class.\n',
                 ("cuda", 8): 'Tell me about the french revolution. The french revolution was a period of radical social and political upheaval in France that lasted from 1789 to 1799. It was a time of great change and upheaval, marked by the overthrow of the monarchy, the establishment of the First French Republic, and the Reign of Terror.\nThe French Revolution began in 1789 with the Estates-General, a representative assembly that had not met since 1614. The Third Estate, which represented the common people, demanded greater representation and eventually broke away to form the National Assembly. The National Assembly adopted the Declaration of the Rights of Man and of the Citizen, which enshrined the',
                 ("cuda", None): 'Tell me about the french revolution. The french revolution was a period of radical political and social upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the First French Republic.\nThe revolution began in 1789 with the Estates-General, a representative assembly that had not met since 1614. The Third Estate, which represented the common people, demanded greater representation and eventually broke away to form the National Assembly. The National Assembly adopted the Declaration of the Rights of Man and of the Citizen, which enshr',
+                ("tpu", None): 'Tell me about the french revolution. The french revolution was a period of radical social and political upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the First French Republic.\nThe revolution began in 1789 with the Estates-General, a representative assembly that had not met since 1614. The Third Estate, which represented the common people, demanded greater representation and eventually broke away to form the National Assembly. The National Assembly adopted the Declaration of the Rights of Man and of the Citizen, which enshr',
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
@@ -291,14 +293,21 @@ class LlamaIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             [input_text], tokenize=True, return_tensors="pt", add_generation_prompt=True
         ).to(model.device)
 
-        out_sdpa = model.generate(**inputs, max_new_tokens=100, cache_implementation="static", do_sample=False)
+        out_sdpa = model.generate(
+            **inputs, max_new_tokens=100, cache_implementation="static", disable_compile=True, do_sample=False
+        )
         output_text_sdpa = tokenizer.batch_decode(out_sdpa[0, inputs.input_ids.shape[1] :])[0]
 
         # Now toggle FA and test again
         model.set_attn_implementation("flash_attention_2")
 
         out_fa = model.generate(
-            **inputs, max_new_tokens=100, cache_implementation="static", do_sample=False, return_dict_in_generate=True
+            **inputs,
+            max_new_tokens=100,
+            cache_implementation="static",
+            disable_compile=True,
+            do_sample=False,
+            return_dict_in_generate=True,
         )
         output_text_fa = tokenizer.batch_decode(out_fa.sequences[0, inputs.input_ids.shape[1] :])[0]
 

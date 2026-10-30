@@ -35,8 +35,8 @@ from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_docstring,
+    get_current_accelerator,
     is_accelerate_available,
-    is_torch_accelerator_available,
     logging,
 )
 from ..auto import AutoModel
@@ -360,7 +360,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
     config: BarkSubModelConfig
     output_modalities = ("audio",)
 
-    def __init__(self, config):
+    def __init__(self, config: BarkSubModelConfig):
         super().__init__(config)
         self.config = config
 
@@ -866,7 +866,7 @@ class BarkFineModel(BarkPreTrainedModel):
     config: BarkFineConfig
     main_input_name = "codebook_idx"
 
-    def __init__(self, config):
+    def __init__(self, config: BarkFineConfig):
         # non-causal gpt-like model with one embedding layer and one lm_head for each codebook of Encodec
         super().__init__(config)
         self.config = config
@@ -1258,7 +1258,7 @@ class BarkFineModel(BarkPreTrainedModel):
 class BarkModel(BarkPreTrainedModel, GenerationMixin):
     config: BarkConfig
 
-    def __init__(self, config):
+    def __init__(self, config: BarkConfig):
         super().__init__(config)
 
         self.semantic = BarkSemanticModel(config.semantic_config)
@@ -1315,9 +1315,7 @@ class BarkModel(BarkPreTrainedModel, GenerationMixin):
         else:
             raise ImportError("`enable_model_cpu_offload` requires `accelerate`.")
 
-        device_type = "cuda"
-        if is_torch_accelerator_available():
-            device_type = torch.accelerator.current_accelerator().type
+        device_type = (get_current_accelerator() or torch.device("cuda")).type
         device = torch.device(f"{device_type}:{accelerator_id}")
 
         torch_accelerator_module = getattr(torch, device_type)

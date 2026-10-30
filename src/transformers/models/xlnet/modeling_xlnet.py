@@ -26,7 +26,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ... import initialization as init
 from ...activations import ACT2FN, get_activation
 from ...generation import GenerationMixin
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_xlnet import XLNetConfig
@@ -851,7 +851,7 @@ class XLNetForQuestionAnsweringOutput(ModelOutput):
 
 @auto_docstring
 class XLNetModel(XLNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLNetConfig):
         super().__init__(config)
 
         self.mem_len = config.mem_len
@@ -928,7 +928,7 @@ class XLNetModel(XLNetPreTrainedModel):
 
     @staticmethod
     def positional_embedding(pos_seq, inv_freq, bsz=None):
-        sinusoid_inp = torch.einsum("i,d->id", pos_seq, inv_freq)
+        sinusoid_inp = pos_seq[:, None] * inv_freq
         pos_emb = torch.cat([torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)], dim=-1)
         pos_emb = pos_emb[:, None, :]
 
@@ -1090,7 +1090,9 @@ class XLNetModel(XLNetPreTrainedModel):
         if data_mask is not None:
             # all mems can be attended to
             if mlen > 0:
-                mems_mask = torch.zeros([data_mask.shape[0], mlen, bsz]).to(data_mask)
+                mems_mask = torch.zeros(
+                    [data_mask.shape[0], mlen, bsz], device=data_mask.device, dtype=data_mask.dtype
+                )
                 data_mask = torch.cat([mems_mask, data_mask], dim=1)
             if attn_mask is None:
                 attn_mask = data_mask[:, :, :, None]
@@ -1101,9 +1103,11 @@ class XLNetModel(XLNetPreTrainedModel):
             attn_mask = (attn_mask > 0).to(dtype_float)
 
         if attn_mask is not None:
-            non_tgt_mask = -torch.eye(qlen).to(attn_mask)
+            non_tgt_mask = -torch.eye(qlen, device=attn_mask.device, dtype=attn_mask.dtype)
             if mlen > 0:
-                non_tgt_mask = torch.cat([torch.zeros([qlen, mlen]).to(attn_mask), non_tgt_mask], dim=-1)
+                non_tgt_mask = torch.cat(
+                    [torch.zeros([qlen, mlen], device=attn_mask.device, dtype=attn_mask.dtype), non_tgt_mask], dim=-1
+                )
             non_tgt_mask = ((attn_mask + non_tgt_mask[:, :, None, None]) > 0).to(attn_mask)
         else:
             non_tgt_mask = None
@@ -1213,7 +1217,7 @@ class XLNetModel(XLNetPreTrainedModel):
 class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_loss.weight": "transformer.word_embedding.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: XLNetConfig):
         super().__init__(config)
         self.attn_type = config.attn_type
         self.same_length = config.same_length
@@ -1421,9 +1425,8 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = transformer_outputs[0]
-        # Only compute necessary logits
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_loss(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_loss(hidden_states)
 
         loss = None
         if labels is not None:
@@ -1459,7 +1462,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
     """
 )
 class XLNetForSequenceClassification(XLNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLNetConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1583,7 +1586,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
 
 @auto_docstring
 class XLNetForTokenClassification(XLNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLNetConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1691,7 +1694,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
 
 @auto_docstring
 class XLNetForMultipleChoice(XLNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLNetConfig):
         super().__init__(config)
 
         self.transformer = XLNetModel(config)
@@ -1835,7 +1838,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
     """
 )
 class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLNetConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1956,7 +1959,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
 
 @auto_docstring
 class XLNetForQuestionAnswering(XLNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLNetConfig):
         super().__init__(config)
         self.start_n_top = config.start_n_top
         self.end_n_top = config.end_n_top

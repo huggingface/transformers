@@ -393,6 +393,7 @@ class LayoutLMPreTrainedModel(PreTrainedModel):
     config: LayoutLMConfig
     base_model_prefix = "layoutlm"
     supports_gradient_checkpointing = True
+    _supports_sdpa = True
     _can_record_outputs = {
         "hidden_states": LayoutLMLayer,
         "attentions": LayoutLMSelfAttention,
@@ -410,7 +411,7 @@ class LayoutLMPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class LayoutLMModel(LayoutLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMConfig):
         super().__init__(config)
         self.config = config
 
@@ -531,7 +532,7 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
         "cls.predictions.decoder.weight": "layoutlm.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMConfig):
         super().__init__(config)
 
         self.layoutlm = LayoutLMModel(config)
@@ -643,7 +644,7 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
     """
 )
 class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.layoutlm = LayoutLMModel(config)
@@ -767,7 +768,7 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
     """
 )
 class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.layoutlm = LayoutLMModel(config)
@@ -867,7 +868,7 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
 
 @auto_docstring
 class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
-    def __init__(self, config, has_visual_segment_embedding=True):
+    def __init__(self, config: LayoutLMConfig, has_visual_segment_embedding=True):
         r"""
         has_visual_segment_embedding (`bool`, *optional*, defaults to `True`):
             Whether or not to add visual segment embeddings.
