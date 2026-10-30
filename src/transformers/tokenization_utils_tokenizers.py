@@ -81,6 +81,64 @@ MODEL_TO_TRAINER_MAPPING = {
 
 VOCAB_FILES_NAMES = {"tokenizer_file": TOKENIZER_FILE, "vocab_file": TIKTOKEN_VOCAB_FILE}
 
+# Probe string used to detect pre-tokenizer mismatches behaviorally. It covers
+# digits, spaces, CJK and punctuation: the inputs whose splitting most often
+# diverges between the tokenizer.json pipeline and the class-built one.
+_PRETOKENIZER_MISMATCH_PROBE = "Hello world 1234567 你好, test!"
+
+
+def _build_pretokenizer_from_dict(node):
+    """Rebuild a `tokenizers` pre-tokenizer from a tokenizer.json dict.
+
+    Returns None when the dict cannot be rebuilt (unknown type, custom
+    pre-tokenizer, unexpected params). Callers must treat None as "skip the
+    check", never as a mismatch: this warning must never break loading.
+    """
+    from tokenizers import pre_tokenizers
+
+    if not isinstance(node, dict):
+        return None
+    try:
+        # Sequence takes its children as a positional list, not a kwarg.
+        if node.get("type") == "Sequence":
+            children = [_build_pretokenizer_from_dict(child) for child in node.get("pretokenizers", [])]
+            if any(child is None for child in children):
+                return None
+            return pre_tokenizers.Sequence(children)
+        cls = getattr(pre_tokenizers, node["type"])
+        kwargs = {}
+        for key, value in node.items():
+            if key == "type":
+                continue
+            if key == "pattern" and isinstance(value, dict):
+                # {"Regex": "..."} -> "...": Split takes a plain string pattern.
+                value = next(iter(value.values()))
+            elif key == "behavior" and isinstance(value, str):
+                value = value.lower()
+            kwargs[key] = value
+        return cls(**kwargs)
+    except Exception:
+        return None
+
+
+def _pretokenizer_mismatch(json_pretokenizer_dict, built_pretokenizer):
+    """True when the tokenizer.json pre-tokenizer behaves differently from the built one.
+
+    Compares behavior on a probe string instead of type names, so equivalent
+    pipelines (e.g. Metaspace vs Sequence([Metaspace])) don't warn, while real
+    mismatches hidden inside the same type (e.g. Digits individual_digits
+    True vs False) are caught.
+    """
+    json_pt = _build_pretokenizer_from_dict(json_pretokenizer_dict)
+    if json_pt is None or built_pretokenizer is None:
+        return False
+    try:
+        json_out = [tok for tok, _ in json_pt.pre_tokenize_str(_PRETOKENIZER_MISMATCH_PROBE)]
+        built_out = [tok for tok, _ in built_pretokenizer.pre_tokenize_str(_PRETOKENIZER_MISMATCH_PROBE)]
+    except Exception:
+        return False
+    return json_out != built_out
+
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
 class TokenizersBackend(PreTrainedTokenizerBase):
@@ -157,6 +215,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 local_kwargs["_json_truncation"] = tok_from_file.truncation
             if tok_from_file.padding is not None:
                 local_kwargs["_json_padding"] = tok_from_file.padding
+            if tokenizer_json.get("pre_tokenizer") is not None:
+                local_kwargs["_json_pre_tokenizer"] = tokenizer_json["pre_tokenizer"]
 
             # Extract precompiled SentencePiece charsmap from tokenizer.json normalizer
             # when present (e.g. T5 tokenizers converted with SentencePiece >= 2.x).
@@ -369,6 +429,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         # when a class with a custom __init__ rebuilds the backend tokenizer from scratch.
         _json_truncation = kwargs.pop("_json_truncation", None)
         _json_padding = kwargs.pop("_json_padding", None)
+        _json_pre_tokenizer = kwargs.pop("_json_pre_tokenizer", None)
         # Precompiled SentencePiece charsmap is already used by model-specific tokenizers
         # (before calling super().__init__) and should not be stored in `init_kwargs` to keep the tokenizer  serializable.
         kwargs.pop("_spm_precompiled_charsmap", None)
@@ -427,6 +488,17 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         if self._tokenizer is None:
             raise ValueError("The backend tokenizer is not correctly initialized.")
+
+        if _json_pre_tokenizer is not None and self._tokenizer.pre_tokenizer is not None:
+            if _pretokenizer_mismatch(_json_pre_tokenizer, self._tokenizer.pre_tokenizer):
+                logger.warning(
+                    f"The pre-tokenizer built by {self.__class__.__name__} behaves differently from the "
+                    f"`pre_tokenizer` declared in this checkpoint's `tokenizer.json`. "
+                    f"This usually means the `tokenizer_class` in `tokenizer_config.json` is incorrectly set, "
+                    f"and some characters may be silently dropped or split differently at encode time. "
+                    f"If you experience encoding issues, consider changing the `tokenizer_class` to a class "
+                    f"that loads the full `tokenizer.json` pipeline in `tokenizer_config.json`."
+                )
 
         _truncation = kwargs.pop("tokenizer_truncation", None) or self._tokenizer.truncation or _json_truncation
         if _truncation is not None:
