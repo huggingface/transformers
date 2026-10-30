@@ -24,6 +24,7 @@ from .core_model_loading import (
     ErnieFuseAndSplitTextVisionExperts,
     GroupWeightRename,
     Interleave,
+    LayerPairCollapse,
     MergeModulelist,
     PermuteForRope,
     PrefixChange,
@@ -153,6 +154,16 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        # Dory checkpoints store each decoder layer as an attention block followed by an mlp block
+        "dory": [
+            LayerPairCollapse(
+                first_block={"mixer": "self_attn", "attn_alpha": "lambda_1"},
+                second_block={"mixer": "mlp", "mlp_alpha": "lambda_2"},
+            ),
+            WeightRenaming(r"^backbone\.", "model."),
+            WeightRenaming(r"model\.embeddings", "model.embed_tokens"),
+            WeightRenaming(r"self_attn\.g_proj", "self_attn.gate_proj"),
+        ],
         "hy_v4": [
             # General HC prefix which is dropped
             WeightRenaming(r"\.hc_pre\.hc_", ".hc_"),
