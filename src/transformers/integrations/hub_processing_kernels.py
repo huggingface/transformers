@@ -16,8 +16,7 @@ from collections.abc import Callable
 from functools import wraps
 
 from ..feature_extraction_utils import BatchFeature
-from ..image_utils import PILImageResampling
-from ..utils.import_utils import is_torch_available
+from ..utils.import_utils import is_torch_available, is_vision_available
 
 
 if is_torch_available():
@@ -25,10 +24,14 @@ if is_torch_available():
 
     from .hub_kernels import lazy_load_kernel
 
+if is_vision_available():
+    from ..image_utils import PILImageResampling
+
+    KERNEL_INTERPOLATIONS = {PILImageResampling.BILINEAR: "bilinear", PILImageResampling.BICUBIC: "bicubic"}
+
 
 _PROCESSING_KERNEL_ADAPTERS: dict[str, tuple[str, Callable]] = {}
 _KERNEL_DEVICE_TYPE = "cuda"
-KERNEL_INTERPOLATIONS = {PILImageResampling.BILINEAR: "bilinear", PILImageResampling.BICUBIC: "bicubic"}
 
 
 def register_processing_kernel(name: str, kernel_name: str):
