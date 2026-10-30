@@ -98,6 +98,11 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+############################
+#      Start Thinker       #
+############################
+
+
 class Qwen3ASRAudioAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 

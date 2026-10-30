@@ -28,7 +28,12 @@ from ... import initialization as init
 from ...activations import GELUActivation
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    CausalLMOutputWithPast,
+)
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...models.qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ...models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
@@ -64,10 +69,8 @@ from ..qwen2_5_omni.modeling_qwen2_5_omni import (
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 from ..qwen2_vl.modeling_qwen2_vl import (
-    Qwen2VLCausalLMOutputWithPast,
     Qwen2VLForConditionalGeneration,
     Qwen2VLModel,
-    Qwen2VLModelOutputWithPast,
     Qwen2VLRotaryEmbedding,
 )
 from ..siglip.configuration_siglip import SiglipVisionConfig
@@ -682,14 +685,6 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
         return self.vision_model(pixel_values=pixel_values, grid_thw=grid_thw, **kwargs)
 
 
-class PaddleOCRVLModelOutputWithPast(Qwen2VLModelOutputWithPast):
-    pass
-
-
-class PaddleOCRVLCausalLMOutputWithPast(Qwen2VLCausalLMOutputWithPast):
-    pass
-
-
 class PaddleOCRVLModel(Qwen2VLModel):
     _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]
 
@@ -757,7 +752,7 @@ class PaddleOCRVLModel(Qwen2VLModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
-    ) -> tuple | PaddleOCRVLModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         if pixel_values is not None and mm_encoder_outputs is not None:
             raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
@@ -796,15 +791,7 @@ class PaddleOCRVLModel(Qwen2VLModel):
             **kwargs,
         )
 
-        output = PaddleOCRVLModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            rope_deltas=self.rope_deltas,
-        )
-
-        return output
+        return outputs
 
 
 class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
@@ -828,7 +815,7 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | PaddleOCRVLCausalLMOutputWithPast:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
         Example:
 
@@ -866,7 +853,7 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         >>> print(output_text)
         ```
         """
-        outputs: PaddleOCRVLModelOutputWithPast = self.model(
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -890,13 +877,12 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return PaddleOCRVLCausalLMOutputWithPast(
+        return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=outputs.rope_deltas,
         )
 
 

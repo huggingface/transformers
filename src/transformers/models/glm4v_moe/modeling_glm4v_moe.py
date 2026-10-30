@@ -19,7 +19,6 @@
 # limitations under the License.
 import itertools
 from collections.abc import Callable
-from dataclasses import dataclass
 from itertools import accumulate
 
 import torch
@@ -38,7 +37,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
+    MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -484,20 +483,6 @@ class Glm4vMoePreTrainedModel(PreTrainedModel):
         elif isinstance(module, Glm4vMoeTextExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-
-
-@auto_docstring
-@dataclass
-class Glm4vMoeCausalLMOutputWithPast(CausalLMOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
-    router_logits: tuple[torch.FloatTensor] | None = None
-    aux_loss: torch.FloatTensor | None = None
 
 
 class Glm4vMoeVisionRotaryEmbedding(nn.Module):
@@ -1035,19 +1020,6 @@ class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
 
 
 @auto_docstring
-@dataclass
-class Glm4vMoeModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
-    router_logits: tuple[torch.FloatTensor] | None = None
-
-
-@auto_docstring
 class Glm4vMoeModel(Glm4vMoePreTrainedModel):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
@@ -1355,7 +1327,7 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Glm4vMoeModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1410,10 +1382,7 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
             **kwargs,
         )
 
-        return Glm4vMoeModelOutputWithPast(
-            **outputs,
-            rope_deltas=self.rope_deltas,
-        )
+        return outputs
 
 
 def load_balancing_loss_func(
@@ -1545,7 +1514,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Glm4vMoeCausalLMOutputWithPast:
+    ) -> tuple | MoeCausalLMOutputWithPast:
         r"""
         Example:
 
@@ -1622,14 +1591,13 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
                     loss.device
                 )  # make sure to reside in the same device
 
-        return Glm4vMoeCausalLMOutputWithPast(
+        return MoeCausalLMOutputWithPast(
             loss=loss,
             aux_loss=aux_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=outputs.rope_deltas,
             router_logits=outputs.router_logits,
         )
 

@@ -27,7 +27,11 @@ from ...modeling_layers import (
     GenericForTokenClassification,
     GradientCheckpointingLayer,
 )
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, SequenceClassifierOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    SequenceClassifierOutputWithPast,
+)
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -58,7 +62,6 @@ from ..qwen3_next.modeling_qwen3_next import (
 from ..qwen3_vl.configuration_qwen3_vl import Qwen3VLConfig, Qwen3VLVisionConfig
 from ..qwen3_vl.modeling_qwen3_vl import (
     Qwen3VLForConditionalGeneration,
-    Qwen3VLModelOutputWithPast,
     Qwen3VLTextRotaryEmbedding,
     Qwen3VLVisionModel,
     Qwen3VLVisionRotaryEmbedding,
@@ -491,10 +494,6 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
         )
 
 
-class Qwen3_5ModelOutputWithPast(Qwen3VLModelOutputWithPast):
-    pass
-
-
 class Qwen3_5TextModel(Qwen3NextModel):
     config: Qwen3_5TextConfig
 
@@ -566,7 +565,7 @@ class Qwen3_5TextModel(Qwen3NextModel):
 
         hidden_states = self.norm(hidden_states)
 
-        return Qwen3_5ModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
