@@ -32,7 +32,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     logging,
-    requires_backends,
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import requires
@@ -258,7 +257,6 @@ class ConditionalDetrImageProcessorPil(DetrImageProcessorPil):
             `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
-        requires_backends(self, ["torch"])
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
         if target_sizes is not None:
@@ -325,7 +323,6 @@ class ConditionalDetrImageProcessorPil(DetrImageProcessorPil):
             `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`). In both cases,
             `(height, width)` corresponds to the target size (if `target_sizes` is specified).
         """
-        requires_backends(self, ["torch"])
         class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes]
         masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
 
