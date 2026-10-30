@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import tempfile
 import unittest
 
 import torch
@@ -27,7 +28,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
 if is_vision_available():
-    from transformers import GemmaTokenizer, SiglipImageProcessor
+    from transformers import GemmaTokenizer, PI0ImageProcessor, SiglipImageProcessor
 
 
 @require_vision
@@ -103,6 +104,23 @@ class PI0ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         out_with_newline = processor(images=image, text="pick object\n", return_tensors="pt")
         self.assertTrue(torch.equal(out_no_newline["input_ids"], out_with_newline["input_ids"]))
         self.assertTrue(torch.equal(out_no_newline["attention_mask"], out_with_newline["attention_mask"]))
+
+    @require_torch
+    def test_processor_with_pi0_image_processor(self):
+        processor = self.processor_class(
+            image_processor=PI0ImageProcessor(), tokenizer=self.get_component("tokenizer")
+        )
+        outputs = processor(images=self.prepare_images_inputs(), text="pick", padding="longest")
+        self.assertEqual(outputs["pixel_values"].shape, torch.Size([1, 1, 3, 224, 224]))
+        self.assertEqual((outputs["input_ids"] == processor.image_token_id).sum().item(), 256)
+
+    def test_normalization_statistics_survive_save_and_load(self):
+        processor = self.processor_class(**self.prepare_components(), state_mean=[1.0] * 8, chunk_size=10)
+        with tempfile.TemporaryDirectory() as saved_directory:
+            processor.save_pretrained(saved_directory)
+            reloaded = self.processor_class.from_pretrained(saved_directory)
+        self.assertEqual(reloaded.state_mean, [1.0] * 8)
+        self.assertEqual(reloaded.chunk_size, 10)
 
     @unittest.skip("PI0 doesn't need vLLM integration")
     def test_get_num_multimodal_tokens_matches_processor_call(self):
