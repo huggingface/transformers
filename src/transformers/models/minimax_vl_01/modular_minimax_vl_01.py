@@ -97,6 +97,11 @@ MINIMAX_VL_01_IMAGE_GRID_PINPOINTS = [
 class MiniMaxVL01TextConfig(MiniMaxConfig):
     model_type = "minimax_vl_01_text"
     base_config_key = "text_config"
+    router_aux_loss_coef = AttributeError()
+
+    def __post_init__(self, **kwargs):
+        kwargs.pop("router_aux_loss_coef", None)
+        super().__post_init__(**kwargs)
 
 
 class MiniMaxVL01TextCache(MiniMaxCache):
@@ -278,7 +283,7 @@ class MiniMaxVL01TextModel(MiniMaxModel):
 
 
 def _migrate_legacy_text_config(text_config: dict) -> dict:
-    """Translate the released remote-code MiniMax-Text-01 schema to the native VL-01 text schema."""
+    """Convert the original MiniMax-VL-01 checkpoint's nested text config to native MiniMax field names."""
     text_config = dict(text_config)
     model_type = text_config.get("model_type")
     legacy_keys = {
@@ -377,20 +382,15 @@ class MiniMaxVL01Config(LlavaNextConfig):
     """
 
     model_type = "minimax_vl_01"
-    attribute_map = {"image_token_id": "image_token_index"}
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     image_token_index: int = 200025
-    projector_hidden_act: str = "gelu"
     vision_feature_select_strategy: str = "default"
     vision_feature_layer: int | list[int] = -1
-    multimodal_projector_bias: bool = True
-    tie_word_embeddings: bool = False
-    image_grid_pinpoints: list | None = None
-    image_seq_length: int = 576
     ignore_index: int = -100
+    image_seq_length = AttributeError()
 
     def __post_init__(self, **kwargs):
+        kwargs.pop("image_seq_length", None)
         if self.vision_feature_select_strategy != "default":
             raise ValueError("MiniMax-VL-01 supports only `vision_feature_select_strategy='default'`.")
 
@@ -402,6 +402,7 @@ class MiniMaxVL01Config(LlavaNextConfig):
 
         if isinstance(self.vision_config, dict):
             vision_config = dict(self.vision_config)
+            vision_config.pop("vocab_size", None)
             vision_config["model_type"] = vision_config.get("model_type", "clip_vision_model")
             self.vision_config = AutoConfig.for_model(vision_config.pop("model_type"), **vision_config)
         elif self.vision_config is None:
@@ -414,8 +415,6 @@ class MiniMaxVL01Config(LlavaNextConfig):
                 num_attention_heads=16,
                 num_hidden_layers=24,
                 patch_size=14,
-                projection_dim=6144,
-                vocab_size=32000,
             )
         if (
             not isinstance(self.vision_config, PreTrainedConfig)
@@ -437,23 +436,17 @@ class MiniMaxVL01Config(LlavaNextConfig):
                 intermediate_size=9216,
                 num_hidden_layers=80,
                 num_attention_heads=64,
-                num_key_value_heads=8,
                 head_dim=128,
                 max_position_embeddings=8192,
-                rms_norm_eps=1e-5,
                 bos_token_id=None,
                 eos_token_id=None,
-                num_experts_per_tok=2,
                 num_local_experts=32,
                 layer_types=[
                     "full_attention" if (layer_idx + 1) % 8 == 0 else "linear_attention" for layer_idx in range(80)
                 ],
                 full_attn_alpha_factor=layernorm_factor,
-                full_attn_beta_factor=1.0,
                 linear_attn_alpha_factor=layernorm_factor,
-                linear_attn_beta_factor=1.0,
                 mlp_alpha_factor=layernorm_factor,
-                mlp_beta_factor=1.0,
                 rope_parameters={
                     "rope_type": "default",
                     "rope_theta": 10_000_000,
@@ -504,6 +497,8 @@ class MiniMaxVL01ImageProcessor(LlavaNextImageProcessor):
     def __init__(self, **kwargs: Unpack[MiniMaxVL01ImageProcessorKwargs]):
         if kwargs.get("process_image_mode", self.process_image_mode) != "anyres":
             raise ValueError("MiniMax-VL-01 supports only `process_image_mode='anyres'`.")
+        if kwargs.get("do_pad", self.do_pad):
+            raise ValueError("MiniMax-VL-01 does not support `do_pad=True`.")
         super().__init__(**kwargs)
 
     def _resize_for_patching(
@@ -548,6 +543,8 @@ class MiniMaxVL01ImageProcessor(LlavaNextImageProcessor):
     ) -> BatchFeature:
         if kwargs.get("process_image_mode", self.process_image_mode) != "anyres":
             raise ValueError("MiniMax-VL-01 supports only `process_image_mode='anyres'`.")
+        if do_pad:
+            raise ValueError("MiniMax-VL-01 does not support `do_pad=True`.")
 
         processed_images = []
         image_sizes = []
@@ -612,6 +609,8 @@ class MiniMaxVL01ImageProcessorPil(LlavaNextImageProcessorPil):
     def __init__(self, **kwargs: Unpack[MiniMaxVL01ImageProcessorKwargs]):
         if kwargs.get("process_image_mode", self.process_image_mode) != "anyres":
             raise ValueError("MiniMax-VL-01 supports only `process_image_mode='anyres'`.")
+        if kwargs.get("do_pad", self.do_pad):
+            raise ValueError("MiniMax-VL-01 does not support `do_pad=True`.")
         super().__init__(**kwargs)
 
     def _resize_for_patching(
@@ -654,6 +653,8 @@ class MiniMaxVL01ImageProcessorPil(LlavaNextImageProcessorPil):
     ) -> BatchFeature:
         if kwargs.get("process_image_mode", self.process_image_mode) != "anyres":
             raise ValueError("MiniMax-VL-01 supports only `process_image_mode='anyres'`.")
+        if do_pad:
+            raise ValueError("MiniMax-VL-01 does not support `do_pad=True`.")
 
         processed_images = []
         image_sizes = []

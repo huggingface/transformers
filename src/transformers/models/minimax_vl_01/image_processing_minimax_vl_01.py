@@ -109,6 +109,8 @@ class MiniMaxVL01ImageProcessor(TorchvisionBackend):
         super().__init__(**kwargs)
         if kwargs.get("process_image_mode", self.process_image_mode) != "anyres":
             raise ValueError("MiniMax-VL-01 supports only `process_image_mode='anyres'`.")
+        if kwargs.get("do_pad", self.do_pad):
+            raise ValueError("MiniMax-VL-01 does not support `do_pad=True`.")
 
     @auto_docstring
     def preprocess(
@@ -224,6 +226,8 @@ class MiniMaxVL01ImageProcessor(TorchvisionBackend):
         """Custom preprocessing for LLaVA-NeXT with patch processing."""
         if kwargs.get("process_image_mode", self.process_image_mode) != "anyres":
             raise ValueError("MiniMax-VL-01 supports only `process_image_mode='anyres'`.")
+        if do_pad:
+            raise ValueError("MiniMax-VL-01 does not support `do_pad=True`.")
 
         processed_images = []
         image_sizes = []
