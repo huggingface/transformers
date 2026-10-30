@@ -25,8 +25,6 @@ class DoryConfig(PreTrainedConfig):
     r"""
     ngpt_alpha_init (`float`, *optional*, defaults to 0.05):
         Initial interpolation rate for the normalized residual updates.
-    attention_output_gate_logit_scale_init (`float`, *optional*):
-        Initial attention gate scale. Defaults to the square root of `hidden_size`.
     n_input_layers (`int`, *optional*, defaults to 0):
         Number of physical blocks before the recurrent section.
     n_recurrent_layers (`int`, *optional*):
@@ -65,16 +63,12 @@ class DoryConfig(PreTrainedConfig):
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
     tie_word_embeddings: bool = False
-    hidden_act: str = "silu"
     # Also normalizes the learned nGPT scales at inference time.
     initializer_range: float = 0.02
     sliding_window: int | None = 1024
     rope_parameters: dict | None = None
     layer_types: list[str] | None = None
     ngpt_alpha_init: float = 0.05
-    attention_output_gate_logit_scale_init: float | None = None
-    mlp_bias: bool = False
-    attention_bias: bool = False
     n_input_layers: int = 0
     n_recurrent_layers: int | None = None
     n_output_layers: int = 0
@@ -83,6 +77,18 @@ class DoryConfig(PreTrainedConfig):
     recurrent_kv_cache_mode: str = "per_loop"
 
     def __post_init__(self, **kwargs):
+        # Published checkpoints include these now-fixed architectural fields.
+        legacy_values = {
+            "hidden_act": ("silu",),
+            "mlp_bias": (False,),
+            "attention_bias": (False,),
+            "attention_output_gate_logit_scale_init": (None, self.hidden_size**0.5),
+        }
+        for key, supported_values in legacy_values.items():
+            if key in kwargs:
+                value = kwargs.pop(key)
+                if value not in supported_values:
+                    raise ValueError(f"Dory requires {key} to be one of {supported_values!r}, got {value!r}")
         if self.layer_types is None:
             self.layer_types = [
                 "mlp" if i % 2 else "full_attention" if i % 8 == 6 else "sliding_attention"
@@ -130,10 +136,8 @@ class DoryConfig(PreTrainedConfig):
             raise ValueError("initializer_range must be positive")
         if "sliding_attention" in self.layer_types and (self.sliding_window is None or self.sliding_window <= 0):
             raise ValueError("sliding_window must be a positive integer")
-        if self.attention_bias or self.mlp_bias:
-            raise ValueError("Dory requires bias-free projections")
-        if self.hidden_act != "silu" or self.tie_word_embeddings:
-            raise ValueError("Dory requires SiLU and untied embeddings")
+        if self.tie_word_embeddings:
+            raise ValueError("Dory requires untied embeddings")
 
     def validate_rope(self):
         if self.layer_types is None:

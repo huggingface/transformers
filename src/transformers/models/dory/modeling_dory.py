@@ -25,7 +25,6 @@ from torch import nn
 from torch.nn import functional as F
 
 from ... import initialization as init
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicLayer
 from ...generation import GenerationMixin
 from ...integrations import is_deepspeed_zero3_enabled, use_kernel_forward_from_hub
@@ -260,9 +259,10 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def justnorm(x, dim=-1):
-    xf = x.float()
-    return (xf * torch.rsqrt(xf.pow(2).sum(dim, keepdim=True) + 1e-6)).to(x.dtype)
+def l2_normalize(hidden_states, dim=-1):
+    normalized_states = hidden_states.float()
+    normalized_states = normalized_states * torch.rsqrt(normalized_states.pow(2).sum(dim, keepdim=True) + 1e-6)
+    return normalized_states.to(hidden_states.dtype)
 
 
 class DoryAttention(nn.Module):
@@ -272,17 +272,16 @@ class DoryAttention(nn.Module):
         self.head_dim = config.head_dim
         self.q_size = config.num_attention_heads * config.head_dim
         kv_size = config.num_key_value_heads * config.head_dim
-        self.q_proj = nn.Linear(config.hidden_size, self.q_size, bias=config.attention_bias)
-        self.k_proj = nn.Linear(config.hidden_size, kv_size, bias=config.attention_bias)
-        self.v_proj = nn.Linear(config.hidden_size, kv_size, bias=config.attention_bias)
-        self.g_proj = nn.Linear(config.hidden_size, self.q_size, bias=config.attention_bias)
-        self.o_proj = nn.Linear(self.q_size, config.hidden_size, bias=config.attention_bias)
+        self.q_proj = nn.Linear(config.hidden_size, self.q_size, bias=False)
+        self.k_proj = nn.Linear(config.hidden_size, kv_size, bias=False)
+        self.v_proj = nn.Linear(config.hidden_size, kv_size, bias=False)
+        self.g_proj = nn.Linear(config.hidden_size, self.q_size, bias=False)
+        self.o_proj = nn.Linear(self.q_size, config.hidden_size, bias=False)
         self.sqk = nn.Parameter(torch.full((self.q_size,), config.initializer_range))
         self.s_gate = nn.Parameter(torch.full((self.q_size,), config.initializer_range))
+        # nGPT scaled-parameter initialization, section 2.6: https://arxiv.org/abs/2410.01131
         self._sqk_factor = config.head_dim**0.5 / config.initializer_range
-        gate_scale = config.attention_output_gate_logit_scale_init
-        if gate_scale is None:
-            gate_scale = config.hidden_size**0.5
+        gate_scale = config.hidden_size**0.5
         self._s_gate_factor = gate_scale**0.5 / config.initializer_range
         self.layer_idx = layer_idx
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
@@ -308,8 +307,8 @@ class DoryAttention(nn.Module):
         gate = self.g_proj(hidden_states)
         query, key = apply_rotary_pos_emb(query, key, *position_embeddings, unsqueeze_dim=2)
         sqk = (self.sqk.float() * self._sqk_factor).view(1, 1, -1, self.head_dim)
-        query = (sqk.square() * justnorm(query).float()).to(query.dtype).transpose(1, 2)
-        key = justnorm(key).transpose(1, 2)
+        query = (sqk.square() * l2_normalize(query).float()).to(query.dtype).transpose(1, 2)
+        key = l2_normalize(key).transpose(1, 2)
         cache_idx = self.layer_idx
         if self.config.recurrent_kv_cache_mode == "per_loop":
             cache_idx += loop_idx * self.config.num_hidden_layers
@@ -334,18 +333,18 @@ class DoryAttention(nn.Module):
         output = output.reshape(*hidden_states.shape[:-1], self.q_size)
         s_gate = (self.s_gate.float() * self._s_gate_factor).square()
         output = (output.float() * torch.sigmoid(gate.float() * s_gate)).to(output.dtype)
-        return self.o_proj(justnorm(output)), weights
+        return self.o_proj(l2_normalize(output)), weights
 
 
 class DoryMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
+        self.gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
         self.suv_gate = nn.Parameter(torch.ones(config.intermediate_size))
         self.suv_up = nn.Parameter(torch.ones(config.intermediate_size))
-        self.act_fn = ACT2FN[config.hidden_act]
+        self.act_fn = nn.SiLU()
         self._suv_factor = config.hidden_size**0.5
 
     def forward(self, hidden_states):
@@ -353,12 +352,16 @@ class DoryMLP(nn.Module):
         gate = (gate.float() * (self.suv_gate.float() * self._suv_factor)).to(gate.dtype)
         up = (up.float() * (self.suv_up.float() * self._suv_factor)).to(up.dtype)
         output = (self.act_fn(gate.float()) * up.float()).to(gate.dtype)
-        return self.down_proj(justnorm(output))
+        return self.down_proj(l2_normalize(output))
 
 
-def slerp_alpha(a, b, alpha, scale):
-    ya, yb = justnorm(a).float(), justnorm(b).float()
-    return justnorm(ya + (alpha.float() * scale).abs() * (yb - ya)).to(a.dtype)
+def normalized_residual_update(hidden_states, update, alpha, scale):
+    """Normalized interpolation from nGPT: https://arxiv.org/abs/2410.01131."""
+    normalized_states = l2_normalize(hidden_states).float()
+    normalized_update = l2_normalize(update).float()
+    return l2_normalize(
+        normalized_states + (alpha.float() * scale).abs() * (normalized_update - normalized_states)
+    ).to(hidden_states.dtype)
 
 
 class DoryDecoderLayer(GradientCheckpointingLayer):
@@ -375,9 +378,11 @@ class DoryDecoderLayer(GradientCheckpointingLayer):
 
     def forward(self, hidden_states, **kwargs):
         if self.layer_type == "mlp":
-            return slerp_alpha(hidden_states, self.mixer(hidden_states), self.mlp_alpha, self._alpha_scale)
+            return normalized_residual_update(
+                hidden_states, self.mixer(hidden_states), self.mlp_alpha, self._alpha_scale
+            )
         output, _ = self.mixer(hidden_states, **kwargs)
-        return slerp_alpha(hidden_states, output, self.attn_alpha, self._alpha_scale)
+        return normalized_residual_update(hidden_states, output, self.attn_alpha, self._alpha_scale)
 
 
 class DoryLMHead(nn.Linear):
@@ -513,9 +518,9 @@ class DoryModel(DoryPreTrainedModel):
         state = input_hidden
         for loop_idx in range(self.config.n_recurrent_loops):
             final_loop = loop_idx == self.config.n_recurrent_loops - 1
-            state = justnorm(
+            state = l2_normalize(
                 apply_layers(
-                    justnorm(state + input_hidden.to(state.device)), input_end, recurrent_end, loop_idx, final_loop
+                    l2_normalize(state + input_hidden.to(state.device)), input_end, recurrent_end, loop_idx, final_loop
                 )
             )
         hidden_states = apply_layers(state, recurrent_end, recurrent_end + self.config.n_output_layers)
@@ -524,8 +529,6 @@ class DoryModel(DoryPreTrainedModel):
 
 @auto_docstring
 class DoryForCausalLM(DoryPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {}
-
     def __init__(self, config):
         super().__init__(config)
         self.backbone = DoryModel(config)

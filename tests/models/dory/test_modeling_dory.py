@@ -98,6 +98,35 @@ def test_learned_vocabulary_scale_is_applied_after_projection():
     torch.testing.assert_close(model.lm_head(hidden), expected)
 
 
+@pytest.mark.parametrize("gate_scale", [None, 4.0])
+def test_legacy_fixed_config_fields_load_without_reserializing(tmp_path, gate_scale):
+    legacy_fields = {
+        "hidden_act": "silu",
+        "mlp_bias": False,
+        "attention_bias": False,
+        "attention_output_gate_logit_scale_init": gate_scale,
+    }
+    config = DoryConfig.from_dict({"hidden_size": 16, **legacy_fields})
+    config.save_pretrained(tmp_path)
+    loaded = DoryConfig.from_pretrained(tmp_path)
+    assert loaded.hidden_size == 16
+    assert all(key not in loaded.to_dict() for key in legacy_fields)
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        ("hidden_act", "gelu"),
+        ("mlp_bias", True),
+        ("attention_bias", True),
+        ("attention_output_gate_logit_scale_init", 2.0),
+    ],
+)
+def test_incompatible_legacy_config_fields_are_rejected(key, value):
+    with pytest.raises(ValueError, match=key):
+        DoryConfig.from_dict({"hidden_size": 16, key: value})
+
+
 def test_invalid_loop_count_override_is_rejected_on_load(tmp_path):
     make_model().save_pretrained(tmp_path)
     with pytest.raises(StrictDataclassClassValidationError, match="n_recurrent_loops"):
@@ -399,7 +428,7 @@ class DoryModelTester(CausalLMModelTester):
     base_model_class = DoryModel
 
     def __init__(self, parent, **kwargs):
-        super().__init__(parent, hidden_act="silu", n_recurrent_loops=2, sliding_window=16, **kwargs)
+        super().__init__(parent, n_recurrent_loops=2, sliding_window=16, **kwargs)
         self.expected_num_hidden_layers = self.num_hidden_layers * self.n_recurrent_loops + 1
 
 
