@@ -312,10 +312,10 @@ class DistributedMixin:
         if distributed_config.pp_size > 1:
             model = apply_pipeline_parallelism(model, mesh_manager.get_mesh("pp"))
 
-        if distributed_config.tp_size > 1 and tp_plan:
+        if distributed_config.tp_size > 1:
             model = apply_tensor_parallelism(model, mesh_manager.get_mesh("tp"), tp_plan)
 
-        if distributed_config.ep_size > 1 and ep_plan:
+        if distributed_config.ep_size > 1:
             tp_mesh = mesh_manager.get_mesh("tp")
             ep_mesh = mesh_manager.get_mesh("ep")
 
@@ -328,7 +328,7 @@ class DistributedMixin:
                 # we will have to slice the batch here in order to avoid computing tp_size times the same batch.
                 model = apply_expert_parallelism(model, ep_mesh, tp_mesh, ep_plan)
 
-        if distributed_config.fsdp_size > 1 and fsdp_plan:
+        if distributed_config.fsdp_size > 1:
             model = apply_fully_sharded_data_parallelism(model, mesh_manager, fsdp_plan, ep_plan)
 
         return model
