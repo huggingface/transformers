@@ -312,7 +312,7 @@ class JinaEmbeddingsV3LMHead(XLMRobertaLMHead):
 
 
 class JinaEmbeddingsV3ForMaskedLM(XLMRobertaForMaskedLM):
-    def __init__(self, config):
+    def __init__(self, config: JinaEmbeddingsV3Config):
         JinaEmbeddingsV3PreTrainedModel.__init__(self, config=config)
 
         self.lm_head = JinaEmbeddingsV3LMHead(config)

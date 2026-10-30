@@ -188,7 +188,7 @@ class WatermarkDetector:
 
     def _compute_pval(self, x, loc=0, scale=1):
         z = (x - loc) / scale
-        return 1 - (0.5 * (1 + np.sign(z) * (1 - np.exp(-2 * z**2 / np.pi))))
+        return 0.5 * torch.special.erfc(torch.as_tensor(z / np.sqrt(2))).numpy()
 
     def __call__(
         self,

@@ -1022,7 +1022,7 @@ class LukeForMaskedLM(LukePreTrainedModel):
         "lm_head.bias": "lm_head.decoder.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: LukeConfig):
         super().__init__(config)
 
         self.luke = LukeModel(config)
@@ -1160,7 +1160,7 @@ class LukeForMaskedLM(LukePreTrainedModel):
     """
 )
 class LukeForEntityClassification(LukePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LukeConfig):
         super().__init__(config)
 
         self.luke = LukeModel(config)
@@ -1289,7 +1289,7 @@ class LukeForEntityClassification(LukePreTrainedModel):
     """
 )
 class LukeForEntityPairClassification(LukePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LukeConfig):
         super().__init__(config)
 
         self.luke = LukeModel(config)
@@ -1423,7 +1423,7 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
     """
 )
 class LukeForEntitySpanClassification(LukePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LukeConfig):
         super().__init__(config)
 
         self.luke = LukeModel(config)
@@ -1581,7 +1581,7 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
     """
 )
 class LukeForSequenceClassification(LukePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LukeConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.luke = LukeModel(config)
@@ -1703,7 +1703,7 @@ class LukeForSequenceClassification(LukePreTrainedModel):
     """
 )
 class LukeForTokenClassification(LukePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LukeConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1806,7 +1806,7 @@ class LukeForTokenClassification(LukePreTrainedModel):
 
 @auto_docstring
 class LukeForQuestionAnswering(LukePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LukeConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -1924,7 +1924,7 @@ class LukeForQuestionAnswering(LukePreTrainedModel):
 
 @auto_docstring
 class LukeForMultipleChoice(LukePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LukeConfig):
         super().__init__(config)
 
         self.luke = LukeModel(config)

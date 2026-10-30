@@ -239,6 +239,7 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
 
 
 class DiaEncoder(DiaPreTrainedModel):
+    config: DiaEncoderConfig
     _can_record_outputs = {
         "hidden_states": DiaEncoderLayer,
         "attentions": DiaSelfAttention,
@@ -354,6 +355,7 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
 class DiaDecoder(DiaPreTrainedModel):
     """Transformer Decoder Stack using DenseGeneral."""
 
+    config: DiaDecoderConfig
     _can_record_outputs = {
         "hidden_states": DiaDecoderLayer,
         "attentions": DiaSelfAttention,

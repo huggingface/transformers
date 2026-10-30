@@ -41,9 +41,19 @@ class TestTrainerDistributedConfig(TestCasePlus):
         return cmd + (script_args or [])
 
     @require_peft
-    def test_peft_save(self):
-        """`Trainer` saves the LoRA adapter of a model sharded at load time, and the saved adapter is the trained one."""
-        cmd = self.get_torchrun_cmd(PEFT_SAVE_SCRIPT, ["--output_dir", self.get_auto_remove_tmp_dir()])
+    def test_peft_save_fsdp(self):
+        """Save and reload an adapter whose weights are sharded with FSDP."""
+        cmd = self.get_torchrun_cmd(
+            PEFT_SAVE_SCRIPT, ["--output_dir", self.get_auto_remove_tmp_dir(), "--parallelism", "fsdp"]
+        )
+        execute_subprocess_async(cmd, env=self.get_env())
+
+    @require_peft
+    def test_peft_save_tp(self):
+        """Save and reload an adapter whose weights are tensor-parallel DTensors."""
+        cmd = self.get_torchrun_cmd(
+            PEFT_SAVE_SCRIPT, ["--output_dir", self.get_auto_remove_tmp_dir(), "--parallelism", "tp"]
+        )
         execute_subprocess_async(cmd, env=self.get_env())
 
     @require_peft
@@ -58,6 +68,8 @@ class TestTrainerDistributedConfig(TestCasePlus):
                 "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5",
                 "--bias",
                 "lora_only",
+                "--parallelism",
+                "fsdp",
             ],
         )
         execute_subprocess_async(cmd, env=self.get_env())

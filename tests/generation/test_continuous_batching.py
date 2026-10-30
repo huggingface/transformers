@@ -92,7 +92,7 @@ from transformers.utils import (
 )
 from transformers.utils.generic import is_flash_attention_requested
 
-from ..test_tensor_parallel_mixin import _init_distributed
+from ..distributed_testing_utils import run_distributed
 
 
 # Constants for tests
@@ -2637,7 +2637,7 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
         )
 
 
-# Worker functions for the TP continuous batching tests, spawned through `_init_distributed`.
+# Worker functions for the TP continuous batching tests, spawned through `run_distributed`.
 def _tp_continuous_batching_worker(
     rank: int,
     model_id: str,
@@ -2927,7 +2927,7 @@ def _tp_pause_generation_worker(
 @require_torch_multi_accelerator
 class ContinuousBatchingTensorParallelTest(unittest.TestCase):
     """Integration tests for continuous batching with tensor parallelism. Each test spawns a TP-sized process group
-    via `_init_distributed` (see `tests/test_tensor_parallel_mixin.py`) with the NCCL backend."""
+    via `run_distributed` (see `tests/test_tensor_parallel_mixin.py`) with the NCCL backend."""
 
     @property
     def tp_size(self) -> int:
@@ -2946,7 +2946,7 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
         }
         defaults.update(worker_kwargs)
         flexible_flash_skip(self, defaults["attn_implementation"])
-        _init_distributed(tp=self.tp_size, backend="nccl")(_tp_continuous_batching_worker)(**defaults)
+        run_distributed(world_size=self.tp_size, backend="nccl")(_tp_continuous_batching_worker)(**defaults)
 
     def test_continuous_batching_tp_fast(self) -> None:
         """Test that continuous batching with `DistributedConfig(tp_size=...)` produces non-empty, reproducible greedy outputs and
@@ -2957,7 +2957,7 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
     def test_continuous_batching_tp_pause(self) -> None:
         """Test that `pause` keeps the TP ranks in the same pause window even when they request it at different
         iterations, and that pausing repeatedly mid-generation loses no request and does not make the ranks diverge."""
-        _init_distributed(tp=self.tp_size, backend="nccl")(_tp_pause_generation_worker)(
+        run_distributed(world_size=self.tp_size, backend="nccl")(_tp_pause_generation_worker)(
             model_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
             attn_implementation="flash_attention_2",
             max_new_tokens=20,
@@ -2995,7 +2995,7 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
     def test_continuous_batching_tp_cancellation(self) -> None:
         """Test that `cancel_request` propagates across the TP group: the driver enqueues the cancellation, broadcasts
         it to non-driver ranks via `tp_broadcast_object`, and generation stops well before `max_new_tokens`."""
-        _init_distributed(tp=self.tp_size, backend="nccl")(_tp_cancellation_worker)(
+        run_distributed(world_size=self.tp_size, backend="nccl")(_tp_cancellation_worker)(
             model_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
             attn_implementation="flash_attention_2",
         )
@@ -3005,7 +3005,7 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
     def test_continuous_batching_tp_cancellation_realistic(self) -> None:
         """Test that `cancel_request` propagates across the TP group: the driver enqueues the cancellation, broadcasts
         it to non-driver ranks via `tp_broadcast_object`, and generation stops well before `max_new_tokens`."""
-        _init_distributed(tp=self.tp_size, backend="nccl")(_tp_cancellation_worker)(
+        run_distributed(world_size=self.tp_size, backend="nccl")(_tp_cancellation_worker)(
             model_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
             attn_implementation="flash_attention_2",
             use_async_batching=True,

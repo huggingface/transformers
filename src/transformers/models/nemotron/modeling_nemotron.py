@@ -446,7 +446,7 @@ class NemotronForCausalLM(NemotronPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
-    def __init__(self, config):
+    def __init__(self, config: NemotronConfig):
         super().__init__(config)
         self.model = NemotronModel(config)
         self.vocab_size = config.vocab_size
