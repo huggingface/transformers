@@ -365,6 +365,11 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         hidden_states = outputs[0]
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
+        final_logit_softcapping = getattr(self.config.get_text_config(), "final_logit_softcapping", None)
+        if final_logit_softcapping is not None:
+            logits = logits / final_logit_softcapping
+            logits = torch.tanh(logits)
+            logits = logits * final_logit_softcapping
 
         loss = None
         if labels is not None:
