@@ -344,3 +344,4 @@ if __name__ == "__main__":
         ],
         cmdclass={"deps_table_update": DepsTableUpdateCommand},
     )
+

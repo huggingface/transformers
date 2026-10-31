@@ -7,7 +7,7 @@ on:
   push:
     branches:
       - run_nvidia_ci*
-      - fetcher-recording
+      - fetcher-recording-disabled
   workflow_dispatch:
     inputs:
       prev_workflow_run_id:
