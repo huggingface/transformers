@@ -112,6 +112,9 @@ class DecisionPipelineTest(unittest.TestCase):
         questions = (
             {"type": "choice", "criteria": {}},
             {"type": "score", "criteria": []},
+            {"type": "score", "criteria": ["low", "high"], "values": [0]},
+            {"type": "score", "criteria": ["low", "high"], "values": [1, 0]},
+            {"type": "score", "criteria": ["low", "high"], "values": [0, float("inf")]},
             {"type": "score", "criteria": {"low": "a"}},
             {"type": "choice", "criteria": ["a"]},
             {"type": "noul", "criteria": {"yes": "a"}},
