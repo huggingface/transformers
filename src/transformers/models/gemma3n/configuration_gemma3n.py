@@ -59,9 +59,9 @@ class Gemma3nTextConfig(PreTrainedConfig):
         explicitly provide a sparsity value for each layer in the model. By default, the first 10 layers are
         sparse with a sparsity factor of 0.95 and the rest are dense.
     attention_layer_types (`list[str]`, *optional*):
-        Attention type of each layer (`"attention"`, `"kv_source"` or `"kv_shared"`). Derived from
-        `num_kv_shared_layers` and `layer_types` when not provided: the last `num_kv_shared_layers` layers are
-        `"kv_shared"`, and the last non-shared layer of each type before them is its `"kv_source"`.
+        Attention type of each layer (`"attention"` or `"kv_shared"`). Derived from `num_kv_shared_layers` when
+        not provided: the last `num_kv_shared_layers` layers are `"kv_shared"` and reuse the kv states of the last
+        non-shared layer of the same type.
 
     ```python
     >>> from transformers import Gemma3nTextModel, Gemma3nTextConfig
@@ -161,12 +161,8 @@ class Gemma3nTextConfig(PreTrainedConfig):
             )
 
         first_kv_shared_layer_idx = self.num_hidden_layers - self.num_kv_shared_layers
-        prev_layers = self.layer_types[:first_kv_shared_layer_idx]
-        # The last non-shared layer of each type stores its full-length kv for the shared layers
-        kv_sources = {len(prev_layers) - 1 - prev_layers[::-1].index(t) for t in set(prev_layers)}
         attention_layer_types = [
-            "kv_shared" if i >= first_kv_shared_layer_idx > 0 else "kv_source" if i in kv_sources else "attention"
-            for i in range(self.num_hidden_layers)
+            "kv_shared" if i >= first_kv_shared_layer_idx > 0 else "attention" for i in range(self.num_hidden_layers)
         ]
         if self.attention_layer_types is None:
             self.attention_layer_types = attention_layer_types
