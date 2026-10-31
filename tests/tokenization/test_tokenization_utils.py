@@ -155,6 +155,28 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.assertTrue(isinstance(batch["input_ids"], np.ndarray))
         self.assertEqual(batch["input_ids"].tolist(), [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]])
 
+    @require_torch
+    def test_padding_with_offsets(self):
+        tokenizer = BertTokenizer()
+        tokenizer.add_tokens(["hello", "world"])
+        texts = ["hello world", "hello"]
+
+        for side in ["left", "right"]:
+            tokenizer.padding_side = side
+            features = tokenizer(texts, return_offsets_mapping=True)
+            # Rust backend padding as a reference
+            expected_encoding = tokenizer(texts, padding=True, return_offsets_mapping=True)
+            for return_tensors in [None, "np", "pt"]:
+                with self.subTest(padding_side=side, return_tensors=return_tensors):
+                    batch = tokenizer.pad(features, return_tensors=return_tensors)
+                    self.assertListEqual(
+                        [len(offsets) for offsets in batch["offset_mapping"]],
+                        [len(input_ids) for input_ids in batch["input_ids"]],
+                        msg="offset_mapping lengths must match input_ids lengths",
+                    )
+                    for key in expected_encoding:
+                        np.testing.assert_array_equal(batch[key], expected_encoding[key])
+
     @require_tokenizers
     def test_decoding_single_token(self):
         for tokenizer_class in [BertTokenizer, BertTokenizer]:

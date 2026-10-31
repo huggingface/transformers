@@ -1014,6 +1014,70 @@ class TestDataCollatorForLanguageModelingWholeWordMask(DataCollatorTestMixin, un
         self.assertEqual(batch["input_ids"].shape, (2, 10))
         self.assertEqual(batch["labels"].shape, (2, 10))
 
+    def test_with_padding(self):
+        """Test whole word masking with different-length sequences."""
+        tokenizer, features = self._get_tokenizer_and_features()
+        features[1] = tokenizer("token_0", return_offsets_mapping=True)
+        expected_input_ids = [
+            [1, 4, 4, 4, 4, 4, 4, 4, 4, 2],
+            [1, 4, 2, 3, 3, 3, 3, 3, 3, 3],
+        ]
+        expected_labels = [
+            [-100, 5, 6, 7, 8, 9, 10, 11, 12, -100],
+            [-100, 5, -100, -100, -100, -100, -100, -100, -100, -100],
+        ]
+        expected_attention_mask = [
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            [1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+        ]
+
+        for return_tensors in ["pt", "np"]:
+            with self.subTest(return_tensors=return_tensors):
+                collator = DataCollatorForLanguageModeling(
+                    tokenizer,
+                    whole_word_mask=True,
+                    mlm_probability=1.0,
+                    mask_replace_prob=1.0,
+                    random_replace_prob=0.0,
+                    return_tensors=return_tensors,
+                )
+                batch = collator(features)
+                np.testing.assert_array_equal(batch["input_ids"], expected_input_ids)
+                np.testing.assert_array_equal(batch["labels"], expected_labels)
+                np.testing.assert_array_equal(batch["attention_mask"], expected_attention_mask)
+
+    def test_pad_to_multiple_of(self):
+        """Test whole word masking with equal-length sequences padded to a multiple."""
+        tokenizer, features = self._get_tokenizer_and_features()
+        expected_input_ids = [
+            [1, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 3, 3, 3, 3, 3],
+            [1, 4, 4, 4, 4, 4, 4, 4, 4, 2, 3, 3, 3, 3, 3, 3],
+        ]
+        expected_labels = [
+            [-100, 5, 6, 7, 8, 9, 10, 11, 12, -100, -100, -100, -100, -100, -100, -100],
+            [-100, 5, 6, 7, 8, 9, 10, 11, 12, -100, -100, -100, -100, -100, -100, -100],
+        ]
+        expected_attention_mask = [
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+        ]
+
+        for return_tensors in ["pt", "np"]:
+            with self.subTest(return_tensors=return_tensors):
+                collator = DataCollatorForLanguageModeling(
+                    tokenizer,
+                    whole_word_mask=True,
+                    mlm_probability=1.0,
+                    mask_replace_prob=1.0,
+                    random_replace_prob=0.0,
+                    pad_to_multiple_of=8,
+                    return_tensors=return_tensors,
+                )
+                batch = collator(features)
+                np.testing.assert_array_equal(batch["input_ids"], expected_input_ids)
+                np.testing.assert_array_equal(batch["labels"], expected_labels)
+                np.testing.assert_array_equal(batch["attention_mask"], expected_attention_mask)
+
     def test_with_numpy_inputs(self):
         """Test with numpy array inputs."""
         tokenizer, _ = self._get_tokenizer_and_features()
