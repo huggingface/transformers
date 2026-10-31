@@ -1148,3 +1148,187 @@ class GgufModelTests(unittest.TestCase):
 
         EXPECTED_TEXT = "Hello Atari 2600! es un videoj"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+
+@require_gguf
+class GgufReaderMappingTests(unittest.TestCase):
+    def test_qwen3_config_mapping(self):
+        from transformers.integrations.ggml import GGUF_CONFIG_MAPPING
+
+        self.assertIn("qwen3", GGUF_CONFIG_MAPPING)
+        self.assertEqual(GGUF_CONFIG_MAPPING["qwen3"].get("attention.key_length"), "head_dim")
+
+    def test_mistral_config_mapping(self):
+        from transformers.integrations.ggml import GGUF_CONFIG_MAPPING
+
+        self.assertIn("mistral", GGUF_CONFIG_MAPPING)
+        self.assertEqual(GGUF_CONFIG_MAPPING["mistral"].get("attention.sliding_window"), "sliding_window")
+        self.assertEqual(GGUF_CONFIG_MAPPING["mistral"].get("sliding_window"), "sliding_window")
+
+    def test_mixtral_config_mapping(self):
+        from transformers.integrations.ggml import GGUF_CONFIG_MAPPING
+
+        self.assertIn("mixtral", GGUF_CONFIG_MAPPING)
+        mixtral_mapping = GGUF_CONFIG_MAPPING["mixtral"]
+        self.assertEqual(mixtral_mapping.get("expert_count"), "num_local_experts")
+        self.assertEqual(mixtral_mapping.get("expert_used_count"), "num_experts_per_tok")
+        self.assertEqual(mixtral_mapping.get("attention.sliding_window"), "sliding_window")
+
+    def test_qwen3_head_dim_from_checkpoint(self):
+        import os
+        import gguf
+        from transformers.modeling_gguf_pytorch_utils import load_gguf_checkpoint
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "qwen3.gguf")
+            writer = gguf.GGUFWriter(path, "qwen3")
+            writer.add_uint32("qwen3.context_length", 2048)
+            writer.add_uint32("qwen3.block_count", 2)
+            writer.add_uint32("qwen3.embedding_length", 256)
+            writer.add_uint32("qwen3.feed_forward_length", 512)
+            writer.add_uint32("qwen3.attention.head_count", 4)
+            writer.add_uint32("qwen3.attention.head_count_kv", 2)
+            writer.add_float32("qwen3.attention.layer_norm_rms_epsilon", 1e-6)
+            writer.add_uint32("qwen3.attention.key_length", 64)
+            writer.add_token_list(["<unk>", "<s>", "</s>"])
+            writer.write_header_to_file()
+            writer.write_kv_data_to_file()
+            writer.close()
+
+            parsed = load_gguf_checkpoint(path, return_tensors=False)
+            self.assertEqual(parsed["config"].get("head_dim"), 64)
+
+    def test_mistral_detection_and_tensor_loading(self):
+        import os
+        import numpy as np
+        import gguf
+        from transformers.models.mistral.modeling_mistral import MistralConfig, MistralForCausalLM
+        from transformers.modeling_gguf_pytorch_utils import load_gguf_checkpoint
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "mistral.gguf")
+            writer = gguf.GGUFWriter(path, "llama")
+            writer.add_name("Mistral-7B-v0.1")
+            writer.add_uint32("llama.context_length", 512)
+            writer.add_uint32("llama.block_count", 1)
+            writer.add_uint32("llama.embedding_length", 64)
+            writer.add_uint32("llama.feed_forward_length", 128)
+            writer.add_uint32("llama.attention.head_count", 4)
+            writer.add_uint32("llama.attention.head_count_kv", 2)
+            writer.add_uint32("llama.rope.dimension_count", 16)
+            writer.add_float32("llama.attention.layer_norm_rms_epsilon", 1e-5)
+            writer.add_sliding_window(4096)
+            writer.add_token_list(["<unk>", "<s>", "</s>"])
+
+            weights_f32 = np.ones((64, 64), dtype=np.float32)
+            writer.add_tensor("token_embd.weight", np.ones((3, 64), dtype=np.float32))
+            writer.add_tensor("blk.0.attn_q.weight", weights_f32)
+            writer.add_tensor("blk.0.attn_k.weight", np.ones((32, 64), dtype=np.float32))
+            writer.add_tensor("blk.0.attn_v.weight", np.ones((32, 64), dtype=np.float32))
+            writer.add_tensor("blk.0.attn_output.weight", weights_f32)
+            writer.add_tensor("blk.0.attn_norm.weight", np.ones((64,), dtype=np.float32))
+            writer.add_tensor("blk.0.ffn_gate.weight", np.ones((128, 64), dtype=np.float32))
+            writer.add_tensor("blk.0.ffn_up.weight", np.ones((128, 64), dtype=np.float32))
+            writer.add_tensor("blk.0.ffn_down.weight", np.ones((64, 128), dtype=np.float32))
+            writer.add_tensor("blk.0.ffn_norm.weight", np.ones((64,), dtype=np.float32))
+            writer.add_tensor("output_norm.weight", np.ones((64,), dtype=np.float32))
+            writer.add_tensor("output.weight", np.ones((3, 64), dtype=np.float32))
+
+            writer.write_header_to_file()
+            writer.write_kv_data_to_file()
+            writer.write_tensors_to_file()
+            writer.close()
+
+            mistral_cfg = MistralConfig(
+                vocab_size=3,
+                hidden_size=64,
+                intermediate_size=128,
+                num_hidden_layers=1,
+                num_attention_heads=4,
+                num_key_value_heads=2,
+                sliding_window=4096,
+            )
+            mistral_model = MistralForCausalLM(mistral_cfg)
+
+            parsed = load_gguf_checkpoint(path, return_tensors=True, model_to_load=mistral_model)
+            config = parsed["config"]
+            self.assertEqual(config.get("model_type"), "mistral")
+            self.assertEqual(config.get("sliding_window"), 4096)
+            self.assertIn("model.layers.0.self_attn.q_proj.weight", parsed["tensors"])
+            self.assertIn("model.layers.0.mlp.gate_proj.weight", parsed["tensors"])
+
+            load_res = mistral_model.load_state_dict(parsed["tensors"], strict=False)
+            self.assertEqual(len(load_res.unexpected_keys), 0)
+            self.assertEqual(len(load_res.missing_keys), 0)
+
+    def test_mixtral_routing_and_tensor_loading(self):
+        import os
+        import numpy as np
+        import gguf
+        from transformers.models.mixtral.modeling_mixtral import MixtralConfig, MixtralForCausalLM
+        from transformers.modeling_gguf_pytorch_utils import load_gguf_checkpoint
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "mixtral.gguf")
+            writer = gguf.GGUFWriter(path, "llama")
+            writer.add_uint32("llama.context_length", 2048)
+            writer.add_uint32("llama.block_count", 1)
+            writer.add_uint32("llama.embedding_length", 64)
+            writer.add_uint32("llama.feed_forward_length", 128)
+            writer.add_uint32("llama.attention.head_count", 4)
+            writer.add_uint32("llama.attention.head_count_kv", 2)
+            writer.add_uint32("llama.rope.dimension_count", 16)
+            writer.add_float32("llama.attention.layer_norm_rms_epsilon", 1e-5)
+            writer.add_uint32("llama.expert_count", 4)
+            writer.add_uint32("llama.expert_used_count", 2)
+            writer.add_token_list(["<unk>", "<s>", "</s>"])
+
+            weights_f32 = np.ones((64, 64), dtype=np.float32)
+            writer.add_tensor("token_embd.weight", np.ones((3, 64), dtype=np.float32))
+            writer.add_tensor("blk.0.attn_q.weight", weights_f32)
+            writer.add_tensor("blk.0.attn_k.weight", np.ones((32, 64), dtype=np.float32))
+            writer.add_tensor("blk.0.attn_v.weight", np.ones((32, 64), dtype=np.float32))
+            writer.add_tensor("blk.0.attn_output.weight", weights_f32)
+            writer.add_tensor("blk.0.attn_norm.weight", np.ones((64,), dtype=np.float32))
+            writer.add_tensor("blk.0.ffn_gate_inp.weight", np.ones((4, 64), dtype=np.float32))
+            writer.add_tensor("blk.0.ffn_gate_exps.weight", np.ones((4, 128, 64), dtype=np.float32))
+            writer.add_tensor("blk.0.ffn_up_exps.weight", np.ones((4, 128, 64), dtype=np.float32))
+            writer.add_tensor("blk.0.ffn_down_exps.weight", np.ones((4, 64, 128), dtype=np.float32))
+            writer.add_tensor("blk.0.ffn_norm.weight", np.ones((64,), dtype=np.float32))
+            writer.add_tensor("output_norm.weight", np.ones((64,), dtype=np.float32))
+            writer.add_tensor("output.weight", np.ones((3, 64), dtype=np.float32))
+
+            writer.write_header_to_file()
+            writer.write_kv_data_to_file()
+            writer.write_tensors_to_file()
+            writer.close()
+
+            mixtral_cfg = MixtralConfig(
+                vocab_size=3,
+                hidden_size=64,
+                intermediate_size=128,
+                num_hidden_layers=1,
+                num_attention_heads=4,
+                num_key_value_heads=2,
+                num_local_experts=4,
+                num_experts_per_tok=2,
+            )
+            mixtral_model = MixtralForCausalLM(mixtral_cfg)
+
+            parsed = load_gguf_checkpoint(path, return_tensors=True, model_to_load=mixtral_model)
+            config = parsed["config"]
+            self.assertEqual(config.get("model_type"), "mixtral")
+            self.assertEqual(config.get("num_local_experts"), 4)
+            self.assertEqual(config.get("num_experts_per_tok"), 2)
+
+            tensors = parsed["tensors"]
+            self.assertIn("model.layers.0.mlp.gate.weight", tensors)
+            self.assertEqual(tensors["model.layers.0.mlp.gate.weight"].shape, torch.Size([4, 64]))
+            self.assertIn("model.layers.0.mlp.experts.gate_up_proj", tensors)
+            self.assertEqual(tensors["model.layers.0.mlp.experts.gate_up_proj"].shape, torch.Size([4, 256, 64]))
+            self.assertIn("model.layers.0.mlp.experts.down_proj", tensors)
+            self.assertEqual(tensors["model.layers.0.mlp.experts.down_proj"].shape, torch.Size([4, 64, 128]))
+
+            load_res = mixtral_model.load_state_dict(parsed["tensors"], strict=False)
+            self.assertEqual(len(load_res.unexpected_keys), 0)
+            self.assertEqual(len(load_res.missing_keys), 0)

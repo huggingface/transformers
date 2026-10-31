@@ -453,8 +453,66 @@ class MiniMaxM2TensorProcessor(TensorProcessor):
             out.copy_(torch_weights)
 
 
+class MixtralTensorProcessor(LlamaTensorProcessor):
+    HF_EXPERT_RENAME_PATTERN = re.compile(r"(?:mlp|block_sparse_moe)\.experts\.\d+\.")
+    HF_MOE_W13_PATTERN = re.compile(
+        r"(?:model\.)?layers\.(?P<bid>\d+)\.(?:mlp|block_sparse_moe)\.experts\.gate_up_proj"
+    )
+    GGUF_MOE_WEIGHTS_PATTERN = re.compile(r"(?P<name>.*\.ffn_(?P<w>gate|down|up)_exps)\.weight$")
+
+    def __init__(self, config=None):
+        super().__init__(config=config)
+
+    def preprocess_name(self, hf_name: str) -> str:
+        return re.sub(self.HF_EXPERT_RENAME_PATTERN, "mlp.experts.", hf_name)
+
+    def perform_fallback_tensor_mapping(
+        self, gguf_to_hf_name_map: dict[str, str], suffix: str, qual_name: str, hf_name: str
+    ):
+        if m := re.fullmatch(self.HF_MOE_W13_PATTERN, hf_name):
+            full_hf_name = qual_name + hf_name
+            gguf_to_hf_name_map[f"blk.{m['bid']}.ffn_gate_exps{suffix}"] = full_hf_name
+            gguf_to_hf_name_map[f"blk.{m['bid']}.ffn_up_exps{suffix}"] = full_hf_name
+
+    def process(self, weights, name: str, **kwargs):
+        if m := re.fullmatch(self.GGUF_MOE_WEIGHTS_PATTERN, name):
+            tensor_key_mapping = kwargs.get("tensor_key_mapping")
+            parsed_parameters = kwargs.get("parsed_parameters")
+            torch_dtype = kwargs.get("torch_dtype")
+            if tensor_key_mapping:
+                self._set_moe_expert_tensor(
+                    weights, parsed_parameters, tensor_key_mapping[m["name"]], m["w"], torch_dtype=torch_dtype
+                )
+                return GGUFTensor(weights, None, {})
+        return super().process(weights, name, **kwargs)
+
+    def _set_moe_expert_tensor(
+        self, weights: np.ndarray, parsed_parameters: dict[str, dict], hf_name: str, w: str, torch_dtype=None
+    ):
+        torch_weights = torch.from_numpy(np.copy(weights))
+        if torch_dtype is not None:
+            torch_weights = torch_weights.to(torch_dtype)
+        if w == "down":
+            parsed_parameters["tensors"][hf_name] = torch_weights
+        else:
+            shape = list(weights.shape)
+            shard_dim = 1
+            shard_size = shape[shard_dim]
+            shape[shard_dim] = shard_size * 2
+            if hf_name not in parsed_parameters["tensors"]:
+                parsed_parameters["tensors"][hf_name] = torch.zeros(shape, dtype=torch_weights.dtype)
+            out: torch.Tensor = parsed_parameters["tensors"][hf_name]
+            if w == "gate":
+                out = out.narrow(shard_dim, 0, shard_size)
+            else:  # w == "up"
+                out = out.narrow(shard_dim, shard_size, shard_size)
+            out.copy_(torch_weights)
+
+
 TENSOR_PROCESSORS = {
     "llama": LlamaTensorProcessor,
+    "mistral": LlamaTensorProcessor,
+    "mixtral": MixtralTensorProcessor,
     "qwen2moe": Qwen2MoeTensorProcessor,
     "gpt_oss": GptOssTensorProcessor,
     "qwen3moe": Qwen2MoeTensorProcessor,
@@ -522,6 +580,8 @@ def get_gguf_hf_weights_map(
         model_type = "minimax-m2"
     elif model_type == "gpt_oss":
         model_type = "gpt-oss"
+    elif model_type in ("mistral", "mixtral"):
+        model_type = "llama"
     arch = None
     for key, value in MODEL_ARCH_NAMES.items():
         if value == model_type:
@@ -606,10 +666,17 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     # NOTE: Some GGUF checkpoints may miss `general.name` field in metadata
     model_name = read_field(reader, "general.name")
 
+    expert_count = read_field(reader, f"{architecture}.expert_count") or read_field(reader, "llama.expert_count")
+    has_experts = expert_count and expert_count[0] > 0
+    is_mixtral_name = model_name and any("mixtral" in name.lower() for name in model_name)
+    is_mistral_name = model_name and any("mistral" in name.lower() for name in model_name)
+
     updated_architecture = None
+    if ("llama" in architecture or "mixtral" in architecture) and (has_experts or is_mixtral_name):
+        updated_architecture = "mixtral"
     # in llama.cpp mistral models use the same architecture as llama. We need
     # to add this patch to ensure things work correctly on our side.
-    if "llama" in architecture and "mistral" in model_name:
+    elif ("llama" in architecture and is_mistral_name) or "mistral" in architecture:
         updated_architecture = "mistral"
     # FIXME: Currently this implementation is only for flan-t5 architecture.
     # It needs to be developed for supporting legacy t5.
@@ -781,7 +848,9 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
 
         config = parsed_parameters.get("config", {})
 
-        ProcessorClass = TENSOR_PROCESSORS.get(architecture, TensorProcessor)
+        ProcessorClass = TENSOR_PROCESSORS.get(
+            updated_architecture, TENSOR_PROCESSORS.get(architecture, TensorProcessor)
+        )
         processor = ProcessorClass(config=config)
 
         tensor_key_mapping = get_gguf_hf_weights_map(model_to_load, processor)
@@ -795,6 +864,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
                 name=name,
                 tensor_key_mapping=tensor_key_mapping,
                 parsed_parameters=parsed_parameters,
+                torch_dtype=torch_dtype,
             )
 
             weights = result.weights
