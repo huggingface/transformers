@@ -757,6 +757,7 @@ class Glm4vModel(Qwen2VLModel):
     def __init__(self, config: Glm4vConfig):
         super().__init__(config)
         self.visual = Glm4vVisionModel._from_config(config.vision_config)
+        self.language_model = Glm4vTextModel._from_config(config.text_config)
 
     def get_video_features(
         self,
@@ -938,6 +939,10 @@ class Glm4vCausalLMOutputWithPast(Qwen2_5_VLCausalLMOutputWithPast):
 
 
 class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
+    def __init__(self, config: Glm4vConfig):
+        super().__init__(config)
+        self.model = Glm4vModel(config)
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

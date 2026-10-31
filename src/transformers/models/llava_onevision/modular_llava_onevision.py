@@ -19,6 +19,7 @@ import torch
 import torchvision.transforms.v2.functional as tvF
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...image_processing_utils import BatchFeature
@@ -395,7 +396,12 @@ class LlavaOnevisionCausalLMOutputWithPast(LlavaNextVideoCausalLMOutputWithPast)
 
 
 class LlavaOnevisionPreTrainedModel(LlavaNextVideoPreTrainedModel):
-    pass
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, LlavaOnevisionModel):
+            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
+            init.normal_(module.image_newline, mean=0.0, std=embed_std)
 
 
 class LlavaOnevisionModel(LlavaNextVideoModel):
@@ -706,6 +712,10 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
 
 class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGeneration):
+    def __init__(self, config: LlavaOnevisionConfig):
+        super().__init__(config)
+        self.model = LlavaOnevisionModel(config)
+
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring

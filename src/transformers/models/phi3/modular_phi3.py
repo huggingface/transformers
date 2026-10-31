@@ -205,6 +205,10 @@ class Phi3DecoderLayer(MistralDecoderLayer):
 
 class Phi3PreTrainedModel(MistralPreTrainedModel):
     _version = "0.0.5"
+    _can_record_outputs = {
+        "hidden_states": Phi3DecoderLayer,
+        "attentions": Phi3Attention,
+    }
 
 
 class Phi3ForCausalLM(MistralForCausalLM):

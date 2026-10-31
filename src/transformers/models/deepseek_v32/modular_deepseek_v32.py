@@ -29,6 +29,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
@@ -37,7 +38,8 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ..axk1.modeling_axk1 import AXK1Attention
+from ...utils.output_capturing import OutputRecorder
+from ..axk1.modeling_axk1 import AXK1Attention, AXK1Experts
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
     DeepseekV3Model,
@@ -49,7 +51,11 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     eager_attention_forward,
 )
 from ..glm4_moe_lite.configuration_glm4_moe_lite import Glm4MoeLiteConfig
-from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
+from ..glm4_moe_lite.modeling_glm4_moe_lite import (
+    Glm4MoeLiteDecoderLayer,
+    Glm4MoeLiteMLP,
+    Glm4MoeLiteTopkRouter,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -356,11 +362,30 @@ class DeepseekV32Attention(AXK1Attention):
         return attn_output, attn_weights
 
 
-class DeepseekV32DecoderLayer(Glm4MoeLiteDecoderLayer):
+class DeepseekV32MLP(Glm4MoeLiteMLP):
     pass
 
 
+class DeepseekV32TopkRouter(Glm4MoeLiteTopkRouter):
+    pass
+
+
+class DeepseekV32Experts(AXK1Experts):
+    pass
+
+
+class DeepseekV32DecoderLayer(Glm4MoeLiteDecoderLayer):
+    def __init__(self, config: DeepseekV32Config, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.self_attn = DeepseekV32Attention(config, layer_idx)
+
+
 class DeepseekV32PreTrainedModel(DeepseekV3PreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": DeepseekV32DecoderLayer,
+        "attentions": DeepseekV32Attention,
+        "router_logits": OutputRecorder(DeepseekV32TopkRouter, index=0),
+    }
     _keep_in_fp32_modules = ["indexer.weights_proj"]
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
@@ -368,8 +393,24 @@ class DeepseekV32PreTrainedModel(DeepseekV3PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = False
 
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, DeepseekV32TopkRouter):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            init.zeros_(module.e_score_correction_bias)
+        elif isinstance(module, DeepseekV32Experts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+
 
 class DeepseekV32Model(DeepseekV3Model):
+    def __init__(self, config: DeepseekV32Config):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [DeepseekV32DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -428,7 +469,9 @@ class DeepseekV32Model(DeepseekV3Model):
 
 
 class DeepseekV32ForCausalLM(DeepseekV3ForCausalLM):
-    pass
+    def __init__(self, config: DeepseekV32Config):
+        super().__init__(config)
+        self.model = DeepseekV32Model(config)
 
 
 __all__ = [

@@ -364,6 +364,7 @@ class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMix
     def __init__(self, config: Ovis2Config):
         super().__init__(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.model = Ovis2Model(config)
 
     @auto_docstring
     def get_image_features(

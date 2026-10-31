@@ -107,9 +107,14 @@ class HeliumDecoderLayer(LlamaDecoderLayer):
         self.input_layernorm = HeliumRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = HeliumRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+        self.self_attn = HeliumAttention(config=config, layer_idx=layer_idx)
+
 
 class HeliumPreTrainedModel(LlamaPreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "hidden_states": HeliumDecoderLayer,
+        "attentions": HeliumAttention,
+    }
 
 
 class HeliumModel(HeliumPreTrainedModel, LlamaModel):
@@ -126,7 +131,9 @@ class HeliumModel(HeliumPreTrainedModel, LlamaModel):
 
 
 class HeliumForCausalLM(GemmaForCausalLM):
-    pass
+    def __init__(self, config: HeliumConfig):
+        super().__init__(config)
+        self.model = HeliumModel(config)
 
 
 class HeliumForSequenceClassification(GemmaForSequenceClassification):

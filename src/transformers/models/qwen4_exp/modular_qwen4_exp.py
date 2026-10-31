@@ -289,6 +289,10 @@ class Qwen4ExpConfig(Qwen3_5MoeConfig):
 
     model_type = "qwen4_exp"
     base_model_fsdp_plan = None
+    sub_configs_defaults = {
+        "vision_config": Qwen4ExpVisionConfig,
+        "text_config": Qwen4ExpTextConfig,
+    }
 
 
 class Qwen4ExpTextRotaryEmbedding(Qwen3_5TextRotaryEmbedding):
@@ -1037,6 +1041,10 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
 class Qwen4ExpForCausalLM(Qwen3_5MoeForCausalLM):
     config: Qwen4ExpTextConfig
 
+    def __init__(self, config: Qwen4ExpTextConfig):
+        super().__init__(config)
+        self.model = Qwen4ExpTextModel(config)
+
 
 @auto_docstring
 class Qwen4ExpVisionModel(Qwen3_5MoeVisionModel):
@@ -1140,7 +1148,9 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
 
 @auto_docstring
 class Qwen4ExpForConditionalGeneration(Qwen3_5MoeForConditionalGeneration):
-    pass
+    def __init__(self, config: Qwen4ExpConfig):
+        super().__init__(config)
+        self.model = Qwen4ExpModel(config)
 
 
 __all__ = [

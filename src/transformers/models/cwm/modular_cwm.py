@@ -109,7 +109,10 @@ class CwmDecoderLayer(LlamaDecoderLayer):
 
 
 class CwmPreTrainedModel(LlamaPreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "hidden_states": CwmDecoderLayer,
+        "attentions": CwmAttention,
+    }
 
 
 class CwmModelOutputWithPast(BaseModelOutputWithPast):
@@ -185,7 +188,9 @@ class CwmModel(LlamaModel):
 
 
 class CwmForCausalLM(LlamaForCausalLM):
-    pass
+    def __init__(self, config: CwmConfig):
+        super().__init__(config)
+        self.model = CwmModel(config)
 
 
 __all__ = [

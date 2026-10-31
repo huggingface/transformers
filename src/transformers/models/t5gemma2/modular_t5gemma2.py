@@ -22,7 +22,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import DynamicCache, EncoderDecoderCache, StaticCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...generation import GenerationConfig, GenerationMixin, GenerationMode
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -47,7 +47,7 @@ from ...utils import (
 )
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..auto import AutoModel
+from ..auto import AutoConfig, AutoModel
 from ..gemma3.configuration_gemma3 import Gemma3Config, Gemma3TextConfig
 from ..gemma3.modeling_gemma3 import (
     Gemma3Attention,
@@ -103,6 +103,10 @@ class T5Gemma2TextConfig(Gemma3TextConfig, PreTrainedConfig):
 @strict
 class T5Gemma2EncoderConfig(Gemma3Config):
     model_type = "t5gemma2_encoder"
+    sub_configs_defaults = {
+        "text_config": T5Gemma2TextConfig,
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="siglip_vision_model"),
+    }
 
 
 @auto_docstring(checkpoint="google/t5gemma-2-270m-270m")
@@ -347,7 +351,15 @@ def sliding_window_mask_function(sliding_window: int, is_causal=True) -> Callabl
 
 
 class T5Gemma2EncoderLayer(T5GemmaEncoderLayer):
-    pass
+    def __init__(self, config, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+        self.self_attn = T5Gemma2SelfAttention(
+            config=config,
+            layer_idx=layer_idx,
+        )
+
+        self.mlp = T5Gemma2MLP(config)
 
 
 class T5Gemma2DecoderLayer(T5GemmaEncoderLayer):
@@ -361,6 +373,8 @@ class T5Gemma2DecoderLayer(T5GemmaEncoderLayer):
             config=config,
             layer_idx=layer_idx,
         )
+
+        self.mlp = T5Gemma2MLP(config)
 
     def forward(
         self,

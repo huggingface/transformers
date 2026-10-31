@@ -48,6 +48,7 @@ from ..dinov2_with_registers.modeling_dinov2_with_registers import (
     Dinov2WithRegistersBackbone,
     Dinov2WithRegistersEmbeddings,
     Dinov2WithRegistersEncoder,
+    Dinov2WithRegistersLayerScale,
     Dinov2WithRegistersModel,
     Dinov2WithRegistersPreTrainedModel,
 )
@@ -357,11 +358,31 @@ class Tipsv2VisionEmbeddings(Dinov2WithRegistersEmbeddings):
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
 
+class Tipsv2VisionLayerScale(Dinov2WithRegistersLayerScale):
+    pass
+
+
 class Tipsv2VisionPreTrainedModel(Dinov2WithRegistersPreTrainedModel):
     config: Tipsv2VisionConfig
     base_model_prefix = "vision_model"
     _no_split_modules = ["Tipsv2VisionEmbeddings", "Tipsv2VisionLayer"]
     _keys_to_ignore_on_load_unexpected = {"text_encoder"}
+
+    @torch.no_grad()
+    def _init_weights(self, module) -> None:
+        """Initialize the weights"""
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        if isinstance(module, Tipsv2VisionEmbeddings):
+            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
+            init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
+            init.zeros_(module.mask_token)
+            init.zeros_(module.register_tokens)
+        if isinstance(module, Tipsv2VisionLayerScale):
+            init.constant_(module.lambda1, self.config.layerscale_value)
 
 
 class Tipsv2VisionEncoder(Dinov2WithRegistersEncoder):
@@ -369,6 +390,10 @@ class Tipsv2VisionEncoder(Dinov2WithRegistersEncoder):
 
 
 class Tipsv2VisionModel(Dinov2WithRegistersModel):
+    def __init__(self, config: Tipsv2VisionConfig):
+        super().__init__(config)
+        self.embeddings = Tipsv2VisionEmbeddings(config)
+
     def forward(self, **super_kwargs) -> BaseModelOutputWithPooling:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, sequence_length)`):

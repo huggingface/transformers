@@ -18,15 +18,17 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
+from torch.nn import CrossEntropyLoss
 from torchvision.transforms.v2 import functional as tvF
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import SubConfigSpec
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring
+from ...utils import TensorType, TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple
 from ..auto import AutoConfig
 from ..idefics3.image_processing_idefics3 import (
@@ -307,19 +309,101 @@ class UltraVBertConnector(ModernVBertConnector):
 class UltraVBertPreTrainedModel(ModernVBertPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"vision_model\.head\."]
 
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+
+        def init_weight(module: nn.Module, std: float):
+            cutoff_factor = getattr(self.config, "initializer_cutoff_factor", 2.0)
+            init.trunc_normal_(
+                module.weight,
+                mean=0.0,
+                std=std,
+                a=-cutoff_factor * std,
+                b=cutoff_factor * std,
+            )
+
+            if isinstance(module, (nn.Linear, nn.Conv2d)):
+                if module.bias is not None:
+                    init.zeros_(module.bias)
+
+        if isinstance(module, UltraVBertConnector):
+            out_std = self.config.initializer_range / math.sqrt(2.0 * self.config.text_config.num_hidden_layers)
+            init_weight(module.modality_projection, out_std)
+        elif isinstance(module, UltraVBertForMaskedLM):
+            out_std = self.config.initializer_range / math.sqrt(2.0 * self.config.text_config.num_hidden_layers)
+            init_weight(module.lm_head, out_std)
+        elif isinstance(
+            module,
+            (
+                UltraVBertForSequenceClassification,
+                UltraVBertForTokenClassification,
+            ),
+        ):
+            final_out_std = self.config.initializer_range / math.sqrt(self.config.text_config.hidden_size)
+            init_weight(module.classifier, final_out_std)
+
 
 @auto_docstring
 class UltraVBertModel(ModernVBertModel):
+    def __init__(self, config: UltraVBertConfig):
+        super().__init__(config)
+
+        # init components
+        self.connector = UltraVBertConnector(config)
+
     @can_return_tuple
     @auto_docstring(checkpoint="athrael-soju/UltraVBERT")
-    def forward(self, **super_kwargs):
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_attention_mask: torch.BoolTensor | None = None,
+        image_hidden_states: torch.FloatTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | UltraVBertBaseModelOutput:
         r"""
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_images, image_size, image_size)`, *optional*):
             Mask over the real pixels of each image tile.
         image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The hidden states of the image encoder after modality projection.
         """
-        return super().forward(**super_kwargs)
+
+        if inputs_embeds is None:
+            inputs_embeds = self.text_model.get_input_embeddings()(input_ids).to(input_ids.device)
+
+        # Images processing
+        if pixel_values is not None:
+            image_hidden_states = self.get_image_features(
+                pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask
+            ).pooler_output
+
+        # Merge image and text embeddings
+        if image_hidden_states is not None:
+            image_hidden_states = torch.cat(image_hidden_states, dim=0)
+            image_hidden_states = image_hidden_states.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_hidden_states
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_hidden_states)
+
+        # Language model pass
+        outputs = self.text_model(
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            **kwargs,
+        )
+
+        return UltraVBertBaseModelOutput(
+            last_hidden_state=outputs.last_hidden_state,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            image_hidden_states=image_hidden_states,
+        )
 
 
 class UltraVBertPredictionHead(nn.Module):
@@ -342,22 +426,64 @@ class UltraVBertForMaskedLM(ModernVBertForMaskedLM):
         super().__init__(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, self.vocab_size, bias=False)
 
+        self.model = UltraVBertModel(config)
+        self.projection_head = UltraVBertPredictionHead(config.text_config)
+
     @can_return_tuple
     @auto_docstring(checkpoint="athrael-soju/UltraVBERT")
-    def forward(self, **super_kwargs):
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_attention_mask: torch.BoolTensor | None = None,
+        image_hidden_states: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | UltraVBertMaskedLMOutput:
         r"""
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_images, image_size, image_size)`, *optional*):
             Mask over the real pixels of each image tile.
         image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The hidden states of the image encoder after modality projection.
         """
-        return super().forward(**super_kwargs)
+
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            pixel_values=pixel_values,
+            pixel_attention_mask=pixel_attention_mask,
+            image_hidden_states=image_hidden_states,
+            **kwargs,
+        )
+        hidden_states = outputs[0]
+
+        logits = self.lm_head(self.projection_head(hidden_states))
+
+        loss = None
+        if labels is not None:
+            criterion = CrossEntropyLoss()
+            loss = criterion(logits.view(-1, self.vocab_size), labels.view(-1))
+
+        return UltraVBertMaskedLMOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            image_hidden_states=outputs.image_hidden_states,
+        )
 
 
 class UltraVBertForSequenceClassification(ModernVBertForSequenceClassification):
     def __init__(self, config: UltraVBertConfig):
         super().__init__(config)
         self.head = nn.Identity()
+
+        self.model = UltraVBertModel(config)
 
     @can_return_tuple
     @auto_docstring(checkpoint="athrael-soju/UltraVBERT")
@@ -375,6 +501,8 @@ class UltraVBertForTokenClassification(ModernVBertForTokenClassification):
     def __init__(self, config: UltraVBertConfig):
         super().__init__(config)
         self.head = nn.Identity()
+
+        self.model = UltraVBertModel(config)
 
     @can_return_tuple
     @auto_docstring(checkpoint="athrael-soju/UltraVBERT")

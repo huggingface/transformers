@@ -22,12 +22,13 @@ from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     ChannelDimension,
+    ImageInput,
     PILImageResampling,
     SizeDict,
     get_image_size,
 )
-from ...processing_utils import ImagesKwargs, VideosKwargs
-from ...utils import TensorType
+from ...processing_utils import ImagesKwargs, Unpack, VideosKwargs
+from ...utils import TensorType, auto_docstring
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from ..glm4v.video_processing_glm4v import smart_resize
 from ..glm46v.configuration_glm46v import Glm46VConfig
@@ -86,6 +87,7 @@ class GlmgaImageProcessorKwargs(ImagesKwargs, total=False):
 
 class GlmgaImageProcessor(Glm46VImageProcessor):
     patch_expand_factor = 1
+    valid_kwargs = GlmgaImageProcessorKwargs
 
     def _preprocess(
         self,
@@ -152,9 +154,14 @@ class GlmgaImageProcessor(Glm46VImageProcessor):
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
         )
 
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[GlmgaImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
+
 
 class GlmgaImageProcessorPil(Glm46VImageProcessorPil):
     patch_expand_factor = 1
+    valid_kwargs = GlmgaImageProcessorKwargs
 
     def _preprocess(
         self,
@@ -215,6 +222,10 @@ class GlmgaImageProcessorPil(Glm46VImageProcessorPil):
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
         )
 
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[GlmgaImageProcessorKwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
+
 
 class GlmgaVideoProcessorInitKwargs(VideosKwargs, total=False):
     r"""
@@ -246,6 +257,10 @@ class GlmgaVideoProcessor(Glm46VVideoProcessor):
     fps = 2
     patch_expand_factor = 1
     max_frames = 640
+    valid_kwargs = GlmgaVideoProcessorInitKwargs
+
+    def __init__(self, **kwargs: Unpack[GlmgaVideoProcessorInitKwargs]):
+        super().__init__(**kwargs)
 
     def sample_frames(
         self,

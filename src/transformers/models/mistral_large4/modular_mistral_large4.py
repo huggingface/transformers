@@ -30,7 +30,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoConfig
 from ..deepseek_v32.modeling_deepseek_v32 import DeepseekV32Indexer, eager_attention_forward
 from ..glm_moe_dsa.configuration_glm_moe_dsa import GlmMoeDsaConfig
@@ -399,6 +399,7 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
         self.kv_a_layernorm = (
             MistralLarge4RMSNorm(config.kv_lora_rank, eps=config.rms_norm_eps) if not self.is_kv_shared_layer else None
         )
+        self.indexer = None if self.skip_topk else MistralLarge4TextIndexer(config, layer_idx)
 
     # trf-ignore: TRF043
     def forward(
@@ -544,7 +545,9 @@ class MistralLarge4TextExperts(Mistral4Experts):
 
 
 class MistralLarge4TextMoE(Mistral4MoE):
-    pass
+    def __init__(self, config: MistralLarge4TextConfig):
+        super().__init__(config)
+        self.gate = MistralLarge4TextTopkRouter(config)
 
 
 class MistralLarge4TextDecoderLayer(GlmMoeDsaDecoderLayer):
@@ -552,6 +555,7 @@ class MistralLarge4TextDecoderLayer(GlmMoeDsaDecoderLayer):
         super().__init__(config, layer_idx)
         self.input_layernorm = MistralLarge4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MistralLarge4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.self_attn = MistralLarge4TextAttention(config, layer_idx)
 
     def forward(
         self,
@@ -596,6 +600,11 @@ class MistralLarge4PreTrainedModel(GlmMoeDsaPreTrainedModel):
     _keep_in_fp32_modules_strict = ["rotary_emb", "mlp.gate.weight"]
     # The checkpoint ships a multi-token-prediction draft head that this model does not implement yet # TODO
     _keys_to_ignore_on_load_unexpected = [r"mtp_dspark\..*"]
+    _can_record_outputs = {
+        "hidden_states": MistralLarge4TextDecoderLayer,
+        "attentions": MistralLarge4TextAttention,
+        "router_logits": OutputRecorder(MistralLarge4TextTopkRouter, index=0),
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -617,6 +626,10 @@ class MistralLarge4TextModel(MistralLarge4PreTrainedModel, GlmMoeDsaModel):
     def __init__(self, config: MistralLarge4TextConfig):
         super().__init__(config)
         self.norm = MistralLarge4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.layers = nn.ModuleList(
+            [MistralLarge4TextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.rotary_emb = MistralLarge4TextRotaryEmbedding(config=config)
 
     @merge_with_config_defaults
     @capture_outputs
@@ -776,6 +789,7 @@ class MistralLarge4ForConditionalGeneration(Mistral3ForConditionalGeneration):
     def __init__(self, config: MistralLarge4Config):
         super().__init__(config)
         self.final_logit_softcapping = self.config.get_text_config().final_logit_softcapping
+        self.model = MistralLarge4Model(config)
 
     @merge_with_config_defaults
     @can_return_tuple

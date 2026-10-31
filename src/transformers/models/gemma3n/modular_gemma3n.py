@@ -1994,7 +1994,9 @@ class Gemma3nTextModel(Gemma3TextModel):
 
 @auto_docstring(custom_intro="The base Gemma 3n language model with a language modeling head.")
 class Gemma3nForCausalLM(Gemma3ForCausalLM):
-    pass
+    def __init__(self, config: Gemma3nTextConfig):
+        super().__init__(config)
+        self.model = Gemma3nTextModel(config)
 
 
 class Gemma3nMultimodalEmbedder(nn.Module):
@@ -2311,6 +2313,10 @@ class Gemma3nModel(PaliGemmaModel):
 )
 class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
     accepts_loss_kwargs = False
+
+    def __init__(self, config: Gemma3nConfig):
+        super().__init__(config)
+        self.model = Gemma3nModel(config)
 
     def get_per_layer_input_embeddings(self):
         return self.model.get_per_layer_input_embeddings()

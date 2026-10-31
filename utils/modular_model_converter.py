@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
+import ast
 import glob
 import importlib
 import multiprocessing as mp
@@ -984,7 +985,11 @@ def get_decorators_to_keep(
 
 
 def replace_class_node(
-    mapper: ModelFileMapper, modular_class_node: cst.ClassDef, renamed_super_class: str, original_super_class: str
+    mapper: ModuleMapper,
+    modular_class_node: cst.ClassDef,
+    renamed_super_class: str,
+    original_super_class: str,
+    original_modeling_node: cst.ClassDef | None = None,
 ) -> cst.ClassDef:
     """
     Replace a class node which inherits from another modeling class. This function works in the following way:
@@ -1003,6 +1008,9 @@ def replace_class_node(
             The name of the class from which `modular_class_node` inherits after automatic renaming.
         original_super_class (`str`):
             The name of the class from which `modular_class_node` inherits before automatic renaming.
+        original_modeling_node (`cst.ClassDef`, *optional*):
+            The already unpacked parent node, when the parent is defined in the same modular file. In this case, no
+            renaming happens as both classes already share the same model name.
 
     Returns:
         A new class node corresponding to the modular definition.
@@ -1011,12 +1019,14 @@ def replace_class_node(
     if any(base is None for base in all_new_bases.keys()):
         raise ValueError(f"Could not parse the name of the bases for {modular_class_node.name.value}")
 
-    original_modeling_node = mapper.classes[renamed_super_class]
+    same_file_parent = original_modeling_node is not None
+    if not same_file_parent:
+        original_modeling_node = mapper.classes[renamed_super_class]
     # Always use the new name of the class (in case we use e.g. `ColPaliForRetrieval` inheriting from `PaliGemmaForConditionalGeneration`)
     new_class_name = modular_class_node.name
 
     # If the new class name is different from the renamed super class name, we need to update the docstrings/comments accordingly
-    if new_class_name.value != renamed_super_class:
+    if new_class_name.value != renamed_super_class and not same_file_parent:
         common_suffix = common_partial_suffix(new_class_name.value, renamed_super_class)
         # Note that this works even without common prefix, in which case it does not replace anything
         old, new = renamed_super_class.replace(common_suffix, ""), new_class_name.value.replace(common_suffix, "")
@@ -1626,12 +1636,19 @@ class ModularFileMapper(ModuleMapper):
         # 1. for each modeling file found in the imports, rename it with the new model name, visit it, and update dependencies
         self.visited_modules = {}
         self.renamers = {}
+        # Top-level classes/functions of each renamed modeling file, before the modular definitions are merged in
+        self.renamed_original_nodes = {}
         name_prefixes = self.infer_new_model_name()
         for file, module in self.model_specific_modules.items():
             file_model_name = file.split(".")[-2]
             new_name = name_prefixes[file]
             renamer = ReplaceNameTransformer(file_model_name, new_name, self.model_name)
             renamed_module = module.visit(renamer)
+            self.renamed_original_nodes[file] = {
+                node.name.value: node
+                for node in renamed_module.body
+                if isinstance(node, (cst.ClassDef, cst.FunctionDef))
+            }
             self.visited_modules[file] = ModelFileMapper.visit_and_merge_dependencies(
                 renamed_module,
                 self.classes,
@@ -1883,6 +1900,32 @@ def check_dependencies_and_create_import_node(
     return corrected_dependencies, new_imports
 
 
+def get_same_file_parent_to_unpack(
+    modular_mapper: ModularFileMapper, node: cst.ClassDef, files: dict[str, dict]
+) -> cst.ClassDef | None:
+    """
+    Return the generated node of the parent of `node` if `node` should be unpacked from it as for a cross-model parent,
+    i.e. if the parent is a modeling block of the same modular file that was itself unpacked from another model (directly
+    or through a chain of such same-file parents). `PreTrainedModel` subclasses and other files' classes (configs,
+    processors, ...) stay inherited, as do thin `*args` wrappers such as deprecated aliases.
+    """
+    bases = [
+        k.value.value for k in node.bases if m.matches(k.value, m.Name()) and k.value.value in modular_mapper.classes
+    ]
+    if len(bases) != 1 or bases[0] not in files["modeling"]:
+        return None
+    parent_node = files["modeling"][bases[0]]["node"]
+    # The parent was not unpacked: the generated node is the modular one
+    if parent_node is modular_mapper.classes[bases[0]]:
+        return None
+    parent_bases = [bases[0]] + [get_full_attribute_name(k.value) or "" for k in parent_node.bases]
+    if any(base.endswith("PreTrainedModel") for base in parent_bases):
+        return None
+    if any(m.matches(k, m.FunctionDef(params=m.Parameters(star_arg=m.Param()))) for k in node.body.body):
+        return None
+    return parent_node
+
+
 def get_class_node_and_dependencies(
     modular_mapper: ModularFileMapper, class_name: str, node: cst.CSTNode, files: dict[str, dict]
 ) -> tuple[dict, str, dict]:
@@ -1945,8 +1988,13 @@ def get_class_node_and_dependencies(
     # No transformers (modeling file) super class, just check functions and assignments dependencies
     else:
         updated_node = node
-        # The node was NOT modified -> no need to look recursively for other class dependencies. Indeed, even if they are not
-        # already defined (which would mean a weird order of the code in the modular...), they will be in the future
+        # A same-file parent unpacked from another model is unpacked in turn, from its already generated node
+        if file_type == "modeling" and (parent_node := get_same_file_parent_to_unpack(modular_mapper, node, files)):
+            parent_name = parent_node.name.value
+            updated_node = replace_class_node(modular_mapper, node, parent_name, parent_name, parent_node)
+        # No need to look recursively for other class dependencies. Indeed, even if they are not already defined (which
+        # would mean a weird order of the code in the modular...), they will be in the future. The dependencies of an
+        # unpacked same-file parent were already added with it
         all_dependencies_to_add = augmented_dependencies_for_class_node(updated_node, modular_mapper, imported_objects)
 
         # At this point, if any class dependency is found, but belongs to another file, it means that we need to remove
@@ -1967,6 +2015,108 @@ def get_class_node_and_dependencies(
     nodes_to_add[class_name] = (class_idx, updated_node)
 
     return nodes_to_add, file_type, new_imports
+
+
+def _normalized_code(node: cst.CSTNode) -> str:
+    """Code of `node` without docstrings, so that only behavior is compared."""
+    tree = ast.parse(cst.Module(body=[node]).code)
+    for sub in ast.walk(tree):
+        body = getattr(sub, "body", None)
+        if (
+            isinstance(body, list)
+            and body
+            and isinstance(body[0], ast.Expr)
+            and isinstance(body[0].value, ast.Constant)
+            and isinstance(body[0].value.value, str)
+        ):
+            sub.body = body[1:] or [ast.Pass()]
+    return ast.dump(tree)
+
+
+def _statement_key(node: cst.CSTNode) -> str | None:
+    if isinstance(node, (cst.FunctionDef, cst.ClassDef)):
+        return node.name.value
+    target = get_assign_target(node)
+    return target.value if isinstance(target, cst.Name) else None
+
+
+class _BehaviorNamesCollector(cst.CSTVisitor):
+    """Collect names used by the code, skipping type annotations (they do not change behavior)."""
+
+    def __init__(self):
+        self.names = set()
+
+    def visit_Annotation(self, node):
+        return False
+
+    def visit_Name(self, node):
+        self.names.add(node.value)
+
+
+def _names_in(node: cst.CSTNode) -> set[str]:
+    collector = _BehaviorNamesCollector()
+    cst.Module(body=[node]).visit(collector)
+    return collector.names
+
+
+def find_inherited_code_mismatches(
+    modular_mapper: "ModularFileMapper", files: dict[str, dict]
+) -> list[tuple[str, str, str, str]]:
+    """
+    Inheriting in a modular file must mean the same thing as inheriting in Python. If `MixtralDecoderLayer(LlamaDecoderLayer)`
+    does not override `__init__`, Python builds `LlamaMLP`, but the generated file builds `MixtralMLP` because of the
+    renaming. If the modular file redefines `MixtralMLP` with different code, the modular and generated files disagree.
+    Returns `(class_name, member, used_name, parent_class)` for each such case.
+    """
+    generated = {name: entry["node"] for body in files.values() for name, entry in body.items()}
+    # ponytail: classes only; redefined functions are looked up in module globals, the usual modular pattern
+    # ponytail: `*Kwargs` TypedDicts only carry processor defaults, not worth explicit overrides
+    modular_defined = {name for name in modular_mapper.classes if not name.endswith("Kwargs")}
+    mismatches = []
+    for class_name, modular_node in modular_mapper.classes.items():
+        bases = [
+            k.value.value
+            for k in modular_node.bases
+            if m.matches(k.value, m.Name()) and k.value.value in modular_mapper.model_specific_imported_objects
+        ]
+        if len(bases) != 1 or class_name not in generated:
+            continue
+        originals = modular_mapper.renamed_original_nodes[modular_mapper.model_specific_imported_objects[bases[0]]]
+        modular_statements = {_statement_key(node): node for node in modular_node.body.body}
+        for statement in generated[class_name].body.body:
+            key = _statement_key(statement)
+            inherited_names = _names_in(statement)
+            if key is not None and key in modular_statements:
+                inherited_names -= _names_in(modular_statements[key])
+            for name in sorted(inherited_names & modular_defined - {class_name}):
+                if name not in originals or name not in generated:
+                    continue
+                if _normalized_code(originals[name]) != _normalized_code(generated[name]):
+                    mismatches.append((class_name, key, name, bases[0]))
+    return mismatches
+
+
+# Modular files whose inherited code still silently uses classes they redefine. Do not add to this list: override
+# the inherited method instead (see `check_inherited_code_uses_parent_definitions`).
+INHERITANCE_MISMATCH_ALLOWLIST = {
+    "falcon_mamba",
+}
+
+
+def check_inherited_code_uses_parent_definitions(modular_mapper: "ModularFileMapper", files: dict[str, dict]):
+    if modular_mapper.model_name in INHERITANCE_MISMATCH_ALLOWLIST:
+        return
+    mismatches = find_inherited_code_mismatches(modular_mapper, files)
+    if mismatches:
+        errors = [
+            f"`{class_name}.{member}` is inherited from `{parent}` but uses `{name}`, which the modular file redefines: "
+            f"Python inheritance would use `{parent}`'s version. Override `{member}` in `{class_name}`."
+            for class_name, member, name, parent in mismatches
+        ]
+        raise ValueError(
+            f"Modular file for `{modular_mapper.model_name}` does not behave like the generated code:\n- "
+            + "\n- ".join(errors)
+        )
 
 
 def create_modules(
@@ -2011,6 +2161,8 @@ def create_modules(
                 idx = current_file_indices[file_type]
                 current_file_indices[file_type] += 1
             files[file_type][dependency] = {"insert_idx": idx, "node": node}
+
+    check_inherited_code_uses_parent_definitions(modular_mapper, files)
 
     # Add the __all__ statement to files at the end
     for file_type, node in modular_mapper.all_all_to_add.items():

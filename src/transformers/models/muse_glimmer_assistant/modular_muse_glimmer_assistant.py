@@ -139,6 +139,7 @@ class MuseGlimmerAssistantDecoderLayer(Exaone4DecoderLayer):
         super().__init__(config, layer_idx)
         self.input_layernorm = MuseGlimmerAssistantRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         del self.post_feedforward_layernorm
+        self.self_attn = MuseGlimmerAssistantAttention(config=config, layer_idx=layer_idx)
 
     def forward(
         self,
@@ -170,6 +171,10 @@ class MuseGlimmerAssistantDecoderLayer(Exaone4DecoderLayer):
 
 class MuseGlimmerAssistantPreTrainedModel(Exaone4PreTrainedModel):
     main_input_name = "noise_embeds"
+    _can_record_outputs = {
+        "hidden_states": MuseGlimmerAssistantDecoderLayer,
+        "attentions": MuseGlimmerAssistantAttention,
+    }
 
 
 class MuseGlimmerAssistantContextProjection(nn.Module):

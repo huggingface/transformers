@@ -94,6 +94,8 @@ class Lfm2MoeSparseMoeBlock(Qwen3MoeSparseMoeBlock):
         self.use_expert_bias = config.use_expert_bias
         if self.use_expert_bias:
             self.expert_bias = nn.Buffer(torch.zeros(config.num_experts, dtype=torch.float32))
+        self.experts = Lfm2MoeExperts(config)
+        self.gate = Lfm2MoeTopKRouter(config)
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
@@ -149,6 +151,9 @@ class Lfm2MoeModel(MixtralModel):
         self.embedding_norm = Lfm2MoeRMSNorm(config.hidden_size, eps=config.norm_eps)
         del self.norm
         del self.rotary_emb
+        self.layers = nn.ModuleList(
+            [Lfm2MoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
     def forward(
         self,
@@ -210,7 +215,9 @@ class Lfm2MoeModel(MixtralModel):
 
 
 class Lfm2MoeForCausalLM(DeepseekV2ForCausalLM):
-    pass
+    def __init__(self, config: Lfm2MoeConfig):
+        super().__init__(config)
+        self.model = Lfm2MoeModel(config)
 
 
 __all__ = ["Lfm2MoeForCausalLM", "Lfm2MoeModel", "Lfm2MoePreTrainedModel"]

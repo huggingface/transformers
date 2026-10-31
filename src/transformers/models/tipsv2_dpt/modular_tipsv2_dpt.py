@@ -354,7 +354,13 @@ class Tipsv2DptFeatureFusionStage(ZoeDepthFeatureFusionStage):
 
 
 class Tipsv2DptNeck(DepthAnythingNeck):
-    pass
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.reassemble_stage = Tipsv2DptReassembleStage(config)
+
+        # fusion
+        self.fusion_stage = Tipsv2DptFeatureFusionStage(config)
 
 
 class Tipsv2DptDecoder(nn.Module):

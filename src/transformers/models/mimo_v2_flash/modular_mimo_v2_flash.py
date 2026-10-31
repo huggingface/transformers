@@ -26,6 +26,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import no_inherit_decorator
+from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Experts,
     DeepseekV3ForCausalLM,
@@ -301,7 +302,11 @@ class MiMoV2FlashAttention(Qwen2Attention):
 
 
 class MiMoV2FlashDecoderLayer(Glm4MoeLiteDecoderLayer):
-    pass
+    def __init__(self, config: MiMoV2FlashConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.self_attn = MiMoV2FlashAttention(config, layer_idx)
+
+        self.mlp = MiMoV2FlashMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else MiMoV2FlashMLP(config)
 
 
 @auto_docstring
@@ -311,6 +316,11 @@ class MiMoV2FlashPreTrainedModel(DeepseekV3PreTrainedModel):
     _supports_flex_attn = False  # asymmetric head dim + not being a power of 2
     _compatible_flash_implementations = ["flash_attention_4"]
     _keys_to_ignore_on_load_unexpected = [r"^model\.mtp\."]
+    _can_record_outputs = {
+        "hidden_states": MiMoV2FlashDecoderLayer,
+        "attentions": MiMoV2FlashAttention,
+        "router_logits": OutputRecorder(MiMoV2FlashTopkRouter, index=0),
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -330,11 +340,18 @@ class MiMoV2FlashPreTrainedModel(DeepseekV3PreTrainedModel):
 
 @auto_docstring
 class MiMoV2FlashModel(LagunaModel):
-    pass
+    def __init__(self, config: MiMoV2FlashConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [MiMoV2FlashDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.rotary_emb = MiMoV2FlashRotaryEmbedding(config=config)
 
 
 class MiMoV2FlashForCausalLM(DeepseekV3ForCausalLM):
-    pass
+    def __init__(self, config: MiMoV2FlashConfig):
+        super().__init__(config)
+        self.model = MiMoV2FlashModel(config)
 
 
 __all__ = [

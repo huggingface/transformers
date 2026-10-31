@@ -19,12 +19,14 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import SubConfigSpec
 from ...generation import GenerationConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.generic import merge_with_config_defaults
+from ..auto import AutoConfig
 from ..idefics3.configuration_idefics3 import Idefics3Config, Idefics3VisionConfig
 from ..idefics3.image_processing_idefics3 import Idefics3ImageProcessor
 from ..idefics3.image_processing_pil_idefics3 import Idefics3ImageProcessorPil
@@ -86,6 +88,12 @@ class SmolVLMConfig(Idefics3Config):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
+    model_type = "smolvlm"
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="llama", init_kwargs={"rms_norm_eps": 1e-5}),
+        "vision_config": SmolVLMVisionConfig,
+    }
 
 
 class SmolVLMImageProcessor(Idefics3ImageProcessor):

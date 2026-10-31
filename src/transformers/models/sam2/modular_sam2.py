@@ -44,7 +44,7 @@ from ...utils.generic import (
     is_flash_attention_requested,
     merge_with_config_defaults,
 )
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
 from ..detr.modeling_detr import DetrSinePositionEmbedding
 from ..sam.image_processing_sam import SamImageProcessor
@@ -955,7 +955,13 @@ class Sam2TwoWayAttentionBlock(SamTwoWayAttentionBlock, GradientCheckpointingLay
 
 
 class Sam2TwoWayTransformer(SamTwoWayTransformer):
-    pass
+    def __init__(self, config: Sam2MaskDecoderConfig):
+        super().__init__(config)
+
+        for i in range(self.num_hidden_layers):
+            self.layers.append(Sam2TwoWayAttentionBlock(config, skip_first_layer_pe=(i == 0)))
+
+        self.final_attn_token_to_image = Sam2Attention(config)
 
 
 class Sam2LayerNorm(SamLayerNorm):
@@ -1153,6 +1159,7 @@ class Sam2MaskDecoder(SamMaskDecoder):
 )
 class Sam2Model(SamModel):
     _tied_weights_keys = {}
+    _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam2TwoWayAttentionBlock, index=2)}
 
     def __init__(self, config: Sam2Config):
         PreTrainedModel.__init__(self, config)

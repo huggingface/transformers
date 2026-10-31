@@ -246,7 +246,9 @@ class RadioAttention(Dinov2Attention):
 
 
 class RadioLayer(Dinov2Layer):
-    pass
+    def __init__(self, config: RadioConfig) -> None:
+        super().__init__(config)
+        self.attention = RadioAttention(config)
 
 
 @auto_docstring

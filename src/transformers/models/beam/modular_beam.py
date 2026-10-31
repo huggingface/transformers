@@ -181,6 +181,8 @@ class BeamAttention(Qwen3MoeAttention):
         self.gate_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         # One gate bias per head, broadcast over `head_dim`.
         self.gate_bias = nn.Parameter(torch.zeros(config.num_attention_heads))
+        self.q_norm = BeamRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
+        self.k_norm = BeamRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
 
     def forward(
         self,
@@ -288,6 +290,8 @@ class BeamMoE(Qwen3MoeSparseMoeBlock):
     def __init__(self, config: BeamConfig):
         super().__init__(config)
         self.routed_scaling_factor = config.routed_scaling_factor
+        self.experts = BeamExperts(config)
+        self.gate = BeamTopKRouter(config)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
@@ -305,6 +309,9 @@ class BeamDecoderLayer(DeepseekV32DecoderLayer):
         self.post_feedforward_layernorm = BeamRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.attn_residual_add_idx = 2 * (layer_idx + 1)
         self.mlp_residual_add_idx = self.attn_residual_add_idx + 1
+        self.self_attn = BeamAttention(config, layer_idx)
+
+        self.mlp = BeamMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else BeamMLP(config)
 
     def forward(
         self,
@@ -372,6 +379,14 @@ class BeamPreTrainedModel(DeepseekV3PreTrainedModel):
 
 
 class BeamModel(Qwen3MoeModel):
+    def __init__(self, config: BeamConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [BeamDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = BeamRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = BeamRotaryEmbedding(config=config)
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -441,6 +456,10 @@ class BeamModel(Qwen3MoeModel):
 
 
 class BeamForCausalLM(DeepseekV3ForCausalLM):
+    def __init__(self, config: BeamConfig):
+        super().__init__(config)
+        self.model = BeamModel(config)
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

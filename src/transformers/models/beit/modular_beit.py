@@ -223,6 +223,7 @@ class BeitLayer(ViTLayer):
             nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True) if init_values > 0 else 1.0
         )
         self.relative_position_bias = BeitRelativePositionBias(config) if config.use_relative_position_bias else None
+        self.attention = BeitAttention(config)
 
     def forward(
         self,
@@ -271,6 +272,10 @@ class BeitPreTrainedModel(ViTPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r".*relative_position_index.*"]
     _supports_flash_attn = False
     _supports_flex_attn = False
+    _can_record_outputs = {
+        "hidden_states": BeitLayer,
+        "attentions": BeitAttention,
+    }
 
     def _init_weights(self, module):
         """Initialize the weights"""

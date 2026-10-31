@@ -179,7 +179,12 @@ class HunYuanMoEV1RotaryEmbedding(HunYuanDenseV1RotaryEmbedding):
 
 
 class HunYuanMoEV1Model(DeepseekV2Model):
-    pass
+    def __init__(self, config: HunYuanMoEV1Config):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [HunYuanMoEV1DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.rotary_emb = HunYuanMoEV1RotaryEmbedding(config=config)
 
 
 class HunYuanMoEV1ForCausalLM(DeepseekV2ForCausalLM):

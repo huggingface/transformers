@@ -136,6 +136,10 @@ class Aimv2Config(SiglipConfig):
     projection_dim: int = 512
     logit_scale_init_value: float = 2.6592
     max_logit_scale: float = 100.0
+    sub_configs_defaults = {
+        "vision_config": Aimv2VisionConfig,
+        "text_config": Aimv2TextConfig,
+    }
 
 
 class Aimv2Output(SiglipOutput):
@@ -229,7 +233,9 @@ class Aimv2EncoderLayer(GradientCheckpointingLayer):
 
 
 class Aimv2Encoder(SiglipEncoder):
-    pass
+    def __init__(self, config: Aimv2Config):
+        super().__init__(config)
+        self.layers = nn.ModuleList([Aimv2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
 
 class Aimv2AttentionPoolingHead(nn.Module):

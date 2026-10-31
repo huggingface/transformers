@@ -247,6 +247,7 @@ class CohereModel(LlamaModel):
             [CohereDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = CohereLayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)
+        self.rotary_emb = CohereRotaryEmbedding(config=config)
 
 
 class CohereForCausalLM(LlamaForCausalLM):

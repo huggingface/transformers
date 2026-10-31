@@ -91,6 +91,8 @@ class Lfm2VlModel(LlavaModel):
     def __init__(self, config: Lfm2VlConfig):
         super().__init__(config)
 
+        self.multi_modal_projector = Lfm2VlMultiModalProjector(config)
+
     @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
@@ -236,6 +238,10 @@ class Lfm2VlModel(LlavaModel):
 
 
 class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
+    def __init__(self, config: Lfm2VlConfig):
+        super().__init__(config)
+        self.model = Lfm2VlModel(config)
+
     @auto_docstring
     def get_image_features(
         self,

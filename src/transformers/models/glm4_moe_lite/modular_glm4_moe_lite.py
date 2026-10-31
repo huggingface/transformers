@@ -19,6 +19,7 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
+from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeDecoderLayer,
@@ -172,11 +173,20 @@ class Glm4MoeLiteDecoderLayer(Glm4MoeDecoderLayer, nn.Module):
 
 
 class Glm4MoeLitePreTrainedModel(Glm4MoePreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": Glm4MoeLiteDecoderLayer,
+        "attentions": Glm4MoeLiteAttention,
+        "router_logits": OutputRecorder(Glm4MoeLiteTopkRouter, index=0),
+    }
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.47.*"]
 
 
 class Glm4MoeLiteModel(Glm4MoeModel):
-    pass
+    def __init__(self, config: Glm4MoeLiteConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [Glm4MoeLiteDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
 
 class Glm4MoeLiteForCausalLM(Glm4MoeForCausalLM):

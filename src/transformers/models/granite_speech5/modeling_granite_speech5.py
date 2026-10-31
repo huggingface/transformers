@@ -264,12 +264,23 @@ class GraniteSpeech5EncoderBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
-class GraniteSpeech5EncoderSubsamplingBlock(GraniteSpeech5EncoderBlock):
+class GraniteSpeech5EncoderSubsamplingBlock(GradientCheckpointingLayer):
     """Conformer block that subsamples time by 2"""
 
     def __init__(self, config: GraniteSpeech5EncoderConfig, layer_idx: int | None = None):
-        super().__init__(config, layer_idx)
+        super().__init__()
+        self.gradient_checkpointing = False
+
+        self.feed_forward1 = GraniteSpeech5EncoderFeedForward(config)
+        self.self_attn = GraniteSpeech5EncoderAttention(config, layer_idx)
         self.conv = GraniteSpeech5EncoderConvolutionModule(config, stride=2)
+        self.feed_forward2 = GraniteSpeech5EncoderFeedForward(config)
+
+        self.norm_feed_forward1 = nn.LayerNorm(config.hidden_size)
+        self.norm_self_att = nn.LayerNorm(config.hidden_size)
+        self.norm_conv = nn.LayerNorm(config.hidden_size)
+        self.norm_feed_forward2 = nn.LayerNorm(config.hidden_size)
+        self.norm_out = nn.LayerNorm(config.hidden_size)
 
     def forward(
         self,

@@ -18,6 +18,8 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ... import initialization as init
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ...utils.generic import ModelOutput, TransformersKwargs, merge_with_config_defaults
@@ -28,6 +30,7 @@ from ..sam.modeling_sam import (
     SamImageSegmentationOutput,
     SamLayerNorm,
     SamModel,
+    SamPositionalEmbedding,
     SamPreTrainedModel,
     SamTwoWayTransformer,
     SamVisionAttention,
@@ -84,6 +87,13 @@ class SamHQConfig(SamConfig):
         Dictionary of configuration options used to initialize [`SamHQMaskDecoderConfig`].
     """
 
+    model_type = "sam_hq"
+    sub_configs_defaults = {
+        "prompt_encoder_config": SamHQPromptEncoderConfig,
+        "mask_decoder_config": SamHQMaskDecoderConfig,
+        "vision_config": SamHQVisionConfig,
+    }
+
 
 class SamHQVisionEncoderOutput(SamVisionEncoderOutput):
     r"""
@@ -127,8 +137,23 @@ class SamHQVisionLayer(SamVisionLayer):
     pass
 
 
-class SamHQPreTrainedModel(SamPreTrainedModel):
+class SamHQPositionalEmbedding(SamPositionalEmbedding):
     pass
+
+
+class SamHQPreTrainedModel(SamPreTrainedModel):
+    @torch.no_grad()
+    def _init_weights(self, module: nn.Module):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, SamHQVisionAttention):
+            if module.use_rel_pos:
+                init.zeros_(module.rel_pos_h)
+                init.zeros_(module.rel_pos_w)
+        elif isinstance(module, SamHQVisionEncoder):
+            if self.config.use_abs_pos:
+                init.zeros_(module.pos_embed)
+        elif isinstance(module, SamHQPositionalEmbedding):
+            init.normal_(module.positional_embedding, std=module.scale)
 
 
 class SamHQVisionEncoder(SamVisionEncoder, SamHQPreTrainedModel):
@@ -380,7 +405,9 @@ class SamHQMaskDecoder(nn.Module):
 
 
 class SamHQVisionModel(SamVisionModel):
-    pass
+    def __init__(self, config: SamHQVisionConfig):
+        super().__init__(config)
+        self.vision_encoder = SamHQVisionEncoder(config)
 
 
 @auto_docstring(

@@ -99,6 +99,11 @@ class AyaVisionModelOutputWithPast(LlavaModelOutputWithPast):
 
 
 class AyaVisionModel(LlavaModel):
+    def __init__(self, config: AyaVisionConfig):
+        super().__init__(config)
+
+        self.multi_modal_projector = AyaVisionMultiModalProjector(config)
+
     # Unlike LLaVA, the model doesn't have to deal with Pixtral-style image states
     @merge_with_config_defaults
     @can_return_tuple
@@ -202,6 +207,10 @@ class AyaVisionModel(LlavaModel):
 
 
 class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
+    def __init__(self, config: AyaVisionConfig):
+        super().__init__(config)
+        self.model = AyaVisionModel(config)
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

@@ -21,6 +21,7 @@ from ..mistral.modeling_mistral import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from .configuration_ministral3 import Ministral3Config
 
 
 logger = logging.get_logger(__name__)
@@ -81,12 +82,17 @@ class Ministral3Attention(MistralAttention):
 
 
 class Ministral3DecoderLayer(MistralDecoderLayer):
-    pass
+    def __init__(self, config: Ministral3Config, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.self_attn = Ministral3Attention(config=config, layer_idx=layer_idx)
 
 
 @auto_docstring
 class Ministral3PreTrainedModel(MistralPreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "hidden_states": Ministral3DecoderLayer,
+        "attentions": Ministral3Attention,
+    }
 
 
 @auto_docstring

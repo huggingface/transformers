@@ -29,6 +29,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ..llama.modeling_llama import (
     LlamaAttention,
+    LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
@@ -167,7 +168,23 @@ class GemmaAttention(LlamaAttention):
         self.is_causal = not getattr(config, "use_bidirectional_attention", False)
 
 
+class GemmaDecoderLayer(LlamaDecoderLayer):
+    def __init__(self, config: GemmaConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+        self.self_attn = GemmaAttention(config=config, layer_idx=layer_idx)
+
+        self.mlp = GemmaMLP(config)
+        self.input_layernorm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+
 class GemmaPreTrainedModel(LlamaPreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": GemmaDecoderLayer,
+        "attentions": GemmaAttention,
+    }
+
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
@@ -185,6 +202,11 @@ class GemmaModel(LlamaModel):
         self.embed_tokens = GemmaTextScaledWordEmbedding(
             config.vocab_size, config.hidden_size, self.padding_idx, embed_scale=self.config.hidden_size**0.5
         )
+        self.layers = nn.ModuleList(
+            [GemmaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = GemmaRotaryEmbedding(config=config)
 
     def forward(
         self,
@@ -240,6 +262,10 @@ class GemmaModel(LlamaModel):
 
 
 class GemmaForCausalLM(LlamaForCausalLM):
+    def __init__(self, config: GemmaConfig):
+        super().__init__(config)
+        self.model = GemmaModel(config)
+
     def forward(**super_kwargs):
         r"""
         Example:

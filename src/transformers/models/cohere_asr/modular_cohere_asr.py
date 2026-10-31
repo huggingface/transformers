@@ -266,6 +266,7 @@ class CohereAsrDecoder(MoonshineDecoder):
         self.pos_emb = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.embedding_layernorm = nn.LayerNorm(config.hidden_size)
         self.proj = nn.Linear(config.encoder_config.hidden_size, config.hidden_size, bias=True)
+        self.layers = nn.ModuleList([CohereAsrDecoderLayer(config, idx) for idx in range(config.num_hidden_layers)])
         self.post_init()
 
     def forward(
@@ -348,6 +349,7 @@ class CohereAsrModel(MoonshineModel):
     def __init__(self, config: CohereAsrConfig):
         super().__init__(config)
         self.encoder = AutoModel.from_config(config.encoder_config)
+        self.decoder = CohereAsrDecoder(config)
 
     @can_return_tuple
     @auto_docstring
@@ -426,6 +428,7 @@ class CohereAsrForConditionalGeneration(MoonshineForConditionalGeneration):
     def __init__(self, config: CohereAsrConfig):
         super().__init__(config)
         self.proj_out = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
+        self.model = CohereAsrModel(config)
         self.post_init()
 
     @can_return_tuple
