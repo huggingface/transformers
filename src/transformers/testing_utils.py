@@ -4984,6 +4984,45 @@ def set_ci_collecting_file(path: str | None) -> None:
     _ci_currently_collecting_file = path
 
 
+def scan_preloaded_test_module_deps(nodeid: str) -> None:
+    """Record deps for a test module that was pre-loaded before its pytest_collectstart.
+
+    When a test file is imported as a side-effect of another test file's module-level
+    import (e.g. ``test_modeling_auto`` does ``from ..bert.test_modeling_bert import
+    BertModelTester`` at the top level), the importing module's body runs while
+    ``_ci_currently_collecting_file`` points to the *other* test file.  By the time
+    pytest fires ``pytest_collectstart`` for the pre-loaded file, the module is already
+    in ``sys.modules`` and its body does not re-execute, so our ``builtins.__import__``
+    hook never fires for its imports under the correct collecting-file context.
+
+    This function is called from ``pytest_collectstart`` in ``conftest.py``, *after*
+    ``set_ci_collecting_file`` has already set the correct context.  It checks whether
+    the module is pre-loaded and, if so, walks its ``__dict__`` to find every
+    transformers object and records its defining module via ``__module__``.
+
+    No-op if ``CI_RECORD_DEPS_OUTPUT`` is not set or the module is not yet in
+    ``sys.modules`` (normal path — the import hook handles fresh loads).
+    """
+    if not os.environ.get("CI_RECORD_DEPS_OUTPUT"):
+        return
+    if _ci_currently_collecting_file is None:
+        return
+
+    # Convert nodeid path to Python module name.
+    # nodeid looks like "tests/models/bert/test_modeling_bert.py"
+    module_name = nodeid.replace("\\", "/").removesuffix(".py").replace("/", ".")
+    module = sys.modules.get(module_name)
+    if module is None:
+        return  # Not pre-loaded; the normal import hook will handle it.
+
+    # Module is already in sys.modules — its body already ran under a different context.
+    # Scan its __dict__ for every object whose __module__ points into transformers/ or tests/.
+    for obj in module.__dict__.values():
+        mod_name = getattr(obj, "__module__", None)
+        if isinstance(mod_name, str) and mod_name.split(".")[0] in ("transformers", "tests"):
+            _record_import_chain(mod_name)
+
+
 def set_ci_deps_phase(phase: str, test_id: str | None = None) -> None:
     global _ci_current_phase, _ci_current_test_id
     _ci_current_phase = phase
