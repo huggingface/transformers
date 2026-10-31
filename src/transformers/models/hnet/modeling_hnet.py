@@ -905,7 +905,9 @@ class HNetStack(nn.Module):
                 and_mask_function=None
                 if self.sliding_window is None
                 else lambda batch_idx, head_idx, q_idx, kv_idx: (
-                    kv_positions[batch_idx, kv_idx] > kv_positions[batch_idx, q_idx] - self.sliding_window
+                    # A static cache has slots past the written positions, which the padding mask removes anyway
+                    kv_positions[batch_idx, kv_idx.clamp(max=kv_positions.shape[1] - 1)]
+                    > kv_positions[batch_idx, q_idx] - self.sliding_window
                 ),
                 layer_idx=self.first_attention_idx,
             )
@@ -1149,8 +1151,10 @@ class HNetModel(HNetPreTrainedModel):
             if past_key_values is not None:
                 # Sequences that close no chunk at this step get a padding position, the cache keeps the full mask
                 step_mask = new_mask[:, None, :, None].float()
-                stage_mask = past_key_values.update(step_mask, step_mask, self.chunk_mask_ids[stage_idx])[0]
-                stage_mask = stage_mask[:, 0, :, 0].bool()
+                chunk_mask_idx = self.chunk_mask_ids[stage_idx]
+                stage_mask = past_key_values.update(step_mask, step_mask, chunk_mask_idx)[0]
+                # A static cache returns its whole buffer: keep the positions written so far
+                stage_mask = stage_mask[:, 0, : past_key_values.get_seq_length(chunk_mask_idx), 0].bool()
         else:
             hidden_states = self.widen(hidden_states, len(self.encoders))
             hidden_states = self.main_network(hidden_states, stage_mask, past_key_values, **kwargs)
@@ -1255,6 +1259,11 @@ class HNetForCausalLM(HNetPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    @staticmethod
+    def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, position_ids=None, **kwargs):
+        # Every stage builds its own masks from the 2D padding mask, at its own length
+        return attention_mask
 
 
 __all__ = ["HNetForCausalLM", "HNetModel", "HNetPreTrainedModel"]
