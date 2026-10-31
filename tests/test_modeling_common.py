@@ -2573,6 +2573,7 @@ class ModelTesterMixin(ExportTesterMixin):
     @require_torch_accelerator
     def test_resize_tokens_embeddings_with_deepspeed(self):
         ds_config = {
+            "train_micro_batch_size_per_gpu": 1,
             "zero_optimization": {
                 "stage": 3,
                 "offload_param": {"device": "cpu", "pin_memory": True},
@@ -2585,6 +2586,7 @@ class ModelTesterMixin(ExportTesterMixin):
     @require_torch_multi_accelerator
     def test_resize_tokens_embeddings_with_deepspeed_multi_gpu(self):
         ds_config = {
+            "train_micro_batch_size_per_gpu": 1,
             "zero_optimization": {
                 "stage": 3,
             },
@@ -2687,6 +2689,7 @@ class ModelTesterMixin(ExportTesterMixin):
     @require_torch_accelerator
     def test_resize_embeddings_untied_with_deepspeed(self):
         ds_config = {
+            "train_micro_batch_size_per_gpu": 1,
             "zero_optimization": {
                 "stage": 3,
                 "offload_param": {"device": "cpu", "pin_memory": True},
@@ -2699,6 +2702,7 @@ class ModelTesterMixin(ExportTesterMixin):
     @require_torch_multi_accelerator
     def test_resize_embeddings_untied_with_deepspeed_multi_gpu(self):
         ds_config = {
+            "train_micro_batch_size_per_gpu": 1,
             "zero_optimization": {
                 "stage": 3,
             },

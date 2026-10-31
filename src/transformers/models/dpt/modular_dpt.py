@@ -29,7 +29,7 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import ImagesKwargs
-from ...utils import TensorType, auto_docstring, requires_backends
+from ...utils import TensorType, auto_docstring
 from ..beit.image_processing_beit import BeitImageProcessor
 
 
@@ -271,7 +271,6 @@ class DPTImageProcessor(BeitImageProcessor):
             `List[Dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
             predictions.
         """
-        requires_backends(self, "torch")
 
         predicted_depth = outputs.predicted_depth
 

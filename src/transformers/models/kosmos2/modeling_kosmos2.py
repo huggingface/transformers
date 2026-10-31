@@ -107,10 +107,6 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, Kosmos2ImageToTextProjection):
             init.normal_(module.dense.weight, std=std)
             init.normal_(module.latent_query)
-        elif isinstance(module, Kosmos2TextTransformer):
-            init.normal_(module.embed_tokens.weight, mean=0.0, std=std)
-            if module.embed_tokens.padding_idx is not None:
-                init.zeros_(module.embed_tokens.weight[module.embed_tokens.padding_idx])
         elif isinstance(module, Kosmos2TextSinusoidalPositionalEmbedding):
             emb_weights = module.get_embedding(
                 module.num_positions + module.offset, module.embedding_dim, module.padding_idx
@@ -683,6 +679,7 @@ class KosmosTextAttention(nn.Module):
         add_inner_attn_layernorm: bool | None = False,
         bias: bool | None = True,
         layer_idx: bool | None = None,
+        is_causal: bool = False,
     ):
         super().__init__()
         self.config = config
@@ -690,7 +687,7 @@ class KosmosTextAttention(nn.Module):
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
-        self.is_causal = True
+        self.is_causal = is_causal
 
         if (self.head_dim * num_heads) != self.embed_dim:
             raise ValueError(
@@ -819,6 +816,7 @@ class Kosmos2TextBlock(GradientCheckpointingLayer):
             is_decoder=True,
             add_inner_attn_layernorm=True,
             layer_idx=layer_idx,
+            is_causal=True,
         )
         self.dropout = config.dropout
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)

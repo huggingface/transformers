@@ -40,9 +40,9 @@ from ...utils import (
     auto_docstring,
     is_cv2_available,
     logging,
-    requires_backends,
 )
 from ...utils.generic import TensorType, can_return_tuple, merge_with_config_defaults
+from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
 from ..resnet.modeling_resnet import ResNetConvLayer
@@ -415,6 +415,7 @@ class PPDocLayoutV3ImageProcessor(TorchvisionBackend):
 
         return polygon_points
 
+    @requires(backends=("torch", "cv2"))
     def post_process_object_detection(
         self,
         outputs,
@@ -432,7 +433,6 @@ class PPDocLayoutV3ImageProcessor(TorchvisionBackend):
             `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, boxes and polygon_points for an image
             in the batch as predicted by the model.
         """
-        requires_backends(self, ["torch", "cv2"])
         boxes = outputs.pred_boxes
         logits = outputs.logits
         order_logits = outputs.order_logits

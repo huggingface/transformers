@@ -37,7 +37,7 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.import_utils import requires, requires_backends
+from ...utils.import_utils import requires
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..detr.image_processing_detr import DetrImageProcessor
 from ..detr.image_processing_pil_detr import DetrImageProcessorPil
@@ -155,7 +155,6 @@ class DeformableDetrImageProcessorPil(DetrImageProcessorPil):
             `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
-        requires_backends(self, ["torch"])
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
         if target_sizes is not None:
