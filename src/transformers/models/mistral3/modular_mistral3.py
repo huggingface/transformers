@@ -121,6 +121,11 @@ class Mistral3PreTrainedModel(LlavaPreTrainedModel):
 
 
 class Mistral3Model(LlavaModel):
+    def __init__(self, config: Mistral3Config):
+        super().__init__(config)
+
+        self.multi_modal_projector = Mistral3MultiModalProjector(config)
+
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring(
@@ -221,6 +226,10 @@ class Mistral3Model(LlavaModel):
 
 
 class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
+    def __init__(self, config: Mistral3Config):
+        super().__init__(config)
+        self.model = Mistral3Model(config)
+
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring

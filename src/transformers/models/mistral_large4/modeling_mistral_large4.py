@@ -943,9 +943,7 @@ class MistralLarge4TextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: MistralLarge4TextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = MISTRAL_LARGE4_TEXT_ATTENTION_CLASSES[config.attention_layer_types[layer_idx]](
-            config, layer_idx
-        )
+        self.self_attn = MistralLarge4TextAttention(config, layer_idx)
 
         self.mlp = (
             MistralLarge4TextMoE(config)
@@ -954,6 +952,9 @@ class MistralLarge4TextDecoderLayer(GradientCheckpointingLayer):
         )
         self.input_layernorm = MistralLarge4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MistralLarge4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.self_attn = MISTRAL_LARGE4_TEXT_ATTENTION_CLASSES[config.attention_layer_types[layer_idx]](
+            config, layer_idx
+        )
 
     def forward(
         self,
@@ -1005,7 +1006,7 @@ class MistralLarge4PreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": MistralLarge4TextDecoderLayer,
-        "attentions": list(MISTRAL_LARGE4_TEXT_ATTENTION_CLASSES.values()),
+        "attentions": MistralLarge4TextAttention,
         "router_logits": OutputRecorder(MistralLarge4TextTopkRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["rotary_emb", "mlp.gate.weight"]

@@ -17,6 +17,7 @@ from collections.abc import Callable
 import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
+from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
@@ -25,6 +26,7 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.output_capturing import OutputRecorder
 from ..axk1.modeling_axk1 import AXK1Attention
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3RMSNorm,
@@ -36,9 +38,11 @@ from ..deepseek_v32.modeling_deepseek_v32 import (
     DeepseekV32DecoderLayer,
     DeepseekV32ForCausalLM,
     DeepseekV32Indexer,
+    DeepseekV32MLP,
     DeepseekV32Model,
     DeepseekV32PreTrainedModel,
     DeepseekV32RotaryEmbedding,
+    DeepseekV32TopkRouter,
 )
 
 
@@ -285,7 +289,19 @@ class GlmMoeDsaAttention(AXK1Attention):
         return attn_output, attn_weights, topk_indices
 
 
+class GlmMoeDsaMLP(DeepseekV32MLP):
+    pass
+
+
+class GlmMoeDsaTopkRouter(DeepseekV32TopkRouter):
+    pass
+
+
 class GlmMoeDsaDecoderLayer(DeepseekV32DecoderLayer):
+    def __init__(self, config: GlmMoeDsaConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.self_attn = GlmMoeDsaAttention(config, layer_idx)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -320,10 +336,21 @@ class GlmMoeDsaDecoderLayer(DeepseekV32DecoderLayer):
 
 
 class GlmMoeDsaPreTrainedModel(DeepseekV32PreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": GlmMoeDsaDecoderLayer,
+        "attentions": GlmMoeDsaAttention,
+        "router_logits": OutputRecorder(GlmMoeDsaTopkRouter, index=0),
+    }
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
 
 
 class GlmMoeDsaModel(DeepseekV32Model):
+    def __init__(self, config: GlmMoeDsaConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [GlmMoeDsaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -385,6 +412,10 @@ class GlmMoeDsaModel(DeepseekV32Model):
 
 class GlmMoeDsaForCausalLM(DeepseekV32ForCausalLM):
     _fsdp_plan = {"lm_head": "keep_full_weight"}
+
+    def __init__(self, config: GlmMoeDsaConfig):
+        super().__init__(config)
+        self.model = GlmMoeDsaModel(config)
 
 
 __all__ = [

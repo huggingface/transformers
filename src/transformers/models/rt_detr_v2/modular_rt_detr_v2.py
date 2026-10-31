@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
+import math
 import warnings
 
 import torch
@@ -22,6 +23,7 @@ from torch import Tensor
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from ..auto import AutoConfig
@@ -29,9 +31,11 @@ from ..rt_detr.modeling_rt_detr import (
     RTDetrDecoder,
     RTDetrDecoderLayer,
     RTDetrForObjectDetection,
+    RTDetrMLP,
     RTDetrMLPPredictionHead,
     RTDetrModel,
     RTDetrPreTrainedModel,
+    RTDetrSelfAttention,
 )
 
 
@@ -391,6 +395,14 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
         return output, attention_weights
 
 
+class RTDetrV2MLP(RTDetrMLP):
+    pass
+
+
+class RTDetrV2SelfAttention(RTDetrSelfAttention):
+    pass
+
+
 class RTDetrV2DecoderLayer(RTDetrDecoderLayer):
     def __init__(self, config: RTDetrV2Config):
         # initialize parent class
@@ -400,14 +412,77 @@ class RTDetrV2DecoderLayer(RTDetrDecoderLayer):
 
 
 class RTDetrV2PreTrainedModel(RTDetrPreTrainedModel):
+    @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
+        """Initialize the weights"""
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, RTDetrV2ForObjectDetection):
+            if module.model.decoder.class_embed is not None:
+                for layer in module.model.decoder.class_embed:
+                    prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
+                    bias = float(-math.log((1 - prior_prob) / prior_prob))
+                    init.xavier_uniform_(layer.weight)
+                    init.constant_(layer.bias, bias)
+
+            if module.model.decoder.bbox_embed is not None:
+                for layer in module.model.decoder.bbox_embed:
+                    init.constant_(layer.layers[-1].weight, 0)
+                    init.constant_(layer.layers[-1].bias, 0)
+
+        elif isinstance(module, RTDetrV2MultiscaleDeformableAttention):
+            init.constant_(module.sampling_offsets.weight, 0.0)
+            default_dtype = torch.get_default_dtype()
+            thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
+                2.0 * math.pi / module.n_heads
+            )
+            grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
+            grid_init = (
+                (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
+                .view(module.n_heads, 1, 1, 2)
+                .repeat(1, module.n_levels, module.n_points, 1)
+            )
+            for i in range(module.n_points):
+                grid_init[:, :, i, :] *= i + 1
+
+            init.copy_(module.sampling_offsets.bias, grid_init.view(-1))
+            init.constant_(module.attention_weights.weight, 0.0)
+            init.constant_(module.attention_weights.bias, 0.0)
+            init.xavier_uniform_(module.value_proj.weight)
+            init.constant_(module.value_proj.bias, 0.0)
+            init.xavier_uniform_(module.output_proj.weight)
+            init.constant_(module.output_proj.bias, 0.0)
+
+        elif isinstance(module, RTDetrV2Model):
+            prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
+            bias = float(-math.log((1 - prior_prob) / prior_prob))
+            init.xavier_uniform_(module.enc_score_head.weight)
+            init.constant_(module.enc_score_head.bias, bias)
+
+        elif isinstance(module, nn.BatchNorm2d):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
+
+        if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
+            init.xavier_uniform_(module.weight_embedding.weight)
+        if hasattr(module, "denoising_class_embed") and self.config.num_denoising > 0:
+            init.xavier_uniform_(module.denoising_class_embed.weight)
         if isinstance(module, RTDetrV2MultiscaleDeformableAttention):
             n_points_scale = [1 / n for n in module.n_points_list for _ in range(n)]
             init.copy_(module.n_points_scale, torch.tensor(n_points_scale, dtype=torch.float32))
 
 
 class RTDetrV2Decoder(RTDetrDecoder):
+    _can_record_outputs = {
+        "hidden_states": RTDetrV2DecoderLayer,
+        "attentions": RTDetrV2SelfAttention,
+        "cross_attentions": RTDetrV2MultiscaleDeformableAttention,
+    }
+
     def __init__(self, config: RTDetrV2Config):
         super().__init__(config)
         self.layers = nn.ModuleList([RTDetrV2DecoderLayer(config) for _ in range(config.decoder_layers)])

@@ -390,6 +390,10 @@ class PaddleOCRDecoderLayer(Ernie4_5DecoderLayer):
     def __init__(self, config: PaddleOCRTextConfig, layer_idx: int):
         super().__init__()
 
+        self.self_attn = PaddleOCRAttention(config=config, layer_idx=layer_idx)
+
+        self.mlp = PaddleOCRMLP(config)
+
 
 @auto_docstring
 class PaddleOCRVLPreTrainedModel(PreTrainedModel):
@@ -422,6 +426,10 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel, Ernie4_5Model):
 
     def __init__(self, config: PaddleOCRTextConfig):
         super().__init__(config)
+        self.layers = nn.ModuleList(
+            [PaddleOCRDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.rotary_emb = PaddleOCRRotaryEmbedding(config=config)
 
     @merge_with_config_defaults
     @capture_outputs
@@ -545,6 +553,8 @@ class PaddleOCRVisionMLP(SiglipMLP):
 class PaddleOCRVisionEncoderLayer(VideoLlama3VisionEncoderLayer):
     def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__()
+        self.self_attn = PaddleOCRVisionAttention(config=config)
+        self.mlp = PaddleOCRVisionMLP(config=config)
 
 
 class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
@@ -809,6 +819,10 @@ class PaddleOCRVLModel(Qwen2VLModel):
 
 class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
     _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]
+
+    def __init__(self, config: PaddleOCRVLConfig):
+        super().__init__(config)
+        self.model = PaddleOCRVLModel(config)
 
     def get_video_features(self):
         raise AttributeError("PaddleOCRVLForConditionalGeneration does not support video.")

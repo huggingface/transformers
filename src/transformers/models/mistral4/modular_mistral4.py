@@ -98,7 +98,9 @@ class Mistral4Experts(DeepseekV3Experts):
 
 
 class Mistral4MoE(DeepseekV3MoE):
-    pass
+    def __init__(self, config: Mistral4Config):
+        super().__init__(config)
+        self.gate = Mistral4TopkRouter(config)
 
 
 class Mistral4Attention(DeepseekV3Attention):

@@ -283,6 +283,8 @@ class PeAudioVideoEncoderLayer(Qwen3DecoderLayer):
         super().__init__(config, layer_idx)
         del self.attention_type
 
+        self.self_attn = PeAudioVideoEncoderAttention(config=config, layer_idx=layer_idx)
+
 
 class PeAudioVideoEncoderRMSNorm(Qwen3RMSNorm): ...
 

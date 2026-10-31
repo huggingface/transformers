@@ -886,6 +886,10 @@ class Gemma4VisionEncoderLayer(Gemma3DecoderLayer):
         super().__init__(self, config, layer_idx)
         self.self_attn = Gemma4VisionAttention(config=config, layer_idx=layer_idx)
         self.mlp = Gemma4VisionMLP(config)
+        self.input_layernorm = Gemma4RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Gemma4RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.pre_feedforward_layernorm = Gemma4RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = Gemma4RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -1531,6 +1535,10 @@ class Gemma4TextModel(Gemma3TextModel):
 @auto_docstring(custom_intro="The base Gemma 4 language model with a language modeling head.")
 class Gemma4ForCausalLM(Gemma3ForCausalLM):
     base_model_prefix = "model"
+
+    def __init__(self, config: Gemma4TextConfig):
+        super().__init__(config)
+        self.model = Gemma4TextModel(config)
 
     @can_return_tuple
     @auto_docstring
@@ -2206,6 +2214,10 @@ class Gemma4Model(Gemma3nModel):
 )
 class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
     base_model_prefix = "model"
+
+    def __init__(self, config: Gemma4Config):
+        super().__init__(config)
+        self.model = Gemma4Model(config)
 
     def get_per_layer_input_embeddings(self):
         return self.model.get_per_layer_input_embeddings()

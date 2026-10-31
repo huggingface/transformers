@@ -331,6 +331,8 @@ class FunAsrNanoEncoderLayer(LlamaDecoderLayer):
             nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) if add_norm else nn.Identity()
         )
 
+        self.mlp = FunAsrNanoMLP(config)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -467,6 +469,10 @@ class FunAsrNanoMultiModalProjector(nn.Module):
     """
 )
 class FunAsrNanoModel(AudioFlamingo3Model):
+    def __init__(self, config: FunAsrNanoConfig):
+        super().__init__(config)
+        self.multi_modal_projector = FunAsrNanoMultiModalProjector(config)
+
     @can_return_tuple
     @auto_docstring(
         custom_intro="This method is used to get the audio embeddings from input features, meaning inferring the audio encoder and the adaptor."
@@ -514,6 +520,10 @@ class FunAsrNanoModel(AudioFlamingo3Model):
     """
 )
 class FunAsrNanoForConditionalGeneration(Qwen3ASRForConditionalGeneration):
+    def __init__(self, config: FunAsrNanoConfig):
+        super().__init__(config)
+        self.model = FunAsrNanoModel(config)
+
     def forward(self, **super_kwargs):
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):

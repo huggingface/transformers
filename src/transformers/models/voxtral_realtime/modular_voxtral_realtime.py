@@ -458,6 +458,9 @@ class VoxtralRealtimeTextModel(MistralModel):
         super().__init__(config)
         self.norm = VoxtralRealtimeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = VoxtralRealtimeRotaryEmbedding(config=config)
+        self.layers = nn.ModuleList(
+            [VoxtralRealtimeTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
 
 class VoxtralRealtimeTimeEmbedding(nn.Module):

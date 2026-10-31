@@ -581,7 +581,9 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
 
 
 class Zamba2ForCausalLM(ZambaForCausalLM):
-    pass
+    def __init__(self, config: Zamba2Config):
+        super().__init__(config)
+        self.model = Zamba2Model(config)
 
 
 class Zamba2ForSequenceClassification(ZambaForSequenceClassification):

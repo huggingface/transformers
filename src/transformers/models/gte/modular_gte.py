@@ -136,7 +136,9 @@ class GteMLP(GemmaMLP):
 
 
 class GteLayer(JinaEmbeddingsV3Layer):
-    pass
+    def __init__(self, config: GteConfig):
+        super().__init__(config)
+        self.mlp = GteMLP(config)
 
 
 class GtePooler(JinaEmbeddingsV3Pooler):
@@ -167,6 +169,8 @@ class GteModel(JinaEmbeddingsV3Model):
             Whether to add a pooling layer.
         """
         super().__init__(config, add_pooling_layer=add_pooling_layer)
+
+        self.embeddings = GteEmbeddings(config)
 
 
 class GteLMHead(JinaEmbeddingsV3LMHead):
@@ -242,7 +246,10 @@ class GteForSequenceClassification(BertForSequenceClassification):
 
 
 class GteForTokenClassification(BertForTokenClassification):
-    pass
+    def __init__(self, config: GteConfig):
+        super().__init__(config)
+
+        self.gte = GteModel(config, add_pooling_layer=False)
 
 
 __all__ = [

@@ -20,6 +20,7 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import (
@@ -199,6 +200,7 @@ class JinaEmbeddingsV3Layer(GPTNeoXLayer):
         del self.use_parallel_residual
         del self.input_layernorm
         del self.attention
+        self.mlp = JinaEmbeddingsV3MLP(config)
 
     def forward(
         self,
@@ -234,6 +236,16 @@ class JinaEmbeddingsV3PreTrainedModel(XLMRobertaPreTrainedModel):
         "attentions": JinaEmbeddingsV3Attention,
     }
 
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        super()._init_weights(module)
+        if isinstance(module, JinaEmbeddingsV3LMHead):
+            init.zeros_(module.bias)
+        elif isinstance(module, JinaEmbeddingsV3Embeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
+
 
 @auto_docstring
 class JinaEmbeddingsV3Model(XLMRobertaModel):
@@ -242,6 +254,8 @@ class JinaEmbeddingsV3Model(XLMRobertaModel):
         self.rotary_emb = JinaEmbeddingsV3RotaryEmbedding(config)
         self.layers = nn.ModuleList([JinaEmbeddingsV3Layer(config) for _ in range(config.num_hidden_layers)])
         del self.encoder
+
+        self.embeddings = JinaEmbeddingsV3Embeddings(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -373,15 +387,24 @@ class JinaEmbeddingsV3ForMaskedLM(XLMRobertaForMaskedLM):
 
 
 class JinaEmbeddingsV3ForSequenceClassification(XLMRobertaForSequenceClassification):
-    pass
+    def __init__(self, config: JinaEmbeddingsV3Config):
+        super().__init__(config)
+
+        self.roberta = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
 
 
 class JinaEmbeddingsV3ForTokenClassification(XLMRobertaForTokenClassification):
-    pass
+    def __init__(self, config: JinaEmbeddingsV3Config):
+        super().__init__(config)
+
+        self.roberta = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
 
 
 class JinaEmbeddingsV3ForQuestionAnswering(XLMRobertaForQuestionAnswering):
-    pass
+    def __init__(self, config: JinaEmbeddingsV3Config):
+        super().__init__(config)
+
+        self.roberta = JinaEmbeddingsV3Model(config, add_pooling_layer=False)
 
 
 __all__ = [

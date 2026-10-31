@@ -123,9 +123,18 @@ class NanoChatDecoderLayer(LlamaDecoderLayer):
         self.input_layernorm = NanoChatRMSNorm(eps=config.rms_norm_eps)
         self.post_attention_layernorm = NanoChatRMSNorm(eps=config.rms_norm_eps)
 
+        self.self_attn = NanoChatAttention(config=config, layer_idx=layer_idx)
+
+        self.mlp = NanoChatMLP(config)
+
 
 @auto_docstring
 class NanoChatPreTrainedModel(LlamaPreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": NanoChatDecoderLayer,
+        "attentions": NanoChatAttention,
+    }
+
     def _init_weights(self, module: nn.Module) -> None:
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, NanoChatAttention):
@@ -142,6 +151,9 @@ class NanoChatModel(LlamaModel):
         super().__init__(config)
 
         self.norm = NanoChatRMSNorm(eps=config.rms_norm_eps)
+        self.layers = nn.ModuleList(
+            [NanoChatDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
     def forward(
         self,
@@ -201,6 +213,10 @@ class NanoChatForCausalLM(Gemma2ForCausalLM):
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
     _fsdp_plan = {"lm_head": "keep_full_weight"}
+
+    def __init__(self, config: NanoChatConfig):
+        super().__init__(config)
+        self.model = NanoChatModel(config)
 
     def forward(self, **super_kwargs) -> CausalLMOutputWithPast:
         r"""

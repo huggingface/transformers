@@ -72,6 +72,7 @@ from ..glm_moe_dsa.configuration_glm_moe_dsa import GlmMoeDsaConfig
 from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaAttention, GlmMoeDsaDecoderLayer, GlmMoeDsaIndexer
 from ..glm_ocr.configuration_glm_ocr import GlmOcrVisionConfig
 from ..glm_ocr.modeling_glm_ocr import (
+    GlmOcrVisionAttention,
     GlmOcrVisionBlock,
     GlmOcrVisionMlp,
     GlmOcrVisionModel,
@@ -1149,6 +1150,10 @@ class Glm5NextTextDecoderLayer(GlmMoeDsaDecoderLayer):
             else Glm5NextTextAttention(config, layer_idx)
         )
 
+        self.mlp = (
+            Glm5NextTextMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else Glm5NextTextMLP(config)
+        )
+
         self.attn_hc = Glm5NextTextHyperConnection(config)
         self.ffn_hc = Glm5NextTextHyperConnection(config)
 
@@ -1396,6 +1401,10 @@ class Glm5NextVisionPatchMerger(GlmOcrVisionPatchMerger):
         return self.down_proj(self.act_fn(gate) * up)
 
 
+class Glm5NextVisionAttention(GlmOcrVisionAttention):
+    pass
+
+
 class Glm5NextVisionBlock(GlmOcrVisionBlock):
     def __init__(self, config) -> None:
         super().__init__(config)
@@ -1404,6 +1413,11 @@ class Glm5NextVisionBlock(GlmOcrVisionBlock):
 
 @auto_docstring
 class Glm5NextVisionModel(GlmOcrVisionModel):
+    _can_record_outputs = {
+        "hidden_states": Glm5NextVisionBlock,
+        "attentions": Glm5NextVisionAttention,
+    }
+
     def __init__(self, config: Glm5NextVisionConfig) -> None:
         super().__init__(config)
         self.blocks = nn.ModuleList([Glm5NextVisionBlock(config) for _ in range(config.depth)])
@@ -1584,6 +1598,7 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
 
     def __init__(self, config: Glm5NextConfig):
         super().__init__(config)
+        self.model = Glm5NextModel(config)
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
         self.num_experts = config.text_config.num_local_experts
         self.num_experts_per_tok = config.text_config.num_experts_per_tok

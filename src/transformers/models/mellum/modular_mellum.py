@@ -14,6 +14,7 @@
 
 import torch
 from huggingface_hub.dataclasses import strict
+from torch import nn
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
@@ -22,13 +23,21 @@ from ...modeling_rope_utils import (
     RopeParameters,
 )
 from ...utils import auto_docstring, logging
-from ..laguna.modeling_laguna import LagunaDecoderLayer, LagunaModel, LagunaRotaryEmbedding
+from ...utils.output_capturing import OutputRecorder
+from ..laguna.modeling_laguna import (
+    LagunaDecoderLayer,
+    LagunaMLP,
+    LagunaModel,
+    LagunaRotaryEmbedding,
+)
 from ..qwen3_moe.configuration_qwen3_moe import Qwen3MoeConfig
 from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeAttention,
+    Qwen3MoeExperts,
     Qwen3MoeForCausalLM,
     Qwen3MoePreTrainedModel,
     Qwen3MoeSparseMoeBlock,
+    Qwen3MoeTopKRouter,
 )
 
 
@@ -130,7 +139,22 @@ class MellumAttention(Qwen3MoeAttention):
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
 
+class MellumExperts(Qwen3MoeExperts):
+    pass
+
+
+class MellumTopKRouter(Qwen3MoeTopKRouter):
+    pass
+
+
 class MellumSparseMoeBlock(Qwen3MoeSparseMoeBlock):
+    def __init__(self, config: MellumConfig):
+        super().__init__(config)
+        self.experts = MellumExperts(config)
+        self.gate = MellumTopKRouter(config)
+
+
+class MellumMLP(LagunaMLP):
     pass
 
 
@@ -138,14 +162,29 @@ class MellumDecoderLayer(LagunaDecoderLayer):
     def __init__(self, config: MellumConfig, layer_idx: int):
         super().__init__()
         self.self_attn = MellumAttention(config, layer_idx)
+        if config.mlp_layer_types[layer_idx] == "sparse":
+            self.mlp = MellumSparseMoeBlock(config)
+        else:
+            self.mlp = MellumMLP(config, intermediate_size=config.intermediate_size)
 
 
 class MellumPreTrainedModel(Qwen3MoePreTrainedModel):
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(MellumTopKRouter, index=0),
+        "hidden_states": MellumDecoderLayer,
+        "attentions": MellumAttention,
+    }
     _keys_to_ignore_on_load_unexpected = [r"^mtp\."]
 
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
+        std = self.config.initializer_range
+        if isinstance(module, MellumExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, MellumTopKRouter):
+            init.normal_(module.weight, mean=0.0, std=std)
         if isinstance(module, MellumRotaryEmbedding):
             for layer_type in module.layer_types:
                 rope_init_fn = module.compute_default_rope_parameters
@@ -157,11 +196,17 @@ class MellumPreTrainedModel(Qwen3MoePreTrainedModel):
 
 
 class MellumModel(LagunaModel):
-    pass
+    def __init__(self, config: MellumConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [MellumDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
 
 class MellumForCausalLM(Qwen3MoeForCausalLM):
-    pass
+    def __init__(self, config: MellumConfig):
+        super().__init__(config)
+        self.model = MellumModel(config)
 
 
 __all__ = [

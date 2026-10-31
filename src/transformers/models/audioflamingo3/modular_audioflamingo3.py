@@ -188,6 +188,7 @@ class AudioFlamingo3Model(VoxtralModel):
 
     def __init__(self, config: AudioFlamingo3Config):
         super().__init__(config)
+        self.multi_modal_projector = AudioFlamingo3MultiModalProjector(config)
 
     @can_return_tuple
     @auto_docstring(

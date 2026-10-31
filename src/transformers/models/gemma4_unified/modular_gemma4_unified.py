@@ -23,7 +23,7 @@ from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
@@ -531,7 +531,11 @@ class Gemma4UnifiedVisionConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="google/gemma-4-12B-it")
 @strict
 class Gemma4UnifiedConfig(Gemma4Config):
-    pass
+    sub_configs_defaults = {
+        "text_config": Gemma4UnifiedTextConfig,
+        "vision_config": SubConfigSpec(config_class=Gemma4UnifiedVisionConfig, optional=True),
+        "audio_config": SubConfigSpec(config_class=Gemma4UnifiedAudioConfig, optional=True),
+    }
 
 
 @auto_docstring
@@ -647,6 +651,11 @@ class Gemma4UnifiedTextDecoderLayer(Gemma2DecoderLayer):
         )
         self.mlp = Gemma4UnifiedTextMLP(config, layer_idx)
         self.layer_scalar = nn.Buffer(torch.ones(1))
+        self.input_layernorm = Gemma4UnifiedRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Gemma4UnifiedRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        self.pre_feedforward_layernorm = Gemma4UnifiedRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = Gemma4UnifiedRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -742,6 +751,10 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
         )
         self.norm = Gemma4UnifiedRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.unique_layer_types = set(self.config.layer_types)
+        self.layers = nn.ModuleList(
+            [Gemma4UnifiedTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.rotary_emb = Gemma4UnifiedTextRotaryEmbedding(config=config)
 
     def forward(
         self,
@@ -816,6 +829,10 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
 
 
 class Gemma4UnifiedForCausalLM(Gemma4ForCausalLM):
+    def __init__(self, config: Gemma4UnifiedTextConfig):
+        super().__init__(config)
+        self.model = Gemma4UnifiedTextModel(config)
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1258,6 +1275,10 @@ class Gemma4UnifiedModel(Gemma4Model):
 
 
 class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
+    def __init__(self, config: Gemma4UnifiedConfig):
+        super().__init__(config)
+        self.model = Gemma4UnifiedModel(config)
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

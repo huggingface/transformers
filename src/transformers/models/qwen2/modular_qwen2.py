@@ -99,11 +99,19 @@ class Qwen2Attention(LlamaAttention):
 
 
 class Qwen2DecoderLayer(LlamaDecoderLayer):
-    pass
+    def __init__(self, config: Qwen2Config, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+        self.self_attn = Qwen2Attention(config=config, layer_idx=layer_idx)
+
+        self.mlp = Qwen2MLP(config)
 
 
 class Qwen2PreTrainedModel(LlamaPreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "hidden_states": Qwen2DecoderLayer,
+        "attentions": Qwen2Attention,
+    }
 
 
 class Qwen2Model(MistralModel):
@@ -178,7 +186,9 @@ class Qwen2Model(MistralModel):
 
 
 class Qwen2ForCausalLM(LlamaForCausalLM):
-    pass
+    def __init__(self, config: Qwen2Config):
+        super().__init__(config)
+        self.model = Qwen2Model(config)
 
 
 class Qwen2ForSequenceClassification(LlamaForSequenceClassification):

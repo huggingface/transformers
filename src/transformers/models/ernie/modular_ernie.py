@@ -277,6 +277,11 @@ class ErnieForPreTraining(BertForPreTraining):
         "cls.predictions.decoder.weight": "ernie.embeddings.word_embeddings.weight",
     }
 
+    def __init__(self, config: ErnieConfig):
+        super().__init__(config)
+
+        self.ernie = ErnieModel(config)
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -355,6 +360,11 @@ class ErnieForPreTraining(BertForPreTraining):
 
 
 class ErnieForCausalLM(BertLMHeadModel):
+    def __init__(self, config: ErnieConfig):
+        super().__init__(config)
+
+        self.ernie = ErnieModel(config, add_pooling_layer=False)
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -426,6 +436,11 @@ class ErnieForMaskedLM(BertForMaskedLM):
         "cls.predictions.decoder.weight": "ernie.embeddings.word_embeddings.weight",
     }
 
+    def __init__(self, config: ErnieConfig):
+        super().__init__(config)
+
+        self.ernie = ErnieModel(config, add_pooling_layer=False)
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -478,6 +493,11 @@ class ErnieForMaskedLM(BertForMaskedLM):
 
 
 class ErnieForNextSentencePrediction(BertForNextSentencePrediction):
+    def __init__(self, config: ErnieConfig):
+        super().__init__(config)
+
+        self.ernie = ErnieModel(config)
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -552,6 +572,11 @@ class ErnieForNextSentencePrediction(BertForNextSentencePrediction):
 
 
 class ErnieForSequenceClassification(BertForSequenceClassification):
+    def __init__(self, config: ErnieConfig):
+        super().__init__(config)
+
+        self.ernie = ErnieModel(config)
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -620,6 +645,11 @@ class ErnieForSequenceClassification(BertForSequenceClassification):
 
 
 class ErnieForMultipleChoice(BertForMultipleChoice):
+    def __init__(self, config: ErnieConfig):
+        super().__init__(config)
+
+        self.ernie = ErnieModel(config)
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -707,6 +737,11 @@ class ErnieForMultipleChoice(BertForMultipleChoice):
 
 
 class ErnieForTokenClassification(BertForTokenClassification):
+    def __init__(self, config: ErnieConfig):
+        super().__init__(config)
+
+        self.ernie = ErnieModel(config, add_pooling_layer=False)
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -757,6 +792,11 @@ class ErnieForTokenClassification(BertForTokenClassification):
 
 
 class ErnieForQuestionAnswering(BertForQuestionAnswering):
+    def __init__(self, config: ErnieConfig):
+        super().__init__(config)
+
+        self.ernie = ErnieModel(config, add_pooling_layer=False)
+
     @can_return_tuple
     @auto_docstring
     def forward(

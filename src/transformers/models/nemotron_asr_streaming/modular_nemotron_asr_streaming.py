@@ -21,6 +21,7 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...feature_extraction_utils import BatchFeature
 from ...masking_utils import create_bidirectional_mask
@@ -165,6 +166,7 @@ class NemotronAsrStreamingConfig(ParakeetRNNTConfig):
     vocab_size: int = 1025
     pad_token_id: int = 0
     blank_token_id: int = 1024
+    sub_configs_defaults = {"encoder_config": NemotronAsrStreamingEncoderConfig}
 
 
 class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
@@ -782,6 +784,7 @@ class NemotronAsrStreamingEncoderBlock(ParakeetEncoderBlock):
     def __init__(self, config: NemotronAsrStreamingEncoderConfig, layer_idx: int | None = None):
         super().__init__(config, layer_idx)
         self.conv = NemotronAsrStreamingEncoderConvolutionModule(config, layer_idx=layer_idx)
+        self.self_attn = NemotronAsrStreamingEncoderAttention(config, layer_idx)
 
     def forward(
         self,
@@ -825,6 +828,10 @@ class NemotronAsrStreamingPreTrainedModel(ParakeetPreTrainedModel):
     config: NemotronAsrStreamingConfig
     # flex attention is incompatible as this model uses a float attention mask (relative position bias) across the board
     _supports_flex_attn = False
+    _can_record_outputs = {
+        "hidden_states": NemotronAsrStreamingEncoderBlock,
+        "attentions": NemotronAsrStreamingEncoderAttention,
+    }
 
     def _get_subsampling_output_length(self, input_lengths: torch.Tensor):
         encoder_config = getattr(self.config, "encoder_config", self.config)
@@ -843,6 +850,18 @@ class NemotronAsrStreamingPreTrainedModel(ParakeetPreTrainedModel):
             lengths = torch.floor(lengths)
 
         return lengths.to(dtype=torch.int)
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        std = getattr(self.config, "initializer_range", 0.02)
+
+        if isinstance(module, NemotronAsrStreamingEncoderAttention):
+            init.normal_(module.bias_u, mean=0.0, std=std)
+            init.normal_(module.bias_v, mean=0.0, std=std)
+        elif isinstance(module, NemotronAsrStreamingEncoderRelPositionalEncoding):
+            buffer_value = module.compute_default_relative_positional_parameters(module.config)
+            init.copy_(module.inv_freq, buffer_value)
 
 
 def chunked_limited_mask_function(left_ctx: int, right_ctx: int) -> Callable:
@@ -867,6 +886,15 @@ def chunked_limited_mask_function(left_ctx: int, right_ctx: int) -> Callable:
     """
 )
 class NemotronAsrStreamingEncoder(ParakeetEncoder):
+    def __init__(self, config: NemotronAsrStreamingEncoderConfig):
+        super().__init__(config)
+        self.subsampling = NemotronAsrStreamingEncoderSubsamplingConv2D(config)
+        self.encode_positions = NemotronAsrStreamingEncoderRelPositionalEncoding(config)
+
+        self.layers = nn.ModuleList(
+            [NemotronAsrStreamingEncoderBlock(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+
     @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
@@ -1040,6 +1068,8 @@ class NemotronAsrStreamingForRNNT(
 
     def __init__(self, config: NemotronAsrStreamingConfig):
         super().__init__(config)
+        self.decoder = NemotronAsrStreamingRNNTDecoder(config)
+        self.joint = NemotronAsrStreamingRNNTJointNetwork(config)
 
     @auto_docstring
     @can_return_tuple

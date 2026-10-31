@@ -221,6 +221,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
         self.high_res_vision_alpha = nn.Parameter(torch.zeros(1))
 
         super().__init__(config)
+        self.aligner = DeepseekVLHybridAligner(config)
 
     def get_low_res_image_features(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
         return self.vision_model(pixel_values, return_dict=True, **kwargs)
@@ -336,6 +337,10 @@ class DeepseekVLHybridModel(DeepseekVLModel):
 
 
 class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneration):
+    def __init__(self, config: DeepseekVLHybridConfig):
+        super().__init__(config)
+        self.model = DeepseekVLHybridModel(config)
+
     @can_return_tuple
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
     def forward(

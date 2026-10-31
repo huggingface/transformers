@@ -402,7 +402,14 @@ class BailingHybridMoE(DeepseekV3MoE):
 
 
 class BailingHybridDecoderLayer(KimiLinearDecoderLayer):
-    pass
+    def __init__(self, config: BailingHybridConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.self_attn = (
+            # CODEPATH: TODO: remove this once the mlinter rule is relaxed
+            BailingHybridAttention(config, layer_idx)
+            if config.layer_types[layer_idx] == "full_attention"
+            else BailingHybridDeltaAttention(config, layer_idx)
+        )
 
 
 @auto_docstring
@@ -441,11 +448,21 @@ class BailingHybridPreTrainedModel(Qwen3NextPreTrainedModel):
 
 @auto_docstring
 class BailingHybridModel(Qwen3NextModel):
-    pass
+    def __init__(self, config: BailingHybridConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [BailingHybridDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = BailingHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = BailingHybridRotaryEmbedding(config=config)
 
 
 class BailingHybridForCausalLM(DeepseekV3ForCausalLM, GenerationMixin):
     _tied_weights_keys = {}
+
+    def __init__(self, config: BailingHybridConfig):
+        super().__init__(config)
+        self.model = BailingHybridModel(config)
 
 
 __all__ = [

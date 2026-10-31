@@ -568,6 +568,7 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
         super().__init__(self)
         self.visual = Cosmos3EdgeVisionModel._from_config(config.vision_config)
         self.projector = Cosmos3EdgePatchMerger(config)
+        self.language_model = Cosmos3EdgeTextModel._from_config(config.text_config)
 
     def get_image_features(
         self,
@@ -622,6 +623,10 @@ class Cosmos3EdgeForConditionalGeneration(Qwen2VLForConditionalGeneration, Cosmo
     config: Cosmos3EdgeConfig
     _tied_weights_keys = {}
     accepts_loss_kwargs = False
+
+    def __init__(self, config: Cosmos3EdgeConfig):
+        super().__init__(config)
+        self.model = Cosmos3EdgeModel(config)
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         # Qwen2-VL exposes four axes (text plus three visual axes). Edge's interleaved M-RoPE consumes the three

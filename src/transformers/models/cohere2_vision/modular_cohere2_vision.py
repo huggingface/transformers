@@ -92,6 +92,11 @@ class Cohere2VisionPreTrainedModel(AyaVisionPreTrainedModel):
 
 
 class Cohere2VisionModel(AyaVisionModel):
+    def __init__(self, config: Cohere2VisionConfig):
+        super().__init__(config)
+
+        self.multi_modal_projector = Cohere2VisionMultiModalProjector(config)
+
     @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
@@ -160,6 +165,10 @@ class Cohere2VisionModel(AyaVisionModel):
 
 
 class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
+    def __init__(self, config: Cohere2VisionConfig):
+        super().__init__(config)
+        self.model = Cohere2VisionModel(config)
+
     @auto_docstring
     def get_image_features(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]

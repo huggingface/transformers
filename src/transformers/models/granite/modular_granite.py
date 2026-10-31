@@ -179,6 +179,10 @@ class GraniteModel(LlamaModel):
 
 
 class GraniteForCausalLM(LlamaForCausalLM):
+    def __init__(self, config: GraniteConfig):
+        super().__init__(config)
+        self.model = GraniteModel(config)
+
     @can_return_tuple
     @auto_docstring
     def forward(

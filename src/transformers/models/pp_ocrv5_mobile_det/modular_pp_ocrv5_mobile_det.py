@@ -261,7 +261,10 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
     """
 )
 class PPOCRV5MobileDetForObjectDetection(PPOCRV5ServerDetForObjectDetection):
-    pass
+    def __init__(self, config: PPOCRV5MobileDetConfig):
+        super().__init__(config)
+        self.model = PPOCRV5MobileDetModel(config)
+        self.head = PPOCRV5MobileDetHead(config)
 
 
 __all__ = [

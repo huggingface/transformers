@@ -41,6 +41,7 @@ from ..rt_detr.modeling_rt_detr import (
     RTDetrModel,
     RTDetrPreTrainedModel,
     RTDetrRepVggBlock,
+    RTDetrSelfAttention,
     inverse_sigmoid,
 )
 from ..rt_detr_v2.modeling_rt_detr_v2 import multi_scale_deformable_attention_v2
@@ -553,6 +554,10 @@ class DFineSCDown(nn.Module):
         return input_features
 
 
+class DFineSelfAttention(RTDetrSelfAttention):
+    pass
+
+
 class DFineEncoderLayer(RTDetrEncoderLayer):
     def __init__(self, config: DFineConfig):
         super().__init__(config)
@@ -562,7 +567,9 @@ class DFineEncoderLayer(RTDetrEncoderLayer):
 
 
 class DFineAIFILayer(RTDetrAIFILayer):
-    pass
+    def __init__(self, config: DFineConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList([DFineEncoderLayer(config) for _ in range(config.encoder_layers)])
 
 
 class DFineIntegral(nn.Module):
@@ -783,6 +790,12 @@ class DFineDecoder(RTDetrDecoder):
     utilizing attention mechanisms, location quality estimators, and distribution refinement techniques
     to improve bounding box accuracy and robustness.
     """
+
+    _can_record_outputs = {
+        "hidden_states": DFineDecoderLayer,
+        "attentions": DFineSelfAttention,
+        "cross_attentions": DFineMultiscaleDeformableAttention,
+    }
 
     def __init__(self, config: DFineConfig):
         self.eval_idx = config.eval_idx if config.eval_idx >= 0 else config.decoder_layers + config.eval_idx

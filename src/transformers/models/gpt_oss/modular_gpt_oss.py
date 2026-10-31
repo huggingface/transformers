@@ -339,6 +339,14 @@ class GptOssPreTrainedModel(LlamaPreTrainedModel):
 
 
 class GptOssModel(MixtralModel):
+    def __init__(self, config: GptOssConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [GptOssDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = GptOssRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = GptOssRotaryEmbedding(config=config)
+
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -400,7 +408,9 @@ class GptOssModel(MixtralModel):
 
 
 class GptOssForCausalLM(MixtralForCausalLM):
-    pass
+    def __init__(self, config: GptOssConfig):
+        super().__init__(config)
+        self.model = GptOssModel(config)
 
 
 class GptOssForSequenceClassification(MixtralForSequenceClassification):

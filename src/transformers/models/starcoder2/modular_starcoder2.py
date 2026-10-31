@@ -200,7 +200,9 @@ class Starcoder2Model(MistralModel):
 
 
 class Starcoder2ForCausalLM(MistralForCausalLM):
-    pass
+    def __init__(self, config: Starcoder2Config):
+        super().__init__(config)
+        self.model = Starcoder2Model(config)
 
 
 class Starcoder2ForSequenceClassification(MistralForSequenceClassification):

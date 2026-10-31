@@ -193,6 +193,7 @@ class PhiModel(LlamaModel):
         self.embed_dropout = nn.Dropout(config.embd_pdrop)
         self.final_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         del self.norm
+        self.rotary_emb = PhiRotaryEmbedding(config=config)
 
     @merge_with_config_defaults
     @capture_outputs
@@ -256,6 +257,7 @@ class PhiForCausalLM(LlamaForCausalLM):
     def __init__(self, config: PhiConfig):
         super().__init__(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
+        self.model = PhiModel(config)
 
 
 class PhiForSequenceClassification(LlamaForSequenceClassification):

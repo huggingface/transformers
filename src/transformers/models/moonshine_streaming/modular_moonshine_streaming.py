@@ -409,7 +409,12 @@ class MoonshineStreamingModel(MoonshineModel):
         self.decoder = MoonshineStreamingDecoder(config)
 
 
-class MoonshineStreamingForConditionalGeneration(MoonshineForConditionalGeneration): ...
+class MoonshineStreamingForConditionalGeneration(MoonshineForConditionalGeneration):
+    ...
+
+    def __init__(self, config: MoonshineStreamingConfig):
+        super().__init__(config)
+        self.model = MoonshineStreamingModel(config)
 
 
 __all__ = [

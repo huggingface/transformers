@@ -774,7 +774,9 @@ class MistralLarge4TextExperts(Mistral4Experts):
 
 
 class MistralLarge4TextMoE(Mistral4MoE):
-    pass
+    def __init__(self, config: MistralLarge4TextConfig):
+        super().__init__(config)
+        self.gate = MistralLarge4TextTopkRouter(config)
 
 
 class MistralLarge4TextDecoderLayer(GlmMoeDsaDecoderLayer):
@@ -785,6 +787,7 @@ class MistralLarge4TextDecoderLayer(GlmMoeDsaDecoderLayer):
         )
         self.input_layernorm = MistralLarge4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MistralLarge4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.self_attn = MistralLarge4TextAttention(config, layer_idx)
 
     def forward(
         self,
@@ -834,6 +837,11 @@ class MistralLarge4PreTrainedModel(GlmMoeDsaPreTrainedModel):
     _keep_in_fp32_modules_strict = ["rotary_emb", "mlp.gate.weight"]
     # The checkpoint ships a multi-token-prediction draft head that this model does not implement yet # TODO
     _keys_to_ignore_on_load_unexpected = [r"mtp_dspark\..*"]
+    _can_record_outputs = {
+        "hidden_states": MistralLarge4TextDecoderLayer,
+        "attentions": MistralLarge4TextAttention,
+        "router_logits": OutputRecorder(MistralLarge4TextTopkRouter, index=0),
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -855,6 +863,10 @@ class MistralLarge4TextModel(MistralLarge4PreTrainedModel, GlmMoeDsaModel):
     def __init__(self, config: MistralLarge4TextConfig):
         super().__init__(config)
         self.norm = MistralLarge4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.layers = nn.ModuleList(
+            [MistralLarge4TextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.rotary_emb = MistralLarge4TextRotaryEmbedding(config=config)
 
     @merge_with_config_defaults
     @capture_outputs
@@ -1014,6 +1026,7 @@ class MistralLarge4ForConditionalGeneration(Mistral3ForConditionalGeneration):
     def __init__(self, config: MistralLarge4Config):
         super().__init__(config)
         self.final_logit_softcapping = self.config.get_text_config().final_logit_softcapping
+        self.model = MistralLarge4Model(config)
 
     @merge_with_config_defaults
     @can_return_tuple

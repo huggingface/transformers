@@ -87,6 +87,7 @@ class ViTMSNModel(ViTModel):
         """
         super().__init__(config)
         del self.pooler
+        self.embeddings = ViTMSNEmbeddings(config, use_mask_token=use_mask_token)
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)

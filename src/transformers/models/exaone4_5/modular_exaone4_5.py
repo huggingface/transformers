@@ -189,7 +189,9 @@ class Exaone4_5_MLP(Qwen2_5_VLMLP):
 
 
 class Exaone4_5_VisionBlock(Qwen2_5_VLVisionBlock):
-    pass
+    def __init__(self, config, attn_implementation: str = "sdpa") -> None:
+        super().__init__(config, attn_implementation)
+        self.attn = Exaone4_5_VisionAttention(config=config)
 
 
 class Exaone4_5_PreTrainedModel(Exaone4PreTrainedModel):
@@ -200,6 +202,10 @@ class Exaone4_5_PreTrainedModel(Exaone4PreTrainedModel):
 
 class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel, Qwen2_5_VisionTransformerPretrainedModel):
     config: Exaone4_5_VisionConfig
+    _can_record_outputs = {
+        "hidden_states": Exaone4_5_VisionBlock,
+        "attentions": Exaone4_5_VisionAttention,
+    }
 
     def __init__(self, config: Exaone4_5_VisionConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -326,6 +332,10 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
     """
 
     input_modalities = ("image", "video", "text")
+
+    def __init__(self, config: Exaone4_5_Config):
+        super().__init__(config)
+        self.model = Exaone4_5_Model(config)
 
     def forward(
         self,

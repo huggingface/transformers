@@ -297,6 +297,10 @@ class LightOnOcrModel(Mistral3Model):
 
 
 class LightOnOcrForConditionalGeneration(Mistral3ForConditionalGeneration):
+    def __init__(self, config: LightOnOcrConfig):
+        super().__init__(config)
+        self.model = LightOnOcrModel(config)
+
     @auto_docstring
     def get_image_features(
         self, pixel_values: torch.FloatTensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
