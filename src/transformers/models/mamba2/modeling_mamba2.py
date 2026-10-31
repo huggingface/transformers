@@ -473,7 +473,8 @@ class Mamba2Mixer(nn.Module):
 
         A = -torch.exp(self.A_log.float())
         fused_kwargs = kwargs | {"dt_limit": self.time_step_limit}
-        if self.training and cache_params is None:
+        # The fused kernel ignores padding: at inference, only use it without a padding mask
+        if cache_params is None and (self.training or attention_mask is None):
             fused_output = mamba2_split_conv1d_scan_combined(
                 projected_states,
                 self.conv1d.weight.squeeze(1),
