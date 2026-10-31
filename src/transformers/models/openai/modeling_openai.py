@@ -297,7 +297,7 @@ class OpenAIGPTDoubleHeadsModelOutput(ModelOutput):
 
 @auto_docstring
 class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: OpenAIGPTConfig):
         super().__init__(config)
 
         self.tokens_embed = nn.Embedding(config.vocab_size, config.n_embd)
@@ -414,7 +414,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
 class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "transformer.tokens_embed.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: OpenAIGPTConfig):
         super().__init__(config)
         self.transformer = OpenAIGPTModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
@@ -498,7 +498,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel, GenerationMixin):
 class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
     _tied_weights_keys = {"transformer.tokens_embed.weight": "lm_head.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: OpenAIGPTConfig):
         super().__init__(config)
 
         config.num_labels = 1
@@ -613,7 +613,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
     """
 )
 class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: OpenAIGPTConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = OpenAIGPTModel(config)

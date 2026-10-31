@@ -159,6 +159,7 @@ class ConfigTestUtils(unittest.TestCase):
                 "_output_attentions",
                 "_attn_implementation_internal",
                 "_experts_implementation_internal",
+                "_post_init_done",
             ],
         )
         keys_with_defaults = [key for key, value in config_common_kwargs.items() if value == getattr(base_config, key)]
@@ -473,6 +474,33 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertIsInstance(new_config_instance.inf_positive, float)
         self.assertIsInstance(new_config_instance.inf_negative, float)
         self.assertIsInstance(new_config_instance.nan, float)
+
+
+class ConfigTokenPropagationTest(unittest.TestCase):
+    def test_token_kwarg_forwarded_to_get_config_dict(self):
+        """
+        Regression test: `token` is an explicit parameter of `PreTrainedConfig.from_pretrained`
+        but was not forwarded into `kwargs` before calling `get_config_dict`, so it arrived as
+        `None` in `cached_files`. This broke loading from private/gated repos when `token=` was
+        passed as a kwarg and `HF_TOKEN` env var was not set.
+        """
+        captured = {}
+
+        def fake_get_config_dict(cls, pretrained_model_name_or_path, **kwargs):
+            captured["token"] = kwargs.get("token")
+            raise OSError("stop")  # abort early, we only care about kwargs
+
+        with mock.patch.object(BertConfig, "get_config_dict", classmethod(fake_get_config_dict)):
+            try:
+                BertConfig.from_pretrained("dummy-repo", token="my-secret-token")
+            except OSError:
+                pass
+
+        self.assertEqual(
+            captured.get("token"),
+            "my-secret-token",
+            "token kwarg was not forwarded to get_config_dict",
+        )
 
 
 class ConfigSubclassKwOnlyTest(unittest.TestCase):

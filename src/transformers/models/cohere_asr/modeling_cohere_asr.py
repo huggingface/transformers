@@ -328,7 +328,7 @@ class CohereAsrDecoder(CohereAsrPreTrainedModel):
         "cross_attentions": OutputRecorder(CohereAsrCrossAttention, index=1, layer_name="encoder_attn"),
     }
 
-    def __init__(self, config):
+    def __init__(self, config: CohereAsrConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -424,7 +424,7 @@ class CohereAsrDecoder(CohereAsrPreTrainedModel):
 
 @auto_docstring
 class CohereAsrModel(CohereAsrPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CohereAsrConfig):
         super().__init__(config)
         self.encoder = AutoModel.from_config(config.encoder_config)
         self.decoder = CohereAsrDecoder(config)
@@ -548,7 +548,7 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
 class CohereAsrForConditionalGeneration(CohereAsrPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"proj_out.weight": "model.decoder.embed_tokens.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: CohereAsrConfig):
         super().__init__(config)
         self.model = CohereAsrModel(config)
         self.proj_out = nn.Linear(config.hidden_size, config.vocab_size, bias=True)

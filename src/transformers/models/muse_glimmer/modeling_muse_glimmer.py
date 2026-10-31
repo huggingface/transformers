@@ -1065,7 +1065,7 @@ class MuseGlimmerForConditionalGeneration(MuseGlimmerPreTrainedModel, Generation
     accepts_loss_kwargs = False
     input_modalities = ("image", "video", "text")
 
-    def __init__(self, config):
+    def __init__(self, config: MuseGlimmerConfig):
         super().__init__(config)
         self.model = MuseGlimmerModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)

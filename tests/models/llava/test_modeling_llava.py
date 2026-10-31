@@ -308,6 +308,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             ("xpu", 3): "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,",
             ("cuda", None): "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,",
             ("rocm", (9, 5)): "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. First, the",
+            ("rocm", (9, 4)): '\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,',
         })  # fmt: skip
         EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
 
@@ -338,6 +339,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             {
                 (None, None): "USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a dock on a large body of water, there are a few things to be cautious about. First, be mindful of the weather conditions, as sudden changes in weather can make the dock unsafe to use. Second, be aware of the water depth and any potential hazards, such as rocks or debris, that may be present in the water. Third, be cautious of the dock's stability and any potential structural issues that may affect its safety. Lastly, be aware of any local regulations or guidelines for using the dock and the surrounding water area. By taking these precautions, you can ensure a safe and enjoyable experience at this location.",
                 ("xpu", 5): "USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a dock on a large body of water, there are a few things to be cautious about. First, be mindful of the weather conditions, as sudden changes in weather can make the dock unsafe to use. Second, be aware of the water depth and any potential hazards, such as rocks or debris, that may be present in the water. Third, be cautious of the dock's stability and any potential structural issues that could lead to accidents. Lastly, be aware of any local regulations or guidelines for using the dock and the surrounding water area. By taking these precautions, you can ensure a safe and enjoyable experience at this location.",
+                ("rocm", (9, 4)): "USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a dock on a large body of water, there are a few things to be cautious about. First, be mindful of the weather conditions, as sudden changes in weather can make the dock unsafe to use. Second, be aware of the water depth and any potential hazards, such as rocks or debris, that may be present in the water. Third, be cautious of the dock's stability and any potential structural issues that could lead to accidents. Lastly, be aware of any local regulations or guidelines for using the dock and the surrounding water area. By taking these precautions, you can ensure a safe and enjoyable experience at this location.",
             }
         )  # fmt: skip
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
@@ -452,6 +454,10 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending out into a large body",
                     "USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat sleeping on a bed.",
                 ],
+                ("rocm", (9, 4)): [
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier overlooking a large body of",
+                    "USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat sleeping on a bed.",
+                ],
             }
         )
         EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
@@ -507,6 +513,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "\nUSER: Describe the image.\nASSISTANT: The image features a small, fluffy dog sitting on a sidewalk. The dog is holding",
                     "\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama",
                 ],
+                ("rocm", (9, 4)): ["\n \nUSER: What's the difference of two images?\nASSISTANT: In the two images, the primary difference is the presence of a green plant in one and a yellow", '\nUSER: Describe the image.\nASSISTANT: The image features a small, fluffy dog sitting on a sidewalk. The dog is holding', '\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama'],
             }
         )  # fmt: skip
         EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
@@ -638,6 +645,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
                 ("cuda", 8): "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which spans the entire image. The dog appears to be a puppy,",
                 ("rocm", (9, 5)): "Describe the images.The image features a dog positioned centrally, taking up a significant portion of the frame. The dog is situated against a backdrop of rugged terrain, which includes rocky cliffs and grassy slopes. The dog appears to be in a relaxed posture, possibly looking directly",
                 ("xpu", 5): "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of wooden planks, which cover the entire background. The dog appears to be a puppy,",
+                ("rocm", (9, 4)): 'Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of wooden planks, which cover the entire background. The dog appears to be a puppy,',
             }
         )  # fmt: skip
         EXPECTED_GENERATION = EXPECTED_GENERATIONS.get_expectation()
@@ -689,6 +697,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
                     'What breed is the dog?The dog in the image is a black Labrador Retriever.',
                     'What is shown in this image?A dirt path stretches into the distance, flanked by grassy areas on either side. The path appears to be well-trodden and leads towards a wooded area with tall trees. The sky is clear and blue, suggesting a bright and sunny day'
                 ],
+                ("rocm", (9, 4)): ['What breed is the dog?The dog in the image is a black Labrador Retriever.', 'What is shown in this image?A narrow dirt path is surrounded by grass and trees. The path leads to a distant point, and the sky is clear and blue.'],
             }
         )  # fmt: skip
 

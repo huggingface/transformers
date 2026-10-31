@@ -219,7 +219,7 @@ class VitMatteDetailCaptureModule(nn.Module):
     """
 )
 class VitMatteForImageMatting(VitMattePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: VitMatteConfig):
         super().__init__(config)
         self.config = config
 
