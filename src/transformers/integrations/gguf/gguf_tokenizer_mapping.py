@@ -88,6 +88,15 @@ def get_gguf_tokenizer(gguf_path: str) -> tuple[str, dict, dict]:
     }
     tokenizer, tokenizer_config = grouped["tokenizer"], grouped["tokenizer_config"]
 
+    tokenizer_type = tokenizer.get("tokenizer_type")
+    if tokenizer_type == "llama":
+        # Older files have no flag, and llama.cpp adds BOS to a sentencepiece vocabulary that does not say otherwise.
+        tokenizer_config.setdefault("add_bos_token", True)
+    elif tokenizer_type == "gemma4":
+        # The flag is set, but the reference tokenizer adds no BOS because the chat template writes `<bos>` itself.
+        # llama.cpp forces BOS on here (ggml-org/llama.cpp#21500); we follow the reference.
+        tokenizer_config["add_bos_token"] = False
+
     for name, key in _SPECIAL_TOKENS.items():
         token_id = metadata.get(f"tokenizer.ggml.{key}")
         tokenizer_config[name] = tokenizer["tokens"][token_id] if token_id is not None else None
