@@ -36,7 +36,6 @@ from ...masking_utils import (
     maybe_pad_block_sequence_ids,
     sliding_window_overlay,
 )
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -68,6 +67,8 @@ from ..gemma3n.modeling_gemma3n import (
     Gemma3nMultimodalEmbedder,
     Gemma3nPreTrainedModel,
     Gemma3nRMSNorm,
+    Gemma3nTextAttention,
+    Gemma3nTextKVSharedAttention,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -970,8 +971,7 @@ class Gemma4VisionEncoder(nn.Module):
 
 class Gemma4TextMLP(Gemma3MLP):
     def __init__(self, config: Gemma4TextConfig, layer_idx: int):
-        first_kv_shared_layer_idx = config.num_hidden_layers - config.num_kv_shared_layers
-        is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx > 0
+        is_kv_shared_layer = config.attention_layer_types[layer_idx] == "kv_shared"
         use_double_wide_mlp = config.use_double_wide_mlp and is_kv_shared_layer
         super().__init__()
         self.intermediate_size = config.intermediate_size * (2 if use_double_wide_mlp else 1)
@@ -1010,100 +1010,65 @@ class Gemma4TextRotaryEmbedding(Gemma3RotaryEmbedding):
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
 
-class Gemma4TextAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+class Gemma4TextAttention(Gemma3nTextAttention):
+    def __init__(self, config: Gemma4TextConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        # `head_dim` and `num_key_value_heads` vary per layer type
+        self.head_dim = config.per_layer_config[layer_idx].head_dim
+        self.num_key_value_groups = (
+            config.num_attention_heads // config.per_layer_config[layer_idx].num_key_value_heads
+        )
+        self.is_causal = config.use_bidirectional_attention != "all"
+        self.k_proj = nn.Linear(
+            config.hidden_size,
+            config.per_layer_config[layer_idx].num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size,
+            config.per_layer_config[layer_idx].num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
+        )
+
+
+class Gemma4TextKEqVAttention(Gemma4TextAttention):
+    """Full attention layers with `config.attention_k_eq_v`: the key projection doubles as the value projection."""
 
     def __init__(self, config: Gemma4TextConfig, layer_idx: int):
-        super().__init__()
-        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
-        self.config = config
-        self.layer_idx = layer_idx
-        self.is_sliding = self.layer_type == "sliding_attention"
-        self.sliding_window = config.sliding_window if self.is_sliding else None
-
-        layer_config = config.per_layer_config[layer_idx]
-        self.head_dim = layer_config.head_dim
-        self.use_alternative_attention = config.attention_k_eq_v and not self.is_sliding
-        self.num_key_value_groups = config.num_attention_heads // layer_config.num_key_value_heads
-        self.scaling = 1.0
-        self.attention_dropout = self.config.attention_dropout
-        self.is_causal = config.use_bidirectional_attention != "all"
-
-        # Shared kv cache
-        first_kv_shared_layer_idx = self.config.num_hidden_layers - getattr(self.config, "num_kv_shared_layers", 0)
-        self.is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx >= 0
-        prev_layers = config.layer_types[:first_kv_shared_layer_idx]
-        self.store_full_length_kv = not self.is_kv_shared_layer and layer_idx == len(prev_layers) - 1 - prev_layers[
-            ::-1
-        ].index(config.layer_types[layer_idx])
-
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.q_norm = Gemma4RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-
-        # Layers sharing kv states don't need any weight matrices
-        if not self.is_kv_shared_layer:
-            self.k_norm = Gemma4RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-            self.v_norm = Gemma4RMSNorm(self.head_dim, eps=config.rms_norm_eps, with_scale=False)
-
-            self.k_proj = nn.Linear(
-                config.hidden_size, layer_config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-            )
-            self.v_proj = (
-                nn.Linear(
-                    config.hidden_size, layer_config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-                )
-                if not self.use_alternative_attention
-                else None
-            )
-
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
+        super().__init__(config, layer_idx)
+        del self.v_proj
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor,
         attention_mask: torch.Tensor | None,
-        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]],
         past_key_values: Cache | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
         cos, sin = position_embeddings
-
         query_states = self.q_proj(hidden_states).view(hidden_shape)
         query_states = self.q_norm(query_states)
         query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
         query_states = query_states.transpose(1, 2)
 
-        # For layers with shared KV (from kv sharing point onwards), we reuse the same keys/values states as the last non-sharing layer.
-        # We cannot simply reuse the cached state if we have a Cache, as sliding layers will not remember the full states in their Cache
-        # once we are past the sliding window - so we always use `shared_kv_states` instead, even when past_key_values is not None
-        if self.is_kv_shared_layer:
-            key_states, value_states = shared_kv_states[self.layer_type]
-            # Device of past layer may be different from current one
-            key_states = key_states.to(query_states.device)
-            value_states = value_states.to(query_states.device)
-        else:
-            key_states = self.k_proj(hidden_states).view(hidden_shape)
-            value_states = self.v_proj(hidden_states).view(hidden_shape) if self.v_proj is not None else key_states
+        key_states = self.k_proj(hidden_states).view(hidden_shape)
+        # Keys double as values
+        value_states = self.v_norm(key_states)
+        value_states = value_states.transpose(1, 2)
 
-            key_states = self.k_norm(key_states)
-            key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
-            key_states = key_states.transpose(1, 2)
+        key_states = self.k_norm(key_states)
+        key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
+        key_states = key_states.transpose(1, 2)
 
-            value_states = self.v_norm(value_states)
-            value_states = value_states.transpose(1, 2)
-
-        if past_key_values is not None and not self.is_kv_shared_layer:
+        if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-        if self.store_full_length_kv:
-            shared_kv_states[self.layer_type] = key_states, value_states
+        # The last non-shared layer of each type writes last, and is the one the kv-shared layers of that type reuse
+        shared_kv_states[self.layer_type] = key_states, value_states
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -1124,6 +1089,24 @@ class Gemma4TextAttention(nn.Module):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
+
+
+class Gemma4TextKVSharedAttention(Gemma3nTextKVSharedAttention):
+    def __init__(self, config: Gemma4TextConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        # `head_dim` and `num_key_value_heads` vary per layer type
+        self.head_dim = config.per_layer_config[layer_idx].head_dim
+        self.num_key_value_groups = (
+            config.num_attention_heads // config.per_layer_config[layer_idx].num_key_value_heads
+        )
+        self.is_causal = config.use_bidirectional_attention != "all"
+
+
+GEMMA4_TEXT_ATTENTION_CLASSES = {
+    "attention": Gemma4TextAttention,
+    "k_eq_v_attention": Gemma4TextKEqVAttention,
+    "kv_shared": Gemma4TextKVSharedAttention,
+}
 
 
 class Gemma4TextExperts(MixtralExperts):
@@ -1174,7 +1157,7 @@ class Gemma4TextRouter(nn.Module):
 class Gemma4TextDecoderLayer(Gemma3DecoderLayer):
     def __init__(self, config: Gemma4TextConfig | Gemma4VisionConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.self_attn = Gemma4TextAttention(config=config, layer_idx=layer_idx)
+        self.self_attn = GEMMA4_TEXT_ATTENTION_CLASSES[config.attention_layer_types[layer_idx]](config, layer_idx)
         self.mlp = Gemma4TextMLP(config, layer_idx)
         self.layer_scalar = nn.Buffer(torch.ones(1))
 
@@ -1318,7 +1301,11 @@ class Gemma4TextModel(Gemma3TextModel):
     _can_record_outputs = {
         "router_logits": OutputRecorder(Gemma4TextRouter, index=0),
         "hidden_states": Gemma4TextDecoderLayer,
-        "attentions": Gemma4TextAttention,
+        "attentions": [
+            Gemma4TextAttention,
+            Gemma4TextKEqVAttention,
+            Gemma4TextKVSharedAttention,
+        ],
     }
 
     def __init__(self, config: Gemma4TextConfig):
@@ -1351,8 +1338,8 @@ class Gemma4TextModel(Gemma3TextModel):
 
         # Update `_keys_to_ignore_on_load_unexpected` to drop all k/v proj and norms for the shared layers
         self._keys_to_ignore_on_load_unexpected = []
-        for i, layer in enumerate(self.layers):
-            if layer.self_attn.is_kv_shared_layer:
+        for i, attention_type in enumerate(config.attention_layer_types):
+            if attention_type == "kv_shared":
                 self._keys_to_ignore_on_load_unexpected.extend(
                     [f"layers.{i}.self_attn.{name}" for name in ("k_proj", "v_proj", "k_norm", "v_norm")]
                 )

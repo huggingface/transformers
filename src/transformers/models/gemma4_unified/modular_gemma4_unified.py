@@ -56,6 +56,8 @@ from ..gemma4.modeling_gemma4 import (
     Gemma4PreTrainedModel,
     Gemma4RMSNorm,
     Gemma4TextAttention,
+    Gemma4TextKEqVAttention,
+    Gemma4TextKVSharedAttention,
     Gemma4TextMLP,
     Gemma4TextModelOutputWithPast,
     Gemma4TextRotaryEmbedding,
@@ -445,6 +447,11 @@ class Gemma4UnifiedTextConfig(Gemma4TextConfig):
     num_kv_shared_layers (`int`, defaults to 0):
         Number of consecutive decoder layers that share the same key-value projections.
         A value of 0 means no sharing (each layer has independent KV projections).
+    attention_layer_types (`list[str]`, *optional*):
+        Attention variant of each decoder layer: `"attention"`, `"k_eq_v_attention"` (full attention layers when
+        `attention_k_eq_v=True`) or `"kv_shared"` (the last `num_kv_shared_layers` layers, which reuse the kv states
+        of the last non-shared layer of the same type). Derived from `layer_types`, `num_kv_shared_layers` and
+        `attention_k_eq_v` if not set.
     use_double_wide_mlp (`bool`, defaults to `False`):
         Whether to use a double-width MLP with fused gate and up projections.
     """
@@ -616,6 +623,21 @@ class Gemma4UnifiedTextAttention(Gemma4TextAttention):
     pass
 
 
+class Gemma4UnifiedTextKEqVAttention(Gemma4TextKEqVAttention):
+    pass
+
+
+class Gemma4UnifiedTextKVSharedAttention(Gemma4TextKVSharedAttention):
+    pass
+
+
+GEMMA4_UNIFIED_TEXT_ATTENTION_CLASSES = {
+    "attention": Gemma4UnifiedTextAttention,
+    "k_eq_v_attention": Gemma4UnifiedTextKEqVAttention,
+    "kv_shared": Gemma4UnifiedTextKVSharedAttention,
+}
+
+
 class Gemma4UnifiedTextMLP(Gemma4TextMLP):
     pass
 
@@ -624,7 +646,9 @@ class Gemma4UnifiedTextDecoderLayer(Gemma2DecoderLayer):
     def __init__(self, config: Gemma4UnifiedTextConfig | Gemma4UnifiedVisionConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.layer_idx = layer_idx
-        self.self_attn = Gemma4UnifiedTextAttention(config=config, layer_idx=layer_idx)
+        self.self_attn = GEMMA4_UNIFIED_TEXT_ATTENTION_CLASSES[config.attention_layer_types[layer_idx]](
+            config, layer_idx
+        )
         self.mlp = Gemma4UnifiedTextMLP(config, layer_idx)
         self.layer_scalar = nn.Buffer(torch.ones(1))
         self.input_layernorm = Gemma4UnifiedRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -711,7 +735,11 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
     input_modalities = ("text",)
     _can_record_outputs = {
         "hidden_states": Gemma4UnifiedTextDecoderLayer,
-        "attentions": Gemma4UnifiedTextAttention,
+        "attentions": [
+            Gemma4UnifiedTextAttention,
+            Gemma4UnifiedTextKEqVAttention,
+            Gemma4UnifiedTextKVSharedAttention,
+        ],
     }
 
     def __init__(self, config: Gemma4UnifiedTextConfig):
