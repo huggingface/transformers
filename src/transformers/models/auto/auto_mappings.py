@@ -303,6 +303,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("gte", "GteConfig"),
         ("helium", "HeliumConfig"),
         ("hgnet_v2", "HGNetV2Config"),
+        ("hnet", "HNetConfig"),
         ("hiera", "HieraConfig"),
         ("higgs_audio_v2", "HiggsAudioV2Config"),
         ("higgs_audio_v2_tokenizer", "HiggsAudioV2TokenizerConfig"),

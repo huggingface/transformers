@@ -1243,6 +1243,7 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
             self.lazy_initialization(recurrent_states=recurrent_states, state_idx=state_idx)
         # Note that we copy instead of assigning, to preserve the static address for cudagraphs
         self.recurrent_states[state_idx].copy_(recurrent_states)
+        self.has_previous_state[state_idx] = True
         return self.recurrent_states[state_idx]
 
 
