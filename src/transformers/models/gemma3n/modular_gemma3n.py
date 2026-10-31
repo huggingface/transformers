@@ -197,6 +197,14 @@ class Gemma3nTextConfig(Gemma3TextConfig):
                 f"attention_layer_types={self.attention_layer_types} does not match `num_kv_shared_layers` and "
                 f"`layer_types`, expected {attention_layer_types}."
             )
+        if first_kv_shared_layer_idx > 0 and (
+            missing := set(self.layer_types[first_kv_shared_layer_idx:])
+            - set(self.layer_types[:first_kv_shared_layer_idx])
+        ):
+            raise ValueError(
+                f"kv-shared layers of type {sorted(missing)} have no preceding non-shared layer of the same type to "
+                "reuse the kv states from."
+            )
 
         PreTrainedConfig.__post_init__(**kwargs)
 

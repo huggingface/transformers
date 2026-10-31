@@ -105,10 +105,10 @@ class Gemma4TextConfig(PreTrainedConfig):
         Number of consecutive decoder layers that share the same key-value projections.
         A value of 0 means no sharing (each layer has independent KV projections).
     attention_layer_types (`list[str]`, *optional*):
-        Attention variant of each decoder layer: `"attention"`, `"kv_source"` (last non-shared layer of its type,
-        whose kv states the shared layers reuse), `"kv_shared"`, or the `"k_eq_v_"`-prefixed variants of the first
-        two for full attention layers when `attention_k_eq_v=True`. Derived from `layer_types`,
-        `num_kv_shared_layers` and `attention_k_eq_v` if not set.
+        Attention variant of each decoder layer: `"attention"`, `"k_eq_v_attention"` (full attention layers when
+        `attention_k_eq_v=True`) or `"kv_shared"` (the last `num_kv_shared_layers` layers, which reuse the kv states
+        of the last non-shared layer of the same type). Derived from `layer_types`, `num_kv_shared_layers` and
+        `attention_k_eq_v` if not set.
     enable_moe_block (`bool`, defaults to `False`):
         Whether to enable Mixture-of-Experts (MoE) blocks in the decoder layers. When
         `True`, eligible layers will use a sparse MoE feed-forward network.
@@ -208,15 +208,18 @@ class Gemma4TextConfig(PreTrainedConfig):
 
         attention_layer_types = []
         first_kv_shared_layer_idx = self.num_hidden_layers - self.num_kv_shared_layers
-        prev_layers = self.layer_types[:first_kv_shared_layer_idx]
         for layer_idx, layer_type in enumerate(self.layer_types):
             if layer_idx >= first_kv_shared_layer_idx > 0:
+                # kv-shared layers reuse the kv states of the last non-shared layer of the same type
+                if layer_type not in self.layer_types[:first_kv_shared_layer_idx]:
+                    raise ValueError(
+                        f"Layer {layer_idx} is kv-shared but no non-shared `{layer_type}` layer precedes it"
+                    )
                 attention_layer_types.append("kv_shared")
-                continue
-            # The last non-shared layer of each type stores its full-length kv for the shared layers
-            is_kv_source = layer_idx == len(prev_layers) - 1 - prev_layers[::-1].index(layer_type)
-            k_eq_v = "k_eq_v_" if self.attention_k_eq_v and layer_type != "sliding_attention" else ""
-            attention_layer_types.append(k_eq_v + ("kv_source" if is_kv_source else "attention"))
+            elif self.attention_k_eq_v and layer_type != "sliding_attention":
+                attention_layer_types.append("k_eq_v_attention")
+            else:
+                attention_layer_types.append("attention")
         if self.attention_layer_types is None:
             self.attention_layer_types = attention_layer_types
         elif self.attention_layer_types != attention_layer_types:

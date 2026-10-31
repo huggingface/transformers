@@ -361,20 +361,14 @@ class AXK2Attention(DeepseekV32Attention):
             past_key_values=past_key_values,
         )
 
-        sparse_indices = None
+        sparse_indices = topk_indices
         if self.config._attn_implementation in ("eager", "sdpa"):
-            index_mask = (
-                topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
-                .scatter(-1, topk_indices.long(), False)
-                .unsqueeze(1)
-            )
-
-            if attention_mask.dtype == torch.bool:
-                attention_mask = attention_mask & ~index_mask
-            else:
-                attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
-        else:
-            sparse_indices = topk_indices
+            # Eager / SDPA can't consume indices: mask every key the indexer did not select instead
+            selected = topk_indices.new_zeros((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
+            selected = selected.scatter(-1, topk_indices.long(), True).unsqueeze(1)
+            masked_value = False if attention_mask.dtype == torch.bool else torch.finfo(hidden_states.dtype).min
+            attention_mask = attention_mask.masked_fill(~selected, masked_value)
+            sparse_indices = None
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward

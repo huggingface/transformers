@@ -58,9 +58,9 @@ class MistralLarge4TextConfig(PreTrainedConfig):
         index computes and caches its own latent KV; a layer pointing at an earlier layer has no `kv_a_proj_with_mqa`
         and reuses that layer's cache (the source layer must be its own source). Defaults to no sharing.
     attention_layer_types (`list[str]`, *optional*):
-        Attention type of each layer: `"rope"` or `"nope"`, suffixed with `"_kv_source"` for layers whose latent KV
-        is reused by later layers, or `"_kv_shared"` for layers reusing it. Derived from `no_rope_layers` and
-        `kv_source_layers` if not set, and must agree with them otherwise.
+        Attention type of each layer: `"rope"`, `"nope"`, or `"nope_kv_shared"` for NoPE layers reusing the latent KV
+        of the most recent `"nope"` layer. Derived from `no_rope_layers` and `kv_source_layers` if not set, and must
+        agree with them otherwise.
 
     ```python
     >>> from transformers import MistralLarge4TextConfig, MistralLarge4TextModel
@@ -120,6 +120,7 @@ class MistralLarge4TextConfig(PreTrainedConfig):
     n_group: int = 1
     topk_group: int = 1
     num_experts_per_tok: int = 4
+    norm_topk_prob: bool = True
     hidden_act: str = "silu"
     max_position_embeddings: int = 1048576
     initializer_range: float = 0.02
@@ -167,15 +168,19 @@ class MistralLarge4TextConfig(PreTrainedConfig):
         # KV sharing: by default every layer owns its latent KV cache
         if self.kv_source_layers is None:
             self.kv_source_layers = list(range(self.num_hidden_layers))
-        # Attention type of each layer: RoPE or NoPE, and whether it shares its latent KV, reuses another's, or neither
-        attention_layer_types = []
+        # Attention type of each layer. KV sharing layers reuse the latent KV of the most recent NoPE layer
+        attention_layer_types, last_nope_layer = [], None
         for layer_idx, source in enumerate(self.kv_source_layers):
-            layer_type = "rope" if self.no_rope_layers[layer_idx] else "nope"
-            if source != layer_idx:
-                layer_type += "_kv_shared"
-            elif layer_idx in self.kv_source_layers[layer_idx + 1 :]:
-                layer_type += "_kv_source"
-            attention_layer_types.append(layer_type)
+            if source == layer_idx:
+                attention_layer_types.append("rope" if self.no_rope_layers[layer_idx] else "nope")
+                last_nope_layer = layer_idx if attention_layer_types[-1] == "nope" else last_nope_layer
+            elif self.no_rope_layers[layer_idx] or source != last_nope_layer:
+                raise ValueError(
+                    f"Layer {layer_idx} can only share the KV of the most recent NoPE layer computing its own "
+                    f"({last_nope_layer}), and must be a NoPE layer itself; got source {source}."
+                )
+            else:
+                attention_layer_types.append("nope_kv_shared")
         if self.attention_layer_types is None:
             self.attention_layer_types = attention_layer_types
         elif self.attention_layer_types != attention_layer_types:

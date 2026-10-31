@@ -57,9 +57,7 @@ from ..gemma4.modeling_gemma4 import (
     Gemma4RMSNorm,
     Gemma4TextAttention,
     Gemma4TextKEqVAttention,
-    Gemma4TextKEqVKVSourceAttention,
     Gemma4TextKVSharedAttention,
-    Gemma4TextKVSourceAttention,
     Gemma4TextMLP,
     Gemma4TextModelOutputWithPast,
     Gemma4TextRotaryEmbedding,
@@ -450,10 +448,10 @@ class Gemma4UnifiedTextConfig(Gemma4TextConfig):
         Number of consecutive decoder layers that share the same key-value projections.
         A value of 0 means no sharing (each layer has independent KV projections).
     attention_layer_types (`list[str]`, *optional*):
-        Attention variant of each decoder layer: `"attention"`, `"kv_source"` (last non-shared layer of its type,
-        whose kv states the shared layers reuse), `"kv_shared"`, or the `"k_eq_v_"`-prefixed variants of the first
-        two for full attention layers when `attention_k_eq_v=True`. Derived from `layer_types`,
-        `num_kv_shared_layers` and `attention_k_eq_v` if not set.
+        Attention variant of each decoder layer: `"attention"`, `"k_eq_v_attention"` (full attention layers when
+        `attention_k_eq_v=True`) or `"kv_shared"` (the last `num_kv_shared_layers` layers, which reuse the kv states
+        of the last non-shared layer of the same type). Derived from `layer_types`, `num_kv_shared_layers` and
+        `attention_k_eq_v` if not set.
     use_double_wide_mlp (`bool`, defaults to `False`):
         Whether to use a double-width MLP with fused gate and up projections.
     """
@@ -621,10 +619,6 @@ class Gemma4UnifiedTextAttention(Gemma4TextAttention):
     pass
 
 
-class Gemma4UnifiedTextKVSourceAttention(Gemma4TextKVSourceAttention):
-    pass
-
-
 class Gemma4UnifiedTextKEqVAttention(Gemma4TextKEqVAttention):
     pass
 
@@ -633,15 +627,9 @@ class Gemma4UnifiedTextKVSharedAttention(Gemma4TextKVSharedAttention):
     pass
 
 
-class Gemma4UnifiedTextKEqVKVSourceAttention(Gemma4TextKEqVKVSourceAttention):
-    pass
-
-
 GEMMA4_UNIFIED_TEXT_ATTENTION_CLASSES = {
     "attention": Gemma4UnifiedTextAttention,
-    "kv_source": Gemma4UnifiedTextKVSourceAttention,
     "k_eq_v_attention": Gemma4UnifiedTextKEqVAttention,
-    "k_eq_v_kv_source": Gemma4UnifiedTextKEqVKVSourceAttention,
     "kv_shared": Gemma4UnifiedTextKVSharedAttention,
 }
 
@@ -741,8 +729,6 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
         "attentions": [
             Gemma4UnifiedTextAttention,
             Gemma4UnifiedTextKEqVAttention,
-            Gemma4UnifiedTextKVSourceAttention,
-            Gemma4UnifiedTextKEqVKVSourceAttention,
             Gemma4UnifiedTextKVSharedAttention,
         ],
     }

@@ -87,11 +87,11 @@ class MistralLarge4VisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("index_topk", 4)
         kwargs.setdefault("index_head_dim", 16)
         kwargs.setdefault("index_n_heads", 2)
-        # RoPE, NoPE, RoPE, NoPE. Since KV can only be shared by layers with the same PE, layer 3 reuse layer 1's KV,
-        # and layer 2 reuses layer 0's KV. We also test index sharing in the last two layers.
+        # RoPE, NoPE, RoPE, NoPE. Only NoPE layers share KV, with the most recent NoPE layer: layer 3 reuses layer 1's
+        # KV. We also test index sharing in the last two layers.
         kwargs.setdefault("num_hidden_layers", 4)
         kwargs.setdefault("no_rope_layers", [1, 0, 1, 0])
-        kwargs.setdefault("kv_source_layers", [0, 1, 0, 1])
+        kwargs.setdefault("kv_source_layers", [0, 1, 2, 1])
         kwargs.setdefault("indexer_types", ["full", "full", "shared", "shared"])
         # MoE: layer 0 is dense, the others route to 2 of 8 experts plus a shared expert
         kwargs.setdefault("first_k_dense_replace", 1)

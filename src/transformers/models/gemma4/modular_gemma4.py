@@ -68,7 +68,7 @@ from ..gemma3n.modeling_gemma3n import (
     Gemma3nPreTrainedModel,
     Gemma3nRMSNorm,
     Gemma3nTextAttention,
-    Gemma3nTextKVSourceAttention,
+    Gemma3nTextKVSharedAttention,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -1074,77 +1074,7 @@ class Gemma4TextKEqVAttention(Gemma3nTextAttention):
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=self.attention_dropout if self.training else 0.0,
-            scaling=self.scaling,
-            sliding_window=self.sliding_window,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
-
-
-class Gemma4TextKVSourceAttention(Gemma3nTextKVSourceAttention):
-    def __init__(self, config: Gemma4TextConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        # `head_dim` and `num_key_value_heads` vary per layer type
-        self.head_dim = config.per_layer_config[layer_idx].head_dim
-        self.num_key_value_groups = (
-            config.num_attention_heads // config.per_layer_config[layer_idx].num_key_value_heads
-        )
-        self.is_causal = config.use_bidirectional_attention != "all"
-        self.k_proj = nn.Linear(
-            config.hidden_size,
-            config.per_layer_config[layer_idx].num_key_value_heads * self.head_dim,
-            bias=config.attention_bias,
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size,
-            config.per_layer_config[layer_idx].num_key_value_heads * self.head_dim,
-            bias=config.attention_bias,
-        )
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: torch.Tensor,
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
-        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        cos, sin = position_embeddings
-        query_states = self.q_proj(hidden_states).view(hidden_shape)
-        query_states = self.q_norm(query_states)
-        query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
-        query_states = query_states.transpose(1, 2)
-
-        key_states = self.k_proj(hidden_states).view(hidden_shape)
-        key_states = self.k_norm(key_states)
-        key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
-        key_states = key_states.transpose(1, 2)
-
-        value_states = self.v_proj(hidden_states).view(hidden_shape)
-        value_states = self.v_norm(value_states)
-        value_states = value_states.transpose(1, 2)
-
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        # The last non-shared layer of each type writes last, and is the one the kv-shared layers of that type reuse
         shared_kv_states[self.layer_type] = key_states, value_states
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -1168,9 +1098,7 @@ class Gemma4TextKVSourceAttention(Gemma3nTextKVSourceAttention):
         return attn_output, attn_weights
 
 
-class Gemma4TextKEqVKVSourceAttention(Gemma3nTextKVSourceAttention):
-    """A `Gemma4TextKEqVAttention` layer that is also the kv source of its type."""
-
+class Gemma4TextKVSharedAttention(Gemma3nTextKVSharedAttention):
     def __init__(self, config: Gemma4TextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         # `head_dim` and `num_key_value_heads` vary per layer type
@@ -1179,133 +1107,12 @@ class Gemma4TextKEqVKVSourceAttention(Gemma3nTextKVSourceAttention):
             config.num_attention_heads // config.per_layer_config[layer_idx].num_key_value_heads
         )
         self.is_causal = config.use_bidirectional_attention != "all"
-        self.k_proj = nn.Linear(
-            config.hidden_size,
-            config.per_layer_config[layer_idx].num_key_value_heads * self.head_dim,
-            bias=config.attention_bias,
-        )
-        del self.v_proj
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: torch.Tensor,
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
-        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        cos, sin = position_embeddings
-        query_states = self.q_proj(hidden_states).view(hidden_shape)
-        query_states = self.q_norm(query_states)
-        query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
-        query_states = query_states.transpose(1, 2)
-
-        key_states = self.k_proj(hidden_states).view(hidden_shape)
-        # Keys double as values
-        value_states = self.v_norm(key_states)
-        value_states = value_states.transpose(1, 2)
-
-        key_states = self.k_norm(key_states)
-        key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
-        key_states = key_states.transpose(1, 2)
-
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-        shared_kv_states[self.layer_type] = key_states, value_states
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=self.attention_dropout if self.training else 0.0,
-            scaling=self.scaling,
-            sliding_window=self.sliding_window,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
-
-
-class Gemma4TextKVSharedAttention(Gemma3nTextAttention):
-    """Reuses the kv states of the last non-shared layer of the same type, so it has no k/v weights."""
-
-    def __init__(self, config: Gemma4TextConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        # `head_dim` and `num_key_value_heads` vary per layer type
-        self.head_dim = config.per_layer_config[layer_idx].head_dim
-        self.num_key_value_groups = (
-            config.num_attention_heads // config.per_layer_config[layer_idx].num_key_value_heads
-        )
-        self.is_causal = config.use_bidirectional_attention != "all"
-        # Layers sharing kv states don't need any weight matrices
-        del self.k_proj
-        del self.v_proj
-        del self.k_norm
         del self.v_norm
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: torch.Tensor,
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
-        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        cos, sin = position_embeddings
-        query_states = self.q_proj(hidden_states).view(hidden_shape)
-        query_states = self.q_norm(query_states)
-        query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
-        query_states = query_states.transpose(1, 2)
-
-        # We cannot simply reuse the cached state if we have a Cache, as sliding layers will not remember the full states in their Cache
-        # once we are past the sliding window - so we always use `shared_kv_states` instead, even when past_key_values is not None
-        key_states, value_states = shared_kv_states[self.layer_type]
-        # Device of past layer may be different from current one
-        key_states = key_states.to(query_states.device)
-        value_states = value_states.to(query_states.device)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=self.attention_dropout if self.training else 0.0,
-            scaling=self.scaling,
-            sliding_window=self.sliding_window,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
 
 
 GEMMA4_TEXT_ATTENTION_CLASSES = {
     "attention": Gemma4TextAttention,
-    "kv_source": Gemma4TextKVSourceAttention,
     "k_eq_v_attention": Gemma4TextKEqVAttention,
-    "k_eq_v_kv_source": Gemma4TextKEqVKVSourceAttention,
     "kv_shared": Gemma4TextKVSharedAttention,
 }
 
@@ -1505,8 +1312,6 @@ class Gemma4TextModel(Gemma3TextModel):
         "attentions": [
             Gemma4TextAttention,
             Gemma4TextKEqVAttention,
-            Gemma4TextKVSourceAttention,
-            Gemma4TextKEqVKVSourceAttention,
             Gemma4TextKVSharedAttention,
         ],
     }
