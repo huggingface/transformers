@@ -2157,7 +2157,10 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
 
         elif isinstance(module, Mask2FormerPixelDecoderEncoderMultiscaleDeformableAttention):
             init.constant_(module.sampling_offsets.weight, 0.0)
-            thetas = torch.arange(module.n_heads, dtype=torch.int64).float() * (2.0 * math.pi / module.n_heads)
+            default_dtype = torch.get_default_dtype()
+            thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
+                2.0 * math.pi / module.n_heads
+            )
             grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
             grid_init = (
                 (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
@@ -2181,6 +2184,20 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
                 if p.dim() > 1:
                     init.xavier_uniform_(p, gain=xavier_std)
             init.zeros_(module.cross_attn.in_proj_bias)
+
+        elif isinstance(module, Mask2FormerMLPPredictionHead):
+            for submodule in module.modules():
+                if isinstance(submodule, nn.Linear):
+                    init.kaiming_uniform_(submodule.weight, a=math.sqrt(5))
+                    if submodule.bias is not None:
+                        fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(submodule.weight)
+                        bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+                        init.uniform_(submodule.bias, -bound, bound)
+
+        elif isinstance(module, nn.Embedding):
+            init.normal_(module.weight, mean=0.0, std=1.0)
+            if module.padding_idx is not None:
+                init.zeros_(module.weight[module.padding_idx])
 
         elif isinstance(module, Mask2FormerPixelDecoder):
             init.normal_(module.level_embed, std=0)

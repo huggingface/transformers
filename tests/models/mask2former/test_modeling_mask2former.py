@@ -41,6 +41,10 @@ if is_torch_available():
     import torch
 
     from transformers import Mask2FormerForUniversalSegmentation, Mask2FormerModel
+    from transformers.models.mask2former.modeling_mask2former import (
+        Mask2FormerMaskedAttentionDecoder,
+        Mask2FormerPixelDecoderEncoderMultiscaleDeformableAttention,
+    )
 
     if is_vision_available():
         from transformers import Mask2FormerImageProcessorPil
@@ -265,6 +269,33 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             model = model_class(config).to(torch_device)
             outputs = model(**inputs, output_attentions=True)
             self.assertTrue(outputs.attentions is not None)
+
+    def test_initialization(self):
+        config = Mask2FormerConfig()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            for name, module in model.named_modules():
+                if isinstance(module, torch.nn.Embedding):
+                    std = torch.std(module.weight.data).item()
+                    self.assertTrue(
+                        0.8 < std < 1.2,
+                        f"Embedding {name} has std {std}, expected close to 1.0",
+                    )
+                elif isinstance(module, Mask2FormerMaskedAttentionDecoder):
+                    for submodule in module.mask_predictor.mask_embedder.modules():
+                        if isinstance(submodule, torch.nn.Linear):
+                            self.assertIsNotNone(submodule.bias)
+                            self.assertFalse(
+                                torch.all(submodule.bias == 0),
+                                "Mask MLP biases should not be all zero",
+                            )
+                elif isinstance(module, Mask2FormerPixelDecoderEncoderMultiscaleDeformableAttention):
+                    self.assertTrue(torch.all(module.sampling_offsets.weight.data == 0.0))
+                    self.assertFalse(torch.all(module.sampling_offsets.bias.data == 0.0))
+                    self.assertTrue(torch.all(module.attention_weights.weight.data == 0.0))
+                    self.assertTrue(torch.all(module.attention_weights.bias.data == 0.0))
+                    self.assertFalse(torch.all(module.value_proj.weight.data == 0.0))
+                    self.assertTrue(torch.all(module.value_proj.bias.data == 0.0))
 
     def test_training(self):
         if not self.model_tester.is_training:
