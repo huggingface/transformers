@@ -1,11 +1,13 @@
-# Scheduled build of the AMD Ryzen "Strix Halo" (gfx1151) CI image.
+# Scheduled build of the AMD CI images: Ryzen "Strix Halo" (gfx1151) and Radeon
+# AI Pro R9700 (gfx1201), both from docker/transformers-pytorch-amd-gpu-gfx1151
+# with GPU_ARCH set per image.
 #
 # Built ONCE here (on a GitHub-hosted builder, off the pool) and pushed to GHCR;
 # the test workflow (amd-strix-halo-probe.yml) then just pulls it. Mirrors how
 # build-docker-images.yml builds the MI300 image. Push to a
 # `build_amd_gfx1151_image*` branch (or run it manually) to refresh the image
 # after a Dockerfile change.
-name: Build AMD gfx1151 (Strix Halo) CI image
+name: Build AMD gfx1151 / gfx1201 CI images
 
 on:
   workflow_dispatch:
@@ -25,9 +27,13 @@ permissions:
 
 jobs:
   build:
-    name: Build & push gfx1151 image
+    name: Build & push ${{ matrix.arch }} image
     runs-on:
       group: aws-general-8-plus
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [gfx1151, gfx1201]
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
@@ -48,11 +54,16 @@ jobs:
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: ./docker/transformers-pytorch-amd-gpu-gfx1151
+          # HF_KERNELS_URL (a repo variable, optional): where AMD's Hub-kernel
+          # builds are fetched from; empty skips them (see the Dockerfile's
+          # "Hub kernels" section).
           build-args: |
             REF=main
+            GPU_ARCH=${{ matrix.arch }}
+            HF_KERNELS_URL=${{ vars.HF_KERNELS_URL }}
           secrets: |
             hf_token=${{ secrets.HF_HUB_READ_TOKEN }}
           push: true
           tags: |
-            ghcr.io/huggingface/transformers-pytorch-amd-gpu-gfx1151:latest
-            ghcr.io/huggingface/transformers-pytorch-amd-gpu-gfx1151:${{ github.sha }}
+            ghcr.io/huggingface/transformers-pytorch-amd-gpu-${{ matrix.arch }}:latest
+            ghcr.io/huggingface/transformers-pytorch-amd-gpu-${{ matrix.arch }}:${{ github.sha }}
