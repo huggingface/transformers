@@ -48,8 +48,12 @@ jobs:
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: ./docker/transformers-pytorch-amd-gpu-gfx1151
+          # HF_KERNELS_URL (a repo variable, optional): where AMD's Hub-kernel
+          # builds are fetched from; empty skips them (see the Dockerfile's
+          # "Hub kernels" section).
           build-args: |
             REF=main
+            HF_KERNELS_URL=${{ vars.HF_KERNELS_URL }}
           secrets: |
             hf_token=${{ secrets.HF_HUB_READ_TOKEN }}
           push: true
