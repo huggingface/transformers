@@ -81,6 +81,7 @@ from .configuration_utils import (
 )
 from .continuous_batching import ContinuousMixin
 from .logits_process import (
+    ClassifierFreeGuidanceLogitsProcessor,
     EncoderNoRepeatNGramLogitsProcessor,
     EncoderRepetitionPenaltyLogitsProcessor,
     EpsilonLogitsWarper,
@@ -101,6 +102,7 @@ from .logits_process import (
     SequenceBiasLogitsProcessor,
     SuppressTokensAtBeginLogitsProcessor,
     SuppressTokensLogitsProcessor,
+    SynthIDTextWatermarkLogitsProcessor,
     TemperatureLogitsWarper,
     TopHLogitsWarper,
     TopKLogitsWarper,
@@ -2992,6 +2994,32 @@ class GenerationMixin(ContinuousMixin):
             stopping_criteria=stopping_criteria,
             tokenizer=generation_mode_kwargs.get("tokenizer"),
         )
+
+        # Prompt lookup decoding calls the logits processors on draft tokens (when filtering candidates and when
+        # verifying them, including at positions after the first rejected draft token). Stateful processors would
+        # have their internal state advanced by those extra calls, so the output would differ from generation
+        # without prompt lookup -- the same reason assisted generation is refused for stateful models above.
+        if generation_config.prompt_lookup_num_tokens is not None:
+            stateful_processors = [
+                processor
+                for processor in prepared_logits_processor
+                if isinstance(
+                    processor,
+                    (
+                        ClassifierFreeGuidanceLogitsProcessor,
+                        UnbatchedClassifierFreeGuidanceLogitsProcessor,
+                        SynthIDTextWatermarkLogitsProcessor,
+                    ),
+                )
+            ]
+            if len(stateful_processors) > 0:
+                raise ValueError(
+                    "prompt lookup decoding is not supported with stateful logits processors, such as "
+                    f"{', '.join(type(processor).__name__ for processor in stateful_processors)}, as their internal "
+                    "state would be advanced on draft tokens and change the output. Please remove "
+                    "`prompt_lookup_num_tokens` or disable the stateful logits processor (e.g. unset "
+                    "`guidance_scale` or `watermarking_config`)."
+                )
 
         # Set model_kwargs `use_cache` so we can use it later in forward runs
         model_kwargs["use_cache"] = generation_config.use_cache
