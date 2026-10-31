@@ -224,6 +224,35 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
 
             torch.testing.assert_close(logits_padded, logits_padfree, atol=1e-5, rtol=1e-5)
 
+    @require_causal_conv1d
+    @require_flash_linear_attention
+    @require_torch_gpu
+    def test_padding_free_rows_match_single_row(self):
+        torch.manual_seed(0)
+        config = self.model_tester.get_config()
+        model = Qwen3NextForCausalLM(config).to(torch_device).eval()
+
+        data_collator = DataCollatorWithFlattening(
+            return_tensors="pt", return_seq_idx=True, return_flash_attn_kwargs=True
+        )
+        # Four sequences that fill two rows of 5 tokens: [1, 2, 3 | 4, 5] and [6, 7, 8, 9 | 10]
+        features = [{"input_ids": [1, 2, 3]}, {"input_ids": [4, 5]}, {"input_ids": [6, 7, 8, 9]}, {"input_ids": [10]}]
+        single_row = data_collator(features)
+        single_row = {
+            key: value.to(torch_device) if torch.is_tensor(value) else value for key, value in single_row.items()
+        }
+        # `cu_seq_lens_*` and `seq_idx` index the flattened rows, so they stay the same for two rows
+        two_rows = {
+            key: value.view(2, -1) if key in ("input_ids", "position_ids", "seq_idx", "labels") else value
+            for key, value in single_row.items()
+        }
+
+        with torch.no_grad():
+            logits_single_row = model(**single_row, use_cache=False).logits
+            logits_two_rows = model(**two_rows, use_cache=False).logits
+
+        torch.testing.assert_close(logits_two_rows.view_as(logits_single_row), logits_single_row, atol=1e-5, rtol=1e-5)
+
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     def test_eager_matches_sdpa_inference(
         self,
