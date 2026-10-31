@@ -1031,22 +1031,11 @@ class Gemma4TextAttention(Gemma3nTextAttention):
         )
 
 
-class Gemma4TextKEqVAttention(Gemma3nTextAttention):
+class Gemma4TextKEqVAttention(Gemma4TextAttention):
     """Full attention layers with `config.attention_k_eq_v`: the key projection doubles as the value projection."""
 
     def __init__(self, config: Gemma4TextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        # `head_dim` and `num_key_value_heads` vary per layer type
-        self.head_dim = config.per_layer_config[layer_idx].head_dim
-        self.num_key_value_groups = (
-            config.num_attention_heads // config.per_layer_config[layer_idx].num_key_value_heads
-        )
-        self.is_causal = config.use_bidirectional_attention != "all"
-        self.k_proj = nn.Linear(
-            config.hidden_size,
-            config.per_layer_config[layer_idx].num_key_value_heads * self.head_dim,
-            bias=config.attention_bias,
-        )
         del self.v_proj
 
     def forward(
@@ -1111,7 +1100,6 @@ class Gemma4TextKVSharedAttention(Gemma3nTextKVSharedAttention):
             config.num_attention_heads // config.per_layer_config[layer_idx].num_key_value_heads
         )
         self.is_causal = config.use_bidirectional_attention != "all"
-        del self.v_norm
 
 
 GEMMA4_TEXT_ATTENTION_CLASSES = {

@@ -1525,20 +1525,16 @@ class Gemma3nTextAttention(Gemma3Attention):
         return attn_output, attn_weights
 
 
-@no_inherit_decorator
-class Gemma3nTextKVSharedAttention(Gemma3Attention):
+class Gemma3nTextKVSharedAttention(Gemma3nTextAttention):
     """Reuses the kv states of the last non-shared layer of the same type, so it has no k/v weights."""
 
     def __init__(self, config: Gemma3nTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.scaling = 1.0
-        self.is_causal = True
-        del self.attn_logit_softcapping
-        self.q_norm = Gemma3nRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
         # Layers sharing kv states don't need any weight matrices
         del self.k_proj
         del self.v_proj
         del self.k_norm
+        del self.v_norm
 
     def forward(
         self,
