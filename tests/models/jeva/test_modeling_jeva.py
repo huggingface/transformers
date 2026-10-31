@@ -269,3 +269,15 @@ class JevaForDecisionTest(unittest.TestCase):
         (-reference.log_softmax(-1)[:, 0].sum()).backward()
         torch.testing.assert_close(logits.grad.double(), reference.grad, rtol=1e-6, atol=1e-14)
         self.assertLess(logits.grad[0, 0].item(), 0)
+
+        torch.manual_seed(0)
+        self.config.coverage_bias_init = -4.0
+        model = JevaForDecision(self.config)
+        labels = self.inputs["labels"].clone()
+        labels[0] = torch.tensor([0.0, 1.0, 0.0, 0.0])
+        output = model(**{**self.inputs, "labels": labels})
+        self.assertGreater(output.coverage_logits[0].item(), 18)
+        output.loss.backward()
+        expected = output.coverage_logits[0].detach().neg().sigmoid() / model.core.tau_cov().detach() / 2
+        self.assertGreater(model.core.coverage_bias.grad.item(), 0)
+        torch.testing.assert_close(model.core.coverage_bias.grad, expected, atol=1e-30, rtol=1e-6)
