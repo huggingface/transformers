@@ -14,7 +14,7 @@
 import math
 from collections import UserDict
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Literal
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -529,10 +529,6 @@ class Gemma4UnifiedConfig(Gemma4Config):
         "vision_config": SubConfigSpec(config_class=Gemma4UnifiedVisionConfig, optional=True),
         "audio_config": SubConfigSpec(config_class=Gemma4UnifiedAudioConfig, optional=True),
     }
-
-    text_config: Gemma4UnifiedTextConfig | dict[str, Any] | None = None
-    vision_config: Gemma4UnifiedVisionConfig | dict[str, Any] | None = None
-    audio_config: Gemma4UnifiedAudioConfig | dict[str, Any] | None = None
 
 
 @auto_docstring

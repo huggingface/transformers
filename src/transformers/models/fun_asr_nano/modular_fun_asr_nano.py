@@ -29,7 +29,6 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack, prepare_keyword_inputs, prepare_prompt_input
-from ...tokenization_utils_base import TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
@@ -185,38 +184,6 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
 
     def batch_decode(self, *args, **kwargs):
         raise AttributeError("Not needed")
-
-    @auto_docstring
-    def __call__(
-        self,
-        text: TextInput | list[TextInput],
-        audio: AudioInput | None = None,
-        output_labels: bool | None = False,
-        **kwargs: Unpack[FunAsrNanoProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        output_labels (bool, *optional*, default=False):
-            Whether to return labels for training.
-
-        Returns:
-            [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
-            audio features (`input_features`, `input_features_mask`).
-        """
-        # Check only if passed explicitly as another value since by default we'll use `pt`
-        if "return_tensors" in kwargs and kwargs["return_tensors"] != "pt":
-            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
-
-        if output_labels:
-            kwargs["return_mm_token_type_ids"] = True
-        model_inputs = super().__call__(audio=audio, text=text, **kwargs)
-
-        if output_labels:
-            mm_token_type_ids = model_inputs.pop("mm_token_type_ids")
-            labels = model_inputs["input_ids"].clone()
-            labels[mm_token_type_ids != 0] = -100  # audio positions
-            labels[labels == self.tokenizer.pad_token_id] = -100
-            model_inputs["labels"] = labels
-        return BatchFeature(data=model_inputs, tensor_type="pt")
 
 
 @auto_docstring

@@ -21,8 +21,7 @@ from PIL.Image import Resampling as PILImageResampling
 from ...configuration_utils import SubConfigSpec
 from ...feature_extraction_utils import BatchFeature
 from ...image_transforms import divide_to_patches, group_images_by_shape, reorder_images
-from ...image_utils import ImageInput, SizeDict
-from ...processing_utils import Unpack
+from ...image_utils import SizeDict
 from ...utils import TensorType, auto_docstring, is_cv2_available, logging, requires_backends
 from ..auto import AutoConfig
 from ..minicpmv4_6.configuration_minicpmv4_6 import MiniCPMV4_6Config, MiniCPMV4_6VisionConfig
@@ -160,9 +159,6 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
     downsample_mode = "4x"
     small_image_upsize = "always"
     valid_kwargs = MiniCPMOcrImageProcessorKwargs
-
-    def __init__(self, **kwargs: Unpack[MiniCPMOcrImageProcessorKwargs]):
-        super().__init__(**kwargs)
 
     def _resolve_tile_size(
         self,
@@ -318,14 +314,6 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
             tensor_type=return_tensors,
             skip_tensor_conversion=["grids", "num_patches_per_image"],
         )
-
-    @auto_docstring
-    def preprocess(
-        self,
-        images: ImageInput,
-        **kwargs: Unpack[MiniCPMOcrImageProcessorKwargs],
-    ) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
 
 
 class MiniCPMOcrVideoProcessorKwargs(MiniCPMV4_6VideoProcessorKwargs, total=False):

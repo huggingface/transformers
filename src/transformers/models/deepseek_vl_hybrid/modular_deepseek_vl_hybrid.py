@@ -30,7 +30,6 @@ from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
-    ImageInput,
     PILImageResampling,
     SizeDict,
 )
@@ -423,7 +422,6 @@ class DeepseekVLHybridImageProcessorPil(DeepseekVLImageProcessorPil):
     high_res_size = {"height": 1024, "width": 1024}
     high_res_resample = PILImageResampling.BICUBIC
     model_input_names = ["pixel_values", "high_res_pixel_values"]
-    valid_kwargs = DeepseekVLHybridImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[DeepseekVLHybridImageProcessorKwargs]):
         PilBackend.__init__(self, **kwargs)
@@ -528,10 +526,6 @@ class DeepseekVLHybridImageProcessorPil(DeepseekVLImageProcessorPil):
             tensor_type=return_tensors,
         )
 
-    @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[DeepseekVLHybridImageProcessorKwargs]) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
-
 
 class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
     high_res_image_mean = OPENAI_CLIP_MEAN
@@ -539,7 +533,6 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
     high_res_size = {"height": 1024, "width": 1024}
     high_res_resample = PILImageResampling.BICUBIC
     model_input_names = ["pixel_values", "high_res_pixel_values"]
-    valid_kwargs = DeepseekVLHybridImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[DeepseekVLHybridImageProcessorKwargs]):
         TorchvisionBackend.__init__(self, **kwargs)

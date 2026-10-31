@@ -839,7 +839,6 @@ class Cosmos3EdgeVideoProcessor(Glm4vVideoProcessor):
     num_frames = None
     max_duration = None
     max_image_size = None
-    valid_kwargs = Cosmos3EdgeVideoProcessorInitKwargs
 
     def __init__(self, **kwargs: Unpack[Cosmos3EdgeVideoProcessorInitKwargs]):
         if kwargs.get("temporal_patch_size", self.temporal_patch_size) != 1:

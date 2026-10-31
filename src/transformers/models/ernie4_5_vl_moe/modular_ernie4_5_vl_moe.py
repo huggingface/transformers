@@ -533,6 +533,9 @@ class Ernie4_5_VLMoeTextModel(Ernie4_5_MoeModel):
 
     def __init__(self, config: Ernie4_5_VLMoeTextConfig):
         super().__init__(config)
+        self.layers = nn.ModuleList(
+            [Ernie4_5_VLMoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self.rotary_emb = Ernie4_5_VLMoeTextRotaryEmbedding(config=config)
 
     @merge_with_config_defaults
@@ -650,6 +653,7 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPretr
 
     def __init__(self, config: Ernie4_5_VLMoeVisionConfig) -> None:
         super().__init__(config)
+        self.blocks = nn.ModuleList([Ernie4_5_VLMoeVisionBlock(config) for _ in range(config.depth)])
 
         del self.merger
 
@@ -816,6 +820,7 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
 
     def __init__(self, config: Ernie4_5_VLMoeConfig):
         super().__init__(config)
+        self.language_model = Ernie4_5_VLMoeTextModel._from_config(config.text_config)
 
         del self.visual
         self.vision_tower = Ernie4_5_VLMoeVisionTransformerPretrainedModel._from_config(config.vision_config)
@@ -1048,6 +1053,7 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
 class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, GenerationMixin):
     def __init__(self, config: Ernie4_5_VLMoeConfig):
         super().__init__(config)
+        self.model = Ernie4_5_VLMoeModel(config)
 
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
         self.num_experts = config.text_config.num_experts

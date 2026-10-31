@@ -21,10 +21,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_causal_mask
 from ...modeling_rope_utils import RopeParameters
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
@@ -43,6 +44,7 @@ from ..timesfm.modeling_timesfm import (
     TimesFmModelForPrediction,
     TimesFmOutput,
     TimesFmOutputForPrediction,
+    TimesFmPositionalEmbedding,
     TimesFmPreTrainedModel,
     TimesFmResidualBlock,
 )
@@ -232,6 +234,10 @@ class TimesFm2_5DecoderLayer(LlamaDecoderLayer):
 
     def __init__(self, config: TimesFm2_5Config, layer_idx: int):
         super().__init__(config, layer_idx)
+
+        self.self_attn = TimesFm2_5Attention(config=config, layer_idx=layer_idx)
+
+        self.mlp = TimesFm2_5MLP(config)
         self.pre_feedforward_layernorm = TimesFm2_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = TimesFm2_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -262,6 +268,10 @@ class TimesFm2_5DecoderLayer(LlamaDecoderLayer):
         return hidden_states
 
 
+class TimesFm2_5PositionalEmbedding(TimesFmPositionalEmbedding):
+    pass
+
+
 @auto_docstring
 class TimesFm2_5PreTrainedModel(TimesFmPreTrainedModel):
     config: TimesFm2_5Config
@@ -273,6 +283,24 @@ class TimesFm2_5PreTrainedModel(TimesFmPreTrainedModel):
         "hidden_states": TimesFm2_5DecoderLayer,
         "attentions": TimesFm2_5Attention,
     }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, TimesFm2_5Attention):
+            # Initialize scaling parameter
+            init.ones_(module.scaling)
+        elif isinstance(module, TimesFm2_5PositionalEmbedding):
+            num_timescales = module.embedding_dims // 2
+            max_timescale, min_timescale = module.max_timescale, module.min_timescale
+            log_timescale_increment = math.log(float(max_timescale) / float(min_timescale)) / max(
+                num_timescales - 1, 1
+            )
+            init.copy_(
+                module.inv_timescales,
+                min_timescale
+                * torch.exp(torch.arange(num_timescales, dtype=torch.float32) * -log_timescale_increment),
+            )
 
 
 class TimesFm2_5Model(TimesFm2_5PreTrainedModel):

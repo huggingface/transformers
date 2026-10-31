@@ -25,13 +25,13 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
 from ..auto import AutoConfig
-from ..sam2.modeling_sam2 import eager_attention_forward, window_partition
+from ..sam2.modeling_sam2 import Sam2PositionalEmbedding, eager_attention_forward, window_partition
 from ..sam2_video.configuration_sam2_video import (
     Sam2VideoMaskDecoderConfig,
     Sam2VideoPromptEncoderConfig,
@@ -568,16 +568,43 @@ class EdgeTamVideoPositionEmbeddingSine(Sam2VideoPositionEmbeddingSine):
 
 
 class EdgeTamVideoMemoryEncoder(Sam2VideoMemoryEncoder):
-    pass
+    def __init__(self, config: EdgeTamVideoConfig):
+        super().__init__(config)
+        output_channels = config.memory_encoder_output_channels
+        self.position_encoding = EdgeTamVideoPositionEmbeddingSine(
+            num_position_features=output_channels // 2, normalize=True
+        )
 
 
 class EdgeTamVideoFeedForward(Sam2VideoFeedForward):
     pass
 
 
+class EdgeTamVideoPositionalEmbedding(Sam2PositionalEmbedding):
+    pass
+
+
 class EdgeTamVideoPreTrainedModel(Sam2VideoPreTrainedModel):
+    @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, EdgeTamVideoModel):
+            if module.no_memory_positional_encoding is not None:
+                init.zeros_(module.no_memory_positional_encoding)
+            if module.memory_temporal_positional_encoding is not None:
+                init.zeros_(module.memory_temporal_positional_encoding)
+            if module.no_object_pointer is not None:
+                init.zeros_(module.no_object_pointer)
+            if module.occlusion_spatial_embedding_parameter is not None:
+                init.zeros_(module.occlusion_spatial_embedding_parameter)
+        if isinstance(module, EdgeTamVideoMemoryFuserCXBlock):
+            if module.scale is not None:
+                init.zeros_(module.scale)
+        elif isinstance(module, EdgeTamVideoPositionalEmbedding):
+            init.normal_(module.positional_embedding, std=module.scale)
+        elif isinstance(module, EdgeTamVideoMemoryAttention):
+            position_ids = module.precompute_positions(module.config)
+            init.copy_(module.position_ids, position_ids)
         if isinstance(module, EdgeTamVideoMemoryAttention):
             position_ids_k = module.precompute_positions(module.config, is_key=True)
             init.copy_(module.position_ids_k, position_ids_k)
@@ -658,6 +685,9 @@ class EdgeTamVideoMemoryAttention(Sam2VideoMemoryAttention):
         super().__init__()
         position_ids_k = self.precompute_positions(config, is_key=True)
         self.position_ids_k = nn.Buffer(position_ids_k, persistent=False)
+        self.layers = nn.ModuleList(
+            [EdgeTamVideoMemoryAttentionLayer(config) for _ in range(config.memory_attention_num_layers)]
+        )
 
     @staticmethod
     def precompute_positions(config: EdgeTamVideoConfig, is_key: bool = False):
@@ -981,6 +1011,7 @@ class EdgeTamVideoModel(Sam2VideoModel):
 
     def __init__(self, config: EdgeTamVideoConfig):
         super().__init__(config)
+        self.memory_attention = EdgeTamVideoMemoryAttention(config)
         self.spatial_perceiver = EdgeTamVideoPerceiverResampler(config)
 
         self.post_init()

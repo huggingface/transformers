@@ -663,16 +663,36 @@ class Nemotron3_5TranscribeModel(AudioFlamingo3Model):
         """
         if inputs_embeds is None and input_ids is not None:
             inputs_embeds = self._embed_input_ids(input_ids)
-        return super().forward(
-            input_ids=input_ids,
-            input_features=input_features,
-            input_features_mask=input_features_mask,
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        audio_embeds = None
+        if input_features is not None and input_ids is not None:
+            audio_embeds = self.get_audio_features(input_features, input_features_mask, return_dict=True).pooler_output
+
+            # replace text-audio token placeholders with audio embeddings
+            special_audio_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, audio_features=audio_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(
+                special_audio_mask, audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            )
+
+        outputs = self.language_model(
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
+        )
+
+        return Nemotron3_5TranscribeModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            audio_hidden_states=audio_embeds,
         )
 
     @auto_docstring(

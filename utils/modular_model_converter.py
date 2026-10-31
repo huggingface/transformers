@@ -2000,8 +2000,23 @@ def _statement_key(node: cst.CSTNode) -> str | None:
     return target.value if isinstance(target, cst.Name) else None
 
 
+class _BehaviorNamesCollector(cst.CSTVisitor):
+    """Collect names used by the code, skipping type annotations (they do not change behavior)."""
+
+    def __init__(self):
+        self.names = set()
+
+    def visit_Annotation(self, node):
+        return False
+
+    def visit_Name(self, node):
+        self.names.add(node.value)
+
+
 def _names_in(node: cst.CSTNode) -> set[str]:
-    return {name.value for name in m.findall(node, m.Name())}
+    collector = _BehaviorNamesCollector()
+    cst.Module(body=[node]).visit(collector)
+    return collector.names
 
 
 def find_inherited_code_mismatches(
@@ -2015,7 +2030,8 @@ def find_inherited_code_mismatches(
     """
     generated = {name: entry["node"] for body in files.values() for name, entry in body.items()}
     # ponytail: classes only; redefined functions are looked up in module globals, the usual modular pattern
-    modular_defined = set(modular_mapper.classes)
+    # ponytail: `*Kwargs` TypedDicts only carry processor defaults, not worth explicit overrides
+    modular_defined = {name for name in modular_mapper.classes if not name.endswith("Kwargs")}
     mismatches = []
     for class_name, modular_node in modular_mapper.classes.items():
         bases = [
@@ -2043,59 +2059,7 @@ def find_inherited_code_mismatches(
 # Modular files whose inherited code still silently uses classes they redefine. Do not add to this list: override
 # the inherited method instead (see `check_inherited_code_uses_parent_definitions`).
 INHERITANCE_MISMATCH_ALLOWLIST = {
-    "altclip",
-    "chinese_clip",
-    "clipseg",
-    "colmodernvbert",
-    "d_fine",
-    "deepseek_ocr2",
-    "deepseek_v32",
-    "deimv2",
-    "edgetam",
-    "edgetam_video",
-    "ernie4_5_vl_moe",
-    "eurobert",
     "falcon_mamba",
-    "flex_olmo",
-    "flint",
-    "gemma",
-    "glm4_moe",
-    "glm4_moe_lite",
-    "glm4v_moe",
-    "glm5_next",
-    "glm_image",
-    "glm_moe_dsa",
-    "gradium_phonon_tts",
-    "granite_speech_plus",
-    "granitemoehybrid",
-    "granitemoeshared",
-    "higgs_audio_v2",
-    "instructblipvideo",
-    "jais2",
-    "mellum",
-    "metaclip_2",
-    "minimax_m2",
-    "moonshine",
-    "nomic_bert",
-    "owlv2",
-    "paddleocr_vl",
-    "pocket_tts",
-    "pp_doclayout_v2",
-    "qwen2_5_omni",
-    "qwen3_asr",
-    "qwen3_omni_moe",
-    "qwen3_vl_moe",
-    "rf_detr",
-    "rt_detr_v2",
-    "sam_hq",
-    "siglip2",
-    "smolvlm",
-    "solar_open",
-    "timesfm2_5",
-    "tipsv2",
-    "unlimited_ocr",
-    "vaultgemma",
-    "videomt",
 }
 
 

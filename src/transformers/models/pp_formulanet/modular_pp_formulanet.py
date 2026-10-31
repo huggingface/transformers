@@ -143,8 +143,6 @@ class PPFormulaNetProcessor(NougatProcessor):
     [`~PPFormulaNetProcessor.__call__`] and [`~PPFormulaNetProcessor.decode`] for more information.
     """
 
-    valid_processor_kwargs = PPFormulaNetProcessorKwargs
-
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 

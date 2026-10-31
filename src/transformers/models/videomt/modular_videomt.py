@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from dataclasses import dataclass
 
 import torch
@@ -20,6 +21,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...file_utils import ModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ..eomt.configuration_eomt import EomtConfig
@@ -29,6 +31,7 @@ from ..eomt.modeling_eomt import (
     EomtLayer,
     EomtLayerNorm2d,
     EomtLayerScale,
+    EomtLoss,
     EomtMLP,
     EomtPatchEmbeddings,
     EomtPreTrainedModel,
@@ -145,13 +148,42 @@ class VideomtForUniversalSegmentationOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
+class VideomtLoss(EomtLoss):
+    pass
+
+
 class VideomtPreTrainedModel(EomtPreTrainedModel):
     main_input_name = "pixel_values_videos"
     input_modalities = ("video",)
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
-        super()._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
+        std = self.config.initializer_range
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
+            init.kaiming_uniform_(module.weight, a=math.sqrt(5))
+            if module.bias is not None:
+                fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(module.weight)
+                bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+                init.uniform_(module.bias, -bound, bound)
+        elif isinstance(module, nn.Embedding):
+            init.normal_(module.weight, mean=0.0, std=1)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
+        elif isinstance(module, VideomtLayerScale):
+            if hasattr(module, "lambda1"):
+                init.constant_(module.lambda1, self.config.layerscale_value)
+        elif isinstance(module, VideomtEmbeddings):
+            init.trunc_normal_(module.cls_token, mean=0.0, std=std)
+            init.zeros_(module.register_tokens)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+        elif isinstance(module, VideomtLoss):
+            empty_weight = torch.ones(module.num_labels + 1)
+            empty_weight[-1] = module.eos_coef
+            init.copy_(module.empty_weight, empty_weight)
+        elif isinstance(module, VideomtForUniversalSegmentation):
+            init.ones_(module.attn_mask_probs)
         if isinstance(module, VideomtEmbeddings):
             init.zeros_(module.mask_token)
 
@@ -174,6 +206,7 @@ class VideomtForUniversalSegmentation(EomtForUniversalSegmentation):
     def __init__(self, config: VideomtConfig):
         super().__init__(config)
         self.query_updater = nn.Linear(config.hidden_size, config.hidden_size)
+        self.embeddings = VideomtEmbeddings(config)
 
     def _disable_attention_mask(attn_mask, prob, num_query_tokens, encoder_start_tokens, device):
         raise AttributeError("Not needed for Videomt")

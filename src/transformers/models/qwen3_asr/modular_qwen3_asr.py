@@ -32,6 +32,7 @@ from ..auto import AutoConfig
 from ..qwen2_audio.modeling_qwen2_audio import Qwen2AudioPreTrainedModel
 from ..qwen3_omni_moe.configuration_qwen3_omni_moe import Qwen3OmniMoeAudioEncoderConfig
 from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
+    Qwen3OmniMoeAudioAttention,
     Qwen3OmniMoeAudioEncoder,
     Qwen3OmniMoeAudioEncoderLayer,
     SinusoidsPositionEmbedding,
@@ -136,6 +137,10 @@ class Qwen3ASRPreTrainedModel(Qwen2AudioPreTrainedModel):
             init.copy_(module.positional_embedding, position_embeddings)
 
 
+class Qwen3ASRAudioAttention(Qwen3OmniMoeAudioAttention):
+    pass
+
+
 class Qwen3ASRAudioEncoderLayer(Qwen3OmniMoeAudioEncoderLayer):
     def __init__(self, config: Qwen3ASREncoderConfig):
         super().__init__(config)
@@ -149,11 +154,16 @@ class Qwen3ASRAudioEncoderLayer(Qwen3OmniMoeAudioEncoderLayer):
 class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
     config: Qwen3ASREncoderConfig
     _no_split_modules = ["Qwen3ASRAudioEncoderLayer"]
+    _can_record_outputs = {
+        "hidden_states": Qwen3ASRAudioEncoderLayer,
+        "attentions": Qwen3ASRAudioAttention,
+    }
 
     def __init__(self, config: Qwen3ASREncoderConfig):
         super().__init__(config)
         embed_dim = config.d_model
         self.positional_embedding = SinusoidsPositionEmbedding(config.max_position_embeddings, embed_dim)
+        self.layers = nn.ModuleList([Qwen3ASRAudioEncoderLayer(config) for _ in range(config.encoder_layers)])
         del self.conv_chunksize
         del self.proj1
         del self.act
@@ -242,6 +252,10 @@ class Qwen3ASRMultiModalProjector(VoxtralMultiModalProjector):
 
 
 class Qwen3ASRModel(AudioFlamingo3Model):
+    def __init__(self, config: Qwen3ASRConfig):
+        super().__init__(config)
+        self.multi_modal_projector = Qwen3ASRMultiModalProjector(config)
+
     @can_return_tuple
     @auto_docstring(
         custom_intro="This method is used to get the audio embeddings from input features (a log mel spectrogram)."
@@ -273,6 +287,10 @@ class Qwen3ASRModel(AudioFlamingo3Model):
 class Qwen3ASRForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
+
+    def __init__(self, config: Qwen3ASRConfig):
+        super().__init__(config)
+        self.model = Qwen3ASRModel(config)
 
     def forward(self, **super_kwargs):
         r"""

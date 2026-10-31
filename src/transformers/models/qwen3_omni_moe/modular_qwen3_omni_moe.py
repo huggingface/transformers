@@ -62,6 +62,7 @@ from ..qwen2_5_omni.configuration_qwen2_5_omni import (
 from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     Qwen2_5OmniAudioAttention,
     Qwen2_5OmniAudioEncoder,
+    Qwen2_5OmniAudioEncoderLayer,
     Qwen2_5OmniPreTrainedModel,
     Qwen2_5OmniPreTrainedModelForConditionalGeneration,
     Qwen2_5OmniSnakeBeta,
@@ -100,7 +101,9 @@ from ..qwen3_vl_moe.configuration_qwen3_vl_moe import Qwen3VLMoeVisionConfig
 from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
     Qwen3VLMoeTextModel,
     Qwen3VLMoeTextRotaryEmbedding,
+    Qwen3VLMoeTextTopKRouter,
     Qwen3VLMoeVisionAttention,
+    Qwen3VLMoeVisionBlock,
     Qwen3VLMoeVisionModel,
     Qwen3VLMoeVisionRotaryEmbedding,
 )
@@ -371,6 +374,11 @@ class Qwen3OmniMoeThinkerConfig(Qwen2_5OmniThinkerConfig):
     model_type = "qwen3_omni_moe_thinker"
     # Override parent's attribute_map as we use audio_token_id directly, not audio_token_index
     attribute_map = {}
+    sub_configs_defaults = {
+        "text_config": Qwen3OmniMoeTextConfig,
+        "vision_config": Qwen3OmniMoeVisionEncoderConfig,
+        "audio_config": Qwen3OmniMoeAudioEncoderConfig,
+    }
 
     audio_token_id: int = 151646
     image_token_id: int = 151655
@@ -957,7 +965,18 @@ class Qwen3OmniMoeAudioAttention(Qwen2_5OmniAudioAttention):
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
 
 
+class Qwen3OmniMoeAudioEncoderLayer(Qwen2_5OmniAudioEncoderLayer):
+    def __init__(self, config: Qwen3OmniMoeAudioEncoderConfig):
+        super().__init__(config)
+        self.self_attn = Qwen3OmniMoeAudioAttention(config)
+
+
 class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
+    _can_record_outputs = {
+        "hidden_states": Qwen3OmniMoeAudioEncoderLayer,
+        "attentions": Qwen3OmniMoeAudioAttention,
+    }
+
     def __init__(self, config: Qwen3OmniMoeAudioEncoderConfig):
         super().__init__(config)
         del self.proj
@@ -1077,8 +1096,23 @@ class Qwen3OmniMoeVisionRotaryEmbedding(Qwen3VLMoeVisionRotaryEmbedding):
         return super().compute_axial_rope_parameters(config, device=device, **kwargs)
 
 
+class Qwen3OmniMoeTextTopKRouter(Qwen3VLMoeTextTopKRouter):
+    pass
+
+
+class Qwen3OmniMoeVisionBlock(Qwen3VLMoeVisionBlock):
+    def __init__(self, config, attn_implementation: str = "sdpa") -> None:
+        super().__init__(config, attn_implementation)
+        self.attn = Qwen3OmniMoeVisionAttention(config=config)
+
+
 class Qwen3OmniMoeVisionEncoder(Qwen3VLMoeVisionModel):
     config: Qwen3OmniMoeVisionEncoderConfig
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(Qwen3OmniMoeTextTopKRouter, layer_name="mlp.gate", index=0),
+        "hidden_states": Qwen3OmniMoeVisionBlock,
+        "attentions": Qwen3OmniMoeVisionAttention,
+    }
 
     def __init__(self, config: Qwen3OmniMoeVisionEncoderConfig, *inputs, **kwargs):
         self.merger_list = nn.ModuleList(
@@ -1091,6 +1125,8 @@ class Qwen3OmniMoeVisionEncoder(Qwen3VLMoeVisionModel):
             ]
         )
         super().__init__(config, *inputs, **kwargs)
+
+        self.rotary_pos_emb = Qwen3OmniMoeVisionRotaryEmbedding(config)
         del self.deepstack_merger_list
 
     @property
@@ -1118,6 +1154,8 @@ class Qwen3OmniMoeThinkerTextTopKRouter(Qwen3MoeTopKRouter):
 class Qwen3OmniMoeThinkerTextSparseMoeBlock(Qwen3MoeSparseMoeBlock):
     def __init__(self, config: Qwen3OmniMoeThinkerConfig):
         super().__init__(config)
+        self.experts = Qwen3OmniMoeThinkerTextExperts(config)
+        self.gate = Qwen3OmniMoeThinkerTextTopKRouter(config)
 
 
 class Qwen3OmniMoeThinkerTextAttention(Qwen3MoeAttention):
@@ -1126,15 +1164,40 @@ class Qwen3OmniMoeThinkerTextAttention(Qwen3MoeAttention):
         self.sliding_window = None
 
 
+class Qwen3OmniMoeThinkerTextMLP(Qwen3MoeMLP):
+    pass
+
+
 class Qwen3OmniMoeThinkerTextDecoderLayer(Qwen3MoeDecoderLayer):
     def __init__(self, config, layer_idx):
         super().__init__(config, layer_idx)
         self.self_attn = Qwen3OmniMoeThinkerTextAttention(config, layer_idx)
+        if (layer_idx not in config.mlp_only_layers) and (
+            config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
+        ):
+            self.mlp = Qwen3OmniMoeThinkerTextSparseMoeBlock(config)
+        else:
+            self.mlp = Qwen3OmniMoeThinkerTextMLP(config, intermediate_size=config.intermediate_size)
 
 
 class Qwen3OmniMoeThinkerTextPreTrainedModel(Qwen3MoePreTrainedModel):
     config: Qwen3OmniMoeTextConfig
     config: Qwen3OmniMoeTextConfig
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(Qwen3OmniMoeThinkerTextTopKRouter, index=0),
+        "hidden_states": Qwen3OmniMoeThinkerTextDecoderLayer,
+        "attentions": Qwen3OmniMoeThinkerTextAttention,
+    }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        std = self.config.initializer_range
+        if isinstance(module, Qwen3OmniMoeThinkerTextExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, Qwen3OmniMoeThinkerTextTopKRouter):
+            init.normal_(module.weight, mean=0.0, std=std)
 
 
 class Qwen3OmniMoeThinkerTextModel(Qwen3VLMoeTextModel):
@@ -1177,6 +1240,12 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
         "attentions": Qwen3OmniMoeThinkerTextAttention,
         "router_logits": OutputRecorder(Qwen3OmniMoeThinkerTextTopKRouter, index=0),
     }
+
+    def __init__(self, config: Qwen3OmniMoeThinkerConfig):
+        super().__init__(config)
+        self.audio_tower = Qwen3OmniMoeAudioEncoder._from_config(config.audio_config)
+        self.visual = Qwen3OmniMoeVisionEncoder._from_config(config.vision_config)
+        self.language_model = Qwen3OmniMoeThinkerTextModel._from_config(config.text_config)
 
     def get_video_features(
         self,
@@ -1379,6 +1448,7 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
 class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForConditionalGeneration):
     def __init__(self, config: Qwen3OmniMoeThinkerConfig):
         super().__init__(config)
+        self.model = Qwen3OmniMoeThinkerModel(config)
         self.num_experts = config.text_config.num_experts
         self.num_experts_per_tok = config.text_config.num_experts_per_tok
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
@@ -1693,6 +1763,12 @@ class Qwen3OmniMoeTalkerDecoderLayer(Qwen3MoeDecoderLayer):
     def __init__(self, config, layer_idx):
         super().__init__(config, layer_idx)
         self.self_attn = Qwen3OmniMoeThinkerTextAttention(config, layer_idx)
+        if (layer_idx not in config.mlp_only_layers) and (
+            config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
+        ):
+            self.mlp = Qwen3OmniMoeThinkerTextSparseMoeBlock(config)
+        else:
+            self.mlp = Qwen3OmniMoeThinkerTextMLP(config, intermediate_size=config.intermediate_size)
         self.mlp = Qwen3OmniMoeTalkerTextSparseMoeBlock(config)
 
 

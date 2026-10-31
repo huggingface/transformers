@@ -28,7 +28,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
-from ...image_utils import ImageInput, PILImageResampling, SizeDict
+from ...image_utils import PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
@@ -132,7 +132,6 @@ class MuseGlimmerImageProcessor(Glm4vImageProcessor):
     size = None
     merge_size = 2
     max_image_tokens = 4096
-    valid_kwargs = MuseGlimmerImageProcessorKwargs
 
     def _validate_preprocess_kwargs(self, **kwargs):
         # MuseGlimmer uses aspect_ratio_preserving_resize driven by patch_size,
@@ -285,10 +284,6 @@ class MuseGlimmerImageProcessor(Glm4vImageProcessor):
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         return grid_h * grid_w
-
-    @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[MuseGlimmerImageProcessorKwargs]) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
 
 
 class MuseGlimmerVideoProcessorInitKwargs(VideosKwargs, total=False):

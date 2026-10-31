@@ -17,12 +17,15 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
+from ...utils.output_capturing import OutputRecorder
 from ..cohere.modeling_cohere import CohereAttention
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3DecoderLayer,
+    DeepseekV3Experts,
     DeepseekV3ForCausalLM,
     DeepseekV3MLP,
     DeepseekV3Model,
@@ -191,16 +194,40 @@ class Glm4MoeRMSNorm(DeepseekV3RMSNorm):
     pass
 
 
-class Glm4MoeDecoderLayer(DeepseekV3DecoderLayer):
+class Glm4MoeExperts(DeepseekV3Experts):
     pass
+
+
+class Glm4MoeDecoderLayer(DeepseekV3DecoderLayer):
+    def __init__(self, config: Glm4MoeConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+        self.self_attn = Glm4MoeAttention(config=config, layer_idx=layer_idx)
 
 
 class Glm4MoePreTrainedModel(DeepseekV3PreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": Glm4MoeDecoderLayer,
+        "attentions": Glm4MoeAttention,
+        "router_logits": OutputRecorder(Glm4MoeTopkRouter, index=0),
+    }
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.92.*", r"model\.layers\.46.*"]
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, Glm4MoeTopkRouter):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            init.zeros_(module.e_score_correction_bias)
+        elif isinstance(module, Glm4MoeExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
 class Glm4MoeModel(DeepseekV3Model):
-    pass
+    def __init__(self, config: Glm4MoeConfig):
+        super().__init__(config)
+        self.rotary_emb = Glm4MoeRotaryEmbedding(config=config)
 
 
 class Glm4MoeForCausalLM(DeepseekV3ForCausalLM):

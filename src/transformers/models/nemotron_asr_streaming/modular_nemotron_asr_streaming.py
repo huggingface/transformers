@@ -1148,21 +1148,6 @@ class NemotronAsrStreamingForRNNT(
             padding_cache=encoder_outputs.padding_cache,
         )
 
-    @can_return_tuple
-    def get_audio_features(
-        self,
-        input_features: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> NemotronAsrStreamingEncoderModelOutput:
-        encoder_outputs = self.encoder(
-            input_features=input_features,
-            attention_mask=attention_mask,
-            **kwargs,
-        )
-        encoder_outputs.pooler_output = self.encoder_projector(encoder_outputs.last_hidden_state)
-        return encoder_outputs
-
 
 __all__ = [
     "NemotronAsrStreamingConfig",

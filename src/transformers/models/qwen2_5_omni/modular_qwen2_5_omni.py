@@ -65,6 +65,7 @@ from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionTransformerPretrainedModel,
     Qwen2_5_VLAttention,
+    Qwen2_5_VLDecoderLayer,
     Qwen2_5_VLMLP,
     Qwen2_5_VLPreTrainedModel,
     Qwen2_5_VLTextModel,
@@ -1490,6 +1491,8 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
 
     def __init__(self, config: Qwen2_5OmniVisionEncoderConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
+
+        self.rotary_pos_emb = Qwen2_5OmniVisionRotaryEmbedding(config)
         self.blocks = nn.ModuleList([Qwen2_5OmniVisionBlock(config) for _ in range(config.depth)])
 
     def permute_input_for_window_attn(self, input_tensor: torch.Tensor, window_index: torch.Tensor, seq_len: int):
@@ -1603,8 +1606,20 @@ class Qwen2MLP(Qwen2_5_VLMLP):
     pass
 
 
+class Qwen2_5OmniDecoderLayer(Qwen2_5_VLDecoderLayer):
+    def __init__(self, config: Qwen2_5OmniTextConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.self_attn = Qwen2_5OmniAttention(config, layer_idx)
+
+        self.mlp = Qwen2MLP(config)
+
+
 class Qwen2_5OmniThinkerTextModel(Qwen2_5_VLTextModel):
     config: Qwen2_5OmniTextConfig
+    _can_record_outputs = {
+        "hidden_states": Qwen2_5OmniDecoderLayer,
+        "attentions": Qwen2_5OmniAttention,
+    }
     _no_split_modules = ["Qwen2_5OmniDecoderLayer"]
 
     def __init__(self, config: Qwen2_5OmniTextConfig):
@@ -2140,6 +2155,10 @@ class Qwen2_5OmniTalkerCausalLMOutputWithPast(CausalLMOutputWithPast):
 class Qwen2_5OmniTalkerModel(Qwen2_5_VLTextModel):
     config: Qwen2_5OmniTalkerConfig
     input_modalities = ("image", "video", "audio", "text")
+    _can_record_outputs = {
+        "hidden_states": Qwen2_5OmniDecoderLayer,
+        "attentions": Qwen2_5OmniAttention,
+    }
 
     _no_split_modules = ["Qwen2_5OmniDecoderLayer"]
 
