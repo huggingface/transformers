@@ -1035,6 +1035,12 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             image_hidden_states=outputs.image_hidden_states,
         )
 
+    def prepare_inputs_for_generation(self, input_ids, inputs_embeds=None, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(input_ids, inputs_embeds=inputs_embeds, **kwargs)
+        # The block mask reads them by position, so a prefill chunk needs them from the start of the sequence
+        model_inputs["mm_token_type_ids"] = kwargs.get("mm_token_type_ids")
+        return model_inputs
+
     @staticmethod
     def create_masks_for_generate(
         config: PreTrainedConfig,

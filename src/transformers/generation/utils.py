@@ -701,11 +701,12 @@ class GenerationMixin(ContinuousMixin):
         position_ids_key = "decoder_position_ids" if self.config.is_encoder_decoder else "position_ids"
         if (position_ids := kwargs.pop(position_ids_key, None)) is not None:
             model_inputs[position_ids_key] = position_ids
-        if (token_type_ids := kwargs.pop("token_type_ids", None)) is not None:
-            model_inputs["token_type_ids"] = token_type_ids
+        for token_type_key in ("token_type_ids", "mm_token_type_ids", "moe_mm_token_type_ids"):
+            if (token_type := kwargs.pop(token_type_key, None)) is not None:
+                model_inputs[token_type_key] = token_type
 
         # 3. Slice model inputs if it's an input that should have the same length as `input_ids`
-        for model_input_name in [position_ids_key, "token_type_ids", "mm_token_type_ids"]:
+        for model_input_name in [position_ids_key, "token_type_ids", "mm_token_type_ids", "moe_mm_token_type_ids"]:
             model_input = model_inputs.get(model_input_name)
             if model_input is not None and model_input.shape[-1] != sequence_length:
                 # Input can be 2D or 3D, and we always slice on `seq-length` (last dim)
@@ -4323,7 +4324,8 @@ class GenerationMixin(ContinuousMixin):
             chunk_size = generation_config.prefill_chunk_size
             # In case we are restarting from non-empty Cache and the input_ids also contain the old ones, we need to slice
             next_sequence_length = 0 if next_sequence_length is None else next_sequence_length
-            input_chunks = torch.split(input_ids[:, -next_sequence_length:], chunk_size, dim=-1)
+            prefill_ids = input_ids[:, -next_sequence_length:]
+            input_chunks = torch.split(prefill_ids, chunk_size, dim=-1)
 
             model_forward = (
                 self.get_compiled_call(generation_config.compile_config)
@@ -4333,15 +4335,54 @@ class GenerationMixin(ContinuousMixin):
 
             attention_mask = model_kwargs.pop("attention_mask", None)
             position_ids = model_kwargs.pop("position_ids", None)
+            token_types = {
+                key: model_kwargs.pop(key)
+                for key in ("token_type_ids", "mm_token_type_ids", "moe_mm_token_type_ids")
+                if model_kwargs.get(key) is not None
+            }
+            mm_encoder_outputs = model_kwargs.pop("mm_encoder_outputs", None)
+            # Every chunk is part of the first iteration, but only the first one encodes the raw multimodal inputs
+            raw_mm_inputs = {
+                key: model_kwargs.pop(key) for key in MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL if key in model_kwargs
+            }
+
+            # Pre-encoded features are consumed in placeholder order over (batch, seq): feature row `i` of a modality
+            # fills its `i`-th placeholder token, so each chunk gets the rows of the placeholders it contains
+            chunk_mm_encoder_outputs = [{} for _ in input_chunks]
+            if is_first_iteration and mm_encoder_outputs:
+                for modality, output in mm_encoder_outputs.items():
+                    if output is None:
+                        continue
+                    mask = prefill_ids == getattr(self.config, f"{modality}_token_id")
+                    feature_rows = mask.flatten().cumsum(0).view_as(mask) - 1
+                    for chunk_idx, (chunk_mask, chunk_rows) in enumerate(
+                        zip(mask.split(chunk_size, dim=-1), feature_rows.split(chunk_size, dim=-1))
+                    ):
+                        if chunk_mask.any():
+                            chunk_mm_encoder_outputs[chunk_idx][modality] = _slice_mm_encoder_output(
+                                output, chunk_rows[chunk_mask]
+                            )
+
             past_length = cache.get_seq_length()
-            for input_chunk in input_chunks:
+            for chunk_idx, input_chunk in enumerate(input_chunks):
                 current_length = past_length + input_chunk.shape[-1]
                 if attention_mask is not None:
                     model_kwargs["attention_mask"] = attention_mask[:, :current_length]
                 if position_ids is not None:
                     # Always slice on `seq-length` (last dim)
                     model_kwargs["position_ids"] = position_ids[..., past_length:current_length]
-                model_inputs = self.prepare_inputs_for_generation(input_chunk, **model_kwargs)
+                # Up to the chunk end like the attention mask, for the models that read them by position
+                for key, token_type in token_types.items():
+                    model_kwargs[key] = token_type[..., :current_length]
+                model_inputs = self.prepare_inputs_for_generation(
+                    input_chunk,
+                    is_first_iteration=is_first_iteration,
+                    **model_kwargs,
+                    **(raw_mm_inputs if chunk_idx == 0 else {}),
+                )
+
+                if chunk_mm_encoder_outputs[chunk_idx]:
+                    model_inputs["mm_encoder_outputs"] = chunk_mm_encoder_outputs[chunk_idx]
 
                 outputs = model_forward(**model_inputs, return_dict=True)
 
@@ -4351,9 +4392,35 @@ class GenerationMixin(ContinuousMixin):
             # Recreate the kwargs based on the full length
             model_kwargs["attention_mask"] = attention_mask
             model_kwargs["position_ids"] = position_ids
+            model_kwargs.update(token_types)
+            model_kwargs.update(raw_mm_inputs)
+            if mm_encoder_outputs is not None:
+                model_kwargs["mm_encoder_outputs"] = mm_encoder_outputs
 
             # Latest outputs contain next token logits
             return outputs
+
+
+def _slice_mm_encoder_output(output: ModelOutput, rows: torch.LongTensor) -> ModelOutput:
+    """
+    Keeps the given rows of the flattened `(num_placeholder_tokens, hidden_size)` features of a pre-encoded multimodal
+    output, in the container type the model expects: a single-item list, or a tensor with a batch of one. Only the
+    pooled and deepstack features are kept, as those are what the models read from pre-encoded outputs.
+    """
+
+    def slice_features(features):
+        rows_features = torch.cat([feature.reshape(-1, feature.shape[-1]) for feature in features])[rows]
+        if isinstance(features, torch.Tensor):
+            return rows_features.unsqueeze(0)
+        return [rows_features]
+
+    sliced = {"pooler_output": slice_features(output["pooler_output"])}
+    deepstack_features = output.get("deepstack_features")
+    if deepstack_features is not None:
+        if isinstance(deepstack_features[0][0], torch.Tensor):
+            deepstack_features = [slice_features(layer_features) for layer_features in deepstack_features]
+        sliced["deepstack_features"] = deepstack_features
+    return type(output)(**sliced)
 
 
 def _speculative_sampling(

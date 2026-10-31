@@ -48,19 +48,33 @@ if is_torch_available():
         AutoModelForCausalLM,
         AutoTokenizer,
         Cache,
+        CLIPVisionConfig,
+        CTRLConfig,
+        CTRLLMHeadModel,
         DynamicCache,
+        Ernie4_5_VLMoeConfig,
+        Ernie4_5_VLMoeForConditionalGeneration,
         Gemma2Config,
+        Gemma3Config,
+        Gemma3ForConditionalGeneration,
+        Gemma3TextConfig,
+        Gemma4Config,
         Gemma4ForCausalLM,
+        Gemma4ForConditionalGeneration,
         Gemma4TextConfig,
+        Gemma4VisionConfig,
         GenerationConfig,
         LlamaConfig,
         LlamaForCausalLM,
+        LlavaConfig,
+        LlavaForConditionalGeneration,
         MixtralConfig,
         MixtralForCausalLM,
         PreTrainedConfig,
         QuantizedCache,
         Qwen3VLConfig,
         Qwen3VLForConditionalGeneration,
+        SiglipVisionConfig,
         StaticCache,
         convert_and_export_with_cache,
         pipeline,
@@ -568,6 +582,262 @@ class CacheTest(unittest.TestCase):
         # Should both be equal, and equal to the ones without chunking
         self.assertTrue(torch.equal(no_chunked_only_new_ids, chunked_only_new_ids))
         self.assertTrue(torch.equal(chunked_only_new_ids, chunked_full_ids[:, -chunked_only_new_ids.shape[-1] :]))
+
+    @staticmethod
+    def _get_tiny_llava():
+        set_seed(3)
+        config = LlavaConfig(
+            vision_config=CLIPVisionConfig(
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=1,
+                num_attention_heads=2,
+                image_size=8,
+                patch_size=4,
+                projection_dim=16,
+            ),
+            text_config=LlamaConfig(
+                vocab_size=64,
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=1,
+                num_attention_heads=2,
+                num_key_value_heads=2,
+                max_position_embeddings=64,
+                pad_token_id=0,
+            ),
+            image_token_index=63,
+            vision_feature_layer=-1,
+            vision_feature_select_strategy="full",
+        )
+        return LlavaForConditionalGeneration(config).to(torch_device).eval()
+
+    def test_chunked_prefill_keeps_image_inputs(self):
+        """
+        A chunked prefill must pass the image inputs to its first forward, as the unchunked prefill does. They were
+        dropped from every chunk, so a vision-language model generated without the image.
+        """
+        model = self._get_tiny_llava()
+        # 5 image tokens (4 patches + CLS) in the first chunk of 6, then 4 text tokens
+        input_ids = torch.tensor([[1] + [63] * 5 + [5, 6, 7, 8]], device=torch_device)
+        image_a = torch.randn(1, 3, 8, 8, device=torch_device)
+        image_b = torch.randn(1, 3, 8, 8, device=torch_device) * 5
+        generation_kwargs = {
+            "max_new_tokens": 6,
+            "do_sample": False,
+            "output_scores": True,
+            "return_dict_in_generate": True,
+        }
+
+        expected = model.generate(input_ids, pixel_values=image_a, **generation_kwargs)
+        out = model.generate(input_ids, pixel_values=image_a, **generation_kwargs, prefill_chunk_size=6)
+        out_b = model.generate(input_ids, pixel_values=image_b, **generation_kwargs, prefill_chunk_size=6)
+
+        self.assertTrue(torch.equal(out.sequences, expected.sequences))
+        torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores))
+        self.assertFalse(torch.equal(torch.stack(out.scores), torch.stack(out_b.scores)))
+
+    def test_chunked_prefill_splits_image_features(self):
+        """
+        A chunk boundary may fall inside a run of image tokens: each chunk must get the image features of its own image
+        tokens, so that any `prefill_chunk_size` gives the same output as the unchunked prefill.
+        """
+        model = self._get_tiny_llava()
+        generation_kwargs = {
+            "max_new_tokens": 6,
+            "do_sample": False,
+            "output_scores": True,
+            "return_dict_in_generate": True,
+        }
+        one_image = torch.tensor([[1] + [63] * 5 + [5, 6, 7, 8]], device=torch_device)
+        # Image runs at positions 1-5 and 8-12: chunks of 4 split both of them
+        two_images = torch.tensor([[1] + [63] * 5 + [5, 6] + [63] * 5 + [7, 8]], device=torch_device)
+        two_prompts = torch.tensor(
+            [[1] + [63] * 5 + [5, 6, 7, 8], [1, 9, 10] + [63] * 5 + [11, 12]], device=torch_device
+        )
+        cases = [
+            (one_image, torch.randn(1, 3, 8, 8, device=torch_device), [4, 2]),
+            (two_images, torch.randn(2, 3, 8, 8, device=torch_device), [4, 3]),
+            (two_prompts, torch.randn(2, 3, 8, 8, device=torch_device), [4]),
+        ]
+        for input_ids, pixel_values, chunk_sizes in cases:
+            expected = model.generate(input_ids, pixel_values=pixel_values, **generation_kwargs)
+            for chunk_size in chunk_sizes:
+                case = f"{pixel_values.shape[0]} images, batch {input_ids.shape[0]}, prefill_chunk_size={chunk_size}"
+                out = model.generate(
+                    input_ids, pixel_values=pixel_values, **generation_kwargs, prefill_chunk_size=chunk_size
+                )
+                self.assertTrue(torch.equal(out.sequences, expected.sequences), case)
+                torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores), msg=case)
+
+    def test_chunked_prefill_keeps_token_type_ids(self):
+        """
+        Gemma3 and Gemma4 build a bidirectional mask over each image run from `token_type_ids` and `mm_token_type_ids`.
+        Every chunk of a chunked prefill must get them, or the image tokens of a later chunk attend causally only and
+        the output differs from the unchunked prefill.
+        """
+        set_seed(3)
+        config = Gemma3Config(
+            vision_config=SiglipVisionConfig(
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=1,
+                num_attention_heads=2,
+                image_size=8,
+                patch_size=2,
+            ),
+            text_config=Gemma3TextConfig(
+                vocab_size=64,
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=2,
+                num_attention_heads=2,
+                num_key_value_heads=2,
+                head_dim=8,
+                max_position_embeddings=64,
+                sliding_window=16,
+                layer_types=["sliding_attention", "full_attention"],
+                pad_token_id=0,
+            ),
+            mm_tokens_per_image=4,
+            boi_token_index=61,
+            eoi_token_index=62,
+            image_token_index=63,
+        )
+        model = Gemma3ForConditionalGeneration(config).to(torch_device).eval()
+        generation_kwargs = {
+            "max_new_tokens": 6,
+            "do_sample": False,
+            "output_scores": True,
+            "return_dict_in_generate": True,
+        }
+        image = [61] + [63] * 4 + [62]
+        # Chunks of 4: the image run fills the second chunk
+        later_image = torch.tensor([[1, 2, 3] + image + [5, 6, 7]], device=torch_device)
+        # Chunks of 8: one image run in each chunk
+        two_images = torch.tensor([[1] + image + [5, 6] + image + [7]], device=torch_device)
+        cases = [
+            (later_image, torch.randn(1, 3, 8, 8, device=torch_device), 4),
+            (two_images, torch.randn(2, 3, 8, 8, device=torch_device), 8),
+        ]
+        for input_ids, pixel_values, chunk_size in cases:
+            inputs = {"pixel_values": pixel_values, "token_type_ids": (input_ids == 63).long()}
+            expected = model.generate(input_ids, **inputs, **generation_kwargs)
+            out = model.generate(input_ids, **inputs, **generation_kwargs, prefill_chunk_size=chunk_size)
+            case = f"{pixel_values.shape[0]} images, prefill_chunk_size={chunk_size}"
+            self.assertTrue(torch.equal(out.sequences, expected.sequences), case)
+            torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores), msg=case)
+
+        config = Gemma4Config(
+            vision_config=Gemma4VisionConfig(
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=1,
+                num_attention_heads=2,
+                num_key_value_heads=2,
+                head_dim=8,
+                patch_size=2,
+                pooling_kernel_size=2,
+                position_embedding_size=16,
+            ),
+            text_config=Gemma4TextConfig(
+                vocab_size=64,
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=2,
+                num_attention_heads=2,
+                num_key_value_heads=2,
+                head_dim=8,
+                max_position_embeddings=64,
+                sliding_window=16,
+                layer_types=["sliding_attention", "full_attention"],
+                vocab_size_per_layer_input=64,
+                hidden_size_per_layer_input=8,
+                use_bidirectional_attention="vision",
+                pad_token_id=0,
+            ),
+            boi_token_id=61,
+            eoi_token_id=62,
+            image_token_id=63,
+            video_token_id=60,
+            audio_token_id=59,
+        )
+        model = Gemma4ForConditionalGeneration(config).to(torch_device).eval()
+        # A 4x4 grid of patches, pooled 2x2 into the 4 image tokens of the second chunk
+        grid = torch.stack([torch.arange(4).repeat(4), torch.arange(4).repeat_interleave(4)], dim=-1)
+        inputs = {
+            "pixel_values": torch.randn(1, 16, 12, device=torch_device),
+            "image_position_ids": grid[None].to(torch_device),
+            "mm_token_type_ids": (later_image == 63).long(),
+        }
+        expected = model.generate(later_image, **inputs, **generation_kwargs)
+        out = model.generate(later_image, **inputs, **generation_kwargs, prefill_chunk_size=4)
+        self.assertTrue(torch.equal(out.sequences, expected.sequences))
+        torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores))
+
+    def test_chunked_prefill_slices_per_token_types(self):
+        """
+        Ernie4.5-VL-MoE routes each token by its `moe_mm_token_type_ids`, so every chunk of a chunked prefill must
+        get the types of its own tokens. CTRL drops `token_type_ids` in generation, so no chunk may get them back.
+        """
+        set_seed(3)
+        # Both layers route by type, so a wrong route of the first one reaches the later chunks through the cache
+        config = Ernie4_5_VLMoeConfig(
+            text_config={
+                "vocab_size": 64,
+                "hidden_size": 32,
+                "intermediate_size": 32,
+                "num_hidden_layers": 2,
+                "num_attention_heads": 2,
+                "num_key_value_heads": 1,
+                "rope_parameters": {"rope_type": "default", "rope_theta": 500_000.0, "mrope_section": [3, 3, 2]},
+                "moe_intermediate_size": [32, 32],
+                "mlp_layer_types": ["sparse", "sparse"],
+                "pad_token_id": 0,
+            },
+            vision_config={
+                "depth": 1,
+                "hidden_size": 32,
+                "intermediate_size": 32,
+                "num_heads": 2,
+                "spatial_merge_size": 1,
+            },
+            image_start_token_id=5,
+            image_end_token_id=6,
+            image_token_id=7,
+            video_start_token_id=3,
+            video_end_token_id=4,
+            video_token_id=8,
+        )
+        model = Ernie4_5_VLMoeForConditionalGeneration(config).to(torch_device).eval()
+        generation_kwargs = {
+            "max_new_tokens": 6,
+            "do_sample": False,
+            "output_scores": True,
+            "return_dict_in_generate": True,
+        }
+        # Chunks of 4: the 2x2 patches of the image fill the second chunk
+        input_ids = torch.tensor([[1, 9, 10, 5] + [7] * 4 + [6, 11, 12, 13]], device=torch_device)
+        inputs = {
+            "pixel_values": torch.randn(4, 3 * 14 * 14, device=torch_device),
+            "image_grid_thw": torch.tensor([[1, 2, 2]], device=torch_device),
+            "mm_token_type_ids": (input_ids == 7).long(),
+            "moe_mm_token_type_ids": torch.isin(input_ids, torch.tensor([5, 6, 7], device=torch_device)).long(),
+        }
+        expected = model.generate(input_ids, **inputs, **generation_kwargs)
+        out = model.generate(input_ids, **inputs, **generation_kwargs, prefill_chunk_size=4)
+        self.assertTrue(torch.equal(out.sequences, expected.sequences))
+        torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores))
+
+        set_seed(3)
+        config = CTRLConfig(vocab_size=64, n_embd=16, dff=32, n_layer=1, n_head=2, n_positions=64, pad_token_id=0)
+        model = CTRLLMHeadModel(config).to(torch_device).eval()
+        input_ids = torch.tensor([[1, 9, 10, 11, 12, 13, 14, 15, 16, 17]], device=torch_device)
+        token_type_ids = torch.tensor([[0, 0, 1, 1, 0, 0, 1, 1, 0, 0]], device=torch_device)
+        expected = model.generate(input_ids, token_type_ids=token_type_ids, **generation_kwargs)
+        out = model.generate(input_ids, token_type_ids=token_type_ids, **generation_kwargs, prefill_chunk_size=4)
+        self.assertTrue(torch.equal(out.sequences, expected.sequences))
+        torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores))
 
     def test_dynamic_layers_reset_drops_their_states(self):
         """
