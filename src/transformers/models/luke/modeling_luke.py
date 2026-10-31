@@ -1018,6 +1018,7 @@ class LukeLMHead(nn.Module):
 )
 class LukeForMaskedLM(LukePreTrainedModel):
     _tied_weights_keys = {
+        "lm_head.decoder.weight": "luke.embeddings.word_embeddings.weight",
         "entity_predictions.decoder.weight": "luke.entity_embeddings.entity_embeddings.weight",
         "lm_head.bias": "lm_head.decoder.bias",
     }
