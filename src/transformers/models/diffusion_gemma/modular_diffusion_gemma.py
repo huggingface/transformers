@@ -422,6 +422,10 @@ class DiffusionGemmaDecoderTextAttention(nn.Module):
         if not past_key_values.is_compileable:
             keys = torch.cat([cache_layer.keys, key_states], dim=-2)
             values = torch.cat([cache_layer.values, value_states], dim=-2)
+        elif cache_layer.is_sliding:
+            # The static window is right-aligned. Match the dynamic cache's W-1 retained states.
+            keys = torch.cat([cache_layer.keys[..., 1:, :], key_states], dim=-2)
+            values = torch.cat([cache_layer.values[..., 1:, :], value_states], dim=-2)
         else:
             batch, num_heads, max_len, dim = cache_layer.keys.shape
             new_length = key_states.shape[-2]
@@ -1216,12 +1220,10 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
             kv_length, kv_offset = past_key_values.get_mask_sizes(q_length, layer_idx)
             kv_length += additional_kv_length  # Add current canvas length
 
-            # StaticSlidingLayers cannot go beyond sliding window, even with `additional_kv_length`!
             if layer_pattern == "sliding_attention" and past_key_values.is_compileable:
-                layer_idx = past_key_values.is_sliding.index(True)
                 sliding_layer = past_key_values.layers[layer_idx]
-                if kv_length >= sliding_layer.get_max_length() + additional_kv_length:
-                    kv_length = sliding_layer.get_max_length() + additional_kv_length
+                kv_length = sliding_layer.get_max_length() - 1 + q_length
+                kv_offset = sliding_layer.cumulative_length - (sliding_layer.get_max_length() - 1)
 
             mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
             attention_mask = mask_interface(

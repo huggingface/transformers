@@ -882,7 +882,8 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             "position_ids": position_ids,
         }
 
-        if token_type_ids is not None:
+        # Image tokens attend each other bidirectionally only when they are input, i.e. on the first iteration
+        if token_type_ids is not None and is_first_iteration:
             block_sequence_ids = get_block_sequence_ids_for_mask(token_type_ids, device=inputs_embeds.device)
             return create_masks_for_vision_model(
                 block_sequence_ids=block_sequence_ids,

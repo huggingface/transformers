@@ -26,7 +26,7 @@ from ...cache_utils import (
     DynamicCache,
     DynamicLayer,
     DynamicSlidingWindowLayer,
-    StaticSlidingWindowLayer,
+    StaticLayer,
 )
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
@@ -817,7 +817,7 @@ class UnlimitedOcrDynamicReferenceSlidingWindowLayer(DynamicSlidingWindowLayer):
             self.prefill_cumulative_length = new_prefill_length
 
 
-class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
+class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticLayer):
     """
     A static cache layer that stores the key and value states as static tensors of shape
     `[batch_size, num_heads, min(max_cache_len, prefill_length + sliding_window), head_dim]`.
@@ -840,11 +840,12 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
     """
 
     _layer_type = "reference_sliding_attention"
+    is_sliding = True
 
     def __init__(self, max_cache_len: int, sliding_window: int, **kwargs):
-        super().__init__(max_cache_len=max_cache_len, sliding_window=sliding_window, **kwargs)
-        # Effective sliding window length is determined by max_cache_len in parent
+        super().__init__(max_cache_len=min(max_cache_len, sliding_window))
         self.sliding_window = self.max_cache_len
+        self.cumulative_length_int = 0
         self.prefill_max_cache_len = max_cache_len - self.sliding_window
         self.prefill_length: int | None = None
         self.prefill_cumulative_length: int = 0
@@ -909,7 +910,7 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
             value_states = value_states[..., prefill_kv_length:, :]
 
         # Decode
-        sliding_keys, sliding_values = super().update(key_states, value_states, *args, **kwargs)
+        sliding_keys, sliding_values = self._update_sliding_states(key_states, value_states)
 
         # The parent returned the original buffers
         if sliding_keys is self.keys:
@@ -920,6 +921,37 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
             torch.cat((self.prefill_keys, sliding_keys), dim=-2),
             torch.cat((self.prefill_values, sliding_values), dim=-2),
         )
+
+    def _update_sliding_states(self, key_states, value_states):
+        # Reference slots and decode slots share a buffer. Keep decode states left-aligned so their
+        # offset never shifts the permanent reference slots into negative (unwritten) mask positions.
+        length = key_states.shape[-2]
+        current_length = self.cumulative_length_int
+        self.cumulative_length_int += length
+        if current_length + length <= self.max_cache_len:
+            positions = torch.arange(length, device=self.device) + self.cumulative_length
+            self.keys[:, :, positions] = key_states
+            self.values[:, :, positions] = value_states
+            self.cumulative_length.add_(length)
+            return self.keys, self.values
+
+        if current_length >= self.max_cache_len and length == 1:
+            # Tensor indexing prevents unsafe shift/copy fusion (pytorch/pytorch#159855).
+            keys, values = self.keys.roll(-1, dims=-2), self.values.roll(-1, dims=-2)
+            index = torch.tensor([-1], dtype=torch.long, device=self.device)
+            keys[:, :, index] = key_states
+            values[:, :, index] = value_states
+            self.keys.copy_(keys)
+            self.values.copy_(values)
+            return self.keys, self.values
+
+        start = 1 if current_length >= self.max_cache_len else 0
+        end = min(current_length, self.max_cache_len)
+        keys = torch.cat((self.keys[:, :, start:end, :], key_states), dim=-2)
+        values = torch.cat((self.values[:, :, start:end, :], value_states), dim=-2)
+        self.keys.copy_(keys[:, :, -self.max_cache_len :, :])
+        self.values.copy_(values[:, :, -self.max_cache_len :, :])
+        return keys, values
 
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
@@ -934,11 +966,15 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
             kv_length = max(
                 prefill_length + self.sliding_window,
                 # Query exceeds prefill and maybe also sliding window
-                self.prefill_cumulative_length + super().get_seq_length() + query_length,
+                self.prefill_cumulative_length + self.cumulative_length_int + query_length,
             )
         # Decode
         else:
-            kv_length, kv_offset = super().get_mask_sizes(query_length)
+            kv_offset = max(self.cumulative_length_int - self.sliding_window + 1, 0)
+            if self.cumulative_length_int >= self.sliding_window:
+                kv_length = self.sliding_window + query_length - 1
+            else:
+                kv_length = max(self.sliding_window, self.cumulative_length_int + query_length)
             kv_length += self.prefill_length
 
         # Returned kv_offset is with respect to sliding window keys.
@@ -953,7 +989,7 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
         return min(max_cache_len, self.prefill_length + self.sliding_window)
 
     def get_seq_length(self) -> int:
-        return self.prefill_cumulative_length + super().get_seq_length()
+        return self.prefill_cumulative_length + self.cumulative_length_int
 
     def set_prefill_length(self, prefill_length: int) -> None:  # trf-ignore: TRF033
         """Declare how many leading tokens are prefill states, before they are cached."""
@@ -962,6 +998,7 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
 
     def reset(self) -> None:
         super().reset()
+        self.cumulative_length_int = 0
         if self.is_initialized:
             # This also zeros the self.prefill_keys, self.keys, etc. views
             self.all_keys.zero_()

@@ -91,6 +91,7 @@ if is_torch_available():
         MtpCache,
         QuantoQuantizedLayer,
         StaticCache,
+        StaticSlidingWindowLayer,
         get_layer_types_and_kwargs,
     )
     from transformers.generation import (
@@ -2811,38 +2812,32 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
         # When `output_attentions=True`, each iteration of generate appends the attentions corresponding to the new
         # token(s)
-        # NOTE: `StaticCache` may have different lengths on different layers, if this test starts failing add more
-        # elaborate checks
         for generated_length, iter_attentions in enumerate(attentions):
-            # regardless of using cache, the first forward pass will have the full prompt as input
-            if use_cache and generated_length > 0:
-                model_input_length = 1
-            else:
-                model_input_length = prompt_length + generated_length
+            model_input_length = 1 if use_cache and generated_length > 0 else prompt_length + generated_length
             if has_static_cache:
-                # Hybrid caches (e.g. Bamba: full_attention + linear_attention) have layers with no fixed
-                # max — `get_max_length(i)` returns -1 on those. Pick the first layer that reports a
-                # real length; that's the one whose attention shape we're checking against.
-                query_length = next(
-                    (
-                        decoder_past_key_values.get_max_length(i)
-                        for i in range(len(decoder_past_key_values))
-                        if decoder_past_key_values.get_max_length(i) != -1
-                    ),
-                    prompt_length + generated_length,
-                )
+                # Sliding prefill returns the prompt itself; decode returns the bounded window.
+                # Linear/recurrent layers do not return attention weights.
+                key_lengths = [
+                    prompt_length
+                    if generated_length == 0 and isinstance(layer, StaticSlidingWindowLayer) and prompt_length > 1
+                    else layer.get_max_length()
+                    for layer in decoder_past_key_values.layers
+                    if layer.get_max_length() != -1
+                ]
+                # KV-sharing layers return attentions but reuse the last cache of the same type.
+                shared_layers = getattr(config, "num_kv_shared_layers", 0) or 0
+                if shared_layers:
+                    cached_types = config.layer_types[:-shared_layers]
+                    key_lengths += [
+                        key_lengths[len(cached_types) - 1 - cached_types[::-1].index(layer_type)]
+                        for layer_type in config.layer_types[-shared_layers:]
+                    ]
             else:
-                query_length = prompt_length + generated_length
+                key_lengths = [prompt_length + generated_length] * len(iter_attentions)
 
-            expected_shape = (
-                batch_size,
-                config.num_attention_heads,
-                model_input_length,
-                query_length,
-            )
-            # check attn size
             self.assertListEqual(
-                [layer_attention.shape for layer_attention in iter_attentions], [expected_shape] * len(iter_attentions)
+                [layer_attention.shape for layer_attention in iter_attentions],
+                [(batch_size, config.num_attention_heads, model_input_length, length) for length in key_lengths],
             )
 
     def _check_encoder_attention_for_generate(self, attentions, batch_size, config, prompt_length):
