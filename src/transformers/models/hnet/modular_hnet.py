@@ -333,10 +333,14 @@ class HNetStack(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None,
+        step_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        """`attention_mask` is the 2D padding mask over the cached and new positions."""
+        """
+        `attention_mask` is the 2D padding mask over the cached and new positions (a static cache returns its whole
+        buffer), `step_mask` the one of the new positions, `None` when they are all real.
+        """
         seq_len = hidden_states.shape[1]
         causal_mask = position_embeddings = None
         if self.first_attention_idx is not None:
@@ -344,9 +348,14 @@ class HNetStack(nn.Module):
             if attention_mask is None:
                 past_length = past_key_values.get_seq_length(self.first_attention_idx) if past_key_values else 0
                 kv_positions = torch.arange(past_length + seq_len, device=hidden_states.device)[None]
+                position_ids = kv_positions[:, past_length:]
             else:
                 kv_positions = (attention_mask.long().cumsum(dim=-1) - 1).clamp(min=0)
-            position_ids = kv_positions[:, -seq_len:]
+                new_positions = (
+                    step_mask.long() if step_mask is not None else hidden_states.new_ones(1, seq_len).long()
+                )
+                past_counts = attention_mask.sum(dim=-1, keepdim=True) - new_positions.sum(dim=-1, keepdim=True)
+                position_ids = (past_counts + new_positions.cumsum(dim=-1) - 1).clamp(min=0)
             position_embeddings = self.rotary_emb(hidden_states, position_ids)
             causal_mask = create_causal_mask(
                 config=self.config,
@@ -358,18 +367,15 @@ class HNetStack(nn.Module):
                 and_mask_function=None
                 if self.sliding_window is None
                 else lambda batch_idx, head_idx, q_idx, kv_idx: (
-                    # A static cache has slots past the written positions, which the padding mask removes anyway
-                    kv_positions[batch_idx, kv_idx.clamp(max=kv_positions.shape[1] - 1)]
-                    > kv_positions[batch_idx, q_idx] - self.sliding_window
+                    kv_positions[batch_idx, kv_idx] > kv_positions[batch_idx, q_idx] - self.sliding_window
                 ),
                 layer_idx=self.first_attention_idx,
             )
-        mamba_mask = create_recurrent_attention_mask(self.config, hidden_states, attention_mask)
+        mamba_mask = create_recurrent_attention_mask(self.config, hidden_states, step_mask)
 
         # Decoding a batch where some sequences close no chunk: their step is padding, and must not move their state
-        saved_states, skipped = [], None
-        if past_key_values is not None and seq_len == 1 and attention_mask is not None:
-            skipped = ~attention_mask[:, -1]
+        saved_states = []
+        if past_key_values is not None and seq_len == 1 and step_mask is not None:
             saved_states = [
                 (state, state.clone())
                 for layer in self.layers
@@ -390,7 +396,7 @@ class HNetStack(nn.Module):
             )
 
         for state, previous in saved_states:
-            state.copy_(torch.where(skipped.view(-1, *[1] * (state.dim() - 1)), previous, state))
+            state.copy_(torch.where(step_mask.view(-1, *[1] * (state.dim() - 1)), state, previous))
         return self.norm_f(hidden_states)
 
 
@@ -435,13 +441,17 @@ def boundaries_last(boundary_mask: torch.Tensor) -> torch.Tensor:
     return positions.argsort(dim=1)
 
 
-def chunk(hidden_states: torch.Tensor, boundary_mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+def chunk(
+    hidden_states: torch.Tensor, boundary_mask: torch.Tensor, max_chunks: int | None = None
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Keeps the boundary positions only, left-padded like the bytes so that every sequence ends on its last chunk:
-    `(B, L, D) -> (B, num_chunks, D)` and its padding mask.
+    `(B, L, D) -> (B, max_chunks, D)` and its padding mask. `max_chunks` defaults to the most chunks of a sequence.
     """
     num_chunks = boundary_mask.sum(dim=1)
-    max_chunks = int(num_chunks.max())
+    if max_chunks is None:
+        # The only data-dependent shape: prefill needs the chunk count, a decoding step always has 1 position
+        max_chunks = int(num_chunks.max())
     order = boundaries_last(boundary_mask)[:, boundary_mask.shape[1] - max_chunks :]
     chunk_states = hidden_states.gather(1, order[..., None].expand(-1, -1, hidden_states.shape[-1]))
     chunk_mask = torch.arange(max_chunks, device=boundary_mask.device)[None] >= (max_chunks - num_chunks)[:, None]
@@ -470,17 +480,15 @@ def dechunk(
     prob = prob.gather(1, boundaries_last(boundary_mask)[:, seq_len - num_chunks :]).masked_fill(~chunk_mask, 1e-4)
     dt = -torch.log1p(-prob)
     initial_states = None if previous is None else previous.float().view(batch_size, num_heads, -1, 1)
-    smoothed = chunk_states.float()
-    if num_chunks > 0:
-        smoothed = mamba2_chunk_scan(
-            (chunk_states.float() * chunk_mask[..., None] / dt[..., None]).view(batch_size, num_chunks, num_heads, -1),
-            dt[..., None].expand(-1, -1, num_heads),
-            -torch.ones(num_heads, device=dt.device),
-            prob[..., None, None],
-            torch.ones_like(prob)[..., None, None],
-            config.chunk_size,
-            initial_states=initial_states,
-        ).view(batch_size, num_chunks, hidden_size)
+    smoothed = mamba2_chunk_scan(
+        (chunk_states.float() * chunk_mask[..., None] / dt[..., None]).view(batch_size, num_chunks, num_heads, -1),
+        dt[..., None].expand(-1, -1, num_heads),
+        -torch.ones(num_heads, device=dt.device),
+        prob[..., None, None],
+        torch.ones_like(prob)[..., None, None],
+        config.chunk_size,
+        initial_states=initial_states,
+    ).view(batch_size, num_chunks, hidden_size)
 
     # Position `t` belongs to the last chunk closed at or before it, chunks being left-padded
     chunks_so_far = boundary_mask.cumsum(dim=1)
@@ -505,6 +513,8 @@ class HNetPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
     _is_stateful = True
+    # Decoding steps have static shapes (prefill does not: it chunks to a data-dependent length)
+    _can_compile_fullgraph = True
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -576,55 +586,51 @@ class HNetModel(HNetPreTrainedModel):
         hidden_states = self.embed_tokens(input_ids) if inputs_embeds is None else inputs_embeds
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
-        stage_mask = attention_mask.bool() if attention_mask is not None else None
-        # The 2D mask spans the past positions when decoding, routing and chunking only see the new ones
+        # A decoding step runs every stage on exactly 1 position, padding for sequences that close no chunk: no
+        # data-dependent shape, so it compiles to a single graph
+        decoding = past_key_values is not None and hidden_states.shape[1] == 1
+        level_mask = attention_mask.bool() if attention_mask is not None else None
+        # The 2D mask spans the past positions (as a static buffer when compiled), routing and chunking only see the
+        # new ones, all real when decoding
         new_mask = (
-            stage_mask[:, -hidden_states.shape[1] :]
-            if stage_mask is not None
+            level_mask[:, -hidden_states.shape[1] :]
+            if level_mask is not None and not decoding
             else torch.ones(hidden_states.shape[:2], dtype=torch.bool, device=hidden_states.device)
         )
+        step_mask = None if decoding else new_mask
 
         # Down: encode, then keep only the chunk boundaries for the next stage
-        stage_masks, residuals, boundaries = [], [], []
+        level_masks, chunk_masks, residuals, boundaries = [], [], [], []
         for stage_idx, (encoder, routing_module, residual_proj) in enumerate(
             zip(self.encoders, self.routing_modules, self.residual_projs)
         ):
             if stage_idx > 0:
                 hidden_states = self.widen(hidden_states, stage_idx)
-            hidden_states = encoder(hidden_states, stage_mask, past_key_values, **kwargs)
+            hidden_states = encoder(hidden_states, level_mask, step_mask, past_key_values, **kwargs)
             boundary_prob, boundary_mask = routing_module(hidden_states, new_mask, past_key_values)
-            stage_masks.append(stage_mask)
+            level_masks.append((level_mask, step_mask))
             residuals.append(residual_proj(hidden_states.to(residual_proj.weight.dtype)))
             boundaries.append((boundary_prob, boundary_mask))
-            hidden_states, new_mask = chunk(hidden_states, boundary_mask)
-            # Decoding a step that closes no chunk in any sequence: the inner stages have nothing to process
-            if hidden_states.shape[1] == 0:
-                break
-            stage_mask = new_mask
+            hidden_states, new_mask = chunk(hidden_states, boundary_mask, 1 if decoding else None)
+            chunk_masks.append(new_mask)
+            step_mask = level_mask = new_mask
             if past_key_values is not None:
-                # Sequences that close no chunk at this step get a padding position, the cache keeps the full mask
-                step_mask = new_mask[:, None, :, None].float()
-                chunk_mask_idx = self.chunk_mask_ids[stage_idx]
-                stage_mask = past_key_values.update(step_mask, step_mask, chunk_mask_idx)[0]
-                # A static cache returns its whole buffer: keep the positions written so far
-                stage_mask = stage_mask[:, 0, : past_key_values.get_seq_length(chunk_mask_idx), 0].bool()
-        else:
-            hidden_states = self.widen(hidden_states, len(self.encoders))
-            hidden_states = self.main_network(hidden_states, stage_mask, past_key_values, **kwargs)
+                # The cache keeps the padding mask of every chunk seen so far
+                cached_mask = new_mask[:, None, :, None].float()
+                level_mask = past_key_values.update(cached_mask, cached_mask, self.chunk_mask_ids[stage_idx])[0]
+                level_mask = level_mask[:, 0, :, 0].bool()
+
+        hidden_states = self.widen(hidden_states, len(self.encoders))
+        hidden_states = self.main_network(hidden_states, level_mask, step_mask, past_key_values, **kwargs)
 
         # Up: spread each chunk back over its positions, add the encoder residual, decode
-        for stage_idx in reversed(range(len(boundaries))):
+        for stage_idx in reversed(range(len(self.encoders))):
             hidden_states = hidden_states[..., : self.stage_widths[stage_idx]]
             boundary_prob, boundary_mask = boundaries[stage_idx]
-            chunk_mask = (
-                new_mask
-                if stage_idx == len(boundaries) - 1
-                else stage_masks[stage_idx + 1][:, -hidden_states.shape[1] :]
-            )
             dechunk_idx = self.dechunk_ids[stage_idx]
             hidden_states = dechunk(
                 hidden_states,
-                chunk_mask,
+                chunk_masks[stage_idx],
                 boundary_prob,
                 boundary_mask,
                 self.config,
@@ -637,7 +643,7 @@ class HNetModel(HNetPreTrainedModel):
             confidence = 1 + confidence - confidence.detach()
             residual = residuals[stage_idx]
             hidden_states = (hidden_states.to(residual.dtype) * confidence + residual).to(hidden_states.dtype)
-            hidden_states = self.decoders[stage_idx](hidden_states, stage_masks[stage_idx], past_key_values, **kwargs)
+            hidden_states = self.decoders[stage_idx](hidden_states, *level_masks[stage_idx], past_key_values, **kwargs)
 
         return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
 
@@ -651,9 +657,15 @@ class HNetForCausalLM(LlamaForCausalLM):
         self.post_init()
 
     @staticmethod
-    def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, position_ids=None, **kwargs):
-        # Every stage builds its own masks from the 2D padding mask, at its own length
-        return attention_mask
+    def create_masks_for_generate(
+        config, inputs_embeds, attention_mask, past_key_values, position_ids=None, is_first_iteration=False, **kwargs
+    ):
+        # Every stage builds its own masks from the 2D padding mask, at its own length. When decoding with a static
+        # cache, it is padded to the cache length so that every step has the same shapes
+        if is_first_iteration or attention_mask is None:
+            return attention_mask
+        cache_length = past_key_values.get_max_length(config.layer_types.index("full_attention"))
+        return F.pad(attention_mask, (0, cache_length - attention_mask.shape[1]))
 
 
 __all__ = ["HNetConfig", "HNetForCausalLM", "HNetModel", "HNetPreTrainedModel"]
