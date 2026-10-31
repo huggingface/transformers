@@ -37,24 +37,29 @@ if is_torch_available():
     import torch
 
     from transformers import MistralLarge4ForConditionalGeneration, MistralLarge4Model
-    from transformers.models.mistral_large4.modeling_mistral_large4 import MistralLarge4TextIndexer
+    from transformers.models.mistral_large4.modeling_mistral_large4 import (
+        MistralLarge4TextIndexer,
+        MistralLarge4TextNoRopeIndexer,
+    )
 
 
 @contextmanager
 def indexer_leaky_relu():
-    """Swaps `F.relu` for `F.leaky_relu` in the body of the indexer forward (whatever decorators wrap it).
+    """Swaps `F.relu` for `F.leaky_relu` in the body of the indexer forwards (whatever decorators wrap them).
 
     With random weights, the indexer's ReLU zeroes many scores and `topk` breaks those exact ties differently depending
     on tensor shapes (cache type, padding). A leaky ReLU keeps the scores distinct, so tests comparing such code paths
     select the same tokens. The real ReLU is covered by the integration tests, on trained weights.
     """
-    forward = inspect.unwrap(MistralLarge4TextIndexer.forward)
-    code = forward.__code__
-    forward.__code__ = code.replace(co_names=tuple("leaky_relu" if n == "relu" else n for n in code.co_names))
+    forwards = [inspect.unwrap(cls.forward) for cls in (MistralLarge4TextIndexer, MistralLarge4TextNoRopeIndexer)]
+    codes = [forward.__code__ for forward in forwards]
+    for forward, code in zip(forwards, codes):
+        forward.__code__ = code.replace(co_names=tuple("leaky_relu" if n == "relu" else n for n in code.co_names))
     try:
         yield
     finally:
-        forward.__code__ = code
+        for forward, code in zip(forwards, codes):
+            forward.__code__ = code
 
 
 class MistralLarge4VisionText2TextModelTester(VLMModelTester):
