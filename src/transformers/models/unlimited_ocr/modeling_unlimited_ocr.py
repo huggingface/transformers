@@ -577,6 +577,7 @@ class UnlimitedOcrSamVisionProj(nn.Module):
 
 
 class UnlimitedOcrSamVisionEncoder(UnlimitedOcrPreTrainedModel):
+    config: UnlimitedOcrSamVisionConfig
     _can_record_outputs = {"hidden_states": UnlimitedOcrSamVisionLayer, "attentions": UnlimitedOcrSamVisionAttention}
     _input_embed_layer = "patch_embed"
 
@@ -890,7 +891,7 @@ class UnlimitedOcrEncoder(nn.Module):
     """
 )
 class UnlimitedOcrVisionEncoder(UnlimitedOcrPreTrainedModel):
-    config: UnlimitedOcrVisionConfig
+    config: UnlimitedOcrVisionEncoderConfig
     main_input_name = "patch_embeds"
     input_modalities = ("image",)
     _can_record_outputs = {
@@ -924,6 +925,8 @@ class UnlimitedOcrVisionEncoder(UnlimitedOcrPreTrainedModel):
 
 @auto_docstring(custom_intro="Vision model encoding images first with SAM followed by an additional (CLIP) model.")
 class UnlimitedOcrVisionModel(UnlimitedOcrPreTrainedModel):
+    config: UnlimitedOcrVisionConfig
+
     def __init__(self, config: UnlimitedOcrVisionConfig):
         super().__init__(config)
         self.sam_encoder = UnlimitedOcrSamVisionEncoder(config.sam_config)

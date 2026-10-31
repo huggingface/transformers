@@ -141,7 +141,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         return model
 
     def update_parallel_plan(self, model, plan):
-        from ..distributed.tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
+        from ..distributed.parallel_utils import _get_parameter_plan, replace_layer_number_by_wildcard
         from ..integrations.finegrained_fp8 import FP8Experts
 
         super().update_parallel_plan(model, plan)
@@ -156,7 +156,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self) -> bool:
-        return False
+        return True
 
     @property
     def is_compileable(self) -> bool:
@@ -177,6 +177,10 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     def update_weight_conversions(self, weight_conversions, model):
         from ..core_model_loading import WeightRenaming
 
-        # Some FP8 checkpoints (e.g. DeepSeek-V4-Flash) ship per-block scales under `.scale`
-        scale_rename = WeightRenaming(source_patterns=r"^(.+)\.scale", target_patterns=r"\1.weight_scale_inv")
-        return [scale_rename] + super().update_weight_conversions(weight_conversions, model)
+        # Some FP8 checkpoints ship per-block scales under `.scale` (e.g. DeepSeek-V4-Flash) or `.qscale_weight`
+        # (e.g. Mistral Large 4)
+        scale_renames = [
+            WeightRenaming(source_patterns=r"^(.+)\.scale", target_patterns=r"\1.weight_scale_inv"),
+            WeightRenaming(source_patterns=r"\.qscale_weight", target_patterns=".weight_scale_inv"),
+        ]
+        return scale_renames + super().update_weight_conversions(weight_conversions, model)

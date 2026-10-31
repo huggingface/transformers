@@ -504,7 +504,7 @@ class LiltPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class LiltModel(LiltPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: LiltConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -645,7 +645,7 @@ class LiltModel(LiltPreTrainedModel):
 )
 class LiltForSequenceClassification(LiltPreTrainedModel):
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification.__init__ with Roberta->Lilt, roberta->lilt
-    def __init__(self, config):
+    def __init__(self, config: LiltConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -754,7 +754,7 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
 @auto_docstring
 class LiltForTokenClassification(LiltPreTrainedModel):
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification.__init__ with Roberta->Lilt, roberta->lilt
-    def __init__(self, config):
+    def __init__(self, config: LiltConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -873,7 +873,7 @@ class LiltClassificationHead(nn.Module):
 @auto_docstring
 class LiltForQuestionAnswering(LiltPreTrainedModel):
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering.__init__ with Roberta->Lilt, roberta->lilt
-    def __init__(self, config):
+    def __init__(self, config: LiltConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

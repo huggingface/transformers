@@ -27,13 +27,14 @@ from .utils import (
     is_flash_attn_4_available,
     is_rocm_platform,
     is_torch_cuda_available,
+    is_torch_greater_or_equal,
     is_torch_mlu_available,
     is_torch_musa_available,
     is_torch_npu_available,
     is_torch_xpu_available,
     logging,
 )
-from .utils.import_utils import PACKAGE_DISTRIBUTION_MAPPING, is_tracing
+from .utils.import_utils import _package_distribution_mapping, is_tracing
 
 
 logger = logging.get_logger(__name__)
@@ -73,7 +74,8 @@ FLASH_ATTN_KERNEL_FALLBACK = {
 }
 
 FLASH_ATTN_KERNEL_VERSIONS = {
-    "kernels-community/flash-attn2": 3,
+    # v4 was only tested on 2.10 and upwards
+    "kernels-community/flash-attn2": 4 if is_torch_greater_or_equal("2.10", accept_dev=True) else 3,
     "kernels-community/flash-attn3": 1,
     "kernels-community/vllm-flash-attn3": 1,
     "kernels-community/aiter-flash-attn": 2,
@@ -101,7 +103,8 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
         "general_availability_check": is_flash_attn_2_available,
         "pkg_availability_check": lambda *args, **kwargs: (
             importlib.util.find_spec("flash_attn") is not None
-            and "flash-attn" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])]
+            and "flash-attn"
+            in [pkg.replace("_", "-") for pkg in _package_distribution_mapping().get("flash_attn", [])]
         ),
         "supported_devices": (
             (is_torch_cuda_available, "cuda"),
@@ -124,7 +127,7 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
         "pkg_availability_check": lambda *args, **kwargs: (
             importlib.util.find_spec("flash_attn_interface") is not None
             and "flash-attn-3"
-            in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn_interface", [])]
+            in [pkg.replace("_", "-") for pkg in _package_distribution_mapping().get("flash_attn_interface", [])]
         ),
         "supported_devices": ((is_torch_cuda_available, "cuda"),),
         "cuda_min_major_version": 8,  # Ampere
@@ -134,7 +137,8 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
         "general_availability_check": is_flash_attn_4_available,
         "pkg_availability_check": lambda *args, **kwargs: (
             importlib.util.find_spec("flash_attn") is not None
-            and "flash-attn-4" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])]
+            and "flash-attn-4"
+            in [pkg.replace("_", "-") for pkg in _package_distribution_mapping().get("flash_attn", [])]
         ),
         "supported_devices": ((is_torch_cuda_available, "cuda"),),
         "cuda_min_major_version": 9,  # Hopper

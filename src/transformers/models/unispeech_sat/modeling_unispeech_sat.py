@@ -714,6 +714,12 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 init.uniform_(module.bias, a=-k, b=k)
+        elif isinstance(module, UniSpeechSatModel) and hasattr(module, "masked_spec_embed"):
+            init.uniform_(module.masked_spec_embed)
+        elif isinstance(module, UniSpeechSatForPreTraining):
+            init.zeros_(module.label_embeddings_concat)
+        elif isinstance(module, AMSoftmaxLoss):  # noqa: F821
+            init.normal_(module.weight)
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor | int):
         """
@@ -1085,7 +1091,7 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
     """
 )
 class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
-    def __init__(self, config, target_lang: str | None = None):
+    def __init__(self, config: UniSpeechSatConfig, target_lang: str | None = None):
         r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
@@ -1212,7 +1218,7 @@ class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
     """
 )
 class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: UniSpeechSatConfig):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -1305,7 +1311,7 @@ class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
 
 @auto_docstring
 class UniSpeechSatForAudioFrameClassification(UniSpeechSatPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: UniSpeechSatConfig):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -1451,7 +1457,7 @@ class TDNNLayer(nn.Module):
     """
 )
 class UniSpeechSatForXVector(UniSpeechSatPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: UniSpeechSatConfig):
         super().__init__(config)
 
         self.unispeech_sat = UniSpeechSatModel(config)

@@ -43,7 +43,6 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.import_utils import requires
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..swin.modeling_swin import SwinDropPath
 from ..vit.modeling_vit import ViTAttention, ViTPreTrainedModel, eager_attention_forward
@@ -157,7 +156,6 @@ class SegformerImageProcessor(BeitImageProcessor):
         return processed_images
 
 
-@requires(backends=("torch", "torchvision"))
 class SegformerImageProcessorPil(BeitImageProcessorPil):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -204,7 +202,7 @@ class SegformerImageProcessorPil(BeitImageProcessorPil):
                     "do_normalize": False,
                     "do_rescale": False,
                     # Nearest resample is used for segmentation maps instead of BILINEAR.
-                    "resample": tvF.InterpolationMode.NEAREST_EXACT,
+                    "resample": PILImageResampling.NEAREST,
                 }
             )
             processed_segmentation_maps = self._preprocess(
@@ -527,7 +525,7 @@ class SegformerPreTrainedModel(ViTPreTrainedModel):
 
 @auto_docstring
 class SegformerModel(SegformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SegformerConfig):
         super().__init__(config)
         self.config = config
 
@@ -561,7 +559,7 @@ class SegformerModel(SegformerPreTrainedModel):
     """
 )
 class SegformerForImageClassification(SegformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SegformerConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -685,7 +683,7 @@ class SegformerDecodeHead(nn.Module):
     """
 )
 class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SegformerConfig):
         super().__init__(config)
         self.segformer = SegformerModel(config)
         self.decode_head = SegformerDecodeHead(config)
