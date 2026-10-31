@@ -14,7 +14,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -101,9 +101,52 @@ class DiffusionGemmaTextConfig(Gemma4TextConfig):
     attention_k_eq_v = AttributeError()
     use_double_wide_mlp = AttributeError()
     num_kv_shared_layers = AttributeError()
+    attention_layer_types = AttributeError()
     vocab_size_per_layer_input = AttributeError()
     hidden_size_per_layer_input = AttributeError()
     use_cache = AttributeError()
+
+    def __post_init__(self, **kwargs):
+        if self.use_bidirectional_attention == "all":
+            self.is_causal = False
+            self.sliding_window = (self.sliding_window // 2) + 1  # due to fa we set exclusive bounds
+
+        if self.layer_types is None:
+            sliding_window_pattern = 6  # by default 5:1
+            self.layer_types = [
+                "sliding_attention" if bool((i + 1) % sliding_window_pattern) else "full_attention"
+                for i in range(self.num_hidden_layers)
+            ]
+
+        if self.layer_types and (last_layer_type := self.layer_types[-1]) != "full_attention":
+            logger.warning(
+                f"Last layer must use `full_attention`, but got `{last_layer_type}`. Forcing last layer to `full_attention`."
+            )
+            self.layer_types[-1] = "full_attention"
+
+        default_rope_params: dict[Literal["full_attention", "sliding_attention"] : dict[str, Any]] = {
+            "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0},
+            "full_attention": {"rope_type": "proportional", "partial_rotary_factor": 0.25, "rope_theta": 1_000_000.0},
+        }
+        if self.rope_parameters is None:
+            self.rope_parameters = default_rope_params
+
+        global_head_dim = kwargs.pop("global_head_dim", 512)
+        num_global_key_value_heads = kwargs.pop("num_global_key_value_heads", None)
+        if "per_layer_config" not in kwargs:
+            layer_overrides: dict[str, Any] = {"head_dim": global_head_dim}
+            # `attention_k_eq_v` gates the kv-head override for the models that declare it;
+            # models that drop the attribute entirely are ungated, hence the `True` fallback.
+            num_key_value_heads = num_global_key_value_heads if getattr(self, "attention_k_eq_v", True) else None
+            if num_key_value_heads is not None:
+                layer_overrides["num_key_value_heads"] = num_key_value_heads
+            kwargs["per_layer_config"] = {
+                layer_idx: layer_overrides
+                for layer_idx, layer_type in enumerate(self.layer_types)
+                if layer_type == "full_attention"
+            }
+
+        PreTrainedConfig.__post_init__(self, **kwargs)
 
 
 @auto_docstring(checkpoint="google/diffusiongemma-26B-A4B-it")

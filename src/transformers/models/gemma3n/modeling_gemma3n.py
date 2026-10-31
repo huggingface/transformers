@@ -1398,16 +1398,6 @@ class Gemma3nTextKVSharedAttention(nn.Module):
         return attn_output, attn_weights
 
 
-def gemma3n_text_attention_type(config: Gemma3nTextConfig, layer_idx: int) -> str:
-    first_kv_shared_layer_idx = config.num_hidden_layers - config.num_kv_shared_layers
-    if layer_idx >= first_kv_shared_layer_idx > 0:
-        return "kv_shared"
-    prev_layers = config.layer_types[:first_kv_shared_layer_idx]
-    # The last non-shared layer of each type stores its full-length kv for the shared layers
-    is_kv_source = layer_idx == len(prev_layers) - 1 - prev_layers[::-1].index(config.layer_types[layer_idx])
-    return "kv_source" if is_kv_source else "attention"
-
-
 GEMMA3N_TEXT_ATTENTION_CLASSES = {
     "attention": Gemma3nTextAttention,
     "kv_source": Gemma3nTextKVSourceAttention,
@@ -1421,9 +1411,7 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
         self.config = config
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
-        self.self_attn = GEMMA3N_TEXT_ATTENTION_CLASSES[gemma3n_text_attention_type(config, layer_idx)](
-            config, layer_idx
-        )
+        self.self_attn = GEMMA3N_TEXT_ATTENTION_CLASSES[config.attention_layer_types[layer_idx]](config, layer_idx)
         self.mlp = Gemma3nTextMLP(config, layer_idx=layer_idx)
         self.input_layernorm = Gemma3nRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Gemma3nRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
@@ -1788,8 +1776,8 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
 
         # Update `_keys_to_ignore_on_load_unexpected` to drop all k/v proj and norms for the shared layers
         self._keys_to_ignore_on_load_unexpected = []
-        for i, layer in enumerate(self.layers):
-            if isinstance(layer.self_attn, Gemma3nTextKVSharedAttention):
+        for i, attention_type in enumerate(config.attention_layer_types):
+            if attention_type == "kv_shared":
                 self._keys_to_ignore_on_load_unexpected.extend(
                     [f"layers.{i}.self_attn.{name}" for name in ("k_proj", "v_proj", "k_norm", "v_norm")]
                 )

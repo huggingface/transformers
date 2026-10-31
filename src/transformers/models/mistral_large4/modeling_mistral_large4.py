@@ -1387,15 +1387,6 @@ class MistralLarge4TextMoE(nn.Module):
         return hidden_states
 
 
-def get_attention_type(config: MistralLarge4TextConfig, layer_idx: int) -> str:
-    attention_type = "rope" if config.no_rope_layers[layer_idx] else "nope"
-    if config.kv_source_layers[layer_idx] != layer_idx:
-        return f"{attention_type}_kv_shared"
-    if layer_idx in config.kv_source_layers[layer_idx + 1 :]:
-        return f"{attention_type}_kv_source"
-    return attention_type
-
-
 MISTRAL_LARGE4_TEXT_ATTENTION_CLASSES = {
     "rope": MistralLarge4TextAttention,
     "rope_kv_source": MistralLarge4TextKVSourceAttention,
@@ -1410,7 +1401,7 @@ class MistralLarge4TextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: MistralLarge4TextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = MISTRAL_LARGE4_TEXT_ATTENTION_CLASSES[get_attention_type(config, layer_idx)](
+        self.self_attn = MISTRAL_LARGE4_TEXT_ATTENTION_CLASSES[config.attention_layer_types[layer_idx]](
             config, layer_idx
         )
 

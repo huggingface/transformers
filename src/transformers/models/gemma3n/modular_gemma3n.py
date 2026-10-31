@@ -100,6 +100,10 @@ class Gemma3nTextConfig(Gemma3TextConfig):
         The sparsity factor used to extract the top-k activations for a given layer. The provided Sequence must
         explicitly provide a sparsity value for each layer in the model. By default, the first 10 layers are
         sparse with a sparsity factor of 0.95 and the rest are dense.
+    attention_layer_types (`list[str]`, *optional*):
+        Attention type of each layer (`"attention"`, `"kv_source"` or `"kv_shared"`). Derived from
+        `num_kv_shared_layers` and `layer_types` when not provided: the last `num_kv_shared_layers` layers are
+        `"kv_shared"`, and the last non-shared layer of each type before them is its `"kv_source"`.
 
     ```python
     >>> from transformers import Gemma3nTextModel, Gemma3nTextConfig
@@ -148,6 +152,7 @@ class Gemma3nTextConfig(Gemma3TextConfig):
     num_kv_shared_layers: int = 15
     laurel_rank: int = 64
     activation_sparsity_pattern: float | list[float] | None = None
+    attention_layer_types: list[str] | None = None
     attn_logit_softcapping = AttributeError()
     use_bidirectional_attention = AttributeError()
     query_pre_attn_scalar = AttributeError()
@@ -179,6 +184,22 @@ class Gemma3nTextConfig(Gemma3TextConfig):
             raise ValueError(
                 "activation_sparsity_pattern must have an explicit activation sparsity value for every layer."
                 f"Expected {self.num_hidden_layers} values but got {len_asp}."
+            )
+
+        first_kv_shared_layer_idx = self.num_hidden_layers - self.num_kv_shared_layers
+        prev_layers = self.layer_types[:first_kv_shared_layer_idx]
+        # The last non-shared layer of each type stores its full-length kv for the shared layers
+        kv_sources = {len(prev_layers) - 1 - prev_layers[::-1].index(t) for t in set(prev_layers)}
+        attention_layer_types = [
+            "kv_shared" if i >= first_kv_shared_layer_idx > 0 else "kv_source" if i in kv_sources else "attention"
+            for i in range(self.num_hidden_layers)
+        ]
+        if self.attention_layer_types is None:
+            self.attention_layer_types = attention_layer_types
+        elif list(self.attention_layer_types) != attention_layer_types:
+            raise ValueError(
+                f"attention_layer_types={self.attention_layer_types} does not match `num_kv_shared_layers` and "
+                f"`layer_types`, expected {attention_layer_types}."
             )
 
         PreTrainedConfig.__post_init__(**kwargs)
@@ -1626,16 +1647,6 @@ class Gemma3nTextKVSharedAttention(Gemma3Attention):
         return attn_output, attn_weights
 
 
-def gemma3n_text_attention_type(config: Gemma3nTextConfig, layer_idx: int) -> str:
-    first_kv_shared_layer_idx = config.num_hidden_layers - config.num_kv_shared_layers
-    if layer_idx >= first_kv_shared_layer_idx > 0:
-        return "kv_shared"
-    prev_layers = config.layer_types[:first_kv_shared_layer_idx]
-    # The last non-shared layer of each type stores its full-length kv for the shared layers
-    is_kv_source = layer_idx == len(prev_layers) - 1 - prev_layers[::-1].index(config.layer_types[layer_idx])
-    return "kv_source" if is_kv_source else "attention"
-
-
 GEMMA3N_TEXT_ATTENTION_CLASSES = {
     "attention": Gemma3nTextAttention,
     "kv_source": Gemma3nTextKVSourceAttention,
@@ -1653,9 +1664,7 @@ class Gemma3nTextDecoderLayer(Gemma3DecoderLayer):
 
         self.altup = Gemma3nTextAltUp(config)
         self.laurel = Gemma3nTextLaurelBlock(config)
-        self.self_attn = GEMMA3N_TEXT_ATTENTION_CLASSES[gemma3n_text_attention_type(config, layer_idx)](
-            config, layer_idx
-        )
+        self.self_attn = GEMMA3N_TEXT_ATTENTION_CLASSES[config.attention_layer_types[layer_idx]](config, layer_idx)
         self.per_layer_input_gate = nn.Linear(self.hidden_size, self.hidden_size_per_layer_input, bias=False)
         self.per_layer_projection = nn.Linear(self.hidden_size_per_layer_input, self.hidden_size, bias=False)
         self.post_per_layer_input_norm = Gemma3nRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
@@ -1933,8 +1942,8 @@ class Gemma3nTextModel(Gemma3TextModel):
 
         # Update `_keys_to_ignore_on_load_unexpected` to drop all k/v proj and norms for the shared layers
         self._keys_to_ignore_on_load_unexpected = []
-        for i, layer in enumerate(self.layers):
-            if isinstance(layer.self_attn, Gemma3nTextKVSharedAttention):
+        for i, attention_type in enumerate(config.attention_layer_types):
+            if attention_type == "kv_shared":
                 self._keys_to_ignore_on_load_unexpected.extend(
                     [f"layers.{i}.self_attn.{name}" for name in ("k_proj", "v_proj", "k_norm", "v_norm")]
                 )

@@ -752,25 +752,10 @@ class Gemma4UnifiedTextKEqVKVSourceAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# ---- Text model ----
-
-
-def gemma4_unified_text_attention_type(config: Gemma4UnifiedTextConfig, layer_idx: int) -> str:
-    first_kv_shared_layer_idx = config.num_hidden_layers - config.num_kv_shared_layers
-    if layer_idx >= first_kv_shared_layer_idx > 0:
-        return "kv_shared"
-    layer_type = config.layer_types[layer_idx]
-    prev_layers = config.layer_types[:first_kv_shared_layer_idx]
-    # The last non-shared layer of each type stores its full-length kv for the shared layers
-    is_kv_source = layer_idx == len(prev_layers) - 1 - prev_layers[::-1].index(layer_type)
-    k_eq_v = "k_eq_v_" if config.attention_k_eq_v and layer_type != "sliding_attention" else ""
-    return k_eq_v + ("kv_source" if is_kv_source else "attention")
-
-
 class Gemma4UnifiedTextMLP(nn.Module):
     def __init__(self, config: Gemma4UnifiedTextConfig, layer_idx: int):
         super().__init__()
-        is_kv_shared_layer = gemma4_unified_text_attention_type(config, layer_idx) == "kv_shared"
+        is_kv_shared_layer = config.attention_layer_types[layer_idx] == "kv_shared"
         use_double_wide_mlp = config.use_double_wide_mlp and is_kv_shared_layer
         self.config = config
         self.hidden_size = config.hidden_size
@@ -799,9 +784,9 @@ class Gemma4UnifiedTextDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.config = config
-        self.self_attn = GEMMA4_UNIFIED_TEXT_ATTENTION_CLASSES[
-            gemma4_unified_text_attention_type(config, layer_idx)  # noqa: F821
-        ](config, layer_idx)
+        self.self_attn = GEMMA4_UNIFIED_TEXT_ATTENTION_CLASSES[config.attention_layer_types[layer_idx]](
+            config, layer_idx
+        )
         self.mlp = Gemma4UnifiedTextMLP(config, layer_idx)
         self.input_layernorm = Gemma4UnifiedRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Gemma4UnifiedRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

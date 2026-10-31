@@ -57,6 +57,10 @@ class MistralLarge4TextConfig(PreTrainedConfig):
         For each layer, the index of the layer whose latent KV cache it attends to. A layer whose entry is its own
         index computes and caches its own latent KV; a layer pointing at an earlier layer has no `kv_a_proj_with_mqa`
         and reuses that layer's cache (the source layer must be its own source). Defaults to no sharing.
+    attention_layer_types (`list[str]`, *optional*):
+        Attention type of each layer: `"rope"` or `"nope"`, suffixed with `"_kv_source"` for layers whose latent KV
+        is reused by later layers, or `"_kv_shared"` for layers reusing it. Derived from `no_rope_layers` and
+        `kv_source_layers` if not set, and must agree with them otherwise.
 
     ```python
     >>> from transformers import MistralLarge4TextConfig, MistralLarge4TextModel
@@ -140,6 +144,7 @@ class MistralLarge4TextConfig(PreTrainedConfig):
     no_rope_layers: list[int] | None = None
     no_rope_layer_interval: int = 4
     kv_source_layers: list[int] | None = None
+    attention_layer_types: list[str] | None = None
     final_logit_softcapping: float = 30.0
 
     def __post_init__(self, **kwargs):
@@ -162,6 +167,22 @@ class MistralLarge4TextConfig(PreTrainedConfig):
         # KV sharing: by default every layer owns its latent KV cache
         if self.kv_source_layers is None:
             self.kv_source_layers = list(range(self.num_hidden_layers))
+        # Attention type of each layer: RoPE or NoPE, and whether it shares its latent KV, reuses another's, or neither
+        attention_layer_types = []
+        for layer_idx, source in enumerate(self.kv_source_layers):
+            layer_type = "rope" if self.no_rope_layers[layer_idx] else "nope"
+            if source != layer_idx:
+                layer_type += "_kv_shared"
+            elif layer_idx in self.kv_source_layers[layer_idx + 1 :]:
+                layer_type += "_kv_source"
+            attention_layer_types.append(layer_type)
+        if self.attention_layer_types is None:
+            self.attention_layer_types = attention_layer_types
+        elif self.attention_layer_types != attention_layer_types:
+            raise ValueError(
+                f"`attention_layer_types` ({self.attention_layer_types}) does not match the one derived from "
+                f"`no_rope_layers` and `kv_source_layers` ({attention_layer_types})."
+            )
         # Per-layer indexer mode: a pattern (e.g. `"FSSF..."`) overrides the freq/offset schedule.
         if self.indexer_types is None:
             pattern = kwargs.get("index_topk_pattern")

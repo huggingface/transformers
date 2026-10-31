@@ -449,6 +449,11 @@ class Gemma4UnifiedTextConfig(Gemma4TextConfig):
     num_kv_shared_layers (`int`, defaults to 0):
         Number of consecutive decoder layers that share the same key-value projections.
         A value of 0 means no sharing (each layer has independent KV projections).
+    attention_layer_types (`list[str]`, *optional*):
+        Attention variant of each decoder layer: `"attention"`, `"kv_source"` (last non-shared layer of its type,
+        whose kv states the shared layers reuse), `"kv_shared"`, or the `"k_eq_v_"`-prefixed variants of the first
+        two for full attention layers when `attention_k_eq_v=True`. Derived from `layer_types`,
+        `num_kv_shared_layers` and `attention_k_eq_v` if not set.
     use_double_wide_mlp (`bool`, defaults to `False`):
         Whether to use a double-width MLP with fused gate and up projections.
     """
@@ -649,9 +654,9 @@ class Gemma4UnifiedTextDecoderLayer(Gemma2DecoderLayer):
     def __init__(self, config: Gemma4UnifiedTextConfig | Gemma4UnifiedVisionConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.layer_idx = layer_idx
-        self.self_attn = GEMMA4_UNIFIED_TEXT_ATTENTION_CLASSES[
-            gemma4_unified_text_attention_type(config, layer_idx)  # noqa: F821
-        ](config, layer_idx)
+        self.self_attn = GEMMA4_UNIFIED_TEXT_ATTENTION_CLASSES[config.attention_layer_types[layer_idx]](
+            config, layer_idx
+        )
         self.mlp = Gemma4UnifiedTextMLP(config, layer_idx)
         self.layer_scalar = nn.Buffer(torch.ones(1))
 

@@ -965,21 +965,9 @@ class Gemma4VisionEncoder(nn.Module):
 # ---- Text model ----
 
 
-def gemma4_text_attention_type(config: Gemma4TextConfig, layer_idx: int) -> str:
-    first_kv_shared_layer_idx = config.num_hidden_layers - config.num_kv_shared_layers
-    if layer_idx >= first_kv_shared_layer_idx > 0:
-        return "kv_shared"
-    layer_type = config.layer_types[layer_idx]
-    prev_layers = config.layer_types[:first_kv_shared_layer_idx]
-    # The last non-shared layer of each type stores its full-length kv for the shared layers
-    is_kv_source = layer_idx == len(prev_layers) - 1 - prev_layers[::-1].index(layer_type)
-    k_eq_v = "k_eq_v_" if config.attention_k_eq_v and layer_type != "sliding_attention" else ""
-    return k_eq_v + ("kv_source" if is_kv_source else "attention")
-
-
 class Gemma4TextMLP(Gemma3MLP):
     def __init__(self, config: Gemma4TextConfig, layer_idx: int):
-        is_kv_shared_layer = gemma4_text_attention_type(config, layer_idx) == "kv_shared"
+        is_kv_shared_layer = config.attention_layer_types[layer_idx] == "kv_shared"
         use_double_wide_mlp = config.use_double_wide_mlp and is_kv_shared_layer
         super().__init__()
         self.intermediate_size = config.intermediate_size * (2 if use_double_wide_mlp else 1)
@@ -1370,9 +1358,7 @@ class Gemma4TextRouter(nn.Module):
 class Gemma4TextDecoderLayer(Gemma3DecoderLayer):
     def __init__(self, config: Gemma4TextConfig | Gemma4VisionConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.self_attn = GEMMA4_TEXT_ATTENTION_CLASSES[gemma4_text_attention_type(config, layer_idx)](
-            config, layer_idx
-        )
+        self.self_attn = GEMMA4_TEXT_ATTENTION_CLASSES[config.attention_layer_types[layer_idx]](config, layer_idx)
         self.mlp = Gemma4TextMLP(config, layer_idx)
         self.layer_scalar = nn.Buffer(torch.ones(1))
 
@@ -1555,8 +1541,8 @@ class Gemma4TextModel(Gemma3TextModel):
 
         # Update `_keys_to_ignore_on_load_unexpected` to drop all k/v proj and norms for the shared layers
         self._keys_to_ignore_on_load_unexpected = []
-        for i, layer in enumerate(self.layers):
-            if isinstance(layer.self_attn, Gemma4TextKVSharedAttention):
+        for i, attention_type in enumerate(config.attention_layer_types):
+            if attention_type == "kv_shared":
                 self._keys_to_ignore_on_load_unexpected.extend(
                     [f"layers.{i}.self_attn.{name}" for name in ("k_proj", "v_proj", "k_norm", "v_norm")]
                 )
