@@ -592,6 +592,38 @@ class TestChunkSSE(unittest.TestCase):
         result = BaseHandler.chunk_to_sse("hello")
         self.assertEqual(result, "data: hello\n\n")
 
+    def test_streaming_error_valid_json_escaping(self):
+        """Verifies that _StreamError containing quotes, newlines, and brackets produces valid JSON."""
+        from types import SimpleNamespace
+        from transformers.cli.serving.completion import CompletionHandler
+        from transformers.cli.serving.utils import _StreamError
+
+        error_msg = 'The following `model_kwargs` are not used by the model: ["foo", "bar"]\nDetail: "quotes"'
+        c_handler = CompletionHandler.__new__(CompletionHandler)
+        q = asyncio.Queue()
+        q.put_nowait(_StreamError(error_msg))
+        streamer = SimpleNamespace(total_tokens=0, cancel=lambda: None)
+        gm = SimpleNamespace(generate_streaming=lambda *a, **k: (q, streamer))
+        gen_config = SimpleNamespace(max_new_tokens=8)
+        resp = c_handler._streaming("req-1", None, None, "m", {"input_ids": [1]}, gen_config, gm)
+
+        async def collect(body):
+            parts = []
+            async for chunk in body:
+                parts.append(chunk)
+            return "".join(parts)
+
+        loop = asyncio.new_event_loop()
+        try:
+            sse_out = loop.run_until_complete(collect(resp.body_iterator))
+        finally:
+            loop.close()
+
+        self.assertTrue(sse_out.startswith("data: "))
+        self.assertTrue(sse_out.endswith("\n\n"))
+        payload = json.loads(sse_out[len("data: ") : -2])
+        self.assertEqual(payload.get("error"), error_msg)
+
 
 @require_serve
 @require_serve
