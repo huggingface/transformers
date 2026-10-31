@@ -5171,8 +5171,26 @@ def install_ci_source_deps_tracker() -> None:
                     if submodule in sys.modules:
                         _record_import_chain(submodule)
                     else:
-                        # item is a class/function — find its defining module via __module__.
-                        # Use __dict__ directly to avoid triggering __getattr__ again.
+                        # `item` is a class/function, not a real subpackage.  The naive
+                        # check `sys.modules.get("transformers.BertModel")` always fails
+                        # because Python stores the module under its real dotted name
+                        # ("transformers.models.bert.modeling_bert"), never under the
+                        # fabricated "transformers.<ClassName>" key.
+                        #
+                        # Normally this is fine: when `from transformers import BertModel`
+                        # first fires, `transformers.__getattr__` calls
+                        # `importlib.import_module("...modeling_bert")`, our
+                        # `_tracking_import_module` hook fires, and we record the file.
+                        #
+                        # But if BertModel is already in `transformers.__dict__` (put there
+                        # by an earlier `from transformers import BertModel` in a different
+                        # test), Python skips `__getattr__` entirely — no importlib call,
+                        # no hook, nothing recorded.
+                        #
+                        # Fix: ask the class itself where it was defined via `__module__`,
+                        # which is baked in at class-definition time and is always the real
+                        # dotted module name.  Use `__dict__` (not `getattr`) to avoid
+                        # re-triggering `__getattr__` and causing our hook to fire twice.
                         parent_mod = sys.modules.get(resolved_name)
                         if parent_mod is not None:
                             attr = parent_mod.__dict__.get(item)
