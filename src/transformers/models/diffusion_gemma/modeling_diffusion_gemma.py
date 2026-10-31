@@ -262,8 +262,8 @@ def eager_attention_forward(
 class DiffusionGemmaEncoderTextAttention(nn.Module):
     """Attention layer for the diffusion model.
 
-    This layer is just like `Gemma4TextAttention`, with one key differences:
-    1. Removes shared KV cache logic, as it is unused in DiffusionGemma.
+    This layer is just like `Gemma4TextAttention`, with one key difference:
+    1. Full attention layers always use their keys as values (like `Gemma4TextKEqVAttention`).
     """
 
     def __init__(self, config: DiffusionGemmaTextConfig, layer_idx: int):
@@ -320,8 +320,8 @@ class DiffusionGemmaEncoderTextAttention(nn.Module):
         query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
         query_states = query_states.transpose(1, 2)
 
-        # CHANGED: removed `if self.is_kv_shared_layer` branch, kept the `else`
         key_states = self.k_proj(hidden_states).view(hidden_shape)
+        # CHANGED: full attention layers use their keys as values
         value_states = self.v_proj(hidden_states).view(hidden_shape) if self.v_proj is not None else key_states
 
         key_states = self.k_norm(key_states)
@@ -360,7 +360,7 @@ class DiffusionGemmaDecoderTextAttention(nn.Module):
     """Attention layer for the diffusion model.
 
     This layer is just like `Gemma4TextAttention`, with three key differences:
-    1. Removes shared KV cache logic, as it is unused in DiffusionGemma.
+    1. Full attention layers always use their keys as values (like `Gemma4TextKEqVAttention`).
     2. It doesn't update the KV cache in the forward pass. The KV cache here corresponds to the
        encoder's KV cache, which is passed in via `past_key_values` -- from the decoder's perspective, it can be seen
        as a read-only encoder KV cache.
@@ -422,8 +422,8 @@ class DiffusionGemmaDecoderTextAttention(nn.Module):
         query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
         query_states = query_states.transpose(1, 2)
 
-        # CHANGED: removed `if self.is_kv_shared_layer` branch, kept the `else`
         key_states = self.k_proj(hidden_states).view(hidden_shape)
+        # CHANGED: full attention layers use their keys as values
         value_states = self.v_proj(hidden_states).view(hidden_shape) if self.v_proj is not None else key_states
 
         key_states = self.k_norm(key_states)
@@ -434,9 +434,9 @@ class DiffusionGemmaDecoderTextAttention(nn.Module):
         value_states = value_states.transpose(1, 2)
 
         if past_key_values is not None:
+            # CHANGED: the encoder cache is read-only from the decoder
             key_states, value_states = self.append_to_cache(past_key_values, key_states, value_states)
 
-        # CHANGED: removed the `if self.store_full_length_kv` branch
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )

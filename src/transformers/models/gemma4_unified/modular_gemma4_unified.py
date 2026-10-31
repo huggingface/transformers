@@ -56,6 +56,10 @@ from ..gemma4.modeling_gemma4 import (
     Gemma4PreTrainedModel,
     Gemma4RMSNorm,
     Gemma4TextAttention,
+    Gemma4TextKEqVAttention,
+    Gemma4TextKEqVKVSourceAttention,
+    Gemma4TextKVSharedAttention,
+    Gemma4TextKVSourceAttention,
     Gemma4TextMLP,
     Gemma4TextModelOutputWithPast,
     Gemma4TextRotaryEmbedding,
@@ -612,6 +616,31 @@ class Gemma4UnifiedTextAttention(Gemma4TextAttention):
     pass
 
 
+class Gemma4UnifiedTextKVSourceAttention(Gemma4TextKVSourceAttention):
+    pass
+
+
+class Gemma4UnifiedTextKEqVAttention(Gemma4TextKEqVAttention):
+    pass
+
+
+class Gemma4UnifiedTextKVSharedAttention(Gemma4TextKVSharedAttention):
+    pass
+
+
+class Gemma4UnifiedTextKEqVKVSourceAttention(Gemma4TextKEqVKVSourceAttention):
+    pass
+
+
+GEMMA4_UNIFIED_TEXT_ATTENTION_CLASSES = {
+    "attention": Gemma4UnifiedTextAttention,
+    "kv_source": Gemma4UnifiedTextKVSourceAttention,
+    "k_eq_v_attention": Gemma4UnifiedTextKEqVAttention,
+    "k_eq_v_kv_source": Gemma4UnifiedTextKEqVKVSourceAttention,
+    "kv_shared": Gemma4UnifiedTextKVSharedAttention,
+}
+
+
 class Gemma4UnifiedTextMLP(Gemma4TextMLP):
     pass
 
@@ -620,7 +649,9 @@ class Gemma4UnifiedTextDecoderLayer(Gemma2DecoderLayer):
     def __init__(self, config: Gemma4UnifiedTextConfig | Gemma4UnifiedVisionConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.layer_idx = layer_idx
-        self.self_attn = Gemma4UnifiedTextAttention(config=config, layer_idx=layer_idx)
+        self.self_attn = GEMMA4_UNIFIED_TEXT_ATTENTION_CLASSES[
+            gemma4_unified_text_attention_type(config, layer_idx)  # noqa: F821
+        ](config, layer_idx)
         self.mlp = Gemma4UnifiedTextMLP(config, layer_idx)
         self.layer_scalar = nn.Buffer(torch.ones(1))
 

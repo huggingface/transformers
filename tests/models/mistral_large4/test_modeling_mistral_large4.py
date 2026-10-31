@@ -132,7 +132,7 @@ class MistralLarge4ModelTest(VLMModelTest, unittest.TestCase):
         for layer_idx, layer in enumerate(model.language_model.layers):
             # Test that KV sharing layers have no kv_a projection
             owns_kv = config.text_config.kv_source_layers[layer_idx] == layer_idx
-            self.assertEqual(layer.self_attn.kv_a_proj_with_mqa is not None, owns_kv)
+            self.assertEqual(hasattr(layer.self_attn, "kv_a_proj_with_mqa"), owns_kv)
             # Test that NoPE layers have no rope dimensions
             uses_rope = bool(config.text_config.no_rope_layers[layer_idx])
             expected_rope_dim = config.text_config.qk_rope_head_dim if uses_rope else 0

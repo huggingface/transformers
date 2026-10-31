@@ -40,7 +40,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..gemma2.modeling_gemma2 import (
@@ -51,6 +51,7 @@ from ..gemma2.modeling_gemma2 import (
 )
 from ..gemma3.configuration_gemma3 import Gemma3TextConfig
 from ..gemma3.modeling_gemma3 import (
+    Gemma3Attention,
     Gemma3DecoderLayer,
     Gemma3ForCausalLM,
     Gemma3RotaryEmbedding,
@@ -1435,54 +1436,38 @@ def apply_rotary_pos_emb(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, 
     return (x * cos) + (rotate_half(x) * sin)
 
 
-class Gemma3nTextAttention(nn.Module):
+@no_inherit_decorator
+class Gemma3nTextAttention(Gemma3Attention):
     def __init__(self, config: Gemma3nTextConfig, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
-        self.is_sliding = self.layer_type == "sliding_attention"
-        self.sliding_window = config.sliding_window if self.is_sliding else None
-
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        super().__init__(config, layer_idx)
         self.scaling = 1.0
-        self.attention_dropout = self.config.attention_dropout
         self.is_causal = True
+        del self.attn_logit_softcapping
+        self.q_norm = Gemma3nRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = Gemma3nRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
+        self.v_norm = Gemma3nRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
-        first_kv_shared_layer_idx = self.config.num_hidden_layers - self.config.num_kv_shared_layers
-        self.is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx > 0
-        prev_layers = config.layer_types[:first_kv_shared_layer_idx]
-        if self.is_kv_shared_layer:
-            # For shared layers, find the last non-shared layer of the same type before sharing starts
-            self.kv_shared_layer_index = len(prev_layers) - 1 - prev_layers[::-1].index(config.layer_types[layer_idx])
-            self.store_full_length_kv = False
-        else:
-            self.kv_shared_layer_index = None
-            # For non-shared layers, store full-length kv if this is the last non-shared layer of its type
-            self.store_full_length_kv = layer_idx == len(prev_layers) - 1 - prev_layers[::-1].index(
-                config.layer_types[layer_idx]
-            )
+    def get_key_value_states(
+        self,
+        hidden_states: torch.Tensor,
+        hidden_shape: tuple[int, ...],
+        cos: torch.Tensor,
+        sin: torch.Tensor,
+        past_key_values: Cache | None,
+        shared_kv_states: dict[int, tuple[torch.Tensor, torch.Tensor]] | None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        key_states = self.k_proj(hidden_states).view(hidden_shape)
+        key_states = self.k_norm(key_states)
+        key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
+        key_states = key_states.transpose(1, 2)
 
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.q_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
+        value_states = self.v_proj(hidden_states).view(hidden_shape)
+        value_states = self.v_norm(value_states)
+        value_states = value_states.transpose(1, 2)
 
-        # Layers sharing kv states don't need any weight matrices
-        if not self.is_kv_shared_layer:
-            self.k_proj = nn.Linear(
-                config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-            )
-            self.v_proj = nn.Linear(
-                config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-            )
-            self.k_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
-            self.v_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps, with_scale=False)
-
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        return key_states, value_states
 
     def forward(
         self,
@@ -1494,7 +1479,7 @@ class Gemma3nTextAttention(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.config.head_dim)
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
         cos, sin = position_embeddings
         query_states = self.q_proj(hidden_states).view(hidden_shape)
@@ -1502,28 +1487,9 @@ class Gemma3nTextAttention(nn.Module):
         query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
         query_states = query_states.transpose(1, 2)
 
-        # For layers with shared KV (from kv sharing point onwards), we reuse the same keys/values states as the last non-sharing layer.
-        # We cannot simply reuse the cached state if we have a Cache, as sliding layers will not remember the full states in their Cache
-        # once we are past the sliding window - so we always use `shared_kv_states` instead, even when past_key_values is not None
-        if self.is_kv_shared_layer:
-            key_states, value_states = shared_kv_states[self.kv_shared_layer_index]
-            # Device of past layer may be different from current one
-            key_states = key_states.to(query_states.device)
-            value_states = value_states.to(query_states.device)
-        else:
-            key_states = self.k_proj(hidden_states).view(hidden_shape)
-            key_states = self.k_norm(key_states)
-            key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
-            key_states = key_states.transpose(1, 2)
-
-            value_states = self.v_proj(hidden_states).view(hidden_shape)
-            value_states = self.v_norm(value_states)
-            value_states = value_states.transpose(1, 2)
-
-        if past_key_values is not None and not self.is_kv_shared_layer:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-        if self.store_full_length_kv:
-            shared_kv_states[self.layer_idx] = key_states, value_states
+        key_states, value_states = self.get_key_value_states(
+            hidden_states, hidden_shape, cos, sin, past_key_values, shared_kv_states
+        )
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -1546,6 +1512,52 @@ class Gemma3nTextAttention(nn.Module):
         return attn_output, attn_weights
 
 
+class Gemma3nTextKVSourceAttention(Gemma3nTextAttention):
+    """Last non-shared layer of its type: also exposes its full-length kv states to the kv-shared layers."""
+
+    def get_key_value_states(self, hidden_states, hidden_shape, cos, sin, past_key_values, shared_kv_states):
+        key_states, value_states = super().get_key_value_states(
+            hidden_states, hidden_shape, cos, sin, past_key_values, shared_kv_states
+        )
+        shared_kv_states[self.layer_idx] = key_states, value_states
+        return key_states, value_states
+
+
+class Gemma3nTextKVSharedAttention(Gemma3nTextAttention):
+    """Reuses the kv states of the last non-shared layer of the same type, so it has no k/v weights."""
+
+    def __init__(self, config: Gemma3nTextConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        prev_layers = config.layer_types[: config.num_hidden_layers - config.num_kv_shared_layers]
+        self.kv_shared_layer_index = len(prev_layers) - 1 - prev_layers[::-1].index(config.layer_types[layer_idx])
+        # Layers sharing kv states don't need any weight matrices
+        del self.k_proj, self.v_proj, self.k_norm, self.v_norm
+
+    def get_key_value_states(self, hidden_states, hidden_shape, cos, sin, past_key_values, shared_kv_states):
+        # We cannot simply reuse the cached state if we have a Cache, as sliding layers will not remember the full states in their Cache
+        # once we are past the sliding window - so we always use `shared_kv_states` instead, even when past_key_values is not None
+        key_states, value_states = shared_kv_states[self.kv_shared_layer_index]
+        # Device of past layer may be different from current one
+        return key_states.to(hidden_states.device), value_states.to(hidden_states.device)
+
+
+def gemma3n_text_attention_type(config: Gemma3nTextConfig, layer_idx: int) -> str:
+    first_kv_shared_layer_idx = config.num_hidden_layers - config.num_kv_shared_layers
+    if layer_idx >= first_kv_shared_layer_idx > 0:
+        return "kv_shared"
+    prev_layers = config.layer_types[:first_kv_shared_layer_idx]
+    # The last non-shared layer of each type stores its full-length kv for the shared layers
+    is_kv_source = layer_idx == len(prev_layers) - 1 - prev_layers[::-1].index(config.layer_types[layer_idx])
+    return "kv_source" if is_kv_source else "attention"
+
+
+GEMMA3N_TEXT_ATTENTION_CLASSES = {
+    "attention": Gemma3nTextAttention,
+    "kv_source": Gemma3nTextKVSourceAttention,
+    "kv_shared": Gemma3nTextKVSharedAttention,
+}
+
+
 class Gemma3nTextDecoderLayer(Gemma3DecoderLayer):
     def __init__(self, config: Gemma3nTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -1556,7 +1568,9 @@ class Gemma3nTextDecoderLayer(Gemma3DecoderLayer):
 
         self.altup = Gemma3nTextAltUp(config)
         self.laurel = Gemma3nTextLaurelBlock(config)
-        self.self_attn = Gemma3nTextAttention(config, layer_idx)
+        self.self_attn = GEMMA3N_TEXT_ATTENTION_CLASSES[gemma3n_text_attention_type(config, layer_idx)](
+            config, layer_idx
+        )
         self.per_layer_input_gate = nn.Linear(self.hidden_size, self.hidden_size_per_layer_input, bias=False)
         self.per_layer_projection = nn.Linear(self.hidden_size_per_layer_input, self.hidden_size, bias=False)
         self.post_per_layer_input_norm = Gemma3nRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
@@ -1835,7 +1849,7 @@ class Gemma3nTextModel(Gemma3TextModel):
         # Update `_keys_to_ignore_on_load_unexpected` to drop all k/v proj and norms for the shared layers
         self._keys_to_ignore_on_load_unexpected = []
         for i, layer in enumerate(self.layers):
-            if layer.self_attn.is_kv_shared_layer:
+            if isinstance(layer.self_attn, Gemma3nTextKVSharedAttention):
                 self._keys_to_ignore_on_load_unexpected.extend(
                     [f"layers.{i}.self_attn.{name}" for name in ("k_proj", "v_proj", "k_norm", "v_norm")]
                 )

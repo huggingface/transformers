@@ -32,11 +32,12 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
-from ..deepseek_v32.modeling_deepseek_v32 import DeepseekV32Indexer, eager_attention_forward
+from ..deepseek_v32.modeling_deepseek_v32 import eager_attention_forward
 from ..glm_moe_dsa.configuration_glm_moe_dsa import GlmMoeDsaConfig
 from ..glm_moe_dsa.modeling_glm_moe_dsa import (
     GlmMoeDsaAttention,
     GlmMoeDsaDecoderLayer,
+    GlmMoeDsaIndexer,
     GlmMoeDsaModel,
     GlmMoeDsaPreTrainedModel,
 )
@@ -291,10 +292,9 @@ class MistralLarge4TextSoftmaxScaling(nn.Module):
         return query_states * scale.unsqueeze(-1)
 
 
-class MistralLarge4TextIndexer(DeepseekV32Indexer):
+class MistralLarge4TextIndexer(GlmMoeDsaIndexer):
     """Indexer from glm_moe_dsa, but since there is no Q-LoRA in the attention, the indexer queries are derived from
-    hidden states, using norm -> proj -> softmax scaling. Also, for layers with no RoPE, the indexer does not use RoPE
-    as well."""
+    hidden states, using norm -> proj -> softmax scaling."""
 
     def __init__(self, config: MistralLarge4TextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -302,7 +302,15 @@ class MistralLarge4TextIndexer(DeepseekV32Indexer):
         self.q_input_norm = nn.LayerNorm(config.hidden_size, eps=1e-6)
         self.wq_b = nn.Linear(config.hidden_size, self.n_heads * self.head_dim, bias=False)
         self.softmax_scaling = MistralLarge4TextSoftmaxScaling(self.n_heads)
-        self.use_rope = config.no_rope_layers[layer_idx]
+
+    def apply_rotary(
+        self, q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Applies interleaved RoPE to the first `qk_rope_head_dim` dims of the indexer queries and keys."""
+        q_rot, q_pass = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
+        k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
+        q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
+        return torch.cat([q_rot, q_pass], dim=-1), torch.cat([k_rot, k_pass], dim=-1)
 
     @torch.no_grad()
     def forward(
@@ -341,13 +349,7 @@ class MistralLarge4TextIndexer(DeepseekV32Indexer):
         # Same for the keys
         k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
 
-        # If there is RoPE, apply it (interleaved)
-        if self.use_rope:
-            q_rot, q_pass = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
-            k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
-            q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
-            q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
-            k = torch.cat([k_rot, k_pass], dim=-1)  # [B, S, 1, D]
+        q, k = self.apply_rotary(q, k, cos, sin)  # [B, S, H, D], [B, S, 1, D]
         k = k.squeeze(2)
 
         if past_key_values is not None:
@@ -370,13 +372,27 @@ class MistralLarge4TextIndexer(DeepseekV32Indexer):
         return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
 
 
+class MistralLarge4TextNoRopeIndexer(MistralLarge4TextIndexer):
+    """Indexer of the NoPE layers: no RoPE on the indexer queries and keys either."""
+
+    def apply_rotary(
+        self, q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        return q, k
+
+
 class MistralLarge4TextAttention(GlmMoeDsaAttention):
-    """DSA attention from GlmMoeDsa, with no Q-LoRA and KV sharing."""
+    """DSA attention from GlmMoeDsa, with no Q-LoRA."""
+
+    use_rope = True
+    kv_sharing_key = "rope"
+    indexer_class = MistralLarge4TextIndexer
 
     def __init__(self, config: MistralLarge4TextConfig, layer_idx: int):
-        self.use_rope = config.no_rope_layers[layer_idx]
-        self.is_kv_shared_layer = config.kv_source_layers[layer_idx] != layer_idx
         super().__init__(config, layer_idx)
+        # NoPE layers fold the rotary head dims into the non-rotary ones
+        self.qk_rope_head_dim = config.qk_rope_head_dim if self.use_rope else 0
+        self.qk_nope_head_dim = config.qk_nope_head_dim + (0 if self.use_rope else config.qk_rope_head_dim)
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
         del self.q_lora_rank
@@ -385,20 +401,38 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
         del self.q_b_proj
 
         self.softmax_scaling = MistralLarge4TextSoftmaxScaling(self.num_heads)
-
-        self.qk_rope_head_dim = config.qk_rope_head_dim if self.use_rope else 0
-        self.qk_nope_head_dim = config.qk_nope_head_dim + (0 if self.use_rope else config.qk_rope_head_dim)
-
-        self.store_full_length_kv = any(src == layer_idx for src in config.kv_source_layers[layer_idx + 1 :])
-
-        self.kv_a_proj_with_mqa = (
-            nn.Linear(self.hidden_size, config.kv_lora_rank + self.qk_rope_head_dim, bias=config.attention_bias)
-            if not self.is_kv_shared_layer
-            else None
+        self.indexer = None if self.skip_topk else self.indexer_class(config, layer_idx)
+        self.kv_a_proj_with_mqa = nn.Linear(
+            self.hidden_size, config.kv_lora_rank + self.qk_rope_head_dim, bias=config.attention_bias
         )
-        self.kv_a_layernorm = (
-            MistralLarge4RMSNorm(config.kv_lora_rank, eps=config.rms_norm_eps) if not self.is_kv_shared_layer else None
-        )
+        self.kv_a_layernorm = MistralLarge4RMSNorm(config.kv_lora_rank, eps=config.rms_norm_eps)
+
+    def apply_rotary(
+        self, states: torch.Tensor, position_embeddings: tuple[torch.Tensor, torch.Tensor]
+    ) -> torch.Tensor:
+        """Applies LeRoPE to the rotary part of the queries or keys."""
+        cos, sin = position_embeddings
+        return apply_rotary_pos_emb_interleave(states, None, cos, sin)[0]
+
+    def get_key_states(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        past_key_values: Cache | None,
+        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Computes the (cached) compressed latent keys `k_pass` and `k_rot`."""
+        batch_size, seq_length = hidden_states.shape[:-1]
+        compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
+        kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        # Both latents are viewed as single-head, 4D tensors, as expected by `expand_kv`
+        k_pass = self.kv_a_layernorm(kv_pass).view(batch_size, 1, seq_length, self.kv_lora_rank)
+        k_rot = self.apply_rotary(k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim), position_embeddings)
+
+        # Update the cache while latent KV is still compressed
+        if past_key_values is not None:
+            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
+        return k_pass, k_rot
 
     # trf-ignore: TRF043
     def forward(
@@ -418,33 +452,9 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
         q_states = self.q_proj(hidden_states).view(query_shape).transpose(1, 2)
         q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
-        # Either the layer computes it's own cache or it loads it from shared_kv_states
-        if self.is_kv_shared_layer:
-            k_pass, k_rot = shared_kv_states["rope" if self.use_rope else "nope"]
-            k_pass = k_pass.to(q_states.device)  # device of past layer may be different from current one
-            k_rot = k_rot.to(q_states.device)
-        else:
-            compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-            kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-            # Both latents are viewed as single-head, 4D tensors, as expected by `expand_kv`
-            k_pass = self.kv_a_layernorm(kv_pass).view(batch_size, 1, seq_length, self.kv_lora_rank)
-            k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
+        k_pass, k_rot = self.get_key_states(hidden_states, position_embeddings, past_key_values, shared_kv_states)
 
-        # Apply LeRoPE to the queries and the keys, except if this is a no_rope layer
-        if self.use_rope:
-            cos, sin = position_embeddings
-            # For layers with cache sharing, only rotate the queries: the keys were already rotated by the source layer
-            if self.is_kv_shared_layer:
-                q_rot, _ = apply_rotary_pos_emb_interleave(q_rot, None, cos, sin)
-            else:
-                q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
-
-        # Update the cache while latent KV is still compressed
-        if past_key_values is not None and not self.is_kv_shared_layer:
-            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
-        # If the layer takes part in cache sharing and computes its own cache, store a copy in shared_kv_states
-        if self.store_full_length_kv:
-            shared_kv_states["rope" if self.use_rope else "nope"] = (k_pass, k_rot)
+        q_rot = self.apply_rotary(q_rot, position_embeddings)
 
         # Recompose and apply softmax-scaling to the queries
         query_states = torch.cat((q_pass, q_rot), dim=-1)
@@ -502,6 +512,110 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
         return attn_output, attn_weights, topk_indices
 
 
+class MistralLarge4TextKVSourceAttention(MistralLarge4TextAttention):
+    """Stores this layer's latent keys in `shared_kv_states`, to be reused by later `kv_shared` layers."""
+
+    def get_key_states(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        past_key_values: Cache | None,
+        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        k_pass, k_rot = super().get_key_states(hidden_states, position_embeddings, past_key_values, shared_kv_states)
+        shared_kv_states[self.kv_sharing_key] = (k_pass, k_rot)
+        return k_pass, k_rot
+
+
+class MistralLarge4TextKVSharedAttention(MistralLarge4TextAttention):
+    """Reuses the (already rotated and cached) latent keys of its `kv_source` layer, instead of computing its own."""
+
+    def __init__(self, config: MistralLarge4TextConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        # Keys come from the source layer: no weights of its own
+        del self.kv_a_proj_with_mqa
+        del self.kv_a_layernorm
+
+    def get_key_states(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        past_key_values: Cache | None,
+        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        k_pass, k_rot = shared_kv_states[self.kv_sharing_key]
+        # device of past layer may be different from current one
+        return k_pass.to(hidden_states.device), k_rot.to(hidden_states.device)
+
+
+class MistralLarge4TextNoRopeAttention(MistralLarge4TextAttention):
+    """Attention without positional encoding: the rotary head dims are folded into the non-rotary ones."""
+
+    use_rope = False
+    kv_sharing_key = "nope"
+    indexer_class = MistralLarge4TextNoRopeIndexer
+
+    def apply_rotary(
+        self, states: torch.Tensor, position_embeddings: tuple[torch.Tensor, torch.Tensor]
+    ) -> torch.Tensor:
+        return states
+
+
+class MistralLarge4TextNoRopeKVSourceAttention(MistralLarge4TextNoRopeAttention):
+    """Stores this layer's latent keys in `shared_kv_states`, to be reused by later `kv_shared` layers."""
+
+    def get_key_states(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        past_key_values: Cache | None,
+        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        k_pass, k_rot = super().get_key_states(hidden_states, position_embeddings, past_key_values, shared_kv_states)
+        shared_kv_states[self.kv_sharing_key] = (k_pass, k_rot)
+        return k_pass, k_rot
+
+
+class MistralLarge4TextNoRopeKVSharedAttention(MistralLarge4TextNoRopeAttention):
+    """Reuses the (already rotated and cached) latent keys of its `kv_source` layer, instead of computing its own."""
+
+    def __init__(self, config: MistralLarge4TextConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        # Keys come from the source layer: no weights of its own
+        del self.kv_a_proj_with_mqa
+        del self.kv_a_layernorm
+
+    def get_key_states(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        past_key_values: Cache | None,
+        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        k_pass, k_rot = shared_kv_states[self.kv_sharing_key]
+        # device of past layer may be different from current one
+        return k_pass.to(hidden_states.device), k_rot.to(hidden_states.device)
+
+
+def get_attention_type(config: MistralLarge4TextConfig, layer_idx: int) -> str:
+    attention_type = "rope" if config.no_rope_layers[layer_idx] else "nope"
+    if config.kv_source_layers[layer_idx] != layer_idx:
+        return f"{attention_type}_kv_shared"
+    if layer_idx in config.kv_source_layers[layer_idx + 1 :]:
+        return f"{attention_type}_kv_source"
+    return attention_type
+
+
+MISTRAL_LARGE4_TEXT_ATTENTION_CLASSES = {
+    "rope": MistralLarge4TextAttention,
+    "rope_kv_source": MistralLarge4TextKVSourceAttention,
+    "rope_kv_shared": MistralLarge4TextKVSharedAttention,
+    "nope": MistralLarge4TextNoRopeAttention,
+    "nope_kv_source": MistralLarge4TextNoRopeKVSourceAttention,
+    "nope_kv_shared": MistralLarge4TextNoRopeKVSharedAttention,
+}
+
+
 class MistralLarge4TextMLP(Qwen2MoeMLP):
     pass
 
@@ -550,6 +664,9 @@ class MistralLarge4TextMoE(Mistral4MoE):
 class MistralLarge4TextDecoderLayer(GlmMoeDsaDecoderLayer):
     def __init__(self, config: MistralLarge4TextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        self.self_attn = MISTRAL_LARGE4_TEXT_ATTENTION_CLASSES[get_attention_type(config, layer_idx)](
+            config, layer_idx
+        )
         self.input_layernorm = MistralLarge4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MistralLarge4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
