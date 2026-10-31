@@ -18,7 +18,7 @@ tokenization_utils_tokenizers.py
 
 import bisect
 import unicodedata
-from collections import OrderedDict
+from collections import Counter, OrderedDict
 from typing import Any, overload
 
 from .tokenization_utils_base import (
@@ -818,6 +818,16 @@ class PythonBackend(PreTrainedTokenizerBase):
         first_ids = get_input_ids(text)
         second_ids = get_input_ids(text_pair) if text_pair is not None else None
 
+        prepare_kwargs = {}
+        if return_special_tokens_mask:
+            special_ids_in_text = self._get_special_ids_in_text(
+                (text, text_pair),
+                first_ids + (second_ids or []),
+                kwargs.get("split_special_tokens", self.split_special_tokens),
+            )
+            if special_ids_in_text:
+                prepare_kwargs["special_ids_in_text"] = special_ids_in_text
+
         return self.prepare_for_model(
             first_ids,
             pair_ids=second_ids,
@@ -836,7 +846,27 @@ class PythonBackend(PreTrainedTokenizerBase):
             return_special_tokens_mask=return_special_tokens_mask,
             return_length=return_length,
             verbose=verbose,
+            **prepare_kwargs,
         )
+
+    def _get_special_ids_in_text(self, texts, ids: list[int], split_special_tokens: bool) -> set[int]:
+        """
+        Returns the ids of the special tokens typed in `texts`. An id is only returned when all of its occurrences in
+        `ids` were typed, as an unknown word or a delimiter added by the tokenizer can map to a special id as well.
+        """
+        if split_special_tokens:
+            return set()
+        special_tokens = set(self.all_special_tokens)
+        typed = Counter()
+        for text in texts:
+            for piece in [text] if isinstance(text, str) else text if isinstance(text, (list, tuple)) else []:
+                if isinstance(piece, str):
+                    typed.update(token for token in self.tokens_trie.split(piece) if token in special_tokens)
+        return {
+            token_id
+            for token, count in typed.items()
+            if ids.count(token_id := self.convert_tokens_to_ids(token)) == count
+        }
 
     def prepare_for_tokenization(
         self, text: str, is_split_into_words: bool = False, **kwargs
@@ -1137,6 +1167,7 @@ class PythonBackend(PreTrainedTokenizerBase):
         return_length: bool = False,
         verbose: bool = True,
         prepend_batch_axis: bool = False,
+        special_ids_in_text: set[int] | None = None,
         **kwargs,
     ) -> BatchEncoding:
         """
@@ -1145,6 +1176,7 @@ class PythonBackend(PreTrainedTokenizerBase):
         Args:
             ids: Tokenized input ids of the first sequence.
             pair_ids: Tokenized input ids of the second sequence (optional).
+            special_ids_in_text: Ids of the special tokens typed in the text, flagged in `special_tokens_mask`.
         """
         # Get padding/truncation strategies
         padding_strategy, truncation_strategy, max_length, _ = self._get_padding_truncation_strategies(
@@ -1202,9 +1234,14 @@ class PythonBackend(PreTrainedTokenizerBase):
         if return_token_type_ids:
             encoded_inputs["token_type_ids"] = token_type_ids
         if return_special_tokens_mask:
-            encoded_inputs["special_tokens_mask"] = (
+            special_tokens_mask = (
                 self.get_special_tokens_mask(ids, pair_ids) if add_special_tokens else [0] * len(sequence)
             )
+            if special_ids_in_text:
+                special_tokens_mask = [
+                    1 if m or t in special_ids_in_text else 0 for m, t in zip(special_tokens_mask, sequence)
+                ]
+            encoded_inputs["special_tokens_mask"] = special_tokens_mask
         if return_overflowing_tokens and not return_tensors and overflowing_tokens:
             encoded_inputs["overflowing_tokens"] = overflowing_tokens
             encoded_inputs["num_truncated_tokens"] = total_len - max_length if max_length else 0

@@ -500,6 +500,14 @@ class RoCBertTokenizer(PreTrainedTokenizer):
         else:
             second_ids, second_shape_ids, second_proun_ids = None, None, None
 
+        special_ids_in_text = None
+        if return_special_tokens_mask:
+            special_ids_in_text = self._get_special_ids_in_text(
+                (text, text_pair),
+                first_ids + (second_ids or []),
+                kwargs.get("split_special_tokens", self.split_special_tokens),
+            )
+
         return self.prepare_for_model(
             first_ids,
             first_shape_ids,
@@ -522,6 +530,7 @@ class RoCBertTokenizer(PreTrainedTokenizer):
             return_special_tokens_mask=return_special_tokens_mask,
             return_length=return_length,
             verbose=verbose,
+            special_ids_in_text=special_ids_in_text,
         )
 
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
@@ -549,6 +558,7 @@ class RoCBertTokenizer(PreTrainedTokenizer):
         return_length: bool = False,
         verbose: bool = True,
         prepend_batch_axis: bool = False,
+        special_ids_in_text: set[int] | None = None,
         **kwargs,
     ) -> BatchEncoding:
         """
@@ -683,6 +693,11 @@ class RoCBertTokenizer(PreTrainedTokenizer):
                 encoded_inputs["special_tokens_mask"] = self.get_special_tokens_mask(ids, pair_ids)
             else:
                 encoded_inputs["special_tokens_mask"] = [0] * len(sequence)
+            if special_ids_in_text:
+                encoded_inputs["special_tokens_mask"] = [
+                    1 if m or t in special_ids_in_text else 0
+                    for m, t in zip(encoded_inputs["special_tokens_mask"], sequence)
+                ]
 
         # Check lengths
         self._eventual_warn_about_too_long_sequence(encoded_inputs["input_ids"], max_length, verbose)
@@ -833,6 +848,7 @@ class RoCBertTokenizer(PreTrainedTokenizer):
         input_ids = []
         input_shape_ids = []
         input_pronunciation_ids = []
+        batch_special_ids_in_text = []
         for ids_or_pair_ids in batch_text_or_text_pairs:
             if not isinstance(ids_or_pair_ids, (list, tuple)):
                 ids, pair_ids = ids_or_pair_ids, None
@@ -850,11 +866,20 @@ class RoCBertTokenizer(PreTrainedTokenizer):
             input_ids.append((first_ids, second_ids))
             input_shape_ids.append((first_shape_ids, second_shape_ids))
             input_pronunciation_ids.append((first_proun_ids, second_proun_ids))
+            if return_special_tokens_mask:
+                batch_special_ids_in_text.append(
+                    self._get_special_ids_in_text(
+                        (ids, pair_ids),
+                        first_ids + (second_ids or []),
+                        kwargs.get("split_special_tokens", self.split_special_tokens),
+                    )
+                )
 
         batch_outputs = self._batch_prepare_for_model(
             input_ids,
             batch_shape_ids_pairs=input_shape_ids,
             batch_pronunciation_ids_pairs=input_pronunciation_ids,
+            batch_special_ids_in_text=batch_special_ids_in_text,
             add_special_tokens=add_special_tokens,
             padding_strategy=padding_strategy,
             truncation_strategy=truncation_strategy,
@@ -893,6 +918,7 @@ class RoCBertTokenizer(PreTrainedTokenizer):
         return_special_tokens_mask: bool = False,
         return_length: bool = False,
         verbose: bool = True,
+        batch_special_ids_in_text: list[set[int]] | None = None,
     ) -> BatchEncoding:
         """
         Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model. It
@@ -931,6 +957,7 @@ class RoCBertTokenizer(PreTrainedTokenizer):
                 return_tensors=None,  # We convert the whole batch to tensors at the end
                 prepend_batch_axis=False,
                 verbose=verbose,
+                special_ids_in_text=batch_special_ids_in_text[i] if batch_special_ids_in_text else None,
             )
 
             for key, value in outputs.items():
