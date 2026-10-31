@@ -5138,18 +5138,51 @@ def install_ci_source_deps_tracker() -> None:
     _importlib.import_module = _tracking_import_module
 
 
+def _ci_record_target(out_dir: Path, base_name: str) -> tuple[Path, bool]:
+    """Return (target_path, is_controller) for xdist-aware writing.
+
+    xdist worker  → writes to ``<base_name>_<worker_id>.json`` (unique, no races).
+    xdist controller → is_controller=True; caller must merge worker files then write ``base_name``.
+    non-xdist     → writes directly to ``base_name``.
+    """
+    worker_id = os.environ.get("PYTEST_XDIST_WORKER")
+    if worker_id:
+        stem, ext = base_name.rsplit(".", 1) if "." in base_name else (base_name, "json")
+        return out_dir / f"{stem}_{worker_id}.{ext}", False
+    # Detect xdist controller by checking whether worker output files already exist on disk.
+    # Workers always run pytest_sessionfinish before the controller, so their gw*.json files
+    # are present by the time this code runs on the controller process.
+    # (PYTEST_XDIST_TESTRUNUID is only set in workers, not the controller, so cannot be used.)
+    stem = base_name.rsplit(".", 1)[0] if "." in base_name else base_name
+    is_controller = bool(list(out_dir.glob(f"{stem}_gw*.json")))
+    return out_dir / base_name, is_controller
+
+
 def record_ci_source_deps_chains() -> None:
     """Write recorded import chains to ``deps_chain.json`` next to ``CI_RECORD_DEPS_OUTPUT``.
 
     No-op if ``CI_RECORD_DEPS_OUTPUT`` is not set.  Call from ``pytest_sessionfinish``.
+    xdist-aware: workers write per-worker files; controller merges them.
     """
     output_path = os.environ.get("CI_RECORD_DEPS_OUTPUT")
     if not output_path:
         return
     out_dir = Path(output_path).parent
+    target, is_controller = _ci_record_target(out_dir, "deps_chain.json")
+    if is_controller:
+        merged: list = []
+        for f in sorted(out_dir.glob("deps_chain_gw*.json")):
+            try:
+                merged.extend(json.loads(f.read_text(encoding="utf-8")))
+            except (OSError, json.JSONDecodeError):
+                pass
+        data = merged
+    else:
+        data = _ci_deps_chains
     try:
-        with open(out_dir / "deps_chain.json", "w", encoding="utf-8") as f:
-            json.dump(_ci_deps_chains, f, indent=2)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        with open(target, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
     except OSError:
         pass
 
@@ -5172,24 +5205,43 @@ def record_ci_source_deps_by_file() -> None:
     the fetcher map.
 
     No-op if ``CI_RECORD_DEPS_OUTPUT`` is not set.  Call from ``pytest_sessionfinish``.
+    xdist-aware: workers write per-worker files; controller merges them.
     """
     output_path = os.environ.get("CI_RECORD_DEPS_OUTPUT")
     if not output_path:
         return
-    # Accumulate per-file, per-phase sets; always emit both keys for a consistent schema.
-    by_file: dict[str, dict[str, set[str]]] = {}
-    for (test_file, phase), src_files in _ci_deps_by_file.items():
-        if test_file.startswith("__"):
-            continue  # skip global __collection__ pool
-        entry = by_file.setdefault(test_file, {"collection": set(), "execution": set()})
-        entry.setdefault(phase, set()).update(src_files)
-    out = {
-        test_file: {phase: sorted(srcs) for phase, srcs in sorted(phases.items())}
-        for test_file, phases in sorted(by_file.items())
-    }
     out_dir = Path(output_path).parent
+    target, is_controller = _ci_record_target(out_dir, "deps_by_file.json")
+    if is_controller:
+        merged_by_file: dict[str, dict[str, set]] = {}
+        for wf in sorted(out_dir.glob("deps_by_file_gw*.json")):
+            try:
+                worker_data = json.loads(wf.read_text(encoding="utf-8"))
+                for test_file, phases in worker_data.items():
+                    entry = merged_by_file.setdefault(test_file, {"collection": set(), "execution": set()})
+                    for phase, srcs in phases.items():
+                        entry.setdefault(phase, set()).update(srcs)
+            except (OSError, json.JSONDecodeError):
+                pass
+        out = {
+            tf: {phase: sorted(srcs) for phase, srcs in sorted(phases.items())}
+            for tf, phases in sorted(merged_by_file.items())
+        }
+    else:
+        # Accumulate per-file, per-phase sets; always emit both keys for a consistent schema.
+        by_file: dict[str, dict[str, set[str]]] = {}
+        for (test_file, phase), src_files in _ci_deps_by_file.items():
+            if test_file.startswith("__"):
+                continue  # skip global __collection__ pool
+            entry = by_file.setdefault(test_file, {"collection": set(), "execution": set()})
+            entry.setdefault(phase, set()).update(src_files)
+        out = {
+            test_file: {phase: sorted(srcs) for phase, srcs in sorted(phases.items())}
+            for test_file, phases in sorted(by_file.items())
+        }
     try:
-        with open(out_dir / "deps_by_file.json", "w", encoding="utf-8") as f:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        with open(target, "w", encoding="utf-8") as f:
             json.dump(out, f, indent=2)
     except OSError:
         pass
@@ -5222,12 +5274,23 @@ def record_ci_source_deps() -> None:
     if not output_path:
         return
 
-    current = _ci_source_deps_current()
-    baseline = _ci_record_deps_baseline or set()
-    imported_files = sorted(current - baseline)
     out_dir = Path(output_path).parent
+    target, is_controller = _ci_record_target(out_dir, "deps_by_sys_module.json")
+    if is_controller:
+        merged_set: set[str] = set()
+        for wf in sorted(out_dir.glob("deps_by_sys_module_gw*.json")):
+            try:
+                merged_set.update(json.loads(wf.read_text(encoding="utf-8")))
+            except (OSError, json.JSONDecodeError):
+                pass
+        imported_files = sorted(merged_set)
+    else:
+        current = _ci_source_deps_current()
+        baseline = _ci_record_deps_baseline or set()
+        imported_files = sorted(current - baseline)
     try:
-        with open(out_dir / "deps_by_sys_module.json", "w", encoding="utf-8") as f:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        with open(target, "w", encoding="utf-8") as f:
             json.dump(imported_files, f, indent=2)
     except OSError:
         pass
