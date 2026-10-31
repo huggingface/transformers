@@ -32,7 +32,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import _scope_router_output_collection, capture_outputs
 from ...vision_utils import (
     get_vision_attention_seqlens,
     get_vision_interpolation_indices_and_weights,
@@ -554,15 +554,16 @@ class Qwen3_5TextModel(Qwen3NextModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            hidden_states = decoder_layer(
-                hidden_states,
-                position_embeddings=position_embeddings,
-                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
-                position_ids=text_position_ids,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                **kwargs,
-            )
+            with _scope_router_output_collection():
+                hidden_states = decoder_layer(
+                    hidden_states,
+                    position_embeddings=position_embeddings,
+                    attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                    position_ids=text_position_ids,
+                    past_key_values=past_key_values,
+                    use_cache=use_cache,
+                    **kwargs,
+                )
 
         hidden_states = self.norm(hidden_states)
 

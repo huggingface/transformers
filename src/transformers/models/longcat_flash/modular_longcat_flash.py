@@ -28,7 +28,7 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.output_capturing import OutputRecorder
+from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
     DeepseekV3MLP,
@@ -389,14 +389,15 @@ class LongcatFlashModel(DeepseekV3Model):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers[: self.config.num_layers]:
-            hidden_states = decoder_layer(
-                hidden_states,
-                attention_mask=causal_mask,
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                position_embeddings=position_embeddings,
-                **kwargs,
-            )
+            with _scope_router_output_collection():
+                hidden_states = decoder_layer(
+                    hidden_states,
+                    attention_mask=causal_mask,
+                    position_ids=position_ids,
+                    past_key_values=past_key_values,
+                    position_embeddings=position_embeddings,
+                    **kwargs,
+                )
 
         hidden_states = self.norm(hidden_states)
         return MoeModelOutputWithPast(

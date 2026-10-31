@@ -25,6 +25,7 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.output_capturing import _scope_router_output_collection
 from ..axk1.modeling_axk1 import AXK1Attention
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3RMSNorm,
@@ -371,16 +372,17 @@ class GlmMoeDsaModel(DeepseekV32Model):
 
         topk_indices = None  # MAIN DIFF with DSV3.2
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            hidden_states, topk_indices = decoder_layer(
-                hidden_states,
-                attention_mask=causal_mask_mapping["indexed_attention"],
-                position_embeddings=position_embeddings,
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                prev_topk_indices=topk_indices,  # MAIN DIFF with DSV3.2
-                **kwargs,
-            )
+            with _scope_router_output_collection():
+                hidden_states, topk_indices = decoder_layer(
+                    hidden_states,
+                    attention_mask=causal_mask_mapping["indexed_attention"],
+                    position_embeddings=position_embeddings,
+                    position_ids=position_ids,
+                    past_key_values=past_key_values,
+                    use_cache=use_cache,
+                    prev_topk_indices=topk_indices,  # MAIN DIFF with DSV3.2
+                    **kwargs,
+                )
 
         hidden_states = self.norm(hidden_states)
         return MoeModelOutputWithPast(

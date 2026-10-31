@@ -34,7 +34,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection, capture_outputs
 from .configuration_openai_privacy_filter import OpenAIPrivacyFilterConfig
 
 
@@ -471,13 +471,14 @@ class OpenAIPrivacyFilterModel(OpenAIPrivacyFilterPreTrainedModel):
         )
 
         for encoder_layer in self.layers:
-            hidden_states = encoder_layer(
-                hidden_states,
-                position_embeddings=position_embeddings,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                **kwargs,
-            )
+            with _scope_router_output_collection():
+                hidden_states = encoder_layer(
+                    hidden_states,
+                    position_embeddings=position_embeddings,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    **kwargs,
+                )
 
         hidden_states = self.norm(hidden_states)
 

@@ -34,7 +34,7 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
 )
-from ...utils.output_capturing import OutputRecorder
+from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection
 from ..afmoe.modeling_afmoe import AfmoeForCausalLM
 from ..laguna.configuration_laguna import LagunaConfig
 from ..laguna.modeling_laguna import LagunaModel, LagunaRotaryEmbedding
@@ -633,17 +633,18 @@ class ZayaModel(LagunaModel):
             layer_type = self.config.layer_types[idx]
             # Attention uses the prepared causal mask, while CCA projection still needs the raw 2D mask to zero padding
             # tokens before convolution.
-            hidden_states, prev_router_hidden_states = decoder_layer(
-                hidden_states,
-                prev_router_hidden_states,
-                attention_mask={
-                    "causal": causal_mask_mapping[layer_type],
-                    "conv": causal_mask_mapping.get("conv"),
-                },
-                past_key_values=past_key_values,
-                position_embeddings=position_embeddings[layer_type],
-                **kwargs,
-            )
+            with _scope_router_output_collection():
+                hidden_states, prev_router_hidden_states = decoder_layer(
+                    hidden_states,
+                    prev_router_hidden_states,
+                    attention_mask={
+                        "causal": causal_mask_mapping[layer_type],
+                        "conv": causal_mask_mapping.get("conv"),
+                    },
+                    past_key_values=past_key_values,
+                    position_embeddings=position_embeddings[layer_type],
+                    **kwargs,
+                )
 
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
 

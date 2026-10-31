@@ -37,7 +37,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection, capture_outputs
 from .configuration_deepseek_v4 import DeepseekV4Config
 
 
@@ -1354,15 +1354,16 @@ class DeepseekV4Model(DeepseekV4PreTrainedModel):
         }
 
         for layer in self.layers:
-            hidden_states = layer(
-                hidden_states,
-                position_embeddings=position_embeddings,
-                position_ids=position_ids,
-                attention_mask=causal_mask,
-                input_ids=input_ids,
-                past_key_values=past_key_values,
-                **kwargs,
-            )
+            with _scope_router_output_collection():
+                hidden_states = layer(
+                    hidden_states,
+                    position_embeddings=position_embeddings,
+                    position_ids=position_ids,
+                    attention_mask=causal_mask,
+                    input_ids=input_ids,
+                    past_key_values=past_key_values,
+                    **kwargs,
+                )
 
         hidden_states = self.norm(self.hc_head(hidden_states))
         return MoeModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)

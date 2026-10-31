@@ -41,7 +41,7 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection, capture_outputs
 from ..gemma3.modeling_gemma3 import (
     Gemma3CausalLMOutputWithPast,
     Gemma3ForCausalLM,
@@ -829,13 +829,14 @@ class InklingTextModel(InklingPreTrainedModel):
         hidden_states = inputs_embeds
         for i, decoder_layer in enumerate(self.layers):
             attention_type = "full_attention" if self.config.layer_types[i] == "hybrid" else "sliding_attention"
-            hidden_states = decoder_layer(
-                hidden_states,
-                attention_mask=causal_mask_mapping[attention_type],
-                conv_mask=causal_mask_mapping["linear_attention"],
-                past_key_values=past_key_values,
-                **kwargs,
-            )
+            with _scope_router_output_collection():
+                hidden_states = decoder_layer(
+                    hidden_states,
+                    attention_mask=causal_mask_mapping[attention_type],
+                    conv_mask=causal_mask_mapping["linear_attention"],
+                    past_key_values=past_key_values,
+                    **kwargs,
+                )
 
         hidden_states = self.norm(hidden_states)
         return MoeModelOutputWithPast(

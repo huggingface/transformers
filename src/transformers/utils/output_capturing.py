@@ -19,6 +19,7 @@ This mostly describe the hooks used and the logic to make capture thread/context
 from __future__ import annotations
 
 import threading
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import wraps
@@ -92,9 +93,51 @@ class CompileableContextVar:
         else:
             self.context_var.reset(token)
 
+    @contextmanager
+    def eager_scope(self, value):
+        """
+        Temporarily bind a value in the current Python context without changing compilation state.
+
+        Call only outside tracing, while this wrapper is using its ContextVar.
+        """
+        token = self.context_var.set(value)
+        try:
+            yield
+        finally:
+            self.context_var.reset(token)
+
 
 # Thread/context-safe global variable
 _active_collector = CompileableContextVar("output_collector")
+
+
+@contextmanager
+def _scope_router_output_collection():
+    """
+    Collect router outputs in a fresh list for each region.
+
+    Enter from eager code around the call to a compiled region. A fresh list prevents Dynamo from specializing on
+    the number of router outputs collected by earlier regions. Merge the outputs into the enclosing collector on
+    exit, including when the region raises. Other buffers remain shared to preserve hidden-state layer indices.
+    During whole-model compilation, use the existing collector unchanged.
+    """
+    if is_torchdynamo_compiling() or _active_collector.compiling:
+        yield
+        return
+
+    collector = _active_collector.get()
+    if collector is None or "router_logits" not in collector:
+        yield
+        return
+
+    local_router_logits = []
+    local_collector = dict(collector)
+    local_collector["router_logits"] = local_router_logits
+    try:
+        with _active_collector.eager_scope(local_collector):
+            yield
+    finally:
+        collector["router_logits"].extend(local_router_logits)
 
 
 def install_output_capuring_hook(
