@@ -319,8 +319,8 @@ class Apertus1p5Config(PreTrainedConfig):
     model_type = "apertus1p5"
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Apertus1p5TextConfig),
-        "vision_config": SubConfigSpec(config_class=Apertus1p5VisionTokenizerConfig),
+        "text_config": Apertus1p5TextConfig,
+        "vision_config": Apertus1p5VisionTokenizerConfig,
         "audio_config": SubConfigSpec(config_class=AutoConfig, model_type="wavtokenizer_encoder"),
     }
 
