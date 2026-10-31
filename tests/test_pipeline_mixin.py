@@ -48,8 +48,6 @@ from transformers.testing_utils import (
 from transformers.utils import direct_transformers_import, logging
 
 
-
-
 pipeline_test_mapping = {
     "audio-classification": {"test": "tests.pipelines.test_pipelines_audio_classification.AudioClassificationPipelineTests"},
     "automatic-speech-recognition": {"test": "tests.pipelines.test_pipelines_automatic_speech_recognition.AutomaticSpeechRecognitionPipelineTests"},
