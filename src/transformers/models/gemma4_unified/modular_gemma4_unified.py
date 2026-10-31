@@ -733,7 +733,13 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
     input_modalities = ("text",)
     _can_record_outputs = {
         "hidden_states": Gemma4UnifiedTextDecoderLayer,
-        "attentions": Gemma4UnifiedTextAttention,
+        "attentions": [
+            Gemma4UnifiedTextAttention,
+            Gemma4UnifiedTextKEqVAttention,
+            Gemma4UnifiedTextKVSourceAttention,
+            Gemma4UnifiedTextKEqVKVSourceAttention,
+            Gemma4UnifiedTextKVSharedAttention,
+        ],
     }
 
     def __init__(self, config: Gemma4UnifiedTextConfig):
