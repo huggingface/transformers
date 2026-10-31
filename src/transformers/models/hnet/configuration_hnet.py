@@ -77,6 +77,7 @@ class HNetConfig(PreTrainedConfig):
     hidden_size: int = 1024
     intermediate_size: int = 0
     num_attention_heads: int = 16
+    num_key_value_heads: int | None = None
     head_dim: int | None = None
     n_mamba_heads: int | None = None
     sliding_window: int | None = 1024
@@ -96,6 +97,8 @@ class HNetConfig(PreTrainedConfig):
     use_conv_bias: bool = True
     hidden_act: str = "silu"
     mlp_bias: bool = False
+    attention_bias: bool = False
+    attention_dropout: float | int = 0.0
     max_position_embeddings: int = 1_048_576
     rope_parameters: RopeParameters | dict | None = None
     rms_norm_eps: float = 1e-5
@@ -142,6 +145,7 @@ class HNetConfig(PreTrainedConfig):
                     "hidden_size": hidden_size,
                     "intermediate_size": intermediate_size,
                     "num_attention_heads": num_heads,
+                    "num_key_value_heads": num_heads,
                     "head_dim": hidden_size // num_heads,
                     "n_mamba_heads": self.mamba_expand * hidden_size // self.mamba_headdim,
                     "sliding_window": sliding_window,

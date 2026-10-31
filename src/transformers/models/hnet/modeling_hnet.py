@@ -684,6 +684,43 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 # Adapted from transformers.models.glm.modular_glm.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
@@ -723,72 +760,40 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
 class HNetAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: HNetConfig, layer_idx: int):
         super().__init__()
-        # Sizes come from the layer's config, but `_attn_implementation` must follow the live model config
         self.config = config
         self.layer_idx = layer_idx
-        layer_config = config.per_layer_config[layer_idx]
-        self.head_dim = layer_config.head_dim
-        self.num_key_value_groups = 1
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
         self.is_causal = True
-        # CODEPATH: hnet_2stage_* slide over 1024 chunks at stage 1, every main network is global
-        self.sliding_window = layer_config.sliding_window
-        projection_size = layer_config.num_attention_heads * self.head_dim
-        self.q_proj = nn.Linear(layer_config.hidden_size, projection_size, bias=False)
-        self.k_proj = nn.Linear(layer_config.hidden_size, projection_size, bias=False)
-        self.v_proj = nn.Linear(layer_config.hidden_size, projection_size, bias=False)
-        self.out_proj = nn.Linear(projection_size, layer_config.hidden_size, bias=False)
+
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -802,60 +807,123 @@ class HNetAttention(nn.Module):
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
+
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
             value_states,
             attention_mask,
-            dropout=0.0,
+            dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=self.sliding_window,
             **kwargs,
         )
+
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        return self.out_proj(attn_output), attn_weights
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
-class HNetDecoderLayer(GradientCheckpointingLayer):
+class HNetAttentionDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: HNetConfig, layer_idx: int):
         super().__init__()
-        layer_config = config.per_layer_config[layer_idx]
-        self.is_mamba = config.layer_types[layer_idx] == "linear_attention"
-        self.input_layernorm = HNetRMSNorm(layer_config.hidden_size, eps=config.rms_norm_eps)
-        if self.is_mamba:
-            self.mixer = HNetMambaMixer(layer_config, layer_idx=layer_idx)
-        else:
-            # Released checkpoints pair every attention layer with an MLP, and no Mamba layer with one
-            self.mixer = HNetAttention(config, layer_idx=layer_idx)
-            self.post_attention_layernorm = HNetRMSNorm(layer_config.hidden_size, eps=config.rms_norm_eps)
-            self.mlp = HNetMLP(layer_config)
+        self.hidden_size = config.hidden_size
+
+        self.self_attn = HNetAttention(config=config, layer_idx=layer_idx)
+
+        self.mlp = HNetMLP(config)
+        self.input_layernorm = HNetRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = HNetRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-        if self.is_mamba:
-            return residual + self.mixer(hidden_states, cache_params=past_key_values, attention_mask=attention_mask)
-
-        hidden_states, _ = self.mixer(
-            hidden_states,
-            position_embeddings=position_embeddings,
+        # Self Attention
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             past_key_values=past_key_values,
+            use_cache=use_cache,
+            position_embeddings=position_embeddings,
             **kwargs,
         )
         hidden_states = residual + hidden_states
-        return hidden_states + self.mlp(self.post_attention_layernorm(hidden_states))
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+        return hidden_states
+
+
+class HNetMambaDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: HNetConfig, layer_idx: int):
+        super().__init__()
+        self.mamba = HNetMambaMixer(config=config, layer_idx=layer_idx)
+        self.input_layernorm = HNetRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.layer_idx = layer_idx
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        original_hidden_states: torch.Tensor | None = None,
+        layer_idx: int | None = None,
+        attention_mask: torch.Tensor | None = None,
+        causal_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        position_ids: torch.LongTensor | None = None,
+        transformer_hidden_states: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
+                `(batch, sequence_length)` where padding elements are indicated by 0.
+            past_key_values (`Cache`, *optional*): cached past key and value projection states
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+        """
+
+        residual = hidden_states
+
+        # `transformer_hidden_states` is the output from shared transformer + linear layer (see fig. 2 in https://huggingface.co/papers/2405.16712).
+        # `transformer_hidden_states` is then added to the input to the mamba layer below (as described in eq. (6) of https://huggingface.co/papers/2405.16712).
+        hidden_states = (
+            hidden_states + transformer_hidden_states if transformer_hidden_states is not None else hidden_states
+        )
+        hidden_states = self.input_layernorm(hidden_states)
+
+        hidden_states = self.mamba(
+            hidden_states=hidden_states,
+            cache_params=past_key_values,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
+        # residual connection after mamba
+        hidden_states = residual + hidden_states
+
+        return hidden_states
+
+
+# Released checkpoints pair every attention layer with an MLP, and no Mamba layer with one
+DECODER_LAYER_TYPES = {"full_attention": HNetAttentionDecoderLayer, "linear_attention": HNetMambaDecoderLayer}
 
 
 class HNetStack(nn.Module):
@@ -868,7 +936,9 @@ class HNetStack(nn.Module):
         super().__init__()
         self.config = config
         stage_config = config.per_layer_config[layer_ids[0]]
-        self.layers = nn.ModuleList([HNetDecoderLayer(config, idx) for idx in layer_ids])
+        self.layers = nn.ModuleList(
+            [DECODER_LAYER_TYPES[config.layer_types[idx]](config.per_layer_config[idx], idx) for idx in layer_ids]
+        )
         self.norm_f = HNetRMSNorm(stage_config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = HNetRotaryEmbedding(stage_config)
         self.sliding_window = stage_config.sliding_window
@@ -921,26 +991,30 @@ class HNetStack(nn.Module):
         mamba_mask = create_recurrent_attention_mask(self.config, hidden_states, step_mask)
 
         # Decoding a batch where some sequences close no chunk: their step is padding, and must not move their state
+        mamba_layers = [layer for layer in self.layers if isinstance(layer, HNetMambaDecoderLayer)]
         saved_states = []
         if past_key_values is not None and seq_len == 1 and step_mask is not None:
             saved_states = [
                 (state, state.clone())
-                for layer in self.layers
-                if layer.is_mamba
+                for layer in mamba_layers
                 for state in (
-                    past_key_values.get_conv_state(layer.mixer.layer_idx),
-                    past_key_values.get_recurrent_state(layer.mixer.layer_idx),
+                    past_key_values.get_conv_state(layer.layer_idx),
+                    past_key_values.get_recurrent_state(layer.layer_idx),
                 )
             ]
 
         for layer in self.layers:
-            hidden_states = layer(
-                hidden_states,
-                attention_mask=mamba_mask if layer.is_mamba else causal_mask,
-                position_embeddings=position_embeddings,
-                past_key_values=past_key_values,
-                **kwargs,
-            )
+            if layer in mamba_layers:
+                hidden_states = layer(hidden_states, attention_mask=mamba_mask, past_key_values=past_key_values)
+            else:
+                hidden_states = layer(
+                    hidden_states,
+                    attention_mask=causal_mask,
+                    position_embeddings=position_embeddings,
+                    past_key_values=past_key_values,
+                    sliding_window=self.sliding_window,
+                    **kwargs,
+                )
 
         for state, previous in saved_states:
             state.copy_(torch.where(step_mask.view(-1, *[1] * (state.dim() - 1)), state, previous))
@@ -986,7 +1060,7 @@ class HNetPreTrainedModel(PreTrainedModel):
     config: HNetConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["HNetDecoderLayer"]
+    _no_split_modules = ["HNetAttentionDecoderLayer", "HNetMambaDecoderLayer"]
     _keep_in_fp32_modules = ["residual_projs"]
     _supports_flash_attn = True
     _supports_sdpa = True

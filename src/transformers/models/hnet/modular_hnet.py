@@ -20,22 +20,19 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import no_inherit_decorator
-from ..bamba.modeling_bamba import BambaRotaryEmbedding, apply_rotary_pos_emb
-from ..lfm2.modeling_lfm2 import Lfm2Attention
+from ..bamba.modeling_bamba import BambaAttention, BambaRotaryEmbedding
 from ..llama.modeling_llama import (
+    LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaMLP,
     LlamaRMSNorm,
-    eager_attention_forward,
 )
-from ..zamba2.modeling_zamba2 import Zamba2MambaMixer, mamba2_chunk_scan
+from ..zamba2.modeling_zamba2 import Zamba2MambaDecoderLayer, Zamba2MambaMixer, mamba2_chunk_scan
 
 
 @auto_docstring(checkpoint="cartesia-ai/hnet_1stage_L")
@@ -91,6 +88,7 @@ class HNetConfig(PreTrainedConfig):
     hidden_size: int = 1024
     intermediate_size: int = 0
     num_attention_heads: int = 16
+    num_key_value_heads: int | None = None
     head_dim: int | None = None
     n_mamba_heads: int | None = None
     sliding_window: int | None = 1024
@@ -110,6 +108,8 @@ class HNetConfig(PreTrainedConfig):
     use_conv_bias: bool = True
     hidden_act: str = "silu"
     mlp_bias: bool = False
+    attention_bias: bool = False
+    attention_dropout: float | int = 0.0
     max_position_embeddings: int = 1_048_576
     rope_parameters: RopeParameters | dict | None = None
     rms_norm_eps: float = 1e-5
@@ -156,6 +156,7 @@ class HNetConfig(PreTrainedConfig):
                     "hidden_size": hidden_size,
                     "intermediate_size": intermediate_size,
                     "num_attention_heads": num_heads,
+                    "num_key_value_heads": num_heads,
                     "head_dim": hidden_size // num_heads,
                     "n_mamba_heads": self.mamba_expand * hidden_size // self.mamba_headdim,
                     "sliding_window": sliding_window,
@@ -214,101 +215,20 @@ class HNetMambaMixer(Zamba2MambaMixer):
     pass
 
 
-@no_inherit_decorator  # Lfm2's kernelized rotary is not partial
-class HNetAttention(Lfm2Attention):
-    def __init__(self, config: HNetConfig, layer_idx: int):
-        nn.Module.__init__(self)
-        # Sizes come from the layer's config, but `_attn_implementation` must follow the live model config
-        self.config = config
-        self.layer_idx = layer_idx
-        layer_config = config.per_layer_config[layer_idx]
-        self.head_dim = layer_config.head_dim
-        self.num_key_value_groups = 1
-        self.scaling = self.head_dim**-0.5
-        self.is_causal = True
-        # CODEPATH: hnet_2stage_* slide over 1024 chunks at stage 1, every main network is global
-        self.sliding_window = layer_config.sliding_window
-        projection_size = layer_config.num_attention_heads * self.head_dim
-        self.q_proj = nn.Linear(layer_config.hidden_size, projection_size, bias=False)
-        self.k_proj = nn.Linear(layer_config.hidden_size, projection_size, bias=False)
-        self.v_proj = nn.Linear(layer_config.hidden_size, projection_size, bias=False)
-        self.out_proj = nn.Linear(projection_size, layer_config.hidden_size, bias=False)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
-        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0,
-            scaling=self.scaling,
-            sliding_window=self.sliding_window,
-            **kwargs,
-        )
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        return self.out_proj(attn_output), attn_weights
+class HNetAttention(BambaAttention):
+    pass
 
 
-class HNetDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: HNetConfig, layer_idx: int):
-        super().__init__()
-        layer_config = config.per_layer_config[layer_idx]
-        self.is_mamba = config.layer_types[layer_idx] == "linear_attention"
-        self.input_layernorm = HNetRMSNorm(layer_config.hidden_size, eps=config.rms_norm_eps)
-        if self.is_mamba:
-            self.mixer = HNetMambaMixer(layer_config, layer_idx=layer_idx)
-        else:
-            # Released checkpoints pair every attention layer with an MLP, and no Mamba layer with one
-            self.mixer = HNetAttention(config, layer_idx=layer_idx)
-            self.post_attention_layernorm = HNetRMSNorm(layer_config.hidden_size, eps=config.rms_norm_eps)
-            self.mlp = HNetMLP(layer_config)
+class HNetAttentionDecoderLayer(LlamaDecoderLayer):
+    pass
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        past_key_values: Cache | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
-        if self.is_mamba:
-            return residual + self.mixer(hidden_states, cache_params=past_key_values, attention_mask=attention_mask)
 
-        hidden_states, _ = self.mixer(
-            hidden_states,
-            position_embeddings=position_embeddings,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-        return hidden_states + self.mlp(self.post_attention_layernorm(hidden_states))
+class HNetMambaDecoderLayer(Zamba2MambaDecoderLayer):
+    pass
+
+
+# Released checkpoints pair every attention layer with an MLP, and no Mamba layer with one
+DECODER_LAYER_TYPES = {"full_attention": HNetAttentionDecoderLayer, "linear_attention": HNetMambaDecoderLayer}
 
 
 class HNetStack(nn.Module):
@@ -321,7 +241,9 @@ class HNetStack(nn.Module):
         super().__init__()
         self.config = config
         stage_config = config.per_layer_config[layer_ids[0]]
-        self.layers = nn.ModuleList([HNetDecoderLayer(config, idx) for idx in layer_ids])
+        self.layers = nn.ModuleList(
+            [DECODER_LAYER_TYPES[config.layer_types[idx]](config.per_layer_config[idx], idx) for idx in layer_ids]
+        )
         self.norm_f = HNetRMSNorm(stage_config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = HNetRotaryEmbedding(stage_config)
         self.sliding_window = stage_config.sliding_window
@@ -374,26 +296,30 @@ class HNetStack(nn.Module):
         mamba_mask = create_recurrent_attention_mask(self.config, hidden_states, step_mask)
 
         # Decoding a batch where some sequences close no chunk: their step is padding, and must not move their state
+        mamba_layers = [layer for layer in self.layers if isinstance(layer, HNetMambaDecoderLayer)]
         saved_states = []
         if past_key_values is not None and seq_len == 1 and step_mask is not None:
             saved_states = [
                 (state, state.clone())
-                for layer in self.layers
-                if layer.is_mamba
+                for layer in mamba_layers
                 for state in (
-                    past_key_values.get_conv_state(layer.mixer.layer_idx),
-                    past_key_values.get_recurrent_state(layer.mixer.layer_idx),
+                    past_key_values.get_conv_state(layer.layer_idx),
+                    past_key_values.get_recurrent_state(layer.layer_idx),
                 )
             ]
 
         for layer in self.layers:
-            hidden_states = layer(
-                hidden_states,
-                attention_mask=mamba_mask if layer.is_mamba else causal_mask,
-                position_embeddings=position_embeddings,
-                past_key_values=past_key_values,
-                **kwargs,
-            )
+            if layer in mamba_layers:
+                hidden_states = layer(hidden_states, attention_mask=mamba_mask, past_key_values=past_key_values)
+            else:
+                hidden_states = layer(
+                    hidden_states,
+                    attention_mask=causal_mask,
+                    position_embeddings=position_embeddings,
+                    past_key_values=past_key_values,
+                    sliding_window=self.sliding_window,
+                    **kwargs,
+                )
 
         for state, previous in saved_states:
             state.copy_(torch.where(step_mask.view(-1, *[1] * (state.dim() - 1)), state, previous))
@@ -506,7 +432,7 @@ class HNetPreTrainedModel(PreTrainedModel):
     config: HNetConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["HNetDecoderLayer"]
+    _no_split_modules = ["HNetAttentionDecoderLayer", "HNetMambaDecoderLayer"]
     _keep_in_fp32_modules = ["residual_projs"]
     _supports_flash_attn = True
     _supports_sdpa = True

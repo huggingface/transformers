@@ -186,14 +186,23 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"backbone\.main_network\.(encoder|decoder|routing_module|residual_proj)\.", r"\1s.1."),
             WeightRenaming(r"backbone\.(encoder|decoder|routing_module|residual_proj)\.", r"\1s.0."),
             WeightRenaming([r"backbone\.main_network\.main_network\.", r"backbone\.main_network\."], "main_network."),
+            # Both Mamba and attention layers keep their output projection in `mixer.out_proj`: every released layout
+            # has attention in all main network layers, the first stage-1 encoder layer and the last stage-1 decoder layer
+            WeightRenaming(
+                r"main_network\.layers\.(\d+)\.mixer\.out_proj\.", r"main_network.layers.\1.self_attn.o_proj."
+            ),
+            WeightRenaming(r"encoders\.1\.layers\.0\.mixer\.out_proj\.", "encoders.1.layers.0.self_attn.o_proj."),
+            WeightRenaming(r"decoders\.1\.layers\.4\.mixer\.out_proj\.", "decoders.1.layers.4.self_attn.o_proj."),
+            WeightRenaming(r"\.mixer\.Wqkv\.", ".self_attn.Wqkv."),
+            WeightRenaming(r"\.mixer\.", ".mamba."),
             WeightConverter(
                 source_patterns=r"\.mlp\.fc1\.weight",
                 target_patterns=[".mlp.up_proj.weight", ".mlp.gate_proj.weight"],
                 operations=[Chunk(dim=0)],
             ),
             WeightConverter(
-                source_patterns=r"\.mixer\.Wqkv\.weight",
-                target_patterns=[".mixer.q_proj.weight", ".mixer.k_proj.weight", ".mixer.v_proj.weight"],
+                source_patterns=r"\.self_attn\.Wqkv\.weight",
+                target_patterns=[".self_attn.q_proj.weight", ".self_attn.k_proj.weight", ".self_attn.v_proj.weight"],
                 operations=[Chunk(dim=0)],
             ),
         ],

@@ -590,6 +590,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
     @property
     def _attn_implementation(self):
+        # A per-layer view of a heterogeneous config follows its parent, which `set_attn_implementation` updates
+        if (parent_config := self.__dict__.get("_per_layer_parent")) is not None:
+            return parent_config._attn_implementation
         return self._attn_implementation_internal
 
     @_attn_implementation.setter
@@ -1418,6 +1421,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             "_commit_hash",
             "_attn_implementation_internal",
             "_experts_implementation_internal",
+            "_per_layer_parent",
             "_post_init_done",
             "ignore_keys_at_rope_validation",
             "base_model_tp_plan",
