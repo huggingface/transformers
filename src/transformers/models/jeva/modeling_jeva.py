@@ -38,7 +38,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, is_peft_available
 from ..auto import AutoModel
-from .configuration_jeva import JEVA_TEMPLATE, JevaConfig
+from .configuration_jeva import JevaConfig
 
 
 if is_peft_available():
@@ -158,7 +158,7 @@ class JevaDecisionStack(nn.Module):
 @auto_docstring
 @dataclass
 class JevaDecisionOutput(ModelOutput):
-    """
+    r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Candidate cross-entropy and, for nullable choices, binary coverage loss, plus the weighted MoE auxiliary loss.
     logits (`torch.FloatTensor` of shape `(batch_size, max_num_options)`):
@@ -273,6 +273,16 @@ def load_balancing_loss_func(
     return overall_loss * num_experts
 
 
+JEVA_TEMPLATE = r"""
+{%- macro text(x) %}{{ "" if x is none else x if x is string else x|tojson }}{% endmacro -%}
+{{- (bos_token or "") ~ "Decision type: " ~ question.type ~ "\nQuestion: " ~ text(question.instructions) ~ "\nState:\n" ~ text(state) ~ "<|mark|>" -}}
+{%- for option in question.options -%}
+{%- set description = question.descriptions[loop.index0] -%}
+{{- (bos_token or "") ~ "Option for " ~ question.type ~ ": " ~ text(option ~ ": " ~ text(description) if question.type == "choice" and description is not none else description if description is not none else option) ~ "<|mark|>" -}}
+{%- endfor -%}
+"""
+
+
 @auto_docstring(
     custom_intro="""
     Jeva encodes the state and each option independently with a shared text model. A matrix decision stack updates the
@@ -284,10 +294,9 @@ class JevaForDecision(DecisionMixin, JevaPreTrainedModel):
     accepts_loss_kwargs = False
 
     def __init__(self, config: JevaConfig, model: PreTrainedModel | None = None):
-        """
-        Args:
-            model (`PreTrainedModel`, *optional*):
-                An already loaded text encoder. Otherwise, initialize it from `config.text_config`.
+        r"""
+        model (`PreTrainedModel`, *optional*):
+            An already loaded text encoder. Otherwise, initialize it from `config.text_config`.
         """
         super().__init__(config)
         self.model = model if model is not None else AutoModel.from_config(config.text_config)
@@ -392,7 +401,7 @@ class JevaForDecision(DecisionMixin, JevaPreTrainedModel):
         num_items_in_batch: torch.Tensor | int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> JevaDecisionOutput:
-        """
+        r"""
         option_input_ids (`torch.LongTensor` of shape `(total_options, option_sequence_length)`):
             Token IDs of the options, flattened in decision order.
         num_options (`torch.LongTensor` of shape `(batch_size,)`):

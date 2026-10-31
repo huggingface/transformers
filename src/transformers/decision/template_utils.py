@@ -98,7 +98,6 @@ class ChoiceQuestion:
     criteria: dict[str, Content | None]
     type: Literal["choice"] = "choice"
     instructions: Content | None = None
-
     allow_null: bool = False
 
     def validate_options(self):
@@ -114,7 +113,6 @@ class ScoreQuestion:
     criteria: list[Content]
     type: Literal["score"] = "score"
     instructions: Content | None = None
-
     values: list[float | int] | None = None
 
     def validate_levels(self):
