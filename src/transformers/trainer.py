@@ -3676,6 +3676,10 @@ class Trainer:
                     active_adapter = active_adapters[0]
 
                     if adapter_subdirs:
+                        if os.path.exists(adapter_weights_file) or os.path.exists(adapter_safe_weights_file):
+                            model.load_adapter(
+                                resume_from_checkpoint, "default", is_trainable=(active_adapter == "default")
+                            )
                         for subdir_name in adapter_subdirs:
                             peft_id = os.path.join(resume_from_checkpoint, subdir_name)
                             model.load_adapter(peft_id, subdir_name, is_trainable=(subdir_name == active_adapter))
