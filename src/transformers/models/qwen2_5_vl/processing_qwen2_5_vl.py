@@ -24,22 +24,14 @@
 # limitations under the License.
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
+from ...utils.deprecation import deprecate_attr
 from ...video_utils import VideoInput
-
-
-class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": True,
-        },
-        "videos_kwargs": {"return_metadata": True},
-    }
 
 
 @auto_docstring
 class Qwen2_5_VLProcessor(ProcessorMixin):
-    valid_processor_kwargs = Qwen2_5_VLProcessorKwargs
+    return_mm_token_type_ids = True
+    videos_kwargs = {"return_metadata": True}
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
@@ -79,10 +71,10 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
             input modalities, along with other useful data.
         """
 
+        merged_kwargs = self._merge_kwargs(**kwargs)
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = Qwen2_5_VLProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = merged_kwargs.get("images_kwargs", {})
             merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
 
             num_image_patches = [
@@ -93,8 +85,7 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
-            videos_kwargs = Qwen2_5_VLProcessorKwargs._defaults.get("videos_kwargs", {})
-            videos_kwargs.update(kwargs)
+            videos_kwargs = merged_kwargs.get("videos_kwargs", {})
             merge_size = videos_kwargs.get("merge_size", None) or self.video_processor.merge_size
             num_video_patches = [
                 self.video_processor.get_num_of_video_patches(*video_size, videos_kwargs) for video_size in video_sizes
@@ -153,5 +144,7 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
         processed_data["second_per_grid_ts"] = second_per_grid_ts
         return processed_data, video_replacements
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Qwen2_5_VLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Qwen2_5_VLProcessor"]

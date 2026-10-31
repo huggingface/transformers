@@ -21,14 +21,7 @@ from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
-
-
-class MllamaProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "image_kwargs": {
-            "max_image_tiles": 4,
-        },
-    }
+from ...utils.deprecation import deprecate_attr
 
 
 def get_cross_attention_token_mask(input_ids: list[int], image_token_id: int) -> list[list[int]]:
@@ -166,7 +159,9 @@ def build_string_from_input(prompt: str, bos_token: str, image_token: str) -> st
 
 @auto_docstring
 class MllamaProcessor(ProcessorMixin):
-    valid_processor_kwargs = MllamaProcessorKwargs
+    image_kwargs = {
+        "max_image_tiles": 4,
+    }
 
     def __init__(self, image_processor, tokenizer, chat_template=None):
         if not hasattr(tokenizer, "image_token"):
@@ -186,7 +181,7 @@ class MllamaProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        **kwargs: Unpack[MllamaProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         Returns:
@@ -203,7 +198,6 @@ class MllamaProcessor(ProcessorMixin):
         self.validate_inputs(images=images, text=text, **kwargs)
 
         output_kwargs = self._merge_kwargs(
-            MllamaProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -328,5 +322,7 @@ class MllamaProcessor(ProcessorMixin):
         image_processor_input_names = [name for name in image_processor_input_names if name != "num_tiles"]
         return list(tokenizer_input_names + image_processor_input_names + ["cross_attention_mask"])
 
+
+__getattr__ = deprecate_attr(__name__, rename={"MllamaProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["MllamaProcessor"]

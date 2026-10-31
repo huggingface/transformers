@@ -32,6 +32,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
 from ...utils import auto_docstring, is_torchvision_available, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import (
     merge_with_config_defaults,
 )
@@ -884,18 +885,13 @@ class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         )
 
 
-class Qwen3VLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_token_type_ids": False,
-            "return_mm_token_type_ids": True,
-        },
-        "videos_kwargs": {"return_metadata": True},
-    }
-
-
 class Qwen3VLProcessor(Qwen2VLProcessor):
+    text_kwargs = {
+        "return_token_type_ids": False,
+    }
+    videos_kwargs = {"return_metadata": True}
+    return_mm_token_type_ids = True
+
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, video_processor, chat_template, **kwargs)
         self.vision_start_token = (
@@ -1144,6 +1140,8 @@ class Qwen3VLVideoProcessor(Qwen2VLVideoProcessor):
 
         return indices
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Qwen3VLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "Qwen3VLConfig",

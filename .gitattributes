@@ -540,6 +540,7 @@ src/transformers/models/seed_oss/modeling_*.py linguist-generated=true
 src/transformers/models/segformer/image_*.py linguist-generated=true
 src/transformers/models/segformer/modeling_*.py linguist-generated=true
 src/transformers/models/sew/modeling_*.py linguist-generated=true
+src/transformers/models/shieldgemma2/processing_*.py linguist-generated=true
 src/transformers/models/siglip2/configuration_*.py linguist-generated=true
 src/transformers/models/siglip2/modeling_*.py linguist-generated=true
 src/transformers/models/siglip2/tokenization_*.py linguist-generated=true

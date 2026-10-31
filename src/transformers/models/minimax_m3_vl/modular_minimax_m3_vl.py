@@ -29,8 +29,9 @@ from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import is_torchdynamo_compiling
 from ...utils.output_capturing import capture_outputs
@@ -59,7 +60,7 @@ from ..minimax_m2.modeling_minimax_m2 import (
 from ..mixtral.modeling_mixtral import MixtralDecoderLayer, load_balancing_loss_func
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VisionPatchEmbed, Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
-from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor, Qwen2VLProcessorKwargs
+from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -1232,12 +1233,6 @@ class MiniMaxM3VLImageProcessor(Qwen2VLImageProcessor):
         TorchvisionBackend.__init__(size=size, **kwargs)
 
 
-class MiniMaxM3VLProcessorKwargs(Qwen2VLProcessorKwargs):
-    _defaults = {
-        "videos_kwargs": {"do_resize": False, "return_metadata": True},
-    }
-
-
 class MiniMaxM3VLProcessor(Qwen2VLProcessor):
     """Combines tokenizer + image_processor + video_processor for MiniMax M3 VL.
 
@@ -1247,7 +1242,11 @@ class MiniMaxM3VLProcessor(Qwen2VLProcessor):
     `]<]{seconds} seconds[>[` timestamp marker per frame when metadata is available.
     """
 
-    valid_processor_kwargs = MiniMaxM3VLProcessorKwargs
+    videos_kwargs = {
+        "do_resize": False,
+        "return_metadata": True,
+    }
+    return_mm_token_type_ids = AttributeError()
 
     IMAGE_TOKEN = "]<]image[>["
     VIDEO_TOKEN = "]<]video[>["
@@ -1290,6 +1289,8 @@ class MiniMaxM3VLProcessor(Qwen2VLProcessor):
             chunk += self.VISION_START_TOKEN + self.VIDEO_TOKEN * frame_seqlen + self.VISION_END_TOKEN
         return chunk
 
+
+__getattr__ = deprecate_attr(__name__, rename={"MiniMaxM3VLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "MiniMaxM3VLConfig",

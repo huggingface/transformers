@@ -294,3 +294,9 @@ class CsmProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @unittest.skip("CSM doesn't need assistant masks as an audio generation model")
     def test_apply_chat_template_assistant_mask(self):
         pass
+
+    @unittest.skip(
+        reason="Cannot change the default of output_labels and depth_decoder_labels_ratio in __call__ without breaking BC."
+    )
+    def test_call_arguments_default_none(self):
+        pass

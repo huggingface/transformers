@@ -201,3 +201,7 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs_dict_no_vision = {"text": text, "images": image_inputs_nested}
         inputs_nested = processor(**inputs_dict_no_vision, **processing_kwargs)
         self.assertTrue(self.text_input_name in inputs_nested)
+
+    @unittest.skip(reason="Skip for BC. Hub configs do not have the same defaults as the processor.")
+    def test_no_redundant_default_kwargs(self):
+        pass
