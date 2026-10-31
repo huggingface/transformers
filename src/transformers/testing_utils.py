@@ -5030,6 +5030,7 @@ def _record_import_chain(module_name: str) -> None:
         elif _ci_record_collection_phase:
             dedup_key = ("__collection__", "collection")
         else:
+            # No active context — import is "lost" (fired before collecting_file was set, e.g. xdist)
             return
 
         # Fast path: skip frame walk entirely for already-seen files (the common case
@@ -5046,10 +5047,15 @@ def _record_import_chain(module_name: str) -> None:
         # definition time during collection pulls in all 98 registered models).
         # Use sys._getframe() — much cheaper than inspect.stack() (no source line reads).
         frame = sys._getframe(2)  # skip _record_import_chain + _tracking_import
+        load_attr_filtered = False
         while frame is not None:
             if frame.f_code.co_name == "_load_attr_from_module":
-                return
+                load_attr_filtered = True
+                break
             frame = frame.f_back
+
+        if load_attr_filtered:
+            return
 
         _ci_deps_by_file.setdefault(dedup_key, set()).add(src_file_rel)
 
@@ -5084,6 +5090,7 @@ def install_ci_source_deps_tracker() -> None:
     if not os.environ.get("CI_RECORD_DEPS_OUTPUT"):
         return
     global _ci_source_deps_repo_root, _ci_source_deps_src_root, _ci_record_collection_phase, _ci_record_chain
+
     _ci_record_collection_phase = os.environ.get("CI_RECORD_DEPS_INCLUDE_COLLECTION", "") == "1"
     _ci_record_chain = os.environ.get("CI_RECORD_DEPS_INCLUDE_CHAIN", "") == "1"
     _ci_source_deps_repo_root = Path(__file__).parent.parent.parent.resolve()
@@ -5124,6 +5131,16 @@ def install_ci_source_deps_tracker() -> None:
                     submodule = f"{resolved_name}.{item}"
                     if submodule in sys.modules:
                         _record_import_chain(submodule)
+                    else:
+                        # item is a class/function — find its defining module via __module__.
+                        # Use __dict__ directly to avoid triggering __getattr__ again.
+                        parent_mod = sys.modules.get(resolved_name)
+                        if parent_mod is not None:
+                            attr = parent_mod.__dict__.get(item)
+                            if attr is not None:
+                                mod_name = getattr(attr, "__module__", None)
+                                if isinstance(mod_name, str) and mod_name.split(".")[0] in ("transformers", "tests"):
+                                    _record_import_chain(mod_name)
         return result
 
     def _tracking_import_module(name, package=None):
@@ -5210,6 +5227,7 @@ def record_ci_source_deps_by_file() -> None:
     output_path = os.environ.get("CI_RECORD_DEPS_OUTPUT")
     if not output_path:
         return
+
     out_dir = Path(output_path).parent
     target, is_controller = _ci_record_target(out_dir, "deps_by_file.json")
     if is_controller:
