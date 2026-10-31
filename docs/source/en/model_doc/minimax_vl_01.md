@@ -40,20 +40,33 @@ before downloading or using the weights.
 
 ## Usage
 
+Convert the original checkpoint configuration to the native format before loading:
+
+```bash
+python src/transformers/models/minimax_vl_01/convert_minimax_vl_01_weights_to_hf.py \
+    /path/to/MiniMax-VL-01 /path/to/MiniMax-VL-01-hf
+```
+
+The converter writes only `config.json`. Load the weights and processor assets from their original checkpoint,
+passing the converted configuration explicitly as shown below.
+
 Use the processor's chat template so that image placeholders and role markers match the checkpoint. The processor
 expands each image placeholder to the exact number of visual features produced for that image.
 
 ```python
 import torch
 
-from transformers import AutoModelForImageTextToText, AutoProcessor
+from transformers import AutoModelForImageTextToText, MiniMaxVL01Config, MiniMaxVL01Processor
 from transformers.image_utils import load_image
 
 
 checkpoint = "MiniMaxAI/MiniMax-VL-01"
-processor = AutoProcessor.from_pretrained(checkpoint)
+config = MiniMaxVL01Config.from_pretrained("/path/to/MiniMax-VL-01-hf")
+processor = MiniMaxVL01Processor.from_pretrained(checkpoint, config=config, trust_remote_code=False)
 model = AutoModelForImageTextToText.from_pretrained(
     checkpoint,
+    config=config,
+    trust_remote_code=False,
     dtype=torch.bfloat16,
     device_map="auto",
 )
