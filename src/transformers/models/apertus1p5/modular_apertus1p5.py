@@ -596,6 +596,7 @@ class Apertus1p5TextForCausalLM(ApertusForCausalLM):
     input_modalities = ("text",)
     _can_compile_fullgraph = True
     _no_split_modules = ["Apertus1p5TextDecoderLayer"]
+    _keys_to_ignore_on_load_unexpected = [r"^model\.vision_tokenizer\.", r"^model\.audio_tokenizer\."]
 
     def __init__(self, config: Apertus1p5TextConfig):
         super().__init__(config)
