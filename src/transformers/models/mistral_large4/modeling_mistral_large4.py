@@ -1006,7 +1006,7 @@ class MistralLarge4PreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": MistralLarge4TextDecoderLayer,
-        "attentions": MistralLarge4TextAttention,
+        "attentions": list(MISTRAL_LARGE4_TEXT_ATTENTION_CLASSES.values()),
         "router_logits": OutputRecorder(MistralLarge4TextTopkRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["rotary_emb", "mlp.gate.weight"]

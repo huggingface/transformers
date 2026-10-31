@@ -390,15 +390,8 @@ class MistralLarge4TextIndexer(GlmMoeDsaIndexer):
         return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
 
 
-class MistralLarge4TextNoRopeIndexer(GlmMoeDsaIndexer):
+class MistralLarge4TextNoRopeIndexer(MistralLarge4TextIndexer):
     """Same as `MistralLarge4TextIndexer`, without RoPE on the indexer queries and keys (for NoPE layers)."""
-
-    def __init__(self, config: MistralLarge4TextConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        del self.q_lora_rank
-        self.q_input_norm = nn.LayerNorm(config.hidden_size, eps=1e-6)
-        self.wq_b = nn.Linear(config.hidden_size, self.n_heads * self.head_dim, bias=False)
-        self.softmax_scaling = MistralLarge4TextSoftmaxScaling(self.n_heads)
 
     @torch.no_grad()
     def forward(
@@ -556,7 +549,7 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
         return attn_output, attn_weights, topk_indices
 
 
-class MistralLarge4TextNoRopeAttention(GlmMoeDsaAttention):
+class MistralLarge4TextNoRopeAttention(MistralLarge4TextAttention):
     """Same as `MistralLarge4TextAttention`, without positional encoding (NoPE layers). Its latent keys are stored in
     `shared_kv_states`, for the following `nope_kv_shared` layers."""
 
@@ -565,17 +558,8 @@ class MistralLarge4TextNoRopeAttention(GlmMoeDsaAttention):
         # NoPE: the rotary head dims are folded into the non-rotary ones
         self.qk_rope_head_dim = 0
         self.qk_nope_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
-
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-        del self.q_lora_rank
-        del self.q_a_proj
-        del self.q_a_layernorm
-        del self.q_b_proj
-
-        self.softmax_scaling = MistralLarge4TextSoftmaxScaling(self.num_heads)
         self.indexer = None if self.skip_topk else MistralLarge4TextNoRopeIndexer(config, layer_idx)
         self.kv_a_proj_with_mqa = nn.Linear(self.hidden_size, config.kv_lora_rank, bias=config.attention_bias)
-        self.kv_a_layernorm = MistralLarge4RMSNorm(config.kv_lora_rank, eps=config.rms_norm_eps)
 
     # trf-ignore: TRF043
     def forward(
@@ -656,24 +640,12 @@ class MistralLarge4TextNoRopeAttention(GlmMoeDsaAttention):
         return attn_output, attn_weights, topk_indices
 
 
-class MistralLarge4TextNoRopeKVSharedAttention(GlmMoeDsaAttention):
+class MistralLarge4TextNoRopeKVSharedAttention(MistralLarge4TextNoRopeAttention):
     """Same as `MistralLarge4TextNoRopeAttention`, but reuses the latent keys of the most recent NoPE layer instead of
     computing its own."""
 
     def __init__(self, config: MistralLarge4TextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        # NoPE: the rotary head dims are folded into the non-rotary ones
-        self.qk_rope_head_dim = 0
-        self.qk_nope_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
-
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-        del self.q_lora_rank
-        del self.q_a_proj
-        del self.q_a_layernorm
-        del self.q_b_proj
-
-        self.softmax_scaling = MistralLarge4TextSoftmaxScaling(self.num_heads)
-        self.indexer = None if self.skip_topk else MistralLarge4TextNoRopeIndexer(config, layer_idx)
         # Keys come from the source layer: no weights of its own
         del self.kv_a_proj_with_mqa
         del self.kv_a_layernorm
@@ -837,11 +809,6 @@ class MistralLarge4PreTrainedModel(GlmMoeDsaPreTrainedModel):
     _keep_in_fp32_modules_strict = ["rotary_emb", "mlp.gate.weight"]
     # The checkpoint ships a multi-token-prediction draft head that this model does not implement yet # TODO
     _keys_to_ignore_on_load_unexpected = [r"mtp_dspark\..*"]
-    _can_record_outputs = {
-        "hidden_states": MistralLarge4TextDecoderLayer,
-        "attentions": MistralLarge4TextAttention,
-        "router_logits": OutputRecorder(MistralLarge4TextTopkRouter, index=0),
-    }
 
     @torch.no_grad()
     def _init_weights(self, module):
