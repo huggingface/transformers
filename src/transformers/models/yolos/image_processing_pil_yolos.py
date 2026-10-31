@@ -34,7 +34,7 @@ from ...image_utils import (
     validate_annotations,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_vision_available, requires_backends
+from ...utils import TensorType, auto_docstring, is_torch_available, is_vision_available
 from ...utils.import_utils import requires
 
 
@@ -721,7 +721,6 @@ class YolosImageProcessorPil(PilBackend):
             `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
-        requires_backends(self, ["torch"])
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
         if target_sizes is not None:

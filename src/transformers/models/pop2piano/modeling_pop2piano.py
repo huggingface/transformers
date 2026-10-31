@@ -600,7 +600,7 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
 
 class Pop2PianoStack(Pop2PianoPreTrainedModel):
     # Copied from transformers.models.t5.modeling_t5.T5Stack.__init__ with T5->Pop2Piano,t5->pop2piano
-    def __init__(self, config):
+    def __init__(self, config: Pop2PianoConfig):
         super().__init__(config)
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)

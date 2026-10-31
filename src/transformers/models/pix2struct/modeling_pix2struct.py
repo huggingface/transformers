@@ -930,7 +930,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
     _tied_weights_keys = {"lm_head.weight": "embed_tokens.weight"}
     supports_gradient_checkpointing = True
 
-    def __init__(self, config):
+    def __init__(self, config: Pix2StructTextConfig):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
 

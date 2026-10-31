@@ -38,7 +38,6 @@ from ...utils import (
     auto_docstring,
     is_scipy_available,
     logging,
-    requires_backends,
 )
 
 
@@ -490,7 +489,6 @@ class VitPoseImageProcessor(TorchvisionBackend):
             `list[list[Dict]]`: A list of dictionaries, each dictionary containing the keypoints and boxes for an image
             in the batch as predicted by the model.
         """
-        requires_backends(self, "torch")
         batch_size, num_keypoints, _, _ = outputs.heatmaps.shape
         if target_sizes is not None and batch_size != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")

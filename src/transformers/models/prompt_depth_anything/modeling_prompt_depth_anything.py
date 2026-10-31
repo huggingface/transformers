@@ -372,7 +372,7 @@ class PromptDepthAnythingNeck(nn.Module):
     """
 )
 class PromptDepthAnythingForDepthEstimation(PromptDepthAnythingPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: PromptDepthAnythingConfig):
         super().__init__(config)
 
         self.backbone = load_backbone(config)
