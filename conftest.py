@@ -42,6 +42,7 @@ from transformers.testing_utils import (
     record_ci_source_deps,
     record_ci_source_deps_by_file,
     record_ci_source_deps_chains,
+    scan_preloaded_test_module_deps,
     set_ci_collecting_file,
     set_ci_deps_phase,
     snapshot_ci_source_deps_baseline,
@@ -403,6 +404,11 @@ def pytest_collectstart(collector):
     if isinstance(collector, pytest.Module):
         # collector.nodeid is already repo-relative (e.g. "tests/models/clip/test_processing_clip.py")
         set_ci_collecting_file(collector.nodeid)
+        # If the module was pre-loaded as a side-effect of another test file's module-level
+        # import (e.g. test_modeling_auto imports test_modeling_bert at the top level), its
+        # body already ran under a different collecting_file context. Scan its __dict__ now
+        # that the correct context is set, so we still capture its transformers deps.
+        scan_preloaded_test_module_deps(collector.nodeid)
 
 
 def pytest_collection_finish(session):
