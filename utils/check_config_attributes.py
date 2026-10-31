@@ -246,6 +246,44 @@ SPECIAL_CASES_TO_ALLOW = {
         "num_diffusion_samples",
         "max_atomic_number",
     ],
+    # The processor owns codec weights; audio_config is consumed by convert_qwen3_tts_to_hf.py.
+    "Qwen3TTSConfig": ["audio_config"],
+    "Qwen3TTSTokenizerConfig": [
+        # Consumed by the encoder_config projection in configuration_qwen3_tts_tokenizer.py;
+        # this checker scans only modeling files, which see the unprefixed component settings.
+        "encoder_attention_bias",
+        "encoder_attention_dropout",
+        "encoder_audio_channels",
+        "encoder_compress",
+        "encoder_dilation_growth_rate",
+        "encoder_frame_rate",
+        "encoder_head_dim",
+        "encoder_hidden_act",
+        "encoder_hidden_size",
+        "encoder_intermediate_size",
+        "encoder_kernel_size",
+        "encoder_last_kernel_size",
+        "encoder_layer_scale_initial_scale",
+        "encoder_norm_eps",
+        "encoder_num_attention_heads",
+        "encoder_num_filters",
+        "encoder_num_hidden_layers",
+        "encoder_num_key_value_heads",
+        "encoder_num_residual_layers",
+        "encoder_pad_mode",
+        "encoder_residual_kernel_size",
+        "encoder_rope_parameters",
+        "encoder_sliding_window",
+        "encoder_upsampling_ratios",
+        "encoder_use_causal_conv",
+        "encoder_use_conv_shortcut",
+    ],
+    "Qwen3TTSTalkerConfig": [
+        # Read in generation_qwen3_tts.py (speaker dialect and think-token prefill), which this check does not scan --
+        # it only looks at files named modeling_*.
+        "codec_think_id",
+        "spk_is_dialect",
+    ],
     "AXK2Config": ["layer_types"],  # needed for correct cache
     # ESMFold2's sub-configs are reached as `config.<sub_config>.<attribute>`, but this check only
     # matches the literal `config.<attribute>`, so it cannot resolve nested access at all.

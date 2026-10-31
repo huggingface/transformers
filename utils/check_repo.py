@@ -148,6 +148,9 @@ PRIVATE_MODELS = [
     "VoxtralRealtimeTextModel",
     "VoxtralRealtimeTextForCausalLM",
     "VoxtralRealtimeTextPreTrainedModel",
+    "Qwen3TTSTokenizerCode2WavPreTrainedModel",
+    "Qwen3TTSTokenizerDecoderBlock",
+    "Qwen3TTSTokenizerDecoderTransformerModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -260,6 +263,12 @@ IGNORE_NON_TESTED = (
         "Molmo2VisionModel",  # Building part of bigger (tested) model. Tested implicitly through Molmo2ForConditionalGeneration.
         "Molmo2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Molmo2ForConditionalGeneration.
         "Molmo2Adapter",  # Building part of bigger (tested) model. Tested implicitly through Molmo2ForConditionalGeneration.
+        "Qwen3TTSBasePreTrainedModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3TTSForConditionalGeneration.
+        "Qwen3TTSTalkerModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3TTSForConditionalGeneration.
+        "Qwen3TTSTalkerTextPreTrainedModel",  # Building part of bigger (tested) model.
+        "Qwen3TTSTalkerCodePredictorModel",  # Building part of bigger (tested) model.
+        "Qwen3TTSTalkerCodePredictorModelForConditionalGeneration",  # Building part of bigger (tested) model.
+        "Qwen3TTSForConditionalGeneration",  # Not a regular model. Tested through integration tests.
         "MllamaTextModel",  # Building part of bigger (tested) model. # TODO: add tests
         "MllamaVisionModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Llama4TextModel",  # Building part of bigger (tested) model. # TODO: add tests
@@ -310,6 +319,8 @@ IGNORE_NON_TESTED = (
         "PocketTTSAudioTokenizerDecoderModel",  # Tested through PocketTTSAudioTokenizerModel
         "VibeVoiceAcousticTokenizerEncoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "VibeVoiceAcousticTokenizerDecoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
+        "Qwen3TTSTokenizerEncoderModel",  # Tested through Qwen3TTSTokenizerModel
+        "Qwen3TTSTokenizerDecoderModel",  # Tested through Qwen3TTSTokenizerModel
         "PI0Model",  # special arch, tested through PI0ForConditionalGeneration
         "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
         "Gemma4VisionModel",  # Building part of a bigger model, tested implicitly
@@ -571,6 +582,10 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "Qwen3OmniMoeTalkerForConditionalGeneration",  # Building part of a bigger model
         "Qwen3OmniMoeTalkerModel",  # Building part of a bigger model
         "Qwen3OmniMoeThinkerTextModel",  # Building part of a bigger model
+        "Qwen3TTSForConditionalGeneration",  # Building part of a bigger model (no auto class for TTS)
+        "Qwen3TTSTalkerModel",  # Building part of a bigger model
+        "Qwen3TTSTalkerCodePredictorModel",  # Building part of a bigger model
+        "Qwen3TTSTalkerCodePredictorModelForConditionalGeneration",  # Building part of a bigger model
         "HunYuanVLTextModel",  # Building part of bigger (tested) model.
         "Ernie4_5_VLMoeTextModel",  # Building part of a bigger model
         "PeAudioFrameLevelModel",
@@ -1269,6 +1284,9 @@ UNDOCUMENTED_OBJECTS = [
     "Ernie4_5_VL_MoeVisionTransformerPretrainedModel",  # BC Alias
     # FIXME(SunMarc)
     "GemmaQuantizationConfig",  # No docs, going for release
+    "Qwen3TTSTalkerCodePredictorModel",  # Internal building block of Qwen3TTS.
+    "Qwen3TTSTalkerCodePredictorModelForConditionalGeneration",  # Internal building block of Qwen3TTS.
+    "Qwen3TTSTalkerModel",  # Internal building block of Qwen3TTS.
 ]
 
 # This list should be empty. Objects in it should get their own doc page.
