@@ -25,7 +25,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
@@ -125,14 +125,11 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
 
     def __init__(self, config: PaliGemmaConfig):
         super().__init__(config)
-        self.vision_tower = AutoModel.from_config(config=config.vision_config)
+        self.vision_tower = AutoModel.from_config(config.vision_config)
         self.multi_modal_projector = PaliGemmaMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
-
-        language_model = AutoModel.from_config(config=config.text_config)
-        self.language_model = language_model
-
-        self.text_config_dtype = self.config.get_text_config().dtype or self.dtype
+        self.language_model = AutoModel.from_config(config.text_config)
+        self.text_config_dtype = self.config.text_config.dtype or self.dtype
         self.post_init()
 
     @can_return_tuple
@@ -294,6 +291,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
 )
 class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: PaliGemmaConfig):
         super().__init__(config)
@@ -365,9 +363,8 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

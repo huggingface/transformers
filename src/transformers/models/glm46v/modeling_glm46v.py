@@ -28,7 +28,7 @@ import torch.nn as nn
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -76,7 +76,7 @@ class Glm46VModel(Glm46VPreTrainedModel):
     accepts_loss_kwargs = False
     _no_split_modules = None
 
-    def __init__(self, config):
+    def __init__(self, config: Glm46VConfig):
         super().__init__(config)
         self.visual = AutoModel.from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
@@ -452,10 +452,11 @@ class Glm46VCausalLMOutputWithPast(CausalLMOutputWithPast):
 
 class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
 
-    def __init__(self, config):
+    def __init__(self, config: Glm46VConfig):
         super().__init__(config)
         self.model = Glm46VModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
@@ -557,9 +558,8 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
 
         hidden_states = outputs[0]
 
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

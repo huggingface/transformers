@@ -22,8 +22,8 @@ import torchvision.transforms.v2.functional as tvF
 from huggingface_hub.dataclasses import strict
 
 from ...activations import ACT2FN
-from ...backbone_utils import consolidate_backbone_kwargs_to_config, load_backbone
-from ...configuration_utils import PreTrainedConfig
+from ...backbone_utils import load_backbone
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_backends import TorchvisionBackend
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -37,7 +37,6 @@ from ...utils import (
     can_return_tuple,
     is_cv2_available,
     logging,
-    requires_backends,
 )
 from ...utils.generic import TensorType
 from ...utils.import_utils import requires
@@ -73,7 +72,21 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         The list of kernel sizes for convolutional layers in the head network for multi-scale feature extraction.
     """
 
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="hgnet_v2",
+            init_kwargs={
+                "arch": "L",
+                "return_idx": [0, 1, 2, 3],
+                "freeze_stem_only": True,
+                "freeze_at": 0,
+                "freeze_norm": True,
+                "lr_mult_list": [0, 0.05, 0.05, 0.05, 0.05],
+                "out_features": ["stage1", "stage2", "stage3", "stage4"],
+            },
+        ),
+    }
     model_type = "pp_ocrv5_server_det"
 
     interpolate_mode: str = "nearest"
@@ -89,21 +102,6 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
     id2label: dict[int, str] | dict[str, str] | None = None
 
     def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="hgnet_v2",
-            default_config_kwargs={
-                "arch": "L",
-                "return_idx": [0, 1, 2, 3],
-                "freeze_stem_only": True,
-                "freeze_at": 0,
-                "freeze_norm": True,
-                "lr_mult_list": [0, 0.05, 0.05, 0.05, 0.05],
-                "out_features": ["stage1", "stage2", "stage3", "stage4"],
-            },
-            **kwargs,
-        )
-
         # For object detection pipeline compatibility: single class "text"
         self.id2label = {0: "text"} if self.id2label is None else self.id2label
         super().__post_init__(**kwargs)
@@ -125,7 +123,6 @@ class PPOCRV5ServerDetImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
-@requires(backends=("torch",))
 class PPOCRV5ServerDetImageProcessor(TorchvisionBackend):
     resample = 2
     image_mean = [0.406, 0.456, 0.485]
@@ -433,6 +430,7 @@ class PPOCRV5ServerDetImageProcessor(TorchvisionBackend):
             [height, width], dtype=torch.float32, device=image.device
         )
 
+    @requires(backends=("torch", "cv2"))
     def post_process_object_detection(
         self,
         predictions,
@@ -461,7 +459,6 @@ class PPOCRV5ServerDetImageProcessor(TorchvisionBackend):
                 - "scores": `torch.Tensor` of shape `(N,)`
                 - "labels": `torch.Tensor` of shape `(N,)` (class id 0 for text)
         """
-        requires_backends(self, ["torch", "cv2"])
         if target_sizes is None:
             raise ValueError("target_sizes must be provided for post_process_object_detection")
 
@@ -839,7 +836,7 @@ class PPOCRV5ServerDetPreTrainedModel(PreTrainedModel):
     """
 
     config: PPOCRV5ServerDetConfig
-    base_model_prefix = "pp_ocrv5_server_det"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_compile_fullgraph = True

@@ -66,6 +66,7 @@ from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     Qwen2_5OmniPreTrainedModelForConditionalGeneration,
     Qwen2_5OmniSnakeBeta,
     Qwen2_5OmniThinkerForConditionalGeneration,
+    Qwen2_5OmniThinkerModel,
 )
 from ..qwen2_5_omni.processing_qwen2_5_omni import (
     Qwen2_5OmniProcessor,
@@ -291,9 +292,15 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -475,9 +482,9 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     >>> print(config.code_predictor_config)  # Access code predictor configuration
     ```"""
 
-    sub_configs = {
-        "code_predictor_config": Qwen3OmniMoeTalkerCodePredictorConfig,
+    sub_configs_defaults = {
         "text_config": Qwen3OmniMoeTalkerTextConfig,
+        "code_predictor_config": Qwen3OmniMoeTalkerCodePredictorConfig,
     }
 
     code_predictor_config: dict | PreTrainedConfig | None = None
@@ -500,22 +507,6 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     speaker_id: dict | None = None
     initializer_range: float = 0.02
     tie_word_embeddings: bool = False
-
-    def __post_init__(self, **kwargs):
-        if self.code_predictor_config is None:
-            self.code_predictor_config = {}
-            self.code_predictor_config = Qwen3OmniMoeTalkerCodePredictorConfig()
-            logger.info("code_predictor_config is None. Initializing code_predictor_config model with default values")
-        else:
-            self.code_predictor_config = Qwen3OmniMoeTalkerCodePredictorConfig(**self.code_predictor_config)
-
-        if self.text_config is None:
-            self.text_config = {}
-            self.text_config = Qwen3OmniMoeTalkerTextConfig()
-            logger.info("talker text_config is None. Initializing talker text model with default values")
-        else:
-            self.text_config = Qwen3OmniMoeTalkerTextConfig(**self.text_config)
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
@@ -625,7 +616,7 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen3_omni_moe"
-    sub_configs = {
+    sub_configs_defaults = {
         "thinker_config": Qwen3OmniMoeThinkerConfig,
         "talker_config": Qwen3OmniMoeTalkerConfig,
         "code2wav_config": Qwen3OmniMoeCode2WavConfig,
@@ -646,28 +637,9 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
     initializer_range: float | None = None
 
     def __post_init__(self, **kwargs):
-        if self.thinker_config is None:
-            self.thinker_config = Qwen3OmniMoeThinkerConfig()
-            logger.info("thinker_config is None. Initializing thinker model with default values")
-        elif isinstance(self.thinker_config, dict):
-            self.thinker_config = Qwen3OmniMoeThinkerConfig(**self.thinker_config)
-
-        if self.talker_config is None:
-            self.talker_config = Qwen3OmniMoeTalkerConfig()
-            logger.info("talker_config is None. Initializing talker model with default values")
-        elif isinstance(self.talker_config, dict):
-            self.talker_config = Qwen3OmniMoeTalkerConfig(**self.talker_config)
-
-        if self.code2wav_config is None:
-            self.code2wav_config = Qwen3OmniMoeCode2WavConfig()
-            logger.info("code2wav_config is None. Initializing code2wav_config model with default values")
-        elif isinstance(self.code2wav_config, dict):
-            self.code2wav_config = Qwen3OmniMoeCode2WavConfig(**self.code2wav_config)
-
+        super().__post_init__(**kwargs)
         if self.initializer_range is None:
             self.initializer_range = self.thinker_config.initializer_range
-
-        super().__post_init__(**kwargs)
 
     def get_text_config(self, decoder=False) -> "PreTrainedConfig":
         """
@@ -1064,7 +1036,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
         hidden_states = self.proj1(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.proj2(hidden_states)
-        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=hidden_states)
 
 
 class Qwen3OmniMoeVisionAttention(Qwen3VLMoeVisionAttention):
@@ -1108,7 +1080,7 @@ class Qwen3OmniMoeVisionRotaryEmbedding(Qwen3VLMoeVisionRotaryEmbedding):
 class Qwen3OmniMoeVisionEncoder(Qwen3VLMoeVisionModel):
     config: Qwen3OmniMoeVisionEncoderConfig
 
-    def __init__(self, config, *inputs, **kwargs):
+    def __init__(self, config: Qwen3OmniMoeVisionEncoderConfig, *inputs, **kwargs):
         self.merger_list = nn.ModuleList(
             [
                 Qwen3OmniMoeVisionPatchMerger(
@@ -1161,12 +1133,12 @@ class Qwen3OmniMoeThinkerTextDecoderLayer(Qwen3MoeDecoderLayer):
 
 
 class Qwen3OmniMoeThinkerTextPreTrainedModel(Qwen3MoePreTrainedModel):
-    config_class = Qwen3OmniMoeTextConfig
+    config: Qwen3OmniMoeTextConfig
     config: Qwen3OmniMoeTextConfig
 
 
 class Qwen3OmniMoeThinkerTextModel(Qwen3VLMoeTextModel):
-    config_class = Qwen3OmniMoeTextConfig
+    config: Qwen3OmniMoeTextConfig
     _can_record_outputs = {
         "hidden_states": Qwen3OmniMoeThinkerTextDecoderLayer,
         "attentions": Qwen3OmniMoeThinkerTextAttention,
@@ -1193,7 +1165,8 @@ class Qwen3OmniMoeThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
     rope_deltas: torch.LongTensor | None = None
 
 
-class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForConditionalGeneration):
+class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
+    _keys_to_ignore_on_load_unexpected = [r"^talker", r"^code2wav"]
     _no_split_modules = [
         "Qwen3OmniMoeAudioEncoder",
         "Qwen3OmniMoeVisionEncoder",
@@ -1204,12 +1177,6 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         "attentions": Qwen3OmniMoeThinkerTextAttention,
         "router_logits": OutputRecorder(Qwen3OmniMoeThinkerTextTopKRouter, index=0),
     }
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_experts = config.text_config.num_experts
-        self.num_experts_per_tok = config.text_config.num_experts_per_tok
-        self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
 
     def get_video_features(
         self,
@@ -1284,14 +1251,13 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         position_ids=None,
         past_key_values=None,
         inputs_embeds=None,
-        labels=None,
         use_cache=None,
         output_router_logits: bool | None = None,
         use_audio_in_video=None,
         video_second_per_grid=None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
-    ) -> tuple | Qwen3OmniMoeThinkerCausalLMOutputWithPast:
+    ) -> tuple | MoeModelOutputWithPast:
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
         )
@@ -1389,7 +1355,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
                 video_second_per_grid=video_second_per_grid,
             )
 
-        outputs = self.model(
+        outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1398,6 +1364,78 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             output_router_logits=output_router_logits,
             deepstack_visual_embeds=visual_embeds_multiscale,
             visual_pos_masks=visual_pos_masks,
+            **kwargs,
+        )
+
+        return MoeModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            past_key_values=outputs.past_key_values,
+            router_logits=outputs.router_logits,
+        )
+
+
+class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForConditionalGeneration):
+    def __init__(self, config: Qwen3OmniMoeThinkerConfig):
+        super().__init__(config)
+        self.num_experts = config.text_config.num_experts
+        self.num_experts_per_tok = config.text_config.num_experts_per_tok
+        self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
+
+    @auto_docstring
+    def get_image_features(self, **super_kwargs) -> tuple | BaseModelOutputWithDeepstackFeatures:
+        return super().get_image_features(**super_kwargs)
+
+    @auto_docstring
+    def get_video_features(self, **super_kwargs) -> tuple | BaseModelOutputWithDeepstackFeatures:
+        return super().get_video_features(**super_kwargs)
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids=None,
+        input_features=None,
+        pixel_values=None,
+        pixel_values_videos=None,
+        image_grid_thw=None,
+        video_grid_thw=None,
+        attention_mask=None,
+        feature_attention_mask=None,
+        audio_feature_lengths=None,
+        position_ids=None,
+        past_key_values=None,
+        inputs_embeds=None,
+        labels=None,
+        use_cache=None,
+        output_router_logits: bool | None = None,
+        use_audio_in_video=None,
+        video_second_per_grid=None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs,
+    ) -> tuple | Qwen3OmniMoeThinkerCausalLMOutputWithPast:
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
+        )
+        outputs: MoeModelOutputWithPast = self.model(
+            input_ids=input_ids,
+            input_features=input_features,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            attention_mask=attention_mask,
+            feature_attention_mask=feature_attention_mask,
+            audio_feature_lengths=audio_feature_lengths,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            use_audio_in_video=use_audio_in_video,
+            video_second_per_grid=video_second_per_grid,
+            mm_encoder_outputs=mm_encoder_outputs,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 
@@ -1428,7 +1466,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             past_key_values=outputs.past_key_values,
-            rope_deltas=self.rope_deltas,
+            rope_deltas=self.model.rope_deltas,
             router_logits=outputs.router_logits,
         )
 
@@ -1469,7 +1507,7 @@ class Qwen3OmniMoeRotaryEmbedding(Qwen3RotaryEmbedding):
 
 
 class Qwen3OmniMoeTalkerCodePredictorModel(Qwen3Model):
-    config_class = Qwen3OmniMoeTalkerCodePredictorConfig
+    config: Qwen3OmniMoeTalkerCodePredictorConfig
     base_model_prefix = "talker.code_predictor.model"
     _can_record_outputs = {
         "attentions": Qwen3OmniMoeTalkerCodePredictorAttention,
@@ -1518,20 +1556,14 @@ class Qwen3OmniMoeTalkerCodePredictorModel(Qwen3Model):
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            # Prepare mask arguments
-            mask_kwargs = {
-                "config": self.config,
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
-                "position_ids": position_ids,
-            }
-            # Create the masks
-            causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
-            }
-
-        hidden_states = inputs_embeds
+            causal_mask = create_causal_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                position_ids=position_ids,
+            )
+            causal_mask_mapping = {"full_attention": causal_mask}
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
@@ -1555,7 +1587,7 @@ class Qwen3OmniMoeTalkerCodePredictorModel(Qwen3Model):
 
 
 class Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration(Qwen3ForCausalLM):
-    config_class = Qwen3OmniMoeTalkerCodePredictorConfig
+    config: Qwen3OmniMoeTalkerCodePredictorConfig
     base_model_prefix = "talker.code_predictor"
     _can_record_outputs = {
         "attentions": Qwen3OmniMoeTalkerCodePredictorAttention,
@@ -1665,7 +1697,7 @@ class Qwen3OmniMoeTalkerDecoderLayer(Qwen3MoeDecoderLayer):
 
 
 class Qwen3OmniMoeTalkerModel(Qwen3VLMoeTextModel):
-    config_class = Qwen3OmniMoeTalkerTextConfig
+    config: Qwen3OmniMoeTalkerTextConfig
     base_model_prefix = "talker.model"
     input_modalities = ("audio",)
     _can_record_outputs = {
@@ -1693,7 +1725,7 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
     _pp_plan = {"codec_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    config_class = Qwen3OmniMoeTalkerConfig
+    config: Qwen3OmniMoeTalkerConfig
     base_model_prefix = "talker"
     _can_record_outputs = {
         "attentions": Qwen3OmniMoeThinkerTextAttention,
@@ -2193,6 +2225,7 @@ class Qwen3OmniMoeCode2WavTransformerLayer(GradientCheckpointingLayer):
 
 
 class Qwen3OmniMoeCode2WavTransformerModel(Qwen3Model):
+    config: Qwen3OmniMoeCode2WavConfig
     _can_record_outputs = {
         "hidden_states": Qwen3OmniMoeCode2WavTransformerLayer,
         "attentions": Qwen3OmniMoeCode2WavAttention,
@@ -2264,6 +2297,8 @@ class Qwen3OmniMoeCode2WavDecoderResidualUnit(nn.Module):
 
 
 class Qwen3OmniMoeCode2WavDecoderBlock(Qwen3OmniMoePreTrainedModel):
+    config: Qwen3OmniMoeCode2WavConfig
+
     def __init__(self, config: Qwen3OmniMoeCode2WavConfig, layer_idx):
         super().__init__(config)
         in_dim = config.decoder_dim // 2**layer_idx
@@ -2289,7 +2324,8 @@ class Qwen3OmniMoeCode2WavDecoderBlock(Qwen3OmniMoePreTrainedModel):
 
 
 class Qwen3OmniMoeCode2Wav(Qwen3OmniMoePreTrainedModel):
-    input_modalities = "audio"
+    input_modalities = ("audio",)
+    config: Qwen3OmniMoeCode2WavConfig
 
     def __init__(self, config: Qwen3OmniMoeCode2WavConfig):
         super().__init__(config)
@@ -2352,7 +2388,7 @@ class Qwen3OmniMoeCode2Wav(Qwen3OmniMoePreTrainedModel):
 
 
 class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, GenerationMixin):
-    config_class = Qwen3OmniMoeConfig
+    config: Qwen3OmniMoeConfig
     output_modalities = ("text", "audio")
 
     def __init__(self, config: Qwen3OmniMoeConfig):
@@ -2470,8 +2506,12 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         talker_top_p: float = 1.0,
         talker_temperature: float = 0.9,
         talker_repetition_penalty: float = 1.05,
+        generation_mode: str | None = None,
         **kwargs,
     ):
+        if return_audio is None and generation_mode is not None:
+            return_audio = generation_mode != "text"
+
         if return_audio and not self.has_talker:
             raise ValueError(
                 "Cannot use talker when talker module not initialized. Use `enable_talker` method or set enable_talker in config to enable talker."
@@ -2910,6 +2950,7 @@ __all__ = [
     "Qwen3OmniMoeVisionEncoderConfig",
     "Qwen3OmniMoeForConditionalGeneration",
     "Qwen3OmniMoeThinkerTextModel",
+    "Qwen3OmniMoeThinkerModel",
     "Qwen3OmniMoeThinkerForConditionalGeneration",
     "Qwen3OmniMoeTalkerForConditionalGeneration",
     "Qwen3OmniMoePreTrainedModel",

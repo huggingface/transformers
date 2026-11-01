@@ -343,12 +343,13 @@ class Qwen3_5MoeForCausalLM(Qwen3NextForCausalLM):
     config: Qwen3_5MoeTextConfig
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*", r"^model.visual.*"]
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen3_5MoeTextConfig):
         super().__init__(config)
         self.model = Qwen3_5MoeTextModel(config)
 
 
 class Qwen3_5MoeForConditionalGeneration(Qwen3VLMoeForConditionalGeneration):
+    input_modalities = ("image", "video", "text")
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
     _fsdp_plan = {"lm_head": "keep_full_weight"}

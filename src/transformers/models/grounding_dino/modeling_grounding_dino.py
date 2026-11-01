@@ -13,6 +13,7 @@
 # limitations under the License.
 """PyTorch Grounding DINO model."""
 
+import copy
 import math
 import warnings
 from dataclasses import dataclass
@@ -2410,8 +2411,7 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
             [GroundingDinoContrastiveEmbedding(config) for _ in range(config.decoder_layers)]
         )
         # hack for box-refinement
-        self.model.decoder.class_embed = self.class_embed  # class embed has no weights so nothing to tie
-        self.model.decoder.bbox_embed = self.bbox_embed
+        self.model.decoder.bbox_embed = copy.deepcopy(self.bbox_embed)
         self.post_init()
 
     @auto_docstring

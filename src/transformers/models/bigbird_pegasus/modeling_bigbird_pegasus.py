@@ -37,7 +37,7 @@ from ...modeling_outputs import (
     Seq2SeqQuestionAnsweringModelOutput,
     Seq2SeqSequenceClassifierOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -2179,7 +2179,7 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
 
 @auto_docstring
 class BigBirdPegasusForQuestionAnswering(BigBirdPegasusPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BigBirdPegasusConfig):
         super().__init__(config)
 
         config.num_labels = 2
@@ -2279,7 +2279,7 @@ class BigBirdPegasusDecoderWrapper(BigBirdPegasusPreTrainedModel):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: BigBirdPegasusConfig):
         super().__init__(config)
         self.decoder = BigBirdPegasusDecoder(config)
         self.post_init()
@@ -2289,7 +2289,7 @@ class BigBirdPegasusDecoderWrapper(BigBirdPegasusPreTrainedModel):
 
 
 class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel, GenerationMixin):
-    def __init__(self, config):
+    def __init__(self, config: BigBirdPegasusConfig):
         config.is_decoder = True
         config.is_encoder_decoder = False
         super().__init__(config)
@@ -2350,9 +2350,8 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

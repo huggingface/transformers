@@ -36,14 +36,13 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     get_max_seqlen,
     is_flash_attention_requested,
-    maybe_autocast,
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
@@ -549,12 +548,9 @@ class GlmOcrVisionRotaryEmbedding(nn.Module):
     @torch.no_grad()
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
-        position_ids_expanded = position_ids[..., None].float()
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = position_ids_expanded * self.inv_freq.float()
-            cos = freqs.cos() * self.attention_scaling
-            sin = freqs.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        cos = freqs.cos() * self.attention_scaling
+        sin = freqs.sin() * self.attention_scaling
 
         cos = self.recomposition_frequencies(cos)
         sin = self.recomposition_frequencies(sin)
@@ -578,7 +574,7 @@ class GlmOcrVisionModel(GlmOcrPreTrainedModel):
         "attentions": GlmOcrVisionAttention,
     }
 
-    def __init__(self, config) -> None:
+    def __init__(self, config: GlmOcrVisionConfig) -> None:
         super().__init__(config)
         self.spatial_merge_size = config.spatial_merge_size
         self.patch_size = config.patch_size
@@ -651,7 +647,7 @@ class GlmOcrVisionModel(GlmOcrPreTrainedModel):
 
 
 class GlmOcrTextRotaryEmbedding(nn.Module):
-    def __init__(self, config: GlmOcrTextConfig, device=None):
+    def __init__(self, config: GlmOcrTextConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -784,15 +780,14 @@ class GlmOcrTextModel(GlmOcrPreTrainedModel):
             # If inputs are not packed (usual 3D positions), do not prepare mask from position_ids
             text_position_ids = None
 
-        mask_kwargs = {
-            "config": self.config,
-            "inputs_embeds": inputs_embeds,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "position_ids": text_position_ids,
-        }
-        # Create the masks
-        causal_mask = create_causal_mask(**mask_kwargs)
+        # Create the mask
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            position_ids=text_position_ids,
+        )
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
@@ -823,7 +818,7 @@ class GlmOcrModel(GlmOcrPreTrainedModel):
     accepts_loss_kwargs = False
     _no_split_modules = ["GlmOcrTextDecoderLayer", "GlmOcrVisionBlock"]
 
-    def __init__(self, config):
+    def __init__(self, config: GlmOcrConfig):
         super().__init__(config)
         self.visual = GlmOcrVisionModel._from_config(config.vision_config)
         self.language_model = GlmOcrTextModel._from_config(config.text_config)
@@ -1199,10 +1194,11 @@ class GlmOcrCausalLMOutputWithPast(CausalLMOutputWithPast):
 
 class GlmOcrForConditionalGeneration(GlmOcrPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
 
-    def __init__(self, config):
+    def __init__(self, config: GlmOcrConfig):
         super().__init__(config)
         self.model = GlmOcrModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
@@ -1304,9 +1300,8 @@ class GlmOcrForConditionalGeneration(GlmOcrPreTrainedModel, GenerationMixin):
 
         hidden_states = outputs[0]
 
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

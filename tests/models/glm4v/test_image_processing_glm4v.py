@@ -87,6 +87,8 @@ class Glm4vImageProcessingTester(ImageProcessingTester):
 @require_vision
 class Glm4vImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processor_tester_class = Glm4vImageProcessingTester
+    # Pillow >= 13 can reverse bicubic resize passes, increasing isolated pixel differences.
+    backend_equivalence_atol = 0.5
 
     # batch size is flattened
     def test_call_pil(self):
@@ -160,6 +162,7 @@ class Glm4vImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             # Test not batched input
             encoded_images = image_processor(
                 image_inputs[0],
+                do_convert_rgb=False,
                 return_tensors="pt",
                 input_data_format="channels_last",
                 image_mean=(0.0, 0.0, 0.0, 0.0),
@@ -171,6 +174,7 @@ class Glm4vImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             # Test batched
             encoded_images = image_processor(
                 image_inputs,
+                do_convert_rgb=False,
                 return_tensors="pt",
                 input_data_format="channels_last",
                 image_mean=(0.0, 0.0, 0.0, 0.0),

@@ -622,7 +622,7 @@ class DepthProPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class DepthProModel(DepthProPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DepthProConfig):
         super().__init__(config)
         self.config = config
         self.encoder = DepthProEncoder(config)
@@ -993,7 +993,7 @@ class DepthProDepthEstimationHead(nn.Module):
     """
 )
 class DepthProForDepthEstimation(DepthProPreTrainedModel):
-    def __init__(self, config, use_fov_model=None):
+    def __init__(self, config: DepthProConfig, use_fov_model=None):
         r"""
         use_fov_model (bool, *optional*):
             Whether to use the field of view model.

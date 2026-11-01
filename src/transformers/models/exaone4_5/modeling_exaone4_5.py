@@ -30,14 +30,13 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     get_max_seqlen,
     is_flash_attention_requested,
-    maybe_autocast,
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
@@ -116,12 +115,9 @@ class Exaone4_5_VisionRotaryEmbedding(nn.Module):
     @torch.no_grad()
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
-        position_ids_expanded = position_ids[..., None].float()
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = position_ids_expanded * self.inv_freq.float()
-            cos = freqs.cos() * self.attention_scaling
-            sin = freqs.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        cos = freqs.cos() * self.attention_scaling
+        sin = freqs.sin() * self.attention_scaling
 
         cos = self.recomposition_frequencies(cos)
         sin = self.recomposition_frequencies(sin)
@@ -522,7 +518,6 @@ class Exaone4_5_PreTrainedModel(PreTrainedModel):
         "hidden_states": Exaone4_5_DecoderLayer,
         "attentions": Exaone4_5_Attention,
     }
-    config_class = Exaone4_5_Config
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
 
@@ -534,7 +529,6 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
         "hidden_states": Exaone4_5_VisionBlock,
         "attentions": Exaone4_5_VisionAttention,
     }
-    config_class = Exaone4_5_VisionConfig
 
     def __init__(self, config: Exaone4_5_VisionConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
@@ -635,6 +629,7 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
+    input_modalities = ("image", "video", "text")
 
     def __init__(self, config: Exaone4_5_Config):
         super().__init__(config)
@@ -808,10 +803,13 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, GenerationMi
     """
 
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
 
-    def __init__(self, config):
+    input_modalities = ("image", "video", "text")
+
+    def __init__(self, config: Exaone4_5_Config):
         super().__init__(config)
         self.model = Exaone4_5_Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
@@ -905,8 +903,8 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, GenerationMi
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

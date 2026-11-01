@@ -285,7 +285,12 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
 
         messages = [{"role": "user", "content": [{"type": "text", "text": "Hi"}]}]
         inputs = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            enable_thinking=False,
         ).to(model.device)
 
         with torch.no_grad():
@@ -316,7 +321,12 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
             }
         ]
         inputs = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            enable_thinking=False,
         ).to(model.device, dtype=torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
@@ -326,6 +336,8 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
             {
                 ("cuda", (8, 6)): "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
                 ("cuda", (10, 0)): "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
+                ("cuda", (8, 0)): "The animal in the image is a Pystylus, also known as the Eurasian pystylus or snow leopard cat. It's a",
+                ("rocm", (9, 4)): "The animal in the image is a Pystylus, also known as a Pystylus cat or Eurasian pystylus. It",
             }
         ).get_expectation()
         # fmt: on
@@ -353,7 +365,12 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
             }
         ]
         inputs = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            enable_thinking=False,
         ).to(model.device, dtype=torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
@@ -362,6 +379,7 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", None): "The video shows two tennis players engaged in a match or practice session on an indoor tennis court. The player in the foreground is positioned at the net,",
+                ("rocm", (9, 4)): "The video shows two tennis players engaged in a match or practice session inside an indoor tennis court. The player in the foreground is positioned at the net,",
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
@@ -398,6 +416,7 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
             return_dict=True,
             return_tensors="pt",
             padding=True,
+            enable_thinking=False,
         ).to(model.device, dtype=torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
@@ -411,6 +430,10 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
                 ("cuda", (10, 0)): [
                     "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
                 ] * 2,
+                ("rocm", (9, 4)): [
+                    "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
+                    "The animal in the image is a Pystylus, also known as the Eurasian pystylus or snow leopard cat. It's a",
+                ],
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
@@ -447,6 +470,7 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
             return_dict=True,
             return_tensors="pt",
             padding=True,
+            enable_thinking=False,
         ).to(model.device, dtype=torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
@@ -460,6 +484,14 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
                 ],
                 ("cuda", (10, 0)): [
                     "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
+                    "I'm a model from the MiniCPM series, developed by Modelbest and OpenBMB. For more details, you can visit https://github",
+                ],
+                ("cuda", (8, 0)): [
+                    "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
+                    "I'm a model from the MiniCPM series, developed by Modelbest and OpenBMB. For more details, you can visit https://github",
+                ],
+                ("rocm", (9, 4)): [
+                    "The animal in the image is a Pystylus, also known as a Pystylus cat or Eurasian pystylus. It",
                     "I'm a model from the MiniCPM series, developed by Modelbest and OpenBMB. For more details, you can visit https://github",
                 ],
             }

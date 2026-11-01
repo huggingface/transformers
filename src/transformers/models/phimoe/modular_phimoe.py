@@ -345,7 +345,7 @@ class PhimoeModel(MixtralModel):
 
 
 class PhimoeForCausalLM(MixtralForCausalLM):
-    def __init__(self, config):
+    def __init__(self, config: PhimoeConfig):
         super().__init__(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=self.config.lm_head_bias)
 
@@ -374,6 +374,7 @@ class PhimoeForCausalLM(MixtralForCausalLM):
             past_length = past_key_values.get_seq_length()
             if past_length <= self.config.original_max_position_embeddings:
                 past_key_values = None
+                kwargs["next_sequence_length"] = None
 
         model_inputs = super().prepare_inputs_for_generation(
             input_ids=input_ids,

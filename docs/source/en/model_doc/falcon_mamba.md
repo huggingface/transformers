@@ -102,6 +102,10 @@ outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
+## Notes
+
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
+
 ## FalconMambaConfig
 
 [[autodoc]] FalconMambaConfig

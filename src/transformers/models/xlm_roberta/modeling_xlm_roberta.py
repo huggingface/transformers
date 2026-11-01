@@ -41,7 +41,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -487,7 +487,7 @@ class XLMRobertaLMHead(nn.Module):
 
 @auto_docstring
 class XLMRobertaPreTrainedModel(PreTrainedModel):
-    config_class = XLMRobertaConfig
+    config: XLMRobertaConfig
     base_model_prefix = "roberta"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
@@ -562,7 +562,7 @@ class XLMRobertaPooler(nn.Module):
 class XLMRobertaModel(XLMRobertaPreTrainedModel):
     _no_split_modules = ["XLMRobertaEmbeddings", "XLMRobertaLayer"]
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: XLMRobertaConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -697,7 +697,7 @@ class XLMRobertaForCausalLM(XLMRobertaPreTrainedModel, GenerationMixin):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: XLMRobertaConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -780,9 +780,8 @@ class XLMRobertaForCausalLM(XLMRobertaPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -805,7 +804,7 @@ class XLMRobertaForMaskedLM(XLMRobertaPreTrainedModel):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: XLMRobertaConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -909,7 +908,7 @@ class XLMRobertaClassificationHead(nn.Module):
     """
 )
 class XLMRobertaForSequenceClassification(XLMRobertaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMRobertaConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -990,7 +989,7 @@ class XLMRobertaForSequenceClassification(XLMRobertaPreTrainedModel):
 
 @auto_docstring
 class XLMRobertaForMultipleChoice(XLMRobertaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMRobertaConfig):
         super().__init__(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
@@ -1083,7 +1082,7 @@ class XLMRobertaForMultipleChoice(XLMRobertaPreTrainedModel):
 
 @auto_docstring
 class XLMRobertaForTokenClassification(XLMRobertaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMRobertaConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         classifier_dropout = (
@@ -1152,7 +1151,7 @@ class XLMRobertaForTokenClassification(XLMRobertaPreTrainedModel):
 
 @auto_docstring
 class XLMRobertaForQuestionAnswering(XLMRobertaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMRobertaConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)

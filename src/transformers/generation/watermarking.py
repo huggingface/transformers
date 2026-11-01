@@ -188,7 +188,7 @@ class WatermarkDetector:
 
     def _compute_pval(self, x, loc=0, scale=1):
         z = (x - loc) / scale
-        return 1 - (0.5 * (1 + np.sign(z) * (1 - np.exp(-2 * z**2 / np.pi))))
+        return 0.5 * torch.special.erfc(torch.as_tensor(z / np.sqrt(2))).numpy()
 
     def __call__(
         self,
@@ -211,6 +211,13 @@ class WatermarkDetector:
                     if `return_dict=True` otherwise a `np.ndarray`.
 
         """
+        has_bos = input_ids[:, 0] == self.bos_token_id
+
+        if torch.any(has_bos) != torch.all(has_bos):
+            raise ValueError(
+                "Some batch contains inconsistent leading BOS token. Make sure "
+                "to prepare input with the same tokenization parameters."
+            )
 
         # Let's assume that if one batch start with `bos`, all batched also do
         if input_ids[0, 0] == self.bos_token_id:

@@ -37,7 +37,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import merge_with_config_defaults
@@ -1256,7 +1256,7 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
     _fsdp_plan = {"lm_head": "keep_full_weight"}
     config: Emu3TextConfig
 
-    def __init__(self, config):
+    def __init__(self, config: Emu3TextConfig):
         super().__init__(config)
         self.model = Emu3TextModel(config)
         self.vocab_size = config.vocab_size
@@ -1308,9 +1308,8 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -1326,7 +1325,7 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
 
 
 class Emu3Model(Emu3PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Emu3Config):
         super().__init__(config)
         self.text_model = Emu3TextModel._from_config(config.text_config)
         self.vqmodel = Emu3VQVAE(config.vq_config)
@@ -1489,7 +1488,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     output_modalities = ("image", "text")
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: Emu3Config):
         super().__init__(config)
         self.model = Emu3Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
@@ -1587,9 +1586,8 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

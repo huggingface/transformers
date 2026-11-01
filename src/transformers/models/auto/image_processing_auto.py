@@ -89,6 +89,7 @@ else:
             ("dinov2", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
             ("donut-swin", {"torchvision": "DonutImageProcessor", "pil": "DonutImageProcessorPil"}),
             ("edgetam", {"torchvision": "Sam2ImageProcessor"}),
+            ("embedding_gemma2", {"pil": "Gemma4ImageProcessorPil", "torchvision": "Gemma4ImageProcessor"}),
             ("emu3", {"pil": "Emu3ImageProcessor"}),
             ("eomt_dinov3", {"torchvision": "EomtImageProcessor", "pil": "EomtImageProcessorPil"}),
             ("exaone4_5", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
@@ -117,6 +118,7 @@ else:
             ("mgp-str", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("minicpmv4_7", {"pil": "MiniCPMV4_6ImageProcessorPil", "torchvision": "MiniCPMV4_6ImageProcessor"}),
             ("mistral3", {"torchvision": "PixtralImageProcessor", "pil": "PixtralImageProcessorPil"}),
+            ("mistral_large4", {"torchvision": "PixtralImageProcessor", "pil": "PixtralImageProcessorPil"}),
             ("mlcd", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             (
                 "mm-grounding-dino",
@@ -126,6 +128,7 @@ else:
                 },
             ),
             ("mobilevitv2", {"torchvision": "MobileViTImageProcessor", "pil": "MobileViTImageProcessorPil"}),
+            ("muse_spark", {"torchvision": "MuseGlimmerImageProcessor"}),
             ("omdet-turbo", {"torchvision": "DetrImageProcessor", "pil": "DetrImageProcessorPil"}),
             ("paligemma", {"torchvision": "SiglipImageProcessor", "pil": "SiglipImageProcessorPil"}),
             ("pixio", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),

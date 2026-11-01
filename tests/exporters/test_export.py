@@ -28,6 +28,7 @@ from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
 from transformers.exporters.exporter_openvino import OpenVINOConfig, OpenVINOExporter
+from transformers.exporters.quantizers.utils import openvino_feed
 from transformers.exporters.utils import (
     cast_leaf_tensors,
     decompose_for_generation,
@@ -104,6 +105,11 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "mean, since the RNG traces as zeros."
         ),
         "VibeVoiceAsrForConditionalGeneration": "Same VAE sampling as `VibeVoiceAsrModel`.",
+        "LwDetrModel": "Same tied-`topk` selection as `DFineModel`.",
+        "LwDetrForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "RfDetrModel": "Same tied-`topk` selection as `DFineModel`.",
+        "RfDetrForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "RfDetrForInstanceSegmentation": "Same tied-`topk` selection as `DFineModel`.",
     },
     # Every backend, generate path only.
     "generate": {
@@ -138,6 +144,14 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "KV-shared layers (`num_kv_shared_layers`) reuse cache entries from earlier layers; "
             "exported prefill returns only `logits` while eager surfaces the populated KV cache. "
             "Same shape as Voxtral. TODO: align the generate-decomposition path."
+        ),
+        "UnlimitedOcrForConditionalGeneration": (
+            "The reference sliding window cache writes into `prefill_keys`/`keys`, which are views of a "
+            "single contiguous buffer. The test exports models with grad enabled, so the first in-place write "
+            "of grad-carrying states turns that buffer into a leaf requiring grad and the next write "
+            "raises `a leaf Variable that requires grad is being used in an in-place operation`. Exporting in "
+            "a `torch.no_grad` context works correctly. Alternatively, kv values have to be detached before "
+            "updating the cache."
         ),
         "VibeVoiceForConditionalGeneration": (
             "Generation uses two forward calls with different input shapes (prefill + noise scheduler); "
@@ -206,6 +220,11 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         ),
         "PixioModel": ("Lowering exceeds the 10-minute test timeout."),
         "PixioBackbone": "Same `timeout` failure as `PixioModel`.",
+        "UnlimitedOcrModel": (
+            "The vision component hits `DispatchError: No ONNX function found for aten.mul.Scalar` "
+            "(no decompositions registered for the real-valued input). Torch export works."
+        ),
+        "UnlimitedOcrForConditionalGeneration": "Same `aten.mul.Scalar` dispatch failure as `UnlimitedOcrModel`.",
     },
     # ONNX, generate path only.
     # Exported and run as usual, but not compared against eager (see the ``.exactness`` note above).
@@ -226,6 +245,7 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "1e-3 tolerance but far from structural."
         ),
         "BitBackbone": "Same ORT accumulation as `BitModel` (~0.0048 across the feature maps).",
+        "BitForImageClassification": "Same ORT accumulation as `BitModel` (~0.0013 on the logits).",
         "ClapModel": "Same ORT accumulation as `BitModel` (~0.0033 on the contrastive logits).",
         "CLIPSegForImageSegmentation": "Same ORT accumulation as `BitModel` (~0.0059 on the decoder logits).",
         "FlavaForPreTraining": "Same ORT accumulation as `BitModel` (~0.0039 on the contrastive logits).",
@@ -269,15 +289,9 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "RTDetrV2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "PPDocLayoutV2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "PPDocLayoutV3ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "PPDocLayoutV4ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "MMGroundingDinoModel": "Same tied-`topk` box selection as `DFineModel`.",
         "MMGroundingDinoForObjectDetection": "Same tied-`topk` box selection as `DFineModel`.",
-        "LwDetrModel": (
-            "The encoder's `topk` ranks proposals by scores that sit ~1e-4 apart in relative terms "
-            "(~9.39e-07 absolute) in the tiny test config, so ONNX Runtime's slightly different arithmetic "
-            "orders two of them the other way round: `enc_outputs_coord_logits` holds the same boxes, "
-            "swapped, matching the other proposal's coordinates exactly."
-        ),
-        "LwDetrForObjectDetection": "Same near-tied `topk` ordering as `LwDetrModel`.",
     },
     "onnx.generate": {
         "ReformerModelWithLMHead": (
@@ -689,29 +703,13 @@ def _run_openvino_model(ov_model, inputs) -> dict:
     to the same inputs eager saw, supplies the identity `beam_idx`, and passes scalar kwargs
     through under their FX placeholder names.
     """
-    import numpy as np
     import openvino
 
     set_seed(1234)
     compiled = openvino.compile_model(ov_model, "AUTO")
     request = compiled.create_infer_request()
     leaves = {path: tensor.cpu() for path, tensor in get_leaf_tensors(inputs).items()}
-    batch = next(iter(leaves.values())).shape[0] if leaves else 1
-
-    feed = {}
-    for port in compiled.inputs:
-        # Passthrough tensors carry both an input and an output name — check every alias.
-        for name in port.get_names():
-            path = re.sub(r"^input\.", "", name)
-            if path in leaves:
-                feed[name] = leaves[path]
-            elif name == "beam_idx":
-                feed[name] = np.arange(batch, dtype=np.int32)
-            elif name in inputs:
-                feed[name] = np.array(inputs[name])
-            else:
-                continue
-            break
+    feed = openvino_feed(ov_model, inputs)
 
     # Folded state variables read zeros on the first infer — seed them from the sample leaves
     # (cast to the variable's dtype: the exporter may retype state, e.g. i64 lengths to i32).
@@ -1229,6 +1227,17 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
             eager_outputs = self._collect_eager_outputs(components)
 
             for name, (model, inputs) in components.items():
+                check_device = True
+                cache = inputs.get("past_key_values")
+                # Some models may share some layers of the cache, in which case those layers are not initialized, but they still
+                # get a `cumulative_length` tensor initialized on cpu, which is never moved to the correct device as the layer is not used
+                if cache is not None and any(
+                    hasattr(layer, "is_initialized")
+                    and not layer.is_initialized
+                    and hasattr(layer, "cumulative_length")
+                    for layer in cache.layers
+                ):
+                    check_device = False
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     exported_program = exporter.export(model, inputs, config=config)
 
@@ -1244,7 +1253,9 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                         backend="dynamo",
                         generation_config=generation_config,
                     ):
-                        self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
+                        self._check_outputs_close(
+                            exported_outputs, eager_outputs[name], atol=atol, rtol=rtol, check_device=check_device
+                        )
 
     # ──────────────────────── ONNX tests ─────────────────────────
 

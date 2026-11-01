@@ -47,14 +47,13 @@ from ...modeling_outputs import (
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     get_max_seqlen,
     is_flash_attention_requested,
-    maybe_autocast,
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import OutputRecorder, capture_outputs
@@ -686,13 +685,14 @@ class Glm5NextTextLinearAttention(nn.Module):
         ).transpose(1, 2)
 
         # Acts for normal prefill but also for multi-token prefill continue
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
-        if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
-            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
+        if cache_params is not None:
+            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
+        else:
+            conv_state, recurrent_state = None, None
 
         # Single token decode path
-        if use_precomputed_states and seq_len == 1:
+        if conv_state is not None and seq_len == 1:
             mixed_qkv = causal_conv1d_update(
                 mixed_qkv,
                 conv_state,
@@ -734,7 +734,7 @@ class Glm5NextTextLinearAttention(nn.Module):
         beta = torch.sigmoid(self.b_proj(hidden_states))
 
         # KDA
-        if use_precomputed_states and seq_len == 1:
+        if recurrent_state is not None and seq_len == 1:
             core_attn_out, last_recurrent_state = recurrent_kimi_delta_attention(
                 query,
                 key,
@@ -753,7 +753,7 @@ class Glm5NextTextLinearAttention(nn.Module):
                 value,
                 g=g,
                 beta=beta,
-                initial_state=recurrent_state if use_precomputed_states else None,
+                initial_state=recurrent_state,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
                 **kwargs,
@@ -1426,7 +1426,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
 class Glm5NextTextModel(Glm5NextPreTrainedModel):
     config: Glm5NextTextConfig
 
-    def __init__(self, config):
+    def __init__(self, config: Glm5NextTextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -1778,12 +1778,9 @@ class Glm5NextVisionRotaryEmbedding(nn.Module):
     @torch.no_grad()
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
-        position_ids_expanded = position_ids[..., None].float()
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = position_ids_expanded * self.inv_freq.float()
-            cos = freqs.cos() * self.attention_scaling
-            sin = freqs.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        cos = freqs.cos() * self.attention_scaling
+        sin = freqs.sin() * self.attention_scaling
 
         cos = self.recomposition_frequencies(cos)
         sin = self.recomposition_frequencies(sin)
@@ -1808,7 +1805,7 @@ class Glm5NextVisionModel(Glm5NextPreTrainedModel):
         "attentions": Glm5NextVisionAttention,
     }
 
-    def __init__(self, config) -> None:
+    def __init__(self, config: Glm5NextVisionConfig) -> None:
         super().__init__(config)
         self.spatial_merge_size = config.spatial_merge_size
         self.patch_size = config.patch_size
@@ -1885,9 +1882,10 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
+    input_modalities = ("image", "video", "text")
     config: Glm5NextConfig
 
-    def __init__(self, config):
+    def __init__(self, config: Glm5NextConfig):
         super().__init__(config)
         self.visual = Glm5NextVisionModel._from_config(config.vision_config)
         self.language_model = Glm5NextTextModel._from_config(config.text_config)
@@ -2140,10 +2138,13 @@ class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin)
     """
 
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
 
-    def __init__(self, config):
+    input_modalities = ("image", "video", "text")
+
+    def __init__(self, config: Glm5NextConfig):
         super().__init__(config)
         self.model = Glm5NextModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
@@ -2253,8 +2254,8 @@ class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin)
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

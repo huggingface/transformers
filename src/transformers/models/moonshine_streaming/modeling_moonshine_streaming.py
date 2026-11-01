@@ -25,6 +25,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -339,7 +340,7 @@ class MoonshineStreamingPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module: nn.Module):
         if isinstance(module, MoonshineStreamingLayerNorm):
-            nn.init.constant_(module.gamma, 1.0 - module.unit_offset)
+            init.constant_(module.gamma, 1.0 - module.unit_offset)
         else:
             super()._init_weights(module)
 
@@ -763,7 +764,7 @@ class MoonshineStreamingDecoder(MoonshineStreamingPreTrainedModel):
         "cross_attentions": OutputRecorder(MoonshineStreamingAttention, index=1, layer_name="encoder_attn"),
     }
 
-    def __init__(self, config):
+    def __init__(self, config: MoonshineStreamingConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -868,7 +869,7 @@ class MoonshineStreamingDecoder(MoonshineStreamingPreTrainedModel):
 
 @auto_docstring
 class MoonshineStreamingModel(MoonshineStreamingPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MoonshineStreamingConfig):
         super().__init__(config)
         self.encoder = MoonshineStreamingEncoder(config.encoder_config)
         self.decoder = MoonshineStreamingDecoder(config)

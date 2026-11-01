@@ -33,7 +33,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
@@ -400,7 +400,7 @@ class CsmPreTrainedModel(PreTrainedModel):
 class CsmDepthDecoderModel(CsmPreTrainedModel):
     config: CsmDepthDecoderConfig
 
-    def __init__(self, config):
+    def __init__(self, config: CsmDepthDecoderConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -532,8 +532,9 @@ class CsmDepthDecoderForCausalLM(CsmPreTrainedModel, GenerationMixin):
     _tp_plan = None
     _pp_plan = None
     _fsdp_plan = {"lm_head": "keep_full_weight"}
+    config: CsmDepthDecoderConfig
 
-    def __init__(self, config):
+    def __init__(self, config: CsmDepthDecoderConfig):
         super().__init__(config)
         self.model = CsmDepthDecoderModel(config)
         self.vocab_size = config.vocab_size
@@ -579,7 +580,10 @@ class CsmDepthDecoderForCausalLM(CsmPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss.
+        # Note: unlike other ForCausalLM/ForConditionalGeneration models, this does not support a bool-mask
+        # `logits_to_keep`, since `CsmCodebooksHead` assigns a different weight per sequence *position* shared
+        # across the whole batch, which a ragged (per-row) mask would break.
         if isinstance(logits_to_keep, int):
             if logits_to_keep == 0:
                 # skip idx 0 logits since it's for the concatenated backbone last hidden state
@@ -646,7 +650,7 @@ class CsmBackboneModelEmbeddings(nn.Module):
 
 @auto_docstring
 class CsmBackboneModel(CsmPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CsmConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -739,7 +743,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
         "backbone_model.embed_tokens.embed_audio_tokens.weight": "depth_decoder.model.embed_tokens.weight"
     }
 
-    def __init__(self, config):
+    def __init__(self, config: CsmConfig):
         super().__init__(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -1007,8 +1011,8 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
 
         backbone_hidden_states = backbone_outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        backbone_logits = self.lm_head(backbone_hidden_states[:, slice_indices, :])
+        backbone_hidden_states = slice_logits_to_keep(backbone_hidden_states, logits_to_keep)
+        backbone_logits = self.lm_head(backbone_hidden_states)
 
         loss = None
         backbone_loss = None

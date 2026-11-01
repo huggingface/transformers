@@ -73,8 +73,8 @@ class GptOssExperts(nn.Module):
         self.gate_up_proj_bias = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_size))
         self.down_proj = nn.Parameter(torch.empty((self.num_experts, self.intermediate_size, self.hidden_size)))
         self.down_proj_bias = nn.Parameter(torch.empty(self.num_experts, self.hidden_size))
-        self.alpha = 1.702
-        self.limit = 7.0
+        self.alpha = config.swiglu_alpha
+        self.limit = config.swiglu_limit
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up[..., ::2], gate_up[..., 1::2]

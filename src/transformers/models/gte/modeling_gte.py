@@ -316,7 +316,7 @@ class GtePooler(nn.Module):
 
 @auto_docstring
 class GtePreTrainedModel(PreTrainedModel):
-    config_class = GteConfig
+    config: GteConfig
     base_model_prefix = "gte"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
@@ -586,7 +586,7 @@ class GteForSequenceClassification(GtePreTrainedModel):
 
 @auto_docstring
 class GteForTokenClassification(GtePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GteConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

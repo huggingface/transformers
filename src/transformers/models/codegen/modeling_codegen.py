@@ -25,7 +25,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...utils import (
     auto_docstring,
     logging,
@@ -39,7 +39,7 @@ logger = logging.get_logger(__name__)
 # Copied from transformers.models.gptj.modeling_gptj.create_sinusoidal_positions
 def create_sinusoidal_positions(num_pos: int, dim: int) -> torch.Tensor:
     inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64) / dim))
-    sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=torch.int64).float(), inv_freq).float()
+    sinusoid_inp = torch.arange(num_pos, dtype=torch.int64).float()[:, None] * inv_freq
     return torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
 
 
@@ -274,7 +274,7 @@ class CodeGenPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class CodeGenModel(CodeGenPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CodeGenConfig):
         super().__init__(config)
 
         self.embed_dim = config.n_embd
@@ -411,7 +411,7 @@ class CodeGenModel(CodeGenPreTrainedModel):
 class CodeGenForCausalLM(CodeGenPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: CodeGenConfig):
         super().__init__(config)
         self.transformer = CodeGenModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size)
@@ -462,9 +462,8 @@ class CodeGenForCausalLM(CodeGenPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = transformer_outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

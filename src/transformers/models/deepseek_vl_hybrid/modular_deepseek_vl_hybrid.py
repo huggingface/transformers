@@ -23,7 +23,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -34,7 +34,7 @@ from ...image_utils import (
     SizeDict,
 )
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
@@ -43,7 +43,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..auto import AutoConfig, AutoModel
 from ..deepseek_vl.configuration_deepseek_vl import DeepseekVLConfig
 from ..deepseek_vl.image_processing_deepseek_vl import DeepseekVLImageProcessor
 from ..deepseek_vl.image_processing_pil_deepseek_vl import DeepseekVLImageProcessorPil
@@ -90,24 +90,13 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
     ```"""
 
     model_type = "deepseek_vl_hybrid"
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig, "high_res_vision_config": AutoConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="siglip_vision_model"),
+        "high_res_vision_config": SubConfigSpec(config_class=AutoConfig, model_type="sam_vision_model"),
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="llama"),
+    }
 
     high_res_vision_config: dict | PreTrainedConfig | None = None
-
-    def __post_init__(self, **kwargs):
-        if self.high_res_vision_config is None:
-            self.high_res_vision_config = {}
-            logger.info("`high_res_vision_config` is `None`. Initializing the `SamVisionConfig` with default values.")
-
-        if isinstance(self.high_res_vision_config, dict):
-            self.high_res_vision_config["model_type"] = self.high_res_vision_config.get(
-                "model_type", "sam_vision_model"
-            )
-            self.high_res_vision_config = CONFIG_MAPPING[self.high_res_vision_config["model_type"]](
-                **self.high_res_vision_config
-            )
-
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring
@@ -220,7 +209,7 @@ class DeepseekVLHybridPreTrainedModel(DeepseekVLPreTrainedModel):
 
 
 class DeepseekVLHybridModel(DeepseekVLModel):
-    def __init__(self, config):
+    def __init__(self, config: DeepseekVLHybridConfig):
         self.output_size = config.vision_config.image_size // config.vision_config.patch_size
         self.global_attn_index = config.high_res_vision_config.global_attn_indexes[0]
 
@@ -377,9 +366,8 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -431,17 +419,17 @@ class DeepseekVLHybridImageProcessorPil(DeepseekVLImageProcessorPil):
     model_input_names = ["pixel_values", "high_res_pixel_values"]
 
     def __init__(self, **kwargs: Unpack[DeepseekVLHybridImageProcessorKwargs]):
-        if kwargs.get("image_mean") is None:
-            background_color = (127, 127, 127)
-        else:
-            background_color = tuple(int(x * 255) for x in kwargs.get("image_mean"))
-        if kwargs.get("high_res_image_mean") is None:
-            high_res_background_color = (127, 127, 127)
-        else:
-            high_res_background_color = tuple(int(x * 255) for x in kwargs.get("high_res_image_mean"))
         PilBackend.__init__(self, **kwargs)
-        self.background_color = tuple(background_color)
-        self.high_res_background_color = tuple(high_res_background_color)
+        image_mean = getattr(self, "image_mean", None)
+        if image_mean is None:
+            self.background_color = (127, 127, 127)
+        else:
+            self.background_color = tuple(int(x * 255) for x in image_mean)
+        high_res_image_mean = getattr(self, "high_res_image_mean", None)
+        if high_res_image_mean is None:
+            self.high_res_background_color = (127, 127, 127)
+        else:
+            self.high_res_background_color = tuple(int(x * 255) for x in high_res_image_mean)
 
     def _standardize_kwargs(
         self,
@@ -542,17 +530,17 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
     model_input_names = ["pixel_values", "high_res_pixel_values"]
 
     def __init__(self, **kwargs: Unpack[DeepseekVLHybridImageProcessorKwargs]):
-        if kwargs.get("image_mean") is None:
-            background_color = (127, 127, 127)
-        else:
-            background_color = tuple(int(x * 255) for x in kwargs.get("image_mean"))
-        if kwargs.get("high_res_image_mean") is None:
-            high_res_background_color = (127, 127, 127)
-        else:
-            high_res_background_color = tuple(int(x * 255) for x in kwargs.get("high_res_image_mean"))
         TorchvisionBackend.__init__(self, **kwargs)
-        self.background_color = tuple(background_color)
-        self.high_res_background_color = tuple(high_res_background_color)
+        image_mean = getattr(self, "image_mean", None)
+        if image_mean is None:
+            self.background_color = (127, 127, 127)
+        else:
+            self.background_color = tuple(int(x * 255) for x in image_mean)
+        high_res_image_mean = getattr(self, "high_res_image_mean", None)
+        if high_res_image_mean is None:
+            self.high_res_background_color = (127, 127, 127)
+        else:
+            self.high_res_background_color = tuple(int(x * 255) for x in high_res_image_mean)
 
     def _standardize_kwargs(
         self,

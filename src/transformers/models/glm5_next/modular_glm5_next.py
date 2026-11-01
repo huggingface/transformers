@@ -50,7 +50,7 @@ from ...modeling_outputs import (
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
@@ -289,7 +289,10 @@ class Glm5NextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "glm5_next"
-    sub_configs = {"vision_config": Glm5NextVisionConfig, "text_config": Glm5NextTextConfig}
+    sub_configs_defaults = {
+        "vision_config": Glm5NextVisionConfig,
+        "text_config": Glm5NextTextConfig,
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -303,18 +306,10 @@ class Glm5NextConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
+        if self.text_config is None:
             # Flat (text-only) GLM-5.3-Flash checkpoints store the text fields at the
             # top level; forward them so `text_config` is populated for BC.
-            self.text_config = self.sub_configs["text_config"](**kwargs)
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
+            self.text_config = kwargs
         super().__post_init__(**kwargs)
 
 
@@ -667,13 +662,14 @@ class Glm5NextTextLinearAttention(nn.Module):
         ).transpose(1, 2)
 
         # Acts for normal prefill but also for multi-token prefill continue
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
-        if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
-            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
+        if cache_params is not None:
+            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
+        else:
+            conv_state, recurrent_state = None, None
 
         # Single token decode path
-        if use_precomputed_states and seq_len == 1:
+        if conv_state is not None and seq_len == 1:
             mixed_qkv = causal_conv1d_update(
                 mixed_qkv,
                 conv_state,
@@ -715,7 +711,7 @@ class Glm5NextTextLinearAttention(nn.Module):
         beta = torch.sigmoid(self.b_proj(hidden_states))
 
         # KDA
-        if use_precomputed_states and seq_len == 1:
+        if recurrent_state is not None and seq_len == 1:
             core_attn_out, last_recurrent_state = recurrent_kimi_delta_attention(
                 query,
                 key,
@@ -734,7 +730,7 @@ class Glm5NextTextLinearAttention(nn.Module):
                 value,
                 g=g,
                 beta=beta,
-                initial_state=recurrent_state if use_precomputed_states else None,
+                initial_state=recurrent_state,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
                 **kwargs,
@@ -1285,7 +1281,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
 class Glm5NextTextModel(Glm5NextPreTrainedModel):
     config: Glm5NextTextConfig
 
-    def __init__(self, config):
+    def __init__(self, config: Glm5NextTextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -1408,7 +1404,7 @@ class Glm5NextVisionBlock(GlmOcrVisionBlock):
 
 @auto_docstring
 class Glm5NextVisionModel(GlmOcrVisionModel):
-    def __init__(self, config) -> None:
+    def __init__(self, config: Glm5NextVisionConfig) -> None:
         super().__init__(config)
         self.blocks = nn.ModuleList([Glm5NextVisionBlock(config) for _ in range(config.depth)])
         self.merger = Glm5NextVisionPatchMerger(
@@ -1422,7 +1418,7 @@ class Glm5NextVisionModel(GlmOcrVisionModel):
 class Glm5NextModel(Exaone4_5_Model, Glm5NextPreTrainedModel):
     config: Glm5NextConfig
 
-    def __init__(self, config):
+    def __init__(self, config: Glm5NextConfig):
         super().__init__(config)
         self.visual = Glm5NextVisionModel._from_config(config.vision_config)
         self.language_model = Glm5NextTextModel._from_config(config.text_config)
@@ -1584,7 +1580,9 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
     Main Glm5Next conditional generation class.
     """
 
-    def __init__(self, config):
+    input_modalities = ("image", "video", "text")
+
+    def __init__(self, config: Glm5NextConfig):
         super().__init__(config)
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
         self.num_experts = config.text_config.num_local_experts
@@ -1664,8 +1662,8 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

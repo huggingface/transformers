@@ -123,6 +123,7 @@ from .utils import (
     is_multipart_available,
     is_natten_available,
     is_nltk_available,
+    is_nncf_available,
     is_numba_available,
     is_onnx_available,
     is_onnxruntime_available,
@@ -324,6 +325,7 @@ _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
 _run_agent_tests = parse_flag_from_env("RUN_AGENT_TESTS", default=False)
 _run_training_tests = parse_flag_from_env("RUN_TRAINING_TESTS", default=True)
 _run_tensor_parallel_tests = parse_flag_from_env("RUN_TENSOR_PARALLEL_TESTS", default=True)
+_run_expert_parallel_tests = parse_flag_from_env("RUN_EXPERT_PARALLEL_TESTS", default=True)
 _run_fsdp_tests = parse_flag_from_env("RUN_FSDP_TESTS", default=True)
 
 
@@ -405,6 +407,22 @@ def is_tensor_parallel_test(test_case):
             return test_case
         else:
             return pytest.mark.is_tensor_parallel_test()(test_case)
+
+
+def is_expert_parallel_test(test_case):
+    """
+    Decorator marking a test as an expert parallel test. If RUN_EXPERT_PARALLEL_TESTS is set to a falsy value, those
+    tests will be skipped.
+    """
+    if not _run_expert_parallel_tests:
+        return unittest.skip(reason="test is expert parallel test")(test_case)
+    else:
+        try:
+            import pytest  # We don't need a hard dependency on pytest in the main library
+        except ImportError:
+            return test_case
+        else:
+            return pytest.mark.is_expert_parallel_test()(test_case)
 
 
 def is_fsdp_test(test_case):
@@ -646,6 +664,10 @@ def require_executorch(test_case):
 
 def require_openvino(test_case):
     return unittest.skipUnless(is_openvino_available(), "test requires OpenVINO")(test_case)
+
+
+def require_nncf(test_case):
+    return unittest.skipUnless(is_nncf_available(), "test requires NNCF")(test_case)
 
 
 def require_timm(test_case):
@@ -1981,6 +2003,7 @@ def assert_screenout(out, what):
 def set_config_for_less_flaky_test(config):
     target_attrs = [
         "rms_norm_eps",
+        "post_norm_eps",
         "layer_norm_eps",
         "norm_eps",
         "norm_epsilon",
@@ -2588,7 +2611,7 @@ def mockenv_context(*remove, **update):
 
 # --- pytest conf functions --- #
 
-# to avoid multiple invocation from tests/conftest.py and examples/conftest.py - make sure it's called only once
+# to avoid multiple invocation if several conftest.py files call it - make sure it's called only once
 pytest_opt_registered = {}
 
 
@@ -3110,16 +3133,22 @@ def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
         test_case.fail(f"{results['error']}")
 
 
+# Devices locked to the process that opens them; a device spec adds its own with `SINGLE_PROCESS_DEVICE = True`
+SINGLE_PROCESS_DEVICES = {"tpu"}
+
+
 def run_test_using_subprocess(func):
     """
     To decorate a test to run in a subprocess using the `subprocess` module. This could avoid potential GPU memory
     issues (GPU OOM or a test that causes many subsequential failing with `CUDA error: device-side assert triggered`).
+
+    On devices in `SINGLE_PROCESS_DEVICES`, the test runs in the current process instead.
     """
     import pytest
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        if os.getenv("_INSIDE_SUB_PROCESS", None) == "1":
+        if os.getenv("_INSIDE_SUB_PROCESS", None) == "1" or torch_device in SINGLE_PROCESS_DEVICES:
             func(*args, **kwargs)
         else:
             test = " ".join(os.environ.get("PYTEST_CURRENT_TEST").split(" ")[:-1])
@@ -3438,8 +3467,8 @@ if is_torch_available() and is_torch_tpu_available():
     # `torch.tpu` does not expose the whole accelerator API yet, so anything missing is left out and
     # falls back to the `default` entry of its table rather than being faked here.
     BACKEND_MANUAL_SEED["tpu"] = torch.tpu.manual_seed
-    BACKEND_DEVICE_COUNT["tpu"] = torch.tpu.device_count
-    BACKEND_SYNCHRONIZE["tpu"] = torch.tpu.synchronize
+    BACKEND_DEVICE_COUNT["tpu"] = torch.accelerator.device_count
+    BACKEND_SYNCHRONIZE["tpu"] = torch.accelerator.synchronize
     BACKEND_TORCH_ACCELERATOR_MODULE["tpu"] = torch.tpu
     if hasattr(torch.tpu, "empty_cache"):
         BACKEND_EMPTY_CACHE["tpu"] = torch.tpu.empty_cache
@@ -3537,6 +3566,9 @@ if is_torch_available():
         update_mapping_from_spec(BACKEND_MANUAL_SEED, "MANUAL_SEED_FN")
         update_mapping_from_spec(BACKEND_EMPTY_CACHE, "EMPTY_CACHE_FN")
         update_mapping_from_spec(BACKEND_DEVICE_COUNT, "DEVICE_COUNT_FN")
+
+        if getattr(device_spec_module, "SINGLE_PROCESS_DEVICE", False):
+            SINGLE_PROCESS_DEVICES.add(torch_device)
 
 
 def compare_pipeline_output_to_hub_spec(output, hub_spec):

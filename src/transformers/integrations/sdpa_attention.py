@@ -1,3 +1,5 @@
+import os
+
 import torch
 
 from ..generation.continuous_batching.cache import PagedAttentionCache
@@ -28,6 +30,8 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 
 def use_gqa_in_sdpa(attention_mask: torch.Tensor | None, key: torch.Tensor, value: torch.Tensor) -> bool:
+    if os.environ.get("TRANSFORMERS_SDPA_FORCE_GQA", "0") == "1":
+        return True
     # XPU and MPS support masked GQA under more recent torch versions
     if _is_torch_xpu_available:
         return _is_torch_greater_or_equal_than_2_8
@@ -74,7 +78,7 @@ def create_position_bias_mask(
         # A custom float mask is already additive, so we can simply add it to the position_bias
         position_bias_mask = position_bias + attention_mask
 
-    return position_bias_mask
+    return position_bias_mask.contiguous()
 
 
 def sdpa_attention_forward(
@@ -90,6 +94,10 @@ def sdpa_attention_forward(
     cache: PagedAttentionCache | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
+    if kwargs.get("softcap") is not None:
+        raise ValueError(
+            "`sdpa` attention does not support `softcap`. Try using `eager`, `flex_attention`, or the few FA kernels supporting it"
+        )
     if kwargs.get("output_attentions", False):
         logger.warning_once(
             "`sdpa` attention does not support `output_attentions=True`."

@@ -39,8 +39,8 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-# ggml's flash attention, the default on MPS where `kernels` can fetch it.
-GGML_ATTN = "ggml-org/ggml-attn"
+# Metal flash attention, the default for continuous batching on MPS where `kernels` can fetch it.
+METAL_FLASH_ATTN = "kernels-community/metal-flash-sdpa"
 
 
 class TimedModel:
@@ -104,6 +104,7 @@ class ModelManager:
         dtype: Torch dtype override. "auto" derives from model weights.
         trust_remote_code: Whether to trust remote code when loading models.
         attn_implementation: Attention implementation override (e.g. "flash_attention_2").
+        continuous_batching: Whether continuous batching is enabled, to default to a Metal flash kernel on MPS.
         quantization: Quantization method ("bnb-4bit" or "bnb-8bit").
         model_timeout: Seconds before an idle model is unloaded. -1 disables.
         force_model: If set, preload this model at init time.
@@ -115,6 +116,7 @@ class ModelManager:
         dtype: str | None = "auto",
         trust_remote_code: bool = False,
         attn_implementation: str | None = None,
+        continuous_batching: bool = False,
         quantization: str | None = None,
         model_timeout: int = 300,
         force_model: str | None = None,
@@ -133,7 +135,9 @@ class ModelManager:
         self.device = int(device) if device.isdigit() else device
         self.dtype = self._resolve_dtype(dtype)
         self.trust_remote_code = trust_remote_code
-        self.attn_implementation = self._resolve_attn_implementation(attn_implementation, self.device)
+        self.attn_implementation = self._resolve_attn_implementation(
+            attn_implementation, self.device, continuous_batching
+        )
         self.quantization = quantization
         self.model_timeout = model_timeout
         self.force_model = force_model
@@ -162,12 +166,12 @@ class ModelManager:
             )
         return resolved
 
-    @classmethod
-    def _resolve_attn_implementation(cls, attn_implementation: str | None, device: str | int) -> str | None:
-        r"""
-        Default to a fast kernel for `mps` when available.
-        """
-        if attn_implementation is not None:
+    @staticmethod
+    def _resolve_attn_implementation(
+        attn_implementation: str | None, device: str | int, continuous_batching: bool
+    ) -> str | None:
+        """Default to the Metal flash kernel for continuous batching on `mps`, when `kernels` is installed."""
+        if attn_implementation is not None or not continuous_batching:
             return attn_implementation
 
         import torch
@@ -181,10 +185,10 @@ class ModelManager:
         )
         if is_mps_device and is_kernels_available():
             logger.warning_once(
-                f"MPS detected and `kernels` is installed: defaulting attention to `{GGML_ATTN}`. "
+                f"Continuous batching on MPS with `kernels` installed: defaulting attention to `{METAL_FLASH_ATTN}`. "
                 "Pass `--attn-implementation sdpa` to opt out."
             )
-            return GGML_ATTN
+            return METAL_FLASH_ATTN
         return attn_implementation
 
     def _validate_args(self):
@@ -513,10 +517,10 @@ class ModelManager:
                     continue
 
                 config = json.loads(config_path.open().read())
-                if not (isinstance(config, dict) and "architectures" in config):
+                if not isinstance(config, dict):
                     continue
 
-                architectures = config["architectures"]
+                architectures = config.get("architectures") or []
                 llms = MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values()
                 vlms = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.values()
                 multimodal = MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES.values()
