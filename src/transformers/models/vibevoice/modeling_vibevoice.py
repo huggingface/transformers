@@ -264,6 +264,7 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         self,
         input_values: torch.FloatTensor,
         padding_mask: torch.Tensor,
+        sample: bool = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -271,13 +272,17 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
             Float values of (normalized) audio waveform.
         padding_mask (`torch.Tensor` of shape `(batch_size, padded_audio_length)`):
             Padding mask to remove padded parts of audio.
+        sample (`bool`, *optional*, defaults to `True`):
+            Whether to sample the acoustic latents from the VAE. If False, the latent mean is used, so the output
+            is deterministic.
         """
 
         # Acoustic tokenizer is not meant to be trainable (see p. 3 of https://huggingface.co/papers/2508.19205)
         with torch.no_grad():
-            acoustic_features = self.audio_tower.encode(input_values, sample=True).latents
-        acoustic_features += self.latent_bias_factor.to(acoustic_features.device)
-        acoustic_features *= self.latent_scaling_factor.to(acoustic_features.device)
+            acoustic_features = self.audio_tower.encode(input_values, sample=sample).latents
+        acoustic_features = (acoustic_features + self.latent_bias_factor.to(acoustic_features.device)) * (
+            self.latent_scaling_factor.to(acoustic_features.device)
+        )
 
         # adjust padding mask according to tokenizer compression
         num_audio_tokens = torch.ceil(padding_mask.sum(dim=-1) / self.config.audio_config.hop_length).to(torch.int64)
@@ -321,18 +326,22 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         input_values: torch.FloatTensor | None = None,
         padding_mask: torch.BoolTensor | None = None,
+        sample: bool = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
         padding_mask (`torch.Tensor` of shape `(batch_size, padded_audio_length)`):
             Padding mask to remove padded parts of audio.
+        sample (`bool`, *optional*, defaults to `True`):
+            Whether to sample the acoustic latents from the VAE. If False, the latent mean is used, so the output
+            is deterministic.
         """
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         audio_features = None
         if input_values is not None:
-            audio_outputs = self.get_audio_features(input_values, padding_mask)
+            audio_outputs = self.get_audio_features(input_values, padding_mask, sample=sample)
             audio_embeds = audio_outputs.pooler_output
             audio_features = audio_outputs.last_hidden_state
 
@@ -420,6 +429,7 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         noise_scheduler: object | None = None,
         ddpm_batch_multiplier: int = 4,
         num_diffusion_steps: int = 10,
+        sample: bool = True,
         **kwargs,
     ) -> tuple | VibeVoiceCausalLMOutputWithPast:
         r"""
@@ -437,6 +447,9 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
             help stabilize training.
         num_diffusion_steps (`int`, *optional*, defaults to 10):
             For training, the number of diffusion steps to use. Defaults to 10 if not provided.
+        sample (`bool`, *optional*, defaults to `True`):
+            Whether to sample the acoustic latents from the VAE. If False, the latent mean is used, so the output
+            is deterministic.
         """
 
         outputs = self.model(
@@ -444,6 +457,7 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
             inputs_embeds=inputs_embeds,
             input_values=input_values,
             padding_mask=padding_mask,
+            sample=sample,
             **kwargs,
         )
 

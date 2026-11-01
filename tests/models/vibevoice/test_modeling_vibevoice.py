@@ -34,6 +34,7 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
+    floats_tensor,
     ids_tensor,
 )
 from ...test_processing_common import url_to_local_path
@@ -277,6 +278,19 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_get_audio_features_sample(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = VibeVoiceForConditionalGeneration(config).to(torch_device).eval()
+        num_samples = 4 * config.audio_config.hop_length
+        input_values = floats_tensor([2, 1, num_samples])
+        padding_mask = torch.ones([2, num_samples], dtype=torch.bool, device=torch_device)
+
+        mean = model.model.get_audio_features(input_values, padding_mask, sample=False).pooler_output
+        repeat = model.model.get_audio_features(input_values, padding_mask, sample=False).pooler_output
+        torch.testing.assert_close(repeat, mean)
+        sampled = model.model.get_audio_features(input_values, padding_mask).pooler_output
+        self.assertFalse(torch.allclose(sampled, mean))
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         """
