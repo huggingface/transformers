@@ -2986,3 +2986,23 @@ via graph edges (framework modules loaded before any test file was set as curren
   push/pop loading stack added, calls `_record_module_graph_edge` in addition to existing
 - Modified `_tracking_import_module`: same pattern
 - Modified `record_ci_source_deps_by_file`: augments output with `graph_transitive`
+
+### Bug fix: collate_ci_source_deps.py (2026-11-01)
+
+`deps_by_file.json` now has three phase keys: `collection`, `execution`, `graph_transitive`.
+
+The original `defaultdict` initializer hardcoded only the two original phases:
+```python
+# BEFORE (broken — KeyError on "graph_transitive"):
+test_to_phases = defaultdict(lambda: {"collection": set(), "execution": set()})
+test_to_phases[test_file][phase].update(src_files)  # KeyError if phase = "graph_transitive"
+```
+
+Fixed to accept any phase dynamically:
+```python
+# AFTER:
+test_to_phases = defaultdict(dict)
+test_to_phases[test_file].setdefault(phase, set()).update(src_files)
+```
+
+Docstring updated to show all three phases in example output.
