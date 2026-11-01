@@ -638,6 +638,30 @@ class TrainerLoggingTest(TestCasePlus):
         self.assertTrue(is_any_loss_nan_or_inf(log_history_no_filter))
         self.assertFalse(is_any_loss_nan_or_inf(log_history_filter))
 
+    def test_eval_loss_inf_nan_filter(self):
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        x = torch.randint(0, 100, (16,))
+        valid = [{"input_ids": x, "labels": x}] * 8
+        # Batches whose labels are all masked have a NaN loss. 8 in a row keeps them apart from valid batches
+        # even when DataParallel merges the per-device batches.
+        masked = [{"input_ids": x, "labels": torch.full_like(x, -100)}] * 8
+
+        def eval_loss(eval_dataset, logging_nan_inf_filter):
+            args = TrainingArguments(
+                self.get_auto_remove_tmp_dir(),
+                per_device_eval_batch_size=1,
+                logging_nan_inf_filter=logging_nan_inf_filter,
+            )
+            return Trainer(tiny_gpt2, args).evaluate(eval_dataset)["eval_loss"]
+
+        self.assertTrue(math.isnan(eval_loss(masked + valid, logging_nan_inf_filter=False)))
+        self.assertAlmostEqual(
+            eval_loss(masked + valid, logging_nan_inf_filter=True),
+            eval_loss(valid, logging_nan_inf_filter=True),
+            places=5,
+        )
+
     def test_log_level(self):
         # testing only --log_level (--log_level_replica requires multiple gpus and DDP and is tested elsewhere)
         logger = logging.get_logger()
