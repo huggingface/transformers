@@ -2384,9 +2384,10 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                         "position_ids": position_ids,
                     }
 
-                # We need to do simple forward without cache in order to trigger packed SDPA/flex/eager attention path
                 res_padded = model(**inputs_dict, use_cache=False)
                 res_padfree = model(**padfree_inputs_dict, use_cache=False)
+                # The (empty) cache created with the default `use_cache` must not disable the packed sequence detection
+                res_padfree_default_cache = model(**padfree_inputs_dict)
 
                 logits_padded = res_padded.logits[dummy_attention_mask.bool()]
                 logits_padfree = res_padfree.logits[0]
@@ -2394,6 +2395,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 # acceptable numerical instability
                 tol = torch.finfo(torch.bfloat16).eps
                 torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
+                torch.testing.assert_close(res_padfree_default_cache.logits[0], logits_padfree, rtol=tol, atol=tol)
 
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="eager")
