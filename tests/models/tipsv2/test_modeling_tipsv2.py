@@ -386,6 +386,17 @@ class Tipsv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_model_bfloat16(self):
+        config, input_ids, attention_mask, pixel_values = self.model_tester.prepare_config_and_inputs()
+        model = Tipsv2Model(config).to(torch_device, dtype=torch.bfloat16).eval()
+        with torch.no_grad():
+            result = model(
+                input_ids=input_ids, pixel_values=pixel_values.to(torch.bfloat16), attention_mask=attention_mask
+            )
+
+        self.assertEqual(result.text_embeds.dtype, torch.bfloat16)
+        self.assertEqual(result.image_embeds.dtype, torch.bfloat16)
+
     @unittest.skip(reason="Hidden states are tested in the individual TIPSv2 text and vision tower tests.")
     def test_hidden_states_output(self):
         pass
