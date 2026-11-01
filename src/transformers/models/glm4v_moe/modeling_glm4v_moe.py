@@ -93,7 +93,7 @@ class Glm4vMoeTextRotaryEmbedding(nn.Module):
 
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
         return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
@@ -538,7 +538,7 @@ class Glm4vMoeVisionRotaryEmbedding(nn.Module):
         spatial_dim = dim // 2
 
         attention_factor = 1.0  # Unused in this type of RoPE
-        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
+        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.int64).float() / spatial_dim))
         return inv_freq.to(device), attention_factor
 
     @torch.no_grad()

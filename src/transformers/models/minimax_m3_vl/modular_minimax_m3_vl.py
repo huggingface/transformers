@@ -757,7 +757,7 @@ class MiniMaxM3VLVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
         spatial_dim = 2 * ((dim // 3) // 2)
 
         attention_factor = 1.0  # Unused in this type of RoPE
-        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
+        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.int64).float() / spatial_dim))
         return inv_freq.to(device), attention_factor
 
     def forward(self, x, position_ids):
