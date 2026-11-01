@@ -3122,3 +3122,22 @@ core_model_loading, modeling_layers, modeling_outputs entirely.
 **Also noted**: `graph_transitive_collection` vs `graph_transitive_execution` as separate
 keys could be useful in future (currently BFS seeds from union of both). Trivial to add.
 Not needed now.
+
+### Phase semantics clarification (future reference, no action needed)
+
+All three phases record "what was new to sys.modules at that moment", not "direct imports only":
+
+- **`collection`** for the 1st test file = direct + ALL transitives (nothing cached yet, full
+  import chain runs). For 2nd+ files = direct + any transitives that happen to be new at that
+  point in collection order (mostly direct, but not purely).
+- **`execution`** = same logic — direct + transitives that were new during test execution.
+- **`graph_transitive`** = purely additive (files reachable via module graph not already in
+  collection or execution). Never moves anything out of the other two phases.
+
+No post-processing is done to separate "direct" from "transitive" within collection/execution.
+The module graph is the only structure that truly tracks directness (parent→child edges).
+
+Post-processing the 1st test file to move its transitives into graph_transitive is theoretically
+possible (use the module graph to distinguish depth-1 vs deeper) but not straightforward and
+not worth doing — the union of all three phases is already the best approximation of the
+complete dep set regardless.
