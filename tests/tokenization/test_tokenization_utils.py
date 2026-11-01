@@ -144,6 +144,21 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.assertEqual(tensor_batch["inputs"].shape, (1, 3))
         self.assertEqual(tensor_batch["labels"].shape, (1,))
 
+    @require_torch
+    def test_batch_encoding_empty_values_default_to_int64(self):
+        import torch
+
+        for value in ([], [[]], [[], []], [[[]], [[]]]):
+            batch = BatchEncoding({"input_ids": value})
+            self.assertEqual(batch.convert_to_tensors(tensor_type="np")["input_ids"].dtype, np.int64)
+            batch = BatchEncoding({"input_ids": value})
+            self.assertEqual(batch.convert_to_tensors(tensor_type="pt")["input_ids"].dtype, torch.int64)
+
+        batch = BatchEncoding({"input_ids": [[], [0.5]]})
+        self.assertEqual(batch.convert_to_tensors(tensor_type="np")["input_ids"].dtype, object)
+        batch = BatchEncoding({"values": [[0.5, 1.5]]})
+        self.assertEqual(batch.convert_to_tensors(tensor_type="pt")["values"].dtype, torch.float32)
+
     def test_padding_accepts_tensors(self):
         features = [{"input_ids": np.array([0, 1, 2])}, {"input_ids": np.array([0, 1, 2, 3])}]
         tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
