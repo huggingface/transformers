@@ -208,7 +208,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
         images = make_flat_list_of_images(images)
 
         if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
+            images = [convert_to_rgb(image, return_numpy=True) for image in images]
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
