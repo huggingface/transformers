@@ -2202,6 +2202,9 @@ def _build_checkpoint_conversion_mapping():
         ),
     ]
 
+    # The `readout.safetensors` of the decision models of vLLM (pplx-decider, d3): the weight of the head, no bias
+    mapping["jev"] = [WeightRenaming(r"^weight", "proj.weight")]
+
     # Gradium's runtime checkpoint (`model.safetensors` next to the runtime's files). Its codec (`mimi.`) and its
     # training-only tensors are left unexpected: the codec is the processor's audio tokenizer.
     conditioners = r"^flow_lm\.condition_provider\.conditioners\."

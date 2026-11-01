@@ -19,12 +19,14 @@ Tests for the serving layer.
 import asyncio
 import json
 import socket
+import tempfile
 import time
 import unittest
 from unittest.mock import MagicMock, patch
 
 from huggingface_hub.utils import httpx
 
+from transformers import DecisionConfig
 from transformers.cli.serve import Serve
 from transformers.cli.serving.chat_completion import ChatCompletionHandler
 from transformers.cli.serving.completion import CompletionHandler
@@ -47,6 +49,7 @@ from transformers.testing_utils import (
     require_librosa,
     require_multipart,
     require_serve,
+    require_torch,
     require_torch_accelerator,
     require_torchcodec,
     require_vision,
@@ -56,6 +59,7 @@ from transformers.testing_utils import (
 from transformers.utils.chat_parsing import ResponseParser
 from transformers.utils.import_utils import is_serve_available
 
+from ..test_decision_head_common import tiny_qwen2
 from ..test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
@@ -697,7 +701,40 @@ class TestSystemOneEndpoint(ServeIntegrationTestCase):
         self.body["questions"]["team"]["criteria"] = {}
         response = httpx.post(f"{self.base_url}/v1/systemone", json=self.body, timeout=30)
         self.assertEqual(response.status_code, 422)
-        self.assertIn("criteria", response.json()["detail"][0]["loc"])
+        self.assertIn("A `choice` question needs `criteria`", response.json()["detail"][0]["msg"])
+
+
+@require_serve
+class TestSystemOneDecisionConfig(unittest.TestCase):
+    @require_torch
+    def test_answers_are_the_pipelines(self):
+        from transformers import AutoTokenizer, pipeline
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+        model = tiny_qwen2(tokenizer)
+        decision_config = DecisionConfig(temperature={"noul": 1.5})
+        handler = SystemOneHandler(MagicMock(), GenerationState(), decision_config=decision_config)
+        request = {"state": "s", "questions": {"upset": {"type": "noul", "instructions": "Upset?"}}}
+        pipe = handler._pipeline("x", model, tokenizer)
+        self.assertIs(handler._pipeline("x", model, tokenizer), pipe)
+        answers, input_tokens = handler._answer(pipe, request)
+        expected = pipeline("decision", model=model, tokenizer=tokenizer, decision_config=decision_config)(request)
+        self.assertEqual(answers, expected)
+        self.assertGreater(input_tokens, 0)
+
+    @require_torch
+    def test_reads_the_decision_config_of_the_repo(self):
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+        model = tiny_qwen2(tokenizer)
+        template = "{{ state }}"
+        with tempfile.TemporaryDirectory() as repo:
+            DecisionConfig(temperature={"noul": 2.0}, chat_template=template).save_pretrained(repo)
+            model.config._name_or_path = model.name_or_path = repo  # as if loaded from the repo
+            pipe = SystemOneHandler(MagicMock(), GenerationState())._pipeline(repo, model, tokenizer)
+        self.assertEqual(pipe.decision_config.temperature, {"noul": 2.0})
+        self.assertEqual(pipe.decision_config.chat_template, template)
 
 
 @slow

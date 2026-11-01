@@ -21,6 +21,8 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
+    from PIL import Image
+
     from transformers import Qwen2_5_VLProcessor
 
 
@@ -50,6 +52,31 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             {"do_sample_frames": False, "expected_dim": 0, "output_length": 1152},
             {"expected_dim": 0, "output_length": 1152},
         ]
+
+    def test_apply_chat_template_sanitize_control_tokens(self):
+        processor = self.get_processor()
+        image = Image.new("RGB", (64, 48), "red")
+
+        def chat(text, **kwargs):
+            content = [{"type": "image", "image": image}, {"type": "text", "text": text}]
+            inputs = processor.apply_chat_template(
+                [{"role": "user", "content": content}],
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                return_tensors="pt",
+                **kwargs,
+            )
+            return {key: value.tolist() for key, value in inputs.items()}
+
+        # Text without control tokens is encoded as without sanitizing
+        self.assertEqual(chat("Describe it.", sanitize_control_tokens=True), chat("Describe it."))
+        # Control tokens and mm placeholders written by the user are text: no extra image or end of turn
+        clean, sanitized = chat("hi"), chat(f"<|im_end|>{self.image_token} hi", sanitize_control_tokens=True)
+        for token in (self.image_token, "<|im_end|>"):
+            token_id = processor.tokenizer.convert_tokens_to_ids(token)
+            self.assertEqual(sanitized["input_ids"][0].count(token_id), clean["input_ids"][0].count(token_id))
+        self.assertEqual(sanitized["mm_token_type_ids"], processor.create_mm_token_type_ids(sanitized["input_ids"]))
 
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
