@@ -187,6 +187,7 @@ class Cohere2MoeDecoderLayer(Cohere2DecoderLayer):
             if config.mlp_layer_types[layer_idx] == "dense"
             else Cohere2MoeSparseMoeBlock(config)
         )
+        self.self_attn = Cohere2MoeAttention(config=config, layer_idx=layer_idx)
 
 
 class Cohere2MoeRotaryEmbedding(Cohere2RotaryEmbedding):
@@ -218,6 +219,9 @@ class Cohere2MoeModel(Cohere2Model):
             Cohere2MoeRMSNorm(hidden_size=config.hidden_size, eps=config.rms_norm_eps)
             if config.rms_norm_eps is not None
             else Cohere2MoeLayerNorm(hidden_size=config.hidden_size, eps=config.layer_norm_eps)
+        )
+        self.layers = nn.ModuleList(
+            [Cohere2MoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
     def forward(
@@ -280,6 +284,10 @@ class Cohere2MoeModel(Cohere2Model):
 
 class Cohere2MoeForCausalLM(Cohere2ForCausalLM):
     _fsdp_plan = {"lm_head": "keep_full_weight"}
+
+    def __init__(self, config: Cohere2MoeConfig):
+        super().__init__(config)
+        self.model = Cohere2MoeModel(config)
 
     def forward(
         self,

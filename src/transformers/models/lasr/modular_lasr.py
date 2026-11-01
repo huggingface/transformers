@@ -301,6 +301,9 @@ class LasrCTCConfig(ParakeetCTCConfig):
 
     vocab_size: int = 512
     pad_token_id: int = 0
+    sub_configs_defaults = {
+        "encoder_config": LasrEncoderConfig,
+    }
 
     @property
     def inputs_to_logits_ratio(self):
@@ -399,6 +402,8 @@ class LasrEncoderBlock(ParakeetEncoderBlock):
         self.norm_conv = nn.LayerNorm(config.hidden_size, config.layer_norm_eps, bias=False)
         self.norm_feed_forward2 = nn.LayerNorm(config.hidden_size, config.layer_norm_eps, bias=False)
         self.norm_out = nn.LayerNorm(config.hidden_size, config.layer_norm_eps, bias=False)
+        self.self_attn = LasrEncoderAttention(config, layer_idx)
+        self.conv = LasrEncoderConvolutionModule(config)
 
     def forward(
         self,
@@ -439,6 +444,10 @@ class LasrEncoderBlock(ParakeetEncoderBlock):
 class LasrPreTrainedModel(ParakeetPreTrainedModel):
     # padding is incompatible with flex attention as the resulting mask cannot be used to apply padding
     _supports_flex_attn = False
+    _can_record_outputs = {
+        "hidden_states": LasrEncoderBlock,
+        "attentions": LasrEncoderAttention,
+    }
 
     def _init_weights(self, module):
         raise AttributeError("Normal super call")

@@ -32,9 +32,14 @@ from transformers.models.instructblip.modeling_instructblip import (
     TransformersKwargs,
 )
 
+from ... import initialization as init
+from ...configuration_utils import SubConfigSpec
 from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple
+from ..auto import AutoConfig
+from ..instructblip.modeling_instructblip import InstructBlipQFormerEmbeddings, InstructBlipVisionEmbeddings
 
 
 @auto_docstring(checkpoint="Salesforce/instructblip-flan-t5-xl")
@@ -123,10 +128,36 @@ class InstructBlipVideoConfig(InstructBlipConfig):
     attribute_map = {"video_token_id": "video_token_index"}
     video_token_index: int | None = None
     image_token_index = AttributeError()
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="opt"),
+        "vision_config": InstructBlipVideoVisionConfig,
+        "qformer_config": InstructBlipVideoQFormerConfig,
+    }
+
+
+class InstructBlipVideoVisionEmbeddings(InstructBlipVisionEmbeddings):
+    pass
+
+
+class InstructBlipVideoQFormerEmbeddings(InstructBlipQFormerEmbeddings):
+    pass
 
 
 class InstructBlipVideoPreTrainedModel(InstructBlipPreTrainedModel):
     input_modalities = ("video", "text")
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        PreTrainedModel._init_weights(self, module)
+        factor = self.config.initializer_range
+        if isinstance(module, InstructBlipVideoVisionEmbeddings):
+            init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
+            init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)
+        elif isinstance(module, (InstructBlipVideoForConditionalGeneration, InstructBlipVideoModel)):
+            init.zeros_(module.query_tokens)
+        elif isinstance(module, InstructBlipVideoQFormerEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 class InstructBlipVideoVisionModel(InstructBlipVisionModel):
@@ -142,6 +173,11 @@ class InstructBlipVideoForConditionalGenerationModelOutput(InstructBlipForCondit
 
 
 class InstructBlipVideoModel(InstructBlipModel):
+    def __init__(self, config: InstructBlipVideoConfig):
+        super().__init__(config)
+
+        self.vision_model = InstructBlipVideoVisionModel(config.vision_config)
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -239,6 +275,11 @@ class InstructBlipVideoModel(InstructBlipModel):
 
 
 class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGeneration):
+    def __init__(self, config: InstructBlipVideoConfig):
+        super().__init__(config)
+
+        self.vision_model = InstructBlipVideoVisionModel._from_config(config.vision_config)
+
     @can_return_tuple
     @auto_docstring
     def get_video_features(

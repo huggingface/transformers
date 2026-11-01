@@ -462,6 +462,10 @@ class NemotronHModel(NemotronHPreTrainedModel):
 class NemotronHForCausalLM(ZambaForCausalLM):
     _tied_weights_keys = {}
 
+    def __init__(self, config: NemotronHConfig):
+        super().__init__(config)
+        self.model = NemotronHModel(config)
+
     @staticmethod
     def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, position_ids=None, **_):
         # Nemotron-H layer_types include non-attention block types (moe / mlp) that the default dispatch

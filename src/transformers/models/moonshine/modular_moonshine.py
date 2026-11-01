@@ -522,6 +522,7 @@ class MoonshineDecoder(LlamaModel):
         super().__init__(config)
         self.norm = nn.LayerNorm(config.hidden_size, bias=False)
         self.layers = nn.ModuleList([MoonshineDecoderLayer(config, idx) for idx in range(config.num_hidden_layers)])
+        self.rotary_emb = MoonshineRotaryEmbedding(config=config)
 
     @merge_with_config_defaults
     @capture_outputs
@@ -602,6 +603,12 @@ class MoonshineDecoder(LlamaModel):
 class MoonshineModel(WhisperModel):
     def _mask_input_features(self):
         raise AttributeError("Not needed for Moonshine")
+
+    def __init__(self, config: MoonshineConfig):
+        super().__init__(config)
+
+        self.encoder = MoonshineEncoder(config)
+        self.decoder = MoonshineDecoder(config)
 
     @can_return_tuple
     @auto_docstring

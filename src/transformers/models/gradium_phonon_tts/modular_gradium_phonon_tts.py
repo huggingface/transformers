@@ -16,13 +16,19 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ... import initialization as init
+from ...configuration_utils import SubConfigSpec
+from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
 from ...utils.type_validators import activation_fn_key, positive_int_field
 from ..pocket_tts.configuration_pocket_tts import PocketTTSConfig, PocketTTSFlowHeadConfig
 from ..pocket_tts.modeling_pocket_tts import (
+    PocketTTSDecoderLayer,
+    PocketTTSFlowLossWeighting,
     PocketTTSForConditionalGeneration,
     PocketTTSModel,
     PocketTTSPreTrainedModel,
+    PocketTTSTimestepEmbedding,
     PocketTTSTimestepNorm,
 )
 from .generation_gradium_phonon_tts import GradiumPhononTTSGenerationMixin
@@ -131,6 +137,7 @@ class GradiumPhononTTSConfig(PocketTTSConfig):
     duration_delta_embedding_dim: int = positive_int_field(default=128)
     duration_delta_scale: float = 1000.0
     duration_delta_max_period: float = 10000.0
+    sub_configs_defaults = {"flow_head_config": SubConfigSpec(config_class=GradiumPhononTTSFlowHeadConfig)}
 
     # Difference to Pocket TTS: no learnt vector before the voice prompt
     audio_prompt_bos_token_id = AttributeError()
@@ -142,7 +149,37 @@ class GradiumPhononTTSTimestepNorm(PocketTTSTimestepNorm):
         return self.weight * hidden_states * torch.rsqrt(mean_square + self.variance_epsilon)
 
 
-class GradiumPhononTTSPreTrainedModel(PocketTTSPreTrainedModel): ...
+class GradiumPhononTTSDecoderLayer(PocketTTSDecoderLayer):
+    pass
+
+
+class GradiumPhononTTSTimestepEmbedding(PocketTTSTimestepEmbedding):
+    def __init__(self, config: GradiumPhononTTSFlowHeadConfig):
+        super().__init__(config)
+        self.norm = GradiumPhononTTSTimestepNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+
+class GradiumPhononTTSFlowLossWeighting(PocketTTSFlowLossWeighting):
+    pass
+
+
+class GradiumPhononTTSPreTrainedModel(PocketTTSPreTrainedModel):
+    @torch.no_grad()
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, GradiumPhononTTSTimestepNorm):
+            init.ones_(module.weight)
+        elif isinstance(module, GradiumPhononTTSTimestepEmbedding):
+            init.copy_(module.freqs, module.compute_default_freqs(self.config.flow_head_config))
+        elif isinstance(module, GradiumPhononTTSModel):
+            init.zeros_(module.bos_latent)
+        elif isinstance(module, GradiumPhononTTSFlowLossWeighting):
+            for parameter in module.parameters():
+                init.zeros_(parameter)
+        elif isinstance(module, GradiumPhononTTSForConditionalGeneration):
+            init.zeros_(module.latent_mean)
+            init.ones_(module.latent_std)
+            init.zeros_(module.latent_stats_num_updates)
 
 
 @auto_docstring(
@@ -191,6 +228,10 @@ class GradiumPhononTTSModel(PocketTTSModel):
 class GradiumPhononTTSForConditionalGeneration(PocketTTSForConditionalGeneration, GradiumPhononTTSGenerationMixin):
     # Gradium's runtime checkpoint also holds the codec (the processor's audio tokenizer) and training-only tensors
     _keys_to_ignore_on_load_unexpected = [r"^mimi\.", r"^flow_lm\.flow\.w_s_t\.", r"\.learnt_padding$"]
+
+    def __init__(self, config: GradiumPhononTTSConfig):
+        super().__init__(config)
+        self.model = GradiumPhononTTSModel(config)
 
 
 __all__ = [

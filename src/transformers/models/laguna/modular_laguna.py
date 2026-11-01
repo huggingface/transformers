@@ -32,6 +32,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ...utils.generic import TransformersKwargs, no_inherit_decorator
+from ...utils.output_capturing import OutputRecorder
 from ..afmoe.modeling_afmoe import AfmoeAttention
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
@@ -255,6 +256,7 @@ class LagunaSparseMoeBlock(Qwen3MoeSparseMoeBlock):
         super().__init__(config)
         self.shared_experts = LagunaMLP(config, intermediate_size=config.shared_expert_intermediate_size)
         self.routed_scaling_factor = config.moe_routed_scaling_factor
+        self.gate = LagunaTopKRouter(config)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
@@ -289,6 +291,9 @@ class LagunaAttention(AfmoeAttention):
         self.gate_per_head = config.gating is True or config.gating == "per-head"
         g_proj_dim = self.num_heads if self.gate_per_head else self.num_heads * self.head_dim
         self.g_proj = nn.Linear(config.hidden_size, g_proj_dim, bias=False)
+
+        self.q_norm = LagunaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = LagunaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -358,6 +363,12 @@ class LagunaDecoderLayer(Glm4MoeLiteDecoderLayer):
 
 
 class LagunaPreTrainedModel(Qwen2MoePreTrainedModel):
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(LagunaTopKRouter, index=0),
+        "hidden_states": LagunaDecoderLayer,
+        "attentions": LagunaAttention,
+    }
+
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -374,6 +385,13 @@ class LagunaPreTrainedModel(Qwen2MoePreTrainedModel):
 
 
 class LagunaModel(LlamaModel):
+    def __init__(self, config: LagunaConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [LagunaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.rotary_emb = LagunaRotaryEmbedding(config=config)
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -438,6 +456,10 @@ class LagunaModel(LlamaModel):
 
 
 class LagunaForCausalLM(Qwen2MoeForCausalLM):
+    def __init__(self, config: LagunaConfig):
+        super().__init__(config)
+        self.model = LagunaModel(config)
+
     def forward(self, **super_kwargs):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

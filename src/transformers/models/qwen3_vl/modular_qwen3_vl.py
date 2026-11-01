@@ -344,6 +344,8 @@ class Qwen3VLTextDecoderLayer(Qwen3DecoderLayer):
         super().__init__(config, layer_idx)
         del self.attention_type
 
+        self.self_attn = Qwen3VLTextAttention(config=config, layer_idx=layer_idx)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -496,6 +498,10 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel, Qwen3Model):
     def __init__(self, config: Qwen3VLTextConfig):
         super().__init__(config)
         del self.has_sliding_layers
+        self.layers = nn.ModuleList(
+            [Qwen3VLTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.rotary_emb = Qwen3VLTextRotaryEmbedding(config=config)
 
     def _deepstack_process(
         self, hidden_states: torch.Tensor, visual_pos_masks: torch.Tensor, visual_embeds: torch.Tensor
@@ -785,6 +791,10 @@ class Qwen3VLCausalLMOutputWithPast(Qwen2_5_VLCausalLMOutputWithPast):
 
 
 class Qwen3VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
+    def __init__(self, config: Qwen3VLConfig):
+        super().__init__(config)
+        self.model = Qwen3VLModel(config)
+
     @auto_docstring
     def get_image_features(self, **super_kwargs) -> tuple | BaseModelOutputWithDeepstackFeatures:
         return super().get_image_features(**super_kwargs)

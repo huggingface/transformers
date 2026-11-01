@@ -242,7 +242,9 @@ class GraniteMoeSWAModel(GraniteMoeSharedModel):
 
 
 class GraniteMoeSWAForCausalLM(GraniteMoeSharedForCausalLM):
-    pass
+    def __init__(self, config: GraniteMoeSWAConfig):
+        super().__init__(config)
+        self.model = GraniteMoeSWAModel(config)
 
 
 __all__ = [

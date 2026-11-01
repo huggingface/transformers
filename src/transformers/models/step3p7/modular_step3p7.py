@@ -827,6 +827,9 @@ class Step3p7Attention(LagunaAttention):
         super().__init__(config, layer_idx, num_heads)
         self.scaling = config.query_pre_attn_scalar**-0.5
 
+        self.q_norm = Step3p7RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = Step3p7RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1052,6 +1055,10 @@ class Step3p7Model(DeepseekOcr2Model):
 class Step3p7ForConditionalGeneration(DeepseekOcr2ForConditionalGeneration):
     input_modalities = ("image", "text")
     config: Step3p7Config
+
+    def __init__(self, config: Step3p7Config):
+        super().__init__(config)
+        self.model = Step3p7Model(config)
 
 
 @auto_docstring

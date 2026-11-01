@@ -41,14 +41,16 @@ from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..deepseek_v2.configuration_deepseek_v2 import DeepseekV2Config
 from ..deepseek_v2.modeling_deepseek_v2 import (
     DeepseekV2DecoderLayer,
+    DeepseekV2Experts,
     DeepseekV2MLP,
     DeepseekV2Model,
     DeepseekV2Moe,
     DeepseekV2PreTrainedModel,
+    DeepseekV2TopkRouter,
 )
 from ..got_ocr2.image_processing_got_ocr2 import (
     GotOcr2ImageProcessor,
@@ -723,6 +725,7 @@ class DeepseekOcr2SamVisionEncoder(SamVisionEncoder, DeepseekOcr2PreTrainedModel
 
     def __init__(self, config: DeepseekOcr2SamVisionConfig):
         super().__init__(config)
+        self.patch_embed = DeepseekOcr2SamPatchEmbeddings(config)
         self.proj = DeepseekOcr2SamVisionProj(config)
 
     def interpolate_pos_encoding(self, height: int, width: int) -> torch.Tensor:
@@ -895,6 +898,14 @@ class DeepseekOcr2TextMLP(DeepseekV2MLP):
     pass
 
 
+class DeepseekOcr2TextExperts(DeepseekV2Experts):
+    pass
+
+
+class DeepseekOcr2TextTopkRouter(DeepseekV2TopkRouter):
+    pass
+
+
 class DeepseekOcr2TextMoe(DeepseekV2Moe):
     pass
 
@@ -912,11 +923,19 @@ class DeepseekOcr2TextDecoderLayer(DeepseekV2DecoderLayer):
 
 class DeepseekOcr2TextPreTrainedModel(DeepseekV2PreTrainedModel):
     config: DeepseekOcr2TextConfig
+    _can_record_outputs = {
+        "hidden_states": DeepseekOcr2TextDecoderLayer,
+        "attentions": DeepseekOcr2TextAttention,
+        "router_logits": OutputRecorder(DeepseekOcr2TextTopkRouter, index=0),
+    }
 
 
 class DeepseekOcr2TextModel(DeepseekV2Model):
     def __init__(self, config: DeepseekOcr2TextConfig):
         super().__init__(config)
+        self.layers = nn.ModuleList(
+            [DeepseekOcr2TextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         # Use (cos/sin) RoPE instead of complex RoPE to match LlamaAttention (MHA)
         self.rotary_emb = DeepseekOcr2TextRotaryEmbedding(config=config)
 
@@ -1060,6 +1079,10 @@ class DeepseekOcr2Model(LlavaNextModel):
 class DeepseekOcr2ForConditionalGeneration(LlavaNextForConditionalGeneration):
     def pack_image_features(self):
         raise NotImplementedError("DeepseekOcr2 does not use pack_image_features")
+
+    def __init__(self, config: DeepseekOcr2Config):
+        super().__init__(config)
+        self.model = DeepseekOcr2Model(config)
 
     @can_return_tuple
     @auto_docstring

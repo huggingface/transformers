@@ -190,11 +190,17 @@ class SmolLM3Attention(LlamaAttention):
 
 
 class SmolLM3DecoderLayer(LlamaDecoderLayer):
-    pass
+    def __init__(self, config: SmolLM3Config, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+        self.self_attn = SmolLM3Attention(config=config, layer_idx=layer_idx)
 
 
 class SmolLM3PreTrainedModel(LlamaPreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "hidden_states": SmolLM3DecoderLayer,
+        "attentions": SmolLM3Attention,
+    }
 
 
 class SmolLM3Model(Qwen2Model):
@@ -202,7 +208,9 @@ class SmolLM3Model(Qwen2Model):
 
 
 class SmolLM3ForCausalLM(LlamaForCausalLM):
-    pass
+    def __init__(self, config: SmolLM3Config):
+        super().__init__(config)
+        self.model = SmolLM3Model(config)
 
 
 class SmolLM3ForSequenceClassification(LlamaForSequenceClassification):

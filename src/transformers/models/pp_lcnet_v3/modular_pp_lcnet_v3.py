@@ -243,7 +243,9 @@ class PPLCNetV3PreTrainedModel(PPLCNetPreTrainedModel):
 
 
 class PPLCNetV3Backbone(PPLCNetBackbone):
-    pass
+    def __init__(self, config: PPLCNetV3Config):
+        super().__init__(config)
+        self.encoder = PPLCNetV3Encoder(config)
 
 
 class PPLCNetV3Encoder(PPLCNetEncoder):

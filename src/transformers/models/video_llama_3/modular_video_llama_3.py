@@ -618,6 +618,7 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
 
     def __init__(self, config: VideoLlama3Config):
         super().__init__(config)  # just to add type hint on config
+        self.model = VideoLlama3Model(config)
 
     def forward(
         self,

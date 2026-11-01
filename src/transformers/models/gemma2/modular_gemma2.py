@@ -309,6 +309,10 @@ class Gemma2DecoderLayer(GradientCheckpointingLayer):
 
 class Gemma2PreTrainedModel(GemmaPreTrainedModel):
     _supports_sdpa = False  # sdpa does not support softcapping
+    _can_record_outputs = {
+        "hidden_states": Gemma2DecoderLayer,
+        "attentions": Gemma2Attention,
+    }
 
 
 class Gemma2Model(GemmaModel):

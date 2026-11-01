@@ -12,6 +12,7 @@ from ...modeling_outputs import BaseModelOutput, Wav2Vec2BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
+from ...utils.output_capturing import OutputRecorder
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2FeatureProjection,
     Wav2Vec2FeedForward,
@@ -468,6 +469,10 @@ class WavLMPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
     _supports_flash_attn = False
     _supports_sdpa = False
     _supports_flex_attn = False
+    _can_record_outputs = {
+        "hidden_states": [WavLMEncoderLayer, WavLMEncoderLayerStableLayerNorm],
+        "attentions": OutputRecorder(WavLMAttention, index=1, layer_name="encoder"),
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -516,7 +521,13 @@ WavLMBaseModelOutput = Wav2Vec2BaseModelOutput
 
 
 class WavLMModel(Wav2Vec2Model):
-    pass
+    def __init__(self, config: WavLMConfig):
+        super().__init__(config)
+
+        if config.do_stable_layer_norm:
+            self.encoder = WavLMEncoderStableLayerNorm(config)
+        else:
+            self.encoder = WavLMEncoder(config)
 
 
 class WavLMForCTC(Wav2Vec2ForCTC):

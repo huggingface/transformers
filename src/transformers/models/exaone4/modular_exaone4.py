@@ -227,12 +227,20 @@ class Exaone4MLP(Olmo2MLP):
 
 
 class Exaone4DecoderLayer(Olmo2DecoderLayer):
-    pass
+    def __init__(self, config: Exaone4Config, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.self_attn = Exaone4Attention(config=config, layer_idx=layer_idx)
+        self.post_attention_layernorm = Exaone4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = Exaone4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 class Exaone4PreTrainedModel(LlamaPreTrainedModel):
     config: Exaone4Config
     _no_split_modules = ["Exaone4DecoderLayer"]
+    _can_record_outputs = {
+        "hidden_states": Exaone4DecoderLayer,
+        "attentions": Exaone4Attention,
+    }
 
 
 class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
@@ -313,6 +321,10 @@ class Exaone4Model(Exaone4PreTrainedModel, LlamaModel):
 
 
 class Exaone4ForCausalLM(LlamaForCausalLM):
+    def __init__(self, config: Exaone4Config):
+        super().__init__(config)
+        self.model = Exaone4Model(config)
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

@@ -16,6 +16,7 @@
 import torch
 from huggingface_hub.dataclasses import strict
 
+from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -334,6 +335,27 @@ class Sam3TrackerVideoSegmentationOutput(Sam2VideoSegmentationOutput):
 
 class Sam3TrackerVideoPreTrainedModel(Sam2VideoPreTrainedModel):
     base_model_prefix = "tracker_model"
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, Sam3TrackerVideoModel):
+            if module.no_memory_positional_encoding is not None:
+                init.zeros_(module.no_memory_positional_encoding)
+            if module.memory_temporal_positional_encoding is not None:
+                init.zeros_(module.memory_temporal_positional_encoding)
+            if module.no_object_pointer is not None:
+                init.zeros_(module.no_object_pointer)
+            if module.occlusion_spatial_embedding_parameter is not None:
+                init.zeros_(module.occlusion_spatial_embedding_parameter)
+        if isinstance(module, Sam3TrackerVideoMemoryFuserCXBlock):
+            if module.scale is not None:
+                init.zeros_(module.scale)
+        elif isinstance(module, Sam3TrackerVideoPositionalEmbedding):
+            init.normal_(module.positional_embedding, std=module.scale)
+        elif isinstance(module, Sam3TrackerVideoMemoryAttention):
+            position_ids = module.precompute_positions(module.config)
+            init.copy_(module.position_ids, position_ids)
 
 
 class Sam3TrackerVideoVisionRotaryEmbedding(Sam2VideoVisionRotaryEmbedding):

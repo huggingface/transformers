@@ -127,7 +127,9 @@ class PPOCRV6MediumDetNeck(PPOCRV5ServerDetNeck):
 
 @auto_docstring(custom_intro="PPOCRV6MediumDet model for text detection tasks.")
 class PPOCRV6MediumDetForObjectDetection(PPOCRV5ServerDetForObjectDetection):
-    pass
+    def __init__(self, config: PPOCRV6MediumDetConfig):
+        super().__init__(config)
+        self.head = PPOCRV6MediumDetHead(config)
 
 
 __all__ = [

@@ -408,10 +408,20 @@ class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
 
 
 class DeepseekV2Model(OlmoeModel):
-    pass
+    def __init__(self, config: DeepseekV2Config):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [DeepseekV2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = DeepseekV2RotaryEmbedding(config=config)
 
 
 class DeepseekV2ForCausalLM(LlamaForCausalLM):
+    def __init__(self, config: DeepseekV2Config):
+        super().__init__(config)
+        self.model = DeepseekV2Model(config)
+
     @can_return_tuple
     @auto_docstring
     def forward(
