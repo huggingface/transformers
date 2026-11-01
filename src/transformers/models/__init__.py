@@ -207,6 +207,7 @@ if TYPE_CHECKING:
     from .gradium_phonon_tts import *
     from .granite import *
     from .granite4_vision import *
+    from .granite_docling import *
     from .granite_speech import *
     from .granite_speech5 import *
     from .granite_speech_plus import *
