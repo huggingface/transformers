@@ -3141,3 +3141,32 @@ Post-processing the 1st test file to move its transitives into graph_transitive 
 possible (use the module graph to distinguish depth-1 vs deeper) but not straightforward and
 not worth doing — the union of all three phases is already the best approximation of the
 complete dep set regardless.
+
+### Fetcher vs recorder comparison (2026-11-01)
+
+Output files (local, untracked):
+- `recorder_aggregated_8shards.json` — union of 8 shards' deps_by_file.json (525 test files)
+- `reverse_map_fetcher_current.json` — fetcher reverse map from current commit (3342 entries)
+
+**Non-universal recorder edges missing from fetcher** (<=20 tests per src file): 1703 src files,
+2415 extra (src→test) edges. Top meaningful patterns:
+
+| src file | extra tests | reason |
+|----------|------------|--------|
+| `siglip/configuration_siglip.py` | +15 | siglip used as vision encoder in many VLMs |
+| `clip/configuration_clip.py` | +11 | clip backbone in llava/sam3/omdet_turbo etc. |
+| `qwen2/configuration_qwen2.py` | +12 | qwen2 backbone in composite models |
+| `timm_backbone/configuration_timm_backbone.py` | +18 | shared backbone in detr/maskformer/grounding_dino family |
+| `wav2vec2/feature_extraction_wav2vec2.py` | +10 | shared audio processing across audio models |
+| `bert/modeling_bert.py` | +8 | bert encoder in encoder-decoder/rag/dpr |
+
+**Important caveat — Windows path bug**: `existing_backbone_files()` in the fetcher returns
+Windows absolute paths on this machine instead of repo-relative posix paths. This causes
+`clip/configuration_clip.py → 0 tests` locally even though the fetcher DOES have backbone
+edges for clip (llava, sam3, omdet_turbo, etc.) via `_get_backbone_map()`. On Linux CI the
+paths are correct. So the clip/backbone gap is likely smaller than it appears here — the
+fetcher already handles those via backbone edges.
+
+**Genuinely new recorder value**: cross-model deps that aren't backbone relationships —
+`siglip` used as vision encoder (not declared as backbone), `wav2vec2` audio processing
+shared across unrelated audio models, `generation/streamers.py` used by streaming models, etc.
