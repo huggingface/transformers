@@ -189,30 +189,30 @@ class GenerateDecoderOnlyOutput(ModelOutput):
         sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
-        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True`):
+        scores (`tuple(torch.Tensor)` *optional*, returned when `output_scores=True`):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
+            at each generation step. Tuple of `torch.Tensor` with up to `max_new_tokens` elements (one element for
             each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
-        logits (`tuple(torch.FloatTensor)` *optional*, returned when `output_logits=True`):
+        logits (`tuple(torch.Tensor)` *optional*, returned when `output_logits=True`):
             Unprocessed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
+            at each generation step. Tuple of `torch.Tensor` with up to `max_new_tokens` elements (one element for
             each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
+        attentions (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
-        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
+            `torch.Tensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
+        hidden_states (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
+            `torch.Tensor` of shape `(batch_size, generated_length, hidden_size)`.
         past_key_values (`Cache`, *optional*, returned when `use_cache=True`):
             Returns the model cache, used to speed up decoding. Different models have a different cache format, check
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
     """
 
     sequences: torch.LongTensor
-    scores: tuple[torch.FloatTensor] | None = None
-    logits: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[tuple[torch.FloatTensor]] | None = None
-    hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
+    scores: tuple[torch.Tensor] | None = None
+    logits: tuple[torch.Tensor] | None = None
+    attentions: tuple[tuple[torch.Tensor]] | None = None
+    hidden_states: tuple[tuple[torch.Tensor]] | None = None
     past_key_values: Cache | None = None
 
 
@@ -225,42 +225,42 @@ class GenerateEncoderDecoderOutput(ModelOutput):
         sequences (`torch.LongTensor` of shape `(batch_size*num_return_sequences, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
-        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True`):
+        scores (`tuple(torch.Tensor)` *optional*, returned when `output_scores=True`):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
+            at each generation step. Tuple of `torch.Tensor` with up to `max_new_tokens` elements (one element for
             each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
-        logits (`tuple(torch.FloatTensor)` *optional*, returned when `output_logits=True`):
+        logits (`tuple(torch.Tensor)` *optional*, returned when `output_logits=True`):
             Unprocessed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
+            at each generation step. Tuple of `torch.Tensor` with up to `max_new_tokens` elements (one element for
             each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
-        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer of the decoder) of shape `(batch_size, num_heads,
+        encoder_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer of the decoder) of shape `(batch_size, num_heads,
             sequence_length, sequence_length)`.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+        encoder_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
-        decoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
+        decoder_attentions (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
-        cross_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
+            `torch.Tensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
+        cross_attentions (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
-        decoder_hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
+            `torch.Tensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
+        decoder_hidden_states (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
+            `torch.Tensor` of shape `(batch_size, generated_length, hidden_size)`.
         past_key_values (`Cache`, *optional*, returned when `use_cache=True`):
             Returns the model cache, used to speed up decoding. Different models have a different cache format, check
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
     """
 
     sequences: torch.LongTensor
-    scores: tuple[torch.FloatTensor] | None = None
-    logits: tuple[torch.FloatTensor] | None = None
-    encoder_attentions: tuple[torch.FloatTensor] | None = None
-    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    decoder_attentions: tuple[tuple[torch.FloatTensor]] | None = None
-    cross_attentions: tuple[tuple[torch.FloatTensor]] | None = None
-    decoder_hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
+    scores: tuple[torch.Tensor] | None = None
+    logits: tuple[torch.Tensor] | None = None
+    encoder_attentions: tuple[torch.Tensor] | None = None
+    encoder_hidden_states: tuple[torch.Tensor] | None = None
+    decoder_attentions: tuple[tuple[torch.Tensor]] | None = None
+    cross_attentions: tuple[tuple[torch.Tensor]] | None = None
+    decoder_hidden_states: tuple[tuple[torch.Tensor]] | None = None
     past_key_values: Cache | None = None
 
 
@@ -273,38 +273,38 @@ class GenerateBeamDecoderOnlyOutput(ModelOutput):
         sequences (`torch.LongTensor` of shape `(batch_size*num_return_sequences, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
-        sequences_scores (`torch.FloatTensor` of shape `(batch_size*num_return_sequences)`, *optional*, returned when `output_scores=True`):
+        sequences_scores (`torch.Tensor` of shape `(batch_size*num_return_sequences)`, *optional*, returned when `output_scores=True`):
             Final beam scores of the generated `sequences`.
-        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True`):
+        scores (`tuple(torch.Tensor)` *optional*, returned when `output_scores=True`):
             Beam transition scores for each vocabulary token at each generation step. Beam transition scores consisting
             of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam.
-            Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each generated token),
+            Tuple of `torch.Tensor` with up to `max_new_tokens` elements (one element for each generated token),
             with each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
-        logits (`tuple(torch.FloatTensor)` *optional*, returned when `output_logits=True`):
+        logits (`tuple(torch.Tensor)` *optional*, returned when `output_logits=True`):
             Unprocessed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
+            at each generation step. Tuple of `torch.Tensor` with up to `max_new_tokens` elements (one element for
             each generated token), with each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
         beam_indices (`torch.LongTensor`, *optional*, returned when `output_scores=True`):
             Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
             `(batch_size*num_return_sequences, sequence_length)`.
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
+        attentions (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
-        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
+            `torch.Tensor` of shape `(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
+        hidden_states (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size*num_beams*num_return_sequences, generated_length, hidden_size)`.
+            `torch.Tensor` of shape `(batch_size*num_beams*num_return_sequences, generated_length, hidden_size)`.
         past_key_values (`Cache`, *optional*, returned when `use_cache=True`):
             Returns the model cache, used to speed up decoding. Different models have a different cache format, check
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
     """
 
     sequences: torch.LongTensor
-    sequences_scores: torch.FloatTensor | None = None
-    scores: tuple[torch.FloatTensor] | None = None
-    logits: tuple[torch.FloatTensor] | None = None
+    sequences_scores: torch.Tensor | None = None
+    scores: tuple[torch.Tensor] | None = None
+    logits: tuple[torch.Tensor] | None = None
     beam_indices: torch.LongTensor | None = None
-    attentions: tuple[tuple[torch.FloatTensor]] | None = None
-    hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
+    attentions: tuple[tuple[torch.Tensor]] | None = None
+    hidden_states: tuple[tuple[torch.Tensor]] | None = None
     past_key_values: Cache | None = None
 
 
@@ -317,51 +317,51 @@ class GenerateBeamEncoderDecoderOutput(ModelOutput):
         sequences (`torch.LongTensor` of shape `(batch_size*num_return_sequences, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
-        sequences_scores (`torch.FloatTensor` of shape `(batch_size*num_return_sequences)`, *optional*, returned when `output_scores=True`):
+        sequences_scores (`torch.Tensor` of shape `(batch_size*num_return_sequences)`, *optional*, returned when `output_scores=True`):
             Final beam scores of the generated `sequences`.
-        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True`):
+        scores (`tuple(torch.Tensor)` *optional*, returned when `output_scores=True`):
             Beam transition scores for each vocabulary token at each generation step. Beam transition scores consisting
             of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam.
-            Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each generated token),
+            Tuple of `torch.Tensor` with up to `max_new_tokens` elements (one element for each generated token),
             with each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
-        logits (`tuple(torch.FloatTensor)` *optional*, returned when `output_logits=True`):
+        logits (`tuple(torch.Tensor)` *optional*, returned when `output_logits=True`):
             Unprocessed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
+            at each generation step. Tuple of `torch.Tensor` with up to `max_new_tokens` elements (one element for
             each generated token), with each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
         beam_indices (`torch.LongTensor`, *optional*, returned when `output_scores=True`):
             Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
             `(batch_size*num_return_sequences, sequence_length)`.
-        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer of the decoder) of shape `(batch_size, num_heads,
+        encoder_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True`):
+            Tuple of `torch.Tensor` (one for each layer of the decoder) of shape `(batch_size, num_heads,
             sequence_length, sequence_length)`.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+        encoder_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True`):
+            Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size*num_beams*num_return_sequences, sequence_length, hidden_size)`.
-        decoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
+        decoder_attentions (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size*num_beams*num_return_sequences, num_heads, generated_length,
+            `torch.Tensor` of shape `(batch_size*num_beams*num_return_sequences, num_heads, generated_length,
             sequence_length)`.
-        cross_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
+        cross_attentions (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
-        decoder_hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
+            `torch.Tensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
+        decoder_hidden_states (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size*num_beams*num_return_sequences, generated_length, hidden_size)`.
+            `torch.Tensor` of shape `(batch_size*num_beams*num_return_sequences, generated_length, hidden_size)`.
         past_key_values (`Cache`, *optional*, returned when `use_cache=True`):
             Returns the model cache, used to speed up decoding. Different models have a different cache format, check
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
     """
 
     sequences: torch.LongTensor
-    sequences_scores: torch.FloatTensor | None = None
-    scores: tuple[torch.FloatTensor] | None = None
-    logits: tuple[torch.FloatTensor] | None = None
+    sequences_scores: torch.Tensor | None = None
+    scores: tuple[torch.Tensor] | None = None
+    logits: tuple[torch.Tensor] | None = None
     beam_indices: torch.LongTensor | None = None
-    encoder_attentions: tuple[torch.FloatTensor] | None = None
-    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    decoder_attentions: tuple[tuple[torch.FloatTensor]] | None = None
-    cross_attentions: tuple[tuple[torch.FloatTensor]] | None = None
-    decoder_hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
+    encoder_attentions: tuple[torch.Tensor] | None = None
+    encoder_hidden_states: tuple[torch.Tensor] | None = None
+    decoder_attentions: tuple[tuple[torch.Tensor]] | None = None
+    cross_attentions: tuple[tuple[torch.Tensor]] | None = None
+    decoder_hidden_states: tuple[tuple[torch.Tensor]] | None = None
     past_key_values: Cache | None = None
 
 
@@ -664,7 +664,7 @@ class GenerationMixin(ContinuousMixin):
         next_sequence_length: int | None = None,
         past_key_values: Cache | None = None,
         attention_mask: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         is_first_iteration: bool | None = False,
         **kwargs,
     ):
@@ -1020,7 +1020,7 @@ class GenerationMixin(ContinuousMixin):
 
     def _prepare_multimodal_encoder_kwargs_for_generation(
         self: "GenerativePreTrainedModel", model_kwargs: dict[str, Any]
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         """Prepares image/video hidden states if model support this modality"""
         model_kwargs.setdefault("mm_encoder_outputs", {})
         keys_to_pop = set()
@@ -1738,10 +1738,10 @@ class GenerationMixin(ContinuousMixin):
             sequences (`torch.LongTensor`):
                 The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or
                 shorter if all batches finished early due to the `eos_token_id`.
-            scores (`tuple(torch.FloatTensor)`):
+            scores (`tuple(torch.Tensor)`):
                 Transition scores for each vocabulary token at each generation step. Beam transition scores consisting
                 of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam.
-                Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each generated token),
+                Tuple of `torch.Tensor` with up to `max_new_tokens` elements (one element for each generated token),
                 with each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
             beam_indices (`torch.LongTensor`, *optional*):
                 Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
@@ -3917,7 +3917,7 @@ class GenerationMixin(ContinuousMixin):
         generation_config: GenerationConfig,
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
-        inputs_tensor: torch.FloatTensor | None = None,
+        inputs_tensor: torch.Tensor | None = None,
         assistant_model: Optional["PreTrainedModel"] = None,
         assistant_tokenizer: Optional["PreTrainedTokenizerBase"] = None,
         tokenizer: Optional["PreTrainedTokenizerBase"] = None,
@@ -3946,7 +3946,7 @@ class GenerationMixin(ContinuousMixin):
             streamer (`BaseStreamer`, *optional*):
                 Streamer object that will be used to stream the generated sequences. Generated tokens are passed
                 through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
-            inputs_tensor (`torch.FloatTensor`, *optional*):
+            inputs_tensor (`torch.Tensor`, *optional*):
                 The input tensor for generation. For decoder models, usually `input_ids`. For encoder-decoder models,
                 the tensor that produced `model_kwargs["encoder_outputs"]`.
             assistant_model (`PreTrainedModel`, *optional*):

@@ -805,7 +805,7 @@ Checks `@auto_docstring` on public `PreTrainedModel` subclasses (`<Model>PreTrai
 +@auto_docstring
  @dataclass
  class AcmeModelOutputWithPast(ModelOutput):
-     logits: torch.FloatTensor | None = None
+     logits: torch.Tensor | None = None
 
 +@auto_docstring
  class AcmeForConditionalGeneration(AcmePreTrainedModel):
