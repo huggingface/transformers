@@ -95,6 +95,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("clipseg", "CLIPSegConfig"),
         ("clipseg_text_model", "CLIPSegTextConfig"),
         ("clipseg_vision_model", "CLIPSegVisionConfig"),
+        ("clm", "ClmConfig"),
         ("clvp", "ClvpConfig"),
         ("clvp_decoder", "ClvpDecoderConfig"),
         ("clvp_encoder", "ClvpEncoderConfig"),
