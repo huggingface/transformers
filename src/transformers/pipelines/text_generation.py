@@ -435,7 +435,9 @@ class TextGenerationPipeline(Pipeline):
         prompt_text = model_outputs["prompt_text"]
         generated_sequence = generated_sequence.numpy().tolist()
         records = []
-        other_outputs = {k: v for k, v in model_outputs.items() if k not in {"generated_sequence", "input_ids", "prompt_text"}}
+        other_outputs = {
+            k: v for k, v in model_outputs.items() if k not in {"generated_sequence", "input_ids", "prompt_text"}
+        }
         split_keys = {}
         if other_outputs:
             for k, v in other_outputs.items():
