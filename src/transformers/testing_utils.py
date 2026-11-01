@@ -4988,8 +4988,6 @@ def preserve_module_forwards(model: "PreTrainedModel"):
                 module.__dict__["forward"] = original_forward
 
 
-_ci_record_deps_baseline: set[str] | None = None
-
 # ---------------------------------------------------------------------------
 # Import chain tracker — records the full call chain for every transformers.*
 # import statement (cached or not) by overriding sys.modules with a dict
@@ -5139,20 +5137,20 @@ def _record_import_chain(module_name: str) -> None:
 
         _ci_deps_by_file.setdefault(dedup_key, set()).add(src_file_rel)
 
-        chain: list = []
         if _ci_record_chain:
+            chain: list = []
             repo_str = repo_root.as_posix() + "/"
             for fi in inspect.stack(context=0)[2:]:
                 fn = fi.filename.replace("\\", "/") if fi.filename else ""
                 fn = fn.removeprefix(repo_str)
                 if "tests/" in fn or "src/transformers/" in fn:
                     chain.append({"file": fn, "line": fi.lineno, "func": fi.function})
-        entry: dict = {"src_file": src_file_rel, "phase": _ci_current_phase, "chain": chain}
-        if _ci_current_test_id is not None:
-            entry["test_id"] = _ci_current_test_id
-        elif _ci_currently_collecting_file is not None:
-            entry["test_file"] = _ci_currently_collecting_file
-        _ci_deps_chains.append(entry)
+            entry: dict = {"src_file": src_file_rel, "phase": _ci_current_phase, "chain": chain}
+            if _ci_current_test_id is not None:
+                entry["test_id"] = _ci_current_test_id
+            elif _ci_currently_collecting_file is not None:
+                entry["test_file"] = _ci_currently_collecting_file
+            _ci_deps_chains.append(entry)
     except Exception:  # noqa: S110
         pass
     finally:
@@ -5326,6 +5324,8 @@ def record_ci_source_deps_chains() -> None:
     No-op if ``CI_RECORD_DEPS_OUTPUT`` is not set.  Call from ``pytest_sessionfinish``.
     xdist-aware: workers write per-worker files; controller merges them.
     """
+    if not _ci_record_chain:
+        return
     output_path = os.environ.get("CI_RECORD_DEPS_OUTPUT")
     if not output_path:
         return
@@ -5516,66 +5516,5 @@ def record_ci_source_deps_by_file() -> None:
         pass
 
 
-def snapshot_ci_source_deps_baseline() -> None:
-    """Snapshot the set of already-imported ``src/transformers/`` files after test collection.
-
-    Called from ``pytest_collection_finish`` in ``conftest.py``.  The diff against
-    ``record_ci_source_deps()`` at session end gives only what was imported during actual test
-    execution — excluding collection-time noise (e.g. pipeline mixin materializing model mappings
-    via ``.items()`` on ``_LazyAutoMapping`` at class definition time).  This isolates dynamic
-    runtime deps that the static fetcher misses (backbones, processors loaded via dynamic dispatch).
-    """
-    global _ci_record_deps_baseline
-    if not os.environ.get("CI_RECORD_DEPS_OUTPUT"):
-        return
-    _ci_record_deps_baseline = _ci_source_deps_current()
 
 
-def record_ci_source_deps() -> None:
-    """Write the list of ``src/transformers/`` source files imported by the tests to the path
-    given by ``CI_RECORD_DEPS_OUTPUT``.  No-op when the env var is not set.
-
-    Called from ``pytest_sessionfinish`` in ``conftest.py``.  Subtracts the baseline snapshot
-    taken at session start so that files already loaded by conftest / plugin initialisation
-    (e.g. all model packages pulled in by ``exporter_dynamo.py``) are excluded.
-    """
-    output_path = os.environ.get("CI_RECORD_DEPS_OUTPUT")
-    if not output_path:
-        return
-
-    out_dir = Path(output_path).parent
-    target, is_controller = _ci_record_target(out_dir, "deps_by_sys_module.json")
-    if is_controller:
-        merged_set: set[str] = set()
-        for wf in sorted(out_dir.glob("deps_by_sys_module_gw*.json")):
-            try:
-                merged_set.update(json.loads(wf.read_text(encoding="utf-8")))
-            except (OSError, json.JSONDecodeError):
-                pass
-        imported_files = sorted(merged_set)
-    else:
-        current = _ci_source_deps_current()
-        baseline = _ci_record_deps_baseline or set()
-        imported_files = sorted(current - baseline)
-    try:
-        out_dir.mkdir(parents=True, exist_ok=True)
-        with open(target, "w", encoding="utf-8") as f:
-            json.dump(imported_files, f, indent=2)
-    except OSError:
-        pass
-
-
-def _ci_source_deps_current() -> set[str]:
-    """Return the set of ``src/transformers/`` source file paths currently in ``sys.modules``."""
-    src_transformers = Path(__file__).parent.parent.parent.resolve() / "src" / "transformers"
-    result = set()
-    for module in sys.modules.values():
-        file = getattr(module, "__file__", None)
-        if not file:
-            continue
-        try:
-            rel = Path(file).resolve().relative_to(src_transformers)
-        except ValueError:
-            continue
-        result.add(f"src/transformers/{rel.as_posix()}")
-    return result

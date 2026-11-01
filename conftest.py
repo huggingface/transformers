@@ -39,13 +39,11 @@ from transformers.testing_utils import (
     patch_psutil_cpu_memory,
     patch_testing_methods_to_collect_info,
     patch_torch_compile_force_graph,
-    record_ci_source_deps,
     record_ci_source_deps_by_file,
     record_ci_source_deps_chains,
     scan_preloaded_test_module_deps,
     set_ci_collecting_file,
     set_ci_deps_phase,
-    snapshot_ci_source_deps_baseline,
     write_ci_module_graph,
 )
 from transformers.utils import enable_tf32
@@ -415,7 +413,6 @@ def pytest_collectstart(collector):
 def pytest_collection_finish(session):
     set_ci_deps_phase("post_collection")
     set_ci_collecting_file(None)
-    snapshot_ci_source_deps_baseline()
 
 
 def pytest_runtest_setup(item):
@@ -434,7 +431,6 @@ def pytest_sessionfinish(session, exitstatus):
     # If no tests are collected, pytest exists with code 5, which makes the CI fail.
     if exitstatus == 5:
         session.exitstatus = 0
-    record_ci_source_deps()
     record_ci_source_deps_by_file()
     record_ci_source_deps_chains()
     write_ci_module_graph()
