@@ -424,6 +424,8 @@ class AnyToAnyPipeline(Pipeline):
         generate_kwargs = self._prepare_generate_kwargs(generate_kwargs)
 
         generated_sequence = self.model.generate(**model_inputs, **generate_kwargs)
+        if input_ids is not None and generated_sequence.ndim == 2 and generated_sequence.shape[0] > input_ids.shape[0]:
+            generated_sequence = generated_sequence.reshape(input_ids.shape[0], -1, generated_sequence.shape[-1])
         return {"generated_sequence": generated_sequence, "prompt_text": prompt_text, "input_ids": input_ids}
 
     def postprocess(
@@ -438,6 +440,12 @@ class AnyToAnyPipeline(Pipeline):
         input_texts = [input_texts] if isinstance(input_texts, (str, Chat)) else input_texts
         generated_sequence = model_outputs["generated_sequence"]
         input_ids = model_outputs["input_ids"]
+        if getattr(generated_sequence, "ndim", 0) == 3:
+            generated_sequence = generated_sequence.flatten(0, 1)
+        if not input_texts or len(generated_sequence) % len(input_texts):
+            raise ValueError("Cannot align generated sequences with input texts")
+        candidates_per_input = len(generated_sequence) // len(input_texts)
+        input_texts = [text for text in input_texts for _ in range(candidates_per_input)]
         if return_type == ReturnType.TENSORS:
             return [
                 {"input_text": input_texts[i], "generated_token_ids": generated_sequence[i]}
@@ -464,6 +472,7 @@ class AnyToAnyPipeline(Pipeline):
             decoded_inputs = self.processor.post_process_multimodal_output(
                 input_ids, skip_special_tokens=skip_special_tokens, **postprocess_kwargs
             )
+            decoded_inputs = [text for text in decoded_inputs for _ in range(candidates_per_input)]
             for text_generated, decoded_input in zip(generated_outputs, decoded_inputs):
                 # There can be added characters before the input text, so we need to find the beginning of the input text in the generated text
                 index_input_text = text_generated.find(decoded_input)
