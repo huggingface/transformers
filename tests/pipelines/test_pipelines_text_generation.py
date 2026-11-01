@@ -664,13 +664,12 @@ class TextGenerationPipelineTests(unittest.TestCase):
             ],
         )
 
-
     def test_return_dict_in_generate_batched_metadata(self):
         generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2", max_new_tokens=2)
         generator.tokenizer.pad_token = generator.tokenizer.eos_token
         generator.tokenizer.padding_side = "left"
         texts = ["Artificial intelligence is", "Hello world"]
-        args = dict(return_dict_in_generate=True, output_scores=True, do_sample=False)
+        args = {"return_dict_in_generate": True, "output_scores": True, "do_sample": False}
 
         greedy = generator(texts, batch_size=2, **args)
         self.assertTrue(all("scores" in group[0] for group in greedy))
@@ -688,8 +687,12 @@ class TextGenerationPipelineTests(unittest.TestCase):
                 )
 
         sampled = generator(
-            texts, batch_size=2, num_return_sequences=2,
-            return_dict_in_generate=True, output_scores=True, do_sample=True,
+            texts,
+            batch_size=2,
+            num_return_sequences=2,
+            return_dict_in_generate=True,
+            output_scores=True,
+            do_sample=True,
         )
         self.assertTrue(all("scores" in record for group in sampled for record in group))
 
