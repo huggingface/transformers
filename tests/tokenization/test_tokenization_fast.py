@@ -453,3 +453,20 @@ class PatchMistralRegexHubCallTests(unittest.TestCase):
                 "not-a-real/hub-id",
             )
         self.assertIsNotNone(result)
+
+    def test_missing_transformers_version_non_mistral_not_patched(self):
+        # https://github.com/huggingface/transformers/issues/49623: old configs (e.g. deberta-v3) have no
+        # `transformers_version` and were treated as Mistral.
+        for transformers_version in [None, ""]:
+            with self.subTest(transformers_version=transformers_version), tempfile.TemporaryDirectory() as tmp_dir:
+                config = {"model_type": "deberta-v2"}
+                if transformers_version is not None:
+                    config["transformers_version"] = transformers_version
+                with open(os.path.join(tmp_dir, "config.json"), "w", encoding="utf-8") as f:
+                    json.dump(config, f)
+
+                tok = self._dummy_backend_tokenizer()
+                result = PreTrainedTokenizerFast._patch_mistral_regex(
+                    tok, tmp_dir, local_files_only=True, fix_mistral_regex=True
+                )
+                self.assertIsInstance(result.pre_tokenizer, pre_tokenizers.Whitespace)
