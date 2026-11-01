@@ -4025,6 +4025,134 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(out.logits[-1].tolist(), out.scores[-1].tolist())
         self.assertNotEqual(out_with_temp.logits[-1].tolist(), out_with_temp.scores[-1].tolist())
 
+    def test_repetition_penalty_left_padding_sampling(self):
+        """Regression test for #50147: left padding should not change EOS scores when PAD == EOS."""
+        set_seed(42)
+
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2", padding_side="left")
+        tokenizer.pad_token = tokenizer.eos_token
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+
+        # Left-padded input where PAD == EOS == tokenizer.eos_token_id
+        inputs = tokenizer(
+            ["Hello world"], return_tensors="pt", padding="max_length", max_length=12
+        )
+        padded = inputs.input_ids.to(torch_device)
+        attention_mask = inputs.attention_mask.to(torch_device)
+        self.assertTrue(torch.any(padded == tokenizer.pad_token_id))
+
+        # Baseline: repetition_penalty=1.0 -> no RepetitionPenaltyLogitsProcessor is added
+        baseline_out = model.generate(
+            padded,
+            attention_mask=attention_mask,
+            max_new_tokens=3,
+            repetition_penalty=1.0,
+            do_sample=True,
+            return_dict_in_generate=True,
+            output_scores=True,
+        )
+
+        # With penalty: processor is active but padding must not count as a genuine EOS occurrence
+        penalized_out = model.generate(
+            padded,
+            attention_mask=attention_mask,
+            max_new_tokens=3,
+            repetition_penalty=2.0,
+            do_sample=True,
+            return_dict_in_generate=True,
+            output_scores=True,
+        )
+
+        eos_token_id = tokenizer.eos_token_id
+        # EOS score must be identical: padding positions are masked out of the penalty
+        self.assertAlmostEqual(
+            baseline_out.scores[0][0, eos_token_id].item(),
+            penalized_out.scores[0][0, eos_token_id].item(),
+        )
+
+    def test_repetition_penalty_left_padding_beam_search(self):
+        """Regression test for #50147: beam search with left padding should not change EOS scores when PAD == EOS."""
+        set_seed(42)
+
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2", padding_side="left")
+        tokenizer.pad_token = tokenizer.eos_token
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+
+        inputs = tokenizer(
+            ["Hello world"], return_tensors="pt", padding="max_length", max_length=12
+        )
+        padded = inputs.input_ids.to(torch_device)
+        attention_mask = inputs.attention_mask.to(torch_device)
+        self.assertTrue(torch.any(padded == tokenizer.pad_token_id))
+
+        baseline_out = model.generate(
+            padded,
+            attention_mask=attention_mask,
+            max_new_tokens=3,
+            repetition_penalty=1.0,
+            num_beams=2,
+            return_dict_in_generate=True,
+            output_scores=True,
+        )
+        penalized_out = model.generate(
+            padded,
+            attention_mask=attention_mask,
+            max_new_tokens=3,
+            repetition_penalty=2.0,
+            num_beams=2,
+            return_dict_in_generate=True,
+            output_scores=True,
+        )
+
+        eos_token_id = tokenizer.eos_token_id
+        self.assertAlmostEqual(
+            baseline_out.scores[0][0, eos_token_id].item(),
+            penalized_out.scores[0][0, eos_token_id].item(),
+        )
+
+    def test_repetition_penalty_left_padding_multiple_return_sequences(self):
+        """Regression test for #50147: multiple return sequences with left padding should not change EOS scores."""
+        set_seed(42)
+
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2", padding_side="left")
+        tokenizer.pad_token = tokenizer.eos_token
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+
+        inputs = tokenizer(
+            ["Hello world"], return_tensors="pt", padding="max_length", max_length=12
+        )
+        padded = inputs.input_ids.to(torch_device)
+        attention_mask = inputs.attention_mask.to(torch_device)
+        self.assertTrue(torch.any(padded == tokenizer.pad_token_id))
+
+        baseline_out = model.generate(
+            padded,
+            attention_mask=attention_mask,
+            max_new_tokens=3,
+            repetition_penalty=1.0,
+            num_return_sequences=2,
+            do_sample=True,
+            return_dict_in_generate=True,
+            output_scores=True,
+        )
+        penalized_out = model.generate(
+            padded,
+            attention_mask=attention_mask,
+            max_new_tokens=3,
+            repetition_penalty=2.0,
+            num_return_sequences=2,
+            do_sample=True,
+            return_dict_in_generate=True,
+            output_scores=True,
+        )
+
+        eos_token_id = tokenizer.eos_token_id
+        # scores[0] has shape [batch_size * num_return_sequences, vocab_size]
+        self.assertAlmostEqual(
+            baseline_out.scores[0][0, eos_token_id].item(),
+            penalized_out.scores[0][0, eos_token_id].item(),
+        )
+
     def test_eos_token_id_int_and_list_top_k_top_sampling(self):
         "Tests that `generate` can run with a list of EOS token ids."
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")

@@ -3238,9 +3238,14 @@ class GenerationMixin(ContinuousMixin):
                 # Copy is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
                 # (the clone itself is always small)
                 next_token_logits = outputs.logits[:, -1].to(copy=True, dtype=torch.float32, device=input_ids.device)
-
+                processor_kwargs = {}
+                if any("attention_mask" in inspect.signature(p.__call__).parameters for p in logits_processor):
+                    attention_mask = model_kwargs.get("attention_mask")
+                    if attention_mask is not None and attention_mask.shape[-1] != input_ids.shape[-1]:
+                        attention_mask = attention_mask[:, : input_ids.shape[-1]]
+                    processor_kwargs["attention_mask"] = attention_mask
                 # pre-process distribution
-                next_token_scores = logits_processor(input_ids, next_token_logits)
+                next_token_scores = logits_processor(input_ids, next_token_logits, **processor_kwargs)
 
                 # Store scores, attentions and hidden_states when required
                 if return_dict_in_generate:
@@ -3737,7 +3742,13 @@ class GenerationMixin(ContinuousMixin):
             # b. Compute log probs -- get log probabilities from logits, process logits with processors (*e.g.*
             # `temperature`, ...), and add new logprobs to existing running logprobs scores.
             log_probs = nn.functional.log_softmax(logits, dim=-1)
-            log_probs = logits_processor(flat_running_sequences, log_probs)
+            processor_kwargs = {}
+            if any("attention_mask" in inspect.signature(p.__call__).parameters for p in logits_processor):
+                attention_mask = model_kwargs.get("attention_mask")
+                if attention_mask is not None and attention_mask.shape[-1] != flat_running_sequences.shape[-1]:
+                    attention_mask = attention_mask[:, : flat_running_sequences.shape[-1]]
+                processor_kwargs["attention_mask"] = attention_mask
+            log_probs = logits_processor(flat_running_sequences, log_probs, **processor_kwargs)
 
             # Store logits, attentions and hidden_states when required
             if return_dict_in_generate:
