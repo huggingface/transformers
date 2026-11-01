@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import contextlib
 import copy
 import glob
 import json
@@ -3259,6 +3260,91 @@ class TestAttentionImplementation(unittest.TestCase):
         with sdpa_kernel([backends[expected_backend]]):
             attn_output, _ = sdpa_attention_forward(module, query, key, value, attention_mask=attention_mask)
         self.assertEqual(attn_output.shape, (1, 16, 8, value_head_dim))
+
+    @parameterized.expand(
+        [
+            # (key head_dim, value head_dim, mask): decoding cases where `use_gqa_in_sdpa` is False
+            (64, 64, "bool"),  # left padding
+            (64, 64, "float"),
+            (64, 64, "2d"),  # (query_length, kv_length) mask, broadcast over batch and heads
+            (64, 64, "3d_per_head"),  # (num_heads, query_length, kv_length) mask, broadcast over batch
+            (64, 64, "position_bias"),  # per-head mask built by `create_position_bias_mask`
+            (512, 512, None),  # head_dim > 256
+            (192, 128, None),  # mismatched (MLA)
+            (192, 128, "bool"),
+        ]
+    )
+    def test_gqa_in_sdpa_decoding_folds_query_heads(self, key_head_dim, value_head_dim, mask_type):
+        # With a single query token, the query heads are folded onto their KV head instead of repeating K/V, so the
+        # output must match attending to the repeated K/V. On CUDA, restricting SDPA to the efficient backend (which
+        # excludes `math`) also proves the folded call stays on a fused kernel.
+        from torch.nn.attention import SDPBackend, sdpa_kernel
+
+        from transformers.integrations.sdpa_attention import repeat_kv, sdpa_attention_forward
+
+        module = torch.nn.Module()
+        module.num_key_value_groups = 4  # 8 query heads, 2 key/value heads
+        query = torch.randn(2, 8, 1, key_head_dim, device=torch_device)
+        key = torch.randn(2, 2, 16, key_head_dim, device=torch_device)
+        value = torch.randn(2, 2, 16, value_head_dim, device=torch_device)
+        attention_mask = torch.ones(2, 1, 1, 16, device=torch_device, dtype=torch.bool)
+        attention_mask[1, ..., :5] = False  # left padding
+        if mask_type == "float":
+            attention_mask = torch.zeros(2, 1, 1, 16, device=torch_device).masked_fill(
+                ~attention_mask, torch.finfo(torch.float32).min
+            )
+        elif mask_type == "2d":
+            attention_mask = attention_mask[1, 0]
+        elif mask_type == "3d_per_head":
+            attention_mask = torch.randn(8, 1, 16, device=torch_device).masked_fill(
+                ~attention_mask[1, 0], torch.finfo(torch.float32).min
+            )
+        elif mask_type is None:
+            attention_mask = None
+        position_bias = torch.randn(1, 8, 1, 16, device=torch_device) if mask_type == "position_bias" else None
+
+        expected, _ = sdpa_attention_forward(
+            torch.nn.Module(),
+            query,
+            repeat_kv(key, 4),
+            repeat_kv(value, 4),
+            attention_mask,
+            position_bias=position_bias,
+        )
+        fused_only = (
+            sdpa_kernel([SDPBackend.EFFICIENT_ATTENTION]) if torch_device == "cuda" else contextlib.nullcontext()
+        )
+        with patch(
+            "transformers.integrations.sdpa_attention.repeat_kv", side_effect=AssertionError("K/V were repeated")
+        ):
+            with fused_only:
+                attn_output, _ = sdpa_attention_forward(
+                    module, query, key, value, attention_mask, position_bias=position_bias
+                )
+        torch.testing.assert_close(attn_output, expected)
+
+    @parameterized.expand(
+        [
+            # (batch_size, kv_length, per-head mask): zero-size inputs, as in direct calls
+            (0, 16, False),  # empty batch
+            (2, 0, True),  # empty KV sequence
+        ]
+    )
+    def test_gqa_in_sdpa_decoding_with_empty_inputs(self, batch_size, kv_length, per_head_mask):
+        from transformers.integrations.sdpa_attention import repeat_kv, sdpa_attention_forward
+
+        module = torch.nn.Module()
+        module.num_key_value_groups = 4  # 8 query heads, 2 key/value heads
+        query = torch.randn(batch_size, 8, 1, 64, device=torch_device)
+        key = torch.randn(batch_size, 2, kv_length, 64, device=torch_device)
+        value = torch.randn(batch_size, 2, kv_length, 64, device=torch_device)
+        attention_mask = torch.zeros(batch_size, 8 if per_head_mask else 1, 1, kv_length, device=torch_device)
+
+        expected, _ = sdpa_attention_forward(
+            torch.nn.Module(), query, repeat_kv(key, 4), repeat_kv(value, 4), attention_mask
+        )
+        attn_output, _ = sdpa_attention_forward(module, query, key, value, attention_mask)
+        torch.testing.assert_close(attn_output, expected)
 
     @parameterized.expand(
         [
