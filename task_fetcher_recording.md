@@ -3089,3 +3089,36 @@ Output files saved locally:
 **Conclusion**: once `fetcher-recording` is rebased onto main (picking up PR #50000),
 the graph will be ~60% smaller and free of cross-model exporter noise. Bart remains
 because it is a real dependency via the generation mixin, not noise.
+
+### Real CI analysis: 8 shards, run 41302880472 (2026-11-01)
+
+Artifacts: `ci_artifacts/run_41302880472/shard{0..7}/deps_by_file.json`
+
+Per-shard summary (xdist, 8 workers per shard, real test execution):
+- 65-66 test files per shard, 525 unique test files total across all shards
+- 64-65 of 66 have `graph_transitive` (the one without = first collected in its worker)
+- Module graph per shard: ~310-350 parent modules, ~3400-3700 direct edges
+- All 3 phases populated (`execution` non-empty — real test runs, not just collection)
+
+#### Universal file set (random ideas, not necessary to implement)
+
+Files present in every test file's dep set (all phases unioned) vary by shard (39-112).
+Global intersection across all 8 shards = **30 files**.
+Excluding `test_modeling_pp_chart2table.py` (outlier — custom arch, no standard modeling
+stack) = **38 files**.
+
+These 38 are the true universal framework deps (modeling_utils, configuration_utils,
+tokenization_utils_base, generation/utils, cache_utils, modeling_outputs, etc.).
+
+**Random idea**: strip the universal set from each test file's dep list before writing
+`fetcher_source_deps.json`. This would:
+- Reduce file size significantly
+- Remove noise (static fetcher already handles these universally anyway)
+- Keep only model-specific edges — the real value the recorder adds
+
+`pp_chart2table` is the only outlier — custom architecture, missing conversion_mapping,
+core_model_loading, modeling_layers, modeling_outputs entirely.
+
+**Also noted**: `graph_transitive_collection` vs `graph_transitive_execution` as separate
+keys could be useful in future (currently BFS seeds from union of both). Trivial to add.
+Not needed now.
