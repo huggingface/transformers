@@ -182,7 +182,6 @@ def mamba_selective_scan(
     delta_bias: torch.Tensor | None = None,
     delta_softplus: bool = False,
     return_last_state: bool = False,
-    initial_state: torch.Tensor | None = None,
     use_mambapy: bool = False,
     use_associative_scan: bool = False,
     **kwargs,
@@ -214,10 +213,6 @@ def mamba_selective_scan(
     discrete_A = torch.exp(A[None, :, None, :] * dt[:, :, :, None])
     discrete_B = dt[:, :, :, None] * B[:, None, :, :].float()
     deltaB_u = discrete_B * hidden_states[:, :, :, None].float()
-
-    if initial_state is not None:
-        initial_state = initial_state.to(dtype=deltaB_u.dtype, device=deltaB_u.device)
-        deltaB_u[:, :, 0] += initial_state * discrete_A[:, :, 0]
 
     if use_mambapy and pscan is not None:
         all_states = pscan(discrete_A.transpose(1, 2), deltaB_u.transpose(1, 2))
@@ -251,6 +246,8 @@ def mamba_selective_scan(
 
     # Recurrent iteration
     else:
+        # "Initial hidden state" is not supported by the kernel path, so use
+        # the same zero initialization as the kernel
         ssm_state = torch.zeros(
             batch_size,
             intermediate_size,
@@ -442,19 +439,23 @@ class MambaMixer(nn.Module):
         time_proj_bias = self.dt_proj.bias.float() if self.dt_proj.bias is not None else None
 
         # Recurrent form
-        if recurrent_state is not None and seq_len == 1:
-            scan_output = mamba_selective_state_update(
-                recurrent_state,
-                hidden_states_B_C.transpose(1, 2)[..., 0],
-                time_step[..., 0],
-                A,
-                B[:, 0],
-                C[:, 0],
-                self.D,
-                z=gate[..., 0],
-                dt_bias=time_proj_bias,
-                dt_softplus=True,
-            ).unsqueeze(-1)
+        if recurrent_state is not None:
+            token_outputs = []
+            for t in range(seq_len):
+                token_output = mamba_selective_state_update(
+                    recurrent_state,
+                    hidden_states_B_C.transpose(1, 2)[..., t],
+                    time_step[..., t],
+                    A,
+                    B[:, t],
+                    C[:, t],
+                    self.D,
+                    z=gate[..., t],
+                    dt_bias=time_proj_bias,
+                    dt_softplus=True,
+                )
+                token_outputs.append(token_output)
+            scan_output = torch.stack(token_outputs, dim=-1)
 
         # Full sequence form
         else:
@@ -470,7 +471,6 @@ class MambaMixer(nn.Module):
                 delta_bias=time_proj_bias,
                 delta_softplus=True,
                 return_last_state=output_final_state,
-                initial_state=recurrent_state,
                 use_mambapy=self.use_mambapy,
                 use_associative_scan=self.use_associative_scan,
             )
