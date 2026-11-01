@@ -637,7 +637,7 @@ def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None
     splits = content.split('\"\"\"')  # fmt: skip
     content = "".join(splits[::2])
 
-    module_parts = str(module_fname).split(os.path.sep)
+    module_parts = str(module_fname).replace("\\", "/").split("/")
     imported_modules = []
 
     # Let's start with relative imports
@@ -659,7 +659,7 @@ def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None
             dep_parts = module_parts[: len(module_parts) - level] + module.split(".")
         else:
             dep_parts = module_parts[: len(module_parts) - level]
-        imported_module = os.path.sep.join(dep_parts)
+        imported_module = "/".join(dep_parts)
         imported_modules.append((imported_module, [imp.strip() for imp in imports.split(",")]))
 
     # Let's continue with direct imports
@@ -672,7 +672,7 @@ def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None
     for module, imports in direct_imports:
         import_parts = module.split(".")[1:]  # ignore the name of the repo since we add it below.
         dep_parts = ["src", "transformers"] + import_parts
-        imported_module = os.path.sep.join(dep_parts)
+        imported_module = "/".join(dep_parts)
         imported_modules.append((imported_module, [imp.strip() for imp in imports.split(",")]))
 
     result = []
@@ -681,7 +681,7 @@ def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None
         if (PATH_TO_REPO / f"{module_file}.py").is_file():
             module_file = f"{module_file}.py"
         elif (PATH_TO_REPO / module_file).is_dir() and (PATH_TO_REPO / module_file / "__init__.py").is_file():
-            module_file = os.path.sep.join([module_file, "__init__.py"])
+            module_file = f"{module_file}/__init__.py"
         else:
             # Some supported imports, such as deprecated module aliases, have no file on disk.
             continue
@@ -738,9 +738,10 @@ def get_module_dependencies(module_fname: str, cache: dict[str, list[str]] | Non
                 for mapping in new_imported_modules_from_import_structure.values():
                     for _module, _imports in mapping.items():
                         # Import Structure returns _module keys as import paths rather than local paths
-                        # We replace with os.path.sep so that it's Windows-compatible
-                        _module = _module.replace(".", os.path.sep)
+                        _module = _module.replace(".", "/")
                         _module = module.replace("__init__.py", f"{_module}.py")
+                        if not (PATH_TO_REPO / _module).is_file():
+                            continue
                         if _module not in new_imported_modules:
                             new_imported_modules[_module] = list(_imports)
                         else:
@@ -760,7 +761,10 @@ def get_module_dependencies(module_fname: str, cache: dict[str, list[str]] | Non
                     path_to_module = PATH_TO_REPO / module.replace("__init__.py", "")
                     dependencies.extend(
                         [
-                            os.path.join(module.replace("__init__.py", ""), f"{i}.py")
+                            # Use resolve().name to get the actual on-disk filename with correct
+                            # casing (on case-insensitive Windows filesystems, "SLIDING_ATTENTION.py"
+                            # would match "sliding_attention.py" via is_file() but we want the real name).
+                            f"{module.replace('__init__.py', '')}{(path_to_module / f'{i}.py').resolve().name}"
                             for i in imports
                             if (path_to_module / f"{i}.py").is_file()
                         ]
