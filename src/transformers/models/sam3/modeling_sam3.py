@@ -751,6 +751,15 @@ class Sam3ViTLayer(GradientCheckpointingLayer):
         position_ids = self.precompute_positions(config, window_size)
         self.position_ids = nn.Buffer(position_ids, persistent=False)
 
+    def _apply(self, fn, recurse=True):
+        res = super()._apply(fn, recurse=recurse)
+        if hasattr(self, "position_ids") and self.position_ids is not None:
+            if not self.position_ids.is_meta:
+                self.position_ids = self.precompute_positions(self.config, self.window_size).to(
+                    device=self.position_ids.device, dtype=torch.float32
+                )
+        return res
+
     @staticmethod
     def precompute_positions(config: Sam3ViTConfig, window_size: int):
         if window_size > 0:
@@ -765,8 +774,8 @@ class Sam3ViTLayer(GradientCheckpointingLayer):
             hw_grid = (image_size[1] // patch_size[1], image_size[0] // patch_size[0])
 
         hpos_ids, wpos_ids = torch.meshgrid(
-            torch.arange(hw_grid[0]),
-            torch.arange(hw_grid[1]),
+            torch.arange(hw_grid[0], dtype=torch.float32),
+            torch.arange(hw_grid[1], dtype=torch.float32),
             indexing="ij",
         )
         position_ids = torch.stack([wpos_ids.flatten(), hpos_ids.flatten()], dim=-1)
