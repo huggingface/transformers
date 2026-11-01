@@ -323,6 +323,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"^mlp1\.0\.", r"multi_modal_projector\.layer_norm\."),
             WeightRenaming(r"^mlp1\.1\.", r"multi_modal_projector\.linear_1\."),
             WeightRenaming(r"^mlp1\.3\.", r"multi_modal_projector\.linear_2\."),
+            WeightRenaming(r"^vision_projector\.vision_final_layernorm\.", r"vision_final_layernorm\."),
             WeightRenaming(r"^sound_encoder\.encoder\.", r"audio_tower\."),
             WeightRenaming(r"^sound_projection\.norm\.", r"embed_audio\.layer_norm\."),
             WeightRenaming(r"^sound_projection\.linear1\.", r"embed_audio\.linear_1\."),

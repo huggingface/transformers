@@ -104,8 +104,8 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
 
         if videos is not None:
-            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            video_num_patches = [sum(videos_inputs["num_patches"])]
+            videos_kwargs = {"temporal_patch_size": self.video_temporal_patch_dim, **output_kwargs["videos_kwargs"]}
+            videos_inputs = self.video_processor(videos=videos, **videos_kwargs)
 
         audio_num_tokens = []
         if audio is not None:
@@ -127,13 +127,16 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
             ]
         if videos is not None:
             assert len(text) == 1, "Video is not supported for batch size > 1"
+            video_metadata = output_kwargs.get("videos_kwargs", {}).get("video_metadata", None)
             videos_replacements = [
                 self.replace_video_token(
                     videos_inputs,
-                    0,
-                    num_frames=video_num_patches[0],
-                    video_metadata=output_kwargs.get("videos_kwargs", {}).get("video_metadata", None),
+                    idx,
+                    video_metadata=video_metadata[idx]
+                    if isinstance(video_metadata, (list, tuple))
+                    else video_metadata,
                 )
+                for idx in range(len(videos_inputs["pixel_values_videos"]))
             ]
         if audio is not None:
             audio_replacements = [
@@ -150,7 +153,6 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
-        # the video processor also returns the per-frame token counts used for the placeholder expansion above
         videos_inputs = {k: v for k, v in videos_inputs.items() if k in self.video_processor.model_input_names}
         output_data = {**text_inputs, **image_inputs, **videos_inputs}
         result = BatchFeature(data=output_data, tensor_type=return_tensors)
@@ -174,13 +176,15 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
         real `<video>` token, so the chunks use the image token; the model tells image from video
         by which `pixel_values_*` argument was passed.
         """
-        num_frames = kwargs["num_frames"]
+        num_frames = int(video_inputs["num_frames"][video_idx])
         video_metadata = kwargs.get("video_metadata")
-        tokens_per_tubelet = int(video_inputs["num_tokens"][video_idx])
+        n_groups = video_inputs["pixel_values_videos"].shape[1]
+        height, width = video_inputs["pixel_values_videos"].shape[-2:]
+        patch_size, merge_size = self.video_processor.patch_size, round(1 / self.video_processor.downsample_ratio)
+        tokens_per_tubelet = (height // patch_size) * (width // patch_size) // merge_size**2
         each_group = self.image_start_token + self.image_token * tokens_per_tubelet + self.image_end_token
 
         temporal_patch_dim = self.video_temporal_patch_dim
-        n_groups = (num_frames + temporal_patch_dim - 1) // temporal_patch_dim
 
         source_fps = video_metadata.fps if (video_metadata is not None and video_metadata.fps) else None
         frames_indices = video_metadata.frames_indices if video_metadata is not None else None
@@ -307,7 +311,8 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+        video_processor_input_names = self.video_processor.model_input_names
+        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names + video_processor_input_names))
 
 
 __all__ = ["NemotronH_Omni_Reasoning_V3Processor"]
