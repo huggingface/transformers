@@ -1073,12 +1073,15 @@ def replace_class_node(
             original_modeling_class_attributes[target_node.value] = node
 
     modular_class_attributes = {}
+    removed_names = set()
     for node in modular_class_node.body.body:
         target_node = get_assign_target(node)
         if target_node is not None:
             if hasattr(node.body[0].value, "func") and node.body[0].value.func.value == "AttributeError":
-                original_modeling_class_attributes.pop(target_node.value)
-                continue  # delete unnecessary cls attribute, especially in configs
+                # Delete an unnecessary cls attribute (especially in configs), or an inherited property and its setter
+                original_modeling_class_attributes.pop(target_node.value, None)
+                removed_names.add(target_node.value)
+                continue
             modular_class_attributes[target_node.value] = node
 
     # Use all original modeling attributes, and potentially override some with values in the modular
@@ -1121,6 +1124,9 @@ def replace_class_node(
     for name, node in original_modeling_methods.items():
         # A class attribute of the same name in modular shadows the method (e.g. a config field replacing a property)
         if name.removesuffix("_setter") in modular_class_attributes:
+            continue
+        # An `AttributeError()` class attribute removes the inherited method or property (including its setter)
+        if name.removesuffix("_setter") in removed_names:
             continue
         # If the method was redefined in modular, make appropriate changes to the node
         if name in modular_methods:
@@ -1783,8 +1789,10 @@ class ModularFileMapper(ModuleMapper):
                     cased_model_name = class_name.replace(suffix, "")
                     # If both the old model and new model share the last part of their name, it is detected as a common
                     # suffix, but it should not be the case -> use the full name in this case
-                    if len(cased_model_name) < len(cased_default_name) and cased_default_name in class_name:
-                        cased_model_name = cased_default_name
+                    if len(cased_model_name) < len(cased_default_name) and class_name.lower().startswith(
+                        cased_default_name.lower()
+                    ):
+                        cased_model_name = class_name[: len(cased_default_name)]
                 # If the new class name is of the form ` class NewNameOldNameClass(OldNameClass):`, i.e. it contains both names,
                 # add the OldName as suffix (see `examples/modular-transformers/modular_test_suffix.py`)
                 elif class_name.replace(cased_default_name, "") == modeling_bases[0]:
