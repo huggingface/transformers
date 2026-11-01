@@ -44,10 +44,11 @@ from ...utils import (
     auto_docstring,
     logging,
 )
+from ...utils.generic import is_flash_attention_requested
 from .configuration_falcon import FalconConfig
 
 
-if is_flash_attn_available():
+if is_flash_attn_available(kernels_fallback_ok=True):
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 logger = logging.get_logger(__name__)
@@ -540,7 +541,10 @@ class FalconDecoderLayer(GradientCheckpointingLayer):
         hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
 
-        self.self_attention = FALCON_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
+        attn_implementation = (
+            "flash_attention_2" if is_flash_attention_requested(config) else config._attn_implementation
+        )
+        self.self_attention = FALCON_ATTENTION_CLASSES[attn_implementation](config, layer_idx)
         self.mlp = FalconMLP(config)
         self.hidden_dropout = config.hidden_dropout
         self.config = config
