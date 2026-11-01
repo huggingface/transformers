@@ -90,7 +90,7 @@ def main():
     for job_name, deps_files in sorted(jobs.items()):
         result = merge_deps_files(deps_files)
         out_path = args.output_dir / f"{job_name}.json"
-        out_path.write_text(json.dumps(result, indent=2) + chr(10), encoding="utf-8")
+        out_path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
         print(f"{job_name}: {len(deps_files)} shard(s), {len(result)} test files -> {out_path}")
 
 
