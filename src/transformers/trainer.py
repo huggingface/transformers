@@ -2332,7 +2332,7 @@ class Trainer:
                     # In the DataParallel case, convert the scalar tensor into a 2-dim tensor with the same value repeated
                     num_items_in_batch = num_items_in_batch.unsqueeze(0).expand(self.args.n_gpu, -1)
                 # Divide by number of devices with the same batch
-                num_items_in_batch = num_items_in_batch // (
+                num_items_in_batch = num_items_in_batch / (
                     self.get_tp_size() * self.get_cp_size() * self.get_sp_size()
                 )
 

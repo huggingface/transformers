@@ -20,6 +20,7 @@ mixed precision, logging, NEFTune, memory metrics, and end-to-end training.
 import math
 import tempfile
 from functools import partial
+from types import SimpleNamespace
 
 import datasets
 import numpy as np
@@ -178,6 +179,46 @@ class TrainerDDPKwargsTest(TestCasePlus):
         # the attribute, this would still be False only by coincidence. Cross-check with ddp_static_graph=True
         # (above) that the kwarg IS plumbed when set — together these tests pin both directions.
         self.assertFalse(handler.static_graph)
+
+
+
+@require_torch
+class TrainerParallelTokenCountTest(TestCasePlus):
+    """Parallel normalization must preserve fractional token counts."""
+
+    def test_non_divisible_token_counts(self):
+        trainer = Trainer.__new__(Trainer)
+        trainer.args = SimpleNamespace(
+            average_tokens_across_devices=False,
+            n_gpu=1,
+        )
+        trainer.model_accepts_loss_kwargs = True
+        trainer.compute_loss_func = None
+        trainer._loss_shifts_labels = True
+
+        # valid tokens, TP, CP, SP, expected denominator
+        cases = [
+            (3, 1, 1, 1, 3.0),
+            (4, 1, 2, 1, 2.0),
+            (3, 1, 2, 1, 1.5),
+            (1, 1, 2, 1, 0.5),
+            (7, 2, 2, 1, 1.75),
+            (7, 1, 1, 4, 1.75),
+        ]
+
+        for valid, tp, cp, sp, expected in cases:
+            with self.subTest(valid=valid, tp=tp, cp=cp, sp=sp):
+                trainer.get_tp_size = lambda tp=tp: tp
+                trainer.get_cp_size = lambda cp=cp: cp
+                trainer.get_sp_size = lambda sp=sp: sp
+
+                labels = torch.tensor(
+                    [[1] + [2] * valid + [-100] * (7 - valid)]
+                )
+                count = trainer._get_num_items_in_batch(
+                    [{"labels": labels}], torch.device("cpu")
+                )
+                self.assertEqual(float(count), expected)
 
 
 # ---------------------------------------------------------------------------
