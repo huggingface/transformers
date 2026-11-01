@@ -319,7 +319,7 @@ def get_impacted_files_from_tiny_model_summary(diff_with_last_commit: bool = Fal
         for model_class in impacted_model_classes:
             module = reversed_structure[model_class]
             fn = f"modeling_{module.split('.')[-1]}.py"
-            files.add(f"src.transformers.{module}.{fn}".replace(".", os.path.sep).replace(f"{os.path.sep}py", ".py"))
+            files.add(f"src.transformers.{module}.{fn}".replace(".", "/").replace("/py", ".py"))
 
     return sorted(files)
 
@@ -442,12 +442,10 @@ def get_all_doctest_files() -> list[str]:
     Returns:
         `List[str]`: The complete list of Python and Markdown files on which we run doctest.
     """
-    py_files = [str(x.relative_to(PATH_TO_REPO)) for x in PATH_TO_REPO.glob("**/*.py")]
-    md_files = [str(x.relative_to(PATH_TO_REPO)) for x in PATH_TO_REPO.glob("**/*.md")]
+    py_files = [x.relative_to(PATH_TO_REPO).as_posix() for x in PATH_TO_REPO.glob("**/*.py")]
+    md_files = [x.relative_to(PATH_TO_REPO).as_posix() for x in PATH_TO_REPO.glob("**/*.md")]
 
     test_files_to_run = py_files + md_files
-    # change to use "/" as path separator
-    test_files_to_run = ["/".join(Path(x).parts) for x in test_files_to_run]
     # don't run doctest for files in `src/transformers/models/deprecated`
     test_files_to_run = [x for x in test_files_to_run if "models/deprecated" not in x]
 
@@ -991,7 +989,7 @@ def get_repo_utils_tests() -> list[str]:
     repo_utils_dir = PATH_TO_TESTS / "repo_utils"
     if not repo_utils_dir.is_dir():
         return []
-    return sorted(str(path.relative_to(PATH_TO_REPO)) for path in repo_utils_dir.glob("test_*.py"))
+    return sorted(path.relative_to(PATH_TO_REPO).as_posix() for path in repo_utils_dir.glob("test_*.py"))
 
 
 def should_run_repo_utils_tests(modified_files: list[str]) -> bool:
@@ -1018,7 +1016,7 @@ def get_conftest_tests() -> list[str]:
     conftest_dir = PATH_TO_TESTS / "conftest_tests"
     if not conftest_dir.is_dir():
         return []
-    return sorted(str(path.relative_to(PATH_TO_REPO)) for path in conftest_dir.glob("test_*.py"))
+    return sorted(path.relative_to(PATH_TO_REPO).as_posix() for path in conftest_dir.glob("test_*.py"))
 
 
 def should_run_conftest_tests(modified_files: list[str]) -> bool:
@@ -1109,7 +1107,7 @@ def infer_tests_to_run(output_file: str, diff_with_last_commit: bool = False, te
 
     test_files_to_run = sorted(set(test_files_to_run))
     # Remove SageMaker tests
-    test_files_to_run = [f for f in test_files_to_run if f.split(os.path.sep)[1] != "sagemaker"]
+    test_files_to_run = [f for f in test_files_to_run if f.split("/")[1] != "sagemaker"]
     # Make sure we did not end up with a test file that was removed
     test_files_to_run = [f for f in test_files_to_run if (PATH_TO_REPO / f).exists()]
 
@@ -1147,9 +1145,9 @@ def filter_tests(output_file: str, filters: list[str]):
         return
 
     if test_files == ["tests"]:
-        test_files = [os.path.join("tests", f) for f in os.listdir("tests") if f not in ["__init__.py"] + filters]
+        test_files = [f"tests/{f}" for f in os.listdir("tests") if f not in ["__init__.py"] + filters]
     else:
-        test_files = [f for f in test_files if f.split(os.path.sep)[1] not in filters]
+        test_files = [f for f in test_files if f.split("/")[1] not in filters]
 
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(" ".join(test_files))
@@ -1212,7 +1210,7 @@ def create_test_list_from_filter(full_test_list, out_path):
     # Collect info: job_name, file_name and files_to_test, so we can process after the loop
     to_output = []
     for job_name, _filter in JOB_TO_TEST_FILE.items():
-        file_name = os.path.join(out_path, f"{job_name}_test_list.txt")
+        file_name = Path(out_path) / f"{job_name}_test_list.txt"
         files_to_test = list(re.findall(_filter, all_test_files))
 
         print(job_name, file_name, len(files_to_test))

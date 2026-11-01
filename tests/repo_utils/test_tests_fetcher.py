@@ -877,3 +877,22 @@ src/transformers/configuration_utils.py
         assert parse_commit_message("[all test] commit") == {"skip": False, "no_filter": False, "test_all": True}
         assert parse_commit_message("[test-all] commit") == {"skip": False, "no_filter": False, "test_all": True}
         assert parse_commit_message("[all_test] commit") == {"skip": False, "no_filter": False, "test_all": True}
+
+    def test_no_windows_path_patterns_in_fetcher(self):
+        """
+        Regression test: tests_fetcher.py must never use os.path.sep, os.path.join, or
+        str(path.relative_to(...)) — all of which produce backslash-separated paths on Windows
+        and break comparisons against the posix paths used everywhere else in the fetcher.
+        Use '/' directly, f-strings, or path.relative_to(...).as_posix() instead.
+        """
+        import re
+
+        fetcher_path = Path(REPO_PATH) / "utils" / "tests_fetcher.py"
+        content = fetcher_path.read_text(encoding="utf-8")
+
+        self.assertNotIn("os.path.sep", content, "Use '/' directly instead of os.path.sep")
+        self.assertNotIn("os.path.join(", content, "Use f-strings or pathlib / operator instead of os.path.join")
+        self.assertFalse(
+            re.search(r"str\(.*relative_to\(", content),
+            "Use path.relative_to(...).as_posix() instead of str(path.relative_to(...))",
+        )
