@@ -174,7 +174,6 @@ class MambaModelTester:
         output_two = outputs.last_hidden_state
 
         self.parent.assertTrue(torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5))
-        # TODO the original mamba does not support decoding more than 1 token neither do we
 
     def create_and_check_mamba_chunked_prefill(self, config, input_ids, *args, device="cpu"):
         model = MambaModel(config)
