@@ -575,6 +575,8 @@
         title: CamemBERT
       - local: model_doc/canine
         title: CANINE
+      - local: model_doc/clm
+        title: CLM
       - local: model_doc/codegen
         title: CodeGen
       - local: model_doc/code_llama
@@ -1315,8 +1317,6 @@
         title: Chameleon
       - local: model_doc/chinese_clip
         title: Chinese-CLIP
-      - local: model_doc/clm
-        title: CLM
       - local: model_doc/clip
         title: CLIP
       - local: model_doc/clipseg

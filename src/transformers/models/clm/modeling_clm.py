@@ -139,6 +139,8 @@ CLM_TEMPLATE = r"""
     """
 )
 class ClmForDecision(DecisionMixin, ClmPreTrainedModel):
+    accepts_loss_kwargs = False
+
     def __init__(self, config: ClmConfig):
         super().__init__(config)
         self.model = AutoModel.from_config(config.text_config)
