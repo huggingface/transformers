@@ -14,15 +14,21 @@
 from collections.abc import Callable
 from functools import partial
 
-import torch
-import torch.nn.functional as F
-from torch._dynamo._trace_wrapped_higher_order_op import TransformGetItemToIndex
+from .utils.import_utils import PYTORCH_IMPORT_ERROR, is_torch_available
 
-from .cache_utils import Cache
-from .configuration_utils import PreTrainedConfig
-from .utils import is_torch_xpu_available, logging
-from .utils.generic import GeneralInterface, is_flash_attention_requested
-from .utils.import_utils import (
+
+if not is_torch_available():
+    raise ImportError(PYTORCH_IMPORT_ERROR.format(__name__))
+
+import torch  # noqa: E402
+import torch.nn.functional as F  # noqa: E402
+from torch._dynamo._trace_wrapped_higher_order_op import TransformGetItemToIndex  # noqa: E402
+
+from .cache_utils import Cache  # noqa: E402
+from .configuration_utils import PreTrainedConfig  # noqa: E402
+from .utils import is_torch_xpu_available, logging  # noqa: E402
+from .utils.generic import GeneralInterface, is_flash_attention_requested  # noqa: E402
+from .utils.import_utils import (  # noqa: E402
     is_torch_flex_attn_available,
     is_torchdynamo_exporting,
     is_tracing,
