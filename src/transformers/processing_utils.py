@@ -127,6 +127,7 @@ MODALITY_TO_BASE_CLASS_MAPPING = {
     "audio_tokenizer": (
         "HiggsAudioV2TokenizerModel",
         "DacModel",
+        "LiquidCodecModel",
         "PocketTTSAudioTokenizerModel",
     ),  # TODO: @eustlb, to be replaced with PreTrainedAudioTokenizerBase
     "audio_processor": "FeatureExtractionMixin",
@@ -705,7 +706,7 @@ class ProcessorMixin(PushToHubMixin):
         data = {**text_inputs, **processed_images, **processed_videos, **processed_audio}
         data = {k: v for k, v in data.items() if k not in self.unused_input_names}
 
-        if not kwargs.get("return_metadata"):
+        if not (kwargs.get("return_metadata") or kwargs.get("videos_kwargs", {}).get("return_metadata")):
             data.pop("video_metadata", None)
 
         return BatchFeature(data, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion)
