@@ -181,7 +181,6 @@ class TrainerDDPKwargsTest(TestCasePlus):
         self.assertFalse(handler.static_graph)
 
 
-
 @require_torch
 class TrainerParallelTokenCountTest(TestCasePlus):
     """Parallel normalization must preserve fractional token counts."""
