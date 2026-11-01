@@ -5231,13 +5231,8 @@ def install_ci_source_deps_tracker() -> None:
                         _record_module_graph_edge(submodule)
                         _record_import_chain(submodule)
                     else:
-                        # `item` is a class/function whose real module is not stored under
-                        # "transformers.<ClassName>" in sys.modules.  When BertModel is first
-                        # accessed, transformers.__getattr__ triggers importlib.import_module
-                        # and _tracking_import_module handles it.  But if BertModel is already
-                        # in transformers.__dict__ (cached by an earlier test), __getattr__ is
-                        # skipped.  Recover the real module via attr.__module__ — it is baked
-                        # in at class-definition time and is always the correct dotted name.
+                        # attr.__module__ gives the real defining module when the attr is
+                        # already cached in transformers.__dict__ (skips __getattr__).  # noqa: NC001
                         parent_mod = sys.modules.get(resolved_name)
                         if parent_mod is not None:
                             attr = parent_mod.__dict__.get(item)
@@ -5421,16 +5416,9 @@ def record_ci_source_deps_by_file() -> None:
             for test_file, phases in sorted(by_file.items())
         }
 
-    # ── Augment with transitive closure via module graph ──────────────────────
-    # The module graph records direct import edges (parent → child) as module names.
-    # For each test file we BFS from its known seed files through the graph to find
-    # files that were transitively imported but whose module bodies didn't re-execute
-    # for this test (sys.modules caching) — the "second encounter" problem.
-    #
-    # Steps:
-    #  1. Build a file-path graph from the module-name graph using sys.modules.__file__.
-    #  2. For each test file: seed from known collection+execution deps, BFS, collect new.
-    #  3. Store newly-discovered files under "graph_transitive" key.
+    # BFS from each test file's seeds through the module graph to recover transitive deps
+    # missed because sys.modules caching prevented module bodies from re-executing on
+    # 2nd+ encounters.  Results stored under "graph_transitive" key.  # noqa: NC001 NC002
 
     src_root = _ci_source_deps_src_root
     repo_root = _ci_source_deps_repo_root
