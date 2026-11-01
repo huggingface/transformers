@@ -1,0 +1,56 @@
+name: Triage PRs
+
+# Closes PRs that link an issue their author may not work on, and labels PRs that link none as standalone; see
+# scripts/triage_prs.py. `edited` re-checks a PR when its description changes, which also reopens a PR this closed
+# once it links a qualifying issue.
+# PR events only log what they would do until the rules are enforced. A manual run checks every
+# open PR, and applies the decisions if `dry_run` is unchecked.
+#
+# `pull_request_target` so the token can label and close PRs from forks. The job checks out the
+# base branch and only reads the PR through the API, so nothing from the PR is executed.
+
+on:
+  pull_request_target:
+    types: [opened, reopened, edited]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Log decisions without labeling, commenting on, or closing PRs
+        type: boolean
+        default: true
+
+permissions: {}
+
+concurrency:
+  group: triage-prs-${{ github.event.pull_request.number || 'all' }}
+  cancel-in-progress: false
+
+jobs:
+  triage:
+    name: Triage PRs
+    if: github.repository == 'huggingface/transformers'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: write
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      DRY_RUN: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        persist-credentials: false
+
+    - name: Setup Python
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      with:
+        python-version-file: .python-version
+
+    - name: Install requirements
+      run: |
+        pip install PyGithub
+    - name: Triage PRs
+      run: |
+        python scripts/triage_prs.py
