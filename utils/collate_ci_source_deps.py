@@ -28,9 +28,9 @@ Expected artifact layout (job / shard / deps_by_file.json)::
 
 Output::
 
-    <output-dir>/tests_torch.json
-    <output-dir>/tests_generation.json
-    <output-dir>/pipelines_torch.json
+    <output-dir>/tests_torch_runtime_deps.json
+    <output-dir>/tests_generation_runtime_deps.json
+    <output-dir>/pipelines_torch_runtime_deps.json
 
 Usage:
     python utils/collate_ci_source_deps.py --artifacts-dir <dir> --output-dir <dir>
@@ -76,7 +76,7 @@ def main():
     args.output_dir.mkdir(parents=True, exist_ok=True)
     for job_name, deps_files in sorted(jobs.items()):
         result = merge_deps_files(deps_files)
-        out_path = args.output_dir / f"{job_name}.json"
+        out_path = args.output_dir / f"{job_name}_runtime_deps.json"
         out_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
         print(f"{job_name}: {len(deps_files)} shard(s), {len(result)} test files -> {out_path}")
 
