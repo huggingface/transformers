@@ -2011,6 +2011,34 @@ Hey how are you doing"""  # noqa: W293
         filtered_sequence = [x for x in filtered_sequence if x is not None]
         self.assertEqual(encoded_sequence, filtered_sequence)
 
+    def test_special_tokens_mask_flags_special_tokens_in_text(self):
+        tokenizer = self.get_tokenizer(do_lower_case=False)
+        text, inputs = "Encode <extra_in_text> this.", {}
+        if hasattr(self, "get_words_and_boxes"):
+            words, boxes = self.get_words_and_boxes()
+            text, inputs = [words[0], "<extra_in_text>"], {"boxes": boxes[:1] * 2}
+        elif hasattr(self, "get_nodes_and_xpaths"):
+            nodes, xpaths = self.get_nodes_and_xpaths()
+            text, inputs = [nodes[0], "<extra_in_text>"], {"xpaths": xpaths[:1] * 2}
+        elif "table" in inspect.signature(tokenizer.__call__).parameters:
+            self.skipTest("Table tokenizers do not take text")
+        tokenizer.add_special_tokens({"extra_special_tokens": ["<extra_in_text>"]})
+        extra_id = tokenizer.convert_tokens_to_ids("<extra_in_text>")
+
+        for add_special_tokens in (True, False):
+            with self.subTest(add_special_tokens=add_special_tokens):
+                encoded = tokenizer(
+                    text,
+                    **inputs,
+                    add_special_tokens=add_special_tokens,
+                    return_special_tokens_mask=True,
+                )
+                special_tokens_mask = encoded["special_tokens_mask"]
+                self.assertEqual(special_tokens_mask[encoded["input_ids"].index(extra_id)], 1)
+                # Only the template tokens and the token typed in the text are flagged, not e.g. unknown words
+                num_template_tokens = tokenizer.num_special_tokens_to_add() if add_special_tokens else 0
+                self.assertEqual(sum(special_tokens_mask), num_template_tokens + 1)
+
     def test_padding_side_in_kwargs(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):

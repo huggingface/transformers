@@ -587,6 +587,9 @@ class LayoutLMv3Tokenizer(TokenizersBackend):
             for encoding in encodings
         ]
 
+        if return_special_tokens_mask:
+            self._flag_special_tokens_in_text(batch_text_or_text_pairs, tokens_and_encodings, is_split_into_words=True)
+
         # Convert the output to have dict[list] from list[dict] and remove the additional overflows dimension
         sanitized_tokens = {}
         for key in tokens_and_encodings[0][0]:

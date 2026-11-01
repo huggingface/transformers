@@ -772,6 +772,34 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         """
         return self._tokenizer.decoder
 
+    def _flag_special_tokens_in_text(self, batch_texts, tokens_and_encodings, is_split_into_words: bool = False):
+        """
+        Flags, in place in the `special_tokens_mask` of `tokens_and_encodings`, the special tokens typed in the input
+        texts, as the Rust encoder only flags the ones added by the template. A special token is typed in the text when
+        its offsets span exactly its own string, which also tells it apart from an unknown word mapped to the unk token.
+        """
+        special_tokens = dict(zip(self.all_special_ids, self.all_special_tokens))
+        for text_or_pair, (encoding_dict, encodings) in zip(batch_texts, tokens_and_encodings):
+            if is_split_into_words:
+                is_single = not text_or_pair or isinstance(text_or_pair[0], str)
+            else:
+                is_single = isinstance(text_or_pair, str)
+            texts = (text_or_pair,) if is_single else text_or_pair
+            for mask, e in zip(encoding_dict["special_tokens_mask"], encodings):
+                ids = e.ids
+                candidates = [i for i, flagged in enumerate(mask) if not flagged and ids[i] in special_tokens]
+                if candidates:
+                    offsets, sequence_ids, word_ids = e.offsets, e.sequence_ids, e.word_ids
+                    for i in candidates:
+                        if sequence_ids[i] is None:
+                            continue
+                        text = texts[sequence_ids[i]]
+                        if not isinstance(text, str):
+                            text = text[word_ids[i]]  # pre-split input: offsets are relative to the word
+                        start, end = offsets[i]
+                        if text[start:end] == special_tokens[ids[i]]:
+                            mask[i] = 1
+
     def _convert_encoding(
         self,
         encoding: EncodingFast,
@@ -1090,6 +1118,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             )
             for encoding in encodings
         ]
+
+        if return_special_tokens_mask:
+            self._flag_special_tokens_in_text(batch_text_or_text_pairs, tokens_and_encodings, is_split_into_words)
 
         # Convert the output to have dict[list] from list[dict]
         sanitized_tokens = {}
