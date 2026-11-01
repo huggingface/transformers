@@ -49,7 +49,7 @@ model = AutoModelForCausalLM.from_pretrained(
 </hfoption>
 <hfoption id="specific layers only">
 
-Quantize a model by creating a dictionary specifying the `nbits` and `group_size` for the linear layers to quantize. Pass them to [`HqqConfig`] and set which layers to quantize with the config. This approach is especially useful for quantizing mixture-of-experts (MoEs) because they are less affected ly lower quantization settings.
+Quantize a model by creating a dictionary specifying the `nbits` and `group_size` for the linear layers to quantize. Pass them to [`HqqConfig`] and set which layers to quantize with the config. This approach is especially useful for quantizing mixture-of-experts (MoEs) because they are less affected by lower quantization settings.
 
 ``` py
 q4_config = {'nbits':4, 'group_size':64}
