@@ -403,6 +403,8 @@ class TextGenerationPipeline(Pipeline):
                     other_outputs[key] = value.reshape(in_b, out_b // in_b, *value.shape[1:])
                 if isinstance(value, tuple) and len(value[0]) == out_b:
                     value = torch.stack(value).swapaxes(0, 1)
+                    if out_b != in_b:
+                        value = value.reshape(in_b, out_b // in_b, *value.shape[1:])
                     other_outputs[key] = value
         else:
             generated_sequence = output
@@ -417,7 +419,7 @@ class TextGenerationPipeline(Pipeline):
             "prompt_text": prompt_text,
         }
         if other_outputs:
-            model_outputs.update({"additional_outputs": other_outputs})
+            model_outputs.update({k: v for k, v in other_outputs.items() if isinstance(v, torch.Tensor)})
         return model_outputs
 
     def postprocess(
@@ -433,10 +435,14 @@ class TextGenerationPipeline(Pipeline):
         prompt_text = model_outputs["prompt_text"]
         generated_sequence = generated_sequence.numpy().tolist()
         records = []
-        other_outputs = model_outputs.get("additional_outputs", {})
+        other_outputs = {
+            k: v for k, v in model_outputs.items() if k not in {"generated_sequence", "input_ids", "prompt_text"}
+        }
         split_keys = {}
         if other_outputs:
             for k, v in other_outputs.items():
+                if len(generated_sequence) > 1 and isinstance(v, torch.Tensor) and v.shape[0] == 1:
+                    v = v[0]
                 if isinstance(v, torch.Tensor) and v.shape[0] == len(generated_sequence):
                     split_keys[k] = v.numpy().tolist()
 
