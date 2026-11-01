@@ -36,6 +36,7 @@ from ...image_utils import (
     get_image_size_for_max_height_width,
     make_list_of_images,
 )
+from ...integrations.hub_processing_kernels import upsample_argmax_with_kernel, use_processing_kernel
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available
 
@@ -607,6 +608,7 @@ class Sapiens2ImageProcessor(TorchvisionBackend):
 
         return reorder_images(processed_images_grouped, grouped_images_index)
 
+    @use_processing_kernel(upsample_argmax_with_kernel)
     def post_process_semantic_segmentation(
         self, outputs, target_sizes: list[tuple] | None = None, return_segmentation_scores: bool = False
     ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessorOutput]":

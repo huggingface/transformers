@@ -178,6 +178,16 @@ class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
     size = {"shortest_edge": 384 * 384, "longest_edge": 1536 * 1536}
     temporal_patch_size = 1
 
+    @property
+    def patch_block_size(self):
+        """Patches are written row by row, not in `merge_size` blocks."""
+        return 1
+
+    @property
+    def flatten_patches(self):
+        """Patches are returned as `(C * T, P, P)` blocks."""
+        return False
+
     def patchify(
         self,
         images: "torch.Tensor",

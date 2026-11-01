@@ -29,6 +29,7 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
+from ...integrations.hub_processing_kernels import resize_normalize_patchify_images_with_kernel, use_processing_kernel
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
@@ -153,17 +154,7 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
         **kwargs,
     ) -> "torch.Tensor":
         """Resize dynamically based on input image aspect ratio."""
-        if not size.shortest_edge or not size.longest_edge:
-            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
-
-        height, width = images.shape[-2:]
-        resized_height, resized_width = smart_resize(
-            height,
-            width,
-            factor=factor,
-            min_pixels=size.shortest_edge,
-            max_pixels=size.longest_edge,
-        )
+        resized_height, resized_width = self._resized_size(*images.shape[-2:], size, factor)
         return super().resize(
             image=images,
             size=SizeDict(height=resized_height, width=resized_width),
@@ -172,6 +163,13 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
             # `resample=1` (LANCZOS), but the original implementation never uses it.
             resample=PILImageResampling.BICUBIC,
         )
+
+    def _resized_size(self, height, width, size, factor):
+        """Size an image of `height` x `width` pixels is resized to."""
+        # get_number_of_image_patches repeats this rule because vLLM needs a patch count
+        if not size.shortest_edge or not size.longest_edge:
+            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
+        return smart_resize(height, width, factor=factor, min_pixels=size.shortest_edge, max_pixels=size.longest_edge)
 
     def patchify(
         self,
@@ -183,22 +181,14 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
         """Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."""
         batch_size, channel, resized_height, resized_width = images.shape
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-        patches = images.reshape(
-            batch_size,
-            channel,
-            grid_h // merge_size,
-            merge_size,
-            patch_size,
-            grid_w // merge_size,
-            merge_size,
-            patch_size,
-        )
-        # Flatten patches in row-major order in comparison to Qwen
-        patches = patches.permute(0, 2, 3, 5, 6, 1, 4, 7)
+        # Patches in plain row-major order, unlike Qwen2-VL's `merge_size` x `merge_size` blocks. The original code
+        # split rows and columns by `merge_size` and the permute joined them back, which gave this same order.
+        patches = images.reshape(batch_size, channel, grid_h, patch_size, grid_w, patch_size)
+        patches = patches.permute(0, 2, 4, 1, 3, 5)
 
         flatten_patches = (
-            patches.unsqueeze(6)
-            .expand(-1, -1, -1, -1, -1, -1, temporal_patch_size, -1, -1)
+            patches.unsqueeze(4)
+            .expand(-1, -1, -1, -1, temporal_patch_size, -1, -1)
             .reshape(
                 batch_size,
                 grid_h * grid_w,
@@ -208,6 +198,7 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
 
         return flatten_patches, grid_h, grid_w
 
+    @use_processing_kernel(resize_normalize_patchify_images_with_kernel)
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -295,6 +286,11 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
             height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
         )
         return resized_height // patch_size, resized_width // patch_size
+
+    @property
+    def patch_block_size(self):
+        """Patches are written row by row, not in `merge_size` blocks."""
+        return 1
 
 
 __all__ = ["HunYuanVLImageProcessor"]
