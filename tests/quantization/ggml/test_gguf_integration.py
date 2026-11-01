@@ -29,6 +29,7 @@ from transformers import (
     Qwen3_5MoeForCausalLM,
 )
 from transformers.testing_utils import (
+    require_accelerate,
     require_gguf,
     require_kernels,
     require_torch_accelerator,
@@ -64,6 +65,165 @@ class GgufDequantizeTest(unittest.TestCase):
                 theirs = reference(blocks.numpy().reshape(-1).copy(), GGMLQuantizationType(ggml_type))
                 # `equal_nan`: a random scale can be a NaN, and both sides must produce the same one
                 self.assertTrue(np.array_equal(ours, theirs.reshape(-1)[: ours.size], equal_nan=True))
+
+
+class Glm4MoeGgufRoundTripTest(unittest.TestCase):
+    """A tiny GLM-4.5 written the way llama.cpp's converter writes one, loaded back through `from_pretrained`.
+
+    The real checkpoints are 100B+, so this is what runs without a download: same metadata keys and tensor
+    names as `ggml-org/GLM-4.5-Air-GGUF`, experts stacked per projection, and the MTP block appended as
+    `blk.{num_hidden_layers}`.
+    """
+
+    def tiny_model(self, **kwargs):
+        from transformers import Glm4MoeConfig, Glm4MoeForCausalLM
+
+        config = Glm4MoeConfig(
+            vocab_size=272,
+            hidden_size=64,
+            intermediate_size=96,
+            num_hidden_layers=3,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=32,  # not hidden_size // num_attention_heads, as on the real models
+            rope_parameters={"rope_type": "default", "rope_theta": 1e6, "partial_rotary_factor": 0.5},
+            moe_intermediate_size=32,
+            n_routed_experts=8,
+            num_experts_per_tok=2,
+            routed_scaling_factor=2.5,
+            first_k_dense_replace=1,
+            num_nextn_predict_layers=1,
+            **kwargs,
+        )
+        torch.manual_seed(0)
+        model = Glm4MoeForCausalLM(config).eval()
+        with torch.no_grad():
+            for name, param in model.named_parameters():
+                param.copy_((1.0 if "norm" in name else 0.0) + 0.05 * torch.randn_like(param))
+            for layer in model.model.layers[config.first_k_dense_replace :]:
+                layer.mlp.gate.e_score_correction_bias.normal_(std=0.1)
+        return model
+
+    def write_gguf(self, model, path):
+        import gguf
+
+        from transformers.convert_slow_tokenizer import bytes_to_unicode
+
+        config, state = model.config, model.state_dict()
+        layers, inter = config.num_hidden_layers, config.moe_intermediate_size
+        writer = gguf.GGUFWriter(path, "glm4moe")
+        writer.add_block_count(layers + 1)
+        writer.add_nextn_predict_layers(1)
+        writer.add_context_length(config.max_position_embeddings)
+        writer.add_embedding_length(config.hidden_size)
+        writer.add_feed_forward_length(config.intermediate_size)
+        writer.add_head_count(config.num_attention_heads)
+        writer.add_head_count_kv(config.num_key_value_heads)
+        writer.add_rope_freq_base(config.rope_parameters["rope_theta"])
+        writer.add_layer_norm_rms_eps(config.rms_norm_eps)
+        writer.add_key_length(config.head_dim)
+        writer.add_rope_dimension_count(config.head_dim // 2)
+        writer.add_expert_count(config.n_routed_experts)
+        writer.add_expert_used_count(config.num_experts_per_tok)
+        writer.add_expert_group_count(config.n_group)
+        writer.add_expert_group_used_count(config.topk_group)
+        writer.add_expert_feed_forward_length(inter)
+        writer.add_expert_shared_count(config.n_shared_experts)
+        writer.add_leading_dense_block_count(config.first_k_dense_replace)
+        writer.add_expert_gating_func(gguf.ExpertGatingFuncType.SIGMOID)
+        writer.add_expert_weights_scale(config.routed_scaling_factor)
+        writer.add_expert_weights_norm(config.norm_topk_prob)
+        tokens = list(bytes_to_unicode().values())
+        tokens += [f"[PAD{i}]" for i in range(config.vocab_size - len(tokens) - 3)]
+        tokens += ["<|endoftext|>", "<|user|>", "<|observation|>"]
+        writer.add_tokenizer_model("gpt2")
+        writer.add_tokenizer_pre("glm4")
+        writer.add_token_list(tokens)
+        writer.add_token_merges([])
+        writer.add_eos_token_id(len(tokens) - 3)
+        writer.add_eot_token_id(len(tokens) - 2)
+        writer.add_eom_token_id(len(tokens) - 1)
+
+        def put(name, tensor):
+            writer.add_tensor(name, tensor.detach().float().numpy().copy())
+
+        def put_layer(src, dst):
+            hf, blk = f"model.layers.{src}.", f"blk.{dst}."
+            for ours, theirs in [
+                ("input_layernorm", "attn_norm"),
+                ("post_attention_layernorm", "post_attention_norm"),
+                ("self_attn.q_proj", "attn_q"),
+                ("self_attn.k_proj", "attn_k"),
+                ("self_attn.v_proj", "attn_v"),
+                ("self_attn.o_proj", "attn_output"),
+                ("self_attn.q_norm", "attn_q_norm"),
+                ("self_attn.k_norm", "attn_k_norm"),
+                ("mlp.gate_proj", "ffn_gate"),
+                ("mlp.up_proj", "ffn_up"),
+                ("mlp.down_proj", "ffn_down"),
+                ("mlp.gate", "ffn_gate_inp"),
+                ("mlp.shared_experts.gate_proj", "ffn_gate_shexp"),
+                ("mlp.shared_experts.up_proj", "ffn_up_shexp"),
+                ("mlp.shared_experts.down_proj", "ffn_down_shexp"),
+            ]:
+                for leaf in ("weight", "bias"):
+                    if f"{hf}{ours}.{leaf}" in state:
+                        put(f"{blk}{theirs}.{leaf}", state[f"{hf}{ours}.{leaf}"])
+            if f"{hf}mlp.experts.gate_up_proj" in state:
+                gate_up = state[f"{hf}mlp.experts.gate_up_proj"]
+                put(f"{blk}ffn_gate_exps.weight", gate_up[:, :inter])
+                put(f"{blk}ffn_up_exps.weight", gate_up[:, inter:])
+                put(f"{blk}ffn_down_exps.weight", state[f"{hf}mlp.experts.down_proj"])
+                put(f"{blk}exp_probs_b.bias", state[f"{hf}mlp.gate.e_score_correction_bias"])
+
+        put("token_embd.weight", state["model.embed_tokens.weight"])
+        put("output_norm.weight", state["model.norm.weight"])
+        if not config.tie_word_embeddings:
+            put("output.weight", state["lm_head.weight"])
+        for layer in range(layers):
+            put_layer(layer, layer)
+        put_layer(layers - 1, layers)  # the MTP block: a whole decoder layer...
+        put(f"blk.{layers}.nextn.eh_proj.weight", torch.zeros(config.hidden_size, 2 * config.hidden_size))
+        writer.write_header_to_file()
+        writer.write_kv_data_to_file()
+        writer.write_tensors_to_file()
+        writer.close()
+
+    @require_gguf
+    @require_accelerate
+    def test_loads_what_llama_cpp_writes(self):
+        for kwargs in ({"attention_bias": True}, {"use_qk_norm": True, "tie_word_embeddings": True, "n_group": 2}):
+            with self.subTest(**kwargs), tempfile.TemporaryDirectory() as tmp:
+                reference = self.tiny_model(**kwargs)
+                self.write_gguf(reference, f"{tmp}/model.gguf")
+                model, info = AutoModelForCausalLM.from_pretrained(
+                    tmp, gguf_file="model.gguf", dtype=torch.float32, output_loading_info=True
+                )
+
+                self.assertEqual(type(model).__name__, "Glm4MoeForCausalLM")
+                self.assertEqual(info["missing_keys"], set())
+                # ...that the decoder stack does not have. Real files put it at 46 or 92, which the model ignores.
+                self.assertTrue(all(key.startswith("model.layers.3.") for key in info["unexpected_keys"]))
+
+                for field in (
+                    "num_hidden_layers",
+                    "head_dim",
+                    "rope_parameters",
+                    "attention_bias",
+                    "use_qk_norm",
+                    "n_group",
+                    "routed_scaling_factor",
+                    "tie_word_embeddings",
+                ):
+                    self.assertEqual(getattr(model.config, field), getattr(reference.config, field), field)
+                self.assertEqual(model.config.eos_token_id, [269, 270, 271])
+
+                loaded = model.state_dict()
+                for name, tensor in reference.state_dict().items():
+                    torch.testing.assert_close(loaded[name], tensor, rtol=0, atol=0, msg=name)
+                input_ids = torch.arange(24).reshape(2, 12)
+                with torch.no_grad():
+                    torch.testing.assert_close(model(input_ids).logits, reference(input_ids).logits)
 
 
 class GgufTokenizerTesterMixin:
@@ -572,6 +732,15 @@ class FlanT5GgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
     gguf_repo = "Felladrin/gguf-flan-t5-small"
     quantized_gguf_file = "flan-t5-small.Q8_0.gguf"
     reference_repo = "google/flan-t5-small"
+
+
+@slow
+class Glm4MoeGgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
+    """Byte-level with the `glm4` pre-tokenizer. The first split of this file holds the metadata alone."""
+
+    gguf_repo = "ggml-org/GLM-4.5-Air-GGUF"
+    quantized_gguf_file = "GLM-4.5-Air-Q4_K_M-00001-of-00002.gguf"
+    reference_repo = "zai-org/GLM-4.5-Air"
 
 
 @slow
