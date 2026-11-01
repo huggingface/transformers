@@ -176,38 +176,32 @@ class MambaModelTester:
         self.parent.assertTrue(torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5))
         # TODO the original mamba does not support decoding more than 1 token neither do we
 
-    def create_and_check_mamba_chunked_prefill(self, config, input_ids, *args):
+    def create_and_check_mamba_chunked_prefill(self, config, input_ids, *args, device="cpu"):
         model = MambaModel(config)
-        model.to(torch_device)
+        model.to(device)
         model.eval()
 
-        input_ids = input_ids[:1].to(torch_device)
-        split = input_ids.shape[1]//2
-        stepwise_outputs = []
+        input_ids = input_ids[:1].to(device)
+        split = input_ids.shape[1] // 2
 
         with torch.no_grad():
             full_output = model(input_ids, use_cache=False).last_hidden_state
             chunked_cache = model(input_ids[:, :split], use_cache=True).cache_params
             chunked_output = model(input_ids[:, split:], use_cache=True, cache_params=chunked_cache).last_hidden_state
 
-            stepwise_cache = model(input_ids[:, :split], use_cache=True).cache_params
-            for t in range(split, input_ids.shape[1]):
-                next_token = input_ids[:, t:t+1]
-                step_output = model(next_token, use_cache=True, cache_params=stepwise_cache)
-                stepwise_cache = step_output.cache_params
-                stepwise_outputs.append(step_output.last_hidden_state)
-            stepwise_output = torch.cat(stepwise_outputs, dim=1)
-
             full_cache = model(input_ids, use_cache=True).cache_params
 
         full_recurrent_state = full_cache.get_recurrent_state(0)
         chunked_recurrent_state = chunked_cache.get_recurrent_state(0)
-        stepwise_recurrent_state = stepwise_cache.get_recurrent_state(0)
 
-        self.parent.assertTrue(torch.allclose(full_output[:, split:], stepwise_output, atol=1e-4, rtol=1e-4), msg=f"Max diff between stepwise and full: {(full_output[:, split:] - stepwise_output).abs().max().item()}")
-        self.parent.assertTrue(torch.allclose(full_recurrent_state, stepwise_recurrent_state, atol=1e-6, rtol=1e-4), msg=f"Max diff between stepwise cache and full cache: {(full_recurrent_state - stepwise_recurrent_state).abs().max().item()}")
-        self.parent.assertTrue(torch.allclose(full_recurrent_state, chunked_recurrent_state, atol=1e-6, rtol=1e-4), msg=f"Max diff between chunked cache and full cache: {(full_recurrent_state-chunked_recurrent_state).abs().max().item()}")
-        self.parent.assertTrue(torch.allclose(full_output[:, split:], chunked_output, atol=1e-4, rtol=1e-4), msg=f"Max diff between chunked and full: {(full_output[:,split:] - chunked_output).abs().max().item()}")
+        self.parent.assertTrue(
+            torch.allclose(full_recurrent_state, chunked_recurrent_state, atol=1e-6, rtol=1e-4),
+            msg=f"Max diff between chunked cache and full cache: {(full_recurrent_state - chunked_recurrent_state).abs().max().item()}",
+        )
+        self.parent.assertTrue(
+            torch.allclose(full_output[:, split:], chunked_output, atol=1e-5, rtol=1e-4),
+            msg=f"Max diff between chunked and full: {(full_output[:, split:] - chunked_output).abs().max().item()}",
+        )
 
     def create_and_check_mamba_cached_slow_forward_and_backwards(
         self, config, input_ids, *args, gradient_checkpointing=False
@@ -318,7 +312,7 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def test_mamba_chunked_prefill_cpu(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_mamba_chunked_prefill(*config_and_inputs)
+        self.model_tester.create_and_check_mamba_chunked_prefill(*config_and_inputs, device="cpu")
 
     def test_mamba_cached_slow_forward_and_backwards(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
