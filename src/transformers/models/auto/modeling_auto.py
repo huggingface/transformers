@@ -608,6 +608,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vits", "VitsModel"),
         ("vivit", "VivitModel"),
         ("vjepa2", "VJEPA2Model"),
+        ("voxcpm2", "VoxCPM2Model"),
         ("voxtral", "VoxtralModel"),
         ("voxtral_encoder", "VoxtralEncoder"),
         ("voxtral_realtime", "VoxtralRealtimeModel"),
@@ -1958,6 +1959,7 @@ MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES = OrderedDict(
         ("seamless_m4t_v2", "SeamlessM4Tv2ForTextToSpeech"),
         ("vibevoice", "VibeVoiceForConditionalGeneration"),
         ("vits", "VitsModel"),
+        ("voxcpm2", "VoxCPM2Model"),
     ]
 )
 
