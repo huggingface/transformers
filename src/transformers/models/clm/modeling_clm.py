@@ -17,15 +17,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from dataclasses import dataclass
+
 import torch
 from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...decision import DecisionConfig, DecisionMixin
+from ...decision import DecisionConfig, DecisionMixin, Question, process_scores, read_marks
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import AutoModel
 from .configuration_clm import ClmConfig
 
@@ -53,6 +55,20 @@ class ClmProjectionHead(nn.Module):
             if self.residual:
                 hidden_states = residual + hidden_states
         return nn.functional.normalize(self.output_projection(hidden_states), dim=-1)
+
+
+@auto_docstring
+@dataclass
+class ClmDecisionOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`):
+        Mean of state-to-action and action-to-state InfoNCE losses, returned when `labels` are provided.
+    logits (`torch.FloatTensor` of shape `(num_questions, num_candidates)`):
+        Scaled cosine similarities between every state and every supplied candidate.
+    """
+
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
 
 
 @auto_docstring
@@ -141,6 +157,7 @@ class ClmForDecision(DecisionMixin, ClmPreTrainedModel):
                 self._decision_config.noul_options = ["false", "true"]
         return self._decision_config
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -148,16 +165,27 @@ class ClmForDecision(DecisionMixin, ClmPreTrainedModel):
         marks: torch.LongTensor,
         num_options: torch.LongTensor,
         question_type_ids: torch.LongTensor | None = None,
+        labels: torch.Tensor | None = None,
+        group_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
+    ) -> ClmDecisionOutput:
+        r"""
+        labels (`torch.LongTensor` of shape `(num_questions,)` or `torch.FloatTensor` of shape `(num_questions, num_candidates)`, *optional*):
+            Matching candidate indices or target distributions over the in-batch candidate pool. The loss is the mean
+            of state-to-candidate cross entropy and candidate-to-state cross entropy. The reverse direction includes
+            only candidates with positive target mass, normalized across their matching states.
+        group_ids (`torch.LongTensor` of shape `(num_questions,)`, *optional*):
+            Group IDs for paired training batches with one matching candidate per state in the same order.
+            Off-diagonal pairs from the same group are excluded as false negatives in both directions.
+        """
         marks, num_options = marks[0], num_options[0]  # a batch of one prompt
         lengths = marks.diff(prepend=marks.new_zeros(1))
-        segments = input_ids[0].split(lengths.tolist())
         # Independent encoder passes preserve the publisher's reusable candidate representations.
-        input_ids = nn.utils.rnn.pad_sequence(
-            segments, batch_first=True, padding_value=self.config.text_config.pad_token_id or 0
-        )
-        attention_mask = torch.arange(input_ids.shape[1], device=input_ids.device)[None] < lengths[:, None]
+        positions = torch.arange(lengths.max(), device=input_ids.device)[None]
+        attention_mask = positions < lengths[:, None]
+        indices = (marks - lengths)[:, None] + positions
+        input_ids = input_ids[0, indices.clamp(max=input_ids.shape[1] - 1)]
+        input_ids = input_ids.masked_fill(~attention_mask, self.config.text_config.pad_token_id or 0)
         outputs = self.model(input_ids=input_ids, attention_mask=attention_mask, use_cache=False, **kwargs)
         hidden_states = outputs.last_hidden_state[torch.arange(len(lengths), device=input_ids.device), lengths - 1]
         hidden_states = hidden_states.float()
@@ -168,8 +196,57 @@ class ClmForDecision(DecisionMixin, ClmPreTrainedModel):
         with torch.autocast(device_type=hidden_states.device.type, enabled=False):
             states = self.state_head(hidden_states[state_indices].to(self.state_head.input_projection.weight.dtype))
             options = self.action_head(hidden_states[is_option].to(self.action_head.input_projection.weight.dtype))
-            scores = (states.repeat_interleave(num_options, dim=0) * options).sum(-1)
-            return self.logit_scale.exp().clamp(max=100.0) * scores
+            scale = self.logit_scale.exp().clamp(max=100.0)
+            logits = scale * states @ options.T
+            loss = None
+            if labels is not None:
+                targets = (
+                    nn.functional.one_hot(labels, options.shape[0]).float() if labels.ndim == 1 else labels.float()
+                )
+                loss_logits = logits.float()
+                if group_ids is not None:
+                    same_group = group_ids[:, None] == group_ids[None, :]
+                    same_group.fill_diagonal_(False)
+                    loss_logits = loss_logits.masked_fill(same_group, -torch.inf)
+                state_log_probs = loss_logits.log_softmax(-1).masked_fill(targets == 0, 0.0)
+                state_loss = -(targets * state_log_probs).sum(-1).mean()
+                reverse_targets = targets.T
+                positive_candidates = reverse_targets.sum(-1) > 0
+                reverse_targets = reverse_targets[positive_candidates]
+                reverse_targets = reverse_targets / reverse_targets.sum(-1, keepdim=True)
+                action_log_probs = loss_logits.T[positive_candidates].log_softmax(-1)
+                action_log_probs = action_log_probs.masked_fill(reverse_targets == 0, 0.0)
+                action_loss = -(reverse_targets * action_log_probs).sum(-1).mean()
+                loss = (state_loss + action_loss) / 2
+            return ClmDecisionOutput(loss=loss, logits=logits)
+
+    @torch.no_grad()
+    def decide(
+        self,
+        input_ids: torch.LongTensor,
+        decision_questions: list[Question],
+        decision_config: DecisionConfig | None = None,
+        **kwargs,
+    ) -> list[torch.Tensor]:
+        """Score each question's candidates with the same decision API as the other decision heads."""
+        decision_config = decision_config or self.decision_config
+        if any(question.allow_null for question in decision_questions):
+            raise ValueError("This decision head does not predict null scores.")
+        inputs, marks = read_marks({"input_ids": input_ids, **kwargs}, decision_config._sentinel_ids)
+        num_options = torch.tensor([[len(question.options) for question in decision_questions]], device=self.device)
+        question_types = [Question.questions_types.index(question.type) for question in decision_questions]
+        output = self(
+            marks=marks[None].to(self.device),
+            num_options=num_options,
+            question_type_ids=torch.tensor([question_types], device=self.device),
+            **{key: value.to(self.device) if hasattr(value, "to") else value for key, value in inputs.items()},
+            return_dict=True,
+        )
+        option_question_ids = torch.repeat_interleave(num_options[0])
+        scores = output.logits[option_question_ids, torch.arange(option_question_ids.shape[0], device=self.device)]
+        return process_scores(
+            decision_config, inputs["input_ids"], marks, decision_questions, scores.split(num_options[0].tolist())
+        )
 
 
 __all__ = ["ClmForDecision", "ClmPreTrainedModel"]
