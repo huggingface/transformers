@@ -287,6 +287,23 @@ class DummyRootMerged(PreTrainedModel):
 
 
 class TestConvertAndLoadStateDict(unittest.TestCase):
+    def test_loading_preserves_requires_grad(self):
+        for dtype in (torch.float32, torch.bfloat16):
+            with self.subTest(dtype=dtype):
+                model = DummyRoot(PreTrainedConfig()).to(dtype=dtype)
+                model.model.layers[0].self_attn.q_proj.requires_grad_(False)
+                expected = {name: parameter.requires_grad for name, parameter in model.named_parameters()}
+                state_dict = {name: torch.randn_like(value) for name, value in model.state_dict().items()}
+
+                loading_info, _ = convert_and_load_state_dict_in_model(model, state_dict, LoadStateDictConfig())
+
+                self.assertFalse(loading_info.missing_keys)
+                self.assertFalse(loading_info.unexpected_keys)
+                self.assertFalse(loading_info.mismatched_keys)
+                for name, parameter in model.named_parameters():
+                    self.assertEqual(parameter.requires_grad, expected[name], name)
+                    torch.testing.assert_close(parameter, state_dict[name], rtol=0, atol=0)
+
     def test_dtensor_shard_aware_mixtral_conversion_uses_only_local_experts(self):
         """Integration test: FSDP-sharded expert loading + WeightConverter.
 
