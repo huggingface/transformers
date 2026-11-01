@@ -42,7 +42,7 @@ from .configuration_maskformer_swin import MaskFormerSwinConfig
 @dataclass
 class MaskFormerSwinModelOutputWithPooling(ModelOutput):
     r"""
-    pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+    pooler_output (`torch.Tensor` of shape `(batch_size, hidden_size)`):
         Last layer hidden-state after a mean pooling operation.
     hidden_states_spatial_dimensions (`tuple(tuple(int, int))`, *optional*):
         A tuple containing the spatial dimension of each `hidden_state` needed to reshape the `hidden_states` to
@@ -50,11 +50,11 @@ class MaskFormerSwinModelOutputWithPooling(ModelOutput):
         `forward` method.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    pooler_output: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
+    last_hidden_state: torch.Tensor | None = None
+    pooler_output: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
     hidden_states_spatial_dimensions: tuple[tuple[int, int]] = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(
@@ -71,10 +71,10 @@ class MaskFormerSwinBaseModelOutput(ModelOutput):
         method.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
+    last_hidden_state: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
     hidden_states_spatial_dimensions: tuple[tuple[int, int]] = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 # Copied from transformers.models.swin.modeling_swin.window_partition
@@ -210,7 +210,7 @@ class MaskFormerSwinPatchEmbeddings(nn.Module):
             pixel_values = nn.functional.pad(pixel_values, pad_values)
         return pixel_values
 
-    def forward(self, pixel_values: torch.FloatTensor | None) -> tuple[torch.Tensor, tuple[int]]:
+    def forward(self, pixel_values: torch.Tensor | None) -> tuple[torch.Tensor, tuple[int]]:
         _, num_channels, height, width = pixel_values.shape
         # pad the input to be divisible by self.patch_size, if needed
         pixel_values = self.maybe_pad(pixel_values, height, width)
@@ -294,7 +294,7 @@ class MaskFormerSwinSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor]:
         batch_size, dim, num_channels = hidden_states.shape
@@ -381,7 +381,7 @@ class MaskFormerSwinAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor]:
         self_outputs = self.self(hidden_states, attention_mask, output_attentions)

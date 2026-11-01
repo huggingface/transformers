@@ -60,79 +60,79 @@ logger = logging.get_logger(__name__)
 @dataclass
 class EsmForProteinFoldingOutput(ModelOutput):
     r"""
-    frames (`torch.FloatTensor`):
+    frames (`torch.Tensor`):
         Output frames.
-    sidechain_frames (`torch.FloatTensor`):
+    sidechain_frames (`torch.Tensor`):
         Output sidechain frames.
-    unnormalized_angles (`torch.FloatTensor`):
+    unnormalized_angles (`torch.Tensor`):
         Predicted unnormalized backbone and side chain torsion angles.
-    angles (`torch.FloatTensor`):
+    angles (`torch.Tensor`):
         Predicted backbone and side chain torsion angles.
-    positions (`torch.FloatTensor`):
+    positions (`torch.Tensor`):
         Predicted positions of the backbone and side chain atoms.
-    states (`torch.FloatTensor`):
+    states (`torch.Tensor`):
         Hidden states from the protein folding trunk.
-    s_s (`torch.FloatTensor`):
+    s_s (`torch.Tensor`):
         Per-residue embeddings derived by concatenating the hidden states of each layer of the ESM-2 LM stem.
-    s_z (`torch.FloatTensor`):
+    s_z (`torch.Tensor`):
         Pairwise residue embeddings.
-    distogram_logits (`torch.FloatTensor`):
+    distogram_logits (`torch.Tensor`):
         Input logits to the distogram used to compute residue distances.
-    lm_logits (`torch.FloatTensor`):
+    lm_logits (`torch.Tensor`):
         Logits output by the ESM-2 protein language model stem.
-    aatype (`torch.FloatTensor`):
+    aatype (`torch.Tensor`):
         Input amino acids (AlphaFold2 indices).
-    atom14_atom_exists (`torch.FloatTensor`):
+    atom14_atom_exists (`torch.Tensor`):
         Whether each atom exists in the atom14 representation.
-    residx_atom14_to_atom37 (`torch.FloatTensor`):
+    residx_atom14_to_atom37 (`torch.Tensor`):
         Mapping between atoms in the atom14 and atom37 representations.
-    residx_atom37_to_atom14 (`torch.FloatTensor`):
+    residx_atom37_to_atom14 (`torch.Tensor`):
         Mapping between atoms in the atom37 and atom14 representations.
-    atom37_atom_exists (`torch.FloatTensor`):
+    atom37_atom_exists (`torch.Tensor`):
         Whether each atom exists in the atom37 representation.
-    residue_index (`torch.FloatTensor`):
+    residue_index (`torch.Tensor`):
         The index of each residue in the protein chain. Unless internal padding tokens are used, this will just be
         a sequence of integers from 0 to `sequence_length`.
-    lddt_head (`torch.FloatTensor`):
+    lddt_head (`torch.Tensor`):
         Raw outputs from the lddt head used to compute plddt.
-    plddt (`torch.FloatTensor`):
+    plddt (`torch.Tensor`):
         Per-residue confidence scores. Regions of low confidence may indicate areas where the model's prediction is
         uncertain, or where the protein structure is disordered.
-    ptm_logits (`torch.FloatTensor`):
+    ptm_logits (`torch.Tensor`):
         Raw logits used for computing ptm.
-    ptm (`torch.FloatTensor`):
+    ptm (`torch.Tensor`):
         TM-score output representing the model's high-level confidence in the overall structure.
-    aligned_confidence_probs (`torch.FloatTensor`):
+    aligned_confidence_probs (`torch.Tensor`):
         Per-residue confidence scores for the aligned structure.
-    predicted_aligned_error (`torch.FloatTensor`):
+    predicted_aligned_error (`torch.Tensor`):
         Predicted error between the model's prediction and the ground truth.
-    max_predicted_aligned_error (`torch.FloatTensor`):
+    max_predicted_aligned_error (`torch.Tensor`):
         Per-sample maximum predicted error.
     """
 
-    frames: torch.FloatTensor | None = None
-    sidechain_frames: torch.FloatTensor | None = None
-    unnormalized_angles: torch.FloatTensor | None = None
-    angles: torch.FloatTensor | None = None
-    positions: torch.FloatTensor | None = None
-    states: torch.FloatTensor | None = None
-    s_s: torch.FloatTensor | None = None
-    s_z: torch.FloatTensor | None = None
-    distogram_logits: torch.FloatTensor | None = None
-    lm_logits: torch.FloatTensor | None = None
-    aatype: torch.FloatTensor | None = None
-    atom14_atom_exists: torch.FloatTensor | None = None
-    residx_atom14_to_atom37: torch.FloatTensor | None = None
-    residx_atom37_to_atom14: torch.FloatTensor | None = None
-    atom37_atom_exists: torch.FloatTensor | None = None
-    residue_index: torch.FloatTensor | None = None
-    lddt_head: torch.FloatTensor | None = None
-    plddt: torch.FloatTensor | None = None
-    ptm_logits: torch.FloatTensor | None = None
-    ptm: torch.FloatTensor | None = None
-    aligned_confidence_probs: torch.FloatTensor | None = None
-    predicted_aligned_error: torch.FloatTensor | None = None
-    max_predicted_aligned_error: torch.FloatTensor | None = None
+    frames: torch.Tensor | None = None
+    sidechain_frames: torch.Tensor | None = None
+    unnormalized_angles: torch.Tensor | None = None
+    angles: torch.Tensor | None = None
+    positions: torch.Tensor | None = None
+    states: torch.Tensor | None = None
+    s_s: torch.Tensor | None = None
+    s_z: torch.Tensor | None = None
+    distogram_logits: torch.Tensor | None = None
+    lm_logits: torch.Tensor | None = None
+    aatype: torch.Tensor | None = None
+    atom14_atom_exists: torch.Tensor | None = None
+    residx_atom14_to_atom37: torch.Tensor | None = None
+    residx_atom37_to_atom14: torch.Tensor | None = None
+    atom37_atom_exists: torch.Tensor | None = None
+    residue_index: torch.Tensor | None = None
+    lddt_head: torch.Tensor | None = None
+    plddt: torch.Tensor | None = None
+    ptm_logits: torch.Tensor | None = None
+    ptm: torch.Tensor | None = None
+    aligned_confidence_probs: torch.Tensor | None = None
+    predicted_aligned_error: torch.Tensor | None = None
+    max_predicted_aligned_error: torch.Tensor | None = None
 
 
 def is_fp16_enabled(device_type):

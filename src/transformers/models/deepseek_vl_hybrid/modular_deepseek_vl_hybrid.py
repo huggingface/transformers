@@ -61,7 +61,7 @@ logger = logging.get_logger(__name__)
 
 
 DEEPSEEK_VL_COMMON_CUSTOM_ARGS = r"""
-    high_res_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size), *optional*):
+    high_res_pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size), *optional*):
         The tensors corresponding to the input images. Pixel values can be obtained using
         [`AutoImageProcessor`].
 """
@@ -103,24 +103,24 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
 @dataclass
 class BaseModelOutputWithHighResVisionEncodings(BaseModelOutputWithPooling):
     r"""
-    high_res_vision_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    high_res_vision_last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the high resolution vision model.
-    high_res_vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the high resolution vision model has an embedding layer, +
+    high_res_vision_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings, if the high resolution vision model has an embedding layer, +
         one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
         Hidden-states of the high resolution vision model at the output of each layer plus the optional initial embedding outputs.
-    high_res_vision_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    high_res_vision_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)` from the high resolution vision model.
 
         Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
         heads.
     """
 
-    high_res_vision_last_hidden_state: torch.FloatTensor | None = None
-    high_res_vision_hidden_states: tuple[torch.FloatTensor] | None = None
-    high_res_vision_attentions: tuple[torch.FloatTensor] | None = None
+    high_res_vision_last_hidden_state: torch.Tensor | None = None
+    high_res_vision_hidden_states: tuple[torch.Tensor] | None = None
+    high_res_vision_attentions: tuple[torch.Tensor] | None = None
 
 
 class DeepseekVLHybridBaseModelOutputWithPast(IdeficsBaseModelOutputWithPast):
@@ -222,12 +222,12 @@ class DeepseekVLHybridModel(DeepseekVLModel):
 
         super().__init__(config)
 
-    def get_low_res_image_features(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
+    def get_low_res_image_features(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
         return self.vision_model(pixel_values, return_dict=True, **kwargs)
 
     def get_high_res_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ):
         kwargs["output_hidden_states"] = True
@@ -257,8 +257,8 @@ class DeepseekVLHybridModel(DeepseekVLModel):
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
-        high_res_pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
+        high_res_pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithHighResVisionEncodings:
         low_res_outputs = self.get_low_res_image_features(pixel_values, **kwargs)
@@ -280,12 +280,12 @@ class DeepseekVLHybridModel(DeepseekVLModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        high_res_pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        high_res_pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
@@ -341,12 +341,12 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        high_res_pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        high_res_pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,

@@ -473,12 +473,12 @@ class FunAsrNanoModel(AudioFlamingo3Model):
     )
     def get_audio_features(
         self,
-        input_features: torch.FloatTensor,
+        input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
-        input_features (`torch.FloatTensor`):
+        input_features (`torch.Tensor`):
             Audio features `(batch, time, feature_dim)` produced by the feature extractor (after LFR stacking).
         input_features_mask (`torch.Tensor`):
             Padding mask for the audio feature sequence, as returned by the processor.

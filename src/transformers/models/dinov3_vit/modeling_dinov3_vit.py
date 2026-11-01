@@ -49,12 +49,12 @@ from .configuration_dinov3_vit import DINOv3ViTConfig
 @dataclass
 class DINOv3ViTBackboneOutput(BackboneOutput):
     r"""
-    cls_tokens (`tuple(torch.FloatTensor)`, *optional*):
+    cls_tokens (`tuple(torch.Tensor)`, *optional*):
         CLS token from each selected feature stage, each of shape `(batch_size, hidden_size)`.
         Only present when `config.return_class_token=True`.
     """
 
-    cls_tokens: tuple[torch.FloatTensor] | None = None
+    cls_tokens: tuple[torch.Tensor] | None = None
 
 
 class DINOv3ViTEmbeddings(nn.Module):

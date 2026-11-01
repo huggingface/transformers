@@ -59,13 +59,13 @@ logger = logging.get_logger(__name__)
 @dataclass
 class Sam3LiteTextTextEncoderOutput(BaseModelOutputWithPooling):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Full sequence of hidden states from the text encoder.
-    pooler_output (`torch.FloatTensor` of shape `(batch_size, projection_dim)`):
+    pooler_output (`torch.Tensor` of shape `(batch_size, projection_dim)`):
         EOT-pooled output projected to `projection_dim` via the internal CLIP-style projection.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+    hidden_states (`tuple(torch.Tensor)`, *optional*):
         Tuple of hidden states at each layer, returned when `output_hidden_states=True`.
-    attentions (`tuple(torch.FloatTensor)`, *optional*):
+    attentions (`tuple(torch.Tensor)`, *optional*):
         Tuple of attention weights at each transformer layer, returned when `output_attentions=True`.
     """
 
@@ -306,7 +306,7 @@ class Sam3LiteTextTextEncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
@@ -421,27 +421,27 @@ class Sam3LiteTextTextModel(Sam3LiteTextPreTrainedModel):
 @dataclass
 class Sam3LiteTextVisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
-    fpn_hidden_states (`tuple[torch.FloatTensor]`):
+    fpn_hidden_states (`tuple[torch.Tensor]`):
         Tuple of multi-level FPN feature maps.
-    fpn_position_encoding (`tuple[torch.FloatTensor]`):
+    fpn_position_encoding (`tuple[torch.Tensor]`):
         Tuple of position encodings for each FPN level.
     """
 
-    fpn_hidden_states: tuple[torch.FloatTensor, ...] = None
-    fpn_position_encoding: tuple[torch.FloatTensor, ...] = None
+    fpn_hidden_states: tuple[torch.Tensor, ...] = None
+    fpn_position_encoding: tuple[torch.Tensor, ...] = None
 
 
 @auto_docstring
 @dataclass
 class Sam3LiteTextGeometryEncoderOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_prompts, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, num_prompts, hidden_size)`):
         Encoded geometry prompt features (boxes).
     attention_mask (`torch.BoolTensor` of shape `(batch_size, num_prompts)`, *optional*):
         Attention mask for geometry prompts where True indicates valid positions and False indicates padding.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: torch.Tensor = None
     attention_mask: torch.BoolTensor | None = None
 
 
@@ -449,116 +449,116 @@ class Sam3LiteTextGeometryEncoderOutput(ModelOutput):
 @dataclass
 class Sam3LiteTextDETREncoderOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Encoded vision features (flattened from multi-level features).
-    pos_embeds_flattened (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+    pos_embeds_flattened (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
         Flattened position embeddings for the vision features.
-    text_features (`torch.FloatTensor` of shape `(batch_size, text_seq_len, hidden_size)`, *optional*):
+    text_features (`torch.Tensor` of shape `(batch_size, text_seq_len, hidden_size)`, *optional*):
         Text features (may be pooled after encoder processing).
     spatial_shapes (`torch.LongTensor` of shape `(num_levels, 2)`, *optional*):
         Spatial shapes (height, width) for each feature pyramid level.
-    hidden_states (`tuple[torch.FloatTensor]`, *optional*):
+    hidden_states (`tuple[torch.Tensor]`, *optional*):
         Tuple of hidden states from all encoder layers.
-    attentions (`tuple[torch.FloatTensor]`, *optional*):
+    attentions (`tuple[torch.Tensor]`, *optional*):
         Tuple of attention weights from all encoder layers.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    pos_embeds_flattened: torch.FloatTensor | None = None
-    text_features: torch.FloatTensor | None = None
+    last_hidden_state: torch.Tensor = None
+    pos_embeds_flattened: torch.Tensor | None = None
+    text_features: torch.Tensor | None = None
     spatial_shapes: torch.LongTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring
 @dataclass
 class Sam3LiteTextDETRDecoderOutput(ModelOutput):
     r"""
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(num_layers, batch_size, num_queries, hidden_size)`):
+    intermediate_hidden_states (`torch.Tensor` of shape `(num_layers, batch_size, num_queries, hidden_size)`):
         Decoder hidden states from all layers.
-    reference_boxes (`torch.FloatTensor` of shape `(num_layers, batch_size, num_queries, 4)`):
+    reference_boxes (`torch.Tensor` of shape `(num_layers, batch_size, num_queries, 4)`):
         Predicted reference boxes from all decoder layers in (cx, cy, w, h) format.
-    presence_logits (`torch.FloatTensor` of shape `(num_layers, batch_size, 1)`):
+    presence_logits (`torch.Tensor` of shape `(num_layers, batch_size, 1)`):
         Presence logits from all decoder layers indicating object presence confidence.
-    hidden_states (`tuple[torch.FloatTensor]`, *optional*):
+    hidden_states (`tuple[torch.Tensor]`, *optional*):
         Tuple of hidden states from all decoder layers.
-    attentions (`tuple[torch.FloatTensor]`, *optional*):
+    attentions (`tuple[torch.Tensor]`, *optional*):
         Tuple of attention weights from all decoder layers (self-attention and cross-attention).
     """
 
-    intermediate_hidden_states: torch.FloatTensor = None
-    reference_boxes: torch.FloatTensor = None
-    presence_logits: torch.FloatTensor = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    intermediate_hidden_states: torch.Tensor = None
+    reference_boxes: torch.Tensor = None
+    presence_logits: torch.Tensor = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring
 @dataclass
 class Sam3LiteTextMaskDecoderOutput(ModelOutput):
     r"""
-    pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height, width)`):
+    pred_masks (`torch.Tensor` of shape `(batch_size, num_queries, height, width)`):
         Predicted segmentation masks for each query.
-    semantic_seg (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
+    semantic_seg (`torch.Tensor` of shape `(batch_size, 1, height, width)`, *optional*):
         Semantic segmentation output.
-    attentions (`tuple[torch.FloatTensor]`, *optional*):
+    attentions (`tuple[torch.Tensor]`, *optional*):
         Tuple of attention weights from mask decoder cross-attention layers.
     """
 
-    pred_masks: torch.FloatTensor = None
-    semantic_seg: torch.FloatTensor | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    pred_masks: torch.Tensor = None
+    semantic_seg: torch.Tensor | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring
 @dataclass
 class Sam3LiteTextImageSegmentationOutput(ModelOutput):
     r"""
-    pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height, width)`):
+    pred_masks (`torch.Tensor` of shape `(batch_size, num_queries, height, width)`):
         Predicted segmentation masks for each query.
-    pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+    pred_boxes (`torch.Tensor` of shape `(batch_size, num_queries, 4)`):
         Predicted bounding boxes in (x1, y1, x2, y2) format.
-    pred_logits (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
+    pred_logits (`torch.Tensor` of shape `(batch_size, num_queries)`, *optional*):
         Classification confidence scores for each query, computed via dot product between
         decoder query features and text features.
-    presence_logits (`torch.FloatTensor` of shape `(batch_size, 1)`, *optional*):
+    presence_logits (`torch.Tensor` of shape `(batch_size, 1)`, *optional*):
         Presence logits from the DETR decoder presence token (last layer only). These indicate whether objects
         are present in the scene. Can be used to compute final scores by multiplying with pred_logits:
         `final_scores = pred_logits.sigmoid() * presence_logits.sigmoid()`.
-    semantic_seg (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
+    semantic_seg (`torch.Tensor` of shape `(batch_size, 1, height, width)`, *optional*):
         Semantic segmentation output.
-    decoder_hidden_states (`tuple[torch.FloatTensor]`, *optional*):
+    decoder_hidden_states (`tuple[torch.Tensor]`, *optional*):
         Tuple of hidden states from all DETR decoder layers. Each tensor has shape `(batch_size, num_queries, hidden_size)`.
-    decoder_reference_boxes (`torch.FloatTensor` of shape `(num_layers, batch_size, num_queries, 4)`, *optional*):
+    decoder_reference_boxes (`torch.Tensor` of shape `(num_layers, batch_size, num_queries, 4)`, *optional*):
         Reference boxes from all DETR decoder layers.
-    encoder_hidden_states (`tuple[torch.FloatTensor]`, *optional*):
+    encoder_hidden_states (`tuple[torch.Tensor]`, *optional*):
         Tuple of hidden states from all DETR encoder layers.
-    vision_hidden_states (`tuple[torch.FloatTensor]`, *optional*):
+    vision_hidden_states (`tuple[torch.Tensor]`, *optional*):
         Tuple of hidden states from all vision encoder (ViT) layers.
-    vision_attentions (`tuple[torch.FloatTensor]`, *optional*):
+    vision_attentions (`tuple[torch.Tensor]`, *optional*):
         Attention weights from vision encoder (ViT) layers.
-    detr_encoder_attentions (`tuple[torch.FloatTensor]`, *optional*):
+    detr_encoder_attentions (`tuple[torch.Tensor]`, *optional*):
         Attention weights from DETR encoder layers.
-    detr_decoder_attentions (`tuple[torch.FloatTensor]`, *optional*):
+    detr_decoder_attentions (`tuple[torch.Tensor]`, *optional*):
         Attention weights from DETR decoder layers (self-attention and cross-attention).
-    mask_decoder_attentions (`tuple[torch.FloatTensor]`, *optional*):
+    mask_decoder_attentions (`tuple[torch.Tensor]`, *optional*):
         Attention weights from mask decoder layers.
     """
 
-    pred_masks: torch.FloatTensor = None
-    pred_boxes: torch.FloatTensor = None
-    pred_logits: torch.FloatTensor | None = None
-    presence_logits: torch.FloatTensor | None = None
-    semantic_seg: torch.FloatTensor | None = None
-    decoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    decoder_reference_boxes: torch.FloatTensor | None = None
-    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    vision_hidden_states: tuple[torch.FloatTensor] | None = None
-    vision_attentions: tuple[torch.FloatTensor] | None = None
-    detr_encoder_attentions: tuple[torch.FloatTensor] | None = None
-    detr_decoder_attentions: tuple[torch.FloatTensor] | None = None
-    mask_decoder_attentions: tuple[torch.FloatTensor] | None = None
+    pred_masks: torch.Tensor = None
+    pred_boxes: torch.Tensor = None
+    pred_logits: torch.Tensor | None = None
+    presence_logits: torch.Tensor | None = None
+    semantic_seg: torch.Tensor | None = None
+    decoder_hidden_states: tuple[torch.Tensor] | None = None
+    decoder_reference_boxes: torch.Tensor | None = None
+    encoder_hidden_states: tuple[torch.Tensor] | None = None
+    vision_hidden_states: tuple[torch.Tensor] | None = None
+    vision_attentions: tuple[torch.Tensor] | None = None
+    detr_encoder_attentions: tuple[torch.Tensor] | None = None
+    detr_decoder_attentions: tuple[torch.Tensor] | None = None
+    mask_decoder_attentions: tuple[torch.Tensor] | None = None
 
 
 class Sam3LiteTextMLP(nn.Module):
@@ -2005,7 +2005,7 @@ class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
     @auto_docstring
     def get_vision_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sam3LiteTextVisionEncoderOutput:
         r"""
@@ -2039,12 +2039,12 @@ class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         vision_embeds: Sam3LiteTextVisionEncoderOutput | None = None,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        text_embeds: torch.FloatTensor | None = None,
-        input_boxes: torch.FloatTensor | None = None,
+        text_embeds: torch.Tensor | None = None,
+        input_boxes: torch.Tensor | None = None,
         input_boxes_labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sam3LiteTextImageSegmentationOutput:
@@ -2052,10 +2052,10 @@ class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
         vision_embeds (`Sam3LiteTextVisionEncoderOutput`, *optional*):
             Pre-computed vision embeddings. Can be used to easily reuse vision embeddings. If provided, `pixel_values`
             should not be passed. Mutually exclusive with `pixel_values`.
-        text_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        text_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Pre-computed text embeddings. Can be used to easily reuse text embeddings. If provided, `input_ids`
             should not be passed. Mutually exclusive with `input_ids`.
-        input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes, 4)`, *optional*):
+        input_boxes (`torch.Tensor` of shape `(batch_size, num_boxes, 4)`, *optional*):
             Normalized box coordinates in [0, 1] range, in (cx, cy, w, h) format.
         input_boxes_labels (`torch.LongTensor` of shape `(batch_size, num_boxes)`, *optional*):
             Labels for boxes: 1 (positive), 0 (negative).

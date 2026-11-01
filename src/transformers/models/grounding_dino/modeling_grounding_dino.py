@@ -140,17 +140,17 @@ class MultiScaleDeformableAttention(nn.Module):
 @dataclass
 class GroundingDinoDecoderOutput(ModelOutput):
     r"""
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+    intermediate_hidden_states (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
         Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
+    intermediate_reference_points (`torch.Tensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
         Stacked intermediate reference points (reference points of each layer of the decoder).
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    intermediate_hidden_states: torch.FloatTensor | None = None
-    intermediate_reference_points: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[tuple[torch.FloatTensor]] | None = None
+    last_hidden_state: torch.Tensor | None = None
+    intermediate_hidden_states: torch.Tensor | None = None
+    intermediate_reference_points: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[tuple[torch.Tensor]] | None = None
 
 
 @auto_docstring(
@@ -163,25 +163,25 @@ class GroundingDinoDecoderOutput(ModelOutput):
 @dataclass
 class GroundingDinoEncoderOutput(ModelOutput):
     r"""
-    last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    last_hidden_state_vision (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the vision encoder.
-    last_hidden_state_text (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    last_hidden_state_text (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the text encoder.
-    vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the vision embeddings + one for the output of each
+    vision_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the vision embeddings + one for the output of each
         layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the vision encoder at the
         output of each layer plus the initial embedding outputs.
-    text_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer)
+    text_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the text embeddings + one for the output of each layer)
         of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
         each layer plus the initial embedding outputs.
     """
 
-    last_hidden_state_vision: torch.FloatTensor | None = None
-    last_hidden_state_text: torch.FloatTensor | None = None
-    vision_hidden_states: tuple[torch.FloatTensor] | None = None
-    text_hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[tuple[torch.FloatTensor]] | None = None
+    last_hidden_state_vision: torch.Tensor | None = None
+    last_hidden_state_text: torch.Tensor | None = None
+    vision_hidden_states: tuple[torch.Tensor] | None = None
+    text_hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[tuple[torch.Tensor]] | None = None
 
 
 @auto_docstring(
@@ -192,59 +192,59 @@ class GroundingDinoEncoderOutput(ModelOutput):
 @dataclass
 class GroundingDinoModelOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.
-    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+    init_reference_points (`torch.Tensor` of shape  `(batch_size, num_queries, 4)`):
         Initial reference points sent through the Transformer decoder.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+    intermediate_hidden_states (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
         Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+    intermediate_reference_points (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked intermediate reference points (reference points of each layer of the decoder).
-    encoder_last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+    encoder_last_hidden_state_vision (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
         Sequence of hidden-states at the output of the last layer of the encoder of the model.
-    encoder_last_hidden_state_text (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+    encoder_last_hidden_state_text (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
         Sequence of hidden-states at the output of the last layer of the encoder of the model.
-    encoder_vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the vision embeddings + one for the output of each
+    encoder_vision_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the vision embeddings + one for the output of each
         layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the vision encoder at the
         output of each layer plus the initial embedding outputs.
-    encoder_text_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer)
+    encoder_text_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the text embeddings + one for the output of each layer)
         of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
         each layer plus the initial embedding outputs.
-    encoder_attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
+    encoder_attentions (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of tuples of `torch.Tensor` (one for attention for each layer) of shape `(batch_size, num_heads,
         sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
         weighted average in the text-vision attention, vision-text attention, text-enhancer (self-attention) and
         multi-scale deformable attention heads. attention softmax, used to compute the weighted average in the
         bi-attention heads.
-    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
+    enc_outputs_class (`torch.Tensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
         Predicted bounding boxes scores where the top `config.num_queries` scoring bounding boxes are picked as
         region proposals in the first stage. Output of bounding box binary classification (i.e. foreground and
         background).
-    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
+    enc_outputs_coord_logits (`torch.Tensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
         Logits of predicted bounding boxes coordinates in the first stage.
-    encoder_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
+    encoder_logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
         Logits of top `config.num_queries` scoring bounding boxes in the first stage.
-    encoder_pred_boxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
+    encoder_pred_boxes (`torch.Tensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
         Coordinates of top `config.num_queries` scoring bounding boxes in the first stage.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    init_reference_points: torch.FloatTensor | None = None
-    intermediate_hidden_states: torch.FloatTensor | None = None
-    intermediate_reference_points: torch.FloatTensor | None = None
-    decoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    decoder_attentions: tuple[tuple[torch.FloatTensor]] | None = None
-    encoder_last_hidden_state_vision: torch.FloatTensor | None = None
-    encoder_last_hidden_state_text: torch.FloatTensor | None = None
-    encoder_vision_hidden_states: tuple[torch.FloatTensor] | None = None
-    encoder_text_hidden_states: tuple[torch.FloatTensor] | None = None
-    encoder_attentions: tuple[tuple[torch.FloatTensor]] | None = None
-    enc_outputs_class: torch.FloatTensor | None = None
-    enc_outputs_coord_logits: torch.FloatTensor | None = None
-    encoder_logits: torch.FloatTensor | None = None
-    encoder_pred_boxes: torch.FloatTensor | None = None
+    last_hidden_state: torch.Tensor | None = None
+    init_reference_points: torch.Tensor | None = None
+    intermediate_hidden_states: torch.Tensor | None = None
+    intermediate_reference_points: torch.Tensor | None = None
+    decoder_hidden_states: tuple[torch.Tensor] | None = None
+    decoder_attentions: tuple[tuple[torch.Tensor]] | None = None
+    encoder_last_hidden_state_vision: torch.Tensor | None = None
+    encoder_last_hidden_state_text: torch.Tensor | None = None
+    encoder_vision_hidden_states: tuple[torch.Tensor] | None = None
+    encoder_text_hidden_states: tuple[torch.Tensor] | None = None
+    encoder_attentions: tuple[tuple[torch.Tensor]] | None = None
+    enc_outputs_class: torch.Tensor | None = None
+    enc_outputs_coord_logits: torch.Tensor | None = None
+    encoder_logits: torch.Tensor | None = None
+    encoder_pred_boxes: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -255,15 +255,15 @@ class GroundingDinoModelOutput(ModelOutput):
 @dataclass
 class GroundingDinoObjectDetectionOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
         Total loss as a linear combination of a negative log-likelihood (cross-entropy) for class prediction and a
         bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
         scale-invariant IoU loss.
     loss_dict (`Dict`, *optional*):
         A dictionary containing the individual losses. Useful for logging.
-    logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
+    logits (`torch.Tensor` of shape `(batch_size, num_queries, num_classes + 1)`):
         Classification logits (including no-object) for all queries.
-    pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+    pred_boxes (`torch.Tensor` of shape `(batch_size, num_queries, 4)`):
         Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
         values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
         possible padding). You can use [`~GroundingDinoProcessor.post_process_grounded_object_detection`] to retrieve the
@@ -272,60 +272,60 @@ class GroundingDinoObjectDetectionOutput(ModelOutput):
         Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
         and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
         `pred_boxes`) for each decoder layer.
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.
-    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+    init_reference_points (`torch.Tensor` of shape  `(batch_size, num_queries, 4)`):
         Initial reference points sent through the Transformer decoder.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+    intermediate_hidden_states (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
         Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+    intermediate_reference_points (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked intermediate reference points (reference points of each layer of the decoder).
-    encoder_last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+    encoder_last_hidden_state_vision (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
         Sequence of hidden-states at the output of the last layer of the encoder of the model.
-    encoder_last_hidden_state_text (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+    encoder_last_hidden_state_text (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
         Sequence of hidden-states at the output of the last layer of the encoder of the model.
-    encoder_vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the vision embeddings + one for the output of each
+    encoder_vision_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the vision embeddings + one for the output of each
         layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the vision encoder at the
         output of each layer plus the initial embedding outputs.
-    encoder_text_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer)
+    encoder_text_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the text embeddings + one for the output of each layer)
         of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
         each layer plus the initial embedding outputs.
-    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
+    enc_outputs_class (`torch.Tensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
         Predicted bounding boxes scores where the top `config.num_queries` scoring bounding boxes are picked as
         region proposals in the first stage. Output of bounding box binary classification (i.e. foreground and
         background).
-    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
+    enc_outputs_coord_logits (`torch.Tensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
         Logits of predicted bounding boxes coordinates in the first stage.
-    encoder_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
+    encoder_logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.two_stage=True`):
         Logits of top `config.num_queries` scoring bounding boxes in the first stage.
-    encoder_pred_boxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
+    encoder_pred_boxes (`torch.Tensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
         Coordinates of top `config.num_queries` scoring bounding boxes in the first stage.
     input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
         Encoded candidate labels sequence. Used in processor to post process object detection result.
     """
 
-    loss: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
     loss_dict: dict | None = None
-    logits: torch.FloatTensor | None = None
-    pred_boxes: torch.FloatTensor | None = None
+    logits: torch.Tensor | None = None
+    pred_boxes: torch.Tensor | None = None
     auxiliary_outputs: list[dict] | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    init_reference_points: torch.FloatTensor | None = None
-    intermediate_hidden_states: torch.FloatTensor | None = None
-    intermediate_reference_points: torch.FloatTensor | None = None
-    decoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    decoder_attentions: tuple[tuple[torch.FloatTensor]] | None = None
-    encoder_last_hidden_state_vision: torch.FloatTensor | None = None
-    encoder_last_hidden_state_text: torch.FloatTensor | None = None
-    encoder_vision_hidden_states: tuple[torch.FloatTensor] | None = None
-    encoder_text_hidden_states: tuple[torch.FloatTensor] | None = None
-    encoder_attentions: tuple[tuple[torch.FloatTensor]] | None = None
-    enc_outputs_class: torch.FloatTensor | None = None
-    enc_outputs_coord_logits: torch.FloatTensor | None = None
-    encoder_logits: torch.FloatTensor | None = None
-    encoder_pred_boxes: torch.FloatTensor | None = None
+    last_hidden_state: torch.Tensor | None = None
+    init_reference_points: torch.Tensor | None = None
+    intermediate_hidden_states: torch.Tensor | None = None
+    intermediate_reference_points: torch.Tensor | None = None
+    decoder_hidden_states: tuple[torch.Tensor] | None = None
+    decoder_attentions: tuple[tuple[torch.Tensor]] | None = None
+    encoder_last_hidden_state_vision: torch.Tensor | None = None
+    encoder_last_hidden_state_text: torch.Tensor | None = None
+    encoder_vision_hidden_states: tuple[torch.Tensor] | None = None
+    encoder_text_hidden_states: tuple[torch.Tensor] | None = None
+    encoder_attentions: tuple[tuple[torch.Tensor]] | None = None
+    enc_outputs_class: torch.Tensor | None = None
+    enc_outputs_coord_logits: torch.Tensor | None = None
+    encoder_logits: torch.Tensor | None = None
+    encoder_pred_boxes: torch.Tensor | None = None
     input_ids: torch.LongTensor | None = None
 
 
@@ -653,26 +653,26 @@ class GroundingDinoTextEnhancerLayer(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
+        hidden_states: torch.Tensor,
         attention_masks: torch.BoolTensor | None = None,
-        position_embeddings: torch.FloatTensor | None = None,
-    ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
+        position_embeddings: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Text self-attention to enhance projection of text features generated by
         the text encoder (AutoModel based on text_config) within GroundingDinoEncoderLayer
 
         Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_dim)`):
+            hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_dim)`):
                 Text features generated by the text encoder.
             attention_masks (`torch.BoolTensor`, *optional*):
                 Attention mask for text self-attention. False for real tokens and True for padding tokens.
-            position_embeddings (`torch.FloatTensor`, *optional*):
+            position_embeddings (`torch.Tensor`, *optional*):
                 Position embeddings to be added to the hidden states.
 
         Returns:
-            `tuple(torch.FloatTensor)` comprising two elements:
-            - **hidden_states** (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`) --
+            `tuple(torch.Tensor)` comprising two elements:
+            - **hidden_states** (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`) --
                 Output of the text self-attention layer.
-            - **attention_weights** (`torch.FloatTensor` of shape `(batch_size, num_heads, sequence_length,
+            - **attention_weights** (`torch.Tensor` of shape `(batch_size, num_heads, sequence_length,
               sequence_length)`) --
                 Attention weights of the text self-attention layer.
         """
@@ -745,17 +745,17 @@ class GroundingDinoBiMultiHeadAttention(nn.Module):
 
     def forward(
         self,
-        vision_features: torch.FloatTensor,
-        text_features: torch.FloatTensor,
+        vision_features: torch.Tensor,
+        text_features: torch.Tensor,
         vision_attention_mask: torch.BoolTensor | None = None,
         text_attention_mask: torch.BoolTensor | None = None,
-    ) -> tuple[tuple[torch.FloatTensor, torch.FloatTensor], tuple[torch.FloatTensor, torch.FloatTensor]]:
+    ) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
         """Image-to-text and text-to-image cross-attention
 
         Args:
-            vision_features (`torch.FloatTensor` of shape `(batch_size, vision_sequence_length, hidden_dim)`):
+            vision_features (`torch.Tensor` of shape `(batch_size, vision_sequence_length, hidden_dim)`):
                 Projected flattened image features generated by the vision backbone.
-            text_features (`torch.FloatTensor` of shape `(batch_size, text_sequence_length, hidden_dim)`):
+            text_features (`torch.Tensor` of shape `(batch_size, text_sequence_length, hidden_dim)`):
                 Projected text features generated by the text encoder.
             vision_attention_mask (`torch.BoolTensor`, **optional**):
                 Attention mask for image-to-text cross-attention. False for real tokens and True for padding tokens.
@@ -763,17 +763,17 @@ class GroundingDinoBiMultiHeadAttention(nn.Module):
                 Attention mask for text-to-image cross-attention. False for real tokens and True for padding tokens.
 
         Returns:
-            `tuple(tuple(torch.FloatTensor), tuple(torch.FloatTensor))` where each inner tuple comprises an attention
+            `tuple(tuple(torch.Tensor), tuple(torch.Tensor))` where each inner tuple comprises an attention
             output and weights:
-            - **vision_attn_output** (`torch.FloatTensor` of shape `(batch_size, vision_sequence_length, hidden_din)`)
+            - **vision_attn_output** (`torch.Tensor` of shape `(batch_size, vision_sequence_length, hidden_din)`)
               --
                 Output of the image-to-text cross-attention layer.
-            - **vision_attn_weights** (`torch.FloatTensor` of shape `(batch_size, num_heads, vision_sequence_length,
+            - **vision_attn_weights** (`torch.Tensor` of shape `(batch_size, num_heads, vision_sequence_length,
               vision_sequence_length)`) --
                 Attention weights of the image-to-text cross-attention layer.
-            - **text_attn_output** (`torch.FloatTensor` of shape `(batch_size, text_sequence_length, hidden_dim)`) --
+            - **text_attn_output** (`torch.Tensor` of shape `(batch_size, text_sequence_length, hidden_dim)`) --
                 Output of the text-to-image cross-attention layer.
-            - **text_attn_weights** (`torch.FloatTensor` of shape `(batch_size, num_heads, text_sequence_length,
+            - **text_attn_weights** (`torch.Tensor` of shape `(batch_size, num_heads, text_sequence_length,
               text_sequence_length)`) --
                 Attention weights of the text-to-image cross-attention layer.
         """
@@ -904,17 +904,17 @@ class GroundingDinoFusionLayer(nn.Module):
 
     def forward(
         self,
-        vision_features: torch.FloatTensor,
-        text_features: torch.FloatTensor,
+        vision_features: torch.Tensor,
+        text_features: torch.Tensor,
         attention_mask_vision: torch.BoolTensor | None = None,
         attention_mask_text: torch.BoolTensor | None = None,
-    ) -> tuple[tuple[torch.FloatTensor, torch.FloatTensor], tuple[torch.FloatTensor, torch.FloatTensor]]:
+    ) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
         """Image and text features fusion
 
         Args:
-            vision_features (`torch.FloatTensor` of shape `(batch_size, vision_sequence_length, hidden_dim)`):
+            vision_features (`torch.Tensor` of shape `(batch_size, vision_sequence_length, hidden_dim)`):
                 Projected flattened image features generated by the vision backbone.
-            text_features (`torch.FloatTensor` of shape `(batch_size, text_sequence_length, hidden_dim)`):
+            text_features (`torch.Tensor` of shape `(batch_size, text_sequence_length, hidden_dim)`):
                 Projected text features generated by the text encoder.
             attention_mask_vision (`torch.BoolTensor`, **optional**):
                 Attention mask for image-to-text cross-attention. False for real tokens and True for padding tokens.
@@ -922,16 +922,16 @@ class GroundingDinoFusionLayer(nn.Module):
                 Attention mask for text-to-image cross-attention. False for real tokens and True for padding tokens.
 
         Returns:
-            `tuple(tuple(torch.FloatTensor), tuple(torch.FloatTensor))` where each inner tuple comprises an enhanced
+            `tuple(tuple(torch.Tensor), tuple(torch.Tensor))` where each inner tuple comprises an enhanced
             feature and attention output and weights:
-            - **vision_features** (`torch.FloatTensor` of shape `(batch_size, vision_sequence_length, vision_dim)`) --
+            - **vision_features** (`torch.Tensor` of shape `(batch_size, vision_sequence_length, vision_dim)`) --
                 Updated vision features with attention output from image-to-text cross-attention layer.
-            - **vision_attn_weights** (`torch.FloatTensor` of shape `(batch_size, num_heads, vision_sequence_length,
+            - **vision_attn_weights** (`torch.Tensor` of shape `(batch_size, num_heads, vision_sequence_length,
               vision_sequence_length)`) --
                 Attention weights of the image-to-text cross-attention layer.
-            - **text_features** (`torch.FloatTensor` of shape `(batch_size, text_sequence_length, text_dim)`) --
+            - **text_features** (`torch.Tensor` of shape `(batch_size, text_sequence_length, text_dim)`) --
                 Updated text features with attention output from text-to-image cross-attention layer.
-            - **text_attn_weights** (`torch.FloatTensor` of shape `(batch_size, num_heads, text_sequence_length,
+            - **text_attn_weights** (`torch.Tensor` of shape `(batch_size, num_heads, text_sequence_length,
               text_sequence_length)`) --
                 Attention weights of the text-to-image cross-attention layer.
         """
@@ -977,13 +977,13 @@ class GroundingDinoDeformableLayer(nn.Module):
     ):
         """
         Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Input to the layer.
-            attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`):
                 Attention mask.
-            position_embeddings (`torch.FloatTensor`, *optional*):
+            position_embeddings (`torch.Tensor`, *optional*):
                 Position embeddings, to be added to `hidden_states`.
-            reference_points (`torch.FloatTensor`, *optional*):
+            reference_points (`torch.Tensor`, *optional*):
                 Reference points.
             spatial_shapes (`torch.LongTensor`, *optional*):
                 Spatial shapes of the backbone feature maps.
@@ -1141,7 +1141,7 @@ class GroundingDinoMultiheadAttention(nn.Module):
         queries: torch.Tensor,
         keys: torch.Tensor,
         values: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor]:
         batch_size, seq_length, _ = queries.shape
@@ -1310,10 +1310,10 @@ class GroundingDinoContrastiveEmbedding(nn.Module):
 
     def forward(
         self,
-        vision_hidden_state: torch.FloatTensor,
-        text_hidden_state: torch.FloatTensor,
+        vision_hidden_state: torch.Tensor,
+        text_hidden_state: torch.Tensor,
         text_token_mask: torch.BoolTensor,
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         output = vision_hidden_state @ text_hidden_state.transpose(-1, -2)
         output = output.masked_fill(~text_token_mask[:, None, :], float("-inf"))
 
@@ -1418,12 +1418,12 @@ class GroundingDinoEncoder(GroundingDinoPreTrainedModel):
         Args:
             spatial_shapes_list (`list[tuple[int, int]]`):
                 Spatial shapes of each feature map.
-            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`):
+            valid_ratios (`torch.Tensor` of shape `(batch_size, num_feature_levels, 2)`):
                 Valid ratios of each feature map.
             device (`torch.device`):
                 Device on which to create the tensors.
         Returns:
-            `torch.FloatTensor` of shape `(batch_size, num_queries, num_feature_levels, 2)`
+            `torch.Tensor` of shape `(batch_size, num_queries, num_feature_levels, 2)`
         """
         reference_points_list = []
         for level, (height, width) in enumerate(spatial_shapes_list):
@@ -1462,14 +1462,14 @@ class GroundingDinoEncoder(GroundingDinoPreTrainedModel):
     ) -> tuple | GroundingDinoEncoderOutput:
         r"""
         Args:
-            vision_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            vision_features (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
             vision_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
                 - 0 for pixel features that are real (i.e. **not masked**),
                 - 1 for pixel features that are padding (i.e. **masked**).
                 [What are attention masks?](../glossary#attention-mask)
-            vision_position_embedding (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            vision_position_embedding (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Position embeddings that are added to the queries and keys in each self-attention layer.
             spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
                 Spatial shapes of each feature map.
@@ -1477,16 +1477,16 @@ class GroundingDinoEncoder(GroundingDinoPreTrainedModel):
                 Spatial shapes of each feature map (but as list for export compatibility).
             level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`):
                 Starting index of each feature map.
-            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`):
+            valid_ratios (`torch.Tensor` of shape `(batch_size, num_feature_levels, 2)`):
                 Ratio of valid area in each feature level.
-            text_features (`torch.FloatTensor` of shape `(batch_size, text_seq_len, hidden_size)`):
+            text_features (`torch.Tensor` of shape `(batch_size, text_seq_len, hidden_size)`):
                 Flattened text features that are passed to the encoder.
             text_attention_mask (`torch.Tensor` of shape `(batch_size, text_seq_len)`, *optional*):
                 Mask to avoid performing attention on padding text features. Mask values selected in `[0, 1]`:
                 - 0 for text features that are real (i.e. **not masked**),
                 - 1 for text features that are padding (i.e. **masked**).
                 [What are attention masks?](../glossary#attention-mask)
-            text_position_embedding (`torch.FloatTensor` of shape `(batch_size, text_seq_len)`):
+            text_position_embedding (`torch.Tensor` of shape `(batch_size, text_seq_len)`):
                 Position embeddings that are added to the queries and keys in each self-attention layer.
             text_self_attention_masks (`torch.BoolTensor` of shape `(batch_size, text_seq_len, text_seq_len)`):
                 Masks to avoid performing attention between padding text features. Mask values selected in `[0, 1]`:
@@ -1617,29 +1617,29 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
     ) -> tuple | GroundingDinoDecoderOutput:
         r"""
         Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+            inputs_embeds (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`):
                 The query embeddings that are passed into the decoder.
-            vision_encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            vision_encoder_hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Last hidden state from encoder related to vision feature map.
             vision_encoder_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
                 - 1 for pixel features that are real (i.e. **not masked**),
                 - 0 for pixel features that are padding (i.e. **masked**).
-            text_encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, text_seq_len, hidden_size)`):
+            text_encoder_hidden_states (`torch.Tensor` of shape `(batch_size, text_seq_len, hidden_size)`):
                 Last hidden state from encoder related to text features.
             text_encoder_attention_mask (`torch.Tensor` of shape `(batch_size, text_seq_len)`, *optional*):
                 Mask to avoid performing attention on padding text features. Mask values selected in `[0, 1]`:
                 - 0 for text features that are real (i.e. **not masked**),
                 - 1 for text features that are padding (i.e. **masked**).
-            reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
+            reference_points (`torch.Tensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
                 Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
-            spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
+            spatial_shapes (`torch.Tensor` of shape `(num_feature_levels, 2)`):
                 Spatial shapes of the feature maps.
             spatial_shapes_list (`list[tuple[int, int]]`):
                 Spatial shapes of the feature maps (but as list for export compatibility).
             level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
                 Indexes for the start of each feature level. In range `[0, sequence_length]`.
-            valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`, *optional*):
+            valid_ratios (`torch.Tensor` of shape `(batch_size, num_feature_levels, 2)`, *optional*):
                 Ratio of valid area in each feature level.
             self_attn_mask (`torch.BoolTensor` of shape `(batch_size, text_seq_len)`):
                 Masks to avoid performing self-attention between vision hidden state. Mask values selected in `[0, 1]`:
@@ -1963,7 +1963,7 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
             spatial_shapes_list (`list[tuple[int, int]]`): Spatial shapes of each feature map.
 
         Returns:
-            `tuple(torch.FloatTensor)`: A tuple of feature map and bbox prediction.
+            `tuple(torch.Tensor)`: A tuple of feature map and bbox prediction.
                 - object_query (Tensor[batch_size, sequence_length, hidden_size]): Object query features. Later used to
                   directly predict a bounding box. (without the need of a decoder)
                 - output_proposals (Tensor[batch_size, sequence_length, 4]): Normalized proposals, after an inverse
@@ -2300,7 +2300,7 @@ class GroundingDinoMLPPredictionHead(nn.Module):
         return x
 
 
-def build_label_maps(logits: torch.FloatTensor, input_ids: torch.LongTensor) -> tuple[torch.FloatTensor]:
+def build_label_maps(logits: torch.Tensor, input_ids: torch.LongTensor) -> tuple[torch.Tensor]:
     """
     Computes a mapping between tokens and their corresponding labels, where `num_labels` is determined by the number of classes in the input prompt.
     The function identifies segments of tokens between specific delimiter tokens and generates label maps for those segments.
@@ -2417,7 +2417,7 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         input_ids: torch.LongTensor,
         token_type_ids: torch.LongTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
@@ -2426,7 +2426,7 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        labels: list[dict[str, torch.LongTensor | torch.FloatTensor]] | None = None,
+        labels: list[dict[str, torch.LongTensor | torch.Tensor]] | None = None,
         **kwargs,
     ):
         r"""

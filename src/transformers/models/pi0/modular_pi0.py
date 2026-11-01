@@ -517,9 +517,9 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        state: torch.FloatTensor,
-        noise: torch.FloatTensor | None = None,
-        timestep: torch.FloatTensor | None = None,
+        state: torch.Tensor,
+        noise: torch.Tensor | None = None,
+        timestep: torch.Tensor | None = None,
         input_ids: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
         pixel_attention_mask: torch.BoolTensor | None = None,
@@ -527,7 +527,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        actions: torch.FloatTensor = None,  # aka labels
+        actions: torch.Tensor = None,  # aka labels
         **kwargs,
     ) -> CausalLMOutputWithPast:
         r"""
@@ -604,15 +604,15 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
     @torch.no_grad()
     def sample_actions(
         self,
-        state: torch.FloatTensor,
+        state: torch.Tensor,
         input_ids: torch.LongTensor,
-        pixel_values: torch.FloatTensor,
-        noise: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor,
+        noise: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         pixel_attention_mask: torch.BoolTensor | None = None,
         num_steps: int | None = None,
         **kwargs,
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         """Run flow matching inference to generate actions."""
 
         num_steps = num_steps or self.config.num_inference_steps

@@ -133,7 +133,7 @@ class PeAudioVideoContrastiveHead(nn.Module):
         self.layer_norm = nn.LayerNorm(normalized_shape=in_dim, eps=1e-6)
         self.proj = nn.Linear(in_dim, out_dim, bias=False)
 
-    def forward(self, x: torch.Tensor) -> torch.FloatTensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.proj(self.layer_norm(x))
 
 
@@ -451,21 +451,21 @@ class PeAudioVideoEncoder(PeAudioVideoPreTrainedModel):
 @dataclass
 class PeAudioVideoOutput(ModelOutput):
     r"""
-    audio_embeds (`torch.FloatTensor`, *optional*):
+    audio_embeds (`torch.Tensor`, *optional*):
         Audio modality embeddings. Shape `(batch_size, sequence_length, hidden_size)`.
-    video_embeds (`torch.FloatTensor`, *optional*):
+    video_embeds (`torch.Tensor`, *optional*):
         Video modality embeddings. Shape `(batch_size, sequence_length, hidden_size)`.
-    audio_video_embeds (`torch.FloatTensor`, *optional*):
+    audio_video_embeds (`torch.Tensor`, *optional*):
         Joint audio-video embeddings produced by a fusion module. Shape `(batch_size, sequence_length, hidden_size)`.
-    text_audio_embeds (`torch.FloatTensor`, *optional*):
+    text_audio_embeds (`torch.Tensor`, *optional*):
         Joint text-audio embeddings. Shape `(batch_size, sequence_length, hidden_size)`.
-    text_video_embeds (`torch.FloatTensor`, *optional*):
+    text_video_embeds (`torch.Tensor`, *optional*):
         Joint text-video embeddings. Shape `(batch_size, sequence_length, hidden_size)`.
-    text_audio_video_embeds (`torch.FloatTensor`, *optional*):
+    text_audio_video_embeds (`torch.Tensor`, *optional*):
         Joint text-audio-video embeddings combining all three modalities. Shape `(batch_size, sequence_length, hidden_size)`.
-    audio_plus_text_embeds (`torch.FloatTensor`, *optional*):
+    audio_plus_text_embeds (`torch.Tensor`, *optional*):
         Combined audio and text embeddings (e.g., concatenation or additive fusion). Shape `(batch_size, sequence_length, hidden_size)`.
-    video_plus_text_embeds (`torch.FloatTensor`, *optional*):
+    video_plus_text_embeds (`torch.Tensor`, *optional*):
         Combined video and text embeddings. Shape `(batch_size, sequence_length, hidden_size)`.
     text_outputs (`MaskedLMOutput`, *optional*):
         Model outputs for the text encoder. Includes hidden states, attentions, and optionally loss.
@@ -475,43 +475,43 @@ class PeAudioVideoOutput(ModelOutput):
         Model outputs for the video encoder, including last hidden state and pooled output.
     audio_video_outputs (`BaseModelOutputWithPooling`, *optional*):
         Model outputs for the joint audio-video encoder.
-    logits_audio_text (`torch.FloatTensor`, *optional*):
+    logits_audio_text (`torch.Tensor`, *optional*):
         Similarity logits between audio and text embeddings. Shape `(batch_size, batch_size)`.
-    logits_video_text (`torch.FloatTensor`, *optional*):
+    logits_video_text (`torch.Tensor`, *optional*):
         Similarity logits between video and text embeddings. Shape `(batch_size, batch_size)`.
-    logits_audio_video (`torch.FloatTensor`, *optional*):
+    logits_audio_video (`torch.Tensor`, *optional*):
         Similarity logits between audio and video embeddings. Shape `(batch_size, batch_size)`.
-    logits_audio_video_text (`torch.FloatTensor`, *optional*):
+    logits_audio_video_text (`torch.Tensor`, *optional*):
         Similarity logits across audio, video, and text modalities.
-    logits_audio_plus_text_video (`torch.FloatTensor`, *optional*):
+    logits_audio_plus_text_video (`torch.Tensor`, *optional*):
         Similarity logits between fused (audio + text) embeddings and video embeddings.
-    logits_video_plus_text_audio (`torch.FloatTensor`, *optional*):
+    logits_video_plus_text_audio (`torch.Tensor`, *optional*):
         Similarity logits between fused (video + text) embeddings and audio embeddings.
-    audio_text_loss (`torch.FloatTensor`, *optional*):
+    audio_text_loss (`torch.Tensor`, *optional*):
         Contrastive loss computed between audio and text representations.
-    video_text_loss (`torch.FloatTensor`, *optional*):
+    video_text_loss (`torch.Tensor`, *optional*):
         Contrastive loss computed between video and text representations.
-    audio_video_loss (`torch.FloatTensor`, *optional*):
+    audio_video_loss (`torch.Tensor`, *optional*):
         Contrastive loss computed between audio and video representations.
-    audio_video_text_loss (`torch.FloatTensor`, *optional*):
+    audio_video_text_loss (`torch.Tensor`, *optional*):
         Joint loss over audio, video, and text modalities.
-    audio_plus_text_video_loss (`torch.FloatTensor`, *optional*):
+    audio_plus_text_video_loss (`torch.Tensor`, *optional*):
         Loss between fused (audio + text) representations and video.
-    video_plus_text_audio_loss (`torch.FloatTensor`, *optional*):
+    video_plus_text_audio_loss (`torch.Tensor`, *optional*):
         Loss between fused (video + text) representations and audio.
-    loss (`torch.FloatTensor`, *optional*):
+    loss (`torch.Tensor`, *optional*):
         Combined loss for all modality-wise losses.
     """
 
     # embeddings
-    audio_embeds: torch.FloatTensor | None = None
-    video_embeds: torch.FloatTensor | None = None
-    audio_video_embeds: torch.FloatTensor | None = None
-    text_audio_embeds: torch.FloatTensor | None = None
-    text_video_embeds: torch.FloatTensor | None = None
-    text_audio_video_embeds: torch.FloatTensor | None = None
-    audio_plus_text_embeds: torch.FloatTensor | None = None
-    video_plus_text_embeds: torch.FloatTensor | None = None
+    audio_embeds: torch.Tensor | None = None
+    video_embeds: torch.Tensor | None = None
+    audio_video_embeds: torch.Tensor | None = None
+    text_audio_embeds: torch.Tensor | None = None
+    text_video_embeds: torch.Tensor | None = None
+    text_audio_video_embeds: torch.Tensor | None = None
+    audio_plus_text_embeds: torch.Tensor | None = None
+    video_plus_text_embeds: torch.Tensor | None = None
 
     # model outputs
     # TODO: update types to the correct ones
@@ -521,20 +521,20 @@ class PeAudioVideoOutput(ModelOutput):
     audio_video_outputs: BaseModelOutputWithPooling | None = None
 
     # logits
-    logits_audio_text: torch.FloatTensor | None = None
-    logits_video_text: torch.FloatTensor | None = None
-    logits_audio_video: torch.FloatTensor | None = None
-    logits_audio_video_text: torch.FloatTensor | None = None
-    logits_audio_plus_text_video: torch.FloatTensor | None = None
-    logits_video_plus_text_audio: torch.FloatTensor | None = None
+    logits_audio_text: torch.Tensor | None = None
+    logits_video_text: torch.Tensor | None = None
+    logits_audio_video: torch.Tensor | None = None
+    logits_audio_video_text: torch.Tensor | None = None
+    logits_audio_plus_text_video: torch.Tensor | None = None
+    logits_video_plus_text_audio: torch.Tensor | None = None
 
-    audio_text_loss: torch.FloatTensor | None = None
-    video_text_loss: torch.FloatTensor | None = None
-    audio_video_loss: torch.FloatTensor | None = None
-    audio_video_text_loss: torch.FloatTensor | None = None
-    audio_plus_text_video_loss: torch.FloatTensor | None = None
-    video_plus_text_audio_loss: torch.FloatTensor | None = None
-    loss: torch.FloatTensor | None = None
+    audio_text_loss: torch.Tensor | None = None
+    video_text_loss: torch.Tensor | None = None
+    audio_video_loss: torch.Tensor | None = None
+    audio_video_text_loss: torch.Tensor | None = None
+    audio_plus_text_video_loss: torch.Tensor | None = None
+    video_plus_text_audio_loss: torch.Tensor | None = None
+    loss: torch.Tensor | None = None
 
     def to_tuple(self) -> tuple[Any]:
         return tuple(self[k] if not k.endswith("model_output") else getattr(self, k).to_tuple() for k in self.keys())
@@ -542,9 +542,9 @@ class PeAudioVideoOutput(ModelOutput):
 
 @dataclass
 class AudioVideoEmbeddings(ModelOutput):
-    audio_embeds: torch.FloatTensor | None = None
-    video_embeds: torch.FloatTensor | None = None
-    audio_video_embeds: torch.FloatTensor | None = None
+    audio_embeds: torch.Tensor | None = None
+    video_embeds: torch.Tensor | None = None
+    audio_video_embeds: torch.Tensor | None = None
 
 
 class PeAudioVideoModel(PeAudioVideoPreTrainedModel):

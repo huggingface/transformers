@@ -688,13 +688,13 @@ class EdgeTamVideoMemoryAttention(Sam2VideoMemoryAttention):
     ):
         """
         Args:
-            current_vision_features (`torch.FloatTensor`):
+            current_vision_features (`torch.Tensor`):
                 The current vision features used for self-attention.
-            memory (`torch.FloatTensor`):
+            memory (`torch.Tensor`):
                 The memory features used for cross-attention.
-            current_vision_position_embeddings (`torch.FloatTensor`, *optional*):
+            current_vision_position_embeddings (`torch.Tensor`, *optional*):
                 The position embeddings for the current vision features.
-            memory_posision_embeddings (`torch.FloatTensor`, *optional*):
+            memory_posision_embeddings (`torch.Tensor`, *optional*):
                 The position embeddings for the memory features.
             num_object_pointer_tokens (`int`, *optional*, defaults to 0):
                 The number of object pointer tokens.
