@@ -180,6 +180,11 @@ def get_all_config_mappings():
 
 def get_all_processor_mappings(config_mapping: dict[str, str]):
     files_to_names = {
+        "image_processing_dali": (
+            "DaliBackend",
+            "IMAGE_PROCESSOR_MAPPING_NAMES_DALI",
+            MISSING_IMAGE_PROCESSOR_MAPPING_NAMES,
+        ),
         "image_processing_pil": (
             "PilBackend",
             "IMAGE_PROCESSOR_MAPPING_NAMES_PIL",
@@ -220,16 +225,19 @@ def get_all_processor_mappings(config_mapping: dict[str, str]):
     for model_type in config_mapping:
         pil_processor_name = all_mappings["IMAGE_PROCESSOR_MAPPING_NAMES_PIL"].get(model_type)
         tv_processor_name = all_mappings["IMAGE_PROCESSOR_MAPPING_NAMES_TV"].get(model_type)
+        dali_processor_name = all_mappings["IMAGE_PROCESSOR_MAPPING_NAMES_DALI"].get(model_type)
 
         if pil_processor_name is not None or tv_processor_name is not None:
             merged_image_processor_mapping[model_type] = {
                 **({"pil": pil_processor_name} if pil_processor_name else {}),
                 **({"torchvision": tv_processor_name} if tv_processor_name else {}),
+                **({"dali": dali_processor_name} if dali_processor_name else {}),
             }
 
     all_mappings["IMAGE_PROCESSOR_MAPPING_NAMES"] = merged_image_processor_mapping
     del all_mappings["IMAGE_PROCESSOR_MAPPING_NAMES_PIL"]
     del all_mappings["IMAGE_PROCESSOR_MAPPING_NAMES_TV"]
+    del all_mappings["IMAGE_PROCESSOR_MAPPING_NAMES_DALI"]
     check_duplicates(MISSING_IMAGE_PROCESSOR_MAPPING_NAMES, merged_image_processor_mapping)
 
     return all_mappings

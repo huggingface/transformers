@@ -305,6 +305,17 @@ class AutoVideoProcessorTest(unittest.TestCase):
             if CustomConfig in VIDEO_PROCESSOR_MAPPING._extra_content:
                 del VIDEO_PROCESSOR_MAPPING._extra_content[CustomConfig]
 
+    def test_unregistered_backend_falls_back_to_torchvision(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor_tmpfile = Path(tmpdirname) / "video_preprocessor_config.json"
+            json.dump(
+                {"video_processor_type": "LlavaOnevisionVideoProcessor"},
+                open(processor_tmpfile, "w", encoding="utf-8"),
+            )
+
+            video_processor = AutoVideoProcessor.from_pretrained(tmpdirname, backend="unregistered")
+            self.assertIsInstance(video_processor, LlavaOnevisionVideoProcessor)
+
     def test_video_processor_new_backend_registration(self):
         class Cv2VideoProcessor(LlavaOnevisionVideoProcessor):
             foo = True

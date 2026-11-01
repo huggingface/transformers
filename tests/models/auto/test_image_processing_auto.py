@@ -357,6 +357,15 @@ class AutoImageProcessorTest(unittest.TestCase):
             self.assertIsInstance(image_processor, ViTImageProcessor)
 
     @require_torchvision
+    def test_unregistered_backend_falls_back_to_torchvision(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
+            json.dump({"image_processor_type": "ViTImageProcessor"}, open(processor_tmpfile, "w", encoding="utf-8"))
+
+            image_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="unregistered")
+            self.assertIsInstance(image_processor, ViTImageProcessor)
+
+    @require_torchvision
     def test_default_to_pil_backend_for_lanczos_processors(self):
         # Processors that rely on Lanczos interpolation (listed in _LANCZOS_IMAGE_PROCESSORS)
         # must default to the PIL backend when torchvision < 0.27, but can use the torchvision
