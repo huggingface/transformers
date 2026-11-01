@@ -4156,6 +4156,35 @@ class GenerationIntegrationTests(unittest.TestCase):
         )
         self.assertTrue(out.shape[-1] <= (input_length + 7))
 
+    def test_prompt_lookup_decoding_rejects_stateful_logits_processors(self):
+        # Prompt lookup calls the logits processors on draft tokens, which advances the internal state of
+        # stateful processors (classifier-free guidance, SynthID watermarking) and changes the output compared
+        # to generation without prompt lookup. It must raise instead of silently generating different tokens.
+        # (see https://github.com/huggingface/transformers/issues/50051)
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM").to(
+            torch_device
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        # Repetitive prompt, so that prompt lookup finds draft tokens
+        inputs = tokenizer("a b c d a b c d a b c d a b c d a b c", return_tensors="pt").to(torch_device)
+
+        watermarking_config = SynthIDTextWatermarkingConfig(
+            keys=[654, 400, 836, 123, 340, 443, 597, 160, 57, 29], ngram_len=5
+        )
+        for stateful_kwargs in ({"guidance_scale": 1.5}, {"watermarking_config": watermarking_config}):
+            with self.assertRaisesRegex(ValueError, "prompt lookup decoding is not supported with stateful"):
+                model.generate(
+                    **inputs, do_sample=False, max_new_tokens=4, prompt_lookup_num_tokens=3, **stateful_kwargs
+                )
+
+        # Stateless processors are unaffected: prompt lookup output still matches plain greedy decoding
+        for stateless_kwargs in ({}, {"repetition_penalty": 1.3}):
+            output_without_lookup = model.generate(**inputs, do_sample=False, max_new_tokens=10, **stateless_kwargs)
+            output_with_lookup = model.generate(
+                **inputs, do_sample=False, max_new_tokens=10, prompt_lookup_num_tokens=3, **stateless_kwargs
+            )
+            self.assertTrue((output_without_lookup == output_with_lookup).all())
+
     def test_assisted_decoding_sliding_window_multi_token_draft(self):
         """
         Test that assisted decoding works correctly when the assistant model has sliding window and will draft several
