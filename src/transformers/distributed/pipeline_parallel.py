@@ -17,8 +17,14 @@ import inspect
 from functools import wraps
 from typing import TYPE_CHECKING
 
-from ..modeling_outputs import CausalLMOutputWithPast
 from ..utils import is_torch_available, is_torch_distributed_available
+from ..utils.import_utils import PYTORCH_IMPORT_ERROR
+
+
+if not is_torch_available():
+    raise ImportError(PYTORCH_IMPORT_ERROR.format(__name__))
+
+from ..modeling_outputs import CausalLMOutputWithPast  # noqa: E402
 
 
 if TYPE_CHECKING:

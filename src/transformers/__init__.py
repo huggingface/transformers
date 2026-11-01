@@ -798,5 +798,5 @@ else:
 
 if not is_torch_available():
     logger.warning_advice(
-        "PyTorch was not found. Models won't be available and only tokenizers, configuration and file/data utilities can be used."
+        "PyTorch >= 2.6 is unavailable. Models won't be available and only tokenizers, configuration and file/data utilities can be used."
     )
