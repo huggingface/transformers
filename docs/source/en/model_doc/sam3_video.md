@@ -76,8 +76,11 @@ inference_session = processor.add_text_prompt(
 # Process all frames in the video
 outputs_per_frame = {}
 # Pass show_progress_bar=True to display a tqdm progress bar.
+# If you already called model.forward on the conditioning frame, use
+# processor.propagate_in_video_iterator_kwargs(...) so that frame is not run twice.
 for model_outputs in model.propagate_in_video_iterator(
-    inference_session=inference_session, max_frame_num_to_track=50
+    inference_session=inference_session,
+    **processor.propagate_in_video_iterator_kwargs(inference_session, conditioning_frame_idx=0, max_frame_num_to_track=50),
 ):
     processed_outputs = processor.postprocess_outputs(inference_session, model_outputs)
     outputs_per_frame[model_outputs.frame_idx] = processed_outputs
