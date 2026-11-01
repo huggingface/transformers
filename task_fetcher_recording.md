@@ -3006,3 +3006,86 @@ test_to_phases[test_file].setdefault(phase, set()).update(src_files)
 ```
 
 Docstring updated to show all three phases in example output.
+
+### Empirical verification re-run (2026-11-01, auto→bert→vit)
+
+Re-run with `CI_RECORD_DEPS_INCLUDE_COLLECTION=1`, no xdist, `--collect-only`:
+
+| Test file        | collection | graph_transitive | total |
+|------------------|-----------|-----------------|-------|
+| auto (1st)       | 248       | —               | 248   |
+| bert (2nd)       | 10        | 224             | 234   |
+| vit  (3rd)       | 29        | 207             | 236   |
+
+Module graph: 187 parent modules, 1985 total direct edges.
+
+Output files land at `Path(CI_RECORD_DEPS_OUTPUT).parent / "deps_by_file.json"` and
+`module_graph.json` — so the env var should point to a FILE inside the desired dir,
+e.g. `CI_RECORD_DEPS_OUTPUT=./reports/deps.json` → files land in `./reports/`.
+
+### Three-key format design note
+
+The `collection / execution / graph_transitive` split means no separate "with/without
+transitive" flag is needed — consumers choose which keys to union:
+- Conservative (low noise): union `collection` + `execution` only
+- Complete (maximum coverage): union all three
+- `graph_transitive` key is absent on the first-collected test file (it got everything
+  directly in `collection`), present on 2nd+ test files.
+
+### Package __init__.py files in the graph
+
+`transformers.models.bert` → `transformers/models/bert/__init__.py` — a real file, not
+noise. If a test reaches it, it imported something from the bert package, so bert file
+changes legitimately affect that test. The lazy `transformers/__init__.py` and
+`transformers/models/__init__.py` are also real but low-signal (rarely changed; lazy so
+they don't pull in model code at import time — a change to them would correctly trigger
+all tests anyway).
+
+### BFS path analysis: why vit reaches bart/clip/deepseek/qwen3/nllb_moe
+
+Traced via the module-name graph. Two distinct root causes:
+
+**1. Generation mixin (legitimate)**
+```
+test_modeling_vit.py
+  → tests/test_modeling_common.py         (vit inherits ModelTesterMixin)
+  → tests/generation/test_utils.py        (GenerationTesterMixin)
+  → transformers/models/bart/modeling_bart.py  (generation tests use bart as reference)
+```
+Correct — if `modeling_bart.py` changes, `test_generation_utils.py` could break, and
+that mixin is exercised by vit's test class. **Survives PR #50000.**
+
+**2. Eager exporter imports (noise, fixed by PR #50000)**
+```
+test_modeling_vit.py
+  → tests/test_modeling_common.py         (ModelTesterMixin → ExportTesterMixin)
+  → tests/exporters/test_export.py
+  → transformers/exporters/exporter_dynamo.py  (eager @register_patch resolution)
+  → transformers/models/deepseek_v2/modeling_deepseek_v2.py
+  → transformers/models/nllb_moe/modeling_nllb_moe.py
+  → transformers/models/qwen2_vl/modeling_qwen2_vl.py
+  → transformers/models/qwen3_5_moe/modeling_qwen3_5_moe.py  (etc.)
+```
+`@register_patch` previously called `_resolve_dotted_path` (which runs
+`importlib.import_module`) at decoration time, pulling in ~50 model files the moment any
+exporter file was imported. PR #50000 (merged 2026-10-26, not yet in `fetcher-recording`)
+stores the dotted-path string and resolves lazily in `apply_patches` instead.
+
+**Effect of PR #50000 on graph (verified by temporary cherry-pick):**
+
+| Metric | Before | After |
+|--------|--------|-------|
+| auto collection | 248 | 136 (-112) |
+| bert graph_transitive | 224 | 111 (-113) |
+| vit graph_transitive | 207 | 94 (-113) |
+| module graph edges | 1985 | 776 (-1209) |
+| deepseek/qwen3/nllb/qwen2_vl in vit | present | **gone** |
+| bart in vit | present | **still present** (legitimate) |
+
+Output files saved locally:
+- Before: `deps_by_file.json`, `module_graph.json` (repo root)
+- After:  `tmp_graph_run2/deps_by_file.json`, `tmp_graph_run2/module_graph.json`
+
+**Conclusion**: once `fetcher-recording` is rebased onto main (picking up PR #50000),
+the graph will be ~60% smaller and free of cross-model exporter noise. Bart remains
+because it is a real dependency via the generation mixin, not noise.
