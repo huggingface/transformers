@@ -291,6 +291,8 @@ class Ovis2IntegrationTest(unittest.TestCase):
         model = Ovis2ForConditionalGeneration.from_pretrained(
             "thisisiron/Ovis2-2B-hf", dtype="bfloat16", device_map=torch_device
         )
+        # The low-res image yields fewer image tokens, so the batch needs left padding for generation
+        self.processor.tokenizer.padding_side = "left"
 
         lowres_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2014/COCO_val2014_000000537955.jpg"
         lowres_img = load_test_image(lowres_url).resize((320, 240))
