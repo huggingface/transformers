@@ -252,6 +252,8 @@ GGUF_PRE_TOKENIZER_SPLITS = {
     "jina-v5-nano": _LLAMA3_SPLIT,
     "dbrx": _LLAMA3_SPLIT,
     "smaug-bpe": _LLAMA3_SPLIT,
+    # llama.cpp spells the contractions out case by case (`'[sS]`), which is the same split
+    "glm4": _LLAMA3_SPLIT,
     "tekken": _TEKKEN_SPLIT,
     "qwen2": _QWEN2_SPLIT,
     "deepseek-r1-qwen": _QWEN2_SPLIT,

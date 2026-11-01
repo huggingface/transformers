@@ -233,11 +233,45 @@ def _lfm2(config) -> list[WeightTransform]:
     return renamings + [conv_kernel]
 
 
+def _glm4moe(config) -> list[WeightTransform]:
+    """GLM-4.5 / 4.6: attention with partial RoPE, then a dense MLP on the first layers and a sigmoid-routed MoE
+    with shared experts on the rest.
+
+    llama.cpp only renames, and stacks each layer's experts into one 3D tensor per projection; gate and up
+    are fused back into `gate_up_proj` here. Q/K are already in NeoX order, so nothing is permuted, and the
+    norms carry no offset, so every quantized weight stays packed.
+
+    The MTP block is written as `blk.{num_hidden_layers}.*`, the index the safetensors checkpoint gives it,
+    so it renames to the same `model.layers.N.*` keys, which the model already ignores on load.
+    """
+    renamings = DENSE_DECODER_RENAMINGS + [
+        WeightRenaming(r"^output_norm\.", "model.norm."),
+        WeightRenaming(r"\.attn_norm\.", ".input_layernorm."),
+        WeightRenaming(r"\.post_attention_norm\.", ".post_attention_layernorm."),
+        WeightRenaming(r"\.attn_q_norm\.", ".self_attn.q_norm."),
+        WeightRenaming(r"\.attn_k_norm\.", ".self_attn.k_norm."),
+        WeightRenaming(r"\.ffn_gate_inp\.", ".mlp.gate."),
+        WeightRenaming(r"\.exp_probs_b\.bias", ".mlp.gate.e_score_correction_bias"),
+        WeightRenaming(r"\.ffn_down_exps\.weight", ".mlp.experts.down_proj"),
+        WeightRenaming(r"\.ffn_gate_shexp\.", ".mlp.shared_experts.gate_proj."),
+        WeightRenaming(r"\.ffn_up_shexp\.", ".mlp.shared_experts.up_proj."),
+        WeightRenaming(r"\.ffn_down_shexp\.", ".mlp.shared_experts.down_proj."),
+    ]
+    # `gate_up_proj` is chunked in two on dim 1, so gate comes first and up second.
+    fuse_gate_up = WeightConverter(
+        source_patterns=[r"\.ffn_gate_exps\.weight", r"\.ffn_up_exps\.weight"],
+        target_patterns=".mlp.experts.gate_up_proj",
+        operations=[ConcatenateRows(dim=1)],
+    )
+    return renamings + [fuse_gate_up]
+
+
 # gguf `general.architecture` -> builder taking the model config
 GGUF_ARCHS = {
     "qwen35": _qwen35,
     "qwen35moe": _qwen35moe,
     "lfm2": _lfm2,
+    "glm4moe": _glm4moe,
 }
 
 
