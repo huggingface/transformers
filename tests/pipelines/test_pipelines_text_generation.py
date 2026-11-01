@@ -664,6 +664,35 @@ class TextGenerationPipelineTests(unittest.TestCase):
             ],
         )
 
+
+    def test_return_dict_in_generate_batched_metadata(self):
+        generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2", max_new_tokens=2)
+        generator.tokenizer.pad_token = generator.tokenizer.eos_token
+        generator.tokenizer.padding_side = "left"
+        texts = ["Artificial intelligence is", "Hello world"]
+        args = dict(return_dict_in_generate=True, output_scores=True, do_sample=False)
+
+        greedy = generator(texts, batch_size=2, **args)
+        self.assertTrue(all("scores" in group[0] for group in greedy))
+
+        beam_args = dict(args, num_beams=3, num_return_sequences=2)
+        inputs = generator.tokenizer(texts, padding=True, return_tensors="pt").to(generator.model.device)
+        direct = generator.model.generate(**inputs, max_new_tokens=2, **beam_args)
+        outputs = generator(texts, batch_size=2, **beam_args)
+        for i, group in enumerate(outputs):
+            self.assertEqual(len(group), 2)
+            for j, candidate in enumerate(group):
+                self.assertIn("beam_indices", candidate)
+                self.assertAlmostEqual(
+                    candidate["sequences_scores"], direct.sequences_scores[i * 2 + j].item(), places=4
+                )
+
+        sampled = generator(
+            texts, batch_size=2, num_return_sequences=2,
+            return_dict_in_generate=True, output_scores=True, do_sample=True,
+        )
+        self.assertTrue(all("scores" in record for group in sampled for record in group))
+
     @require_torch
     def test_pipeline_assisted_generation(self):
         """Tests that we can run assisted generation in the pipeline"""
