@@ -4977,6 +4977,14 @@ _ci_source_deps_repo_root: Path | None = None
 _ci_source_deps_src_root: Path | None = None
 _ci_current_phase: str = "startup"
 _ci_current_test_id: str | None = None
+# Module dependency graph: parent_module_name → set of directly-imported child module names.
+# Built as module bodies execute (one entry per unique (parent, child) pair).
+# Used at session end to compute the full transitive dep set for each test file — including
+# modules whose bodies didn't re-execute for later test files (sys.modules caching).
+_ci_module_graph: dict[str, set[str]] = {}
+# Stack of module names whose bodies are currently executing.
+# Pushed before _original_import when the module is new; popped after it returns.
+_ci_module_loading_stack: list[str] = []
 
 
 def set_ci_collecting_file(path: str | None) -> None:
@@ -5118,6 +5126,36 @@ def _record_import_chain(module_name: str) -> None:
         _ci_deps_tracker_reentrant.active = False
 
 
+def _record_module_graph_edge(module_name: str) -> None:
+    """Record a direct dep edge in the module graph: loading_stack[-1] → module_name.
+
+    Called from the import hook for every transformers/tests import.  When the loading
+    stack is non-empty, the top entry is the module whose body is currently executing —
+    we record that it directly imports ``module_name``.  When the stack is empty the
+    import is a seed (from test file code) and no graph edge is needed (the seed is
+    already captured by ``_record_import_chain``).
+
+    Edges triggered by ``_LazyAutoMapping`` bulk iteration (``_load_attr_from_module``)
+    are filtered out — same rule as in ``_record_import_chain``.
+    """
+    if not _ci_module_loading_stack:
+        return
+    parent = _ci_module_loading_stack[-1]
+    if parent == module_name:
+        return  # self-loop
+    # Fast path: already recorded this edge — skip the frame walk.
+    parent_set = _ci_module_graph.get(parent)
+    if parent_set is not None and module_name in parent_set:
+        return
+    # Discard imports triggered by _LazyAutoMapping bulk iteration (values/items/keys).
+    frame = sys._getframe(0)
+    while frame is not None:
+        if frame.f_code.co_name == "_load_attr_from_module":
+            return
+        frame = frame.f_back
+    _ci_module_graph.setdefault(parent, set()).add(module_name)
+
+
 def install_ci_source_deps_tracker() -> None:
     """Override builtins.__import__ to record import call chains for CI dep analysis.
 
@@ -5143,69 +5181,91 @@ def install_ci_source_deps_tracker() -> None:
     _original_import_module = _importlib.import_module
 
     def _tracking_import(name, globals=None, locals=None, fromlist=(), level=0):
-        result = _original_import(name, globals, locals, fromlist, level)
-        if isinstance(name, str) and not getattr(_ci_deps_tracker_reentrant, "active", False):
-            # Resolve relative imports (level > 0) to their absolute module name.
-            if level > 0 and globals is not None:
-                pkg = globals.get("__package__") or ""
-                # Go up `level` levels in the package hierarchy.
-                parts = pkg.split(".")
-                if level <= len(parts):
-                    base = ".".join(parts[:-level] if level < len(parts) else parts[: max(0, len(parts) - level + 1)])
-                    # Trim off `level - 1` components (level=1 means same package, level=2 means parent, etc.)
-                    base = ".".join(parts[: max(0, len(parts) - (level - 1))])
-                    resolved_name = f"{base}.{name}" if name else base
-                else:
-                    resolved_name = name
-            else:
-                resolved_name = name
-            top = resolved_name.split(".")[0]
-            if top in ("transformers", "tests"):
-                _record_import_chain(resolved_name)
-            # Also record submodules loaded as side-effects via fromlist.
-            if fromlist and top in ("transformers", "tests"):
+        # ── 1. Resolve the module name BEFORE calling the real import ──────────
+        # We need the resolved name early to check sys.modules and manage the
+        # loading stack (which module body is currently executing).
+        resolved_name = name
+        if isinstance(name, str) and level > 0 and globals is not None:
+            pkg = globals.get("__package__") or ""
+            parts = pkg.split(".")
+            if level <= len(parts):
+                # Trim off `level - 1` components (level=1 → same pkg, level=2 → parent, …)
+                base = ".".join(parts[: max(0, len(parts) - (level - 1))])
+                resolved_name = f"{base}.{name}" if name else base
+            # else: keep resolved_name = name (edge case, shouldn't happen in valid Python)
+
+        top = resolved_name.split(".")[0] if isinstance(resolved_name, str) else ""
+        is_relevant = top in ("transformers", "tests")
+        reentrant = getattr(_ci_deps_tracker_reentrant, "active", False)
+
+        # ── 2. Push to loading stack if this module is being loaded fresh ──────
+        # The stack lets _record_module_graph_edge know which parent module body
+        # is executing when a child import fires.
+        is_new = is_relevant and not reentrant and resolved_name not in sys.modules
+        if is_new:
+            _ci_module_loading_stack.append(resolved_name)
+
+        # ── 3. Run the real import (may execute module body recursively) ───────
+        try:
+            result = _original_import(name, globals, locals, fromlist, level)
+        finally:
+            # ── 4. Pop loading stack (always, even on exception) ───────────────
+            if is_new:
+                _ci_module_loading_stack.pop()
+
+        # ── 5. Record graph edge + test-file seed ─────────────────────────────
+        if is_relevant and not reentrant:
+            # Graph edge: whoever is loading right now → resolved_name.
+            # If stack is empty this is a top-level seed (recorded via _record_import_chain).
+            _record_module_graph_edge(resolved_name)
+            # Existing per-test-file attribution (unchanged behaviour).
+            _record_import_chain(resolved_name)
+
+            # Also record submodules loaded as fromlist side-effects.
+            if fromlist:
                 for item in fromlist:
                     if item == "*":
                         continue
                     submodule = f"{resolved_name}.{item}"
                     if submodule in sys.modules:
+                        _record_module_graph_edge(submodule)
                         _record_import_chain(submodule)
                     else:
-                        # `item` is a class/function, not a real subpackage.  The naive
-                        # check `sys.modules.get("transformers.BertModel")` always fails
-                        # because Python stores the module under its real dotted name
-                        # ("transformers.models.bert.modeling_bert"), never under the
-                        # fabricated "transformers.<ClassName>" key.
-                        #
-                        # Normally this is fine: when `from transformers import BertModel`
-                        # first fires, `transformers.__getattr__` calls
-                        # `importlib.import_module("...modeling_bert")`, our
-                        # `_tracking_import_module` hook fires, and we record the file.
-                        #
-                        # But if BertModel is already in `transformers.__dict__` (put there
-                        # by an earlier `from transformers import BertModel` in a different
-                        # test), Python skips `__getattr__` entirely — no importlib call,
-                        # no hook, nothing recorded.
-                        #
-                        # Fix: ask the class itself where it was defined via `__module__`,
-                        # which is baked in at class-definition time and is always the real
-                        # dotted module name.  Use `__dict__` (not `getattr`) to avoid
-                        # re-triggering `__getattr__` and causing our hook to fire twice.
+                        # `item` is a class/function whose real module is not stored under
+                        # "transformers.<ClassName>" in sys.modules.  When BertModel is first
+                        # accessed, transformers.__getattr__ triggers importlib.import_module
+                        # and _tracking_import_module handles it.  But if BertModel is already
+                        # in transformers.__dict__ (cached by an earlier test), __getattr__ is
+                        # skipped.  Recover the real module via attr.__module__ — it is baked
+                        # in at class-definition time and is always the correct dotted name.
                         parent_mod = sys.modules.get(resolved_name)
                         if parent_mod is not None:
                             attr = parent_mod.__dict__.get(item)
                             if attr is not None:
                                 mod_name = getattr(attr, "__module__", None)
                                 if isinstance(mod_name, str) and mod_name.split(".")[0] in ("transformers", "tests"):
+                                    _record_module_graph_edge(mod_name)
                                     _record_import_chain(mod_name)
         return result
 
     def _tracking_import_module(name, package=None):
-        result = _original_import_module(name, package)
-        if isinstance(name, str) and not getattr(_ci_deps_tracker_reentrant, "active", False):
-            resolved = _importlib_util.resolve_name(name, package) if (package and name.startswith(".")) else name
-            if resolved.split(".")[0] in ("transformers", "tests"):
-                _record_import_chain(resolved)
+        # Resolve name before the call so we can manage the loading stack.
+        resolved = _importlib_util.resolve_name(name, package) if (package and name.startswith(".")) else name
+        is_relevant = isinstance(resolved, str) and resolved.split(".")[0] in ("transformers", "tests")
+        reentrant = getattr(_ci_deps_tracker_reentrant, "active", False)
+
+        is_new = is_relevant and not reentrant and resolved not in sys.modules
+        if is_new:
+            _ci_module_loading_stack.append(resolved)
+        try:
+            result = _original_import_module(name, package)
+        finally:
+            if is_new:
+                _ci_module_loading_stack.pop()
+
+        if is_relevant and not reentrant:
+            _record_module_graph_edge(resolved)
+            _record_import_chain(resolved)
         return result
 
     builtins.__import__ = _tracking_import
@@ -5253,6 +5313,52 @@ def record_ci_source_deps_chains() -> None:
         data = merged
     else:
         data = _ci_deps_chains
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        with open(target, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except OSError:
+        pass
+
+
+def write_ci_module_graph() -> None:
+    """Write the module dependency graph to ``module_graph.json`` next to ``CI_RECORD_DEPS_OUTPUT``.
+
+    Output format::
+
+        {
+            "transformers.models.bert.modeling_bert": [
+                "transformers.models.bert.configuration_bert",
+                "transformers.activations",
+                ...
+            ],
+            ...
+        }
+
+    Each key is a Python module name whose body was observed executing during this session.
+    Values are the module names that were *directly* imported from that body — one hop only.
+    The full transitive closure is computed from this graph in ``record_ci_source_deps_by_file``.
+
+    No-op if ``CI_RECORD_DEPS_OUTPUT`` is not set.  Call from ``pytest_sessionfinish``.
+    xdist-aware: workers write per-worker files; controller merges with set union.
+    """
+    output_path = os.environ.get("CI_RECORD_DEPS_OUTPUT")
+    if not output_path:
+        return
+    out_dir = Path(output_path).parent
+    target, is_controller = _ci_record_target(out_dir, "module_graph.json")
+    if is_controller:
+        merged: dict[str, set] = {}
+        for f in sorted(out_dir.glob("module_graph_gw*.json")):
+            try:
+                fragment = json.loads(f.read_text(encoding="utf-8"))
+                for k, v in fragment.items():
+                    merged.setdefault(k, set()).update(v)
+            except (OSError, json.JSONDecodeError):
+                pass
+        data = {k: sorted(v) for k, v in sorted(merged.items())}
+    else:
+        data = {k: sorted(v) for k, v in sorted(_ci_module_graph.items())}
     try:
         out_dir.mkdir(parents=True, exist_ok=True)
         with open(target, "w", encoding="utf-8") as f:
@@ -5314,6 +5420,73 @@ def record_ci_source_deps_by_file() -> None:
             test_file: {phase: sorted(srcs) for phase, srcs in sorted(phases.items())}
             for test_file, phases in sorted(by_file.items())
         }
+
+    # ── Augment with transitive closure via module graph ──────────────────────
+    # The module graph records direct import edges (parent → child) as module names.
+    # For each test file we BFS from its known seed files through the graph to find
+    # files that were transitively imported but whose module bodies didn't re-execute
+    # for this test (sys.modules caching) — the "second encounter" problem.
+    #
+    # Steps:
+    #  1. Build a file-path graph from the module-name graph using sys.modules.__file__.
+    #  2. For each test file: seed from known collection+execution deps, BFS, collect new.
+    #  3. Store newly-discovered files under "graph_transitive" key.
+
+    src_root = _ci_source_deps_src_root
+    repo_root = _ci_source_deps_repo_root
+
+    def _mod_to_path(mod_name: str) -> str | None:
+        mod = sys.modules.get(mod_name)
+        if mod is None:
+            return None
+        f = getattr(mod, "__file__", None)
+        if not f:
+            return None
+        resolved = Path(f).resolve()
+        try:
+            return f"src/transformers/{resolved.relative_to(src_root).as_posix()}"
+        except (ValueError, TypeError):
+            pass
+        try:
+            rel = resolved.relative_to(repo_root).as_posix()
+            if rel.startswith("tests/"):
+                return rel
+        except (ValueError, TypeError):
+            pass
+        return None
+
+    if src_root is not None and repo_root is not None and _ci_module_graph:
+        # Convert module-name graph → file-path graph (built once per session).
+        file_graph: dict[str, set[str]] = {}
+        for parent_mod, child_mods in _ci_module_graph.items():
+            p_path = _mod_to_path(parent_mod)
+            if p_path is None:
+                continue
+            for child_mod in child_mods:
+                c_path = _mod_to_path(child_mod)
+                if c_path is None or c_path == p_path:
+                    continue
+                file_graph.setdefault(p_path, set()).add(c_path)
+
+        # BFS per test file.
+        for test_file, phases in out.items():
+            seeds: set[str] = set()
+            for files in phases.values():
+                seeds.update(files)
+            if not seeds:
+                continue
+            frontier = list(seeds)
+            visited = set(seeds)
+            while frontier:
+                cur = frontier.pop()
+                for dep in file_graph.get(cur, ()):
+                    if dep not in visited:
+                        visited.add(dep)
+                        frontier.append(dep)
+            new_via_graph = sorted(visited - seeds)
+            if new_via_graph:
+                out[test_file]["graph_transitive"] = new_via_graph
+
     try:
         out_dir.mkdir(parents=True, exist_ok=True)
         with open(target, "w", encoding="utf-8") as f:
