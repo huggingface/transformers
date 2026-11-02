@@ -242,6 +242,32 @@ jobs:
               label="KVCacheConfigurator.configure available_bytes",
           )
 
+          # ── 4. _normalize_tp_plan – skip unknown TP styles gracefully ────────
+          # embedding_rowwise / embedding_colwise were added to transformers
+          # after the pinned SGLang commit.  For TP=1 CPU CI, skipping an
+          # unknown style is safe: the module simply runs unreplaced.
+          p_tf = pathlib.Path("python/sglang/srt/models/transformers.py")
+          src_tf = p_tf.read_text()
+          target = "normalized[pattern] = _normalize_tp_style(style)"
+          if target not in src_tf:
+              print("[PATCH] WARNING: _normalize_tp_plan target not found; skipping", flush=True)
+          else:
+              src_tf2 = re.sub(
+                  r'([ \t]+)(normalized\[pattern\] = _normalize_tp_style\(style\))',
+                  lambda m: (
+                      m.group(1) + 'try:\n' +
+                      m.group(1) + '    ' + m.group(2) + '\n' +
+                      m.group(1) + 'except ValueError as _tp_err:\n' +
+                      m.group(1) + '    print(f"[SGLANG-CI] Skipping TP style {style!r} for {pattern!r}: {_tp_err}", flush=True)'
+                  ),
+                  src_tf,
+              )
+              if src_tf2 == src_tf:
+                  print("[PATCH] WARNING: _normalize_tp_plan regex did not match", flush=True)
+              else:
+                  p_tf.write_text(src_tf2)
+                  print("[PATCH] OK: _normalize_tp_plan graceful skip for unknown styles", flush=True)
+
           print("[PATCH] All patches applied.", flush=True)
           PATCHEOF
 
