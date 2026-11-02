@@ -67,6 +67,13 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ## Notes
 
 - Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
+- On NVIDIA GB10 (`SM121`) and AMD Strix Halo (`gfx1151`), `mamba-ssm` and `causal-conv1d` have no prebuilt wheels, so `NemotronHMamba2Mixer` falls back to the slow PyTorch `einsum` segment-sum reference. Pass `use_kernels=True` (`pip install -U kernels`) to [`~PreTrainedModel.from_pretrained`] to use the Hub kernels instead (`kernels-community/mamba-ssm` `v4` on CUDA and [`Atlas-Inference/gdn`](https://huggingface.co/kernels/Atlas-Inference/gdn) on `gfx1151` ROCm). Measured on Strix Halo (`gfx1151`, torch 2.14 + ROCm 7.2, `Nemotron-3.5-Super-VL-120B` Mamba-2 mixer dimensions, bf16):
+
+  | Prompt Tokens | `use_kernels=False` TTFT | `use_kernels=True` TTFT | Decode (`False` -> `True`) |
+  | --- | --- | --- | --- |
+  | 1,024 | 0.64 s | 0.38 s (1.67x faster) | 27.8 -> 31.5 tok/s |
+  | 4,096 | 2.71 s | 1.65 s (1.64x faster) | 24.7 -> 29.2 tok/s |
+  | 16,384 | 18.32 s | 9.38 s (1.95x faster) | 20.9 -> 23.0 tok/s |
 
 ## NemotronHConfig
 
