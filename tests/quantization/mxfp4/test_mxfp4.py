@@ -336,6 +336,34 @@ class Mxfp4IntegrationTest(unittest.TestCase):
         self.assertEqual(result.shape, (2, 8 * 16 * 2, 4))
         self.assertEqual(result.dtype, torch.bfloat16)
 
+    @require_torch
+    def test_dequantize_to_target_dtype(self):
+        """Test that dequantized experts follow the dtype of the parameter they load into"""
+        from transformers import GptOssConfig, GptOssForCausalLM
+        from transformers.integrations.mxfp4 import Mxfp4Dequantize
+
+        config = GptOssConfig(
+            vocab_size=16,
+            hidden_size=32,
+            intermediate_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            num_local_experts=2,
+        )
+        with torch.device("meta"):
+            model = GptOssForCausalLM(config).to(torch.float32)
+
+        # gate_up_proj packs 2 * intermediate_size rows of hidden_size / 32 blocks, 16 bytes each
+        blocks = torch.randint(0, 255, (2, 64, 1, 16), dtype=torch.uint8)
+        scales = torch.randint(100, 150, (2, 64, 1), dtype=torch.uint8)
+        layer_name = "model.layers.0.mlp.experts.gate_up_proj"
+        result = Mxfp4Dequantize(hf_quantizer=None).convert(
+            {"gate_up_proj_blocks": blocks, "gate_up_proj_scales": scales}, model=model, full_layer_name=layer_name
+        )
+        self.assertEqual(result[layer_name].shape, (2, 32, 64))
+        self.assertEqual(result[layer_name].dtype, torch.float32)
+
     @REQUIRE_TRITON_MXFP4
     @require_kernels
     @require_torch
