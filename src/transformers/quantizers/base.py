@@ -265,26 +265,24 @@ class HfQuantizer(ABC):
             )
         operation = dequantize(self)
         for module_name, module in list(model.named_modules()):
-            # ponytail: linears only, quantized fused experts (3D params) stay as they are
-            if not hasattr(module, "in_features"):
+            # ponytail: leaf modules only, so quantized fused experts (3D params) stay as they are
+            if next(module.children(), None) is not None:
                 continue
+            state = module.state_dict()
             for param, serialized in self.serialized_names.items():
-                state = module.state_dict() if param in module._parameters else {}
                 tensors = {name: [state[name]] for name in serialized if name in state}
-                if len(tensors) < 2:  # no companions: not quantized
+                if len(tensors) < 2:  # a weight without companions is not quantized
                     continue
                 full_name = f"{module_name}.{param}"
-                weight = expand_target_names(
-                    operation.convert(tensors, full_layer_name=full_name, model=model), full_name
-                )
-                weight = weight[full_name]
+                weight = operation.convert(tensors, full_layer_name=full_name, model=model)
+                weight = expand_target_names(weight, full_name)[full_name]
                 weight = weight[0] if isinstance(weight, list) else weight
                 bias = getattr(module, "bias", None)
                 with torch.device("meta"):
-                    dense = nn.Linear(module.in_features, module.out_features, bias=bias is not None)
+                    dense = nn.Linear(weight.shape[1], weight.shape[0], bias=bias is not None)
                 dense.weight = nn.Parameter(weight if dtype is None else weight.to(dtype), requires_grad=False)
                 if bias is not None:
-                    dense.bias = bias
+                    dense.bias = nn.Parameter(bias, requires_grad=False)
                 move_accelerate_hook(module, dense)
                 model.set_submodule(module_name, dense)
         return model
