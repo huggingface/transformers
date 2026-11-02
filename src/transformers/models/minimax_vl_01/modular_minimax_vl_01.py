@@ -497,7 +497,12 @@ class MiniMaxVL01ImageProcessorPil(LlavaNextImageProcessorPil):
 
 
 class MiniMaxVL01ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+            "return_mm_token_type_ids": False,
+        },
+    }
 
 
 class MiniMaxVL01Processor(LlavaNextProcessor):
