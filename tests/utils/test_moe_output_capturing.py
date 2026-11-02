@@ -33,15 +33,17 @@ if is_torch_available():
 @require_torch
 @pytest.mark.torch_compile_test
 @pytest.mark.parametrize(
-    "router_logits,attentions,checkpointing",
+    "output_router_logits,output_attentions,checkpointing",
     [(True, False, False), (False, True, False), (True, True, True)],
     ids=["routers", "attentions", "checkpointed_routers_and_attentions"],
 )
-def test_regional_compilation_preserves_outputs_and_reuses_graphs(router_logits, attentions, checkpointing):
+def test_regional_compilation_preserves_outputs_and_reuses_graphs(
+    output_router_logits, output_attentions, checkpointing
+):
     """Given matching Qwen layers with requested router or attention outputs,
     when forward and backward run with regional compilation,
-    then outputs and gradients match eager execution, every layer stays compiled,
-    and repeated calls reuse graphs. Checkpointed calls also replay the layers.
+    then outputs and gradients match eager execution, every forward layer call stays compiled,
+    and repeated calls reuse graphs. Checkpointed calls also replay compiled code.
     """
     from transformers.utils import output_capturing
 
@@ -60,7 +62,9 @@ def test_regional_compilation_preserves_outputs_and_reuses_graphs(router_logits,
         input_ids = torch.tensor([[2, 5, 9, 7, 3], [4, 8, 6, 3, 2]])
         inputs = {"input_ids": input_ids, "labels": input_ids}
         requested = tuple(
-            key for key, enabled in (("router_logits", router_logits), ("attentions", attentions)) if enabled
+            key
+            for key, enabled in (("router_logits", output_router_logits), ("attentions", output_attentions))
+            if enabled
         )
         graphs, calls = [], []
         phase = "forward"
@@ -70,24 +74,25 @@ def test_regional_compilation_preserves_outputs_and_reuses_graphs(router_logits,
             calls.clear()
             model.zero_grad(set_to_none=True)
             phase = "forward"
-            outputs = model(**inputs, output_router_logits=router_logits, output_attentions=attentions)
+            outputs = model(**inputs, output_router_logits=output_router_logits, output_attentions=output_attentions)
             for key in requested:
                 assert len(outputs[key]) == len(model.model.layers)
                 assert all(value.requires_grad for value in outputs[key])
 
             # Keep the collected-output objective separate from task loss: task
             # gradients alone could conceal detached router/attention outputs.
-            objective = outputs.aux_loss if router_logits else 0
+            objective = outputs.aux_loss if output_router_logits else 0
             output_parameters = []
-            if router_logits:
+            if output_router_logits:
                 output_parameters.extend(layer.mlp.gate.weight for layer in model.model.layers)
-            if attentions:
+            if output_attentions:
                 objective = objective + sum(
                     (attention * torch.arange(attention.shape[-1], device=attention.device)).sum()
                     for attention in outputs.attentions
                 )
                 for layer in model.model.layers:
                     output_parameters.extend((layer.self_attn.q_proj.weight, layer.self_attn.k_proj.weight))
+
             phase = "backward"
             output_grads = torch.autograd.grad(objective, output_parameters, retain_graph=True)
             assert all(torch.isfinite(grad).all() and torch.count_nonzero(grad) for grad in output_grads)
