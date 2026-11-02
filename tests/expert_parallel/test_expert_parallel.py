@@ -112,6 +112,10 @@ class TestExpertParallelLayer(TestCasePlus):
             experts = EpDispatchExpertsParallel().install_forward(_DummyExperts(), None, ep_implementation="custom")
         torch.testing.assert_close(experts(torch.zeros(2, 4), None, torch.ones(2, 1)), torch.ones(2, 4))
 
+    def test_megamoe_hands_experts_a_slice_of_the_shared_batch(self):
+        """`"deepgemm_megamoe"` hands each rank a padded slice with global ids, the EP group and the shared buffers."""
+        run_distributed(world_size=2, backend="gloo")(_megamoe_hands_experts_a_slice_of_the_shared_batch)()
+
 
 class _DummyExperts(torch.nn.Module):
     def __init__(self):
@@ -240,3 +244,39 @@ def _ep_gradient_checkpointing_matches_reference(rank, use_reentrant):
     torch.testing.assert_close(output, reference_output.detach())
     torch.testing.assert_close(h.grad, h_ref.grad)
     torch.testing.assert_close(w.grad, w_ref.grad)
+
+
+class _MegaMoEExperts(torch.nn.Module):
+    """Experts that exchange tokens themselves: record what they get and return a per-rank output."""
+
+    num_experts = 2
+
+    def forward(self, hidden_states, top_k_index, top_k_weights, process_group, symm_buffers):
+        self.received = (hidden_states, top_k_index, top_k_weights, process_group, symm_buffers)
+        return hidden_states * (torch.distributed.get_rank() + 1)
+
+
+def _megamoe_hands_experts_a_slice_of_the_shared_batch(rank):
+    mesh = init_device_mesh("cpu", (2,))
+    layers = [
+        EpDispatchExpertsParallel().install_forward(
+            _MegaMoEExperts(), mesh, tp_mesh=mesh, ep_implementation="deepgemm_megamoe"
+        )
+        for _ in range(2)
+    ]
+    # 3 tokens on 2 ranks: rank 1 gets the last token and one skipped slot
+    hidden_states, top_k_index, top_k_weights = _HIDDEN_STATES[:3], _TOP_K_INDEX[:3], _TOP_K_WEIGHTS[:3]
+    outputs = [layer(hidden_states, top_k_index, top_k_weights) for layer in layers]
+
+    received_hidden, received_index, received_weights, process_group, symm_buffers = layers[0].received
+    rows = slice(2 * rank, 2 * rank + 2)
+    padded_index = torch.cat([top_k_index, top_k_index.new_full((1, 2), -1)])
+    padded_weights = torch.cat([top_k_weights, top_k_weights.new_zeros(1, 2)])
+    torch.testing.assert_close(received_index, padded_index[rows])
+    torch.testing.assert_close(received_weights, padded_weights[rows])
+    torch.testing.assert_close(received_hidden[: 3 - 2 * rank], hidden_states[rows])
+    assert torch.distributed.get_process_group_ranks(process_group) == [0, 1]
+    # every layer of the EP group shares the same buffers
+    assert layers[1].received[4] is symm_buffers
+    for output in outputs:
+        torch.testing.assert_close(output, hidden_states * torch.tensor([[1.0], [1.0], [2.0]]))
