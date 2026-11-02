@@ -2263,6 +2263,40 @@ class ModelArgs:
         "shape": None,
     }
 
+    visual_pos_masks = {
+        "description": """
+    Mask of the visual token positions, where the deepstack visual embeddings are added. Derived from the pixel
+    values when they are passed.
+    """,
+        "shape": "of shape `(batch_size, sequence_length)`",
+    }
+
+    deepstack_visual_embeds = {
+        "description": """
+    Deepstack visual embeddings (DeepStack, https://arxiv.org/abs/2406.04334): features from intermediate vision
+    encoder layers, one tensor of shape `(num_visual_tokens, hidden_size)` per decoder layer from the first, added to
+    the hidden states at `visual_pos_masks`. Derived from the pixel values when they are passed.
+    """,
+        "shape": None,
+    }
+
+    vision_mask = {
+        "description": """
+    Boolean mask marking the image token positions, where `deepstack_features` are added. Derived from the pixel
+    values when they are passed.
+    """,
+        "shape": "of shape `(batch_size, sequence_length, hidden_size)`",
+    }
+
+    deepstack_features = {
+        "description": """
+    Mapping from decoder layer index to projected vision features of shape `(num_image_tokens, hidden_size)`, added
+    into the image token positions before that layer. Derived from the pixel values when they are passed;
+    `inputs_embeds` then holds zeros at the image token positions.
+    """,
+        "shape": None,
+    }
+
     output_router_logits = {
         "description": """
     Whether or not to return the logits of all the routers. They are useful for computing the router loss, and
