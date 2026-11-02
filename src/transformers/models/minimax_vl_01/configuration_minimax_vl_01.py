@@ -22,7 +22,7 @@ from typing import Literal
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 from ..auto import AutoConfig
@@ -79,10 +79,9 @@ class MiniMaxVL01TextConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     attribute_map = {"num_experts": "num_local_experts"}
@@ -183,7 +182,10 @@ class MiniMaxVL01Config(PreTrainedConfig):
 
     model_type = "minimax_vl_01"
     attribute_map = {"image_token_id": "image_token_index"}
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    sub_configs_defaults = {
+        "text_config": MiniMaxVL01TextConfig,
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="clip_vision_model"),
+    }
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
