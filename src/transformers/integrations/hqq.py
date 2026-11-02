@@ -178,15 +178,37 @@ class HqqDeserialize(ConversionOps):
         self.hf_quantizer = hf_quantizer
 
     def convert(self, input_dict, model=None, full_layer_name=None, missing_keys=None, **kwargs):
-        module_name = full_layer_name.rpartition(".")[0]
-        module = model.get_submodule(module_name)
-        layer = _hqq_linears(input_dict)[0]
-        # loaded before or after the weight, the bias of the `nn.Linear` is the one of the `HQQLinear`
-        layer.bias = module.bias
-        model.set_submodule(module_name, layer)
-        if missing_keys is not None:
-            missing_keys.discard(full_layer_name)
+        _swap_in(model, full_layer_name, _hqq_linears(input_dict)[0], missing_keys)
         return {}
+
+
+class HqqQuantize(ConversionOps):
+    """The dense weight of an `nn.Linear` is quantized with the `quant_config` it was tagged with, in an `HQQLinear`."""
+
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(self, input_dict, model=None, full_layer_name=None, missing_keys=None, **kwargs):
+        from hqq.core.quantize import HQQLinear
+
+        weight = next(iter(input_dict.values()))
+        weight = weight[0] if isinstance(weight, list) else weight
+        module = model.get_submodule(full_layer_name.rpartition(".")[0])
+        layer = HQQLinear.from_weights(
+            weight, None, module.quant_config, compute_dtype=weight.dtype, device=weight.device
+        )
+        _swap_in(model, full_layer_name, layer, missing_keys)
+        return {}
+
+
+def _swap_in(model, full_layer_name, layer, missing_keys):
+    "Replaces the `nn.Linear` owning `full_layer_name` (its weight) with the `HQQLinear` `layer`"
+    module_name = full_layer_name.rpartition(".")[0]
+    # loaded before or after the weight, the bias of the `nn.Linear` is the one of the `HQQLinear`
+    layer.bias = model.get_submodule(module_name).bias
+    model.set_submodule(module_name, layer)
+    if missing_keys is not None:
+        missing_keys.discard(full_layer_name)
 
 
 class HqqDequantize(ConversionOps):

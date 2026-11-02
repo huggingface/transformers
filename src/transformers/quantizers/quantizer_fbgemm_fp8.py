@@ -134,20 +134,6 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
             pre_quantized=self.pre_quantized,
         )
 
-    def _process_model_after_weight_loading(self, model, **kwargs):
-        """
-        Force update the input scale upper bound after weight loading and device dispatch are complete.
-        This resolves issues where persistent buffers are zeroed out or overwritten during the loading process.
-        """
-        from ..integrations.fbgemm_fp8 import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts
-
-        for m in model.modules():
-            if isinstance(m, (FbgemmFp8Linear, FbgemmFp8Llama4TextExperts)):
-                if hasattr(m, "input_scale_ub"):
-                    # The model is now on the target device, so we can use fill_ directly.
-                    m.input_scale_ub.fill_(self.quantization_config.activation_scale_ub)
-        return model
-
     def is_serializable(self):
         return True
 
