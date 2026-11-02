@@ -2167,3 +2167,50 @@ class CacheCroppingTests(unittest.TestCase):
         self.assertEqual(kv_length, sliding_window)
         self.assertEqual(returned_keys.shape[-2], kv_length)
         self.assertEqual(returned_keys[0, 0, :, 0].tolist(), [2.0, 3.0, 4.0, 5.0])
+
+
+@pytest.mark.parametrize("backend", ("fp8", "quanto", "hqq"))
+def test_quantized_cache_crop_unsupported(backend):
+    if backend != "fp8":
+        pytest.importorskip("optimum.quanto" if backend == "quanto" else "hqq")
+    if backend == "hqq" and not torch.cuda.is_available():
+        pytest.skip("HQQ requires CUDA")
+    cfg = LlamaConfig(
+        hidden_size=256,
+        intermediate_size=512,
+        num_hidden_layers=1,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        head_dim=64,
+    )
+    kw = {} if backend == "fp8" else {"nbits": 4, "q_group_size": 64, "residual_length": 128}
+    cache = QuantizedCache(backend=backend, config=cfg, **kw)
+    device = "cpu" if backend == "quanto" else torch_device
+    k = torch.randn(1, 2, 8, 64, dtype=torch.float16, device=device)
+    cache.update(k, k, 0)
+    assert not cache.is_croppable
+    with pytest.raises(ValueError, match="does not support rollback"):
+        cache.crop(-2)
+    assert cache.get_seq_length() == 8
+
+
+def test_quantized_cache_assisted_unsupported():
+    cfg = LlamaConfig(
+        vocab_size=128,
+        hidden_size=256,
+        intermediate_size=512,
+        num_hidden_layers=1,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        head_dim=64,
+    )
+    model, assistant = LlamaForCausalLM(cfg).eval(), LlamaForCausalLM(cfg).eval()
+    with pytest.raises(ValueError, match="requires a croppable cache"):
+        model.generate(
+            input_ids=torch.tensor([[1, 5, 6]]),
+            assistant_model=assistant,
+            past_key_values=QuantizedCache(backend="fp8", config=cfg),
+            max_new_tokens=2,
+            do_sample=False,
+            disable_compile=True,
+        )

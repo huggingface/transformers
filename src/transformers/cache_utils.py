@@ -727,6 +727,11 @@ class BaseQuantizedLayer(DynamicLayer):
     @abstractmethod
     def _dequantize(self, q_tensor): ...
 
+    is_croppable = False
+
+    def crop(self, tokens_to_remove: int) -> None:
+        raise ValueError("QuantizedCache does not support rollback; use DynamicCache instead.")
+
     def reset(self) -> None:
         """Resets the cache values while preserving the objects."""
         super().reset()
