@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import re
 import types
 
@@ -28,6 +29,7 @@ from ..quantizers.quantizers_utils import get_module_from_name
 
 if is_torchao_available():
     from torchao.prototype.safetensors.safetensors_support import (
+        flatten_tensor_state_dict,
         unflatten_tensor_state_dict,
     )
     from torchao.prototype.safetensors.safetensors_utils import is_metadata_torchao
@@ -241,3 +243,18 @@ class TorchAoDequantize(TorchAoDeserialize):
 
     def convert(self, input_dict, source_patterns=None, model=None, full_layer_name=None, **kwargs):
         return {full_layer_name: self.unflatten(input_dict, source_patterns, full_layer_name).dequantize()}
+
+
+class TorchAoSerialize(ConversionOps):
+    """Flattens the tensor subclasses into plain tensors for safetensors; their layout goes in `metadata`."""
+
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+        self.metadata = {}
+
+    def convert(self, input_dict, **kwargs) -> dict[str, torch.Tensor]:
+        state_dict, metadata = flatten_tensor_state_dict(input_dict)
+        # `tensor_names` lists the tensors of the whole file
+        names = json.loads(self.metadata.get("tensor_names", "[]")) + json.loads(metadata.pop("tensor_names", "[]"))
+        self.metadata.update(metadata, tensor_names=json.dumps(names))
+        return state_dict
