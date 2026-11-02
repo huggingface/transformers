@@ -24,6 +24,7 @@ from .base import ModelRunner
 
 if is_torch_available():
     import torch
+    import torch.fx._pytree as fx_pytree
 
 if is_executorch_available():
     from executorch.exir import ExecutorchProgramManager
@@ -50,13 +51,10 @@ class ExecutorchModelRunner(ModelRunner):
         return cls(program, metadata)
 
     def __call__(self, **kwargs) -> Any:
-        # In traced order, flattened without matching the spec's context: saved as JSON, a cache's int-keyed
-        # bookkeeping (`EncoderDecoderCache.is_updated`) comes back with string keys.
-        traced = self.in_spec.children_specs[1].context
-        leaves = torch.utils._pytree.tree_leaves({name: kwargs[name] for name in traced})
-        if len(leaves) != self.in_spec.num_leaves:
-            raise ValueError(
-                f"The program takes {self.in_spec.num_leaves} inputs, but got {len(leaves)} from {traced}."
-            )
-        feed = [leaf.contiguous() if isinstance(leaf, torch.Tensor) else leaf for leaf in leaves]
+        leaves = fx_pytree.tree_flatten_spec(((), kwargs), self.in_spec)
+        # A string is a constant of the program, whose slot takes `None`: the runtime has no string value.
+        feed = [
+            leaf.contiguous() if isinstance(leaf, torch.Tensor) else None if isinstance(leaf, str) else leaf
+            for leaf in leaves
+        ]
         return self.unflatten(list(self.method.execute(feed)))
