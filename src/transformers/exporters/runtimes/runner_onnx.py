@@ -60,11 +60,21 @@ class OnnxModelRunner(ModelRunner):
         return torch.device("cpu")
 
     @classmethod
-    def from_program(cls, program: ONNXProgram, metadata: ExportMetadata, device=None) -> OnnxModelRunner:
+    def from_program(
+        cls,
+        program: ONNXProgram,
+        metadata: ExportMetadata,
+        device=None,
+        providers: list | None = None,
+        session_options: ort.SessionOptions | None = None,
+    ) -> OnnxModelRunner:
+        """`providers`, ONNX Runtime's own list (TensorRT with its options, say), replaces the ones picked for
+        `device`; `session_options` open the session (`intra_op_num_threads`: ONNX Runtime sizes its thread pool from
+        every core of the machine, not the ones the process may run on)."""
         sessions = []
 
         def open_session(model):
-            sessions.append(ort.InferenceSession(model, providers=_providers(device)))
+            sessions.append(ort.InferenceSession(model, session_options, providers=providers or _providers(device)))
             return sessions[-1]
 
         program.initialize_inference_session(open_session)
