@@ -205,12 +205,21 @@ class Gemma3nTextConfig(PreTrainedConfig):
 
     @property
     def kv_sharing_modes(self) -> list[str | None]:
+        # In this case there are no shared layers
+        if self.num_kv_shared_layers == 0:
+            return [None] * self.num_hidden_layers
+
         # After this index, all layers are consumers
         first_shared_layer = self.num_hidden_layers - self.num_kv_shared_layers
         kv_sharing_modes = [None if i < first_shared_layer else "reuse" for i in range(self.num_hidden_layers)]
 
         # Compute the last index of the layers that will not be shared, for each unique `layer_types`
         reversed_unshared_layer_types = self.layer_types[0:first_shared_layer:-1]
+        # Just a quick check to make sure any layer type that will be shared also has one layer of the same type producing the cache
+        if sorted(set(reversed_unshared_layer_types)) != sorted(set(self.layer_types)):
+            raise ValueError(
+                "The set of layer types producing a cache is different than the set of layer types using them"
+            )
         last_non_consumer_indices = [
             first_shared_layer - 1 - reversed_unshared_layer_types.index(k) for k in set(self.layer_types)
         ]
