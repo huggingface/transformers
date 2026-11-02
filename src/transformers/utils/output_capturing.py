@@ -130,6 +130,7 @@ def _fresh_output_collection():
     if collector is None:
         yield
         return
+
     keys = tuple(key for key in ("router_logits", "attentions") if key in collector)
     if not keys:
         yield
