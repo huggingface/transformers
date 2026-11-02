@@ -528,6 +528,12 @@ class HfExporter(ABC):
             generation_config.update(
                 **model.generation_config.to_dict(), defaults_only=True, allow_custom_entries=True
             )
+            # The model's sampling defaults (qwen3's `temperature`) don't apply to a greedy config, and would make it
+            # unsaveable: `save_pretrained` validates strictly.
+            if not generation_config.do_sample:
+                defaults = GenerationConfig()
+                for name in ("temperature", "top_p", "top_k", "min_p", "typical_p", "epsilon_cutoff", "eta_cutoff"):
+                    setattr(generation_config, name, getattr(defaults, name))
         decode_config = config.get(decode_graph_name(config)) if isinstance(config, dict) else config
         dynamic = bool(getattr(decode_config, "dynamic", False) or getattr(decode_config, "dynamic_shapes", None))
         if multi_token_decode is None:
