@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import torch
 
-from transformers import TrainingArguments
+from transformers import HfArgumentParser, TrainingArguments
 from transformers.debug_utils import DebugOption
 from transformers.trainer_utils import HubStrategy, IntervalStrategy, SaveStrategy, SchedulerType
 from transformers.training_args import OptimizerNames
@@ -134,14 +134,22 @@ class TestTrainingArguments(unittest.TestCase):
             warnings.simplefilter("error", FutureWarning)
             TrainingArguments(**{f.name: getattr(args, f.name) for f in dataclasses.fields(args) if f.init})
 
-    def test_gradient_checkpointing_conflicts_with_activation_checkpointing(self):
-        with self.assertRaises(ValueError):
-            TrainingArguments(
-                output_dir="tmp",
-                activation_checkpointing_kwargs={"use_reentrant": True},
-                gradient_checkpointing_kwargs={"use_reentrant": False},
-                report_to=None,
-            )
+    def test_activation_checkpointing_wins_on_a_copy(self):
+        # A copy carries the old names mirrored from the original, so the new name has to win when it is changed
+        args = TrainingArguments(output_dir="tmp", activation_checkpointing=True, report_to=None)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            args = dataclasses.replace(args, activation_checkpointing=False)
+        self.assertFalse(args.activation_checkpointing)
+        self.assertFalse(args.gradient_checkpointing)
+
+    def test_activation_checkpointing_bare_cli_flags(self):
+        parser = HfArgumentParser(TrainingArguments)
+        (args,) = parser.parse_args_into_dataclasses(["--output_dir", "tmp", "--activation_checkpointing"])
+        self.assertTrue(args.activation_checkpointing)
+        with self.assertWarns(FutureWarning):
+            (args,) = parser.parse_args_into_dataclasses(["--output_dir", "tmp", "--gradient_checkpointing"])
+        self.assertTrue(args.activation_checkpointing)
 
     def test_eval_steps_fallback_to_logging_steps(self):
         """Test that eval_steps falls back to logging_steps when not specified."""

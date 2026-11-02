@@ -903,10 +903,14 @@ class TrainingArguments:
     )
 
     # --- Activation Checkpointing ---
-    activation_checkpointing: bool = field(
-        default=False,
+    # `bool | None` so a copy of the args can tell an unset value from `False`, and `nargs="?"` / `const=True` so a bare
+    # `--activation_checkpointing` means True
+    activation_checkpointing: bool | None = field(
+        default=None,
         metadata={
-            "help": "Enable activation checkpointing to trade compute for memory. Reduces memory at the cost of ~20%% slower training."
+            "help": "Enable activation checkpointing to trade compute for memory. Reduces memory at the cost of ~20%% slower training.",
+            "nargs": "?",
+            "const": True,
         },
     )
     activation_checkpointing_kwargs: dict[str, Any] | str | None = field(
@@ -921,7 +925,11 @@ class TrainingArguments:
     )
     gradient_checkpointing: bool | None = field(
         default=None,
-        metadata={"help": "Deprecated alias of `activation_checkpointing`, will be removed in v6."},
+        metadata={
+            "help": "Deprecated alias of `activation_checkpointing`, will be removed in v6.",
+            "nargs": "?",
+            "const": True,
+        },
     )
     gradient_checkpointing_kwargs: dict[str, Any] | str | None = field(
         default=None,
@@ -1522,19 +1530,19 @@ class TrainingArguments:
                 loaded_dict = _convert_str_dict(loaded_dict)
                 setattr(self, valid_field, loaded_dict)
 
-        # `gradient_checkpointing*` are deprecated aliases of `activation_checkpointing*`. Once resolved, the old names
-        # mirror the new ones, so code that reads them keeps working and a `to_dict()` round trip stays silent.
+        # `gradient_checkpointing*` are deprecated aliases of `activation_checkpointing*`, used only when the new name is
+        # not set. Once resolved, the old names mirror the new ones, so code that reads them keeps working, and a copy
+        # of the args (`dataclasses.replace`, a `to_dict()` rebuild) that changes the new name takes effect silently.
         for old, new in (
             ("gradient_checkpointing", "activation_checkpointing"),
             ("gradient_checkpointing_kwargs", "activation_checkpointing_kwargs"),
         ):
-            old_value, new_value = getattr(self, old), getattr(self, new)
-            if old_value is not None and old_value != new_value:
-                if new_value not in (False, None):
-                    raise ValueError(f"`{old}` is a deprecated alias of `{new}`, set only `{new}`.")
+            if getattr(self, new) is None and getattr(self, old) is not None:
                 warnings.warn(f"`{old}` is deprecated and will be removed in v6. Use `{new}` instead.", FutureWarning)
-                setattr(self, new, old_value)
+                setattr(self, new, getattr(self, old))
             setattr(self, old, getattr(self, new))
+        if self.activation_checkpointing is None:
+            self.activation_checkpointing = self.gradient_checkpointing = False
 
         # Expand ~ in paths so os.makedirs works correctly (#10628)
         if self.output_dir is not None:
