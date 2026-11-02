@@ -35,6 +35,7 @@ Current coverage — the generation `decode` component:
 
 import copy
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -468,6 +469,10 @@ class ExportedModelTest(unittest.TestCase):
                     for key in expected:
                         torch.testing.assert_close(outputs[key].cpu(), expected[key], atol=atol, rtol=atol)
                     self.assertEqual(runtime.dtype, torch.float32)
+                    # A loaded runtime saves back what it runs.
+                    with tempfile.TemporaryDirectory() as resaved:
+                        runtime.save_pretrained(resaved)
+                        self.assertEqual(sorted(os.listdir(resaved)), sorted(os.listdir(directory)))
 
     @pytest.mark.torch_export_test
     def test_dynamo(self):

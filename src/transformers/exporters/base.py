@@ -131,8 +131,11 @@ class ExportArtifacts(Mapping, PushToHubMixin):
             for name, component in self.components.items()
         }
         if multimodal:
-            return ExportedMultimodalModel(runners, self.config)
-        return ExportedModel(next(iter(runners.values())), self.config)
+            model = ExportedMultimodalModel(runners, self.config)
+        else:
+            model = ExportedModel(next(iter(runners.values())), self.config)
+        model.artifacts = self
+        return model
 
     def save_pretrained(self, save_directory: str | Path, push_to_hub: bool = False, **kwargs) -> None:
         """Write the components (one file each), the configs, and a manifest naming each component's file and the
