@@ -245,8 +245,9 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
         padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing operations on padding feature indices.
         sample (`bool`, *optional*, defaults to `True`):
-            Whether to sample the acoustic latents from the VAE. If False, the latent mean is used, so the output
-            is deterministic.
+            Whether to add Gaussian noise to the acoustic latents, as in the original model (σ-VAE: the noise
+            scale is drawn per batch item from N(0, `vae_std`)). If False, the encoder output is used as is, so the
+            output is deterministic.
         """
         with torch.no_grad():
             acoustic_encoder_cache, semantic_encoder_cache = None, None
@@ -306,8 +307,9 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
         padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing operations on padding feature indices.
         sample (`bool`, *optional*, defaults to `True`):
-            Whether to sample the acoustic latents from the VAE. If False, the latent mean is used, so the output
-            is deterministic.
+            Whether to add Gaussian noise to the acoustic latents, as in the original model (σ-VAE: the noise
+            scale is drawn per batch item from N(0, `vae_std`)). If False, the encoder output is used as is, so the
+            output is deterministic.
         """
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -373,8 +375,9 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
         padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing operations on padding feature indices.
         sample (`bool`, *optional*, defaults to `True`):
-            Whether to sample the acoustic latents from the VAE. If False, the latent mean is used, so the output
-            is deterministic.
+            Whether to add Gaussian noise to the acoustic latents, as in the original model (σ-VAE: the noise
+            scale is drawn per batch item from N(0, `vae_std`)). If False, the encoder output is used as is, so the
+            output is deterministic.
 
         Example:
 

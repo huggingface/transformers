@@ -273,8 +273,9 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         padding_mask (`torch.Tensor` of shape `(batch_size, padded_audio_length)`):
             Padding mask to remove padded parts of audio.
         sample (`bool`, *optional*, defaults to `True`):
-            Whether to sample the acoustic latents from the VAE. If False, the latent mean is used, so the output
-            is deterministic.
+            Whether to add Gaussian noise to the acoustic latents, as in the original model (σ-VAE: the noise
+            scale is drawn per batch item from N(0, `vae_std`)). If False, the encoder output is used as is, so the
+            output is deterministic.
         """
 
         # Acoustic tokenizer is not meant to be trainable (see p. 3 of https://huggingface.co/papers/2508.19205)
@@ -333,8 +334,9 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         padding_mask (`torch.Tensor` of shape `(batch_size, padded_audio_length)`):
             Padding mask to remove padded parts of audio.
         sample (`bool`, *optional*, defaults to `True`):
-            Whether to sample the acoustic latents from the VAE. If False, the latent mean is used, so the output
-            is deterministic.
+            Whether to add Gaussian noise to the acoustic latents, as in the original model (σ-VAE: the noise
+            scale is drawn per batch item from N(0, `vae_std`)). If False, the encoder output is used as is, so the
+            output is deterministic.
         """
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -448,8 +450,9 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         num_diffusion_steps (`int`, *optional*, defaults to 10):
             For training, the number of diffusion steps to use. Defaults to 10 if not provided.
         sample (`bool`, *optional*, defaults to `True`):
-            Whether to sample the acoustic latents from the VAE. If False, the latent mean is used, so the output
-            is deterministic.
+            Whether to add Gaussian noise to the acoustic latents, as in the original model (σ-VAE: the noise
+            scale is drawn per batch item from N(0, `vae_std`)). If False, the encoder output is used as is, so the
+            output is deterministic.
         """
 
         outputs = self.model(
