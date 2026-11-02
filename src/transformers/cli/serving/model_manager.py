@@ -240,12 +240,7 @@ class ModelManager:
             return AutoTokenizer.from_pretrained(
                 model_id, gguf_file=gguf_file, revision=revision, trust_remote_code=self.trust_remote_code
             )
-        try:
-            return AutoProcessor.from_pretrained(model_id, revision=revision, trust_remote_code=self.trust_remote_code)
-        except ImportError as error:
-            # Like `pipeline()`: text requests only need the tokenizer (e.g. a Qwen-VL processor without torchvision)
-            logger.warning(f"Serving {model_id} with its tokenizer only, without images: {error}")
-            return AutoTokenizer.from_pretrained(model_id, revision=revision, trust_remote_code=self.trust_remote_code)
+        return AutoProcessor.from_pretrained(model_id, revision=revision, trust_remote_code=self.trust_remote_code)
 
     def _load_model(
         self,
@@ -253,6 +248,7 @@ class ModelManager:
         tqdm_class: type | None = None,
         progress_callback: Callable | None = None,
         gguf_file: str | None = None,
+        model_class: type | None = None,
     ) -> "PreTrainedModel":
         """Load a model.
 
@@ -260,11 +256,12 @@ class ModelManager:
             model_id_and_revision (`str`): Model ID in ``'model_id@revision'`` format.
             tqdm_class (*optional*): tqdm subclass for progress bars during ``from_pretrained``.
             progress_callback (`Callable`, *optional*): Called with progress dicts during loading.
+            model_class (`type`, *optional*): Class to load the model with, instead of the one its config names.
 
         Returns:
             `PreTrainedModel`: The loaded model.
         """
-        from transformers import AutoConfig
+        from transformers import AutoConfig, AutoModelForMultimodalLM
 
         model_id, revision = model_id_and_revision.split("@", 1)
 
@@ -287,22 +284,14 @@ class ModelManager:
             progress_callback({"status": "loading", "model": model_id_and_revision, "stage": "config"})
         config = AutoConfig.from_pretrained(model_id, **model_kwargs)
 
-        from transformers.decision.modeling_utils import checkpoint_decision_config
-        from transformers.models.auto.modeling_auto import (
-            MODEL_FOR_DECISION_MAPPING,
-            MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES,
-        )
+        from transformers.models.auto.modeling_auto import MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES
 
-        # A checkpoint shipping a decision head next to its weights loads as its decision model, as in the pipeline
-        if (decision_config := checkpoint_decision_config(model_id, revision=revision)) is not None:
-            return MODEL_FOR_DECISION_MAPPING[type(decision_config)].from_pretrained(model_id, **model_kwargs)
-
-        if config.model_type in MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES:
-            from transformers import AutoModelForMultimodalLM
-
-            return AutoModelForMultimodalLM.from_pretrained(model_id, **model_kwargs)
-
-        architecture = getattr(transformers, config.architectures[0])
+        if model_class is not None:
+            architecture = model_class
+        elif config.model_type in MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES:
+            architecture = AutoModelForMultimodalLM
+        else:
+            architecture = getattr(transformers, config.architectures[0])
         return architecture.from_pretrained(model_id, **model_kwargs)
 
     def load_model_and_processor(
@@ -311,6 +300,7 @@ class ModelManager:
         progress_callback: Callable | None = None,
         tqdm_class: type | None = None,
         gguf_file: str | None = None,
+        model_class: type | None = None,
     ) -> "tuple[PreTrainedModel, ProcessorMixin | PreTrainedTokenizerFast]":
         """Load a model (or return it from cache), resetting its inactivity timer.
 
@@ -319,9 +309,13 @@ class ModelManager:
             progress_callback: If provided, called with dicts like
                 ``{"status": "loading", "model": ..., "stage": ...}`` during loading.
             tqdm_class: Optional tqdm subclass for progress bars during ``from_pretrained``.
+            model_class: Class to load the model with, instead of the one its config names.
         """
         # Cached under the weights, not the repository: two quantizations of one repo are two models.
         key = model_id_and_revision if gguf_file is None else f"{model_id_and_revision}:{gguf_file}"
+        # And under the class that reads them: a repo loaded as its decision model is another model
+        if model_class is not None:
+            key = f"{key}:{model_class.__name__}"
 
         # Per-model lock prevents duplicate loads when concurrent requests arrive
         with self._model_locks_guard:
@@ -338,6 +332,7 @@ class ModelManager:
                     tqdm_class=tqdm_class,
                     progress_callback=progress_callback,
                     gguf_file=gguf_file,
+                    model_class=model_class,
                 )
                 self.loaded_models[key] = TimedModel(
                     model,

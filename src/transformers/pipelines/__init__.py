@@ -98,7 +98,7 @@ from .zero_shot_object_detection import ZeroShotObjectDetectionPipeline
 if is_torch_available():
     import torch
 
-    from ..decision.modeling_utils import checkpoint_decision_config
+    from ..decision.modeling_utils import maybe_get_decision_model_config
     from ..models.auto.modeling_auto import (
         AutoModel,
         AutoModelForAudioClassification,
@@ -993,7 +993,7 @@ def pipeline(
         # A checkpoint shipping a decision head next to its weights: the decision model whose config files it has
         if task == "decision" and config.model_type not in MODEL_FOR_DECISION_MAPPING_NAMES:
             files_kwargs = {"revision": hub_kwargs["revision"], "token": hub_kwargs["token"]}
-            config = checkpoint_decision_config(model, **files_kwargs) or config
+            config = maybe_get_decision_model_config(model, **files_kwargs) or config
 
     custom_tasks = {}
     if config is not None and len(getattr(config, "custom_pipelines", {})) > 0:

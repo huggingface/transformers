@@ -78,21 +78,36 @@ class SystemOneHandler(BaseHandler):
         )
         self.pipelines: dict[str, DecisionPipeline] = {}
 
+    def _model_class(self, model_id: str) -> "type[PreTrainedModel] | None":
+        """The decision model of a checkpoint shipping its head next to its weights, as in `pipeline("decision")`.
+
+        `None` (the class its config names) for any other model.
+        """
+        from transformers.decision.modeling_utils import maybe_get_decision_model_config
+        from transformers.models.auto.modeling_auto import MODEL_FOR_DECISION_MAPPING
+
+        repo, revision = model_id.split("@", 1)
+        config = maybe_get_decision_model_config(repo, revision=revision)
+        return None if config is None else MODEL_FOR_DECISION_MAPPING[type(config)]
+
     def _validate_request(self, body: dict) -> SystemOneRequest:
-        """Validate the entire request, questions included, before resolving or loading a model."""
+        """Validate the request's fields before resolving or loading a model (questions: `_validate_questions`)."""
         if "model" not in body and self.model_manager.force_model is not None:
             body = {**body, "model": self.model_manager.force_model}
         try:
-            request = SystemOneRequest.model_validate(body, strict=True)
+            return SystemOneRequest.model_validate(body, strict=True)
         except ValidationError as error:
             detail = [{**item, "loc": ("body", *item["loc"])} for item in error.errors(include_url=False)]
             raise HTTPException(status_code=422, detail=detail) from error
+
+    @staticmethod
+    def _validate_questions(questions: dict[str, Any], decision_config: DecisionConfig) -> None:
+        """Validate the questions with the model's decision config, whose labels bound the number of options."""
         try:
-            parse_questions(request.questions, self.decision_config or DecisionConfig())
+            parse_questions(questions, decision_config)
         except ValueError as error:
             detail = [{"loc": ("body", "questions"), "msg": str(error), "type": "value_error"}]
             raise HTTPException(status_code=422, detail=detail) from error
-        return request
 
     def _pipeline(
         self, model_id: str, model: "PreTrainedModel", processor: "ProcessorMixin | PreTrainedTokenizerFast"
@@ -101,22 +116,23 @@ class SystemOneHandler(BaseHandler):
         from transformers import ProcessorMixin
         from transformers.pipelines import DecisionPipeline
 
-        pipe = self.pipelines.get(model_id)
-        if pipe is None or pipe.model is not model:
-            pipe = self.pipelines[model_id] = DecisionPipeline(
+        decision_pipeline = self.pipelines.get(model_id)
+        if decision_pipeline is None or decision_pipeline.model is not model:
+            decision_pipeline = self.pipelines[model_id] = DecisionPipeline(
                 model=model,
                 tokenizer=getattr(processor, "tokenizer", processor),
                 processor=processor if isinstance(processor, ProcessorMixin) else None,
                 decision_config=self.decision_config,
             )
-        return pipe
+        return decision_pipeline
 
     @staticmethod
-    def _answer(pipe: "DecisionPipeline", request: dict[str, Any]) -> tuple[dict[str, Any], int]:
+    def _answer(decision_pipeline: "DecisionPipeline", request: SystemOneRequest) -> tuple[dict[str, Any], int]:
         """The pipeline's steps, in the inference thread: the answers and the number of input tokens."""
-        model_inputs = pipe.preprocess(request)
-        answers = pipe.postprocess(pipe.forward(model_inputs))
-        return answers, sum(inputs["input_ids"].shape[-1] for inputs, _ in model_inputs["prompts"])
+        model_inputs = decision_pipeline.preprocess(request.model_dump())
+        answers = decision_pipeline.postprocess(decision_pipeline.forward(model_inputs))
+        input_tokens = sum(prompt["input_ids"].numel() for prompt, _ in model_inputs["prompts"])
+        return answers, input_tokens
 
     async def handle_request(self, body: dict, request_id: str) -> "JSONResponse":
         """Validate the request, load the model, and answer every question.
@@ -133,12 +149,11 @@ class SystemOneHandler(BaseHandler):
         logger.warning(f"[Request received] Model: {model_id}, questions: {len(request.questions)}")
 
         gen_manager: GenerateManager = self.generation_state.get_manager(model_id, use_cb=False)  # type: ignore[assignment]
-        pipe = self._pipeline(model_id, model, processor)
+        decision_pipeline = self._pipeline(model_id, model, processor)
+        self._validate_questions(request.questions, decision_pipeline.decision_config)
         try:
-            answers, input_tokens = await gen_manager.async_submit(
-                self._answer, pipe, request.model_dump(include={"state", "questions", "assets"})
-            )
-        except ValueError as error:  # e.g. labels that aren't single tokens, or images for a text model
+            answers, input_tokens = await gen_manager.async_submit(self._answer, decision_pipeline, request)
+        except ValueError as error:  # a request this model can't answer
             raise HTTPException(status_code=400, detail=str(error)) from error
         return JSONResponse(
             {

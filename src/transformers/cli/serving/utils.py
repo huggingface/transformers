@@ -1141,9 +1141,15 @@ class BaseHandler:
         body["model"] = model
 
         model_id = self.model_manager.process_model_name(model)
-        model, processor = self.model_manager.load_model_and_processor(model_id, gguf_file=gguf_file)
+        model, processor = self.model_manager.load_model_and_processor(
+            model_id, gguf_file=gguf_file, model_class=self._model_class(model_id)
+        )
 
         return model_id, model, processor
+
+    def _model_class(self, model_id: str) -> "type[PreTrainedModel] | None":
+        """The class this endpoint loads the model with, or `None` for the one its config names."""
+        return None
 
     def _build_generation_config(
         self, body: dict, model_generation_config: "GenerationConfig", use_cb: bool = False
