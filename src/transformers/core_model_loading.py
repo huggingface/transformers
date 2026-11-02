@@ -825,6 +825,7 @@ class WeightTransform:
         "target_patterns",
         "compiled_sources",
         "distributed_operation",
+        "quantization_operation",
         "collected_tensors",
         "layer_targets",
         "_original_source_patterns",
@@ -843,6 +844,8 @@ class WeightTransform:
 
         # Init fields that will be used during conversion
         self.distributed_operation: Any = None
+        # Unused: quantization is the "quantize" load operation. Kept for peft, which copies it to its converters
+        self.quantization_operation = None
         self.collected_tensors: dict[str, list[Future]] = defaultdict(list)
         self.layer_targets: dict[str, set[str]] = defaultdict(set)
 
