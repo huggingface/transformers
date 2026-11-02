@@ -319,10 +319,15 @@ def embedded_inputs(call_inputs: dict, components: dict) -> dict:
     return call_inputs
 
 
+# What a deepstack decoder adds at the visual positions inside its layers (Qwen3-VL's, Granite4-Vision's names).
+DEEPSTACK_INPUTS = ("visual_pos_masks", "deepstack_visual_embeds", "vision_mask", "deepstack_features")
+
+
 def _main_inputs(model: PreTrainedModel, inputs: dict[str, Any], decoder_call: dict[str, Any]) -> dict[str, Any]:
     """`model`'s own kwargs on `inputs_embeds`: the embeddings its text stack received, features scattered in,
-    replace the token ids and modality inputs. Positions the model derived from those (M-RoPE) come along, since it
-    can't recompute them without; the config-only precompute is what the runtime computes them with."""
+    replace the token ids and modality inputs. What the model derived from those and can't recompute without them
+    comes along: M-RoPE positions, computed by the config-only precompute as the runtime computes them, and deepstack
+    features."""
     if decoder_call.get("inputs_embeds") is None:
         return inputs
     main_inputs = copy.copy(inputs)
@@ -334,4 +339,7 @@ def _main_inputs(model: PreTrainedModel, inputs: dict[str, Any], decoder_call: d
     main_inputs = embedded_inputs(main_inputs, {})
     main_inputs.pop("input_ids", None)
     main_inputs["inputs_embeds"] = decoder_call["inputs_embeds"]
+    for name in DEEPSTACK_INPUTS:
+        if decoder_call.get(name) is not None:
+            main_inputs[name] = decoder_call[name]
     return main_inputs
