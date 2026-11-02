@@ -155,7 +155,7 @@ class CsmPreTrainedModel(PreTrainedModel):
 class CsmDepthDecoderModel(LlamaModel, CsmPreTrainedModel):
     config: CsmDepthDecoderConfig
 
-    def __init__(self, config):
+    def __init__(self, config: CsmDepthDecoderConfig):
         super().__init__(config)
         self.embed_tokens = nn.Embedding((config.num_codebooks * config.vocab_size), config.backbone_hidden_size)
         self.inputs_embeds_projector = nn.Linear(config.backbone_hidden_size, config.hidden_size, bias=False)
@@ -275,8 +275,9 @@ class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
     _tied_weights_keys = None
     _tp_plan = None
     _pp_plan = None
+    config: CsmDepthDecoderConfig
 
-    def __init__(self, config):
+    def __init__(self, config: CsmDepthDecoderConfig):
         super().__init__(config)
         del self.lm_head
         self.codebooks_head = CsmCodebooksHead(config.hidden_size, config.num_codebooks, config.vocab_size)
@@ -389,7 +390,7 @@ class CsmBackboneModelEmbeddings(nn.Module):
 
 @auto_docstring
 class CsmBackboneModel(LlamaModel):
-    def __init__(self, config):
+    def __init__(self, config: CsmConfig):
         super().__init__(config)
         self.embed_tokens = CsmBackboneModelEmbeddings(config)
 
@@ -422,7 +423,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
         "backbone_model.embed_tokens.embed_audio_tokens.weight": "depth_decoder.model.embed_tokens.weight"
     }
 
-    def __init__(self, config):
+    def __init__(self, config: CsmConfig):
         super().__init__(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)

@@ -13,21 +13,15 @@
 # limitations under the License.
 """Image processor class for Chameleon."""
 
-import numpy as np
-import PIL.Image
-
 from ...image_processing_backends import PilBackend
-from ...image_utils import (
-    ImageInput,
-    PILImageResampling,
-)
+from ...image_utils import PILImageResampling
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import auto_docstring
 
 
 @auto_docstring
 class ChameleonImageProcessorPil(PilBackend):
-    """PIL backend for Chameleon with custom convert_to_rgb."""
+    """PIL backend for Chameleon."""
 
     resample = PILImageResampling.LANCZOS
     image_mean = [1.0, 1.0, 1.0]
@@ -44,28 +38,6 @@ class ChameleonImageProcessorPil(PilBackend):
 
     def __init__(self, **kwargs: Unpack[ImagesKwargs]):
         super().__init__(**kwargs)
-
-    def convert_to_rgb(self, image: ImageInput) -> ImageInput:
-        """
-        Convert image to RGB by blending the transparency layer if it's in RGBA format.
-        If image is not `PIL.Image`, it is simply returned without modifications.
-        """
-        if not isinstance(image, PIL.Image.Image):
-            return image
-        # PNG tRNS keeps mode "RGB" while storing transparency in image.info.
-        elif image.mode == "RGB" and image.info.get("transparency") is None:
-            return image
-
-        img_rgba = np.array(image.convert("RGBA"))
-
-        # If there is no transparency layer, simple convert and return.
-        if not (img_rgba[:, :, 3] < 255).any():
-            return image.convert("RGB")
-
-        # There is a transparency layer, blend it with a white background.
-        alpha = img_rgba[:, :, 3] / 255.0
-        img_rgb = (1 - alpha[:, :, np.newaxis]) * 255 + alpha[:, :, np.newaxis] * img_rgba[:, :, :3]
-        return PIL.Image.fromarray(img_rgb.astype("uint8"), "RGB")
 
 
 __all__ = ["ChameleonImageProcessorPil"]

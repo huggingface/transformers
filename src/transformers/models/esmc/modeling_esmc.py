@@ -284,7 +284,7 @@ class EsmcLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class EsmcPreTrainedModel(PreTrainedModel):
-    config_class = EsmcConfig
+    config: EsmcConfig
     base_model_prefix = "esmc"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True

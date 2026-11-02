@@ -399,7 +399,7 @@ class MiniCPMV4_7ViTWindowAttentionMerger(nn.Module):
 
 
 class MiniCPMV4_7VisionPreTrainedModel(PreTrainedModel):
-    config_class = MiniCPMV4_7VisionConfig
+    config: MiniCPMV4_7VisionConfig
     main_input_name = "pixel_values"
     _input_embed_layer = "patch_embedding"
     supports_gradient_checkpointing = True
@@ -576,7 +576,7 @@ class MiniCPMV4_7Merger(nn.Module):
 
 
 class MiniCPMV4_7PreTrainedModel(PreTrainedModel):
-    config_class = MiniCPMV4_7Config
+    config: MiniCPMV4_7Config
     base_model_prefix = "model"
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True

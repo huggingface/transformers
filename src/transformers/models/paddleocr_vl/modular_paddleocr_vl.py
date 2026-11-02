@@ -418,6 +418,8 @@ class PaddleOCRVLPreTrainedModel(PreTrainedModel):
 
 
 class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel, Ernie4_5Model):
+    config: PaddleOCRTextConfig
+
     def __init__(self, config: PaddleOCRTextConfig):
         super().__init__(config)
 

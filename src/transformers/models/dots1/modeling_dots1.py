@@ -542,7 +542,7 @@ class Dots1ForCausalLM(Dots1PreTrainedModel, GenerationMixin):
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: Dots1Config):
         super().__init__(config)
         self.model = Dots1Model(config)
         self.vocab_size = config.vocab_size
