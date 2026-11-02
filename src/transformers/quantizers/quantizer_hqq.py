@@ -15,6 +15,7 @@
 from typing import TYPE_CHECKING
 
 from ..integrations import prepare_for_hqq_linear
+from ..integrations.hqq import HQQ_SERIALIZED_NAMES
 from ..utils import is_hqq_available, is_torch_available, logging
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
@@ -67,6 +68,9 @@ class HqqHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
+        if self.pre_quantized and self.quantization_config.dequantize:
+            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
+            return
         # Add the corresponding quant_config to each valid module. This allows us to do the actual nn.Linear -> HQQLinear conversion in create_quantized_param().
         # prepare_for_hqq_linear() also sets the right quantization config inside the model (model.config.quantization_config) and the layers (hqq_layer.quant_config)
         model = prepare_for_hqq_linear(model, quantization_config=self.quantization_config)
@@ -77,3 +81,10 @@ class HqqHfQuantizer(HfQuantizer):
     @property
     def is_trainable(self) -> bool:
         return True
+
+    serialized_names = {"weight": HQQ_SERIALIZED_NAMES}
+
+    def get_load_operations(self):
+        from ..integrations.hqq import HqqDequantize, HqqDeserialize
+
+        return {"deserialize": HqqDeserialize, "dequantize": HqqDequantize}

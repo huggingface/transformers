@@ -45,7 +45,7 @@ class BitNetPackedWeightsTest(unittest.TestCase):
         quantizer = BitNetHfQuantizer(config)
         conversions = quantizer.get_weight_conversions()
         self.assertEqual(len(conversions), 1)
-        self.assertEqual(conversions[0].source_patterns, ["weight"])
+        self.assertEqual(conversions[0].source_patterns, ["weight", "weight_scale"])
         self.assertEqual(conversions[0].target_patterns, ["weight"])
 
     def test_unpack_packed_weights(self):

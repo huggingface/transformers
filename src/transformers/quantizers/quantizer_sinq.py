@@ -162,9 +162,9 @@ class SinqHfQuantizer(HfQuantizer):
     serialized_names = {".weight": [".W_q", ".meta", ".bias"]}
 
     def get_load_operations(self):
-        from ..integrations.sinq import SinqDeserialize, SinqQuantize
+        from ..integrations.sinq import SinqDequantize, SinqDeserialize, SinqQuantize
 
-        return {"deserialize": SinqDeserialize, "quantize": SinqQuantize}
+        return {"deserialize": SinqDeserialize, "dequantize": SinqDequantize, "quantize": SinqQuantize}
 
     def _process_model_before_weight_loading(
         self,
@@ -179,6 +179,9 @@ class SinqHfQuantizer(HfQuantizer):
         For SINQ, we replace nn.Linear modules with empty SINQLinear modules here.
         The actual quantization happens later in SinqQuantize.convert() when weights are loaded.
         """
+        if self.pre_quantized and self.quantization_config.dequantize:
+            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
+            return
         from ..integrations.sinq import replace_with_sinq_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
@@ -223,6 +226,8 @@ class SinqHfQuantizer(HfQuantizer):
            - We skip moving SINQLinear's W_q/meta to avoid memory duplication
         2. Patch HF save/load methods for SINQ serialization
         """
+        if self.pre_quantized and self.quantization_config.dequantize:
+            return model
         from sinq.hf_io import patch_hf_pretrained_io
 
         # Patch HF save/load methods for SINQ serialization

@@ -44,6 +44,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
+    # The checkpoint names are the params of `FbgemmFp8Linear`
     serialized_names = {"weight": ["weight", "weight_scale"]}
     quantization_config: "FbgemmFp8Config"
 
@@ -117,6 +118,9 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
+        if self.pre_quantized and self.quantization_config.dequantize:
+            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
+            return
         from ..integrations import replace_with_fbgemm_fp8_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
@@ -152,6 +156,6 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
         return False
 
     def get_load_operations(self):
-        from ..integrations.fbgemm_fp8 import FbgemmFp8Quantize
+        from ..integrations.fbgemm_fp8 import FbgemmFp8Dequantize, FbgemmFp8Quantize
 
-        return {"quantize": FbgemmFp8Quantize}
+        return {"dequantize": FbgemmFp8Dequantize, "quantize": FbgemmFp8Quantize}

@@ -194,6 +194,6 @@ class TorchAoHfQuantizer(HfQuantizer):
         return {name: [f"_{name}_{s}" for s in suffixes] for name in sorted(self._discover_quantized_param_names())}
 
     def get_load_operations(self):
-        from ..integrations.torchao import TorchAoDeserialize, TorchAoQuantize
+        from ..integrations.torchao import TorchAoDequantize, TorchAoDeserialize, TorchAoQuantize
 
-        return {"deserialize": TorchAoDeserialize, "quantize": TorchAoQuantize}
+        return {"deserialize": TorchAoDeserialize, "dequantize": TorchAoDequantize, "quantize": TorchAoQuantize}

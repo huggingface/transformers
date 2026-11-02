@@ -60,6 +60,9 @@ class SpQRHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
+        if self.pre_quantized and self.quantization_config.dequantize:
+            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
+            return
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
@@ -75,3 +78,10 @@ class SpQRHfQuantizer(HfQuantizer):
 
     def is_serializable(self):
         return True
+
+    serialized_names = {"weight": ["dense_weights", "row_offsets", "col_vals", "in_perm"]}
+
+    def get_load_operations(self):
+        from ..integrations.spqr import SpQRDequantize
+
+        return {"dequantize": SpQRDequantize}

@@ -50,6 +50,9 @@ class AqlmHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
+        if self.pre_quantized and self.quantization_config.dequantize:
+            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
+            return
         replace_with_aqlm_linear(
             model,
             modules_to_not_convert=self.quantization_config.linear_weights_not_to_quantize,
@@ -69,3 +72,10 @@ class AqlmHfQuantizer(HfQuantizer):
 
     def is_serializable(self):
         return True
+
+    serialized_names = {"weight": ["codes", "codebooks", "scales"]}
+
+    def get_load_operations(self):
+        from ..integrations.aqlm import AqlmDequantize
+
+        return {"dequantize": AqlmDequantize}

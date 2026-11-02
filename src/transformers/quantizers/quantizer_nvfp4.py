@@ -43,6 +43,8 @@ class NVFP4HfQuantizer(HfQuantizer):
     """Quantize eligible linear weights to NVFP4 while loading a full-precision checkpoint."""
 
     requires_calibration = False
+    # The buffers of `NVFP4Linear`
+    serialized_names = {"weight": ["weight", "weight_sf", "weight_sf_rowmajor", "weight_global_scale"]}
     quantization_config: NVFP4Config
 
     @property
@@ -102,9 +104,9 @@ class NVFP4HfQuantizer(HfQuantizer):
         replace_with_nvfp4_linear(model, modules_to_not_convert=self.modules_to_not_convert)
 
     def get_load_operations(self):
-        from ..integrations.nvfp4 import NVFP4Quantize
+        from ..integrations.nvfp4 import NVFP4Dequantize, NVFP4Quantize
 
-        return {"quantize": NVFP4Quantize}
+        return {"dequantize": NVFP4Dequantize, "quantize": NVFP4Quantize}
 
     @property
     def is_serializable(self) -> bool:

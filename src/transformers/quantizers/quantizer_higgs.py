@@ -79,6 +79,9 @@ class HiggsHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
+        if self.pre_quantized and self.quantization_config.dequantize:
+            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
+            return
         from ..integrations import replace_with_higgs_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
@@ -133,8 +136,9 @@ class HiggsHfQuantizer(HfQuantizer):
         else:
             return False
 
-    def _dequantize(self, model, dtype=None):
-        from ..integrations import dequantize_higgs
+    serialized_names = {"weight": ["weight", "scales", "tables", "tables2"]}
 
-        model = dequantize_higgs(model)
-        return model
+    def get_load_operations(self):
+        from ..integrations.higgs import HiggsDequantize
+
+        return {"dequantize": HiggsDequantize}

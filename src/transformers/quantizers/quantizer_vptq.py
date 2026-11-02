@@ -52,6 +52,9 @@ class VptqHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
+        if self.pre_quantized and self.quantization_config.dequantize:
+            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
+            return
         from ..integrations import replace_with_vptq_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
@@ -69,3 +72,22 @@ class VptqHfQuantizer(HfQuantizer):
 
     def is_serializable(self):
         return True
+
+    serialized_names = {
+        "weight": [
+            "indices",
+            "centroids.weight",
+            "outlier_indices",
+            "outlier_centroids.weight",
+            "res_indices",
+            "res_centroids.weight",
+            "perm",
+            "weight_scale",
+            "weight_bias",
+        ]
+    }
+
+    def get_load_operations(self):
+        from ..integrations.vptq import VptqDequantize
+
+        return {"dequantize": VptqDequantize}

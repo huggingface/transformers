@@ -102,6 +102,26 @@ class FbgemmFp8Quantize(ConversionOps):
         return {target_key: torch.nn.Parameter(new_value), f"{target_key}_scale": weight_scale}
 
 
+class FbgemmFp8Dequantize(ConversionOps):
+    """Dense weights from the serialized fp8 `weight` and its per output channel `weight_scale`."""
+
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, list[torch.Tensor]]:
+        output = {}
+        for key, weights in input_dict.items():
+            if not key.endswith("weight"):
+                continue  # `weight_scale`
+            weights = weights if isinstance(weights, list) else [weights]
+            scales = input_dict.get(f"{key}_scale")
+            if scales is not None:
+                scales = scales if isinstance(scales, list) else [scales]
+                weights = [weight.float() * scale.view(-1, 1) for weight, scale in zip(weights, scales)]
+            output[key] = weights
+        return output
+
+
 class FbgemmFp8Linear(torch.nn.Linear):
     def __init__(self, in_features, out_features, bias, dtype=torch.float8_e4m3fn):
         super().__init__(in_features, out_features, bias)

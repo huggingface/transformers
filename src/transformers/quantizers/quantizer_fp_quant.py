@@ -110,6 +110,9 @@ class FPQuantHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
+        if self.pre_quantized and self.quantization_config.dequantize:
+            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
+            return
         from fp_quant import replace_with_fp_quant_linear
 
         from ..integrations.fp_quant import adapt_fp_quant_config
@@ -133,10 +136,13 @@ class FPQuantHfQuantizer(HfQuantizer):
 
     @property
     def serialized_names(self):
-        name = ".dqweight" if self.quantization_config.pseudoquantization else ".qweight"
-        return {name: [name]}
+        if self.quantization_config.store_master_weights:
+            return {}  # the checkpoint holds the dense `weight`
+        if self.quantization_config.pseudoquantization:
+            return {"weight": ["dqweight", "forward_hadamard_matrix"]}
+        return {"weight": ["qweight", "scales", "weight_global_scale", "forward_hadamard_matrix"]}
 
     def get_load_operations(self):
-        from ..integrations.fp_quant import FpQuantDeserialize, FpQuantQuantize
+        from ..integrations.fp_quant import FpQuantDequantize, FpQuantDeserialize, FpQuantQuantize
 
-        return {"deserialize": FpQuantDeserialize, "quantize": FpQuantQuantize}
+        return {"deserialize": FpQuantDeserialize, "dequantize": FpQuantDequantize, "quantize": FpQuantQuantize}

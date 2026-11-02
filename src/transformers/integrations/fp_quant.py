@@ -81,40 +81,66 @@ class FpQuantDeserialize(ConversionOps):
         missing_keys: list[str] | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        target_key, value = tuple(input_dict.items())[0]
-        value = value[0] if isinstance(value, list) else value
-        module, _ = get_module_from_name(model, target_key)
-        # The module holds either:
-        #  * `weight` when `store_master_weights=True`
-        #  * `qweight` and `scales` when `store_master_weights=False` and `pseudoquantization=False`
-        #  * `dqweight` when `store_master_weights=False` and `pseudoquantization=True`
-        if target_key == ".qweight":
-            # Loading a real quantized checkpoint without master weights
-            qweight = torch.nn.Parameter(
-                value,
-                requires_grad=False,
-            )
+        output = {key: value[0] if isinstance(value, list) else value for key, value in input_dict.items()}
+        # The module holds `weight`, `qweight`, `scales` and `dqweight`, but only uses the ones of the checkpoint:
+        #  * `qweight` and `scales` when `pseudoquantization=False`
+        #  * `dqweight` when `pseudoquantization=True`
+        # the others are expected in the model even though they are not used, so we set them to empty tensors
+        for name in ("weight", "qweight", "scales", "dqweight"):
+            output.setdefault(name, torch.nn.Parameter(torch.zeros(0), requires_grad=False))
+        return output
 
-            return {
-                ".qweight": qweight,
-                # the way the FPQuantLinear module is designed, these parameters are expected in the model
-                # even though they are not used so we need to set them to zeros
-                ".weight": torch.nn.Parameter(torch.zeros(0)),
-                ".dqweight": torch.nn.Parameter(torch.zeros(0)),
-            }
 
-        if target_key == ".dqweight":
-            # Loading a pseudo-quantized checkpoint without master weights
-            dqweight = torch.nn.Parameter(value)
+class FpQuantDequantize(ConversionOps):
+    """
+    Dense weights from the forward-quantized ones: `dqweight` (pseudo-quantization), or the FP4 `qweight` with its
+    per-block `scales` (E8M0 for MXFP4, E4M3 for NVFP4) divided by `weight_global_scale` (the GEMM scales its output by
+    `1 / (weight_global_scale * act_global_scale)`). Both are rotated by `forward_hadamard_matrix` per group along the
+    input dim, so the dense weight is rotated back by its transpose.
+    """
 
-            return {
-                ".dqweight": dqweight,
-                # the way the FPQuantLinear module is designed, these parameters are expected in the model
-                # even though they are not used so we need to set them to zeros
-                ".weight": torch.nn.Parameter(torch.zeros(0)),
-                ".qweight": torch.nn.Parameter(torch.zeros(0)),
-                ".scales": torch.nn.Parameter(torch.zeros(0)),
-            }
+    # E2M1 values, a byte packs two of them, the low nibble first
+    FP4_VALUES = (0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0)
+
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def dequantize_fp4(self, qweight, scales, global_scale):
+        lut = torch.tensor(self.FP4_VALUES, device=qweight.device)
+        qweight = qweight.view(torch.uint8)
+        values = torch.stack([lut[(qweight & 0xF).long()], lut[(qweight >> 4).long()]], dim=-1).flatten(-2)
+        if self.hf_quantizer.quantization_config.forward_dtype == "mxfp4":
+            scales = torch.exp2(scales.view(torch.uint8).float() - 127)
+        else:
+            scales = scales.view(torch.float8_e4m3fn).float()
+        values = values.unflatten(-1, (scales.shape[-1], -1)) * scales[..., None]
+        return values.flatten(-2) / global_scale.float()
+
+    def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, list[torch.Tensor]]:
+        pseudoquantization = self.hf_quantizer.quantization_config.pseudoquantization
+        anchor = "dqweight" if pseudoquantization else "qweight"
+        output = {}
+        for key, weights in input_dict.items():
+            if not key.endswith(anchor):
+                continue  # `scales`, `weight_global_scale` and `forward_hadamard_matrix`
+            prefix = key.removesuffix(anchor)
+
+            def get(name):
+                value = input_dict[f"{prefix}{name}"]
+                return value if isinstance(value, list) else [value]
+
+            weights = weights if isinstance(weights, list) else [weights]
+            if not pseudoquantization:
+                weights = [
+                    self.dequantize_fp4(*args) for args in zip(weights, get("scales"), get("weight_global_scale"))
+                ]
+            output[f"{prefix}weight"] = [
+                (weight.float().unflatten(-1, (-1, hadamard.shape[0])) @ hadamard.float().T)
+                .flatten(-2)
+                .to(hadamard.dtype)
+                for weight, hadamard in zip(weights, get("forward_hadamard_matrix"))
+            ]
+        return output
 
 
 def adapt_fp_quant_config(config: FPQuantConfig):

@@ -351,10 +351,40 @@ class BitNetDeserialize(ConversionOps):
         full_layer_name: str | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        weight = input_dict["weight"]
-        weight = weight[0] if isinstance(weight, list) else weight
+        output = {key: value[0] if isinstance(value, list) else value for key, value in input_dict.items()}
+        weight = output["weight"]
         module, _ = get_module_from_name(model, full_layer_name)
         # packed checkpoints hold VALUES_PER_ITEM ternary rows per stored row
         if isinstance(module, AutoBitLinear) and weight.shape[0] * VALUES_PER_ITEM == module.out_features:
-            weight = unpack_weights(weight.to(torch.uint8), dtype=module.weight.dtype)
-        return {"weight": weight}
+            output["weight"] = unpack_weights(weight.to(torch.uint8), dtype=module.weight.dtype)
+        return output
+
+
+class BitNetDequantize(ConversionOps):
+    """Dense weights from the ternary `weight` (packed in uint8 or not) and its `weight_scale`."""
+
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, list[torch.Tensor]]:
+        # `BitLinear` divides its output by `weight_scale`, `AutoBitLinear` multiplies it
+        divide = self.hf_quantizer.quantization_config.linear_class != "autobitlinear"
+        # packed checkpoints hold VALUES_PER_ITEM ternary rows per stored row (always for `BitLinear`)
+        out_features = model.get_parameter_or_buffer(full_layer_name).shape[0] if model is not None else None
+        output = {}
+        for key, weights in input_dict.items():
+            if not key.endswith("weight"):
+                continue  # `weight_scale`
+            weights = weights if isinstance(weights, list) else [weights]
+            scales = input_dict.get(f"{key}_scale")
+            if scales is not None:
+                scales = scales if isinstance(scales, list) else [scales]
+                weights = [
+                    unpack_weights(weight.to(torch.uint8), dtype=scale.dtype)
+                    if divide or weight.shape[0] * VALUES_PER_ITEM == out_features
+                    else weight.to(scale.dtype)
+                    for weight, scale in zip(weights, scales)
+                ]
+                weights = [weight / scale if divide else weight * scale for weight, scale in zip(weights, scales)]
+            output[key] = weights
+        return output
