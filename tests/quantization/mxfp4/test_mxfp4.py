@@ -364,6 +364,46 @@ class Mxfp4IntegrationTest(unittest.TestCase):
         self.assertEqual(result[layer_name].shape, (2, 32, 64))
         self.assertEqual(result[layer_name].dtype, torch.float32)
 
+    @require_torch
+    def test_save_dequantized_model(self):
+        """Test that a model loaded with `dequantize=True` saves its experts unquantized, and reloads identically"""
+        from safetensors.torch import save_file
+
+        from transformers import GptOssConfig
+
+        config = GptOssConfig(
+            vocab_size=16,
+            hidden_size=32,
+            intermediate_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            num_local_experts=2,
+        )
+        # An MXFP4 checkpoint: each expert weight packed in blocks of 32 input features, 16 bytes each, plus one scale
+        state_dict = GptOssForCausalLM(config).state_dict()
+        for proj, out_features in (("gate_up_proj", 64), ("down_proj", 32)):
+            del state_dict[f"model.layers.0.mlp.experts.{proj}"]
+            state_dict[f"model.layers.0.mlp.experts.{proj}_blocks"] = torch.randint(
+                0, 255, (2, out_features, 1, 16), dtype=torch.uint8
+            )
+            state_dict[f"model.layers.0.mlp.experts.{proj}_scales"] = torch.randint(
+                120, 130, (2, out_features, 1), dtype=torch.uint8
+            )
+        config.quantization_config = {"quant_method": "mxfp4"}
+
+        with tempfile.TemporaryDirectory() as quantized_dir, tempfile.TemporaryDirectory() as saved_dir:
+            config.save_pretrained(quantized_dir)
+            save_file(state_dict, f"{quantized_dir}/model.safetensors", metadata={"format": "pt"})
+            model = GptOssForCausalLM.from_pretrained(quantized_dir, quantization_config=Mxfp4Config(dequantize=True))
+            model.save_pretrained(saved_dir)
+            reloaded = GptOssForCausalLM.from_pretrained(saved_dir)
+
+        reloaded_state_dict = reloaded.state_dict()
+        self.assertEqual(reloaded_state_dict.keys(), model.state_dict().keys())
+        for name, param in model.state_dict().items():
+            torch.testing.assert_close(reloaded_state_dict[name], param, rtol=0, atol=0)
+
     @REQUIRE_TRITON_MXFP4
     @require_kernels
     @require_torch

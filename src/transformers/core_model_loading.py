@@ -1866,7 +1866,14 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
     # Reverse all Transforms
     reverse_weight_conversions = [conversion.reverse_transform() for conversion in weight_conversions]
     renamings = [entry for entry in reverse_weight_conversions if isinstance(entry, WeightRenaming)]
-    converters = [entry for entry in reverse_weight_conversions if isinstance(entry, WeightConverter)]
+    # A converter that reverses to identities only dequantized the weights on load: they are saved as they are, under
+    # the model's own names
+    converters = [
+        entry
+        for entry in reverse_weight_conversions
+        if isinstance(entry, WeightConverter)
+        and not (entry.operations and all(isinstance(op, _IdentityOp) for op in entry.operations))
+    ]
     pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
 
     conversion_mapping: dict[str, WeightTransform] = {}
