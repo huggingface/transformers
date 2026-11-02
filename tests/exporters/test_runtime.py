@@ -439,6 +439,16 @@ class ExportedModelTest(unittest.TestCase):
                     for key in expected:
                         torch.testing.assert_close(outputs[key].cpu(), expected[key], atol=atol, rtol=atol)
                     self.assertEqual(runtime.dtype, torch.float32)
+                    # Copied by default: the next call leaves them as they are.
+                    runtime(**{**inputs, "input_ids": inputs["input_ids"].flip(-1)})
+                    torch.testing.assert_close(
+                        outputs["last_hidden_state"].cpu(), expected["last_hidden_state"], atol=atol, rtol=atol
+                    )
+                    # Shared outputs are right until the next call.
+                    shared = runtime(**inputs, share_inputs=False, share_outputs=True)
+                    torch.testing.assert_close(
+                        shared["last_hidden_state"].cpu(), expected["last_hidden_state"], atol=atol, rtol=atol
+                    )
                     # A loaded runtime saves back what it runs.
                     with tempfile.TemporaryDirectory() as resaved:
                         runtime.save_pretrained(resaved)
