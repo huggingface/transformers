@@ -43,7 +43,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import OmniModalProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_attr
@@ -2820,7 +2820,7 @@ class Qwen3OmniMoeProcessorKwargs(Qwen2_5OmniProcessorKwargs, total=False):
     n_window: int
 
 
-class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
+class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor):
     text_kwargs = {
         "padding_side": "left",
     }
@@ -2838,6 +2838,7 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
     }
     position_id_per_seconds = 13.0
     n_window = 50
+    load_audio_from_video = False
 
     def replace_multimodal_special_tokens(
         self,
@@ -2950,16 +2951,30 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
                 )
 
         # "videos_kwargs" has priority for backwards compatibility
+        load_audio_from_video = output_kwargs["videos_kwargs"].pop(
+            "load_audio_from_video", output_kwargs["load_audio_from_video"]
+        )
         seconds_per_chunk = output_kwargs["videos_kwargs"].pop("seconds_per_chunk", output_kwargs["seconds_per_chunk"])
         position_id_per_seconds = output_kwargs["videos_kwargs"].pop(
             "position_id_per_seconds", output_kwargs["position_id_per_seconds"]
         )
-        use_audio_in_video = output_kwargs["videos_kwargs"].pop(
-            "use_audio_in_video", output_kwargs["use_audio_in_video"]
-        )
         fps = output_kwargs["videos_kwargs"].get("fps", 1.0)
         fps = fps if fps is not None else 1.0
         n_window = output_kwargs["audio_kwargs"].pop("n_window", output_kwargs["n_window"])
+
+        use_audio_in_video = output_kwargs["videos_kwargs"].pop("use_audio_in_video", False)
+        if use_audio_in_video:
+            logger.warning(
+                "`use_audio_in_video` is depreacted and will be removed in v5.25, use `load_audio_from_video` instead"
+            )
+            load_audio_from_video = True
+
+        if load_audio_from_video:
+            audio, _ = self._resolve_audio_from_video(
+                videos,
+                audio=audio,
+                audio_from_video_indices=None,
+            )
 
         if audio is not None:
             audio_inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
@@ -3005,7 +3020,7 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
             image_grid_thw,
             video_grid_thw,
             video_second_per_grid=video_second_per_grid,
-            use_audio_in_video=use_audio_in_video,
+            use_audio_in_video=load_audio_from_video,
             position_id_per_seconds=position_id_per_seconds,
             seconds_per_chunk=seconds_per_chunk,
         )
@@ -3018,7 +3033,7 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
         )
 
     def apply_chat_template(self, conversations, chat_template=None, **kwargs):
-        return ProcessorMixin.apply_chat_template(self, conversations, chat_template, **kwargs)
+        return OmniModalProcessorMixin.apply_chat_template(self, conversations, chat_template, **kwargs)
 
 
 __getattr__ = deprecate_attr(

@@ -22,7 +22,7 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import OmniModalProcessorMixin, ProcessingKwargs, Unpack, VideosKwargs
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 from ...utils.deprecation import deprecate_attr
@@ -32,6 +32,8 @@ from ...video_utils import VideoInput
 logger = logging.get_logger(__name__)
 
 
+# Redefine kwargs for videos because Qwen-Omni uses some kwargs for processing omni
+# and does not use them in video processor class
 class DeprecatedQwen2_5_OmniVideosKwargs(VideosKwargs, total=False):
     """
     min_pixels (`int`, *optional*):
@@ -55,10 +57,12 @@ class DeprecatedQwen2_5_OmniVideosKwargs(VideosKwargs, total=False):
     max_frames (`int`, *optional*):
         Maximum number of frames to extract from the video. Longer videos will be truncated or sampled to fit
         within this limit.
-    use_audio_in_video (`bool`, *optional*, defaults to `False`):
-        Deprecated, use [`Qwen2_5OmniProcessorKwargs.use_audio_in_video`] instead.
+    load_audio_from_video (`bool`, *optional*, defaults to `False`):
+        Deprecated, use [`Qwen2_5OmniProcessorKwargs.load_audio_from_video`] instead.
         Whether to incorporate audio information when processing videos. When enabled, audio tokens are
         interleaved with video tokens based on temporal alignment, creating a unified multimodal representation.
+    use_audio_in_video (`bool`, *optional*, defaults to `False`):
+        Deprecated arg - use `load_audio_from_video` instead.
     seconds_per_chunk (`float`, *optional*, defaults to `2.0`):
         Deprecated, use [`Qwen2_5OmniProcessorKwargs.seconds_per_chunk`] instead.
         The duration (in seconds) of each video chunk when splitting long videos. This parameter controls how
@@ -77,13 +81,14 @@ class DeprecatedQwen2_5_OmniVideosKwargs(VideosKwargs, total=False):
     min_frames: int
     max_frames: int
     use_audio_in_video: bool
+    load_audio_from_video: bool
     seconds_per_chunk: float
     position_id_per_seconds: int | float
 
 
 class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
     """
-    use_audio_in_video (`bool`, *optional*, defaults to `False`):
+    load_audio_from_video (`bool`, *optional*, defaults to `False`):
         Whether to incorporate audio information when processing videos. When enabled, audio tokens are
         interleaved with video tokens based on temporal alignment, creating a unified multimodal representation.
     seconds_per_chunk (`float`, *optional*, defaults to `2.0`):
@@ -91,18 +96,18 @@ class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
         videos are divided into temporal segments for processing.
     position_id_per_seconds (`int` or `float`, *optional*, defaults to `25`):
         The number of position IDs allocated per second of video. This parameter controls the temporal resolution
-        of position embeddings and is used to align video tokens with audio tokens when `use_audio_in_video=True`.
+        of position embeddings and is used to align video tokens with audio tokens when `load_audio_from_video=True`.
     """
 
     videos_kwargs: DeprecatedQwen2_5_OmniVideosKwargs
 
+    load_audio_from_video: bool
     seconds_per_chunk: float
     position_id_per_seconds: int | float
-    use_audio_in_video: bool
 
 
 @auto_docstring
-class Qwen2_5OmniProcessor(ProcessorMixin):
+class Qwen2_5OmniProcessor(OmniModalProcessorMixin):
     valid_processor_kwargs = Qwen2_5OmniProcessorKwargs
 
     text_kwargs = {
@@ -118,9 +123,9 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         "sampling_rate": 16000,
         "return_attention_mask": True,
     }
+    load_audio_from_video = False
     seconds_per_chunk = 2.0
     position_id_per_seconds = 25
-    use_audio_in_video = False
 
     def __init__(
         self, image_processor=None, video_processor=None, feature_extractor=None, tokenizer=None, chat_template=None
@@ -151,7 +156,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             **kwargs,
         )
 
-        for key in ("seconds_per_chunk", "position_id_per_seconds", "use_audio_in_video"):
+        for key in ("seconds_per_chunk", "position_id_per_seconds", "load_audio_from_video"):
             if key in output_kwargs["videos_kwargs"]:
                 logger.warning_once(
                     f"Passing `{key}` in `videos_kwargs` is deprecated "
@@ -160,13 +165,27 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
                 )
 
         # "videos_kwargs" has priority for backwards compatibility
+        load_audio_from_video = output_kwargs["videos_kwargs"].pop(
+            "load_audio_from_video", output_kwargs["load_audio_from_video"]
+        )
         seconds_per_chunk = output_kwargs["videos_kwargs"].pop("seconds_per_chunk", output_kwargs["seconds_per_chunk"])
         position_id_per_seconds = output_kwargs["videos_kwargs"].pop(
             "position_id_per_seconds", output_kwargs["position_id_per_seconds"]
         )
-        use_audio_in_video = output_kwargs["videos_kwargs"].pop(
-            "use_audio_in_video", output_kwargs["use_audio_in_video"]
-        )
+
+        use_audio_in_video = output_kwargs["videos_kwargs"].pop("use_audio_in_video", False)
+        if use_audio_in_video:
+            logger.warning(
+                "`use_audio_in_video` is depreacted and will be removed in v5.25, use `load_audio_from_video` instead"
+            )
+            load_audio_from_video = True
+
+        if load_audio_from_video:
+            audio, _ = self._resolve_audio_from_video(
+                videos,
+                audio=audio,
+                audio_from_video_indices=None,
+            )
 
         if audio is not None:
             output_kwargs["audio_kwargs"]["padding"] = "max_length"  # Support "max_length" padding only here
@@ -216,7 +235,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
                 image_grid_thw,
                 video_grid_thw,
                 video_second_per_grid=video_second_per_grid,
-                use_audio_in_video=use_audio_in_video,
+                use_audio_in_video=load_audio_from_video,
                 position_id_per_seconds=position_id_per_seconds,
                 seconds_per_chunk=seconds_per_chunk,
             )

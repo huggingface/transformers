@@ -1036,7 +1036,9 @@ def replace_class_node(
             original_base_name = original_base.value.value
             for additional_base_name in additional_bases:
                 suffix = common_partial_suffix(original_base_name, additional_base_name)
-                if len(suffix) > 0 and suffix[0].isupper():
+                # In some cases we have custom class overrides, e.g. `GenerationMixin/ProcessorMixin`
+                # Allow to override the inheritance in that case by checking `endswith`
+                if (len(suffix) > 0 and suffix[0].isupper()) or additional_base_name.endswith(original_base_name):
                     new_name_node = original_base.value.with_changes(value=additional_base_name)
                     new_base = original_base.with_changes(value=new_name_node)
                     # Remove from set
