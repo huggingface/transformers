@@ -13,7 +13,6 @@
 # limitations under the License.
 """PI0.5 model: PaliGemma + action expert conditioned on the timestep through adaptive RMS norms."""
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
@@ -21,11 +20,9 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, make_nested_list_of_images
+from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...processing_utils import Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
@@ -58,108 +55,95 @@ class PI05ProcessorKwargs(PI0ProcessorKwargs, total=False):
 @requires(backends=("vision", "torch"))
 class PI05Processor(PI0Processor):
     valid_processor_kwargs = PI05ProcessorKwargs
+    state_in_prompt = True
 
     def __init__(
         self,
         image_processor=None,
         tokenizer=None,
         chat_template=None,
+        state_mean: list[float] | None = None,
+        state_std: list[float] | None = None,
+        actions_mean: list[float] | None = None,
+        actions_std: list[float] | None = None,
+        state_q01: list[float] | None = None,
+        state_q99: list[float] | None = None,
+        actions_q01: list[float] | None = None,
+        actions_q99: list[float] | None = None,
         max_state_dim: int = 32,
         chunk_size: int = 50,
         **kwargs,
     ):
         r"""
+        state_mean (`list[float]`, *optional*):
+            Dataset mean of the robot state. Required to process `state` unless `state_q01` and `state_q99` are set.
+        state_std (`list[float]`, *optional*):
+            Dataset standard deviation of the robot state.
+        actions_mean (`list[float]`, *optional*):
+            Dataset mean of the actions. Required to process `actions` unless `actions_q01` and `actions_q99` are set.
+        actions_std (`list[float]`, *optional*):
+            Dataset standard deviation of the actions.
+        state_q01 (`list[float]`, *optional*):
+            Dataset 1st percentile of the robot state. With `state_q99`, `state` is mapped to [-1, 1] by quantiles.
+        state_q99 (`list[float]`, *optional*):
+            Dataset 99th percentile of the robot state.
+        actions_q01 (`list[float]`, *optional*):
+            Dataset 1st percentile of the actions. With `actions_q99`, `actions` are mapped to [-1, 1] by quantiles.
+        actions_q99 (`list[float]`, *optional*):
+            Dataset 99th percentile of the actions.
         max_state_dim (`int`, *optional*, defaults to 32):
             Size the actions are zero-padded to.
         chunk_size (`int`, *optional*, defaults to 50):
             Number of actions per chunk.
         """
+        self.state_q01 = state_q01
+        self.state_q99 = state_q99
+        self.actions_q01 = actions_q01
+        self.actions_q99 = actions_q99
         super().__init__(
             image_processor,
             tokenizer,
             chat_template=chat_template,
+            state_mean=state_mean,
+            state_std=state_std,
+            actions_mean=actions_mean,
+            actions_std=actions_std,
             max_state_dim=max_state_dim,
             chunk_size=chunk_size,
             **kwargs,
         )
-        del self.state_mean
-        del self.state_std
-        del self.actions_mean
-        del self.actions_std
 
-    @auto_docstring
-    def __call__(
-        self,
-        images: ImageInput | list[ImageInput] | list[list[ImageInput]] | None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        actions: list | np.ndarray | torch.Tensor | None = None,
-        state: list | np.ndarray | torch.Tensor | None = None,
-        **kwargs: Unpack[PI05ProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        actions (`list | np.ndarray | torch.Tensor`, *optional*):
-            Actions already normalized the way the checkpoint was trained. If provided, they are padded.
-        state (`list | np.ndarray | torch.Tensor`, *optional*):
-            Robot state normalized to [-1, 1]. If provided, it is discretized into 256 bins in the prompt.
-        """
-        output_kwargs = self._merge_kwargs(
-            self.valid_processor_kwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
-        )
-
-        if text is None:
-            logger.warning_once("You are using PI05 without a text prefix. The processor will use an empty prompt.")
-            text = ""
-
-        if isinstance(text, str):
-            text = [text]
-
-        batched_images = make_nested_list_of_images(images)
-        if len(batched_images) != len(text):
-            raise ValueError(
-                f"Received {len(batched_images)} image samples for {len(text)} prompts. "
-                "Each prompt should be associated with one sample (with one or more camera images)."
-            )
-
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        output_kwargs["images_kwargs"].pop("return_tensors", None)
-
+    def build_prompts(
+        self, text: list[str], batched_images: list[list[ImageInput]], state: torch.Tensor | None
+    ) -> list[str]:
+        """Builds one prompt per sample: image tokens, the task, then the state discretized into 256 bins."""
         if state is None:
             state_prompts = [""] * len(text)
         else:
-            state = torch.as_tensor(state, dtype=torch.float32).view(len(text), -1)
-            discretized_state = np.digitize(state.numpy(), bins=np.linspace(-1, 1, 256 + 1)[:-1]) - 1
-            state_prompts = [f", State: {' '.join(map(str, sample_state))}" for sample_state in discretized_state]
+            bins = torch.linspace(-1, 1, 256 + 1)[:-1]
+            discretized_state = torch.bucketize(state.view(len(text), -1), bins, right=True) - 1
+            state_prompts = [f", State: {' '.join(map(str, sample.tolist()))}" for sample in discretized_state]
         tasks = [sample.strip().replace("_", " ").replace("\n", " ") for sample in text]
-        prompt_strings = [
+        return [
             f"{self.image_token * self.image_seq_length * len(image_list)}{self.tokenizer.bos_token}"
             f"Task: {task}{state_prompt};\nAction: "
             for task, state_prompt, image_list in zip(tasks, state_prompts, batched_images)
         ]
-        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
 
-        num_cameras = torch.tensor([len(sample_images) for sample_images in batched_images])
-        pixel_attention_mask = torch.arange(num_cameras.max())[None, :] < num_cameras[:, None]
-        pixel_values = self.image_processor(
-            [image for sample_images in batched_images for image in sample_images],
-            return_tensors="pt",
-            **output_kwargs["images_kwargs"],
-        )["pixel_values"]
-        padded_pixel_values = pixel_values.new_zeros(*pixel_attention_mask.shape, *pixel_values.shape[1:])
-        padded_pixel_values[pixel_attention_mask] = pixel_values
-
-        model_inputs = {
-            **text_inputs,
-            "pixel_values": padded_pixel_values,
-            "pixel_attention_mask": pixel_attention_mask,
-        }
-
-        if actions is not None:
-            actions = torch.as_tensor(actions, dtype=torch.float32)
-            if actions.shape[-1] < self.max_state_dim:
-                actions = F.pad(actions, (0, self.max_state_dim - actions.shape[-1]))
-            model_inputs["actions"] = actions.view(-1, self.chunk_size, self.max_state_dim)
-
-        return BatchFeature(data=model_inputs, tensor_type=return_tensors)
+    def normalize(self, values: torch.Tensor, feature: str) -> torch.Tensor:
+        """Maps `state` or `actions` to [-1, 1] with the dataset quantiles, or normalizes them with mean and std."""
+        q01, q99 = getattr(self, f"{feature}_q01"), getattr(self, f"{feature}_q99")
+        if q01 is not None and q99 is not None:
+            q01, q99 = torch.tensor(q01), torch.tensor(q99)
+            return 2.0 * (values - q01) / torch.where(q99 - q01 == 0, 1e-08, q99 - q01) - 1.0
+        mean, std = getattr(self, f"{feature}_mean"), getattr(self, f"{feature}_std")
+        if mean is None or std is None:
+            raise ValueError(
+                f"Processing `{feature}` needs `{feature}_q01` and `{feature}_q99`, or `{feature}_mean` and "
+                f"`{feature}_std`. Pass the statistics of the dataset the checkpoint was trained on when creating the "
+                "processor."
+            )
+        return (values - torch.tensor(mean)) / (torch.tensor(std) + 1e-08)
 
 
 @auto_docstring(checkpoint="lerobot/pi05_base")
@@ -167,8 +151,7 @@ class PI05Processor(PI0Processor):
 class PI05Config(PI0Config):
     r"""
     dit_config (`dict`, *optional*):
-        Configuration for the action expert. Defaults to a Gemma 300M variant whose norms are conditioned on the
-        timestep.
+        Configuration for the action expert. Defaults to a Gemma 300M variant.
     chunk_size (`int`, *optional*, defaults to 50):
         Number of action steps to predict per chunk.
     max_action_dim (`int`, *optional*, defaults to 32):
@@ -278,6 +261,7 @@ class PI05PreTrainedModel(PI0PreTrainedModel):
     main_input_name = "input_ids"
     _no_split_modules = ["PI05DecoderLayer"]
     _can_record_outputs = {"hidden_states": PI05DecoderLayer, "attentions": PI05Attention}
+    # LeRobot checkpoints store the expert's lm_head, which the pi0 conversion renames to model.dit.embed_tokens
     _keys_to_ignore_on_load_unexpected = [r"model\.dit\.embed_tokens"]
 
     def _init_weights(self, module):
@@ -355,7 +339,7 @@ class PI05ForConditionalGeneration(PI0ForConditionalGeneration):
         inputs_embeds: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         actions: torch.FloatTensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
         noise (`torch.Tensor`, *optional*):
@@ -424,7 +408,6 @@ class PI05ForConditionalGeneration(PI0ForConditionalGeneration):
 __all__ = [
     "PI05Config",
     "PI05PreTrainedModel",
-    "PI05ActionExpertModel",
     "PI05Model",
     "PI05ForConditionalGeneration",
     "PI05Processor",

@@ -29,8 +29,7 @@ from ..auto import AutoConfig
 class PI05Config(PreTrainedConfig):
     r"""
     dit_config (`dict`, *optional*):
-        Configuration for the action expert. Defaults to a Gemma 300M variant whose norms are conditioned on the
-        timestep.
+        Configuration for the action expert. Defaults to a Gemma 300M variant.
     chunk_size (`int`, *optional*, defaults to 50):
         Number of action steps to predict per chunk.
     max_action_dim (`int`, *optional*, defaults to 32):

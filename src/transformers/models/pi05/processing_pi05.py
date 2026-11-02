@@ -48,22 +48,55 @@ class PI05ProcessorKwargs(ProcessingKwargs, total=False):
 @requires(backends=("vision", "torch"))
 class PI05Processor(ProcessorMixin):
     valid_processor_kwargs = PI05ProcessorKwargs
+    state_in_prompt = True
 
     def __init__(
         self,
         image_processor=None,
         tokenizer=None,
         chat_template=None,
+        state_mean: list[float] | None = None,
+        state_std: list[float] | None = None,
+        actions_mean: list[float] | None = None,
+        actions_std: list[float] | None = None,
+        state_q01: list[float] | None = None,
+        state_q99: list[float] | None = None,
+        actions_q01: list[float] | None = None,
+        actions_q99: list[float] | None = None,
         max_state_dim: int = 32,
         chunk_size: int = 50,
         **kwargs,
     ):
         r"""
+        state_mean (`list[float]`, *optional*):
+            Dataset mean of the robot state. Required to process `state` unless `state_q01` and `state_q99` are set.
+        state_std (`list[float]`, *optional*):
+            Dataset standard deviation of the robot state.
+        actions_mean (`list[float]`, *optional*):
+            Dataset mean of the actions. Required to process `actions` unless `actions_q01` and `actions_q99` are set.
+        actions_std (`list[float]`, *optional*):
+            Dataset standard deviation of the actions.
+        state_q01 (`list[float]`, *optional*):
+            Dataset 1st percentile of the robot state. With `state_q99`, `state` is mapped to [-1, 1] by quantiles.
+        state_q99 (`list[float]`, *optional*):
+            Dataset 99th percentile of the robot state.
+        actions_q01 (`list[float]`, *optional*):
+            Dataset 1st percentile of the actions. With `actions_q99`, `actions` are mapped to [-1, 1] by quantiles.
+        actions_q99 (`list[float]`, *optional*):
+            Dataset 99th percentile of the actions.
         max_state_dim (`int`, *optional*, defaults to 32):
             Size the actions are zero-padded to.
         chunk_size (`int`, *optional*, defaults to 50):
             Number of actions per chunk.
         """
+        self.state_q01 = state_q01
+        self.state_q99 = state_q99
+        self.actions_q01 = actions_q01
+        self.actions_q99 = actions_q99
+        self.state_mean = state_mean
+        self.state_std = state_std
+        self.actions_mean = actions_mean
+        self.actions_std = actions_std
         self.max_state_dim = max_state_dim
         self.chunk_size = chunk_size
         if not hasattr(image_processor, "image_seq_length"):
@@ -100,9 +133,22 @@ class PI05Processor(ProcessorMixin):
     ) -> BatchFeature:
         r"""
         actions (`list | np.ndarray | torch.Tensor`, *optional*):
-            Actions already normalized the way the checkpoint was trained. If provided, they are padded.
+            Actions to be predicted by the model. Normalized with the processor's dataset statistics, then padded.
         state (`list | np.ndarray | torch.Tensor`, *optional*):
-            Robot state normalized to [-1, 1]. If provided, it is discretized into 256 bins in the prompt.
+            Robot state. Normalized with the processor's dataset statistics, then padded.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`. If `suffix`
+              is provided, the `input_ids` will also contain the suffix input ids.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            - **pixel_attention_mask** -- Pixel values padding mask to be fed to a model. Returned when `images` is not `None`.
+            - **state** -- Robot state compatible with model if `state` is not None
+            - **actions** -- Label-actions compatible with training if `actions` is not None
         """
         output_kwargs = self._merge_kwargs(
             self.valid_processor_kwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
@@ -125,20 +171,11 @@ class PI05Processor(ProcessorMixin):
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         output_kwargs["images_kwargs"].pop("return_tensors", None)
 
-        if state is None:
-            state_prompts = [""] * len(text)
-        else:
-            state = torch.as_tensor(state, dtype=torch.float32).view(len(text), -1)
-            discretized_state = np.digitize(state.numpy(), bins=np.linspace(-1, 1, 256 + 1)[:-1]) - 1
-            state_prompts = [f", State: {' '.join(map(str, sample_state))}" for sample_state in discretized_state]
-        tasks = [sample.strip().replace("_", " ").replace("\n", " ") for sample in text]
-        prompt_strings = [
-            f"{self.image_token * self.image_seq_length * len(image_list)}{self.tokenizer.bos_token}"
-            f"Task: {task}{state_prompt};\nAction: "
-            for task, state_prompt, image_list in zip(tasks, state_prompts, batched_images)
-        ]
-        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+        if state is not None:
+            state = self.normalize(torch.as_tensor(state, dtype=torch.float32), "state")
+        text_inputs = self.tokenizer(self.build_prompts(text, batched_images, state), **output_kwargs["text_kwargs"])
 
+        # Here is the diff from PaliGemma. Ideally we'd create a new ImageProcessor if it were a VLM
         num_cameras = torch.tensor([len(sample_images) for sample_images in batched_images])
         pixel_attention_mask = torch.arange(num_cameras.max())[None, :] < num_cameras[:, None]
         pixel_values = self.image_processor(
@@ -156,12 +193,49 @@ class PI05Processor(ProcessorMixin):
         }
 
         if actions is not None:
-            actions = torch.as_tensor(actions, dtype=torch.float32)
+            actions = self.normalize(torch.as_tensor(actions, dtype=torch.float32), "actions")
             if actions.shape[-1] < self.max_state_dim:
                 actions = F.pad(actions, (0, self.max_state_dim - actions.shape[-1]))
             model_inputs["actions"] = actions.view(-1, self.chunk_size, self.max_state_dim)
 
+        if state is not None and not self.state_in_prompt:
+            if state.shape[-1] < self.max_state_dim:
+                state = F.pad(state, (0, self.max_state_dim - state.shape[-1]))
+            model_inputs["state"] = state.view(-1, self.max_state_dim)
+
         return BatchFeature(data=model_inputs, tensor_type=return_tensors)
+
+    def build_prompts(
+        self, text: list[str], batched_images: list[list[ImageInput]], state: torch.Tensor | None
+    ) -> list[str]:
+        """Builds one prompt per sample: image tokens, the task, then the state discretized into 256 bins."""
+        if state is None:
+            state_prompts = [""] * len(text)
+        else:
+            bins = torch.linspace(-1, 1, 256 + 1)[:-1]
+            discretized_state = torch.bucketize(state.view(len(text), -1), bins, right=True) - 1
+            state_prompts = [f", State: {' '.join(map(str, sample.tolist()))}" for sample in discretized_state]
+        tasks = [sample.strip().replace("_", " ").replace("\n", " ") for sample in text]
+        return [
+            f"{self.image_token * self.image_seq_length * len(image_list)}{self.tokenizer.bos_token}"
+            f"Task: {task}{state_prompt};\nAction: "
+            for task, state_prompt, image_list in zip(tasks, state_prompts, batched_images)
+        ]
+
+    def normalize(self, values: torch.Tensor, feature: str) -> torch.Tensor:
+        """Maps `state` or `actions` to [-1, 1] with the dataset quantiles, or normalizes them with mean and std."""
+        q01, q99 = getattr(self, f"{feature}_q01"), getattr(self, f"{feature}_q99")
+        if q01 is not None and q99 is not None:
+            q01, q99 = torch.tensor(q01), torch.tensor(q99)
+            return 2.0 * (values - q01) / torch.where(q99 - q01 == 0, 1e-08, q99 - q01) - 1.0
+        mean, std = getattr(self, f"{feature}_mean"), getattr(self, f"{feature}_std")
+        if mean is None or std is None:
+            raise ValueError(
+                f"Processing `{feature}` needs `{feature}_q01` and `{feature}_q99`, or `{feature}_mean` and "
+                f"`{feature}_std`. Pass the statistics of the dataset the checkpoint was trained on when creating the "
+                "processor."
+            )
+        return (values - torch.tensor(mean)) / (torch.tensor(std) + 1e-08)
 
     @property
     def model_input_names(self):

@@ -13,12 +13,9 @@
 # limitations under the License.
 """Testing suite for the PyTorch PI0.5 model."""
 
-import os
-import tempfile
 import unittest
 
 from datasets import load_dataset
-from safetensors.torch import load_file, save_file
 
 from transformers import PI05Config, PI05Processor, is_torch_available
 from transformers.testing_utils import (
@@ -75,32 +72,6 @@ class PI05ForConditionalGenerationModelTest(test_modeling_pi0.PI0ForConditionalG
         self.model_tester = PI05ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=PI05Config, has_text_modality=False)
 
-    def test_load_lerobot_base_and_finetuned_layouts(self):
-        config = self.model_tester.get_config()
-        model = PI05ForConditionalGeneration(config).eval()
-        with tempfile.TemporaryDirectory() as saved_directory:
-            model.save_pretrained(saved_directory)
-            saved_state_dict = load_file(os.path.join(saved_directory, "model.safetensors"))
-            saved_state_dict["paligemma_with_expert.gemma_expert.lm_head.weight"] = torch.zeros(
-                config.vlm_config.text_config.vocab_size, config.dit_config.hidden_size
-            )
-            layouts = {
-                "finetuned": {
-                    key if key.startswith("model.") else f"model.{key}": value
-                    for key, value in saved_state_dict.items()
-                },
-                "base": {key.removeprefix("model."): value for key, value in saved_state_dict.items()},
-            }
-            for layout_name, state_dict in layouts.items():
-                save_file(state_dict, os.path.join(saved_directory, "model.safetensors"), metadata={"format": "pt"})
-                reloaded, loading_info = PI05ForConditionalGeneration.from_pretrained(
-                    saved_directory, output_loading_info=True
-                )
-                self.assertEqual(loading_info["missing_keys"], set(), layout_name)
-                self.assertEqual(loading_info["unexpected_keys"], set(), layout_name)
-                for name, parameter in model.state_dict().items():
-                    torch.testing.assert_close(reloaded.state_dict()[name], parameter, rtol=0, atol=0)
-
 
 LIBERO_TASK = "put the white mug on the left plate and put the yellow and white mug on the right plate"
 LIBERO_MEAN_STD = {
@@ -120,23 +91,15 @@ LIBERO_QUANTILES = {
 @slow
 @require_torch_accelerator
 class PI05ModelIntegrationTest(unittest.TestCase):
-    def normalize(self, values, statistics, feature):
-        values = torch.tensor(values)
-        if f"{feature}_mean" in statistics:
-            mean, std = torch.tensor(statistics[f"{feature}_mean"]), torch.tensor(statistics[f"{feature}_std"])
-            return (values - mean) / (std + 1e-8)
-        q01, q99 = torch.tensor(statistics[f"{feature}_q01"]), torch.tensor(statistics[f"{feature}_q99"])
-        return 2.0 * (values - q01) / torch.where(q99 - q01 == 0, 1e-8, q99 - q01) - 1.0
-
     def prepare_inputs(self, statistics):
-        processor = PI05Processor.from_pretrained("google/paligemma-3b-pt-224")
+        processor = PI05Processor.from_pretrained("google/paligemma-3b-pt-224", **statistics)
         small_data = load_dataset("RaushanTurganbay/libero-small-testing", split="train")
         first_sample = small_data[0]
         inputs = processor(
             images=[[first_sample["observation.images.image"], first_sample["observation.images.wrist_image"]]],
             text=LIBERO_TASK,
-            state=self.normalize(first_sample["observation.state"], statistics, "state"),
-            actions=self.normalize(small_data["action"][:50], statistics, "actions"),
+            state=first_sample["observation.state"],
+            actions=small_data["action"][:50],
             padding="longest",
             return_tensors="pt",
         )
@@ -147,7 +110,12 @@ class PI05ModelIntegrationTest(unittest.TestCase):
 
     def run_model(self, checkpoint, statistics, dtype):
         inputs, actions, noise = self.prepare_inputs(statistics)
-        model = PI05ForConditionalGeneration.from_pretrained(checkpoint, dtype=dtype).to(torch_device).eval()
+        model, loading_info = PI05ForConditionalGeneration.from_pretrained(
+            checkpoint, dtype=dtype, output_loading_info=True
+        )
+        self.assertEqual(loading_info["missing_keys"], set())
+        self.assertEqual(loading_info["unexpected_keys"], set())
+        model = model.to(torch_device).eval()
         model.config.loss_reduction = "none"
         inputs = inputs.to(torch_device).to(dtype)
         noise = noise.to(torch_device, dtype)
@@ -179,9 +147,13 @@ class PI05ModelIntegrationTest(unittest.TestCase):
         loss, sampled = self.run_model("lerobot/pi05_libero_finetuned_v044", LIBERO_MEAN_STD, torch.bfloat16)
         expected_slices = Expectations(
             {
-                ("cuda", 8): [
+                ("cuda", (8, 0)): [
                     [-0.1543, -0.4434, 0.1855, -0.2354, -0.0352, 0.0967, -0.9570],
                     [-0.1562, -0.4336, 0.1914, -0.0869, -0.0552, 0.0786, -0.9492],
+                ],
+                ("cuda", (8, 6)): [
+                    [-0.1523, -0.4453, 0.1865, -0.2441, -0.0332, 0.0977, -0.9570],
+                    [-0.1553, -0.4355, 0.1934, -0.0942, -0.0552, 0.0791, -0.9492],
                 ],
             }
         )  # fmt: skip

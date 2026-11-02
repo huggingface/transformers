@@ -17,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import math
 from collections.abc import Callable
 
@@ -303,6 +304,7 @@ class PI05PreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     _no_split_modules = ["PI05DecoderLayer"]
     _can_record_outputs = {"hidden_states": PI05DecoderLayer, "attentions": PI05Attention}
+    # LeRobot checkpoints store the expert's lm_head, which the pi0 conversion renames to model.dit.embed_tokens
     _keys_to_ignore_on_load_unexpected = [r"model\.dit\.embed_tokens"]
 
     def _init_weights(self, module):
@@ -440,7 +442,7 @@ class PI05Model(PI05PreTrainedModel):
         token_offset = image_token_rank - camera_rank * tokens_per_image
         camera_slot = pixel_attention_mask.cumsum(-1) - 1
         camera_match = (camera_slot[:, None, :] == camera_rank[..., None]) & pixel_attention_mask[:, None, :]
-        feature_index = camera_match.int().argmax(-1) * tokens_per_image + token_offset
+        feature_index = (camera_match.int().argmax(-1) * tokens_per_image + token_offset).to(image_features.device)
         image_embeds = image_features.gather(1, feature_index[..., None].expand(-1, -1, hidden_size))
 
         inputs_embeds = self.vlm.get_input_embeddings()(input_ids.masked_fill(special_image_mask, 0))
@@ -451,7 +453,7 @@ class PI05Model(PI05PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        action_embeds: torch.Tensor,  # aka `suffix_emb` (noise + state + timestep)
+        action_embeds: torch.Tensor,  # aka `suffix_emb`
         input_ids: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
@@ -463,7 +465,7 @@ class PI05Model(PI05PreTrainedModel):
     ) -> BaseModelOutputWithPast:
         r"""
         action_embeds (`torch.Tensor`, *optional*):
-            The embeddings of input actions and robot states.
+            Embeddings of the suffix tokens fed to the action expert.
         pixel_attention_mask (`torch.Tensor`, *optional*):
             The mask indicating padded positions in the input image.
         """
@@ -499,6 +501,8 @@ class PI05Model(PI05PreTrainedModel):
             dit_attention_mask = torch.cat([attention_mask, noise_mask], dim=1)
             dit_position_ids = (torch.cumsum(dit_attention_mask, dim=1) - 1)[:, -action_embeds.shape[1] :]
 
+        # Two blocks: the prefix (VLM tokens and any state token) and the action chunk.
+        # The mask is bidirectional within each block and to earlier blocks, but not to later blocks.
         vlm_block_length = past_key_values.get_seq_length() + action_embeds.shape[1] - self.config.chunk_size
         block_sequence_ids = torch.cat(
             [
@@ -553,7 +557,7 @@ class PI05ForConditionalGeneration(PI05PreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         actions: torch.FloatTensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
         noise (`torch.Tensor`, *optional*):
@@ -684,4 +688,4 @@ class PI05ForConditionalGeneration(PI05PreTrainedModel):
         return noise
 
 
-__all__ = ["PI05PreTrainedModel", "PI05ActionExpertModel", "PI05Model", "PI05ForConditionalGeneration"]
+__all__ = ["PI05PreTrainedModel", "PI05Model", "PI05ForConditionalGeneration"]

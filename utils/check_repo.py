@@ -148,6 +148,7 @@ PRIVATE_MODELS = [
     "VoxtralRealtimeTextModel",
     "VoxtralRealtimeTextForCausalLM",
     "VoxtralRealtimeTextPreTrainedModel",
+    "PI05ActionExpertModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -312,7 +313,6 @@ IGNORE_NON_TESTED = (
         "VibeVoiceAcousticTokenizerDecoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "PI0Model",  # special arch, tested through PI0ForConditionalGeneration
         "PI05Model",  # special arch, tested through PI05ForConditionalGeneration
-        "PI05ActionExpertModel",  # building part of PI05Model, tested through PI05ForConditionalGeneration
         "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
         "Gemma4VisionModel",  # Building part of a bigger model, tested implicitly
         "Gemma4AudioModel",  # Building part of a bigger model, tested implicitly
@@ -582,7 +582,6 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "Ernie4_5_VL_MoeModel",  # BC Alias
         "Ernie4_5_VL_MoeTextModel",  # BC Alias
         "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
-        "PI05ActionExpertModel",  # Building part of PI05Model, tested implicitly through PI05ForConditionalGeneration
         "Granite4VisionTextModel",  # Building part of bigger (tested) model.
         "InklingTextModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingAudioModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.

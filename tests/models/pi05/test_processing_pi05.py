@@ -51,6 +51,10 @@ class PI05ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
 
+    @staticmethod
+    def prepare_processor_dict():
+        return {"state_q01": [-1.0] * 8, "state_q99": [1.0] * 8, "chunk_size": 10}
+
     @require_vision
     def prepare_images_inputs(self, batch_size: int | None = None, nested: bool = True):
         return super().prepare_images_inputs(batch_size, nested=nested)
@@ -69,20 +73,23 @@ class PI05ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_state_is_discretized_into_the_prompt(self):
-        processor = self.get_processor()
         state = [[-1.0, -0.5, 0.0, 0.25, 0.999, 1.0, -0.9921875, 0.5]]
-        outputs = processor(images=self.prepare_images_inputs(), text="pick_up the\nobject", state=state)
-
         expected_bins = [0, 64, 128, 160, 255, 255, 1, 192]
         lerobot_bins = np.digitize(np.array(state), bins=np.linspace(-1, 1, 256 + 1)[:-1]) - 1
         self.assertEqual(lerobot_bins[0].tolist(), expected_bins)
 
-        expected_prompt = f"{processor.tokenizer.bos_token}Task: pick up the object, State: {' '.join(map(str, expected_bins))};\nAction: "
-        expected_inputs = processor.tokenizer(
-            expected_prompt, padding="max_length", max_length=200, padding_side="right", return_tensors="pt"
+        quantile_processor = self.get_processor()
+        mean_std_processor = self.processor_class(
+            **self.prepare_components(), state_mean=[0.0] * 8, state_std=[1.0] * 8
         )
-        self.assertTrue(torch.equal(outputs["input_ids"], expected_inputs["input_ids"]))
-        self.assertNotIn("state", outputs)
+        for processor in (quantile_processor, mean_std_processor):
+            outputs = processor(images=self.prepare_images_inputs(), text="pick_up the\nobject", state=state)
+            expected_prompt = f"{processor.tokenizer.bos_token}Task: pick up the object, State: {' '.join(map(str, expected_bins))};\nAction: "
+            expected_inputs = processor.tokenizer(
+                expected_prompt, padding="max_length", max_length=200, padding_side="right", return_tensors="pt"
+            )
+            self.assertTrue(torch.equal(outputs["input_ids"], expected_inputs["input_ids"]))
+            self.assertNotIn("state", outputs)
 
     @require_torch
     def test_prompt_without_state(self):
