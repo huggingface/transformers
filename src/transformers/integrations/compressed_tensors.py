@@ -42,9 +42,20 @@ def get_experts_scheme(quantization_config):
     return groups[0]
 
 
+def get_dense_scheme(quantization_config):
+    """The config group quantizing the dense layers: in mixed configs, the one whose targets do not single out the
+    experts (see `get_experts_scheme`)."""
+    groups = list(quantization_config.config_groups.values())
+    for group in groups:
+        if not any(target.startswith("re:") and "experts" in target for target in group.targets):
+            return group
+    return groups[0]
+
+
 class CompressedTensorsDequantize(ConversionOps):
     """
-    Dequantize MoE layers when they are in new layout, because they aren't `nn.Module` anymore!
+    Decompresses the checkpoint weights while loading: each dense module's serialized tensors (general converter),
+    and the MoE experts, which are in the new fused layout and aren't `nn.Module`s anymore.
 
     Takes packed weights and scales from the loaded state dict, creates a dummy Module
     to take advantage of higher-lvl API `decompress_module` and dequantizes all weights.
@@ -72,17 +83,16 @@ class CompressedTensorsDequantize(ConversionOps):
         ct_quantization_config = self.hf_quantizer.compressor.quantization_config
         dtype = kwargs["model"].get_parameter(full_layer_name).dtype
 
-        quantization_scheme = self.scheme or get_experts_scheme(ct_quantization_config)
-
-        format = quantization_scheme.format or ct_quantization_config.format
-        compressor = BaseCompressor.get_value_from_registry(format)
-
         if "weight" in input_dict or "weight_scale" in input_dict:
-            # The quantizer's general converter: the keys are the serialized names of one module
+            # The quantizer's general converter: the keys are the serialized names of one dense module
             state_dict = {name: value[0] if isinstance(value, list) else value for name, value in input_dict.items()}
             if "weight_scale" in state_dict:
-                state_dict = compressor.decompress(state_dict, quantization_scheme)
+                scheme = self.scheme or get_dense_scheme(ct_quantization_config)
+                compressor = BaseCompressor.get_value_from_registry(scheme.format or ct_quantization_config.format)
+                state_dict = compressor.decompress(state_dict, scheme)
             return {full_layer_name: state_dict["weight"].to(dtype)}
+
+        quantization_scheme = self.scheme or get_experts_scheme(ct_quantization_config)
 
         weights_args = quantization_scheme.weights
         if weights_args.type == "float" and weights_args.num_bits == 8:
@@ -111,6 +121,9 @@ class CompressedTensorsDequantize(ConversionOps):
                 if output is not None:
                     processed_out[key] = output
             return processed_out
+
+        format = quantization_scheme.format or ct_quantization_config.format
+        compressor = BaseCompressor.get_value_from_registry(format)
 
         class DummyModule(nn.Module):
             def __init__(self, weight, scale, shape):
