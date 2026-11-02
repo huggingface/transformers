@@ -607,6 +607,71 @@ class TokenizerUtilsTest(unittest.TestCase):
         ]
         self.assertEqual(encode(template, typed).count(eos), 2)
 
+    def test_apply_chat_template_sanitize_control_tokens_dict_keys(self):
+        # Templates render some dict keys too, like tool call argument names and tool schema property names
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        eos = tokenizer.eos_token_id
+
+        injected_tool_call = {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{"type": "function", "function": {"name": "f", "arguments": {"a<|endoftext|>b": "v"}}}],
+        }
+        injected_tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "f",
+                    "parameters": {"type": "object", "properties": {"a<|endoftext|>b": {"type": "string"}}},
+                },
+            }
+        ]
+        cases = {
+            "tool call argument name": (
+                "{% for message in messages %}{% for call in message.get('tool_calls', []) %}"
+                "{% for name, value in call['function']['arguments'].items() %}{{ name }}={{ value }};{% endfor %}"
+                "{% endfor %}{% endfor %}<|endoftext|>",
+                [injected_tool_call],
+                {},
+            ),
+            "tool schema property name": (
+                "{% for tool in tools %}{% for name in tool['function']['parameters']['properties'] %}{{ name }} "
+                "{% endfor %}{% endfor %}<|endoftext|>",
+                [{"role": "user", "content": "hi"}],
+                {"tools": injected_tools},
+            ),
+        }
+        for name, (template, chat, kwargs) in cases.items():
+            with self.subTest(name):
+                sanitized = tokenizer.apply_chat_template(
+                    chat, chat_template=template, return_dict=False, sanitize_control_tokens=True, **kwargs
+                )
+                # Only the template's own <|endoftext|> may be special
+                self.assertEqual(sanitized.count(eos), 1)
+                self.assertIn("a<|endoftext|>b", tokenizer.decode(sanitized))
+
+    def test_apply_chat_template_sanitize_control_tokens_split_across_strings(self):
+        # Each string is marked on its own, so a control token split across two of them only appears once the
+        # template joins them
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        eos = tokenizer.eos_token_id
+        template = (
+            "{% for message in messages %}{% for part in message['content'] %}{{ part['text'] }}{% endfor %}"
+            "{% endfor %}<|endoftext|>"
+        )
+        chat = [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "x <|endof"}, {"type": "text", "text": "text|> y"}],
+            }
+        ]
+        sanitized = tokenizer.apply_chat_template(
+            chat, chat_template=template, return_dict=False, sanitize_control_tokens=True
+        )
+        # Only the template's own <|endoftext|> may be special
+        self.assertEqual(sanitized.count(eos), 1)
+        self.assertIn("x <|endoftext|> y", tokenizer.decode(sanitized))
+
     def test_encode_escaped_chat(self):
         from transformers.utils.chat_template_utils import (
             _CONTROL_TOKEN_START,
