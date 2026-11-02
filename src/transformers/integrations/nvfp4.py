@@ -178,7 +178,9 @@ class NVFP4Dequantize(ConversionOps):
             if scales is not None and global_scales is not None:
                 scales = scales if isinstance(scales, list) else [scales]
                 global_scales = global_scales if isinstance(global_scales, list) else [global_scales]
-                weights = [self._dequantize(*tensors) for tensors in zip(weights, scales, global_scales)]
+                # In the dtype of the dense param it loads into
+                dtype = model.get_parameter_or_buffer(full_layer_name).dtype
+                weights = [self._dequantize(*tensors).to(dtype) for tensors in zip(weights, scales, global_scales)]
             output[key] = weights
         return output
 
