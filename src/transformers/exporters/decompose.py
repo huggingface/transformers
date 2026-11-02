@@ -324,6 +324,30 @@ def embedded_inputs(call_inputs: dict, components: dict) -> dict:
 DEEPSTACK_INPUTS = ("visual_pos_masks", "deepstack_visual_embeds", "vision_mask", "deepstack_features")
 
 
+def dense_deepstack(inputs: dict[str, Any]) -> dict[str, Any]:
+    """`inputs` with their deepstack features over every position: an all-True mask, and each layer's features with
+    zeros at the text rows. Adding zeros changes nothing, and every step takes the same shapes, a decode step's too.
+    """
+
+    def spread(rows, features):
+        dense = features.new_zeros(rows.shape[0], features.shape[-1])
+        dense[rows] = features
+        return dense
+
+    inputs = dict(inputs)
+    # Qwen3-VL: a `[batch, sequence]` mask, one feature tensor per decoder layer from the first.
+    if (mask := inputs.get("visual_pos_masks")) is not None:
+        inputs["visual_pos_masks"] = torch.ones_like(mask)
+        inputs["deepstack_visual_embeds"] = [spread(mask.reshape(-1), f) for f in inputs["deepstack_visual_embeds"]]
+    # Granite4-Vision: a `[batch, sequence, 1]` mask, `{decoder layer: features}`.
+    if (mask := inputs.get("vision_mask")) is not None:
+        inputs["vision_mask"] = torch.ones_like(mask)
+        inputs["deepstack_features"] = {
+            layer: spread(mask.reshape(-1), features) for layer, features in inputs["deepstack_features"].items()
+        }
+    return inputs
+
+
 def _main_inputs(model: PreTrainedModel, inputs: dict[str, Any], decoder_call: dict[str, Any]) -> dict[str, Any]:
     """`model`'s own kwargs on `inputs_embeds`: the embeddings its text stack received, features scattered in,
     replace the token ids and modality inputs. What the model derived from those and can't recompute without them
@@ -343,4 +367,4 @@ def _main_inputs(model: PreTrainedModel, inputs: dict[str, Any], decoder_call: d
     for name in DEEPSTACK_INPUTS:
         if decoder_call.get(name) is not None:
             main_inputs[name] = decoder_call[name]
-    return main_inputs
+    return dense_deepstack(main_inputs)

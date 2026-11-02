@@ -103,10 +103,11 @@ class ExportArtifacts(Mapping, PushToHubMixin):
             )
         return next(iter(self.components.values())).program
 
-    def runtime(self, device=None) -> ExportedModel:
+    def runtime(self, device=None, **runner_kwargs) -> ExportedModel:
         """Run this export on `device` (the backend's default when `None`), as an [`ExportedModel`]: a single graph
         ([`~HfExporter.export`]), or a multimodal split ([`~HfExporter.export_multimodal`]) as an
-        [`ExportedMultimodalModel`]."""
+        [`ExportedMultimodalModel`]. `runner_kwargs` go to the backend's runners: `providers` and `session_options`
+        for ONNX Runtime."""
         from .auto import get_runner_class
         from .runtimes.multimodal import MULTIMODAL_COMPONENTS, ExportedMultimodalModel
 
@@ -118,7 +119,7 @@ class ExportArtifacts(Mapping, PushToHubMixin):
             )
         runner_class = get_runner_class(self.export_format)
         runners = {
-            name: runner_class.from_program(component.program, component.metadata, device)
+            name: runner_class.from_program(component.program, component.metadata, device, **runner_kwargs)
             for name, component in self.components.items()
         }
         if multimodal:
