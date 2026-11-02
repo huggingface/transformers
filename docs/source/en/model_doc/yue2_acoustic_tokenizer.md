@@ -42,6 +42,33 @@ latents = model.encode(audio).latents  # (batch_size, num_frames, latent_dim): (
 audio_values = model.decode(latents).audio_values  # (batch_size, audio_channels, num_samples)
 ```
 
+### Speed-up with `torch.compile`
+
+You can speed up inference with [`torch.compile`](https://pytorch.org/docs/stable/generated/torch.compile.html). The first few calls will be slower due to compilation overhead, but subsequent calls will be faster.
+
+On an A100, we observed a speed-up of ~2.1 for a batch size of 4 with 10 seconds of audio each (228 ms to 109 ms for encoding and decoding, [script](https://gist.github.com/ebezzam/d03a9cc1d2bfc31c39c8e3704f73e5bc#file-benchmark_torch_compile-py)).
+
+```python
+import torch
+from transformers import AutoModel
+
+model = AutoModel.from_pretrained("bezzam/yue2-acoustic-tokenizer", device_map="auto")
+
+# 4 excerpts of 10 seconds of 48 kHz stereo audio
+audio = 0.1 * torch.randn(4, 2, 10 * 48000, device=model.device)
+
+compiled_model = torch.compile(model, fullgraph=True)
+
+# Warmup (includes compilation on first call)
+for _ in range(10):
+    with torch.inference_mode():
+        _ = compiled_model(audio)
+
+with torch.inference_mode():
+    output = compiled_model(audio)
+print("Audio values shape:", output.audio_values.shape)
+```
+
 ## YuE2AcousticTokenizerConfig
 
 [[autodoc]] YuE2AcousticTokenizerConfig
