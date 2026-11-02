@@ -15,10 +15,12 @@
 Integration with Deepspeed
 """
 
+import contextlib
 import copy
 import importlib.metadata
 import importlib.util
 import weakref
+from collections.abc import Callable
 from functools import partialmethod
 
 from ..dependency_versions_check import dep_version_check
@@ -748,3 +750,34 @@ def deepspeed_sp_compute_loss(accelerator, model, inputs, return_outputs, pc):
     loss = total_loss / total_good_tokens.clamp(min=1)
 
     return (loss, outputs) if return_outputs else loss
+
+
+@contextlib.contextmanager
+def prevent_arange_dtype_change():
+    """
+    Prevent the `zero.Init` context from changing the dtype of `torch.arange` constructors, so that the explicit dtypes
+    passed inside the initialization of RoPE buffers do not get downcasted.
+    Note: it must be entered BEFORE zero.Init.
+    """
+    from deepspeed.runtime.zero import partition_parameters as pp
+
+    original_wrapper = pp.zero_wrapper_for_fp_tensor_constructor
+
+    def wrapper_without_arange(fn: Callable, target_fp_dtype: torch.dtype, target_device: torch.device) -> Callable:
+        # If it's torch.arange, override to not change the dtype
+        if fn is pp._orig_torch_arange:
+            # Only wrap the device, not the dtype!
+            def wrapped_fn(*args, **kwargs):
+                if kwargs.get("device") is None and target_device is not None:
+                    kwargs["device"] = target_device
+                return fn(*args, **kwargs)
+
+            return wrapped_fn
+
+        return original_wrapper(fn, target_fp_dtype, target_device)
+
+    try:
+        pp.zero_wrapper_for_fp_tensor_constructor = wrapper_without_arange
+        yield
+    finally:
+        pp.zero_wrapper_for_fp_tensor_constructor = original_wrapper
