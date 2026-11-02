@@ -32,8 +32,8 @@ if is_torch_available():
 
 
 def _traced_kwarg(value: Any) -> dict[str, Any]:
-    """How one traced kwarg was shaped, as JSON: rank/shape/dtype for a tensor, per leaf for a mapping, and the
-    kind for anything else."""
+    """How one traced kwarg was shaped, as JSON: rank/shape/dtype for a tensor, per leaf for a mapping, per item for a
+    list of tensors, and the kind for anything else."""
     if isinstance(value, torch.Tensor):
         return {
             "rank": value.dim(),
@@ -42,6 +42,8 @@ def _traced_kwarg(value: Any) -> dict[str, Any]:
         }
     if isinstance(value, Mapping):
         return {"leaves": {str(key): _traced_kwarg(leaf) for key, leaf in value.items()}}
+    if isinstance(value, (list, tuple)) and value and all(isinstance(item, torch.Tensor) for item in value):
+        return {"items": [_traced_kwarg(item) for item in value]}
     return {"container": type(value).__name__}
 
 
