@@ -20,6 +20,14 @@ Transformers provides multiple inference optimization techniques to make models 
 
 For device setup and hardware-specific configuration, see the [Hardware](./hardware) guides. Check which techniques are supported on your hardware before applying the optimizations below.
 
+> [!AgentPrompt]
+> Help the user choose an optimization for their Transformers inference workload. First identify whether memory or speed becomes a problem while loading the model, processing long inputs, generating longer sequences, or serving concurrent requests. Use the matching guide below and check support for the user's model and hardware before recommending a change.
+>
+> 1. Ask for the model and revision, library versions, GPU and available VRAM, CPU RAM, input length, generation limit, batch size, and number of concurrent requests. Ask follow-up questions when missing details could change the recommendation, and state your assumptions.
+> 2. Use the point where the problem occurs to choose what to investigate. Check model weights and loading settings for load-time memory, the KV cache as generated sequences grow, attention allocations for long inputs, and per-request state and scheduling for concurrent requests. Treat weight quantization and KV-cache quantization as separate settings.
+> 3. Recommend one change at a time. Check model and hardware compatibility, then measure peak GPU memory, latency or throughput, and output quality on the same representative workload. Explain any reduction in input length, generation length, or concurrency as a workload tradeoff.
+> 4. Report the proposed configuration, the documentation that supports it, expected tradeoffs, unresolved compatibility questions, and a validation procedure. Separate measurements from estimates. If you cannot run the workload, say that fit and performance remain unverified.
+
 > [!NOTE]
 > Memory and speed are closely related but not the same. Shrinking your memory footprint makes a model "faster" because there is less data to move around. Pure speed optimizations don't always reduce memory and sometimes increase usage. Choose the appropriate optimization based on your use case and hardware.
 

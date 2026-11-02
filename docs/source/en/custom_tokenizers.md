@@ -20,6 +20,14 @@ Tokenizers are decoupled from their learned vocabularies. This allows you to ini
 
 This guide shows how to train and create a custom tokenizer.
 
+> [!AgentPrompt]
+> Help the user choose how to create or adapt a Transformers tokenizer. First find out whether they need to train a new vocabulary, define a custom vocabulary, or change the tokenization pipeline. Use this guide to choose the matching approach.
+>
+> 1. Ask for the language or domain, corpus source and size, starting tokenizer, desired vocabulary size, intended model, and intended use. Ask follow-up questions only when missing details affect the choice, and label your assumptions.
+> 2. Choose the matching workflow. To add tokens to an existing tokenizer, use `add_tokens` for regular tokens or `add_special_tokens` when they need special-token behavior. If you add tokens to a tokenizer paired with a model, resize the model's token embeddings with `resize_token_embeddings(len(tokenizer))`. For a new vocabulary that keeps an existing tokenizer pipeline, use `train_new_from_iterator` with representative text batches. For a supplied vocabulary and merge rules, check whether the tokenizer supports those inputs. Use a custom backend only when the existing pipeline cannot express the required behavior.
+> 3. Check compatibility with the intended model. A new vocabulary can change token IDs, so do not assume it matches a pretrained model's embeddings. Explain whether the model needs matching embeddings or further training.
+> 4. Validate the result. Save and reload the tokenizer, then test encoding and decoding on representative domain text and special tokens. Report the files created, starting tokenizer, vocabulary size, test results, and unresolved compatibility questions.
+
 ## Training a tokenizer
 
 An empty trainable tokenizer replaces the vocabulary with a new target vocabulary. This is useful for adapting to a new domain like finance, a low-resource language, or code.
