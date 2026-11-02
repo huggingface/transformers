@@ -131,17 +131,12 @@ class FPQuantHfQuantizer(HfQuantizer):
     def is_serializable(self):
         return True
 
-    def get_quantize_ops(self):
-        from ..integrations.fp_quant import FpQuantQuantize
-
-        return FpQuantQuantize(self)
-
     @property
     def serialized_names(self):
         name = ".dqweight" if self.quantization_config.pseudoquantization else ".qweight"
         return {name: [name]}
 
     def get_load_operations(self):
-        from ..integrations.fp_quant import FpQuantDeserialize
+        from ..integrations.fp_quant import FpQuantDeserialize, FpQuantQuantize
 
-        return {"deserialize": FpQuantDeserialize}
+        return {"deserialize": FpQuantDeserialize, "quantize": FpQuantQuantize}

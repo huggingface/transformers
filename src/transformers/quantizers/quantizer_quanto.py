@@ -99,7 +99,7 @@ class QuantoHfQuantizer(HfQuantizer):
     def is_serializable(self):
         return False
 
-    def get_quantize_ops(self):
+    def get_load_operations(self):
         from ..integrations.quanto import QuantoQuantize
 
-        return QuantoQuantize(self)
+        return {"quantize": QuantoQuantize}

@@ -26,7 +26,7 @@ if is_fp_quant_available():
 
 from transformers.utils.quantization_config import FPQuantConfig
 
-from ..core_model_loading import ConversionOps
+from ..core_model_loading import ConversionOps, expand_target_names
 from ..quantizers.quantizers_utils import get_module_from_name
 
 
@@ -38,10 +38,11 @@ class FpQuantQuantize(ConversionOps):
         self,
         input_dict: torch.Tensor,
         model: torch.nn.Module | None = None,
+        full_layer_name: str | None = None,
         missing_keys: list[str] | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        target_key, value = tuple(input_dict.items())[0]
+        target_key, value = tuple(expand_target_names(input_dict, full_layer_name).items())[0]
         value = value[0]
         # Loading master weights or an unquantized checkpoint
         weight = torch.nn.Parameter(value)
