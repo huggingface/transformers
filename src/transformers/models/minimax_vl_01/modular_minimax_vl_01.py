@@ -22,7 +22,7 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
     ChannelDimension,
@@ -304,6 +304,10 @@ class MiniMaxVL01Config(LlavaNextConfig):
     """
 
     model_type = "minimax_vl_01"
+    sub_configs_defaults = {
+        "text_config": MiniMaxVL01TextConfig,
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="clip_vision_model"),
+    }
 
     image_token_index: int = 200025
     vision_feature_select_strategy: Literal["default"] = "default"
@@ -601,7 +605,11 @@ class MiniMaxVL01ModelOutputWithPast(LlavaNextModelOutputWithPast):
     r"""
     image_hidden_states (`torch.FloatTensor` of shape `(num_image_tokens, hidden_size)`, *optional*):
         Packed and projected image features inserted at image placeholder positions.
+    router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
+        Tuple of router logits, one per text layer, of shape `(batch_size * sequence_length, num_local_experts)`.
     """
+
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring(custom_intro="Base class for MiniMax-VL-01 causal language model outputs.")
@@ -614,7 +622,11 @@ class MiniMaxVL01CausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
         Float32 prediction scores before softmax.
     image_hidden_states (`torch.FloatTensor` of shape `(num_image_tokens, hidden_size)`, *optional*):
         Packed and projected image features inserted at image placeholder positions.
+    router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
+        Tuple of router logits, one per text layer, of shape `(batch_size * sequence_length, num_local_experts)`.
     """
+
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 class MiniMaxVL01MultiModalProjector(LlavaNextMultiModalProjector):
@@ -713,7 +725,6 @@ class MiniMaxVL01Model(LlavaNextModel):
         image_sizes: torch.Tensor,
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
-        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -742,7 +753,8 @@ class MiniMaxVL01Model(LlavaNextModel):
         elif pixel_values.dim() != 4:
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expected 4 or 5 dimensions")
 
-        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True, return_dict=True, **kwargs)
+        kwargs["output_hidden_states"] = True
+        image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
         if isinstance(vision_feature_layer, int):
             selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
         else:
@@ -778,6 +790,7 @@ class MiniMaxVL01Model(LlavaNextModel):
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MiniMaxVL01ModelOutputWithPast:
         r"""
@@ -794,18 +807,50 @@ class MiniMaxVL01Model(LlavaNextModel):
         pixel_values = self._flatten_pixel_values(pixel_values)
         if pixel_values is not None and pixel_values.numel() == 0:
             pixel_values = None
-        return super().forward(
-            input_ids=input_ids,
-            pixel_values=pixel_values,
-            image_sizes=image_sizes,
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None and pixel_values.size(0) > 0:
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values,
+                image_sizes,
+                vision_feature_layer=vision_feature_layer,
+                vision_feature_select_strategy=vision_feature_select_strategy,
+                return_dict=True,
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
+        outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            vision_feature_layer=vision_feature_layer,
-            vision_feature_select_strategy=vision_feature_select_strategy,
             use_cache=use_cache,
             **kwargs,
+        )
+
+        return MiniMaxVL01ModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
+            router_logits=outputs.router_logits,
         )
 
 
@@ -857,6 +902,7 @@ class MiniMaxVL01ForConditionalGeneration(LlavaNextForConditionalGeneration):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MiniMaxVL01CausalLMOutputWithPast:
         r"""
@@ -882,6 +928,7 @@ class MiniMaxVL01ForConditionalGeneration(LlavaNextForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             return_dict=True,
             **kwargs,
         )
@@ -912,6 +959,7 @@ class MiniMaxVL01ForConditionalGeneration(LlavaNextForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
+            router_logits=outputs.router_logits,
         )
 
 
