@@ -45,12 +45,10 @@ class QuantizationPlanTest(unittest.TestCase):
         self.assertLess(((logits - expected).norm() / expected.norm()).item(), 0.2)
 
     def test_dequantized(self):
-        plan = {
-            "*.self_attn.*_proj*": FineGrainedFP8Config(weight_block_size=(32, 32), dequantize=True),
-            "*.mlp.experts.*": FineGrainedFP8Config(weight_block_size=(128, 128), dequantize=True),
-            "*.mlp.shared_experts.*": NVFP4Config(dequantize=True),
-        }
-        model = Mistral4ForCausalLM.from_pretrained(REPO, dtype=torch.bfloat16, quantization_config=plan)
+        # Every pattern of the checkpoint's plan, without restating its recipe
+        model = Mistral4ForCausalLM.from_pretrained(
+            REPO, dtype=torch.bfloat16, quantization_config={"dequantize": True}
+        )
         # Each weight dequantized from its own format: fp8 ~2.6%, nvfp4 ~9.5% away from the bf16 it came from
         for name, weight in self.dense_reference().items():
             loaded = model.state_dict()[name]

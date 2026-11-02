@@ -430,17 +430,23 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
         pre_quantized = False
 
     if plan_from_config or is_quantization_plan(quantization_config):
-        # One quantizer per pattern; the loading attributes passed for a pattern update its saved config
+        # One quantizer per pattern. Loading attributes update the saved configs: for every pattern (e.g.
+        # `{"dequantize": True}`), or per pattern (a plan of them)
         plan = quantization_params_from_config if plan_from_config else quantization_config
         loading_attributes = (
-            quantization_config if plan_from_config and is_quantization_plan(quantization_config) else {}
+            quantization_config
+            if is_quantization_plan(quantization_config)
+            else dict.fromkeys(plan, quantization_config)
         )
         quantizers = {}
         for pattern, pattern_config in plan.items():
             if plan_from_config:
+                attributes = loading_attributes.get(pattern)
                 pattern_config = AutoHfQuantizer.merge_quantization_configs(
-                    pattern_config, loading_attributes.get(pattern)
+                    pattern_config, None if isinstance(attributes, dict) else attributes
                 )
+                for key, value in (attributes if isinstance(attributes, dict) else {}).items():
+                    setattr(pattern_config, key, value)
             quantizers[pattern] = AutoHfQuantizer.from_config(pattern_config, pre_quantized=plan_from_config)
         hf_quantizer = QuantizationPlanHfQuantizer(quantizers)
         config.quantization_config = hf_quantizer.quantization_config
