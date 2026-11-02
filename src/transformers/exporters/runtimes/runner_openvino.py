@@ -64,6 +64,6 @@ class OpenVINOModelRunner(ModelRunner):
         self.request.reset_state()
 
     def __call__(self, **kwargs) -> Any:
-        outputs = self.request.infer(openvino_feed(self.compiled_model, kwargs))
-        # Copied: the request writes its next outputs into the same buffers.
-        return self.unflatten([torch.from_numpy(outputs[port].copy()) for port in self.compiled_model.outputs])
+        # Outputs come back copied out of the request's buffers, which its next call overwrites.
+        outputs = self.request.infer(openvino_feed(self.compiled_model, kwargs), share_inputs=True)
+        return self.unflatten([torch.from_numpy(outputs[port]) for port in self.compiled_model.outputs])

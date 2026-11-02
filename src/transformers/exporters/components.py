@@ -60,7 +60,8 @@ class _ModelComponent(torch.nn.Module):
 
 
 class ModalityEncoder(_ModelComponent):
-    """Runs one modality's `get_<modality>_features` and returns a single `[num_tokens, hidden]` tensor."""
+    """Runs one modality's `get_<modality>_features` and returns a single `[num_tokens, hidden]` tensor, or, for a
+    deepstack tower (Qwen3-VL), `{"features": ..., "deepstack_features": [one per decoder layer]}`."""
 
     def __init__(self, model: PreTrainedModel, getter: str, grid_kwarg: str | None = None):
         super().__init__(model)
@@ -82,7 +83,16 @@ class ModalityEncoder(_ModelComponent):
             features = getattr(outputs, "last_hidden_state", None)
         if features is None:
             features = outputs
-        return torch.cat(features) if isinstance(features, (tuple, list)) else features
+        features = torch.cat(features) if isinstance(features, (tuple, list)) else features
+        deepstack_features = getattr(outputs, "deepstack_features", None)
+        if deepstack_features is None:
+            return features
+        return {
+            "features": features,
+            "deepstack_features": [
+                torch.cat(layer) if isinstance(layer, (tuple, list)) else layer for layer in deepstack_features
+            ],
+        }
 
 
 class PatchVisionEncoder(_ModelComponent):

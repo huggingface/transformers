@@ -56,31 +56,66 @@ class ExportedMultimodalModel(ExportedModel):
         traced = self.runner.metadata.kwargs
         outputs = self.runner(**{name: value for name, value in inputs.items() if name in traced})
         # The model returns its image features too, which the language model never sees.
-        if "vision_embeddings_model" in features and "image_hidden_states" in getattr(
+        if features.get("vision_embeddings_model") is not None and "image_hidden_states" in getattr(
             outputs, "__dataclass_fields__", {}
         ):
             outputs["image_hidden_states"] = features["vision_embeddings_model"]
+        # And Granite4-Vision its per-layer ones, as `(decoder layer, one tensor per image)`.
+        if "deepstack_features" in features and "deepstack_features" in getattr(outputs, "__dataclass_fields__", {}):
+            outputs["deepstack_features"] = features["deepstack_features"]
         return outputs
 
     def embed(self, **kwargs) -> tuple[dict, dict]:
         """`input_ids` as `inputs_embeds` (plus `per_layer_inputs` when the embedder returns them), each present
-        modality's features scattered into its placeholder rows; and the features, by component."""
+        modality's features scattered into its placeholder rows, and what a deepstack decoder adds inside its layers;
+        and the features, by component (a Granite4-Vision tower's per-image ones under `deepstack_features`)."""
         input_ids = kwargs["input_ids"]
         embedded = self.text_runner(input_ids=input_ids)
         embedded = dict(embedded) if isinstance(embedded, dict) else {"inputs_embeds": embedded}
         inputs_embeds = embedded["inputs_embeds"]
-        features = {}
+        features, deepstack = {}, []
         for spec, runner in self.modality_runners:
             mask = (input_ids == getattr(self.config, spec.token_field)).unsqueeze(-1).to(inputs_embeds.device)
             if all(kwargs.get(key) is None for key in spec.feature_keys) or not mask.any():
                 continue
-            features[spec.component] = self._features(spec, runner, kwargs)
-            inputs_embeds = inputs_embeds.masked_scatter(mask, features[spec.component].to(inputs_embeds))
+            features[spec.component], layers = self._features(spec, runner, kwargs)
+            if features[spec.component] is None:
+                # All of Granite4-Vision's features are added inside the decoder, over zeroed placeholder rows.
+                inputs_embeds = inputs_embeds.masked_fill(mask, 0.0)
+                features["deepstack_features"] = list(layers.items())
+            else:
+                inputs_embeds = inputs_embeds.masked_scatter(mask, features[spec.component].to(inputs_embeds))
+            if layers is not None:
+                deepstack.append((mask[..., 0], layers))
         embedded["inputs_embeds"] = inputs_embeds
+        embedded.update(self._deepstack_inputs(deepstack, inputs_embeds))
         return embedded, features
 
-    def _features(self, spec: ModalitySpec, runner: ModelRunner, kwargs: dict) -> torch.Tensor:
-        """Run one modality's graph on its own inputs, as its getter was called: features for its placeholder rows."""
+    def _deepstack_inputs(self, deepstack: list, inputs_embeds: torch.Tensor) -> dict[str, Any]:
+        """What a deepstack decoder adds at the visual positions inside its layers, under the names the language model
+        was traced with, from each modality's `(placeholder mask, per-layer features)`."""
+        if not deepstack:
+            return {}
+        if "deepstack_features" in self.runner.metadata.kwargs:
+            # Granite4-Vision: `{decoder layer: features}` over the image rows.
+            ((mask, layers),) = deepstack
+            return {
+                "vision_mask": mask.unsqueeze(-1),
+                "deepstack_features": {layer: torch.cat(images).to(inputs_embeds) for layer, images in layers.items()},
+            }
+        # Qwen3-VL: per decoder layer from the first, one tensor over all visual rows, each modality's in its own.
+        visual_pos_masks = torch.stack([mask for mask, _ in deepstack]).any(0)
+        deepstack_visual_embeds = []
+        for index in range(len(deepstack[0][1])):
+            joint = inputs_embeds.new_zeros(int(visual_pos_masks.sum()), inputs_embeds.shape[-1])
+            for mask, layers in deepstack:
+                joint[mask[visual_pos_masks]] = layers[index].to(joint)
+            deepstack_visual_embeds.append(joint)
+        return {"visual_pos_masks": visual_pos_masks, "deepstack_visual_embeds": deepstack_visual_embeds}
+
+    def _features(self, spec: ModalitySpec, runner: ModelRunner, kwargs: dict) -> tuple[torch.Tensor | None, Any]:
+        """Run one modality's graph on its own inputs, as its getter was called: features for its placeholder rows,
+        and a deepstack tower's per-layer features (`None` otherwise)."""
         traced = runner.metadata.kwargs
         feed = {
             ("grid_thw" if key == spec.grid_key else key): value
@@ -97,9 +132,16 @@ class ExportedMultimodalModel(ExportedModel):
         feed = cast_leaf_tensors(feed, dtype=runner.dtype, device=runner.device)
         outputs = runner(**{name: value for name, value in feed.items() if name in traced})
         if not isinstance(outputs, dict):
-            return outputs
-        if "image_features" not in outputs:
-            raise NotImplementedError(
-                f"{spec.component} returns per-layer (deepstack) features, which the runtime can't feed to the language model yet."
-            )
-        return pack_anyres_features(self.config, outputs["image_features"], image_sizes, outputs.get("image_newline"))
+            return outputs, None
+        if "deepstack_features" in outputs:
+            return outputs["features"], list(outputs["deepstack_features"])
+        newline = outputs.get("image_newline")
+        if "image_features" in outputs:
+            return pack_anyres_features(self.config, outputs["image_features"], image_sizes, newline), None
+        # Granite4-Vision's anyres tower: `image_features.<decoder layer>`, all added inside the decoder, per image.
+        layers = {
+            int(name.rsplit(".", 1)[1]): pack_anyres_features(self.config, value, image_sizes, newline, per_image=True)
+            for name, value in outputs.items()
+            if name.startswith("image_features.")
+        }
+        return None, layers

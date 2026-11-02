@@ -402,9 +402,10 @@ def flatten_anyres_patches(config: Any, pixel_values, image_sizes):
     return torch.cat([pix[:count] for pix, count in zip(pixel_values, counts)], dim=0)
 
 
-def pack_anyres_features(config: Any, features, image_sizes, image_newline=None):
+def pack_anyres_features(config: Any, features, image_sizes, image_newline=None, per_image: bool = False):
     """The `pack_image_features` step [`PatchVisionEncoder`] leaves out of the graph, with the modeling's own grid and
-    unpad helpers: each image's base patch, then its tiles unpadded to the image's aspect ratio."""
+    unpad helpers: each image's base patch, then its tiles unpadded to the image's aspect ratio. Concatenated, or one
+    tensor per image with `per_image`."""
     from ..models.llava_next.modeling_llava_next import get_anyres_image_grid_shape, unpad_image
 
     pinpoints = _find_config_attr(config, "image_grid_pinpoints")
@@ -427,7 +428,7 @@ def pack_anyres_features(config: Any, features, image_sizes, image_newline=None)
             if image_newline is not None:
                 feature = torch.cat((feature, image_newline[None].to(feature)), dim=0)
             packed.append(feature)
-    return torch.cat(packed, dim=0)
+    return packed if per_image else torch.cat(packed, dim=0)
 
 
 def packs_anyres_features(owner: Any, config: Any) -> bool:
@@ -682,10 +683,15 @@ def embedded_inputs(call_inputs: dict, components: dict) -> dict:
     return call_inputs
 
 
+# What a deepstack decoder adds at the visual positions inside its layers (Qwen3-VL's, Granite4-Vision's names).
+DEEPSTACK_INPUTS = ("visual_pos_masks", "deepstack_visual_embeds", "vision_mask", "deepstack_features")
+
+
 def _main_inputs(model: PreTrainedModel, inputs: dict[str, Any], decoder_call: dict[str, Any]) -> dict[str, Any]:
     """`model`'s own kwargs on `inputs_embeds`: the embeddings its text stack received, features scattered in,
-    replace the token ids and modality inputs. Positions the model derived from those (M-RoPE) come along, since it
-    can't recompute them without; the config-only precompute is what the runtime computes them with."""
+    replace the token ids and modality inputs. What the model derived from those and can't recompute without them
+    comes along: M-RoPE positions, computed by the config-only precompute as the runtime computes them, and deepstack
+    features."""
     if decoder_call.get("inputs_embeds") is None:
         return inputs
     main_inputs = copy.copy(inputs)
@@ -697,6 +703,9 @@ def _main_inputs(model: PreTrainedModel, inputs: dict[str, Any], decoder_call: d
     main_inputs = embedded_inputs(main_inputs, {})
     main_inputs.pop("input_ids", None)
     main_inputs["inputs_embeds"] = decoder_call["inputs_embeds"]
+    for name in DEEPSTACK_INPUTS:
+        if decoder_call.get(name) is not None:
+            main_inputs[name] = decoder_call[name]
     return main_inputs
 
 
