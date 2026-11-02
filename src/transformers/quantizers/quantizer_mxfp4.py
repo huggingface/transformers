@@ -191,17 +191,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
             model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
         )
 
-    def get_state_dict_and_metadata(self, model):
-        from ..integrations.mxfp4 import Mxfp4GptOssExperts, Mxfp4ReverseDeserialize
-
-        state_dict = model.state_dict()
-        reverse_op = Mxfp4ReverseDeserialize(self)
-        for name, module in model.named_modules():
-            if isinstance(module, Mxfp4GptOssExperts):
-                for proj in ("gate_up_proj", "down_proj"):
-                    state_dict.update(reverse_op.convert({}, model=model, full_layer_name=f"{name}.{proj}_blocks"))
-        return state_dict, {}
-
     def is_serializable(self):
         return True
 
@@ -218,6 +207,11 @@ class Mxfp4HfQuantizer(HfQuantizer):
     }
 
     def get_load_operations(self):
-        from ..integrations.mxfp4 import Mxfp4Dequantize, Mxfp4Deserialize, Mxfp4Quantize
+        from ..integrations.mxfp4 import Mxfp4Dequantize, Mxfp4Deserialize, Mxfp4Quantize, Mxfp4Serialize
 
-        return {"deserialize": Mxfp4Deserialize, "dequantize": Mxfp4Dequantize, "quantize": Mxfp4Quantize}
+        return {
+            "deserialize": Mxfp4Deserialize,
+            "dequantize": Mxfp4Dequantize,
+            "quantize": Mxfp4Quantize,
+            "serialize": Mxfp4Serialize,
+        }

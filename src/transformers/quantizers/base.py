@@ -13,6 +13,7 @@
 # limitations under the License.
 import re
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
 from ..utils import is_torch_available, logging
@@ -269,8 +270,21 @@ class HfQuantizer(ABC):
         return False
 
     def get_state_dict_and_metadata(self, model):
-        """Get state dict and metadata. Useful when we need to modify a bit the state dict due to quantization"""
-        return None, {}
+        """
+        The state dict to save: the `serialize` load operation, if any, writes the tensors of each module under their
+        serialized names (e.g. torchao flattens its tensor subclasses). Its `metadata`, if any, goes in the file.
+        """
+        serialize = self.get_load_operations().get("serialize")
+        if serialize is None:
+            return None, {}
+        operation = serialize(self)
+        modules = defaultdict(dict)
+        for name, tensor in model.state_dict().items():
+            modules[name.rpartition(".")[0]][name] = tensor
+        state_dict = {}
+        for module_name, tensors in modules.items():
+            state_dict.update(operation.convert(tensors, model=model, full_layer_name=module_name))
+        return state_dict, getattr(operation, "metadata", {})
 
     @abstractmethod
     def is_serializable(self): ...
