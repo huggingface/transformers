@@ -185,7 +185,7 @@ class MiniMaxVL01TextLightningAttention(nn.Module):
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, seq_len, hidden_size = hidden_states.shape
         num_blocks = (seq_len + self.block_size - 1) // self.block_size
 
@@ -672,6 +672,7 @@ class MiniMaxVL01TextModel(MiniMaxVL01TextPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -804,7 +805,7 @@ class MiniMaxVL01PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_flex_attn = True
     _supports_attention_backend = True
-    _no_split_modules = ["MiniMaxVL01TextDecoderLayer", "CLIPEncoderLayer"]
+    _no_split_modules = ["MiniMaxVL01TextDecoderLayer"]
     # The remote checkpoint does not store MiniMax's deterministic Lightning-Attention buffers. Its custom CLIP also
     # omits the final pooling LayerNorm, which is unused because MiniMax-VL-01 consumes encoder hidden states.
     _keys_to_ignore_on_load_missing = [
@@ -921,11 +922,8 @@ class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
     def __init__(self, config: MiniMaxVL01Config):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
-
         self.multi_modal_projector = MiniMaxVL01MultiModalProjector(config)
-        embed_std = 1 / math.sqrt(config.text_config.hidden_size)
-        self.image_newline = nn.Parameter(torch.randn(config.text_config.hidden_size, dtype=self.dtype) * embed_std)
-
+        self.image_newline = nn.Parameter(torch.empty(config.text_config.hidden_size, dtype=self.dtype))
         self.vocab_size = config.text_config.vocab_size
         self.language_model = MiniMaxVL01TextModel(config.text_config)
         self.post_init()
@@ -1090,6 +1088,11 @@ class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MiniMaxVL01ModelOutputWithPast:
         r"""
+        pixel_values (`torch.FloatTensor` or `list[torch.FloatTensor]`, *optional*):
+            A flat tensor of shape `(total_crops, channels, height, width)`, a padded 5D crop tensor, or a list of
+            3D crops or 4D crop batches. Each image's thumbnail precedes its high-resolution crops.
+        image_sizes (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
+            Original image sizes in `(height, width)` order.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             Feature selection strategy. MiniMax-VL-01 supports only `"default"`, which removes CLIP's CLS token.
         """
@@ -1220,6 +1223,11 @@ class MiniMaxVL01ForConditionalGeneration(MiniMaxVL01PreTrainedModel, Generation
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MiniMaxVL01CausalLMOutputWithPast:
         r"""
+        pixel_values (`torch.FloatTensor` or `list[torch.FloatTensor]`, *optional*):
+            A flat tensor of shape `(total_crops, channels, height, width)`, a padded 5D crop tensor, or a list of
+            3D crops or 4D crop batches. Each image's thumbnail precedes its high-resolution crops.
+        image_sizes (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
+            Original image sizes in `(height, width)` order.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             Feature selection strategy. MiniMax-VL-01 supports only `"default"`, which removes CLIP's CLS token.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1251,16 +1259,13 @@ class MiniMaxVL01ForConditionalGeneration(MiniMaxVL01PreTrainedModel, Generation
         loss = None
         if labels is not None:
             if attention_mask is not None:
-                shift_attention_mask = attention_mask[..., 1:].to(logits.device) != 0
-                shift_logits = logits[..., :-1, :][shift_attention_mask].contiguous()
-                shift_labels = labels[..., 1:].to(logits.device)[shift_attention_mask].contiguous()
-            else:
-                shift_logits = logits[..., :-1, :].contiguous()
-                shift_labels = labels[..., 1:].to(logits.device).contiguous()
-            loss = nn.functional.cross_entropy(
-                shift_logits.view(-1, shift_logits.size(-1)),
-                shift_labels.view(-1),
+                labels = labels.masked_fill(attention_mask.to(labels.device) == 0, self.config.ignore_index)
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.text_config.vocab_size,
                 ignore_index=self.config.ignore_index,
+                **kwargs,
             )
 
         return MiniMaxVL01CausalLMOutputWithPast(

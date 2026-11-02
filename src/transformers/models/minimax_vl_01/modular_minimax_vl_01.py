@@ -36,7 +36,8 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
-from ..auto import AutoConfig
+from ...utils.output_capturing import capture_outputs
+from ..auto import AutoConfig, AutoModel
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeRotaryEmbedding,
     apply_rotary_pos_emb,  # noqa: F401
@@ -175,7 +176,7 @@ class MiniMaxVL01TextLightningAttention(MiniMaxLightningAttention):
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, seq_len, hidden_size = hidden_states.shape
         num_blocks = (seq_len + self.block_size - 1) // self.block_size
 
@@ -284,7 +285,11 @@ class MiniMaxVL01TextPreTrainedModel(MiniMaxPreTrainedModel):
 
 
 class MiniMaxVL01TextModel(MiniMaxModel):
-    pass
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(self, **super_kwargs):
+        return super().forward(**super_kwargs)
 
 
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-VL-01")
@@ -617,7 +622,7 @@ class MiniMaxVL01MultiModalProjector(LlavaNextMultiModalProjector):
 
 
 class MiniMaxVL01PreTrainedModel(LlavaNextPreTrainedModel):
-    _no_split_modules = ["MiniMaxVL01TextDecoderLayer", "CLIPEncoderLayer"]
+    _no_split_modules = ["MiniMaxVL01TextDecoderLayer"]
     _can_compile_fullgraph = False
     # The remote checkpoint does not store MiniMax's deterministic Lightning-Attention buffers. Its custom CLIP also
     # omits the final pooling LayerNorm, which is unused because MiniMax-VL-01 consumes encoder hidden states.
@@ -634,7 +639,11 @@ class MiniMaxVL01Model(LlavaNextModel):
     config_class = MiniMaxVL01Config
 
     def __init__(self, config: MiniMaxVL01Config):
-        super().__init__(config)
+        MiniMaxVL01PreTrainedModel.__init__(self, config)
+        self.vision_tower = AutoModel.from_config(config.vision_config)
+        self.multi_modal_projector = MiniMaxVL01MultiModalProjector(config)
+        self.image_newline = nn.Parameter(torch.empty(config.text_config.hidden_size, dtype=self.dtype))
+        self.vocab_size = config.text_config.vocab_size
         self.language_model = MiniMaxVL01TextModel(config.text_config)
         self.post_init()
 
@@ -772,6 +781,11 @@ class MiniMaxVL01Model(LlavaNextModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MiniMaxVL01ModelOutputWithPast:
         r"""
+        pixel_values (`torch.FloatTensor` or `list[torch.FloatTensor]`, *optional*):
+            A flat tensor of shape `(total_crops, channels, height, width)`, a padded 5D crop tensor, or a list of
+            3D crops or 4D crop batches. Each image's thumbnail precedes its high-resolution crops.
+        image_sizes (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
+            Original image sizes in `(height, width)` order.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             Feature selection strategy. MiniMax-VL-01 supports only `"default"`, which removes CLIP's CLS token.
         """
@@ -846,6 +860,11 @@ class MiniMaxVL01ForConditionalGeneration(LlavaNextForConditionalGeneration):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MiniMaxVL01CausalLMOutputWithPast:
         r"""
+        pixel_values (`torch.FloatTensor` or `list[torch.FloatTensor]`, *optional*):
+            A flat tensor of shape `(total_crops, channels, height, width)`, a padded 5D crop tensor, or a list of
+            3D crops or 4D crop batches. Each image's thumbnail precedes its high-resolution crops.
+        image_sizes (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
+            Original image sizes in `(height, width)` order.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             Feature selection strategy. MiniMax-VL-01 supports only `"default"`, which removes CLIP's CLS token.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -877,16 +896,13 @@ class MiniMaxVL01ForConditionalGeneration(LlavaNextForConditionalGeneration):
         loss = None
         if labels is not None:
             if attention_mask is not None:
-                shift_attention_mask = attention_mask[..., 1:].to(logits.device) != 0
-                shift_logits = logits[..., :-1, :][shift_attention_mask].contiguous()
-                shift_labels = labels[..., 1:].to(logits.device)[shift_attention_mask].contiguous()
-            else:
-                shift_logits = logits[..., :-1, :].contiguous()
-                shift_labels = labels[..., 1:].to(logits.device).contiguous()
-            loss = nn.functional.cross_entropy(
-                shift_logits.view(-1, shift_logits.size(-1)),
-                shift_labels.view(-1),
+                labels = labels.masked_fill(attention_mask.to(labels.device) == 0, self.config.ignore_index)
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.text_config.vocab_size,
                 ignore_index=self.config.ignore_index,
+                **kwargs,
             )
 
         return MiniMaxVL01CausalLMOutputWithPast(
