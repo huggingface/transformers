@@ -477,19 +477,23 @@ class FalconMambaMixer(nn.Module):
         time_proj_bias = self.dt_proj.bias.float() if self.dt_proj.bias is not None else None
 
         # Recurrent form
-        if recurrent_state is not None and seq_len == 1:
-            scan_output = mamba_selective_state_update(
-                recurrent_state,
-                hidden_states_B_C.transpose(1, 2)[..., 0],
-                time_step[..., 0],
-                A,
-                B[:, 0],
-                C[:, 0],
-                self.D,
-                z=gate[..., 0],
-                dt_bias=time_proj_bias,
-                dt_softplus=True,
-            ).unsqueeze(-1)
+        if recurrent_state is not None:
+            token_outputs = []
+            for t in range(seq_len):
+                token_output = mamba_selective_state_update(
+                    recurrent_state,
+                    hidden_states_B_C.transpose(1, 2)[..., t],
+                    time_step[..., t],
+                    A,
+                    B[:, t],
+                    C[:, t],
+                    self.D,
+                    z=gate[..., t],
+                    dt_bias=time_proj_bias,
+                    dt_softplus=True,
+                )
+                token_outputs.append(token_output)
+            scan_output = torch.stack(token_outputs, dim=-1)
 
         # Full sequence form
         else:
