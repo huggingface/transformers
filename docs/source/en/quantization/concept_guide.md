@@ -16,155 +16,179 @@ rendered properly in your Markdown viewer.
 
 # Quantization concepts
 
-Quantization reduces the memory footprint and computational cost of large machine learning models like those found in the Transformers library. It achieves this by representing the model's weights and or activations with lower-precision data types (like 8-bit integers or int8) instead of the standard 32-bit floating-point (float32).
+A quantized number can only take one of a small set of values, 256 for int8 and 16 for int4, so every quantization method introduces rounding error. Methods differ in how they keep that error from hurting the model's output. This page explains the choices behind those differences: how numbers are mapped to that small set, which tensors get quantized, which data types are used, and when quantization happens.
 
-Reducing a model's precision offers several significant benefits:
+If you're new to quantization in Transformers, start with the [Overview](./overview).
 
-- Smaller model size: Lower-precision data types require less storage space. An int8 model, for example, is roughly 4 times smaller than its float32 counterpart.
-- Faster inference: Operations on lower-precision data types, especially integers, can be significantly faster on compatible hardware (CPUs and GPUs often have specialized instructions for int8 operations). This leads to lower latency.
-- Reduced energy consumption: Faster computations and smaller memory transfers often translate to lower power usage.
+## Map values to fewer bits
 
-The primary trade-off in quantization is *efficiency* vs. *accuracy*. Reducing precision saves resources but inevitably introduces small errors (quantization noise). The goal is to minimize this error using appropriate schemes (affine/symmetric), granularity (per-tensor/channel), and techniques (PTQ/QAT) so that the model's performance on its target task degrades as little as possible.
+Quantization maps a range of high-precision values onto the small set of integers a low-bit type can represent. int8 can represent 256 integers, `[-128, 127]`, and int4 can represent 16.
 
-The sections below cover quantization schemes, granularity, and techniques.
+*Affine quantization* is the most common mapping. It takes the minimum and maximum values of a tensor and stretches the integer range over it. In the example below, a tensor whose values run from -1.8 to 2.4 is mapped to int8, and 0.0 lands on -19.
 
-## Quantization schemes
+```text
+bf16  -1.8             0.0                    2.4
+       ├────────────────┼──────────────────────┤
+       ▼                ▼                      ▼
+int8  -128             -19                    127
+```
 
-The core idea is to map the range of values found in the original float32 weights and activations to the much smaller range represented by int8 (typically $[-128, 127]$).
+Two parameters define the mapping.
 
-This section covers how some quantization techniques work.
-
-<div class="flex justify-center">
-    <img width="606" alt="quant_visual" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/quant_visual.png" />
-</div>
-
-### Affine quantization
-
-The most common method is *affine quantization*. For a given float32 tensor (like a layer's weights), it finds the minimum $val_{min}$ and maximum $val_{max}$ values. This range $[val_{min}, val_{max}]$ is mapped to the int8 range $[q_{min}, q_{max}]$, which is typically $[-128, 127]$.
-
-There are two main ways to perform this mapping, *symmetric* and *asymmetric*. The choice between symmetric and asymmetric quantization determines how the float32 range is mapped to the int8 range.
-
-- Symmetric: This method assumes the original float32 range is symmetric around zero ( $[ -a, a ]$ ). This range is mapped symmetrically to the int8 range, for example, $[-127, 127]$. A key characteristic is that the float32 value $0.0$ maps directly to the int8 value $0$. This only requires one parameter, the **scale ( $S$ )**, to define the mapping. It can simplify computations, but it might be less accurate if the original data distribution isn't naturally centered around zero.
-- Asymmetric (Affine): This method does not assume the data is centered around zero. It maps the exact range $[val_{min}, val_{max}]$ from float32 to the full int8 range, like $[-128, 127]$. This requires two parameters, a **scale ( $S$ )** and a **zero-point ( $Z$ )**.
-
-    scale ( $S$ ): A positive float32 number representing the ratio between the float32 and the int8 range.
+- The *scale* `S` is the size of one integer step in the original units.
 
 $$
 S = \frac{val_{max} - val_{min}}{q_{max} - q_{min}}
 $$
 
-zero-point ( $Z$ ): An int8 value that corresponds to the float32 value $0.0$.
+- The *zero point* `Z` is the integer that represents `0.0`.
 
 $$
 Z = q_{min} - round\left(\frac{val_{min}}{S}\right)
 $$
 
-> [!TIP]
-> In symmetric quantization, Z would typically be fixed at 0.
-
-With these parameters, a float32 value, $x$ can be quantized to int8 ( $q$ ) with the formula below.
+A value `x` is quantized to the integer `q` by dividing by the scale and shifting by the zero point.
 
 $$
 q = round\left(\frac{x}{S} + Z\right)
 $$
 
-The int8 value, $q$, can be dequantized back to approximate float32 with the formula below.
+Dequantizing reverses the mapping and gives back an approximation of `x`. The difference between `x` and its approximation is the rounding error.
 
 $$
 x \approx S \cdot (q - Z)
 $$
 
-<div class="flex justify-center">
-    <img width="606" alt="dequant" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/dequant.png" />
-</div>
+In the example above, `S` is about 0.0165 and `Z` is -19. The value 0.5 quantizes to 11, and 11 dequantizes to about 0.494, a rounding error of about 0.006.
 
-During inference, computations like matrix multiplication are performed using the int8 values ( $q$ ), and the result is dequantized back to float32 (often using a higher-precision accumulation type like int32 internally) before it is passed to the next layer.
-
-### int4 and weight packing
-
-<div class="flex justify-center">
-    <img width="606" alt="weight packing" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/weight_packing.png" />
-</div>
-
-int4 quantization further reduces the model size and memory usage (halving it compared to int8). The same affine or symmetric quantization principles apply, mapping the float32 range to the 16 possible values representable by int4 ( $[-8, 7]$ for signed int4).
-
-A key aspect of int4 quantization is **weight packing**. Since most hardware can't natively handle 4-bit data types in memory, two int4 values are typically packed together into a single int8 byte for storage and transfer. For example, the first value might occupy the lower 4 bits and the second value the upper 4 bits of the byte (`packed_byte = (val1 & 0x0F) | (val2 << 4)`).
-
-int4 is still beneficial even without native int4 compute because the primary benefit comes from reduced memory bandwidth. Loading packed int4 weights (stored as int8) from memory (RAM or VRAM) to the compute units is twice as fast as loading int8 weights. For large models, memory access is often a significant bottleneck. The speed up from faster data transfer can outweigh the computational overhead of unpacking and dequantizing on the fly, leading to overall faster inference, especially in memory-bound scenarios.
-
-However, int4 quantization typically results in a larger accuracy drop compared to int8. Advanced quantization techniques like [GPTQ](./gptq) or [AWQ](./awq) are often necessary for good performance with int4.
-
-### FP8 Quantization (A8W8)
-
-<div class="flex justify-center">
-    <img width="606" alt="fp8" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/fp8.png" />
-</div>
-A newer datatype, 8-bit floating-point (FP8), offers another way to reduce precision while retaining more accuracy than int8 in certain scenarios. FP8 keeps the floating-point structure (sign, exponent, mantissa) but uses fewer bits.
-
-There are two common FP8 variants.
-
-- E4M3: 1 sign bit, 4 exponent bits, 3 mantissa bits. Offers higher precision (more mantissa bits) but a smaller dynamic range (fewer exponent bits).
-- E5M2: 1 sign bit, 5 exponent bits, 2 mantissa bits. Offers a wider dynamic range but lower precision.
-
-FP8 is used in the *A8W8* quantization scheme, which quantizes both activations (A) and weights (W) to 8-bit precision.
-
-While int8 has broad support, efficient FP8 computation requires specific hardware capabilities found in newer GPUs like NVIDIA H100/H200/B100, AMD Instinct MI300 series, and Intel XPU. Without native hardware acceleration, the benefits of FP8 might not be fully realized.
-
-Transformers supports FP8 through specific backends like [FBGEMM](./fbgemm_fp8), [FineGrainedFP8](./finegrained_fp8), and [compressed-tensors](./compressed_tensors). These backends handle the underlying FP8 conversion and computation when the appropriate hardware and configurations are used.
-
-## Granularity
-
-Quantization parameters ( $S$ and $Z$) can be calculated in one of two ways.
-
-- Per-Tensor: One set of $S$ and $Z$ for the entire tensor. Simpler, but less accurate if data values vary greatly within the tensor.
-- Per-Channel (or Per-Group/Block): Separate $S$ and $Z$ for each channel or group. More accurate and better performance at the cost of slightly more complexity and memory.
-
-<div class="flex justify-center">
-    <img width="625" alt="Granularities" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Granularities.png" />
-</div>
-
-## Quantization techniques
-
-There are two main types of quantization techniques.
-
-- Post-Training Quantization (PTQ): Quantization is applied  *after* the model is fully trained.
-- Quantization-Aware Training (QAT): Quantization effects are simulated *during* training by inserting "fake quantization" ops that simulate the rounding errors of quantization. This lets the model adapt to quantization, and usually results in better accuracy, especially at lower bit-widths.
-
-## Quantization in Transformers
-
-Transformers integrates several quantization backends such as bitsandbytes, torchao, compressed-tensors, and more (refer to the quantization [overview](./overview) for more backends).
-
-All backends are unified under the [`HfQuantizer`] API and associated [`QuantizationConfig`] classes. You can integrate your own custom quantization backends by implementing a custom [`HfQuantizer`] and [`QuantizationConfig`], as shown in the [Contribution](./contribute) guide.
-
-The typical workflow for quantization in Transformers is to:
-
-1. Choose a quantization method suitable for your hardware and use case (see the [Overview](./overview) or [Selecting a quantization method](./selecting) guide to help you).
-2. Load a pre-quantized model from the Hugging Face Hub or load a float32/float16/bfloat16 model and apply a specific quantization method with [`QuantizationConfig`].
-
-The example below demonstrates loading a 8B parameter model and quantizing it to 4-bits with bitsandbytes.
-
-```python
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-
-model_id = "meta-llama/Llama-3.1-8B-Instruct"
-
-quantization_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.bfloat16
-)
-
-model = AutoModelForCausalLM.from_pretrained(
-    model_id,
-    quantization_config=quantization_config,
-    dtype=torch.bfloat16,
-    device_map="auto"
-)
+```text
+┌─────┐  quantize   ┌────┐ dequantize   ┌───────┐
+│ 0.5 │ ──────────▶ │ 11 │ ───────────▶ │ 0.494 │
+└─────┘             └────┘              └───────┘
 ```
 
-## Resources
+Affine quantization comes in two forms.
 
-To explore quantization and related performance optimization concepts more deeply, check out the following resources.
+- *Asymmetric* quantization uses the formulas above. It maps the exact range, so no representable values go to waste when the weights aren't centered on zero.
+- *Symmetric* quantization assumes the range is `[-a, a]` and fixes `Z` at 0, so only the scale is stored. The math is cheaper, but some representable values go unused when the weights lean to one side of zero.
+
+## Choose the granularity
+
+A single scale for a whole tensor is cheap to store, but one large outlier stretches the range and spreads the representable values farther apart for every other weight. Smaller groups give each scale a narrower range to cover.
+
+- Per-tensor uses one scale, and one zero point, for the entire tensor.
+- Per-channel uses one scale for each output channel, which is each row of a weight matrix.
+- Per-group, or per-block, uses one scale for each group of consecutive values, such as 128 weights. Each group costs extra storage for its scale.
+
+The diagram below shows the three options on a weight matrix with three rows. Each `s` is one scale.
+
+```text
+per-tensor        per-channel           per-group
+┌────────────┐    ┌────────────┐        ┌──────┬──────┐
+│            │    │            │ s0     │  s0  │  s1  │
+│            │    ├────────────┤        ├──────┼──────┤
+│     s      │    │            │ s1     │  s2  │  s3  │
+│            │    ├────────────┤        ├──────┼──────┤
+│            │    │            │ s2     │  s4  │  s5  │
+└────────────┘    └────────────┘        └──────┴──────┘
+```
+
+Most low-bit methods quantize per group. [GPTQ](./gptq) defaults to groups of 128 weights, and [Fine-grained FP8](./finegrained_fp8) defaults to 128x128 blocks. The FP4 formats in [Data types](#data-types) build the block size into the format itself.
+
+## Quantize weights or activations
+
+Methods differ in which tensors they quantize, and that decides where the matrix multiplication runs.
+
+- *Weight-only* methods store the weights in low precision and leave the activations in bf16 or fp16. Before each matmul, the kernel dequantizes the weights to a higher-precision compute dtype. bitsandbytes 4-bit, AWQ, GPTQ, and HQQ work this way. In bitsandbytes, `bnb_4bit_compute_dtype` sets that compute dtype.
+- *Weight-and-activation* methods quantize the activations as well, and the matmul runs directly in low precision. This needs hardware that supports the low-precision matmul, like FP8 on recent GPUs. The scheme is often written as W8A8 for 8-bit weights and activations.
+
+Weight-only methods save memory but don't always run faster, because dequantizing adds work to every matmul. They speed up generation when the model is *memory-bound*. Generating one token at a time, a GPU spends most of each step reading weights from memory, not computing. Reading 4-bit weights moves a quarter of the data that bf16 weights do, and that saving can outweigh the cost of dequantizing.
+
+Weight-and-activation methods help when the model is *compute-bound*, as in prefill or large batches, because the low-precision matmul itself is faster. Some methods switch between the two. NVFP4 runs a 4-bit-weight, 4-bit-activation matmul for prefill and a 4-bit-weight, 16-bit-activation matmul for decoding.
+
+## Data types
+
+The data type sets which values a quantized number can represent.
+
+### int8 and int4
+
+int8 and int4 represent evenly spaced integers and use the affine mapping above. int4 can represent only 16 values, so it loses more accuracy than int8. Methods that use int4 typically quantize per group or use calibration to keep accuracy up.
+
+Most hardware has no 4-bit storage type, so two int4 values are *packed* into one byte. For example, the first value can take the lower 4 bits and the second value the upper 4 bits. Kernels unpack the values before computing with them.
+
+```text
+┌──────┐  ┌──────┐        ┌──────┬──────┐
+│ val1 │  │ val2 │        │ val2 │ val1 │
+│ 0101 │  │ 0011 │   →    │ 0011 │ 0101 │  1 byte
+└──────┘  └──────┘        └──────┴──────┘
+  int4      int4            high   low
+```
+
+Some 4-bit types space their representable values unevenly to match how weights are distributed. bitsandbytes NF4 puts more of its values near zero, where most weights are.
+
+### FP8
+
+FP8 keeps the floating-point layout of a sign, an exponent, and a mantissa in 8 bits. Its representable values are closer together near zero and farther apart at large magnitudes, which suits the spread of values in weights and activations.
+
+FP8 comes in two variants.
+
+- E4M3 has 4 exponent bits and 3 mantissa bits. It's more precise but covers a smaller range. It's the usual choice for weights and activations during inference.
+- E5M2 has 5 exponent bits and 2 mantissa bits. It covers a wider range with less precision.
+
+```text
+E4M3   ┌─┬───────┬─────┐
+       │S│E E E E│M M M│
+       └─┴───────┴─────┘
+E5M2   ┌─┬─────────┬───┐
+       │S│E E E E E│M M│
+       └─┴─────────┴───┘
+  S sign   E exponent   M mantissa
+```
+
+FP8 matmuls need hardware support, such as NVIDIA GPUs with compute capability 8.9 or higher (Ada, Hopper, Blackwell), AMD Instinct MI300, and Intel XPU. Transformers supports FP8 through [Fine-grained FP8](./finegrained_fp8), [FBGEMM FP8](./fbgemm_fp8), and [compressed-tensors](./compressed_tensors).
+
+### FP4 with block scales
+
+FP4 has 1 sign bit, 2 exponent bits, and 1 mantissa bit (E2M1). It represents only 0, 0.5, 1, 1.5, 2, 3, 4, and 6, positive and negative. With so few values, FP4 formats can't work with one scale per tensor. They attach a scale to every small block of values and store the scales as part of the format.
+
+| Format | Block size | Scale per block | Extra scale |
+|---|---|---|---|
+| [MXFP4](./mxfp4) | 32 values | 8-bit power of two (E8M0) | None |
+| [NVFP4](./nvfp4) | 16 values | FP8 | One FP32 scale per tensor |
+
+MXFP4 is a microscaling format. A power-of-two scale only shifts the exponent, so applying it is cheap, but it can only land on powers of two. NVFP4 uses smaller blocks and an FP8 scale that can take values between powers of two. This keeps more accuracy, at the cost of a per-tensor scale that keeps the FP8 block scales in range. [Four Over Six](./fouroversix) and [FP-Quant](./fp_quant) also produce NVFP4 or MXFP4 weights.
+
+The same block idea shows up at 8 bits. MXFP8 stores FP8 values with power-of-two block scales, and [Fine-grained FP8](./finegrained_fp8) loads it.
+
+### Codebooks
+
+Below 4 bits, some methods stop rounding each weight to the nearest representable value. They quantize groups of weights together as *vectors*. A codebook holds a set of learned vectors, and each group of weights is stored as the index of its closest vector. [AQLM](./aqlm) defaults to groups of 8 weights and a 16-bit index, which works out to 2 bits per weight. [VPTQ](./vptq) also uses codebooks. Finding good codebooks takes a long optimization over calibration data, so these models are quantized ahead of time and loaded as checkpoints.
+
+## When quantization happens
+
+A model is quantized either after training or during it. Most methods in Transformers quantize after training.
+
+### Post-training quantization
+
+*Post-training quantization (PTQ)* quantizes a model that's already trained, without changing what it learned. PTQ methods differ in whether they need data, and that decides which group a method falls into in the documentation's table of contents.
+
+- Without calibration data, the scales come from the weights alone, and quantization is fast enough to run while the model loads. bitsandbytes, HQQ, and torchao work this way. These methods are listed under *Quantize while loading*.
+- With calibration data, the method runs a small dataset through the model and uses the activations to decide how to quantize each layer. Calibration usually gives better accuracy at 4 bits and below, but it takes minutes to hours.
+
+Calibration methods use the activations in different ways. GPTQ quantizes a layer one column at a time and adjusts the remaining columns to make up for each column's rounding error. AWQ finds the weight channels with the largest activations and scales them up before rounding to protect them.
+
+Where the calibration runs decides how you use the method in Transformers.
+
+- [GPTQ](./gptq) calibrates inside `from_pretrained` when you pass a `dataset` to [`GPTQConfig`], so it's listed under *Quantize while loading*.
+- Other calibration methods, like AWQ, AutoRound, AQLM, and VPTQ, calibrate in their own libraries. Transformers loads the result, so they're listed under *Load pre-quantized checkpoints*.
+
+### Quantization-aware training
+
+*Quantization-aware training (QAT)* simulates quantization during training. The forward pass rounds values as quantization would while gradients update the full-precision weights, so the model learns to tolerate the rounding error. QAT usually gives the best accuracy at very low bit widths, but it requires training the model.
+
+[BitNet](./bitnet) models are trained this way, with their 1.58-bit weights in the loop, and Transformers loads the trained checkpoints.
+
+## Resources
 
 - [Quantization Fundamentals with Hugging Face](https://www.deeplearning.ai/short-courses/quantization-fundamentals-with-hugging-face/)
 - [Quantization in Depth](https://www.deeplearning.ai/short-courses/quantization-in-depth)

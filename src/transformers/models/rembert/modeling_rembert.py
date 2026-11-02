@@ -35,7 +35,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import auto_docstring, logging
 from .configuration_rembert import RemBertConfig
@@ -488,7 +488,7 @@ class RemBertPreTrainedModel(PreTrainedModel):
     """
 )
 class RemBertModel(RemBertPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: RemBertConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -611,7 +611,7 @@ class RemBertModel(RemBertPreTrainedModel):
 
 @auto_docstring
 class RemBertForMaskedLM(RemBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RemBertConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -689,7 +689,7 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
     """
 )
 class RemBertForCausalLM(RemBertPreTrainedModel, GenerationMixin):
-    def __init__(self, config):
+    def __init__(self, config: RemBertConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -766,9 +766,8 @@ class RemBertForCausalLM(RemBertPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.cls(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.cls(hidden_states)
 
         loss = None
         if labels is not None:
@@ -795,7 +794,7 @@ class RemBertForCausalLM(RemBertPreTrainedModel, GenerationMixin):
     """
 )
 class RemBertForSequenceClassification(RemBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RemBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.rembert = RemBertModel(config)
@@ -873,7 +872,7 @@ class RemBertForSequenceClassification(RemBertPreTrainedModel):
 
 @auto_docstring
 class RemBertForMultipleChoice(RemBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RemBertConfig):
         super().__init__(config)
 
         self.rembert = RemBertModel(config)
@@ -972,7 +971,7 @@ class RemBertForMultipleChoice(RemBertPreTrainedModel):
 
 @auto_docstring
 class RemBertForTokenClassification(RemBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RemBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1034,7 +1033,7 @@ class RemBertForTokenClassification(RemBertPreTrainedModel):
 
 @auto_docstring
 class RemBertForQuestionAnswering(RemBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RemBertConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels

@@ -46,7 +46,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
@@ -617,7 +617,7 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         "hidden_states": T5GemmaEncoderLayer,
     }
 
-    def __init__(self, config):
+    def __init__(self, config: T5GemmaConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -701,7 +701,7 @@ class T5GemmaDecoder(T5GemmaPreTrainedModel):
         "hidden_states": T5GemmaDecoderLayer,
     }
 
-    def __init__(self, config):
+    def __init__(self, config: T5GemmaConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -992,9 +992,8 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = decoder_outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         decoder_config = self.get_decoder().config
         if decoder_config.final_logit_softcapping is not None:
             logits = logits / decoder_config.final_logit_softcapping

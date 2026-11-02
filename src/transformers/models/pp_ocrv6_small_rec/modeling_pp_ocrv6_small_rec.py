@@ -250,7 +250,7 @@ class PPOCRV6SmallRecEncoderWithSVTR(PPOCRV6SmallRecPreTrainedModel):
 
     def __init__(
         self,
-        config,
+        config: PPOCRV6SmallRecConfig,
     ):
         super().__init__(config)
         in_channels = config.backbone_config.block_configs[-1][-1][2]

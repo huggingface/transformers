@@ -47,7 +47,7 @@ from ...modeling_outputs import (
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
@@ -577,6 +577,7 @@ class UnlimitedOcrSamVisionProj(nn.Module):
 
 
 class UnlimitedOcrSamVisionEncoder(UnlimitedOcrPreTrainedModel):
+    config: UnlimitedOcrSamVisionConfig
     _can_record_outputs = {"hidden_states": UnlimitedOcrSamVisionLayer, "attentions": UnlimitedOcrSamVisionAttention}
     _input_embed_layer = "patch_embed"
 
@@ -890,7 +891,7 @@ class UnlimitedOcrEncoder(nn.Module):
     """
 )
 class UnlimitedOcrVisionEncoder(UnlimitedOcrPreTrainedModel):
-    config: UnlimitedOcrVisionConfig
+    config: UnlimitedOcrVisionEncoderConfig
     main_input_name = "patch_embeds"
     input_modalities = ("image",)
     _can_record_outputs = {
@@ -924,6 +925,8 @@ class UnlimitedOcrVisionEncoder(UnlimitedOcrPreTrainedModel):
 
 @auto_docstring(custom_intro="Vision model encoding images first with SAM followed by an additional (CLIP) model.")
 class UnlimitedOcrVisionModel(UnlimitedOcrPreTrainedModel):
+    config: UnlimitedOcrVisionConfig
+
     def __init__(self, config: UnlimitedOcrVisionConfig):
         super().__init__(config)
         self.sam_encoder = UnlimitedOcrSamVisionEncoder(config.sam_config)
@@ -2132,8 +2135,7 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Unlimite
         )
 
         hidden_states = outputs[0]
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        hidden_states = hidden_states[:, slice_indices, :]
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
 
         loss = None

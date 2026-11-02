@@ -67,7 +67,7 @@ class Kimi_K25Config(PreTrainedConfig):
     model_type = "kimi_k25"
     sub_configs_defaults = {
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="deepseek_v3"),
-        "vision_config": SubConfigSpec(config_class=Kimi_K25VisionConfig),
+        "vision_config": Kimi_K25VisionConfig,
     }
 
     text_config: dict | PreTrainedConfig | None = None

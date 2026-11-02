@@ -34,7 +34,7 @@ from ...image_utils import (
     pil_torch_interpolation_mapping,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, requires_backends
+from ...utils import TensorType, auto_docstring
 
 
 if TYPE_CHECKING:
@@ -253,8 +253,6 @@ class ZoeDepthImageProcessor(TorchvisionBackend):
             `list[dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
             predictions.
         """
-        requires_backends(self, "torch")
-
         predicted_depth = outputs.predicted_depth
 
         if (outputs_flipped is not None) and (predicted_depth.shape != outputs_flipped.predicted_depth.shape):

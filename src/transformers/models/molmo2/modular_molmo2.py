@@ -26,7 +26,7 @@ from torch.nn import functional as F
 from ... import initialization as init
 from ...backbone_utils import filter_output_hidden_states
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
@@ -42,7 +42,7 @@ from ...masking_utils import create_bidirectional_mask, create_causal_mask, crea
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import (
     ImagesKwargs,
     MultiModalData,
@@ -258,9 +258,9 @@ class Molmo2Config(PreTrainedConfig):
     model_type = "molmo2"
     attribute_map = {"image_token_id": "image_patch_id", "video_token_id": "image_patch_id"}
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Molmo2TextConfig),
-        "vision_config": SubConfigSpec(config_class=Molmo2VisionConfig),
-        "adapter_config": SubConfigSpec(config_class=Molmo2AdapterConfig),
+        "text_config": Molmo2TextConfig,
+        "vision_config": Molmo2VisionConfig,
+        "adapter_config": Molmo2AdapterConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -1315,7 +1315,7 @@ class Molmo2VisionEncoderLayer(Siglip2EncoderLayer):
 
 @auto_docstring
 class Molmo2VisionModel(Molmo2PreTrainedModel):
-    config_class = Molmo2VisionConfig
+    config: Molmo2VisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = ["Molmo2VisionEncoderLayer"]
@@ -1364,7 +1364,7 @@ class Molmo2ImageProjectorMLP(LlamaMLP):
     """
 )
 class Molmo2Adapter(Molmo2PreTrainedModel):
-    config_class = Molmo2AdapterConfig
+    config: Molmo2AdapterConfig
     input_modalities = ("image",)
     _no_split_modules = ["Molmo2VisionAttention"]
     _can_record_outputs = {"attentions": Molmo2VisionAttention}
@@ -1765,8 +1765,8 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
 
         hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

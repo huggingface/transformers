@@ -39,7 +39,7 @@ from ...masking_utils import (
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -1585,9 +1585,8 @@ class Gemma4ForCausalLM(Gemma3ForCausalLM):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         if self.config.final_logit_softcapping is not None:
             logits = logits / self.config.final_logit_softcapping
             logits = torch.tanh(logits)
@@ -2079,7 +2078,7 @@ class Gemma4Model(Gemma3nModel):
 
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
             mm_encoder_outputs["video"] = self.get_video_features(
-                pixel_values_videos, video_position_ids, return_dict=True
+                pixel_values_videos, video_position_ids, num_frames_per_video=num_frames_per_video, return_dict=True
             )
 
         if mm_encoder_outputs.get("video") is not None:
@@ -2272,15 +2271,15 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
             use_cache=use_cache,
             image_position_ids=image_position_ids,
             video_position_ids=video_position_ids,
+            num_frames_per_video=num_frames_per_video,
             mm_encoder_outputs=mm_encoder_outputs,
             return_dict=True,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         if (final_logit_softcapping := self.config.get_text_config().final_logit_softcapping) is not None:
             logits = logits / final_logit_softcapping
             logits = torch.tanh(logits)

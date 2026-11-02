@@ -28,9 +28,15 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import (
+    TensorType,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    torch_compilable_check,
+)
 from ..gemma2.modeling_gemma2 import Gemma2DecoderLayer
 from ..gemma4.configuration_gemma4 import Gemma4Config, Gemma4TextConfig
 from ..gemma4.image_processing_gemma4 import (
@@ -337,6 +343,7 @@ class Gemma4UnifiedProcessorKwargs(Gemma4ProcessorKwargs):
     pass
 
 
+@auto_docstring
 class Gemma4UnifiedProcessor(Gemma4Processor):
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         """Replace the audio placeholder with the correct number of audio tokens.
@@ -822,9 +829,8 @@ class Gemma4UnifiedForCausalLM(Gemma4ForCausalLM):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         if self.config.final_logit_softcapping is not None:
             logits = logits / self.config.final_logit_softcapping
             logits = torch.tanh(logits)
@@ -1075,6 +1081,7 @@ class Gemma4UnifiedModel(Gemma4Model):
         use_cache: bool | None = None,
         image_position_ids: torch.LongTensor | None = None,
         video_position_ids: torch.LongTensor | None = None,
+        num_frames_per_video: torch.LongTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4UnifiedModelOutputWithPast:
@@ -1087,6 +1094,9 @@ class Gemma4UnifiedModel(Gemma4Model):
         video_position_ids (`torch.LongTensor` of shape `(total_num_frames, max_patches, 2)`, *optional*):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
+        num_frames_per_video (`torch.LongTensor` of shape `(num_videos,)`, *optional*):
+            Number of frames belonging to each video. Required whenever `pixel_values_videos` is passed,
+            since the frames of all videos are concatenated along a single axis.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1131,7 +1141,7 @@ class Gemma4UnifiedModel(Gemma4Model):
 
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
             mm_encoder_outputs["video"] = self.get_video_features(
-                pixel_values_videos, video_position_ids, return_dict=True
+                pixel_values_videos, video_position_ids, num_frames_per_video=num_frames_per_video, return_dict=True
             )
 
         if mm_encoder_outputs.get("video") is not None:
@@ -1273,15 +1283,15 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
             use_cache=use_cache,
             image_position_ids=image_position_ids,
             video_position_ids=video_position_ids,
+            num_frames_per_video=num_frames_per_video,
             mm_encoder_outputs=mm_encoder_outputs,
             return_dict=True,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         if (final_logit_softcapping := self.config.get_text_config().final_logit_softcapping) is not None:
             logits = logits / final_logit_softcapping
             logits = torch.tanh(logits)

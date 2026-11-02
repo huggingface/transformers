@@ -210,8 +210,8 @@ jobs:
           cd pr-repo
           
           # Run style commands
-          ruff check examples tests src utils scripts benchmark benchmark_v2 setup.py conftest.py --fix
-          ruff format examples tests src utils scripts benchmark benchmark_v2 setup.py conftest.py
+          ruff check examples tests src utils scripts benchmark_v2 setup.py conftest.py --fix
+          ruff format examples tests src utils scripts benchmark_v2 setup.py conftest.py
           python utils/custom_init_isort.py
           python utils/sort_auto_mappings.py
           
@@ -244,8 +244,8 @@ jobs:
           cd pr-repo
           
           # Run style commands
-          ruff check examples tests src utils scripts benchmark benchmark_v2 setup.py conftest.py --fix
-          ruff format examples tests src utils scripts benchmark benchmark_v2 setup.py conftest.py
+          ruff check examples tests src utils scripts benchmark_v2 setup.py conftest.py --fix
+          ruff format examples tests src utils scripts benchmark_v2 setup.py conftest.py
           python utils/sort_auto_mappings.py
           
           # Run fix-repo commands

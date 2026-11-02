@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
 
@@ -207,10 +207,10 @@ class BltConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 500000.0
     sub_configs_defaults = {
-        "patcher_config": SubConfigSpec(config_class=BltPatcherConfig),
-        "encoder_config": SubConfigSpec(config_class=BltLocalEncoderConfig),
-        "decoder_config": SubConfigSpec(config_class=BltLocalDecoderConfig),
-        "global_config": SubConfigSpec(config_class=BltGlobalTransformerConfig),
+        "patcher_config": BltPatcherConfig,
+        "encoder_config": BltLocalEncoderConfig,
+        "decoder_config": BltLocalDecoderConfig,
+        "global_config": BltGlobalTransformerConfig,
     }
 
     vocab_size: int = 260

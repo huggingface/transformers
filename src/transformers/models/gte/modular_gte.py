@@ -144,7 +144,7 @@ class GtePooler(JinaEmbeddingsV3Pooler):
 
 
 class GtePreTrainedModel(BertPreTrainedModel):
-    config_class = GteConfig
+    config: GteConfig
     base_model_prefix = "gte"
 
     # Are kept as non-persistent buffers to avoid being saved in the state dict

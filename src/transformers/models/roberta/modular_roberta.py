@@ -30,7 +30,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
@@ -150,7 +150,7 @@ class RobertaLayer(BertLayer):
 
 @auto_docstring
 class RobertaPreTrainedModel(PreTrainedModel):
-    config_class = RobertaConfig
+    config: RobertaConfig
     base_model_prefix = "roberta"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
@@ -175,7 +175,7 @@ class RobertaPreTrainedModel(PreTrainedModel):
 
 
 class RobertaModel(BertModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: RobertaConfig, add_pooling_layer=True):
         super().__init__(self, config)
 
 
@@ -190,7 +190,7 @@ class RobertaForCausalLM(RobertaPreTrainedModel, GenerationMixin):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -274,9 +274,8 @@ class RobertaForCausalLM(RobertaPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -299,7 +298,7 @@ class RobertaForMaskedLM(RobertaPreTrainedModel):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -403,7 +402,7 @@ class RobertaLMHead(nn.Module):
     """
 )
 class RobertaForSequenceClassification(RobertaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -484,7 +483,7 @@ class RobertaForSequenceClassification(RobertaPreTrainedModel):
 
 @auto_docstring
 class RobertaForMultipleChoice(RobertaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__(config)
 
         self.roberta = RobertaModel(config)
@@ -577,7 +576,7 @@ class RobertaForMultipleChoice(RobertaPreTrainedModel):
 
 @auto_docstring
 class RobertaForTokenClassification(RobertaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -668,7 +667,7 @@ class RobertaClassificationHead(nn.Module):
 
 @auto_docstring
 class RobertaForQuestionAnswering(RobertaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

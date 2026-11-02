@@ -34,7 +34,7 @@ from ...image_utils import (
     SizeDict,
 )
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
@@ -209,7 +209,7 @@ class DeepseekVLHybridPreTrainedModel(DeepseekVLPreTrainedModel):
 
 
 class DeepseekVLHybridModel(DeepseekVLModel):
-    def __init__(self, config):
+    def __init__(self, config: DeepseekVLHybridConfig):
         self.output_size = config.vision_config.image_size // config.vision_config.patch_size
         self.global_attn_index = config.high_res_vision_config.global_attn_indexes[0]
 
@@ -366,9 +366,8 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
