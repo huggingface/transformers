@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 from parameterized import parameterized
 
-from transformers import GPT2Config, WatermarkingConfig, is_torch_available
+from transformers import AutoModelForCausalLM, AutoTokenizer, GPT2Config, WatermarkingConfig, is_torch_available
 from transformers.testing_utils import require_torch, torch_device
 
 
@@ -107,6 +107,60 @@ class WatermarkDetectorTest(unittest.TestCase):
         z_scores = np.array([-2.0, 0.0, 1.0, 2.0, 4.0, 6.0, 10.0])
         expected = [0.5 * math.erfc(z / math.sqrt(2)) for z in z_scores]
         np.testing.assert_allclose(detector._compute_pval(z_scores), expected, rtol=1e-12)
+
+    def test_watermark_detector_null_calibration(self):
+        """Unwatermarked random sequences should yield calibrated p-values and few false positives."""
+        model_config = GPT2Config(vocab_size=128, bos_token_id=127, eos_token_id=127)
+        watermark_config = WatermarkingConfig()
+        detector = WatermarkDetector(model_config, "cpu", watermark_config)
+
+        num_sequences = 500
+        seq_length = 64
+        rng = np.random.default_rng(50232)
+
+        p_values = []
+        predictions = []
+        for _ in range(num_sequences):
+            tokens = rng.integers(0, model_config.vocab_size - 1, size=seq_length, dtype=np.int64)
+            input_ids = torch.tensor([tokens.tolist()], dtype=torch.long)
+            result = detector(input_ids, z_threshold=3.0, return_dict=True)
+            p_values.append(result.p_value[0])
+            predictions.append(bool(result.prediction[0]))
+
+        p_values = np.array(p_values)
+        self.assertTrue(np.all((p_values >= 0.0) & (p_values <= 1.0)))
+        self.assertAlmostEqual((p_values < 0.01).mean(), 0.01, delta=0.02)
+        self.assertAlmostEqual((p_values < 0.05).mean(), 0.05, delta=0.04)
+        self.assertLessEqual(np.mean(predictions), 0.02)
+
+    def test_watermark_detector_detects_watermarked_generation(self):
+        """Text generated with WatermarkingConfig on a tiny model should be flagged by the detector."""
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_id).eval()
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        if tokenizer.pad_token_id is None:
+            tokenizer.pad_token_id = tokenizer.eos_token_id
+
+        prompt = "Hello"
+        model_inputs = tokenizer(prompt, return_tensors="pt")
+        input_len = model_inputs["input_ids"].shape[-1]
+
+        watermark_config = WatermarkingConfig(bias=2.5, seeding_scheme="selfhash")
+        torch.manual_seed(50232)
+        with torch.no_grad():
+            output = model.generate(
+                **model_inputs,
+                watermarking_config=watermark_config,
+                do_sample=False,
+                max_new_tokens=20,
+            )
+
+        detector = WatermarkDetector(model.config, "cpu", watermark_config)
+        result = detector(output[:, input_len:], return_dict=True)
+
+        self.assertTrue(result.prediction[0])
+        self.assertLess(result.p_value[0], 0.01)
+        self.assertGreater(result.z_score[0], 3.0)
 
     def _check_identical_tokens(self, seeding_scheme, context_width, ignore_repeated_ngrams, expected_count):
         result = self._check_num_tokens_scored(
