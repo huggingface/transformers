@@ -1041,7 +1041,9 @@ def pipeline(
                     " repo on your local machine. Make sure you have read the code there to avoid malicious use, then"
                     " set the option `trust_remote_code=True` to remove this error."
                 )
-            class_ref = _resolve_impl(targeted_task["impl"])
+            # Custom pipeline impls are "module.Class" strings inside the Hub repo, which only
+            # get_class_from_dynamic_module can resolve, so we pass them through unchanged
+            class_ref = targeted_task["impl"]
             pipeline_class = get_class_from_dynamic_module(
                 class_ref,
                 model,
