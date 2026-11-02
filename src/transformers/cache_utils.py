@@ -1395,7 +1395,7 @@ class DummyLayer:
     A dummy cache layer that does not store any cache. It is used either for layers that do not need any cache (e.g. layers without any
     attention mechanism but only MoE/mlp), or for shared-cache layers that consume cache producer by other layers.
     This is mostly syntactic sugar to keep a Cache as a container of `num_hidden_layers` CacheLayer instead of setting the dummy layers
-    to None, as we otherwise have to perform a `is not None` check everywhere
+    to None, as we otherwise have to perform a `is not None` check everywhere.
     """
 
     supports_early_init = False  # added so that DummyLayer are properly skipped during `early_initialization`
