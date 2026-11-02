@@ -12,24 +12,126 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tempfile
 import unittest
 
 import numpy as np
 
-from transformers import AutoImageProcessor, MiniMaxVL01ImageProcessor, MiniMaxVL01ImageProcessorPil
-from transformers.image_utils import ChannelDimension, PILImageResampling
-from transformers.testing_utils import require_torch, require_torchvision, require_vision
+from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ChannelDimension, PILImageResampling
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torch_available, is_vision_available
+
+from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+
+
+if is_torch_available():
+    import torch
+
+if is_vision_available():
+    from PIL import Image
+
+
+class MiniMaxVL01ImageProcessingTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=3,
+        num_channels=3,
+        image_size=16,
+        min_resolution=16,
+        max_resolution=64,
+        do_resize=True,
+        do_normalize=True,
+        image_mean=OPENAI_CLIP_MEAN,
+        image_std=OPENAI_CLIP_STD,
+        do_convert_rgb=True,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.num_channels = num_channels
+        self.image_size = image_size
+        self.min_resolution = min_resolution
+        self.max_resolution = max_resolution
+        self.do_resize = do_resize
+        self.do_normalize = do_normalize
+        self.image_mean = image_mean
+        self.image_std = image_std
+        self.do_convert_rgb = do_convert_rgb
+
+    def prepare_image_processor_dict(self):
+        return {
+            "do_resize": self.do_resize,
+            "size": {"height": self.image_size, "width": self.image_size},
+            "image_grid_pinpoints": [[self.image_size, self.image_size]],
+            "do_normalize": self.do_normalize,
+            "image_mean": self.image_mean,
+            "image_std": self.image_std,
+            "do_convert_rgb": self.do_convert_rgb,
+        }
+
+    def expected_output_image_shape(self, images):
+        # The single-cell grid produces a thumbnail and one crop for each image.
+        return 2 * len(images), self.num_channels, self.image_size, self.image_size
+
+    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+        return prepare_image_inputs(
+            batch_size=self.batch_size,
+            num_channels=self.num_channels,
+            min_resolution=self.min_resolution,
+            max_resolution=self.max_resolution,
+            equal_resolution=equal_resolution,
+            numpify=numpify,
+            torchify=torchify,
+        )
 
 
 @require_torch
-@require_torchvision
 @require_vision
-class MiniMaxVL01ImageProcessingTest(unittest.TestCase):
-    image_processing_classes = {
-        "pil": MiniMaxVL01ImageProcessorPil,
-        "torchvision": MiniMaxVL01ImageProcessor,
-    }
+class MiniMaxVL01ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    test_cast_dtype = True
+
+    def setUp(self):
+        super().setUp()
+        self.image_processor_tester = MiniMaxVL01ImageProcessingTester(self)
+
+    @property
+    def image_processor_dict(self):
+        return self.image_processor_tester.prepare_image_processor_dict()
+
+    def _test_call(self, numpify=False, torchify=False, **kwargs):
+        image_inputs = self.image_processor_tester.prepare_image_inputs(numpify=numpify, torchify=torchify)
+        expected_type = torch.Tensor if torchify else np.ndarray if numpify else Image.Image
+        for image in image_inputs:
+            self.assertIsInstance(image, expected_type)
+
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            for inputs in (image_inputs[:1], image_inputs):
+                with self.subTest(backend=image_processing_class.__name__, batch_size=len(inputs)):
+                    encoded_images = image_processor(
+                        inputs[0] if len(inputs) == 1 else inputs, return_tensors="pt", **kwargs
+                    ).pixel_values
+                    expected_shape = self.image_processor_tester.expected_output_image_shape(inputs)
+                    self.assertEqual(tuple(encoded_images.shape), expected_shape)
+
+    # VL-01 concatenates crops across images instead of returning an image batch dimension.
+    def test_call_pil(self):
+        self._test_call()
+
+    def test_call_numpy(self):
+        self._test_call(numpify=True)
+
+    def test_call_pytorch(self):
+        self._test_call(torchify=True)
+
+    def test_call_numpy_4_channels(self):
+        self.image_processor_tester.num_channels = 4
+        self._test_call(
+            numpify=True,
+            input_data_format=ChannelDimension.LAST,
+            do_convert_rgb=False,
+            image_mean=[0.0] * 4,
+            image_std=[1.0] * 4,
+        )
 
     @staticmethod
     def _processor_kwargs(grid_pinpoints):
@@ -104,11 +206,6 @@ class MiniMaxVL01ImageProcessingTest(unittest.TestCase):
                 self.assertEqual(output.image_sizes.tolist(), [[2, 2], [4, 2], [2, 4]])
                 np.testing.assert_array_equal(output.pixel_values.cpu().numpy(), expected)
 
-                # Source order is base thumbnail first, followed by row-major high-resolution tiles.
-                self.assertEqual(output.pixel_values[:2].shape[0], 2)
-                self.assertEqual(output.pixel_values[2:5].shape[0], 3)
-                self.assertEqual(output.pixel_values[5:].shape[0], 3)
-
     def test_floor_rounded_keep_ratio_resize_and_asymmetric_padding(self):
         wide = np.ones((3, 7, 3), dtype=np.uint8)
         tall = np.ones((7, 3, 3), dtype=np.uint8)
@@ -119,8 +216,6 @@ class MiniMaxVL01ImageProcessingTest(unittest.TestCase):
                 processor_kwargs["size"] = {"height": 4, "width": 4}
                 image_processor = image_processing_class(**processor_kwargs)
                 if backend_name == "torchvision":
-                    import torch
-
                     wide_input = torch.from_numpy(self._channels_first(wide))
                     tall_input = torch.from_numpy(self._channels_first(tall))
                     wide_resized = image_processor._resize_for_patching(
@@ -156,18 +251,6 @@ class MiniMaxVL01ImageProcessingTest(unittest.TestCase):
                 np.testing.assert_array_equal(wide_padded, expected_wide)
                 np.testing.assert_array_equal(tall_padded, expected_tall)
 
-    def test_backends_are_exact_for_nearest_neighbor_fixture(self):
-        kwargs = self._processor_kwargs([[2, 2], [4, 2], [2, 4]])
-        outputs = {
-            name: image_processing_class(**kwargs)(list(self._fixture_images()), return_tensors="pt")
-            for name, image_processing_class in self.image_processing_classes.items()
-        }
-
-        np.testing.assert_array_equal(
-            outputs["pil"].pixel_values.cpu().numpy(), outputs["torchvision"].pixel_values.cpu().numpy()
-        )
-        self.assertEqual(outputs["pil"].image_sizes.tolist(), outputs["torchvision"].image_sizes.tolist())
-
     def test_rejects_unreleased_image_modes(self):
         for backend_name, image_processing_class in self.image_processing_classes.items():
             with self.subTest(backend=backend_name, stage="construction"):
@@ -178,16 +261,6 @@ class MiniMaxVL01ImageProcessingTest(unittest.TestCase):
                 image_processor = image_processing_class(**self._processor_kwargs([[2, 2]]))
                 with self.assertRaisesRegex(ValueError, "only.*anyres"):
                     image_processor(self._fixture_images()[0], process_image_mode="dynamic_res", return_tensors="pt")
-
-    def test_save_reload_through_auto_image_processor_for_both_backends(self):
-        for backend_name, image_processing_class in self.image_processing_classes.items():
-            with self.subTest(backend=backend_name), tempfile.TemporaryDirectory() as tmpdirname:
-                image_processor = image_processing_class(**self._processor_kwargs([[2, 2]]))
-                image_processor.save_pretrained(tmpdirname)
-                reloaded = AutoImageProcessor.from_pretrained(tmpdirname, backend=backend_name)
-
-                self.assertIsInstance(reloaded, image_processing_class)
-                self.assertEqual(reloaded.to_dict(), image_processor.to_dict())
 
 
 if __name__ == "__main__":
