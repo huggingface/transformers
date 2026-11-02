@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from ..utils import is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin, QuantizationMethod
-from .quantizers_utils import get_module_from_name
+from .quantizers_utils import get_module_from_name, move_accelerate_hook
 
 
 if TYPE_CHECKING:
@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
 if is_torch_available():
     import torch
+    from torch import nn
 
     if not TYPE_CHECKING:
         from torch.nn import ModuleList
@@ -251,9 +252,42 @@ class HfQuantizer(ABC):
         return model
 
     def _dequantize(self, model, dtype=None):
-        raise NotImplementedError(
-            f"{self.quantization_config.quant_method} has no implementation of `dequantize`, please raise an issue on GitHub."
-        )
+        """
+        Replaces each quantized linear with an `nn.Linear`: the `dequantize` load operation runs on the serialized
+        tensors of its `state_dict`, as when loading the checkpoint with `dequantize=True`.
+        """
+        from ..core_model_loading import expand_target_names
+
+        dequantize = self.get_load_operations().get("dequantize")
+        if dequantize is None:
+            raise NotImplementedError(
+                f"{self.quantization_config.quant_method} has no `dequantize` load operation, please raise an issue on GitHub."
+            )
+        operation = dequantize(self)
+        for module_name, module in list(model.named_modules()):
+            # ponytail: linears only, quantized fused experts (3D params) stay as they are
+            if not hasattr(module, "in_features"):
+                continue
+            for param, serialized in self.serialized_names.items():
+                state = module.state_dict() if param in module._parameters else {}
+                tensors = {name: [state[name]] for name in serialized if name in state}
+                if len(tensors) < 2:  # no companions: not quantized
+                    continue
+                full_name = f"{module_name}.{param}"
+                weight = expand_target_names(
+                    operation.convert(tensors, full_layer_name=full_name, model=model), full_name
+                )
+                weight = weight[full_name]
+                weight = weight[0] if isinstance(weight, list) else weight
+                bias = getattr(module, "bias", None)
+                with torch.device("meta"):
+                    dense = nn.Linear(module.in_features, module.out_features, bias=bias is not None)
+                dense.weight = nn.Parameter(weight if dtype is None else weight.to(dtype), requires_grad=False)
+                if bias is not None:
+                    dense.bias = bias
+                move_accelerate_hook(module, dense)
+                model.set_submodule(module_name, dense)
+        return model
 
     @staticmethod
     def get_modules_to_not_convert(

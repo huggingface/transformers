@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import inspect
 import re
 from contextlib import contextmanager
 from typing import Any
@@ -61,3 +62,18 @@ def on_device(device):
                 return
 
     yield
+
+
+def move_accelerate_hook(old_module, new_module):
+    """Moves the accelerate hook (e.g. offloading) of a module to the one replacing it, as a fresh instance."""
+    old_hook = getattr(old_module, "_hf_hook", None)
+    if old_hook is None:
+        return
+    import accelerate.hooks
+
+    hook_cls = getattr(accelerate.hooks, old_hook.__class__.__name__)
+    init_params = inspect.signature(hook_cls.__init__).parameters
+    accelerate.hooks.remove_hook_from_module(old_module)
+    accelerate.hooks.add_hook_to_module(
+        new_module, hook_cls(**{k: v for k, v in old_hook.__dict__.items() if k in init_params})
+    )

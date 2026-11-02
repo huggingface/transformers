@@ -99,6 +99,8 @@ class QuantizationConfigMixin:
     """
 
     quant_method: QuantizationMethod
+    # Load a pre-quantized checkpoint dense: the `dequantize` load operation runs on every quantized weight
+    dequantize = False
 
     @classmethod
     def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
@@ -433,6 +435,8 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             quantized again.
         bnb_4bit_quant_storage (`torch.dtype` or str, *optional*, defaults to `torch.uint8`):
             This sets the storage type to pack the quantized 4-bit params.
+        dequantize (`bool`, *optional*, defaults to `False`):
+            Whether to dequantize a pre-quantized checkpoint while loading it.
         kwargs (`dict[str, Any]`, *optional*):
             Additional parameters from which to initialize the configuration object.
     """
@@ -449,9 +453,11 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         bnb_4bit_quant_type="fp4",
         bnb_4bit_use_double_quant=False,
         bnb_4bit_quant_storage=None,
+        dequantize=False,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.BITS_AND_BYTES
+        self.dequantize = dequantize
 
         if load_in_4bit and load_in_8bit:
             raise ValueError("load_in_4bit and load_in_8bit are both True, but only one can be used at the same time")

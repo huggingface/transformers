@@ -116,6 +116,9 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         device_map,
         **kwargs,
     ):
+        if self.pre_quantized and self.quantization_config.dequantize:
+            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
+            return
         from ..integrations import replace_with_bnb_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
@@ -135,7 +138,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         )
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        setattr(model, "is_loaded_in_4bit", True)
+        setattr(model, "is_loaded_in_4bit", not self.quantization_config.dequantize)
         return model
 
     def is_serializable(self):
@@ -144,12 +147,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     @property
     def is_trainable(self) -> bool:
         return True
-
-    def _dequantize(self, model, dtype=None):
-        from ..integrations import dequantize_and_replace
-
-        model = dequantize_and_replace(model, quantization_config=self.quantization_config, dtype=dtype)
-        return model
 
     serialized_names = {
         "weight": [
@@ -164,6 +161,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     }
 
     def get_load_operations(self):
-        from ..integrations.bitsandbytes import Bnb4bitDeserialize, Bnb4bitQuantize
+        from ..integrations.bitsandbytes import Bnb4bitDequantize, Bnb4bitDeserialize, Bnb4bitQuantize
 
-        return {"deserialize": Bnb4bitDeserialize, "quantize": Bnb4bitQuantize}
+        return {"deserialize": Bnb4bitDeserialize, "dequantize": Bnb4bitDequantize, "quantize": Bnb4bitQuantize}
