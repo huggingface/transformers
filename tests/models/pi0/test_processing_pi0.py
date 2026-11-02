@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tempfile
 import unittest
 
 import torch
@@ -52,6 +51,10 @@ class PI0ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
+
+    @staticmethod
+    def prepare_processor_dict():
+        return {"state_mean": [1.0] * 8, "state_std": [2.0] * 8, "chunk_size": 10}
 
     @require_vision
     def prepare_images_inputs(self, batch_size: int | None = None, nested: bool = True):
@@ -114,13 +117,11 @@ class PI0ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(outputs["pixel_values"].shape, torch.Size([1, 1, 3, 224, 224]))
         self.assertEqual((outputs["input_ids"] == processor.image_token_id).sum().item(), 256)
 
-    def test_normalization_statistics_survive_save_and_load(self):
-        processor = self.processor_class(**self.prepare_components(), state_mean=[1.0] * 8, chunk_size=10)
-        with tempfile.TemporaryDirectory() as saved_directory:
-            processor.save_pretrained(saved_directory)
-            reloaded = self.processor_class.from_pretrained(saved_directory)
-        self.assertEqual(reloaded.state_mean, [1.0] * 8)
-        self.assertEqual(reloaded.chunk_size, 10)
+    @require_torch
+    def test_state_without_statistics_raises(self):
+        processor = self.processor_class(**self.prepare_components())
+        with self.assertRaisesRegex(ValueError, "state_mean"):
+            processor(images=self.prepare_images_inputs(), text="pick", state=[0.0] * 8)
 
     @unittest.skip("PI0 doesn't need vLLM integration")
     def test_get_num_multimodal_tokens_matches_processor_call(self):

@@ -127,7 +127,7 @@ class PI0Model(PI0PreTrainedModel):
         token_offset = image_token_rank - camera_rank * tokens_per_image
         camera_slot = pixel_attention_mask.cumsum(-1) - 1
         camera_match = (camera_slot[:, None, :] == camera_rank[..., None]) & pixel_attention_mask[:, None, :]
-        feature_index = camera_match.int().argmax(-1) * tokens_per_image + token_offset
+        feature_index = (camera_match.int().argmax(-1) * tokens_per_image + token_offset).to(image_features.device)
         image_embeds = image_features.gather(1, feature_index[..., None].expand(-1, -1, hidden_size))
 
         inputs_embeds = self.vlm.get_input_embeddings()(input_ids.masked_fill(special_image_mask, 0))

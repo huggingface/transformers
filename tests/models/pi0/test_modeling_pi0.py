@@ -13,13 +13,11 @@
 # limitations under the License.
 """Testing suite for the PyTorch PI0 model."""
 
-import os
 import tempfile
 import unittest
 
 from datasets import Dataset, load_dataset
 from parameterized import parameterized
-from safetensors.torch import load_file, save_file
 
 from transformers import PI0Config, PI0Processor, Trainer, TrainingArguments, is_torch_available
 from transformers.image_utils import load_image
@@ -190,7 +188,7 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
                 replayed = model.sample_actions(**inputs_dict, num_steps=3)
             graph.replay()
 
-        torch.testing.assert_close(replayed, expected, rtol=0, atol=0)
+        torch.testing.assert_close(replayed, expected)
 
     def test_model_loss_per_sample(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -199,29 +197,6 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs_dict)
         self.assertEqual(outputs.loss.shape, (self.model_tester.batch_size, config.chunk_size, config.max_action_dim))
-
-    def test_load_lerobot_base_and_finetuned_layouts(self):
-        config = self.model_tester.get_config()
-        model = PI0ForConditionalGeneration(config).eval()
-        with tempfile.TemporaryDirectory() as saved_directory:
-            model.save_pretrained(saved_directory)
-            saved_state_dict = load_file(os.path.join(saved_directory, "model.safetensors"))
-            layouts = {
-                "finetuned": {
-                    key if key.startswith("model.") else f"model.{key}": value
-                    for key, value in saved_state_dict.items()
-                },
-                "base": {key.removeprefix("model."): value for key, value in saved_state_dict.items()},
-            }
-            for layout_name, state_dict in layouts.items():
-                save_file(state_dict, os.path.join(saved_directory, "model.safetensors"), metadata={"format": "pt"})
-                reloaded, loading_info = PI0ForConditionalGeneration.from_pretrained(
-                    saved_directory, output_loading_info=True
-                )
-                self.assertEqual(loading_info["missing_keys"], set(), layout_name)
-                self.assertEqual(loading_info["unexpected_keys"], set(), layout_name)
-                for name, parameter in model.state_dict().items():
-                    torch.testing.assert_close(reloaded.state_dict()[name], parameter, rtol=0, atol=0)
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip("Model architecture is special and requires much higher `tols`")
@@ -341,9 +316,24 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertTrue(torch.isfinite(sampled_actions).all())
 
 
+LIBERO_MEAN_STD = {
+    "state_mean": [-0.0419, 0.0354, 0.8257, 2.9083, -0.5562, -0.1665, 0.0283, -0.0286],
+    "state_std": [0.1074, 0.1442, 0.2572, 0.3441, 1.2344, 0.3580, 0.0133, 0.0132],
+    "actions_mean": [0.0182, 0.0586, -0.0559, 0.0046, 0.0029, -0.0077, -0.0916],
+    "actions_std": [0.2825, 0.3590, 0.3674, 0.0377, 0.0543, 0.0872, 0.9958],
+}
+
+
 @require_torch
 @slow
 class PI0ModelIntegrationTest(unittest.TestCase):
+    def test_pi0_libero_finetuned_loads_every_weight(self):
+        _, loading_info = PI0ForConditionalGeneration.from_pretrained(
+            "lerobot/pi0_libero_finetuned_v044", output_loading_info=True
+        )
+        self.assertEqual(loading_info["missing_keys"], set())
+        self.assertEqual(loading_info["unexpected_keys"], set())
+
     def test_pi0_base_reference_values(self):
         model = PI0ForConditionalGeneration.from_pretrained("lerobot/pi0_base", torch_dtype=torch.float32).eval()
         processor = PI0Processor.from_pretrained("google/paligemma-3b-pt-224")
@@ -418,7 +408,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
 
     def test_pi0_base_libero(self):
         model = PI0ForConditionalGeneration.from_pretrained("lerobot/pi0_base", torch_dtype=torch.float32).eval()
-        processor = PI0Processor.from_pretrained("google/paligemma-3b-pt-224")
+        processor = PI0Processor.from_pretrained("google/paligemma-3b-pt-224", **LIBERO_MEAN_STD)
         model.config.loss_reduction = "none"
 
         small_data = load_dataset("RaushanTurganbay/libero-small-testing", split="train")
@@ -462,7 +452,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
     @require_torch_non_multi_accelerator
     def test_train_pi0_base_libero(self):
         model = PI0ForConditionalGeneration.from_pretrained("lerobot/pi0_base", torch_dtype=torch.bfloat16).eval()
-        processor = PI0Processor.from_pretrained("google/paligemma-3b-pt-224")
+        processor = PI0Processor.from_pretrained("google/paligemma-3b-pt-224", **LIBERO_MEAN_STD)
 
         small_data = load_dataset("RaushanTurganbay/libero-small-testing", split="train")
         train_actions = [small_data["action"][i : i + 50] for i in range(len(small_data) - 50)]

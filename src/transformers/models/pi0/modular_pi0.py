@@ -71,23 +71,23 @@ class PI0Processor(ProcessorMixin):
         image_processor=None,
         tokenizer=None,
         chat_template=None,
-        state_mean: list[float] | None = [-0.0419, 0.0354, 0.8257, 2.9083, -0.5562, -0.1665, 0.0283, -0.0286],
-        state_std: list[float] | None = [0.1074, 0.1442, 0.2572, 0.3441, 1.2344, 0.3580, 0.0133, 0.0132],
-        actions_mean: list[float] | None = [0.0182, 0.0586, -0.0559, 0.0046, 0.0029, -0.0077, -0.0916],
-        actions_std: list[float] | None = [0.2825, 0.3590, 0.3674, 0.0377, 0.0543, 0.0872, 0.9958],
+        state_mean: list[float] | None = None,
+        state_std: list[float] | None = None,
+        actions_mean: list[float] | None = None,
+        actions_std: list[float] | None = None,
         max_state_dim: int = 32,
         chunk_size: int = 50,
         **kwargs,
     ):
         r"""
         state_mean (`list[float]`, *optional*):
-            Dataset mean of the robot state, used to normalize it.
+            Dataset mean of the robot state. Required to process `state`.
         state_std (`list[float]`, *optional*):
-            Dataset standard deviation of the robot state, used to normalize it.
+            Dataset standard deviation of the robot state. Required to process `state`.
         actions_mean (`list[float]`, *optional*):
-            Dataset mean of the actions, used to normalize them.
+            Dataset mean of the actions. Required to process `actions`.
         actions_std (`list[float]`, *optional*):
-            Dataset standard deviation of the actions, used to normalize them.
+            Dataset standard deviation of the actions. Required to process `actions`.
         max_state_dim (`int`, *optional*, defaults to 32):
             Size the state and actions are zero-padded to.
         chunk_size (`int`, *optional*, defaults to 50):
@@ -133,9 +133,9 @@ class PI0Processor(ProcessorMixin):
     ) -> BatchFeature:
         r"""
         actions (`list | np.ndarray | torch.Tensor`, *optional*):
-            Actions to be predicted by the model. If provided, padding, mean and std normalization will be applied.
+            Actions to be predicted by the model. Normalized with the processor's dataset statistics, then padded.
         state (`list | np.ndarray | torch.Tensor`, *optional*):
-            Robotic states to be predicted by the model. If provided, padding, mean and std normalization will be applied.
+            Robot state. Normalized with the processor's dataset statistics, then padded.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -198,20 +198,28 @@ class PI0Processor(ProcessorMixin):
         }
 
         if actions is not None:
-            actions = (torch.tensor(actions) - torch.tensor(self.actions_mean)) / (
-                torch.tensor(self.actions_std) + 1e-08
-            )
+            actions = self.normalize(torch.as_tensor(actions, dtype=torch.float32), "actions")
             if actions.shape[-1] < self.max_state_dim:
                 actions = F.pad(actions, (0, self.max_state_dim - actions.shape[-1]))
             model_inputs["actions"] = actions.view(-1, self.chunk_size, self.max_state_dim)
 
         if state is not None:
-            state = (torch.tensor(state) - torch.tensor(self.state_mean)) / (torch.tensor(self.state_std) + 1e-08)
+            state = self.normalize(torch.as_tensor(state, dtype=torch.float32), "state")
             if state.shape[-1] < self.max_state_dim:
                 state = F.pad(state, (0, self.max_state_dim - state.shape[-1]))
             model_inputs["state"] = state.view(-1, self.max_state_dim)
 
         return BatchFeature(data=model_inputs, tensor_type=return_tensors)
+
+    def normalize(self, values: torch.Tensor, feature: str) -> torch.Tensor:
+        """Normalizes `state` or `actions` with the dataset mean and standard deviation."""
+        mean, std = getattr(self, f"{feature}_mean"), getattr(self, f"{feature}_std")
+        if mean is None or std is None:
+            raise ValueError(
+                f"Processing `{feature}` needs `{feature}_mean` and `{feature}_std`. Pass the statistics of the "
+                "dataset the checkpoint was trained on when creating the processor."
+            )
+        return (values - torch.tensor(mean)) / (torch.tensor(std) + 1e-08)
 
     @property
     def model_input_names(self):
@@ -431,7 +439,7 @@ class PI0Model(PI0PreTrainedModel):
         token_offset = image_token_rank - camera_rank * tokens_per_image
         camera_slot = pixel_attention_mask.cumsum(-1) - 1
         camera_match = (camera_slot[:, None, :] == camera_rank[..., None]) & pixel_attention_mask[:, None, :]
-        feature_index = camera_match.int().argmax(-1) * tokens_per_image + token_offset
+        feature_index = (camera_match.int().argmax(-1) * tokens_per_image + token_offset).to(image_features.device)
         image_embeds = image_features.gather(1, feature_index[..., None].expand(-1, -1, hidden_size))
 
         inputs_embeds = self.vlm.get_input_embeddings()(input_ids.masked_fill(special_image_mask, 0))
