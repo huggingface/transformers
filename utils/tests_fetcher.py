@@ -786,7 +786,7 @@ def create_reverse_dependency_tree() -> list[tuple[str, str]]:
     all_modules = list(PATH_TO_TRANSFORMERS.glob("**/*.py"))
     all_modules = [x for x in all_modules if not ("models" in x.parts and x.parts[-1].startswith("convert_"))]
     all_modules += list(PATH_TO_TESTS.glob("**/*.py"))
-    all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
+    all_modules = [mod.relative_to(PATH_TO_REPO).as_posix() for mod in all_modules]
     edges = [(dep, mod) for mod in all_modules for dep in get_module_dependencies(mod, cache=cache)]
     edges += create_backbone_edges()
     return list(set(edges))
@@ -868,7 +868,7 @@ def create_reverse_dependency_map() -> dict[str, list[str]]:
     all_modules = list(PATH_TO_TRANSFORMERS.glob("**/*.py"))
     all_modules = [x for x in all_modules if not ("models" in x.parts and x.parts[-1].startswith("convert_"))]
     all_modules += list(PATH_TO_TESTS.glob("**/*.py"))
-    all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
+    all_modules = [mod.relative_to(PATH_TO_REPO).as_posix() for mod in all_modules]
     # Compute the direct dependencies of all modules.
     direct_deps = {m: get_module_dependencies(m, cache=cache) for m in all_modules}
 
@@ -943,11 +943,11 @@ def create_reverse_dependency_map() -> dict[str, list[str]]:
                 test_model_dir / f"{test_prefix}_{model_name}.py",
                 processing_test,
             ]
-            test_files = [str(t.relative_to(PATH_TO_REPO)) for t in candidate_tests if t.is_file()]
+            test_files = [t.relative_to(PATH_TO_REPO).as_posix() for t in candidate_tests if t.is_file()]
             if not test_files:
                 continue
             for src_file in src_files:
-                src_key = str(src_file.relative_to(PATH_TO_REPO))
+                src_key = src_file.relative_to(PATH_TO_REPO).as_posix()
                 existing = set(reverse_map.get(src_key, []))
                 for test_file in test_files:
                     if test_file not in existing:
@@ -1194,7 +1194,8 @@ JOB_TO_TEST_FILE = {
     # torch-light.
     "tests_non_model": r"tests/(?!peft_integration/|conftest_tests/|repo_utils/)[^/]*?/test_.*\.py",
     "tests_training_ci": r"tests/models/.*/test_modeling_.*",
-    "tests_tensor_parallel_ci": r"(tests/models/.*/test_modeling_.*|tests/tensor_parallel(?:/test_tensor_parallel\.py)?)",
+    "tests_tensor_parallel_ci": r"(tests/models/.*/test_modeling_.*|tests/tensor_parallel(?:/test_.*\.py)?)",
+    "tests_expert_parallel_ci": r"(tests/models/.*/test_modeling_.*|tests/expert_parallel(?:/test_.*\.py)?)",
     "tests_fsdp_ci": r"(tests/models/.*/test_modeling_.*|tests/test_fsdp_mixin\.py)",
     "tests_peft_integration": r"tests/peft_integration/test_.*\.py",
 }

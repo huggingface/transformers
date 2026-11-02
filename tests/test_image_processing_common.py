@@ -11,17 +11,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import importlib
 import inspect
 import json
 import os
 import pathlib
+import pickle
+import subprocess
 import sys
 import tempfile
+import textwrap
 import warnings
 from copy import deepcopy
 from typing import Any
-from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -42,7 +43,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import import_utils, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 
 if is_torch_available():
@@ -279,6 +280,10 @@ class ImageProcessingTester:
             torchify=torchify,
         )
 
+    def prepare_processor_inputs(self, **kwargs):
+        """Returns dict with kwargs to call the image processor with. `kwargs` are passed to `prepare_image_inputs`."""
+        return {"images": self.prepare_image_inputs(**kwargs)}
+
     def prepare_semantic_segmentation_inputs_ade20k(self, batched: bool = False):
         """Loads image/segmentation map pairs from ADE20k as PIL images."""
         num_inputs = 2 if batched else 1
@@ -334,6 +339,10 @@ class ImageProcessingTester:
 class ImageProcessingTestMixin:
     # Must be set by subclass
     image_processor_tester_class = None
+
+    # Models can allow larger individual pixel differences between image backends without
+    # relaxing the mean-error limit or exact comparisons of integer outputs.
+    backend_equivalence_atol = 1e-1
 
     test_cast_dtype = None
 
@@ -425,7 +434,11 @@ class ImageProcessingTestMixin:
         reference_encoding = encodings[reference_backend]
         for backend_name in backend_names[1:]:
             self._assert_encodings_equivalence(
-                reference_encoding, encodings[backend_name], reference_backend, backend_name
+                reference_encoding,
+                encodings[backend_name],
+                reference_backend,
+                backend_name,
+                atol=self.backend_equivalence_atol,
             )
 
     @require_vision
@@ -448,7 +461,11 @@ class ImageProcessingTestMixin:
         reference_encoding = encodings[reference_backend]
         for backend_name in backend_names[1:]:
             self._assert_encodings_equivalence(
-                reference_encoding, encodings[backend_name], reference_backend, backend_name
+                reference_encoding,
+                encodings[backend_name],
+                reference_backend,
+                backend_name,
+                atol=self.backend_equivalence_atol,
             )
 
     def _assert_has_attributes(self, processor, expected_attributes: dict[str, Any]) -> None:
@@ -619,46 +636,58 @@ class ImageProcessingTestMixin:
                     dict1_common, dict2_common, f"Backends {backend1} and {backend2} differ in common keys"
                 )
 
-    def test_pil_can_load_without_torchvision(self):
-        """Tests that we can init/load PIL-backend processors even when no torchvision is installed."""
-
+    @slow
+    def test_pil_can_run_without_torchvision(self):
+        """Tests that we can run PIL-backend processors even when no torchvision is installed."""
         if "pil" not in self.image_processing_classes:
             self.skipTest("Skipping test: no PIL backend processor found!")
 
         image_processing_class = self.image_processing_classes["pil"]
-        test_file_path = pathlib.Path(sys.modules[self.__class__.__module__].__file__).resolve()
-        model_name = test_file_path.parent.name
+        image_processor = image_processing_class(**self.image_processor_tester.prepare_image_processor_dict())
+        processor_inputs = self.image_processor_tester.prepare_processor_inputs(equal_resolution=False)
+        expected_outputs = image_processor(**processor_inputs, return_tensors=None)
 
-        # Try to init, save and load back a PIL processor in an env with no torchvision
-        with patch.dict(
-            import_utils.BACKENDS_MAPPING,
-            {"torchvision": (lambda: False, import_utils.BACKENDS_MAPPING["torchvision"][1])},
-        ):
-            module = importlib.import_module(f"transformers.models.{model_name}")
+        script = textwrap.dedent(
+            """
+            import pickle
+            import sys
+            sys.modules["torchvision"] = None   # raises ImportError on `import torchvision`
 
-            module_name = f"transformers.models.{model_name}.image_processing_pil_{model_name}"
-            module = importlib.import_module(module_name)
+            from transformers import AutoImageProcessor
 
-            # Restore the real module state afterwards to not drag patches module into other tests
-            self.addCleanup(importlib.reload, module)
+            processor_dir, class_name, inputs_path, outputs_path = sys.argv[1:]
+            processor = AutoImageProcessor.from_pretrained(processor_dir, backend="pil")
+            assert type(processor).__name__ == class_name, type(processor)
 
-            with patch.dict(
-                import_utils.BACKENDS_MAPPING,
-                {"torchvision": (lambda: False, import_utils.BACKENDS_MAPPING["torchvision"][1])},
-            ):
-                importlib.reload(module)
-                image_processing_class = getattr(module, image_processing_class.__name__)
+            with open(inputs_path, "rb") as f:
+                processor_inputs = pickle.load(f)
 
-                image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
-                pil_processor = image_processing_class(**image_processor_dict)
+            outputs = processor(**processor_inputs, return_tensors=None)
 
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    pil_processor.save_pretrained(tmpdirname)
-                    reloaded_processor = AutoImageProcessor.from_pretrained(tmpdirname, backend="pil")
+            with open(outputs_path, "wb") as f:
+                # getattr only required because idefics returns pixel_values instead of BatchFeature
+                pickle.dump(getattr(outputs, "data", outputs), f)
+            """
+        )
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            image_processor.save_pretrained(tmpdirname)
 
-                    # importlib.reload() creates a new class object, so we can't checl `isinstance`
-                    self.assertEqual(reloaded_processor.__class__.__name__, image_processing_class.__name__)
-                    self.assertEqual(reloaded_processor.__class__.__module__, image_processing_class.__module__)
+            inputs_path = os.path.join(tmpdirname, "inputs.pkl")
+            outputs_path = os.path.join(tmpdirname, "outputs.pkl")
+            with open(inputs_path, "wb") as f:
+                pickle.dump(processor_inputs, f)
+
+            result = subprocess.run(
+                [sys.executable, "-c", script, tmpdirname, image_processing_class.__name__, inputs_path, outputs_path],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+            with open(outputs_path, "rb") as f:
+                outputs = pickle.load(f)
+        # getattr only required because idefics returns pixel_values instead of BatchFeature
+        np.testing.assert_equal(outputs, getattr(expected_outputs, "data", expected_outputs))
 
     def test_init_without_params(self):
         for image_processing_class in self.image_processing_classes.values():

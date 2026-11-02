@@ -513,6 +513,7 @@ class SamHQVisionNeck(nn.Module):
 
 
 class SamHQVisionEncoder(SamHQPreTrainedModel):
+    config: SamHQVisionConfig
     _can_record_outputs = {
         "hidden_states": SamHQVisionLayer,
         "attentions": SamHQVisionAttention,
@@ -1237,7 +1238,7 @@ class SamHQModel(SamHQPreTrainedModel):
         "prompt_encoder.shared_embedding.positional_embedding": "shared_image_embedding.positional_embedding"
     }
 
-    def __init__(self, config):
+    def __init__(self, config: SamHQConfig):
         super().__init__(config)
         self.shared_image_embedding = SamHQPositionalEmbedding(config.vision_config)
         self.vision_encoder = SamHQVisionEncoder(config.vision_config)

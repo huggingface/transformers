@@ -1240,7 +1240,7 @@ class LongT5PreTrainedModel(PreTrainedModel):
 
 
 class LongT5Stack(LongT5PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LongT5Config):
         super().__init__(config)
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)

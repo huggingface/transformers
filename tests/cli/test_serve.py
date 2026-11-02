@@ -21,14 +21,14 @@ import json
 import socket
 import time
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from huggingface_hub.utils import httpx
 
 from transformers.cli.serve import Serve
 from transformers.cli.serving.chat_completion import ChatCompletionHandler
 from transformers.cli.serving.completion import CompletionHandler
-from transformers.cli.serving.model_manager import ModelManager, TimedModel
+from transformers.cli.serving.model_manager import METAL_FLASH_ATTN, ModelManager, TimedModel
 from transformers.cli.serving.response import ResponseHandler, compute_usage
 from transformers.cli.serving.server import build_server
 from transformers.cli.serving.systemone import SystemOneHandler
@@ -529,6 +529,13 @@ class TestModelManager(unittest.TestCase):
     def test_quantization_config_none(self):
         mm = ModelManager()
         self.assertIsNone(mm.get_quantization_config())
+
+    def test_metal_flash_attn_default_only_with_continuous_batching(self):
+        resolve = ModelManager._resolve_attn_implementation
+        with patch("transformers.utils.import_utils.is_kernels_available", return_value=True):
+            self.assertEqual(resolve(None, "mps", continuous_batching=True), METAL_FLASH_ATTN)
+            self.assertIsNone(resolve(None, "mps", continuous_batching=False))
+            self.assertEqual(resolve("sdpa", "mps", continuous_batching=True), "sdpa")
 
 
 class TestTimedModel(unittest.TestCase):

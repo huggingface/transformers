@@ -1004,7 +1004,7 @@ class MarianDecoderWrapper(MarianPreTrainedModel):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: MarianConfig):
         super().__init__(config)
         self.decoder = MarianDecoder(config)
         self.post_init()
@@ -1019,7 +1019,7 @@ class MarianForCausalLM(MarianPreTrainedModel, GenerationMixin):
         "lm_head.weight": "model.decoder.embed_tokens.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: MarianConfig):
         config.is_decoder = True
         config.is_encoder_decoder = False
         super().__init__(config)
