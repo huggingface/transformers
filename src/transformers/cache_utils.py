@@ -1429,14 +1429,8 @@ DYNAMIC_LAYER_TYPE_MAPPING = {
     # Hybrid layers carry both a linear-attention state and a dynamic-attention state.
     "hybrid": LinearAttentionAndFullAttentionLayer,
     "hybrid_sliding": LinearAttentionAndSlidingWindowAttentionLayer,
-    # Dummy layer type for KV sharing layers
+    # Dummy layer type for shared KV layers, or layers with legacy name such as "moe" or "mlp" without attention
     "dummy": DummyLayer,
-    # Note: we want `moe` and `mlp` layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from
-    # attention layers. Since they will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
-    # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skipthe indices
-    # we don't need
-    "moe": LinearAttentionLayer,
-    "mlp": LinearAttentionLayer,
 }
 # Same but for StaticCache
 STATIC_LAYER_TYPE_MAPPING = {
@@ -1451,14 +1445,8 @@ STATIC_LAYER_TYPE_MAPPING = {
     # Hybrid layers carry both a linear-attention state and a dynamic-attention state.
     "hybrid": LinearAttentionAndStaticFullAttentionLayer,
     "hybrid_sliding": LinearAttentionAndStaticSlidingWindowAttentionLayer,
-    # Dummy layer type for KV sharing layers
+    # Dummy layer type for shared KV layers, or layers with legacy name such as "moe" or "mlp" without attention
     "dummy": DummyLayer,
-    # Note: we want `moe` and `mlp` layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from
-    # attention layers. Since they will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
-    # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skipthe indices
-    # we don't need
-    "moe": LinearAttentionLayer,
-    "mlp": LinearAttentionLayer,
 }
 
 
@@ -1946,6 +1934,9 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], lis
         layer_types = [
             "dummy" if mode == "reuse" else layer_type for layer_type, mode in zip(layer_types, kv_sharing_modes)
         ]
+
+    # Some models may have "moe" or "mlp" as layer_type, for layer that do not need any attention - replace them with "dummy"
+    layer_types = ["dummy" if layer_type in ("moe", "mlp") else layer_type for layer_type in layer_types]
 
     # Prepare additional kwargs that may be needed to __init__ each cache layer
     per_layer_kwargs = []
