@@ -20,22 +20,6 @@ if is_hqq_available():
 _is_torch_greater_or_equal_than_2_7 = is_torch_greater_or_equal("2.7", accept_dev=True)
 
 
-class KVSharingDict(UserDict[str, tuple[torch.Tensor, ...]]):
-    """
-    A lightweight dict-like container used to share the KV cache between layers. Maps key -> tuple of cache tensors.
-    Inherits from UserDict so it won't trip isinstance(..., dict) and thus it won't be altered by torch's FSDP2 helpers,
-    which would be an issue. It also has a .to() method so that accelerate's `send_to_device` can move it from device to
-    device. Because the device map usually maps contiguous layers to the same device, the .to() method is in-place: this
-    means that once we enter a new layer group on a new device, the shared KV states don't need to be moved again.
-    """
-
-    def to(self, device: torch.device, non_blocking: bool = False) -> "KVSharingDict":
-        keys = list(self.keys())
-        for key in keys:
-            self[key] = tuple(v.to(device, non_blocking=non_blocking) for v in self[key])
-        return self
-
-
 class CacheLayerMixin(ABC):
     """Base, abstract class for a single layer's cache."""
 
@@ -2406,3 +2390,19 @@ class DFlashCache(DynamicCache):
         # all the kv length is shifted by the previous number of accepted tokens, that will be added to k/v inside the Attention
         kv_length, kv_offset = super().get_mask_sizes(query_length, layer_idx)
         return kv_length + self._previous_number_of_accepted_tokens, kv_offset
+
+
+class KVSharingDict(UserDict[str, tuple[torch.Tensor, ...]]):
+    """
+    A lightweight dict-like container used to share the KV cache between layers. Maps key -> tuple of cache tensors.
+    Inherits from UserDict so it won't trip isinstance(..., dict) and thus it won't be altered by torch's FSDP2 helpers,
+    which would be an issue. It also has a .to() method so that accelerate's `send_to_device` can move it from device to
+    device. Because the device map usually maps contiguous layers to the same device, the .to() method is in-place: this
+    means that once we enter a new layer group on a new device, the shared KV states don't need to be moved again.
+    """
+
+    def to(self, device: torch.device, non_blocking: bool = False) -> "KVSharingDict":
+        keys = list(self.keys())
+        for key in keys:
+            self[key] = tuple(v.to(device, non_blocking=non_blocking) for v in self[key])
+        return self
