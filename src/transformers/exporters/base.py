@@ -106,21 +106,29 @@ class ExportArtifacts(Mapping, PushToHubMixin):
             )
         return next(iter(self.components.values())).program
 
+    @property
+    def multimodal(self) -> bool:
+        """Whether this is a multimodal split ([`~HfExporter.export_multimodal`], or a multimodal generation export):
+        told by its component names, which unlike a generation export's need no flag."""
+        from .runtimes.multimodal import MULTIMODAL_COMPONENTS
+
+        return {"language_model", "text_embeddings_model"} <= self.components.keys() <= MULTIMODAL_COMPONENTS
+
     def runtime(self, device=None) -> ExportedModel:
         """Run this export on `device` (the backend's default when `None`), as an [`ExportedModel`]: a single graph
-        ([`~HfExporter.export`]), or a multimodal split ([`~HfExporter.export_multimodal`]) as an
-        [`ExportedMultimodalModel`]."""
+        ([`~HfExporter.export`]), a multimodal split ([`~HfExporter.export_multimodal`]) as an
+        [`ExportedMultimodalModel`], or a generation export ([`~HfExporter.export_for_generation`]) that `generate`
+        drives: an [`ExportedModelForCausalLM`], [`ExportedMultimodalModelForCausalLM`] or
+        [`ExportedModelForSeq2SeqLM`]."""
         from .auto import get_runner_class
-        from .runtimes.multimodal import MULTIMODAL_COMPONENTS, ExportedMultimodalModel
+        from .runtimes.generation import (
+            ExportedModelForCausalLM,
+            ExportedModelForSeq2SeqLM,
+            ExportedMultimodalModelForCausalLM,
+        )
+        from .runtimes.multimodal import ExportedMultimodalModel
 
-        multimodal = {"language_model", "text_embeddings_model"} <= self.components.keys() <= MULTIMODAL_COMPONENTS
-        if self.generation:
-            raise ValueError(
-                f"This is a generation export ({list(self.components)}), run by a generation loop; that runtime isn't "
-                "available yet. `runtime()` runs a single graph (`HfExporter.export`) or a multimodal split "
-                "(`HfExporter.export_multimodal`)."
-            )
-        if len(self.components) != 1 and not multimodal:
+        if len(self.components) != 1 and not self.multimodal and not self.generation:
             raise ValueError(
                 f"This export has components {list(self.components)}, whose runtime isn't available yet. `runtime()` "
                 "runs a single graph (`HfExporter.export`) or a multimodal split (`HfExporter.export_multimodal`)."
@@ -130,7 +138,15 @@ class ExportArtifacts(Mapping, PushToHubMixin):
             name: runner_class.from_program(component.program, component.metadata, device)
             for name, component in self.components.items()
         }
-        if multimodal:
+        if self.generation:
+            if "encoder_model" in runners:
+                generator_class = ExportedModelForSeq2SeqLM
+            elif self.multimodal:
+                generator_class = ExportedMultimodalModelForCausalLM
+            else:
+                generator_class = ExportedModelForCausalLM
+            model = generator_class(runners, self.config, self.generation_config)
+        elif self.multimodal:
             model = ExportedMultimodalModel(runners, self.config)
         else:
             model = ExportedModel(next(iter(runners.values())), self.config)

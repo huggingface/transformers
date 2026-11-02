@@ -50,19 +50,9 @@ class ExportedMultimodalModel(ExportedModel):
         ]
 
     def __call__(self, **kwargs) -> Any:
-        input_ids = kwargs["input_ids"]
-        embedded = self.text_runner(input_ids=input_ids)
-        inputs_embeds = embedded["inputs_embeds"] if isinstance(embedded, dict) else embedded
-        features = {}
-        for spec, runner in self.modality_runners:
-            if all(kwargs.get(key) is None for key in spec.feature_keys):
-                continue
-            features[spec.component] = self._features(spec, runner, kwargs)
-            mask = (input_ids == getattr(self.config, spec.token_field)).unsqueeze(-1).to(inputs_embeds.device)
-            inputs_embeds = inputs_embeds.masked_scatter(mask, features[spec.component].to(inputs_embeds))
+        embedded, features = self.embed(**kwargs)
         # M-RoPE positions come from the token ids and grids, which the language model no longer takes.
-        inputs = precompute_export_inputs(self.config, kwargs)
-        inputs["inputs_embeds"] = inputs_embeds
+        inputs = {**precompute_export_inputs(self.config, kwargs), **embedded}
         traced = self.runner.metadata.kwargs
         outputs = self.runner(**{name: value for name, value in inputs.items() if name in traced})
         # The model returns its image features too, which the language model never sees.
@@ -71,6 +61,23 @@ class ExportedMultimodalModel(ExportedModel):
         ):
             outputs["image_hidden_states"] = features["vision_embeddings_model"]
         return outputs
+
+    def embed(self, **kwargs) -> tuple[dict, dict]:
+        """`input_ids` as `inputs_embeds` (plus `per_layer_inputs` when the embedder returns them), each present
+        modality's features scattered into its placeholder rows; and the features, by component."""
+        input_ids = kwargs["input_ids"]
+        embedded = self.text_runner(input_ids=input_ids)
+        embedded = dict(embedded) if isinstance(embedded, dict) else {"inputs_embeds": embedded}
+        inputs_embeds = embedded["inputs_embeds"]
+        features = {}
+        for spec, runner in self.modality_runners:
+            mask = (input_ids == getattr(self.config, spec.token_field)).unsqueeze(-1).to(inputs_embeds.device)
+            if all(kwargs.get(key) is None for key in spec.feature_keys) or not mask.any():
+                continue
+            features[spec.component] = self._features(spec, runner, kwargs)
+            inputs_embeds = inputs_embeds.masked_scatter(mask, features[spec.component].to(inputs_embeds))
+        embedded["inputs_embeds"] = inputs_embeds
+        return embedded, features
 
     def _features(self, spec: ModalitySpec, runner: ModelRunner, kwargs: dict) -> torch.Tensor:
         """Run one modality's graph on its own inputs, as its getter was called: features for its placeholder rows."""

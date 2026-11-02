@@ -50,6 +50,7 @@ from ..utils.import_utils import is_openvino_available, is_torch_available
 from .configs import ExportFormat, OpenVINOConfig
 from .exporter_dynamo import DynamoExporter, is_cache_object
 from .exporter_onnx import disambiguate_io_names, patch_model_outputs
+from .metadata import load_treespec
 from .utils import (
     BATCH_INPUTS,
     apply_fx_node_fixes,
@@ -170,9 +171,16 @@ class OpenVINOExporter(DynamoExporter):
 
 def update_openvino_metadata(metadata: dict[str, Any], ov_model: openvino.Model) -> None:
     """Record the OpenVINO model's own port names: dotted leaf paths, and once `stateful`, no cache ports but a
-    `beam_idx` input."""
+    `beam_idx` input. The output spec then drops the fields whose every leaf was folded into state."""
     metadata["input_names"] = [port.get_any_name() for port in ov_model.inputs]
     metadata["output_names"] = [port.get_any_name() for port in ov_model.outputs]
+    kept = {name.removeprefix("output.") for name in metadata["output_names"]}
+    spec = load_treespec(metadata["out_spec"])
+    outputs = torch.utils._pytree.tree_unflatten([torch.empty(0) for _ in range(spec.num_leaves)], spec)
+    if isinstance(outputs, Mapping) and not set(get_leaf_tensors(outputs)) <= kept:
+        fields = {key: value for key, value in outputs.items() if set(get_leaf_tensors({key: value})) & kept}
+        pruned = fields if type(outputs) is dict else type(outputs)(**fields)
+        metadata["out_spec"] = torch.utils._pytree.treespec_dumps(torch.utils._pytree.tree_structure(pruned))
 
 
 def _fix_exported_program(exported_program: ExportedProgram) -> tuple[ExportedProgram, Any]:
