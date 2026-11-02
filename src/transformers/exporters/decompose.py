@@ -40,7 +40,7 @@ from .components import (
     PatchVisionEncoder,
     TokenEmbedder,
 )
-from .precompute import _find_config_attr, precompute_export_inputs
+from .precompute import _find_config_attr, get_rope_index_from_config, precompute_export_inputs
 from .utils import patch_attributes
 
 
@@ -683,29 +683,70 @@ def embedded_inputs(call_inputs: dict, components: dict) -> dict:
     return call_inputs
 
 
-# What a deepstack decoder adds at the visual positions inside its layers (Qwen3-VL's, Granite4-Vision's names).
-DEEPSTACK_INPUTS = ("visual_pos_masks", "deepstack_visual_embeds", "vision_mask", "deepstack_features")
+class DeepstackInputs(NamedTuple):
+    """A deepstack decoder's per-layer vision features, beside its mask: their name, whether they come by decoder layer
+    (`{layer: features}`) rather than as a list from the first layer, and the rank of the mask."""
+
+    features: str
+    by_layer: bool
+    mask_rank: int
+
+
+# The deepstack decoders, by their mask's name: Qwen3-VL's and Granite4-Vision's.
+DEEPSTACK_INPUTS = {
+    "visual_pos_masks": DeepstackInputs("deepstack_visual_embeds", by_layer=False, mask_rank=2),
+    "vision_mask": DeepstackInputs("deepstack_features", by_layer=True, mask_rank=3),
+}
+
+
+def deepstack_layers(mask_name: str, features) -> list:
+    """The decoder layers `features` are for, as the decoder of `mask_name` lists them."""
+    return list(features) if DEEPSTACK_INPUTS[mask_name].by_layer else list(range(len(features)))
+
+
+def dense_deepstack(mask_name: str, like: torch.Tensor, layers, parts=()) -> dict[str, Any]:
+    """A deepstack decoder's inputs over every position, as its graph is traced and run: an all-True mask, and each
+    layer's features with zeros wherever none of `parts` sets them. Adding zeros changes nothing, and every step takes
+    the same shapes, a decode step (no image rows) included.
+
+    Args:
+        mask_name: The decoder's mask, a key of `DEEPSTACK_INPUTS`.
+        like: The step's `inputs_embeds`, `[batch, sequence, hidden]`.
+        layers: The decoder layers that take features (`deepstack_layers`).
+        parts: `(rows, features)` per modality: a `[batch, sequence]` mask of its rows, and its features by layer,
+            `[rows, hidden]` each.
+    """
+    spec = DEEPSTACK_INPUTS[mask_name]
+    batch_size, length, hidden_size = like.shape
+    dense = {layer: like.new_zeros(batch_size * length, hidden_size) for layer in layers}
+    for rows, features in parts:
+        for layer, values in features.items() if spec.by_layer else enumerate(features):
+            dense[layer][rows.reshape(-1)] = values.to(like)
+    mask = torch.ones(batch_size, length, *[1] * (spec.mask_rank - 2), dtype=torch.bool, device=like.device)
+    return {mask_name: mask, spec.features: dense if spec.by_layer else list(dense.values())}
 
 
 def _main_inputs(model: PreTrainedModel, inputs: dict[str, Any], decoder_call: dict[str, Any]) -> dict[str, Any]:
     """`model`'s own kwargs on `inputs_embeds`: the embeddings its text stack received, features scattered in,
     replace the token ids and modality inputs. What the model derived from those and can't recompute without them
-    comes along: M-RoPE positions, computed by the config-only precompute as the runtime computes them, and deepstack
-    features."""
+    comes along: M-RoPE positions, computed from the config as the runtime computes them, and deepstack features."""
     if decoder_call.get("inputs_embeds") is None:
         return inputs
     main_inputs = copy.copy(inputs)
     accepted = inspect.signature(model.forward).parameters
+    # The rope index alone: the precompute's modality preparers reuse the name (MiniCPM-V's vision `position_ids`).
     if main_inputs.get("position_ids") is None and "position_ids" in accepted:
-        position_ids = precompute_export_inputs(model.config, inputs).get("position_ids")
-        if position_ids is not None:
-            main_inputs["position_ids"] = position_ids
+        if (rope_index := get_rope_index_from_config(model.config, inputs)) is not None:
+            main_inputs["position_ids"] = rope_index[0]
     main_inputs = embedded_inputs(main_inputs, {})
     main_inputs.pop("input_ids", None)
     main_inputs["inputs_embeds"] = decoder_call["inputs_embeds"]
-    for name in DEEPSTACK_INPUTS:
-        if decoder_call.get(name) is not None:
-            main_inputs[name] = decoder_call[name]
+    for mask_name, spec in DEEPSTACK_INPUTS.items():
+        if (mask := decoder_call.get(mask_name)) is not None:
+            features = decoder_call[spec.features]
+            rows = mask.reshape(mask.shape[:2])
+            layers = deepstack_layers(mask_name, features)
+            main_inputs.update(dense_deepstack(mask_name, main_inputs["inputs_embeds"], layers, [(rows, features)]))
     return main_inputs
 
 
@@ -753,7 +794,7 @@ def decompose_for_generation(
     if multimodal:
         split = decompose_multimodal(prompt.module, prompt.inputs, recorded_features, inputs.get("input_ids"))
         # The decode component serves the text stack; keeping `language_model` would duplicate its parameters.
-        split.pop("language_model", None)
+        language_model = split.pop("language_model", None)
         components.update(split)
 
     writes_cross_cache = False
@@ -778,10 +819,20 @@ def decompose_for_generation(
         decode = components["decode"] = replace(
             decode, inputs={**decode.inputs, "token_type_ids": token_types.new_zeros(text.shape[:2])}
         )
+    deepstack = {}
     if multimodal:
         decode = components["decode"] = replace(decode, inputs=embedded_inputs(decode.inputs, components))
+        for mask_name, spec in DEEPSTACK_INPUTS.items():
+            if language_model is not None and mask_name in language_model.inputs:
+                deepstack = {name: language_model.inputs[name] for name in (mask_name, spec.features)}
+                layers = deepstack_layers(mask_name, deepstack[spec.features])
+                # A decode step has no image rows: zeros, so the one graph takes the prompt's features too.
+                step = dense_deepstack(mask_name, decode.inputs["inputs_embeds"], layers)
+                decode = components["decode"] = replace(decode, inputs={**decode.inputs, **step})
     # The prefill step as the decode graph takes it.
-    components["prefill"] = replace(decode, inputs=_prefill_call(model, prompt.inputs, decode.inputs, components))
+    components["prefill"] = replace(
+        decode, inputs=_prefill_call(model, {**prompt.inputs, **deepstack}, decode.inputs, components)
+    )
     decode_name = "decoder_model" if "encoder" in components else "language_model" if multimodal else "model"
     names = {"decode": decode_name, "encoder": "encoder_model"}
     return {names.get(name, name): component for name, component in components.items()}

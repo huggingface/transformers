@@ -114,12 +114,13 @@ class ExportArtifacts(Mapping, PushToHubMixin):
 
         return {"language_model", "text_embeddings_model"} <= self.components.keys() <= MULTIMODAL_COMPONENTS
 
-    def runtime(self, device=None) -> ExportedModel:
+    def runtime(self, device=None, **runner_kwargs) -> ExportedModel:
         """Run this export on `device` (the backend's default when `None`), as an [`ExportedModel`]: a single graph
         ([`~HfExporter.export`]), a multimodal split ([`~HfExporter.export_multimodal`]) as an
         [`ExportedMultimodalModel`], or a generation export ([`~HfExporter.export_for_generation`]) that `generate`
         drives: an [`ExportedModelForCausalLM`], [`ExportedMultimodalModelForCausalLM`] or
-        [`ExportedModelForSeq2SeqLM`]."""
+        [`ExportedModelForSeq2SeqLM`]. `runner_kwargs` go to the backend's runners: `providers` and `session_options`
+        for ONNX Runtime."""
         from .auto import get_runner_class
         from .runtimes.generation import (
             ExportedModelForCausalLM,
@@ -135,7 +136,7 @@ class ExportArtifacts(Mapping, PushToHubMixin):
             )
         runner_class = get_runner_class(self.export_format)
         runners = {
-            name: runner_class.from_program(component.program, component.metadata, device)
+            name: runner_class.from_program(component.program, component.metadata, device, **runner_kwargs)
             for name, component in self.components.items()
         }
         if self.generation:
