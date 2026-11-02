@@ -124,12 +124,6 @@ class NVFP4QuantizerValidationTest(unittest.TestCase):
     def setUp(self):
         self.quantizer = NVFP4HfQuantizer(NVFP4Config(), pre_quantized=False)
 
-    def test_rejects_pre_quantized_checkpoints(self):
-        quantizer = NVFP4HfQuantizer(NVFP4Config(), pre_quantized=True)
-
-        with self.assertRaisesRegex(ValueError, "pre-quantized NVFP4"):
-            quantizer.validate_environment(device_map={"": "cuda"})
-
     @patch("transformers.quantizers.quantizer_nvfp4.is_kernels_available", return_value=True)
     @patch("torch.cuda.is_available", return_value=True)
     @patch("torch.cuda.get_device_capability", return_value=(10, 0))

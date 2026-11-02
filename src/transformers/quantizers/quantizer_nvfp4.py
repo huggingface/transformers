@@ -50,8 +50,8 @@ class NVFP4HfQuantizer(HfQuantizer):
         return 0.5
 
     def validate_environment(self, device_map, **kwargs):
-        if self.pre_quantized:
-            raise ValueError("Loading pre-quantized NVFP4 checkpoints is not supported yet.")
+        if self.pre_quantized and self.quantization_config.dequantize:
+            return  # the `dequantize` load operation is pure torch
         if not is_kernels_available():
             raise ImportError(
                 "NVFP4 quantization requires the `kernels` package. "
@@ -94,6 +94,9 @@ class NVFP4HfQuantizer(HfQuantizer):
         return isinstance(module, NVFP4Linear) and tensor_name == "weight"
 
     def _process_model_before_weight_loading(self, model: PreTrainedModel, **kwargs):
+        if self.pre_quantized and self.quantization_config.dequantize:
+            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
+            return
         from ..integrations.nvfp4 import replace_with_nvfp4_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
@@ -105,6 +108,13 @@ class NVFP4HfQuantizer(HfQuantizer):
         from ..integrations.nvfp4 import NVFP4Quantize
 
         return NVFP4Quantize(self.quantization_device)
+
+    serialized_names = {"weight": ["weight", "weight_sf", "weight_sf_rowmajor", "weight_global_scale"]}
+
+    def get_load_operations(self):
+        from ..integrations.nvfp4 import NVFP4Dequantize, NVFP4Deserialize
+
+        return {"deserialize": NVFP4Deserialize, "dequantize": NVFP4Dequantize}
 
     @property
     def is_serializable(self) -> bool:

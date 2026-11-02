@@ -146,6 +146,7 @@ LOADING_ATTRIBUTES_CONFIG_TYPES = (
     Mxfp4Config,
     MetalConfig,
     FineGrainedFP8Config,
+    NVFP4Config,
 )
 
 logger = logging.get_logger(__name__)
@@ -335,6 +336,72 @@ def register_quantizer(name: str):
     return register_quantizer_fn
 
 
+def is_quantization_plan(quantization_config) -> bool:
+    "A plan maps glob patterns (like the dtype plan's) to the config quantizing the modules they match"
+    return (
+        isinstance(quantization_config, dict)
+        and len(quantization_config) > 0
+        and all(isinstance(config, (dict, QuantizationConfigMixin)) for config in quantization_config.values())
+    )
+
+
+class QuantizationPlanHfQuantizer(HfQuantizer):
+    """
+    The quantizers of a plan: like the dtype plan's, the glob pattern a module or param matches picks its quantizer,
+    the others stay unquantized. While loading, a param goes through the converters and ops of its quantizer.
+    """
+
+    def __init__(self, quantizers: dict[str, HfQuantizer]):
+        from ..core_model_loading import build_glob_alternation
+
+        self.quantizers = quantizers
+        self.quantization_config = {
+            pattern: quantizer.quantization_config for pattern, quantizer in quantizers.items()
+        }
+        self.pre_quantized = all(quantizer.pre_quantized for quantizer in quantizers.values())
+        self.alternation, self.group_to_pattern, _ = build_glob_alternation(list(quantizers))
+        for quantizer in quantizers.values():
+            quantizer.plan = self
+
+    def quantizer_for(self, name):
+        match = self.alternation.search(name)
+        return self.quantizers[self.group_to_pattern[match.lastgroup]] if match else None
+
+    def param_element_size(self, model, param_name, param):
+        quantizer = self.quantizer_for(param_name)
+        return param.element_size() if quantizer is None else quantizer.param_element_size(model, param_name, param)
+
+    def validate_environment(self, *args, **kwargs):
+        for quantizer in self.quantizers.values():
+            quantizer.validate_environment(*args, **kwargs)
+
+    def update_dtype(self, dtype):
+        for quantizer in self.quantizers.values():
+            dtype = quantizer.update_dtype(dtype)
+        return dtype
+
+    def update_device_map(self, device_map):
+        for quantizer in self.quantizers.values():
+            device_map = quantizer.update_device_map(device_map)
+        return device_map
+
+    def adjust_max_memory(self, max_memory):
+        for quantizer in self.quantizers.values():
+            max_memory = quantizer.adjust_max_memory(max_memory)
+        return max_memory
+
+    def preprocess_model(self, model, **kwargs):
+        for quantizer in self.quantizers.values():
+            quantizer.preprocess_model(model, **kwargs)
+
+    def is_serializable(self):
+        return all(quantizer.is_serializable() for quantizer in self.quantizers.values())
+
+    @property
+    def is_trainable(self):
+        return all(quantizer.is_trainable for quantizer in self.quantizers.values())
+
+
 def get_hf_quantizer(config, quantization_config, device_map, weights_only, user_agent, gguf_file=None):
     if gguf_file is not None:
         if quantization_config is None:
@@ -351,10 +418,33 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
         config.get_text_config(decoder=True), "quantization_config", None
     )
     pre_quantized = quantization_params_from_config is not None
-    if pre_quantized and not AutoHfQuantizer.supports_quant_method(quantization_params_from_config):
+    plan_from_config = is_quantization_plan(quantization_params_from_config)
+    if (
+        pre_quantized
+        and not plan_from_config
+        and not AutoHfQuantizer.supports_quant_method(quantization_params_from_config)
+    ):
         pre_quantized = False
 
-    if pre_quantized or quantization_config is not None:
+    user_plan = is_quantization_plan(quantization_config)
+    if plan_from_config or user_plan:
+        # One quantizer per pattern. Loading attributes update the saved configs: for every pattern (e.g.
+        # `{"dequantize": True}`), or per pattern (a plan of them)
+        plan = quantization_params_from_config if plan_from_config else quantization_config
+        loading_attributes = quantization_config if user_plan else dict.fromkeys(plan, quantization_config)
+        quantizers = {}
+        for pattern, pattern_config in plan.items():
+            if plan_from_config:
+                attributes = loading_attributes.get(pattern)
+                pattern_config = AutoHfQuantizer.merge_quantization_configs(
+                    pattern_config, None if isinstance(attributes, dict) else attributes
+                )
+                for key, value in (attributes if isinstance(attributes, dict) else {}).items():
+                    setattr(pattern_config, key, value)
+            quantizers[pattern] = AutoHfQuantizer.from_config(pattern_config, pre_quantized=plan_from_config)
+        hf_quantizer = QuantizationPlanHfQuantizer(quantizers)
+        config.quantization_config = hf_quantizer.quantization_config
+    elif pre_quantized or quantization_config is not None:
         if pre_quantized:
             config.quantization_config = AutoHfQuantizer.merge_quantization_configs(
                 quantization_params_from_config, quantization_config
@@ -370,7 +460,8 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
         hf_quantizer = None
 
     if hf_quantizer is not None:
-        if gguf_file is not None and hf_quantizer.quantization_config.quant_method != QuantizationMethod.GGUF:
+        quant_method = getattr(hf_quantizer.quantization_config, "quant_method", "plan")
+        if gguf_file is not None and quant_method != QuantizationMethod.GGUF:
             raise ValueError(
                 "You cannot combine Quantization and loading a model from a GGUF file, try again by making sure "
                 "you did not passed a `quantization_config` or that you did not load a quantized model from the Hub."
@@ -384,6 +475,5 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
 
         # In order to ensure popular quantization methods are supported. Can be disable with `disable_telemetry`
         if not getattr(hf_quantizer.quantization_config, "dequantize", False):
-            quant_method = hf_quantizer.quantization_config.quant_method
             user_agent["quant"] = getattr(quant_method, "value", quant_method)
     return hf_quantizer, config, device_map

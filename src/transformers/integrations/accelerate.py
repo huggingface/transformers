@@ -411,12 +411,12 @@ def accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, offload
     if (
         "force_hooks" in inspect.signature(dispatch_model).parameters
         and hf_quantizer is not None
-        and hf_quantizer.quantization_config.quant_method == QuantizationMethod.HQQ
+        and getattr(hf_quantizer.quantization_config, "quant_method", None) == QuantizationMethod.HQQ
     ):
         device_map_kwargs["force_hooks"] = True
     if (
         hf_quantizer is not None
-        and hf_quantizer.quantization_config.quant_method == QuantizationMethod.FBGEMM_FP8
+        and getattr(hf_quantizer.quantization_config, "quant_method", None) == QuantizationMethod.FBGEMM_FP8
         and isinstance(device_map, dict)
         and ("cpu" in device_map.values() or "disk" in device_map.values())
     ):

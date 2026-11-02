@@ -85,6 +85,8 @@ class HfQuantizer(ABC):
     """
 
     requires_calibration = False
+    # In a quantization plan, the plan: it gives each param its quantizer
+    plan: "HfQuantizer | None" = None
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         self.quantization_config = quantization_config
@@ -154,6 +156,10 @@ class HfQuantizer(ABC):
         Check whether a given param needs to be quantized.
         """
         return False
+
+    def quantizer_for(self, name: str) -> "HfQuantizer | None":
+        "The quantizer of the module or param `name`: this one, or in a quantization plan the one of its pattern"
+        return self
 
     def validate_environment(self, *args, **kwargs):
         """
@@ -255,8 +261,8 @@ class HfQuantizer(ABC):
             f"{self.quantization_config.quant_method} has no implementation of `dequantize`, please raise an issue on GitHub."
         )
 
-    @staticmethod
     def get_modules_to_not_convert(
+        self,
         model: "PreTrainedModel",
         skip_modules: list[str] | None = None,
         keep_in_fp32_modules: list[str] | None = None,
@@ -274,6 +280,14 @@ class HfQuantizer(ABC):
             modules_to_not_convert.extend(keep_in_fp32_modules)
 
         modules_to_not_convert = list(set(modules_to_not_convert))
+        # In a quantization plan, the modules whose params belong to another quantizer, or to none
+        if self.plan is not None:
+            modules_to_not_convert += [
+                rf"{re.escape(name)}$"
+                for name, module in model.named_modules()
+                if module._parameters
+                and not any(self.plan.quantizer_for(f"{name}.{param}") is self for param in module._parameters)
+            ]
 
         return modules_to_not_convert
 
@@ -375,7 +389,37 @@ class HfQuantizer(ABC):
                 updated[-1] = converter.copy(
                     all_sources, targets, operations=[dequantize(self)] + converter.operations
                 )
+        if dequantize is not None:
+            updated += self._dequantize_own_name_params(model, dequantize)
         return updated + self.get_weight_conversions()
+
+    def _dequantize_own_name_params(self, model, dequantize):
+        """
+        Dense params stored under their own name, e.g. fused experts `gate_up_proj` with `gate_up_proj_scale_inv`:
+        their companions are the suffixes of the `weight` ones, and the dequantize op gets them together.
+        """
+        from ..core_model_loading import WeightConverter
+
+        serialized = self.serialized_names.get("weight", [])
+        suffixes = [
+            name.removeprefix("weight") for name in serialized if name.startswith("weight") and name != "weight"
+        ]
+        if not suffixes:
+            return []
+        keys = set(model.state_dict())
+        # With their module, e.g. `experts.down_proj`: not `shared_experts.down_proj.weight`
+        names = {
+            ".".join(name.split(".")[-2:])
+            for name, param in model.named_parameters()
+            if param.ndim > 1
+            and name.rpartition(".")[2] not in self.serialized_names
+            and not name.endswith(tuple(suffixes))  # a companion itself
+            and not any(name + suffix in keys for suffix in suffixes)  # the module keeps them
+        }
+        return [
+            WeightConverter([name] + [name + suffix for suffix in suffixes], name, [dequantize(self)])
+            for name in sorted(names)
+        ]
 
 
 class SequentialLlama4TextExperts(ModuleList):

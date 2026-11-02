@@ -889,8 +889,11 @@ class WeightTransform:
         for i, source_pattern in sorted(enumerate(self.source_patterns), key=lambda item: -len(item[1])):
             group_name = f"g{i}"
             pattern = source_pattern.replace("*.", r".*\.")
-            # A pattern ends on a name boundary: `weight` matches `q_proj.weight`, not `q_proj.weight_scale_inv`.
-            # One ending with `_` is the start of a name, e.g. `hc_` for `hc_fn`
+            # A pattern starts and ends on a name boundary: `experts.down_proj` matches `mlp.experts.down_proj`, not
+            # `mlp.shared_experts.down_proj`, and `weight` matches `q_proj.weight`, not `q_proj.weight_scale_inv`. One
+            # ending with `_` is the start of a name, e.g. `hc_` for `hc_fn`
+            if re.match(r"[a-zA-Z0-9]", pattern):
+                pattern = r"(?<!\w)" + pattern
             if re.search(r"[a-zA-Z0-9]$", pattern):
                 pattern += r"(?!\w)"
             branches.append(f"(?P<{group_name}>{pattern})")
@@ -1689,21 +1692,36 @@ def convert_and_load_state_dict_in_model(
     else:
         thread_pool = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
 
-    renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
-    converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
+    def split_conversions(conversions):
+        renamings = [entry for entry in conversions if isinstance(entry, WeightRenaming)]
+        converters = [entry for entry in conversions if isinstance(entry, WeightConverter)]
+        return renamings, converters, {k: converter for converter in converters for k in converter.source_patterns}
+
+    model_conversions = split_conversions(weight_mapping)
+    # A quantization plan loads a param with the converters of the quantizer of its pattern
+    plan_conversions = {
+        quantizer: split_conversions(quantizer.update_weight_conversions(weight_mapping, model))
+        for quantizer in getattr(hf_quantizer, "quantizers", {}).values()
+    }
     param_name_to_load: dict[str, WeightRenaming | WeightConverter] = {}
 
     if dtype_plan != {}:
         dtype_policy_alt, dtype_policy_by_group_name, _ = build_glob_alternation(list(dtype_plan.keys()))
 
-    pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
-
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
+        renamings, converters, pattern_to_converter = model_conversions
         # 1. Rename the key according to all renaming and weight conversion patterns.
         renamed_key, source_pattern = rename_source_key(
             original_key, renamings, converters, base_model_prefix, meta_model_state_dict
         )
+        # Like the dtype plan, the pattern of a quantization plan matching the key picks its quantizer
+        quantizer = hf_quantizer.quantizer_for(renamed_key) if hf_quantizer is not None else None
+        if quantizer is not None and quantizer is not hf_quantizer:
+            renamings, converters, pattern_to_converter = plan_conversions[quantizer]
+            renamed_key, source_pattern = rename_source_key(
+                original_key, renamings, converters, base_model_prefix, meta_model_state_dict
+            )
         if renamed_key not in meta_model_state_dict and original_key in meta_model_state_dict:
             # Key should probably not have been renamed but we might need the `prefix` to be added.
             renamed_key, source_pattern = rename_source_key(
@@ -1725,12 +1743,10 @@ def convert_and_load_state_dict_in_model(
 
             # 3. Handle dtype casting
             needs_quantization = (
-                hf_quantizer
-                and not hf_quantizer.pre_quantized
-                and hf_quantizer.param_needs_quantization(model, renamed_key)
+                quantizer and not quantizer.pre_quantized and quantizer.param_needs_quantization(model, renamed_key)
             )
             if needs_quantization:
-                mapping.quantization_operation = hf_quantizer.get_quantize_ops()
+                mapping.quantization_operation = quantizer.get_quantize_ops()
 
             _dtype = dtype
             if dtype_plan != {} and dtype_policy_alt.search(renamed_key):

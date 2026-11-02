@@ -26,6 +26,7 @@ from ..utils.import_utils import (
     is_kernels_available,
 )
 from .hub_kernels import lazy_load_kernel
+from .mxfp4 import FP4_VALUES
 
 
 if is_torch_available():
@@ -154,6 +155,73 @@ class NVFP4Quantize(ConversionOps):
             output[f"{base}.weight_sf_rowmajor"] = packed_weight.sf_rowmajor
             output[f"{base}.weight_global_scale"] = packed_weight.global_scale
         return output
+
+
+def swizzle_sf(sf_rowmajor: torch.Tensor) -> torch.Tensor:
+    """
+    The block-scaled GEMM layout of row-major FP8 block scales `(rows, cols)`: padded to 128-row x 4-column tiles,
+    each tile stored as 32x16 bytes (rows `r`, `r + 32`, `r + 64`, `r + 96` interleaved).
+    """
+    rows, cols = sf_rowmajor.shape
+    row_tiles, col_tiles = -(-rows // 128), -(-cols // 4)
+    padded = sf_rowmajor.new_zeros(row_tiles * 128, col_tiles * 4)
+    padded[:rows, :cols] = sf_rowmajor
+    tiles = padded.view(row_tiles, 128, col_tiles, 4).permute(0, 2, 1, 3)
+    return tiles.reshape(-1, 4, 32, 4).transpose(1, 2).reshape(-1)
+
+
+class NVFP4Deserialize(ConversionOps):
+    """
+    The `NVFP4Linear` buffers from a checkpoint's `weight`, `weight_sf_rowmajor` and `weight_global_scale`: the kernel's
+    swizzled `weight_sf` is derived from the row-major scales.
+    """
+
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(self, input_dict, **kwargs) -> dict[str, torch.Tensor]:
+        tensors = {name: value[0] if isinstance(value, list) else value for name, value in input_dict.items()}
+        if "weight_sf_rowmajor" in tensors and "weight_sf" not in tensors:
+            out_features, in_features = tensors["weight"].shape[0], tensors["weight"].shape[1] * 2
+            sf_shape = load_nvfp4_kernel().swizzled_sf_shape(out_features, in_features)
+            tensors["weight_sf"] = swizzle_sf(tensors["weight_sf_rowmajor"]).view(torch.int32).view(sf_shape)
+        return tensors
+
+    # TODO: a reverse op, so that NVFP4 checkpoints can be saved (`swizzle_sf` is invertible)
+
+
+class NVFP4Dequantize(ConversionOps):
+    """
+    Dense weights from the packed `weight` (two e2m1 values per byte, low nibble first), its row-major FP8 block
+    scales `weight_sf_rowmajor` and `weight_global_scale`: `weight = fp4 * block_scale / global_scale`.
+    """
+
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, list[torch.Tensor]]:
+        output = {}
+        for key, weights in input_dict.items():
+            if not key.endswith("weight"):
+                continue  # the scales, read along with their weight
+            weights = weights if isinstance(weights, list) else [weights]
+            scales = input_dict.get(f"{key}_sf_rowmajor")
+            global_scales = input_dict.get(f"{key}_global_scale")
+            if scales is not None and global_scales is not None:
+                scales = scales if isinstance(scales, list) else [scales]
+                global_scales = global_scales if isinstance(global_scales, list) else [global_scales]
+                # In the dtype of the dense param it loads into
+                dtype = model.get_parameter_or_buffer(full_layer_name).dtype
+                weights = [self._dequantize(*tensors).to(dtype) for tensors in zip(weights, scales, global_scales)]
+            output[key] = weights
+        return output
+
+    def _dequantize(self, packed, scales, global_scale):
+        values = torch.tensor(FP4_VALUES, device=packed.device)
+        weight = torch.stack([values[(packed & 0xF).int()], values[(packed >> 4).int()]], dim=-1)
+        weight = weight.view(packed.shape[0], -1, SF_VEC_SIZE)
+        scales = scales.view(torch.float8_e4m3fn).float().unsqueeze(-1)
+        return (weight * scales / global_scale).flatten(1)
 
 
 def _is_nvfp4_compatible(module: nn.Module) -> bool:
