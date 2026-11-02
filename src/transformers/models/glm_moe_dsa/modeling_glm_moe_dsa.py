@@ -418,10 +418,10 @@ class GlmMoeDsaAttention(nn.Module):
         sparse_indices = topk_indices
         if self.config._attn_implementation in ("eager", "sdpa"):
             # Eager / SDPA can't consume indices: mask every key the indexer did not select instead
-            selected = topk_indices.new_zeros((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
-            selected = selected.scatter(-1, topk_indices.long(), True).unsqueeze(1)
+            unselected = topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
+            unselected = unselected.scatter(-1, topk_indices.long(), False).unsqueeze(1)
             masked_value = False if attention_mask.dtype == torch.bool else torch.finfo(hidden_states.dtype).min
-            attention_mask = attention_mask.masked_fill(~selected, masked_value)
+            attention_mask = attention_mask.masked_fill(unselected, masked_value)
             sparse_indices = None
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
