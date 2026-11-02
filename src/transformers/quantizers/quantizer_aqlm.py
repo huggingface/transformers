@@ -39,6 +39,8 @@ class AqlmHfQuantizer(HfQuantizer):
     quantization_config: "AqlmConfig"
 
     def validate_environment(self, *args, **kwargs):
+        if self.pre_quantized and self.quantization_config.dequantize:
+            return  # dequantizing is pure torch
         if not is_accelerate_available():
             raise ImportError("Using `aqlm` quantization requires Accelerate: `pip install accelerate`")
 
