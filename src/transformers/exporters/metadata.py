@@ -44,8 +44,8 @@ def _traced_kwarg(value: Any) -> dict[str, Any]:
         return {"leaves": {str(key): _traced_kwarg(leaf) for key, leaf in value.items()}}
     if isinstance(value, (list, tuple)) and value and all(isinstance(item, torch.Tensor) for item in value):
         return {"items": [_traced_kwarg(item) for item in value]}
-    # A scalar is a constant of the program: its value, which a torch program still takes.
-    if isinstance(value, (bool, int, float, str)):
+    # A scalar (or `None`) is a constant of the program: its value, which a torch program still takes.
+    if value is None or isinstance(value, (bool, int, float, str)):
         return {"value": value}
     return {"container": type(value).__name__}
 
