@@ -891,7 +891,12 @@ src/transformers/configuration_utils.py
         content = fetcher_path.read_text(encoding="utf-8")
 
         self.assertNotIn("os.path.sep", content, "Use '/' directly instead of os.path.sep")
+        # os.path.join produces OS-native separators (backslashes on Windows) for path strings
+        # used as dict keys or CI config values. If you need os.path.join for a genuine filesystem
+        # operation (subprocess args, temp files), remove this assertion and use code review instead.
         self.assertNotIn("os.path.join(", content, "Use f-strings or pathlib / operator instead of os.path.join")
+        # Note: this check can be fooled if ".as_posix()" appears on the same line in a comment
+        # rather than in the actual expression. Keep the code straightforward to avoid that edge case.
         bad_lines = [
             line
             for line in content.splitlines()

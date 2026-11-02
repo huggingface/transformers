@@ -1082,7 +1082,7 @@ def infer_tests_to_run(output_file: str, diff_with_last_commit: bool = False, te
         or len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI
         or commit_flags["test_all"]
     ):
-        test_files_to_run = glob.glob("tests/**/test_**.py", recursive=True)
+        test_files_to_run = [Path(f).as_posix() for f in glob.glob("tests/**/test_**.py", recursive=True)]
         if len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI:
             print(
                 f"More than {NUM_MODELS_TO_TRIGGER_FULL_CI - 1} models are impacted. CI is configured to test everything."
