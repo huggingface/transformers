@@ -18,6 +18,7 @@ from typing import Union
 
 import numpy as np
 
+from ...audio_utils import load_audio
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -217,7 +218,8 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
         num_tokens = []
         for audio_item in audio:
             if isinstance(audio_item, str):
-                waveform = self._load_audio(audio_item, sampling_rate)
+                # `"soundfile"` matches the librosa loading this processor used before
+                waveform = load_audio(audio_item, sampling_rate=sampling_rate, backend="soundfile")
             elif is_torch_available() and isinstance(audio_item, torch.Tensor):
                 waveform = audio_item.numpy() if audio_item.dim() == 1 else audio_item.squeeze().numpy()
             elif isinstance(audio_item, np.ndarray):
@@ -248,35 +250,6 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
         for _ in range(num_layers):
             length = (length + add_pad) // stride + 1
         return length
-
-    def _load_audio(self, audio_path: str, target_sr: int) -> np.ndarray:
-        """Load (and resample) audio from a file path, using librosa or soundfile if available."""
-        try:
-            import librosa
-
-            waveform, _ = librosa.load(audio_path, sr=target_sr, mono=True)
-            return waveform
-        except ImportError:
-            pass
-
-        try:
-            import soundfile as sf
-
-            waveform, sr = sf.read(audio_path)
-            if waveform.ndim > 1:
-                waveform = waveform.mean(axis=1)
-            if sr != target_sr:
-                import scipy.signal
-
-                num_samples = int(len(waveform) * target_sr / sr)
-                waveform = scipy.signal.resample(waveform, num_samples)
-            return waveform.astype(np.float32)
-        except ImportError:
-            pass
-
-        raise ImportError(
-            "Audio loading requires either librosa or soundfile. Install with: pip install librosa soundfile"
-        )
 
     def batch_decode(self, *args, **kwargs):
         """Forward to the tokenizer's [`~PreTrainedTokenizer.batch_decode`]."""

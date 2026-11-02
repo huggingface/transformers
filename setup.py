@@ -130,6 +130,8 @@ _deps = [
     "scikit-learn",
     "scipy",
     "sentencepiece>=0.1.91,!=0.1.92",
+    "soundfile>=0.13.0",
+    "soxr>=0.5.0",
     "starlette",
     "sudachipy>=0.6.6",
     "sudachidict_core>=20220729",
@@ -167,7 +169,7 @@ extras = {}
 
 extras["torch"] = deps_list("torch", "accelerate")
 extras["vision"] = deps_list("torchvision", "Pillow")
-extras["audio"] = deps_list("torchaudio", "librosa", "phonemizer")
+extras["audio"] = deps_list("torchaudio", "soundfile", "soxr", "phonemizer")
 extras["video"] = deps_list("av")
 extras["timm"] = deps_list("timm")
 extras["quality"] = deps_list(
@@ -213,6 +215,7 @@ extras["testing"] = (
         "parameterized",
         "psutil",
         "diffusers",  # Needed for VibeVoice TTS integration tests
+        "librosa",  # reference implementation in audio tests
         "nltk",
         "sacremoses",
         "rjieba",

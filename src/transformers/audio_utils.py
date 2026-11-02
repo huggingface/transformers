@@ -18,6 +18,7 @@ and remove unnecessary dependencies.
 
 import base64
 import io
+import math
 import os
 import warnings
 from collections.abc import Sequence
@@ -29,9 +30,9 @@ import numpy as np
 from huggingface_hub.utils import httpx
 
 from .utils import (
-    is_librosa_available,
     is_numpy_array,
     is_soundfile_available,
+    is_soxr_available,
     is_torch_tensor,
     is_torchaudio_available,
     is_torchcodec_greater_or_equal,
@@ -47,10 +48,7 @@ if TYPE_CHECKING:
 if is_soundfile_available():
     import soundfile as sf
 
-if is_librosa_available():
-    import librosa
-
-    # TODO: @eustlb, we actually don't need librosa but soxr is installed with librosa
+if is_soxr_available():
     import soxr
 
 if is_torchaudio_available():
@@ -211,9 +209,11 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None, backe
             The timeout value in seconds for the URL request.
         backend (`str`, *optional*, defaults to `"auto"`):
             Decoding backend: `"auto"` uses torchcodec when available (>=0.3.0) and falls back to
-            librosa; `"torchcodec"`, `"librosa"` or `"torchaudio"` force that backend (and error if it
-            is missing). `"torchaudio"` decodes with `torchaudio.load` and resamples with
+            soundfile; `"torchcodec"`, `"soundfile"` or `"torchaudio"` force that backend (and error if it
+            is missing). `"soundfile"` decodes with `soundfile` and resamples with `soxr` (identical to
+            `librosa.load`). `"torchaudio"` decodes with `torchaudio.load` and resamples with
             `torchaudio.functional.resample` (matches serving stacks such as sglang bit-for-bit).
+            `"librosa"` is a deprecated alias of `"soundfile"`.
 
     Returns:
         `np.ndarray`: A numpy array representing the audio.
@@ -226,29 +226,36 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None, backe
             f"a local file path, or a base64-encoded string (optionally wrapped as a `data:...` URI) but got {type(audio)}."
         )
 
-    # torchcodec handles audio/video; librosa only plain audio. `backend` lets callers pin one.
+    # torchcodec handles audio/video; soundfile only plain audio. `backend` lets callers pin one.
+    if backend == "librosa":
+        warnings.warn(
+            '`backend="librosa"` is deprecated and will be removed in a future release. It now decodes with soundfile '
+            'and resamples with soxr, with output identical to `librosa.load`. Use `backend="soundfile"` instead.',
+            FutureWarning,
+        )
+        backend = "soundfile"
     if backend == "auto":
         resolved_backend = (
             "torchcodec"
             if is_torchcodec_greater_or_equal("0.3.0") and is_torchcodec_usable(decode="audio")
-            else "librosa"
+            else "soundfile"
         )
-    elif backend in ("torchcodec", "librosa", "torchaudio"):
+    elif backend in ("torchcodec", "soundfile", "torchaudio"):
         resolved_backend = backend
     else:
-        raise ValueError(f"Unknown backend {backend!r}; expected 'auto', 'torchcodec', 'librosa', or 'torchaudio'.")
-    # soundfile-based backends (librosa / torchaudio) cannot decode the video-ish formats below.
+        raise ValueError(f"Unknown backend {backend!r}; expected 'auto', 'torchcodec', 'soundfile', or 'torchaudio'.")
+    # soundfile-based backends (soundfile / torchaudio) cannot decode the video-ish formats below.
     use_torchcodec = resolved_backend == "torchcodec"
 
     # 1. Identify the format from the source string (extension / `data:` media type), without fetching.
     filetype = _format_from_source(audio)
-    # 2. With librosa as the only backend, fail fast and clearly on a format it cannot decode.
+    # 2. Without torchcodec, fail fast and clearly on a format soundfile cannot decode.
     if not use_torchcodec and filetype in TORCHCODEC_ONLY_FILETYPES:
         raise RuntimeError(
-            f"The audio source is a '{filetype}' file, which librosa cannot decode. {_NEEDS_TORCHCODEC}"
+            f"The audio source is a '{filetype}' file, which soundfile cannot decode. {_NEEDS_TORCHCODEC}"
         )
 
-    # 3. Resolve to local path or bytes; sniff format for raw base64 payloads before passing to librosa.
+    # 3. Resolve to local path or bytes; sniff format for raw base64 payloads before passing to soundfile.
     source = _resolve_audio_source(audio, timeout=timeout)
     if not use_torchcodec and filetype is None and isinstance(source, bytes):
         try:
@@ -257,7 +264,7 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None, backe
             filetype = None
         if filetype in TORCHCODEC_ONLY_FILETYPES:
             raise RuntimeError(
-                f"The audio source is a '{filetype}' file, which librosa cannot decode. {_NEEDS_TORCHCODEC}"
+                f"The audio source is a '{filetype}' file, which soundfile cannot decode. {_NEEDS_TORCHCODEC}"
             )
 
     # 4. Decode with the selected backend (`requires_backends` raises a clear error if it is missing).
@@ -265,7 +272,7 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None, backe
         requires_backends(load_audio, ["torchcodec"])
         from torchcodec.decoders import AudioDecoder
 
-        # `num_channels=1` matches what most models expect and librosa's default.
+        # `num_channels=1` matches what most models expect and the soundfile backend.
         return AudioDecoder(source, sample_rate=sampling_rate, num_channels=1).get_all_samples().data[0].numpy()
 
     if resolved_backend == "torchaudio":
@@ -277,8 +284,19 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None, backe
             waveform = torchaudio.functional.resample(waveform, orig_freq=src_sampling_rate, new_freq=sampling_rate)
         return waveform.numpy().astype(np.float32)
 
-    requires_backends(load_audio, ["librosa"])
-    return librosa.load(BytesIO(source) if isinstance(source, bytes) else source, sr=sampling_rate)[0]
+    # Same steps as `librosa.load`, so the output is identical: downmix by averaging, `soxr_hq` resampling, and
+    # padding/trimming to `ceil(num_samples * sampling_rate / src_sampling_rate)`.
+    requires_backends(load_audio, ["soundfile", "soxr"])
+    with sf.SoundFile(BytesIO(source) if isinstance(source, bytes) else source) as f:
+        src_sampling_rate = f.samplerate
+        waveform = f.read(dtype="float32", always_2d=True).T
+    waveform = waveform.mean(axis=0) if waveform.shape[0] > 1 else waveform[0]
+
+    if src_sampling_rate != sampling_rate:
+        num_samples = math.ceil(waveform.shape[-1] * sampling_rate / src_sampling_rate)
+        waveform = soxr.resample(waveform, src_sampling_rate, sampling_rate, quality="soxr_hq")
+        waveform = np.pad(waveform, (0, max(0, num_samples - len(waveform))))[:num_samples]
+    return np.ascontiguousarray(waveform, dtype=np.float32)
 
 
 def load_audio_torchcodec(audio: str | np.ndarray, sampling_rate=16000, timeout=None) -> np.ndarray:
@@ -292,13 +310,13 @@ def load_audio_torchcodec(audio: str | np.ndarray, sampling_rate=16000, timeout=
 
 
 def load_audio_librosa(audio: str | np.ndarray, sampling_rate=16000, timeout=None) -> np.ndarray:
-    """Deprecated. Use [`load_audio`] instead (equivalent to `backend="librosa"`)."""
+    """Deprecated. Use [`load_audio`] instead (equivalent to `backend="soundfile"`)."""
     warnings.warn(
         "`load_audio_librosa` is deprecated and will be removed in a future version. "
-        'Use `load_audio(..., backend="librosa")` instead.',
+        'Use `load_audio(..., backend="soundfile")` instead.',
         FutureWarning,
     )
-    return load_audio(audio, sampling_rate=sampling_rate, timeout=timeout, backend="librosa")
+    return load_audio(audio, sampling_rate=sampling_rate, timeout=timeout, backend="soundfile")
 
 
 def load_audio_as(
@@ -327,7 +345,7 @@ def load_audio_as(
             - `dict`: Dictionary with 'data' (base64 encoded audio data) and 'format' keys (if return_format="dict")
             - `io.BytesIO`: BytesIO object containing audio data (if return_format="buffer")
     """
-    requires_backends(load_audio_as, ["librosa"])
+    requires_backends(load_audio_as, ["soundfile", "soxr"])
 
     if return_format not in ["base64", "dict", "buffer"]:
         raise ValueError(f"Invalid return_format: {return_format}. Must be 'base64', 'dict', or 'buffer'")

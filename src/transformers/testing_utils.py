@@ -153,6 +153,7 @@ from .utils import (
     is_seqio_available,
     is_serve_available,
     is_soundfile_available,
+    is_soxr_available,
     is_spacy_available,
     is_speech_available,
     is_spqr_available,
@@ -1825,6 +1826,13 @@ def require_soundfile(test_case):
     Decorator marking a test that requires soundfile
     """
     return unittest.skipUnless(is_soundfile_available(), "test requires soundfile")(test_case)
+
+
+def require_soxr(test_case):
+    """
+    Decorator marking a test that requires soxr
+    """
+    return unittest.skipUnless(is_soxr_available(), "test requires soxr")(test_case)
 
 
 def require_multipart(test_case):

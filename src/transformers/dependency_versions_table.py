@@ -60,6 +60,8 @@ deps = {
     "scikit-learn": "scikit-learn",
     "scipy": "scipy",
     "sentencepiece": "sentencepiece>=0.1.91,!=0.1.92",
+    "soundfile": "soundfile>=0.13.0",
+    "soxr": "soxr>=0.5.0",
     "starlette": "starlette",
     "sudachipy": "sudachipy>=0.6.6",
     "sudachidict_core": "sudachidict_core>=20220729",
