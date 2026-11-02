@@ -51,7 +51,7 @@ class ExecutorchModelRunner(ModelRunner):
         return cls(program, metadata)
 
     def __call__(self, share_inputs: bool = True, share_outputs: bool = False, **kwargs) -> Any:
-        leaves = fx_pytree.tree_flatten_spec(((), kwargs), self.in_spec)
+        leaves = fx_pytree.tree_flatten_spec(((), {**self.constants, **kwargs}), self.in_spec)
         # A string is a constant of the program, whose slot takes `None`: the runtime has no string value.
         feed = [
             leaf.contiguous() if isinstance(leaf, torch.Tensor) else None if isinstance(leaf, str) else leaf

@@ -18,7 +18,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from ...utils.import_utils import is_torch_available
-from ..metadata import ExportMetadata
+from ..metadata import ExportMetadata, load_treespec
 from .base import ModelRunner
 
 
@@ -35,6 +35,8 @@ class DynamoModelRunner(ModelRunner):
     def __init__(self, module: torch.nn.Module, metadata: ExportMetadata):
         super().__init__(metadata)
         self.module = module
+        # The program flattens its kwargs by position, in the order its input spec lists them.
+        self.traced_order = load_treespec(metadata.in_spec).children_specs[1].context if metadata.in_spec else []
 
     @property
     def device(self) -> torch.device:
@@ -46,7 +48,7 @@ class DynamoModelRunner(ModelRunner):
         return cls(module if device is None else module.to(device), metadata)
 
     def __call__(self, share_inputs: bool = True, share_outputs: bool = False, **kwargs) -> Any:
-        # In traced order: the program flattens its kwargs by position.
-        traced = {name: kwargs[name] for name in self.metadata.kwargs if name in kwargs}
+        kwargs = {**self.constants, **kwargs}
+        traced = {name: kwargs[name] for name in self.traced_order if name in kwargs}
         with torch.no_grad():
             return self.module(**traced, **{name: value for name, value in kwargs.items() if name not in traced})
