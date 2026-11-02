@@ -142,8 +142,6 @@ class Mxfp4Deserialize(ConversionOps):
     ) -> dict[str, torch.Tensor]:
         param_data = {}
         proj = "gate_up_proj" if "gate_up_proj" in full_layer_name else "down_proj"
-        import torch.distributed as _d
-        print("DBG", _d.get_rank(), full_layer_name, {k: [tuple(t.shape) for t in v] if isinstance(v, list) else tuple(v.shape) for k, v in input_dict.items()}, flush=True)
 
         if f"{proj}_blocks" in input_dict.keys():
             if isinstance(input_dict[f"{proj}_blocks"], list):
