@@ -763,18 +763,19 @@ def prevent_arange_dtype_change():
 
     original_wrapper = pp.zero_wrapper_for_fp_tensor_constructor
 
-    def wrapper_without_arange(fn: Callable, target_fp_dtype: torch.dtype, target_device: torch.device) -> Callable:
+    def wrapper_without_arange(fn: Callable, *args, **kwargs) -> Callable:
         # If it's torch.arange, override to not change the dtype
         if fn is pp._orig_torch_arange:
             # Only wrap the device, not the dtype!
-            def wrapped_fn(*args, **kwargs):
-                if kwargs.get("device") is None and target_device is not None:
-                    kwargs["device"] = target_device
-                return fn(*args, **kwargs)
+            def wrapped_fn(*inner_args, **inner_kwargs):
+                # target_device was added on recent deespeed versions, so check it through kwargs here to avoid BC issues
+                if inner_kwargs.get("device") is None and kwargs.get("target_device") is not None:
+                    inner_kwargs["device"] = kwargs.get("target_device")
+                return fn(*inner_args, **inner_kwargs)
 
             return wrapped_fn
 
-        return original_wrapper(fn, target_fp_dtype, target_device)
+        return original_wrapper(fn, *args, **kwargs)
 
     try:
         pp.zero_wrapper_for_fp_tensor_constructor = wrapper_without_arange
