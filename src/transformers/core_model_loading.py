@@ -832,6 +832,7 @@ class WeightTransform:
         "_was_used",
         "scope_prefix",
         "base_model_prefix",
+        "scope",
     )
 
     def __init__(self, source_patterns: str | list[str], target_patterns: str | list[str]):
@@ -853,6 +854,8 @@ class WeightTransform:
         # either `base_model_prefix.scope_prefix.` or `scope_prefix.` prefixes
         self.scope_prefix: str | None = None
         self.base_model_prefix: str | None = None
+        # Optional regex the renamed keys must match, e.g. the params of one quantizer of a quantization plan
+        self.scope: str | None = None
 
         # We need to process a few exceptions here when instantiating the reverse mapping (i.e. the targets become
         # sources, and sources become targets). The issues lie in the sources usually, so here we need to check the
@@ -970,9 +973,6 @@ class WeightTransform:
 
         prefix_dot, key_to_match, match_object = matched
 
-        # We have a match, so the Transform was used
-        self._was_used = True
-
         # Find the source that produced the match (it's the first group that matched, as the search stops after first branch match)
         matching_group_name = next(name for name, val in match_object.groupdict().items() if val is not None)
         source_pattern_that_matched = self.source_patterns[int(matching_group_name[1:])]
@@ -987,6 +987,10 @@ class WeightTransform:
         renamed_key = key_to_match.replace(match_object.group(0), replacement, 1)
         if prefix_dot is not None:
             renamed_key = prefix_dot + renamed_key
+        if self.scope is not None and re.search(self.scope, renamed_key) is None:
+            return source_key, None
+        # We have a match, so the Transform was used
+        self._was_used = True
         return renamed_key, source_pattern_that_matched
 
     def reverse_transform(self) -> WeightTransform:
@@ -1002,7 +1006,7 @@ class WeightTransform:
     def copy(self, source_patterns, target_patterns, **kwargs) -> WeightTransform:
         """A transform of the same type and scope, with new patterns and e.g. new `operations`."""
         copy = self.__class__(source_patterns=source_patterns, target_patterns=target_patterns, **kwargs)
-        copy.scope_prefix, copy.base_model_prefix = self.scope_prefix, self.base_model_prefix
+        copy.scope_prefix, copy.base_model_prefix, copy.scope = self.scope_prefix, self.base_model_prefix, self.scope
         return copy
 
     def materialize_tensors(self) -> dict[str, list[torch.Tensor]]:
@@ -1440,6 +1444,21 @@ def apply_converters(source_key: str, weight_converters: list[WeightConverter]) 
     return renamed_key, source_pattern
 
 
+def converter_for(
+    source_pattern: str, renamed_key: str, converters: list[WeightConverter], pattern_to_converter: dict
+) -> WeightConverter:
+    """The converter whose `source_pattern` renamed a key into `renamed_key`. Converters with a `scope` (e.g. one per
+    quantizer of a plan) share patterns with the model's: the first one in scope is the one that matched."""
+    in_scope = (
+        converter
+        for converter in converters
+        if converter.scope is not None
+        and source_pattern in converter.source_patterns
+        and re.search(converter.scope, renamed_key)
+    )
+    return next(in_scope, pattern_to_converter[source_pattern])
+
+
 def rename_source_key(
     source_key: str,
     weight_renamings: list[WeightRenaming],
@@ -1677,12 +1696,14 @@ def convert_and_load_state_dict_in_model(
         if renamed_key in meta_model_state_dict:
             empty_param = meta_model_state_dict.get(renamed_key)
             quantize = None
-            if hf_quantizer and not hf_quantizer.pre_quantized and renamed_key not in param_name_to_load:
-                if hf_quantizer.param_needs_quantization(model, renamed_key):
-                    quantize = hf_quantizer.get_load_operations()["quantize"](hf_quantizer)
+            # In a quantization plan, the quantizer of the param's pattern
+            quantizer = hf_quantizer.quantizer_for(renamed_key) if hf_quantizer is not None else None
+            if quantizer and not quantizer.pre_quantized and renamed_key not in param_name_to_load:
+                if quantizer.param_needs_quantization(model, renamed_key):
+                    quantize = quantizer.get_load_operations()["quantize"](quantizer)
             # If we enter here, we have a WeightConverter operation to perform
             if source_pattern is not None:
-                new_converter = deepcopy(pattern_to_converter[source_pattern])
+                new_converter = deepcopy(converter_for(source_pattern, renamed_key, converters, pattern_to_converter))
                 if quantize is not None:
                     new_converter.operations = new_converter.operations + [quantize]
                 # each target key gets its own converter instance
@@ -1841,7 +1862,7 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
         # `self.source/target_patterns` (for one-to-many and one-to-one, the final name would be enough to infer it technically)
         renamed_key, source_pattern = apply_converters(original_key, converters)
         if source_pattern is not None:
-            new_converter = deepcopy(pattern_to_converter[source_pattern])
+            new_converter = deepcopy(converter_for(source_pattern, renamed_key, converters, pattern_to_converter))
             # each target key gets its own converter instance
             mapping = conversion_mapping.setdefault(renamed_key, new_converter)
         # If not matching a Converter, we can directly apply the renamings to the key

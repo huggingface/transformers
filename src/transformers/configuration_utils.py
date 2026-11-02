@@ -296,6 +296,15 @@ class classproperty(property):
 @dataclass_transform(kw_only_default=True)
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
+def _quantization_config_to_dict(quantization_config):
+    "A quantization config, or a plan mapping glob patterns to configs"
+    if hasattr(quantization_config, "to_dict"):
+        return quantization_config.to_dict()
+    if isinstance(quantization_config, dict):
+        return {key: value.to_dict() if hasattr(value, "to_dict") else value for key, value in quantization_config.items()}
+    return quantization_config
+
+
 class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, HeterogeneousConfigMixin):
     # no-format
     r"""
@@ -1244,9 +1253,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
         if hasattr(self, "quantization_config"):
             serializable_config_dict["quantization_config"] = (
-                self.quantization_config.to_dict()
-                if not isinstance(self.quantization_config, dict) and self.quantization_config is not None
-                else self.quantization_config
+                _quantization_config_to_dict(self.quantization_config)
             )
         self.dict_dtype_to_str(serializable_config_dict)
 
@@ -1294,9 +1301,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
         if hasattr(self, "quantization_config"):
             output["quantization_config"] = (
-                self.quantization_config.to_dict()
-                if not isinstance(self.quantization_config, dict) and self.quantization_config is not None
-                else self.quantization_config
+                _quantization_config_to_dict(self.quantization_config)
             )
         self.dict_dtype_to_str(output)
 

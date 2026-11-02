@@ -3990,7 +3990,9 @@ class PreTrainedModel(
                 Whether or not to offload the buffers with the model parameters.
             quantization_config (`Union[QuantizationConfigMixin,Dict]`, *optional*):
                 A dictionary of configuration parameters or a QuantizationConfigMixin object for quantization (e.g
-                bitsandbytes, gptq).
+                bitsandbytes, gptq). A plan mapping glob patterns to configs (e.g. `{"self_attn": FineGrainedFP8Config(),
+                "mlp": BitsAndBytesConfig(load_in_4bit=True)}`) quantizes the modules matching each pattern with its
+                config, the first matching pattern wins; the other modules stay unquantized.
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
@@ -4393,7 +4395,7 @@ class PreTrainedModel(
         """Perform the actual loading of some checkpoints into a `model`, by reading them from disk and dispatching them accordingly."""
         hf_quantizer = load_config.hf_quantizer
         is_quantized = load_config.is_quantized
-        is_hqq_or_quark = hf_quantizer is not None and hf_quantizer.quantization_config.quant_method in {
+        is_hqq_or_quark = hf_quantizer is not None and getattr(hf_quantizer.quantization_config, "quant_method", None) in {
             QuantizationMethod.HQQ,
             QuantizationMethod.QUARK,
         }

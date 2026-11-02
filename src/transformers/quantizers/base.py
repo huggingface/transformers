@@ -86,6 +86,8 @@ class HfQuantizer(ABC):
     """
 
     requires_calibration = False
+    # In a quantization plan, the regex of the module and param names this quantizer owns
+    scope: str | None = None
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         self.quantization_config = quantization_config
@@ -155,6 +157,10 @@ class HfQuantizer(ABC):
         Check whether a given param needs to be quantized.
         """
         return False
+
+    def quantizer_for(self, name: str) -> "HfQuantizer | None":
+        "The quantizer of the module or param `name`: this one, or in a quantization plan the one of its pattern"
+        return self
 
     def validate_environment(self, *args, **kwargs):
         """
@@ -237,8 +243,8 @@ class HfQuantizer(ABC):
             del model.quantization_method
         model.is_quantized = False
 
-    @staticmethod
     def get_modules_to_not_convert(
+        self,
         model: "PreTrainedModel",
         skip_modules: list[str] | None = None,
         keep_in_fp32_modules: list[str] | None = None,
@@ -256,6 +262,9 @@ class HfQuantizer(ABC):
             modules_to_not_convert.extend(keep_in_fp32_modules)
 
         modules_to_not_convert = list(set(modules_to_not_convert))
+        # In a quantization plan, the modules out of its scope belong to another quantizer, or to none
+        if self.scope is not None:
+            modules_to_not_convert.append(rf"(?!.*(?:{self.scope})).*")
 
         return modules_to_not_convert
 
@@ -271,26 +280,31 @@ class HfQuantizer(ABC):
 
     def get_state_dict_and_metadata(self, model):
         """
-        The state dict to save: the `serialize` load operation, if any, writes the tensors of each module under their
-        serialized names (e.g. torchao flattens its tensor subclasses). Its `metadata`, if any, goes in the file.
+        The state dict to save: the `serialize` load operation, if any, of the quantizer of each module (in a plan, the
+        one of its pattern) writes its tensors under their serialized names (e.g. torchao flattens its tensor
+        subclasses). Their `metadata`, if any, goes in the file.
         """
-        serialize = self.get_load_operations().get("serialize")
-        if serialize is None:
-            return None, {}
-        operation = serialize(self)
         modules = defaultdict(dict)
         for name, tensor in model.state_dict().items():
             modules[name.rpartition(".")[0]][name] = tensor
-        state_dict = {}
+        state_dict, operations = {}, {}
         # Every module: a quantized one may keep its tensors outside of its state dict (e.g. mxfp4's triton tensors)
         for module_name, _ in model.named_modules():
-            state_dict.update(
-                operation.convert(modules.pop(module_name, {}), model=model, full_layer_name=module_name)
-            )
+            quantizer = self.quantizer_for(module_name)
+            if quantizer not in operations:
+                serialize = quantizer.get_load_operations().get("serialize") if quantizer is not None else None
+                operations[quantizer] = serialize(quantizer) if serialize is not None else None
+            tensors, operation = modules.pop(module_name, {}), operations[quantizer]
+            state_dict.update(tensors if operation is None else operation.convert(tensors, model=model, full_layer_name=module_name))
+        if not any(operations.values()):
+            return None, {}
         # Names that aren't `module.tensor`, e.g. bnb's `q_proj.weight.absmax`
         for tensors in modules.values():
             state_dict.update(tensors)
-        return state_dict, getattr(operation, "metadata", {})
+        metadata = {}
+        for operation in operations.values():
+            metadata.update(getattr(operation, "metadata", {}))
+        return state_dict, metadata
 
     @abstractmethod
     def is_serializable(self): ...
