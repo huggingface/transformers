@@ -890,14 +890,13 @@ src/transformers/configuration_utils.py
         fetcher_path = Path(REPO_PATH) / "utils" / "tests_fetcher.py"
         content = fetcher_path.read_text(encoding="utf-8")
 
-        # Strip comments before checking to avoid false positives from lines like
-        # "# don't use os.path.sep or os.path.join(".
-        code_lines = "\n".join(line for line in content.splitlines() if not line.lstrip().startswith("#"))
-        self.assertNotIn("os.path.sep", code_lines, "Use '/' directly instead of os.path.sep")
+        # Note: these checks can be fooled if the banned string appears in an inline comment
+        # on a code line. Keep the code straightforward to avoid that edge case.
+        self.assertNotIn("os.path.sep", content, "Use '/' directly instead of os.path.sep")
         # os.path.join produces OS-native separators (backslashes on Windows) for path strings
         # used as dict keys or CI config values. If you need os.path.join for a genuine filesystem
         # operation (subprocess args, temp files), remove this assertion and use code review instead.
-        self.assertNotIn("os.path.join(", code_lines, "Use f-strings or pathlib / operator instead of os.path.join")
+        self.assertNotIn("os.path.join(", content, "Use f-strings or pathlib / operator instead of os.path.join")
         # Note: this check can be fooled if ".as_posix()" appears on the same line in a comment
         # rather than in the actual expression. Keep the code straightforward to avoid that edge case.
         bad_lines = [
