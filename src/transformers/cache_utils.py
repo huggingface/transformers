@@ -1939,16 +1939,13 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], lis
             else:
                 layer_types.append("full_attention")
 
-    # Copy to avoid modifying the original list when assigning "dummy" layers
-    layer_types = layer_types.copy()
-
     # Some models implement KV cache sharing between layers (e.g. Gemma4): for layers that consume other layers' KV
     # cache, we replace their layer type with a "dummy" layer that will never store any cache
     kv_sharing_modes = getattr(config, "kv_sharing_modes", None)
     if kv_sharing_modes is not None:
-        for i, mode in enumerate(kv_sharing_modes):
-            if mode == "reuse":
-                layer_types[i] = "dummy"
+        layer_types = [
+            "dummy" if mode == "reuse" else layer_type for layer_type, mode in zip(layer_types, kv_sharing_modes)
+        ]
 
     # Prepare additional kwargs that may be needed to __init__ each cache layer
     per_layer_kwargs = []
