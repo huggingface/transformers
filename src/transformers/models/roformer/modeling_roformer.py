@@ -645,7 +645,7 @@ class RoFormerPreTrainedModel(PreTrainedModel):
     """
 )
 class RoFormerModel(RoFormerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RoFormerConfig):
         super().__init__(config)
         self.config = config
         self.embeddings = RoFormerEmbeddings(config)
@@ -773,7 +773,7 @@ class RoFormerForMaskedLM(RoFormerPreTrainedModel):
         "cls.predictions.decoder.weight": "roformer.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: RoFormerConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -856,7 +856,7 @@ class RoFormerForCausalLM(RoFormerPreTrainedModel, GenerationMixin):
         "cls.predictions.decoder.weight": "roformer.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: RoFormerConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -982,7 +982,7 @@ class RoFormerClassificationHead(nn.Module):
     """
 )
 class RoFormerForSequenceClassification(RoFormerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RoFormerConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.roformer = RoFormerModel(config)
@@ -1056,7 +1056,7 @@ class RoFormerForSequenceClassification(RoFormerPreTrainedModel):
 
 @auto_docstring
 class RoFormerForMultipleChoice(RoFormerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RoFormerConfig):
         super().__init__(config)
 
         self.roformer = RoFormerModel(config)
@@ -1149,7 +1149,7 @@ class RoFormerForMultipleChoice(RoFormerPreTrainedModel):
 
 @auto_docstring
 class RoFormerForTokenClassification(RoFormerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RoFormerConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1210,7 +1210,7 @@ class RoFormerForTokenClassification(RoFormerPreTrainedModel):
 
 @auto_docstring
 class RoFormerForQuestionAnswering(RoFormerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RoFormerConfig):
         super().__init__(config)
 
         config.num_labels = 2

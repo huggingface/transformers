@@ -1842,7 +1842,6 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             yield from yield_list
 
 
-@torch.jit.script
 def fast_diag_box_iou(boxes1, boxes2):
     box1_xy = boxes1[:, 2:]
     box1_XY = boxes1[:, :2]

@@ -410,7 +410,7 @@ class LongcatFlashModel(DeepseekV3Model):
 class LongcatFlashForCausalLM(DeepseekV3ForCausalLM):
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp.*"]
 
-    def __init__(self, config):
+    def __init__(self, config: LongcatFlashConfig):
         super().__init__(config)
         self.model = LongcatFlashModel(config)
 

@@ -554,9 +554,9 @@ class DeepseekOcr2SamVisionProj(nn.Module):
 
 
 class DeepseekOcr2SamVisionEncoder(DeepseekOcr2PreTrainedModel):
+    config: DeepseekOcr2SamVisionConfig
     _can_record_outputs = {"hidden_states": DeepseekOcr2SamVisionLayer, "attentions": DeepseekOcr2SamVisionAttention}
     _input_embed_layer = "patch_embed"
-    config: DeepseekOcr2SamVisionConfig
 
     def __init__(self, config: DeepseekOcr2SamVisionConfig):
         super().__init__(config)
@@ -892,7 +892,7 @@ class DeepseekOcr2VisionEncoder(DeepseekOcr2PreTrainedModel):
     }
     config: DeepseekOcr2VisionConfig
 
-    def __init__(self, config):
+    def __init__(self, config: DeepseekOcr2VisionConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size

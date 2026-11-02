@@ -838,7 +838,7 @@ class EvollaModel(EvollaPreTrainedModel):
 
 
 class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
-    def __init__(self, config):
+    def __init__(self, config: EvollaConfig):
         super().__init__(config)
         self.model = EvollaModel(config)
         self.vocab_size = config.vocab_size

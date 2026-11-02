@@ -29,7 +29,7 @@ from transformers.distributed.expert_parallel import (
 from transformers.distributed.parallel_utils import ALL_PARALLEL_STYLES
 from transformers.testing_utils import TestCasePlus, is_expert_parallel_test
 
-from ..test_tensor_parallel_mixin import _init_distributed
+from ..distributed_testing_utils import run_distributed
 
 
 @is_expert_parallel_test
@@ -84,17 +84,17 @@ class TestExpertParallelLayer(TestCasePlus):
     def test_dispatch_hands_experts_the_received_rows(self):
         """The all-to-all's pending result (`AsyncCollectiveTensor`) holds a null pointer until a torch op waits on
         it, and experts that launch kernels on raw pointers would read it: the dispatch waits before any experts run."""
-        _init_distributed(tp=2, backend="gloo")(_dispatch_hands_experts_the_received_rows)()
+        run_distributed(world_size=2, backend="gloo")(_dispatch_hands_experts_the_received_rows)()
 
     def test_ep_implementations_match_one_process(self):
         """Every built-in implementation of `ep_dispatch_experts` gives the single-process output and input gradients,
         and `"auto"` runs the all-reduce on a shared batch at inference and the all-to-all in training."""
-        _init_distributed(tp=2, backend="gloo")(_ep_implementations_match_one_process)()
+        run_distributed(world_size=2, backend="gloo")(_ep_implementations_match_one_process)()
 
     @parameterized.expand([(False,), (True,)])
     def test_ep_auto_implementation_with_gradient_checkpointing(self, use_reentrant):
         """Gradient checkpointing keeps the `"auto"` choice and the gradients correct in both checkpoint modes."""
-        _init_distributed(tp=2, backend="gloo")(_ep_gradient_checkpointing_matches_reference)(use_reentrant)
+        run_distributed(world_size=2, backend="gloo")(_ep_gradient_checkpointing_matches_reference)(use_reentrant)
 
     def test_ep_implementation_names_a_registered_implementation(self):
         """`install_forward` runs the implementation registered under `ep_implementation` and refuses an unknown name."""
@@ -123,7 +123,7 @@ class _DummyExperts(torch.nn.Module):
         return tokens
 
 
-# Worker functions for the expert-parallel layer tests, spawned through `_init_distributed`.
+# Worker functions for the expert-parallel layer tests, spawned through `run_distributed`.
 def _dispatch_hands_experts_the_received_rows(rank):
     hidden_states = torch.arange(32.0).view(4, 8) + 100 * rank
     experts = EpDispatchExpertsParallel().install_forward(_DummyExperts(), init_device_mesh("cpu", (2,)))
