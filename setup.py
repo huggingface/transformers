@@ -193,7 +193,9 @@ if PYTHON_MINOR_VERSION < 14:
     extras["ray"] = deps_list("ray[tune]")
     extras["integrations"] += extras["ray"]
 extras["codecarbon"] = deps_list("codecarbon")
-extras["serving"] = deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette", "rich") + extras["torch"]
+extras["serving"] = (
+    deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette", "rich") + extras["torch"] + extras["vision"]
+)
 extras["num2words"] = deps_list("num2words")
 extras["benchmark"] = deps_list("optimum-benchmark")
 extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "rhoknp")
