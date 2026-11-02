@@ -1705,6 +1705,8 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         scale_fmt (`str`, *optional*, defaults to `"float"`):
             Storage dtype of the per-block weight scales: `"float"` (fp32, V3-style) or
             `"ue8m0"` (1-byte `torch.float8_e8m0fnu`, V4-style).
+        expert_dtype (`str`, *optional*, defaults to `"fp8"`):
+            Format of the MoE experts' weights: `"fp8"`, or `"fp4"` for DeepSeek-V4's FP4-packed experts.
     """
 
     def __init__(
@@ -1715,6 +1717,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         modules_to_not_convert: list | None = None,
         modules_to_convert: list | None = None,
         scale_fmt: str = "float",
+        expert_dtype: str = "fp8",
         **kwargs,
     ):
         self.quant_method = kwargs.pop("quant_method", QuantizationMethod.FP8)
@@ -1728,6 +1731,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         self.weight_block_size = weight_block_size
         self.dequantize = dequantize
         self.scale_fmt = scale_fmt
+        self.expert_dtype = expert_dtype
         self.post_init()
 
     def post_init(self):
@@ -1743,6 +1747,8 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             raise ValueError("weight_block_size must be a tuple of two positive integers")
         if self.scale_fmt not in ("float", "ue8m0"):
             raise ValueError(f"scale_fmt must be 'float' or 'ue8m0'; got {self.scale_fmt!r}")
+        if self.expert_dtype not in ("fp8", "fp4"):
+            raise ValueError(f"expert_dtype must be 'fp8' or 'fp4'; got {self.expert_dtype!r}")
 
     def get_loading_attributes(self):
         return {"dequantize": self.dequantize, "modules_to_not_convert": self.modules_to_not_convert}

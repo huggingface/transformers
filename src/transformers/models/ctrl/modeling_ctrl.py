@@ -26,7 +26,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -214,7 +214,7 @@ class CTRLPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class CTRLModel(CTRLPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CTRLConfig):
         super().__init__(config)
 
         self.d_model_size = config.n_embd
@@ -346,7 +346,7 @@ class CTRLModel(CTRLPreTrainedModel):
 class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "transformer.w.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: CTRLConfig):
         super().__init__(config)
         self.transformer = CTRLModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=True)
@@ -412,9 +412,8 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = transformer_outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -464,7 +463,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
     """
 )
 class CTRLForSequenceClassification(CTRLPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CTRLConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = CTRLModel(config)

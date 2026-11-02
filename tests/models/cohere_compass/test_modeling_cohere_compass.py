@@ -16,14 +16,16 @@
 import unittest
 
 from transformers import (
+    AutoProcessor,
     CohereCompassConfig,
     CohereCompassTextConfig,
     CohereCompassVisionConfig,
     is_torch_available,
 )
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import Expectations, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import floats_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -336,3 +338,89 @@ class CohereCompassModelTest(VLMModelTest, unittest.TestCase):
                 mm_token_type_ids=mm_token_type_ids,
             )
         self.assertEqual(output.logits.shape[:2], input_ids.shape)
+
+
+@slow
+@require_torch_accelerator
+class CohereCompassIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    model_id = "CohereLabs/North-Micro-Vision-Instruct"
+    image_messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen2_vl_demo_small.jpg",
+                },
+                {"type": "text", "text": "What kind of dog is this?"},
+            ],
+        }
+    ]
+    text_messages = [{"role": "user", "content": [{"type": "text", "text": "Write a haiku about the ocean."}]}]
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # Dropped again by the mixin's `tearDownClass`.
+        cls.model = None
+
+    @classmethod
+    def get_model(cls):
+        if cls.model is None:
+            cls.model = CohereCompassForConditionalGeneration.from_pretrained(
+                cls.model_id, dtype="auto", device_map="auto"
+            )
+        return cls.model
+
+    def setUp(self):
+        super().setUp()
+        self.processor = AutoProcessor.from_pretrained(self.model_id)
+
+    def test_small_model_integration_test(self):
+        model = self.get_model()
+        expected_texts = Expectations(
+            {
+                ("cuda", None): "The dog in the picture is a Labrador Retriever. Labradors are known for their friendly and outgoing nature, making them excellent family pets. They are",
+            }
+        )  # fmt: skip
+
+        inputs = self.processor.apply_chat_template(
+            self.image_messages,
+            tokenize=True,
+            return_dict=True,
+            add_generation_prompt=True,
+            return_tensors="pt",
+        ).to(model.device, dtype=model.dtype)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+
+        self.assertEqual(
+            self.processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True),
+            expected_texts.get_expectation(),
+        )
+
+    def test_small_model_integration_test_batch(self):
+        model = self.get_model()
+        expected_texts = Expectations(
+            {
+                ("cuda", None): [
+                    'The dog in the picture is a Labrador Retriever. Labradors are known for their friendly and outgoing nature, often described as "the joy of the',
+                    "Waves of blue embrace,\nWhispering secrets in the sea,\nNature's symphony.",
+                ]
+            }
+        )  # fmt: skip
+
+        # Mixed image and text-only prompts, left-padded to the same length.
+        inputs = self.processor.apply_chat_template(
+            [self.image_messages, self.text_messages],
+            tokenize=True,
+            return_dict=True,
+            add_generation_prompt=True,
+            return_tensors="pt",
+            processor_kwargs={"padding": True, "padding_side": "left"},
+        ).to(model.device, dtype=model.dtype)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+
+        self.assertEqual(
+            self.processor.batch_decode(output[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True),
+            expected_texts.get_expectation(),
+        )

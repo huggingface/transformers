@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -63,6 +63,9 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
@@ -170,8 +173,8 @@ class Qwen3VLMoeConfig(PreTrainedConfig):
 
     model_type = "qwen3_vl_moe"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Qwen3VLMoeVisionConfig),
-        "text_config": SubConfigSpec(config_class=Qwen3VLMoeTextConfig),
+        "vision_config": Qwen3VLMoeVisionConfig,
+        "text_config": Qwen3VLMoeTextConfig,
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 

@@ -553,6 +553,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
         "attentions": WhisperAttention,
     }
     input_modalities = ("audio",)
+    _input_embed_layer = "conv1"
 
     def __init__(self, config: WhisperConfig):
         super().__init__(config)
@@ -583,17 +584,11 @@ class WhisperEncoder(WhisperPreTrainedModel):
             param.requires_grad = False
         self._requires_grad = False
 
-    def get_input_embeddings(self) -> nn.Module:
-        return self.conv1
-
-    def set_input_embeddings(self, value: nn.Module):
-        self.conv1 = value
-
     @merge_with_config_defaults
     @capture_outputs
     def forward(
         self,
-        input_features,
+        input_features: torch.FloatTensor,
         attention_mask=None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
@@ -1152,7 +1147,7 @@ class WhisperDecoderWrapper(WhisperPreTrainedModel):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: WhisperConfig):
         super().__init__(config)
         config.is_encoder_decoder = False
         self.decoder = WhisperDecoder(config)
@@ -1177,7 +1172,7 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"proj_out.weight": "model.decoder.embed_tokens.weight"}
     main_input_name = "input_ids"
 
-    def __init__(self, config):
+    def __init__(self, config: WhisperConfig):
         super().__init__(config)
         config.is_encoder_decoder = False
         self.model = WhisperDecoderWrapper(config)
@@ -1282,7 +1277,7 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
     """
 )
 class WhisperForAudioClassification(WhisperPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: WhisperConfig):
         super().__init__(config)
 
         self.encoder = WhisperEncoder(config)

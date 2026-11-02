@@ -458,6 +458,48 @@ class TestFetcherTester(unittest.TestCase):
             with patch_transformer_repo_path(tmp_folder):
                 assert extract_imports(BERT_MODELING_FILE) == expected_bert_imports
 
+    def test_extract_imports_x_as_x(self):
+        """extract_imports must not drop 'import X as X' or 'import X as Y' forms (regression for #39729)."""
+        with tempfile.TemporaryDirectory() as tmp_folder:
+            tmp_folder = Path(tmp_folder)
+            create_tmp_repo(tmp_folder)
+
+            # X as X form (PEP 484 / mypy public re-export convention): name must be preserved
+            with open(tmp_folder / BERT_MODELING_FILE, "w", encoding="utf-8") as f:
+                f.write(
+                    "from ...modeling_utils import PreTrainedModel as PreTrainedModel\n"
+                    "from ...utils import is_torch_available as is_torch_available\n"
+                    "from .configuration_bert import BertConfig as BertConfig\n"
+                )
+            expected = [
+                ("src/transformers/modeling_utils.py", ["PreTrainedModel"]),
+                ("src/transformers/utils/__init__.py", ["is_torch_available"]),
+                ("src/transformers/models/bert/configuration_bert.py", ["BertConfig"]),
+            ]
+            with patch_transformer_repo_path(tmp_folder):
+                assert extract_imports(BERT_MODELING_FILE) == expected
+
+            # X as Y form: definition-side name (X) is recorded; alias (Y) is not tracked
+            with open(tmp_folder / BERT_MODELING_FILE, "w", encoding="utf-8") as f:
+                f.write("from ...modeling_utils import PreTrainedModel as BaseModel\n")
+            with patch_transformer_repo_path(tmp_folder):
+                result = extract_imports(BERT_MODELING_FILE)
+            assert result == [("src/transformers/modeling_utils.py", ["PreTrainedModel"])]
+
+    def test_extract_imports_skips_modules_without_files(self):
+        with tempfile.TemporaryDirectory() as tmp_folder:
+            tmp_folder = Path(tmp_folder)
+            create_tmp_repo(tmp_folder)
+            with open(tmp_folder / BERT_MODELING_FILE, "a", encoding="utf-8") as f:
+                f.write("from transformers.tokenization_utils_fast import PreTrainedTokenizerFast\n")
+
+            with patch_transformer_repo_path(tmp_folder):
+                assert (
+                    "src/transformers/tokenization_utils_fast",
+                    ["PreTrainedTokenizerFast"],
+                ) not in extract_imports(BERT_MODELING_FILE)
+                create_reverse_dependency_map()
+
     def test_get_module_dependencies(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
             tmp_folder = Path(tmp_folder)
@@ -510,6 +552,28 @@ class TestFetcherTester(unittest.TestCase):
             ]
             with patch_transformer_repo_path(tmp_folder):
                 assert get_module_dependencies(BERT_MODELING_FILE) == expected_bert_dependencies
+
+    def test_get_module_dependencies_same_module_multiple_single_line_imports(self):
+        """Multiple single-line imports from the same module must all be collected (regression: dict() collapsed them)."""
+        with tempfile.TemporaryDirectory() as tmp_folder:
+            tmp_folder = Path(tmp_folder)
+            create_tmp_repo(tmp_folder)
+
+            # Replace the top-level __init__ with individual X as X lines, two targeting .utils
+            init_file = tmp_folder / "src/transformers/__init__.py"
+            with open(init_file, "w", encoding="utf-8") as f:
+                f.write(
+                    "from .utils import cached_file as cached_file\n"
+                    "from .utils import is_torch_available as is_torch_available\n"
+                    "from .models.bert import BertConfig as BertConfig\n"
+                    "from .models.bert import BertModel as BertModel\n"
+                )
+            with patch_transformer_repo_path(tmp_folder):
+                deps = get_module_dependencies("src/transformers/__init__.py")
+
+            # Both .utils symbols must resolve to their source files; the old dict() bug dropped the first one
+            assert "src/transformers/utils/hub.py" in deps, "cached_file (first .utils import) was dropped"
+            assert "src/transformers/utils/imports.py" in deps, "is_torch_available (second .utils import) was dropped"
 
     def test_create_reverse_dependency_tree(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
@@ -655,60 +719,117 @@ src/transformers/configuration_utils.py
         as impacted file from reverse dependency
         """
         reverse_map = create_reverse_dependency_map()
-        models_dir = str(tests_fetcher.PATH_TO_TRANSFORMERS / "models")
+        models_dir = "src/transformers/models"
 
-        # impact of CLIP modeling file to all models where it is a backbone
-        expected_clip_multimodals = {
-            f"{models_dir}/video_llava/configuration_video_llava.py",
-            f"{models_dir}/llava/modeling_llava.py",
-            f"{models_dir}/vipllava/configuration_vipllava.py",
-            f"{models_dir}/granite4_vision/modeling_granite4_vision.py",
-            f"{models_dir}/llava/configuration_llava.py",
-            f"{models_dir}/sam3/configuration_sam3.py",
-            f"{models_dir}/llava_next/configuration_llava_next.py",
-            f"{models_dir}/sam3/modeling_sam3.py",
-            f"{models_dir}/llava_next/modeling_llava_next.py",
-            f"{models_dir}/llava_next_video/configuration_llava_next_video.py",
-            f"{models_dir}/llava_next_video/modeling_llava_next_video.py",
-            f"{models_dir}/vipllava/modeling_vipllava.py",
-            f"{models_dir}/video_llava/modeling_video_llava.py",
-            f"{models_dir}/granite4_vision/configuration_granite4_vision.py",
+        # impact of CLIP modeling file: changing clip must trigger tests for composite models that use it
+        expected_tests_for_clip = {
+            "tests/models/llava/test_modeling_llava.py",
+            "tests/models/llava_next/test_modeling_llava_next.py",
+            "tests/models/vipllava/test_modeling_vipllava.py",
+            "tests/models/video_llava/test_modeling_video_llava.py",
         }
-        assert expected_clip_multimodals.issubset(set(reverse_map[f"{models_dir}/clip/modeling_clip.py"]))
-        assert expected_clip_multimodals.issubset(set(reverse_map[f"{models_dir}/clip/configuration_clip.py"]))
+        assert expected_tests_for_clip.issubset(set(reverse_map[f"{models_dir}/clip/modeling_clip.py"]))
+        assert expected_tests_for_clip.issubset(set(reverse_map[f"{models_dir}/clip/configuration_clip.py"]))
 
         # reverse backbone mapping works only if modeling or configuration files are modified
         # because multimodals re-use only config/model of its backbone
-        assert expected_clip_multimodals.isdisjoint(set(reverse_map[f"{models_dir}/clip/image_processing_clip.py"]))
+        assert expected_tests_for_clip.isdisjoint(set(reverse_map[f"{models_dir}/clip/image_processing_clip.py"]))
 
         # Also lets check with a random text backbone
-        expected_qwen2_multimodals = {
-            f"{models_dir}/got_ocr2/configuration_got_ocr2.py",
-            f"{models_dir}/qwen2_audio/modeling_qwen2_audio.py",
-            f"{models_dir}/musicflamingo/modeling_musicflamingo.py",
-            f"{models_dir}/video_llama_3/configuration_video_llama_3.py",
-            f"{models_dir}/vibevoice_asr/modeling_vibevoice_asr.py",
-            f"{models_dir}/qwen2_audio/configuration_qwen2_audio.py",
-            f"{models_dir}/got_ocr2/modeling_got_ocr2.py",
-            f"{models_dir}/vibevoice/configuration_vibevoice.py",
-            f"{models_dir}/musicflamingo/configuration_musicflamingo.py",
-            f"{models_dir}/fast_vlm/modeling_fast_vlm.py",
-            f"{models_dir}/audioflamingo3/modeling_audioflamingo3.py",
-            f"{models_dir}/pp_chart2table/configuration_pp_chart2table.py",
-            f"{models_dir}/video_llama_3/modeling_video_llama_3.py",
-            f"{models_dir}/fast_vlm/configuration_fast_vlm.py",
-            f"{models_dir}/internvl/configuration_internvl.py",
-            f"{models_dir}/llava_onevision/configuration_llava_onevision.py",
-            f"{models_dir}/audioflamingo3/configuration_audioflamingo3.py",
-            f"{models_dir}/vibevoice/modeling_vibevoice.py",
-            f"{models_dir}/internvl/modeling_internvl.py",
-            f"{models_dir}/vibevoice_asr/configuration_vibevoice_asr.py",
-            f"{models_dir}/ovis2/configuration_ovis2.py",
-            f"{models_dir}/ovis2/modeling_ovis2.py",
-            f"{models_dir}/llava_onevision/modeling_llava_onevision.py",
+        expected_tests_for_qwen2 = {
+            "tests/models/qwen2_audio/test_modeling_qwen2_audio.py",
+            "tests/models/got_ocr2/test_modeling_got_ocr2.py",
         }
-        assert expected_qwen2_multimodals.issubset(set(reverse_map[f"{models_dir}/qwen2/modeling_qwen2.py"]))
-        assert expected_qwen2_multimodals.isdisjoint(set(reverse_map[f"{models_dir}/qwen2/tokenization_qwen2.py"]))
+        assert expected_tests_for_qwen2.issubset(set(reverse_map[f"{models_dir}/qwen2/modeling_qwen2.py"]))
+        # PR #50253 fixed the "X as Y" import bug in extract_imports (imports like
+        # `from .tokenization_qwen2 import PRETOKENIZE_REGEX as _QWEN2_SPLIT` were silently
+        # dropped before the fix). After the fix, tokenization_qwen2.py is now correctly traced
+        # as a dep of qwen2_audio/got_ocr2 tests through the following chain:
+        #   tokenization_qwen2.py → gguf_tokenizer_mapping.py (PRETOKENIZE_REGEX as _QWEN2_SPLIT)
+        #     → modeling_gguf_pytorch_utils.py ← configuration_utils.py (lazy import)
+        #     ← all model configs ← all model tests (~1140 tests)
+        # This large blast radius is undesired, but reducing it (e.g. restructuring the lazy
+        # GGUF imports) is out of scope here and should be addressed in a separate PR as part
+        # of a series of progressive fixes.
+        # assert expected_tests_for_qwen2.isdisjoint(set(reverse_map[f"{models_dir}/qwen2/tokenization_qwen2.py"]))
+
+    def test_preprocessor_files_trigger_their_tests_and_test_processing(self):
+        """
+        Preprocessor source files (image/video processors, feature extractors, tokenizers) are not
+        statically imported by their test files — class resolution is dynamic (e.g. via
+        IMAGE_PROCESSOR_MAPPING_NAMES, TOKENIZER_MAPPING) and processing_<model>.py often has no
+        static import of these classes (e.g. CLIP's processing_clip.py only imports ProcessorMixin).
+        This test ensures create_reverse_dependency_map explicitly wires all preprocessor source
+        files to both their type-specific test file and test_processing_<model>.py by naming
+        convention.
+        """
+        reverse_map = create_reverse_dependency_map()
+        models_dir = "src/transformers/models"
+
+        # --- image processors ---
+        # CLIP: processing_clip.py has zero deps (only imports ProcessorMixin), so
+        # test_processing_clip.py has no static path to image_processing_clip.py — both
+        # test files must be wired explicitly.
+        for img_proc_file in [
+            f"{models_dir}/clip/image_processing_clip.py",
+            f"{models_dir}/clip/image_processing_pil_clip.py",
+        ]:
+            triggered = set(reverse_map[img_proc_file])
+            assert "tests/models/clip/test_image_processing_clip.py" in triggered, (
+                f"{img_proc_file} must trigger test_image_processing_clip.py"
+            )
+            assert "tests/models/clip/test_processing_clip.py" in triggered, (
+                f"{img_proc_file} must trigger test_processing_clip.py"
+            )
+
+        # Fuyu: second model to avoid false positives
+        for img_proc_file in [
+            f"{models_dir}/fuyu/image_processing_fuyu.py",
+            f"{models_dir}/fuyu/image_processing_pil_fuyu.py",
+        ]:
+            triggered = set(reverse_map[img_proc_file])
+            assert "tests/models/fuyu/test_image_processing_fuyu.py" in triggered, (
+                f"{img_proc_file} must trigger test_image_processing_fuyu.py"
+            )
+            assert "tests/models/fuyu/test_processing_fuyu.py" in triggered, (
+                f"{img_proc_file} must trigger test_processing_fuyu.py"
+            )
+
+        # --- video processors ---
+        # qwen2_vl: processing_qwen2_vl.py only imports ProcessorMixin; no static path to
+        # video_processing_qwen2_vl.py from the test side.
+        video_proc_file = f"{models_dir}/qwen2_vl/video_processing_qwen2_vl.py"
+        triggered = set(reverse_map[video_proc_file])
+        assert "tests/models/qwen2_vl/test_video_processing_qwen2_vl.py" in triggered, (
+            f"{video_proc_file} must trigger test_video_processing_qwen2_vl.py"
+        )
+        assert "tests/models/qwen2_vl/test_processing_qwen2_vl.py" in triggered, (
+            f"{video_proc_file} must trigger test_processing_qwen2_vl.py"
+        )
+
+        # --- feature extractors ---
+        # whisper: processing_whisper.py only imports ProcessorMixin; feature_extraction_whisper.py
+        # is not statically reachable from test_processing_whisper.py.
+        feat_ext_file = f"{models_dir}/whisper/feature_extraction_whisper.py"
+        triggered = set(reverse_map[feat_ext_file])
+        assert "tests/models/whisper/test_feature_extraction_whisper.py" in triggered, (
+            f"{feat_ext_file} must trigger test_feature_extraction_whisper.py"
+        )
+        assert "tests/models/whisper/test_processing_whisper.py" in triggered, (
+            f"{feat_ext_file} must trigger test_processing_whisper.py"
+        )
+
+        # --- tokenizers ---
+        # CLIP: processing_clip.py has no static import of CLIPTokenizer, so
+        # tokenization_clip.py is not reachable from test_processing_clip.py.
+        tok_file = f"{models_dir}/clip/tokenization_clip.py"
+        triggered = set(reverse_map[tok_file])
+        assert "tests/models/clip/test_tokenization_clip.py" in triggered, (
+            f"{tok_file} must trigger test_tokenization_clip.py"
+        )
+        assert "tests/models/clip/test_processing_clip.py" in triggered, (
+            f"{tok_file} must trigger test_processing_clip.py"
+        )
 
     @unittest.skip("Broken for now TODO @ArthurZucker")
     def test_infer_tests_to_run(self):
@@ -816,3 +937,34 @@ src/transformers/configuration_utils.py
         assert parse_commit_message("[all test] commit") == {"skip": False, "no_filter": False, "test_all": True}
         assert parse_commit_message("[test-all] commit") == {"skip": False, "no_filter": False, "test_all": True}
         assert parse_commit_message("[all_test] commit") == {"skip": False, "no_filter": False, "test_all": True}
+
+    def test_no_windows_path_patterns_in_fetcher(self):
+        """
+        Regression test: tests_fetcher.py must never use os.path.sep, os.path.join, or
+        str(path.relative_to(...)) — all of which produce backslash-separated paths on Windows
+        and break comparisons against the posix paths used everywhere else in the fetcher.
+        Use '/' directly, f-strings, or path.relative_to(...).as_posix() instead.
+        """
+        import re
+
+        fetcher_path = Path(REPO_PATH) / "utils" / "tests_fetcher.py"
+        content = fetcher_path.read_text(encoding="utf-8")
+
+        # Note: these checks can be fooled if the banned string appears in an inline comment
+        # on a code line. Keep the code straightforward to avoid that edge case.
+        self.assertNotIn("os.path.sep", content, "Use '/' directly instead of os.path.sep")
+        # os.path.join produces OS-native separators (backslashes on Windows) for path strings
+        # used as dict keys or CI config values. If you need os.path.join for a genuine filesystem
+        # operation (subprocess args, temp files), remove this assertion and use code review instead.
+        self.assertNotIn("os.path.join(", content, "Use f-strings or pathlib / operator instead of os.path.join")
+        # Note: this check can be fooled if ".as_posix()" appears on the same line in a comment
+        # rather than in the actual expression. Keep the code straightforward to avoid that edge case.
+        bad_lines = [
+            line
+            for line in content.splitlines()
+            if re.search(r"str\(.*relative_to\(", line) and ".as_posix()" not in line
+        ]
+        self.assertFalse(
+            bad_lines,
+            "Use path.relative_to(...).as_posix() instead of str(path.relative_to(...)):\n" + "\n".join(bad_lines),
+        )

@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 # Instalarea
 
-Transformers depinde de [PyTorch](https://pytorch.org/get-started/locally/). A fost testat cu Python 3.10+ și PyTorch 2.4+.
+Transformers depinde de [PyTorch](https://pytorch.org/get-started/locally/). A fost testat cu Python 3.11+ și PyTorch 2.4+.
 
 ## Virtual environment
 

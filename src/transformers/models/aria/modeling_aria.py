@@ -40,7 +40,7 @@ from ...modeling_outputs import (
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import merge_with_config_defaults
@@ -251,7 +251,8 @@ class AriaTextTopKRouter(nn.Module):
     """Top-k router for the Aria MoE block.
 
     Experts are selected on the raw logits and the routing weights are the softmax over the selected
-    logits only, which is equivalent to renormalizing a softmax taken over every expert.
+    logits only, which is equivalent to renormalizing a softmax taken over every expert. Returns
+    `(router_logits, top_k_weights, top_k_index)`.
     """
 
     def __init__(self, config: AriaTextConfig):
@@ -264,7 +265,7 @@ class AriaTextTopKRouter(nn.Module):
         router_logits = nn.functional.linear(hidden_states, self.weight)  # (num_tokens, num_experts)
         top_k_logits, top_k_index = torch.topk(router_logits, self.top_k, dim=-1)  # (num_tokens, top_k)
         top_k_weights = nn.functional.softmax(top_k_logits, dim=-1)  # (num_tokens, top_k)
-        return top_k_index, top_k_weights, router_logits
+        return router_logits, top_k_weights, top_k_index
 
 
 @use_experts_implementation(is_transposed=True)
@@ -324,7 +325,7 @@ class AriaTextMoELayer(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         original_shape = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_states.size(-1))
-        top_k_index, top_k_weights, _ = self.router(hidden_states)
+        _, top_k_weights, top_k_index = self.router(hidden_states)
         expert_output = self.experts(hidden_states, top_k_index, top_k_weights).view(original_shape)
         shared_expert_output = self.shared_experts(hidden_states.view(original_shape))
         return expert_output + shared_expert_output
@@ -526,7 +527,6 @@ class AriaTextDecoderLayer(GradientCheckpointingLayer):
 class AriaTextPreTrainedModel(PreTrainedModel):
     config: AriaTextConfig
     base_model_prefix = "model"
-    input_modalities = ("image", "text")
     _no_split_modules = ["AriaTextDecoderLayer"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
@@ -537,7 +537,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": AriaTextDecoderLayer,
         "attentions": AriaTextAttention,
-        "router_logits": OutputRecorder(AriaTextTopKRouter, index=2),
+        "router_logits": OutputRecorder(AriaTextTopKRouter, index=0),
     }
 
     @torch.no_grad()
@@ -566,6 +566,7 @@ class AriaPreTrainedModel(PreTrainedModel):
         "hidden_states": AriaTextDecoderLayer,
         "attentions": AriaTextAttention,
     }
+    input_modalities = ("image", "text")
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -756,8 +757,8 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, GenerationMixin):
 
         hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -849,7 +850,6 @@ class AriaModel(AriaPreTrainedModel):
         pixel_values: torch.FloatTensor,
         pixel_mask: torch.FloatTensor | None = None,
         vision_feature_layer: int | list[int] = -1,
-        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
@@ -1096,9 +1096,8 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

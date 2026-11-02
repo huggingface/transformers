@@ -21,7 +21,7 @@ import glob
 import json
 import os
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from git import Repo
@@ -180,9 +180,9 @@ def get_list_of_models_to_deprecate(
     max_num_models=-1,
 ):
     if thresh_date is None:
-        thresh_date = datetime.now(timezone.utc).replace(year=datetime.now(timezone.utc).year - 1)
+        thresh_date = datetime.now(UTC).replace(year=datetime.now(UTC).year - 1)
     else:
-        thresh_date = datetime.strptime(thresh_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        thresh_date = datetime.strptime(thresh_date, "%Y-%m-%d").replace(tzinfo=UTC)
 
     models_dir = PATH_TO_REPO / "src/transformers/models"
     model_paths = get_list_of_repo_model_paths(models_dir=models_dir)

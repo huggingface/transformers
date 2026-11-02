@@ -561,7 +561,7 @@ class PerceiverPreTrainedModel(PreTrainedModel):
 class PerceiverModel(PerceiverPreTrainedModel):
     def __init__(
         self,
-        config,
+        config: PerceiverConfig,
         decoder: Optional["PerceiverAbstractDecoder"] = None,
         input_preprocessor: PreprocessorType = None,
         output_postprocessor: PostprocessorType = None,
@@ -938,7 +938,7 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
     """
 )
 class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: PerceiverConfig):
         super().__init__(config)
 
         trainable_position_encoding_kwargs_decoder = {"num_channels": config.d_latents, "index_dims": 1}
@@ -1060,7 +1060,7 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
     """
 )
 class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: PerceiverConfig):
         super().__init__(config)
 
         trainable_position_encoding_kwargs_preprocessor = {"num_channels": 256, "index_dims": config.image_size**2}
@@ -1185,7 +1185,7 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
     """
 )
 class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: PerceiverConfig):
         super().__init__(config)
 
         fourier_position_encoding_kwargs_preprocessor = {
@@ -1308,7 +1308,7 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
     """
 )
 class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: PerceiverConfig):
         super().__init__(config)
 
         fourier_position_encoding_kwargs_preprocessor = {
@@ -1432,7 +1432,7 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
     """
 )
 class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: PerceiverConfig):
         super().__init__(config)
 
         fourier_position_encoding_kwargs_preprocessor = {
@@ -1978,7 +1978,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
             # to get the indices for the unflattened array
             # unravel_index returns a tuple (x_idx, y_idx, ...)
             # stack to get the [n, d] tensor of coordinates
-            indices = torch.unravel_index(subsampled_points, self.output_index_dims)
+            indices = torch.unravel_index(subsampled_points.to(inputs.device), self.output_index_dims)
             pos = torch.stack(indices, dim=1)
             batch_size = inputs.shape[0]
             # Map these coordinates to [-1, 1]
