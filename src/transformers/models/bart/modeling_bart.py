@@ -27,7 +27,7 @@ from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -257,7 +257,7 @@ class BartAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class BartEncoderLayer(GradientCheckpointingLayer):
+class BartEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: BartConfig, layer_idx: int | None = None):
         super().__init__()
         self.embed_dim = config.d_model
@@ -308,7 +308,7 @@ class BartEncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class BartDecoderLayer(GradientCheckpointingLayer):
+class BartDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: BartConfig, layer_idx: int | None = None):
         super().__init__()
         self.embed_dim = config.d_model
@@ -418,7 +418,7 @@ class BartClassificationHead(nn.Module):
 class BartPreTrainedModel(PreTrainedModel):
     config: BartConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _keys_to_ignore_on_load_unexpected = ["encoder.version", "decoder.version"]
     _no_split_modules = [r"BartEncoderLayer", r"BartDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]

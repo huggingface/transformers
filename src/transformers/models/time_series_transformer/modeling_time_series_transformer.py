@@ -25,7 +25,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -418,7 +418,7 @@ class TimeSeriesTransformerAttention(nn.Module):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartEncoderLayer with Bart->TimeSeriesTransformer, BART->TIME_SERIES_TRANSFORMER
-class TimeSeriesTransformerEncoderLayer(GradientCheckpointingLayer):
+class TimeSeriesTransformerEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: TimeSeriesTransformerConfig, layer_idx: int | None = None):
         super().__init__()
         self.embed_dim = config.d_model
@@ -470,7 +470,7 @@ class TimeSeriesTransformerEncoderLayer(GradientCheckpointingLayer):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartDecoderLayer with Bart->TimeSeriesTransformer, with BART->TIME_SERIES_TRANSFORMER
-class TimeSeriesTransformerDecoderLayer(GradientCheckpointingLayer):
+class TimeSeriesTransformerDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: TimeSeriesTransformerConfig, layer_idx: int | None = None):
         super().__init__()
         self.embed_dim = config.d_model
@@ -558,7 +558,7 @@ class TimeSeriesTransformerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "past_values"
     input_modalities = ("time",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     # TODO: tests would need a rewrite to check for correct implementation
     # Current tests always assume certain inputs to be passed
     _supports_flash_attn = False

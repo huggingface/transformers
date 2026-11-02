@@ -28,7 +28,7 @@ if is_scipy_available():
     from scipy import linalg
 
 from ...activations import ACT2FN
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -225,7 +225,7 @@ class FNetOutput(nn.Module):
         return hidden_states
 
 
-class FNetLayer(GradientCheckpointingLayer):
+class FNetLayer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -364,7 +364,7 @@ class FNetPreTrainingHeads(nn.Module):
 class FNetPreTrainedModel(PreTrainedModel):
     config: FNetConfig
     base_model_prefix = "fnet"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     def _init_weights(self, module):
         super()._init_weights(module)

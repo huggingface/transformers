@@ -23,7 +23,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -309,7 +309,7 @@ class GPTNeoMLP(nn.Module):
         return hidden_states
 
 
-class GPTNeoBlock(GradientCheckpointingLayer):
+class GPTNeoBlock(ActivationCheckpointingLayer):
     def __init__(self, config, layer_id=None):
         super().__init__()
         hidden_size = config.hidden_size
@@ -354,7 +354,7 @@ class GPTNeoBlock(GradientCheckpointingLayer):
 class GPTNeoPreTrainedModel(PreTrainedModel):
     config: GPTNeoConfig
     base_model_prefix = "transformer"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["GPTNeoBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

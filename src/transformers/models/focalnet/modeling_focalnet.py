@@ -23,7 +23,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
@@ -426,7 +426,7 @@ class FocalNetLayer(nn.Module):
         return hidden_state
 
 
-class FocalNetStage(GradientCheckpointingLayer):
+class FocalNetStage(ActivationCheckpointingLayer):
     def __init__(self, config, index, input_resolution):
         super().__init__()
 
@@ -572,7 +572,7 @@ class FocalNetPreTrainedModel(PreTrainedModel):
     config: FocalNetConfig
     base_model_prefix = "focalnet"
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["FocalNetStage"]
 
     @torch.no_grad()

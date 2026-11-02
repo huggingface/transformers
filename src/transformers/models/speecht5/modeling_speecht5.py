@@ -27,7 +27,7 @@ from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -207,7 +207,7 @@ def _compute_mask_indices(
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2NoLayerNormConvLayer with Wav2Vec2->SpeechT5
-class SpeechT5NoLayerNormConvLayer(GradientCheckpointingLayer):
+class SpeechT5NoLayerNormConvLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -229,7 +229,7 @@ class SpeechT5NoLayerNormConvLayer(GradientCheckpointingLayer):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2LayerNormConvLayer with Wav2Vec2->SpeechT5
-class SpeechT5LayerNormConvLayer(GradientCheckpointingLayer):
+class SpeechT5LayerNormConvLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -257,7 +257,7 @@ class SpeechT5LayerNormConvLayer(GradientCheckpointingLayer):
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2GroupNormConvLayer with Wav2Vec2->SpeechT5
-class SpeechT5GroupNormConvLayer(GradientCheckpointingLayer):
+class SpeechT5GroupNormConvLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
@@ -1010,7 +1010,7 @@ class SpeechT5FeedForward(nn.Module):
         return hidden_states
 
 
-class SpeechT5EncoderLayer(GradientCheckpointingLayer):
+class SpeechT5EncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: SpeechT5Config):
         super().__init__()
         self.attention = SpeechT5Attention(
@@ -1067,7 +1067,7 @@ class SpeechT5EncoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
-class SpeechT5DecoderLayer(GradientCheckpointingLayer):
+class SpeechT5DecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: SpeechT5Config, layer_idx=None):
         super().__init__()
         self.self_attn = SpeechT5Attention(
@@ -1164,7 +1164,7 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
     base_model_prefix = "speecht5"
     main_input_name = "input_values"
     input_modalities = "audio"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):

@@ -32,7 +32,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer, GenericForSequenceClassification
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -317,7 +317,7 @@ class CohereCompassAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class CohereCompassDecoderLayer(GradientCheckpointingLayer):
+class CohereCompassDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: CohereCompassTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -372,7 +372,7 @@ class CohereCompassPreTrainedModel(PreTrainedModel):
     config: CohereCompassConfig
     base_model_prefix = "model"
     input_modalities = ("image", "video", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = [
         "CohereCompassDecoderLayer",
         "CohereCompassVisionBlock",
@@ -818,7 +818,7 @@ class CohereCompassVisionAttention(nn.Module):
         return attn_output
 
 
-class CohereCompassVisionBlock(GradientCheckpointingLayer):
+class CohereCompassVisionBlock(ActivationCheckpointingLayer):
     def __init__(self, config, attn_implementation: str = "sdpa") -> None:
         super().__init__()
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=1e-6)

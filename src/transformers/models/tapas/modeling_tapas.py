@@ -25,7 +25,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
@@ -304,7 +304,7 @@ class TapasOutput(nn.Module):
         return hidden_states
 
 
-class TapasLayer(GradientCheckpointingLayer):
+class TapasLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -487,7 +487,7 @@ class TapasOnlyMLMHead(nn.Module):
 class TapasPreTrainedModel(PreTrainedModel):
     config: TapasConfig
     base_model_prefix = "tapas"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     @torch.no_grad()
     def _init_weights(self, module):

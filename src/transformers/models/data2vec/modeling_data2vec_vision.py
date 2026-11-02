@@ -24,7 +24,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -426,7 +426,7 @@ class Data2VecVisionDropPath(nn.Module):
 
 
 # Todo - Refactor as part of vision refactor. Copied from transformers.models.beit.modeling_beit.BeitLayer with Beit->Data2VecVision,BEiT->Data2VecVision
-class Data2VecVisionLayer(GradientCheckpointingLayer):
+class Data2VecVisionLayer(ActivationCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(
@@ -656,7 +656,7 @@ class Data2VecVisionPreTrainedModel(PreTrainedModel):
     base_model_prefix = "data2vec_vision"
     input_modalities = ("image",)
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Data2VecVisionLayer"]
     _keys_to_ignore_on_load_unexpected = [r".*relative_position_index.*"]
     _supports_sdpa = True

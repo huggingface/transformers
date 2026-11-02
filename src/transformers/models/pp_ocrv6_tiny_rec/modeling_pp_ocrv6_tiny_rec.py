@@ -34,7 +34,7 @@ from .configuration_pp_ocrv6_tiny_rec import PPOCRV6TinyRecConfig
 class PPOCRV6TinyRecPreTrainedModel(PreTrainedModel):
     config: PPOCRV6TinyRecConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = False
+    supports_activation_checkpointing = False
     _no_split_modules = []
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

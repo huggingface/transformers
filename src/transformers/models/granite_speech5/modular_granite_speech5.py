@@ -20,7 +20,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -260,7 +260,7 @@ def downsample_attention_mask(attention_mask: torch.Tensor) -> torch.Tensor:
     return attention_mask[:, : 2 * half_length].reshape(attention_mask.shape[0], half_length, 2).all(dim=2)
 
 
-class GraniteSpeech5EncoderBlock(GradientCheckpointingLayer, ParakeetEncoderBlock): ...
+class GraniteSpeech5EncoderBlock(ActivationCheckpointingLayer, ParakeetEncoderBlock): ...
 
 
 class GraniteSpeech5EncoderSubsamplingBlock(GraniteSpeech5EncoderBlock):

@@ -63,7 +63,7 @@ class Cosmos3OmniPreTrainedModel(PreTrainedModel):
     config: Cosmos3OmniConfig
     base_model_prefix = "model"
     input_modalities = ("image", "video", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     # So that modular doesn't drag unnecessary deps
     _no_split_modules = None

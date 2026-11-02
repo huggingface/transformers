@@ -24,7 +24,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -322,7 +322,7 @@ class SiglipMLP(nn.Module):
         return hidden_states
 
 
-class SiglipEncoderLayer(GradientCheckpointingLayer):
+class SiglipEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: SiglipVisionConfig | SiglipTextConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -361,7 +361,7 @@ class SiglipPreTrainedModel(PreTrainedModel):
     config: SiglipConfig
     base_model_prefix = "siglip"
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     _no_split_modules = [
         "SiglipTextEmbeddings",

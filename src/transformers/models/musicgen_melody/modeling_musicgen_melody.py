@@ -39,7 +39,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import (
     FlashAttentionKwargs,
 )
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -296,7 +296,7 @@ class MusicgenMelodyAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class MusicgenMelodyDecoderLayer(GradientCheckpointingLayer):
+class MusicgenMelodyDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: MusicgenMelodyDecoderConfig, layer_idx=None):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -365,7 +365,7 @@ class MusicgenMelodyDecoderLayer(GradientCheckpointingLayer):
 class MusicgenMelodyPreTrainedModel(PreTrainedModel):
     config: MusicgenMelodyDecoderConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["MusicgenMelodyDecoderLayer", "MusicgenMelodyAttention"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -1092,7 +1092,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
     config: MusicgenMelodyConfig
     main_input_name = "input_ids"
     output_modalities = ("audio",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

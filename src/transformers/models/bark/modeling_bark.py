@@ -30,7 +30,7 @@ from ...generation.logits_process import (
 )
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -271,7 +271,7 @@ class BarkMLP(nn.Module):
         return hidden_states
 
 
-class BarkBlock(GradientCheckpointingLayer):
+class BarkBlock(ActivationCheckpointingLayer):
     def __init__(self, config, is_causal=False, layer_idx=None):
         super().__init__()
 
@@ -323,7 +323,7 @@ class BarkBlock(GradientCheckpointingLayer):
 @auto_docstring
 class BarkPreTrainedModel(PreTrainedModel):
     config: BarkConfig
-    supports_gradient_checkpointing = False
+    supports_activation_checkpointing = False
     _supports_flash_attn = True
 
     @property

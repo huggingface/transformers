@@ -27,7 +27,7 @@ from huggingface_hub.dataclasses import strict
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack
@@ -161,7 +161,7 @@ class Qwen2_5_VLVisionAttention(VisionAttention):
         self.dim = config.hidden_size
 
 
-class Qwen2_5_VLVisionBlock(GradientCheckpointingLayer):
+class Qwen2_5_VLVisionBlock(ActivationCheckpointingLayer):
     def __init__(self, config, attn_implementation: str = "sdpa") -> None:
         super().__init__()
         self.norm1 = Qwen2_5_VLRMSNorm(config.hidden_size, eps=1e-6)

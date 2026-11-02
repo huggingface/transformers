@@ -10,7 +10,7 @@ from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, Wav2Vec2BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -407,7 +407,7 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
         return hidden_states
 
 
-class Wav2Vec2ConformerEncoderLayer(GradientCheckpointingLayer):
+class Wav2Vec2ConformerEncoderLayer(ActivationCheckpointingLayer):
     """Conformer block based on https://huggingface.co/papers/2005.08100."""
 
     def __init__(self, config):
@@ -552,7 +552,7 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "wav2vec2_conformer"
     main_input_name = "input_values"
     input_modalities = "audio"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_sdpa = True
     _supports_flex_attn = True
     _can_record_outputs = {

@@ -29,7 +29,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_sliding_window_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedAudioTokenizerBase, PreTrainedModel
@@ -527,7 +527,7 @@ class PocketTTSAudioTokenizerAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class PocketTTSAudioTokenizerTransformerLayer(GradientCheckpointingLayer):
+class PocketTTSAudioTokenizerTransformerLayer(ActivationCheckpointingLayer):
     def __init__(self, config: PocketTTSAudioTokenizerConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -576,7 +576,7 @@ class PocketTTSAudioTokenizerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "pocket_tts_audio_tokenizer"
     main_input_name = "input_values"
     input_modalities = "audio"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["PocketTTSAudioTokenizerTransformerLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

@@ -143,7 +143,7 @@ class UniSpeechPreTrainedModel(PreTrainedModel):
     base_model_prefix = "unispeech"
     main_input_name = "input_values"
     input_modalities = "audio"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True

@@ -22,7 +22,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BackboneOutput,
     BaseModelOutput,
@@ -484,7 +484,7 @@ class HieraLayer(nn.Module):
         return (hidden_states, attn_weights)
 
 
-class HieraStage(GradientCheckpointingLayer):
+class HieraStage(ActivationCheckpointingLayer):
     def __init__(
         self,
         config,
@@ -758,7 +758,7 @@ class HieraPreTrainedModel(PreTrainedModel):
     base_model_prefix = "hiera"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     @torch.no_grad()
     def _init_weights(self, module) -> None:

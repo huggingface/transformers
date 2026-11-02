@@ -32,10 +32,10 @@ from ...integrations import use_experts_implementation, use_kernel_forward_from_
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
+    ActivationCheckpointingLayer,
     GenericForQuestionAnswering,
     GenericForSequenceClassification,
     GenericForTokenClassification,
-    GradientCheckpointingLayer,
 )
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -301,7 +301,7 @@ class Qwen3MoeRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class Qwen3MoeDecoderLayer(GradientCheckpointingLayer):
+class Qwen3MoeDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Qwen3MoeConfig, layer_idx: int):
         super().__init__()
         self.self_attn = Qwen3MoeAttention(config, layer_idx)
@@ -351,7 +351,7 @@ class Qwen3MoeDecoderLayer(GradientCheckpointingLayer):
 class Qwen3MoePreTrainedModel(PreTrainedModel):
     config: Qwen3MoeConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Qwen3MoeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

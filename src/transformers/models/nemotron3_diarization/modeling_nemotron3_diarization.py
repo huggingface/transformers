@@ -28,7 +28,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -488,7 +488,7 @@ class Nemotron3DiarizationMLP(nn.Module):
         return hidden_states
 
 
-class Nemotron3DiarizationAudioLayer(GradientCheckpointingLayer):
+class Nemotron3DiarizationAudioLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Nemotron3DiarizationAudioConfig, layer_idx: int):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -525,7 +525,7 @@ class Nemotron3DiarizationAudioLayer(GradientCheckpointingLayer):
 class Nemotron3DiarizationPreTrainedModel(PreTrainedModel):
     config: Nemotron3DiarizationConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Nemotron3DiarizationAudioLayer"]
     _skip_keys_device_placement = ["speaker_cache"]
     _supports_flash_attn = True

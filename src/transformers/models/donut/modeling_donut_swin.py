@@ -25,7 +25,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from .configuration_donut_swin import DonutSwinConfig
@@ -615,7 +615,7 @@ class DonutSwinLayer(nn.Module):
 
 
 # Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinStage with Swin->DonutSwin
-class DonutSwinStage(GradientCheckpointingLayer):
+class DonutSwinStage(ActivationCheckpointingLayer):
     def __init__(self, config, dim, input_resolution, depth, num_heads, drop_path, downsample):
         super().__init__()
         self.config = config
@@ -764,7 +764,7 @@ class DonutSwinPreTrainedModel(PreTrainedModel):
     base_model_prefix = "donut"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["DonutSwinStage"]
 
     @torch.no_grad()

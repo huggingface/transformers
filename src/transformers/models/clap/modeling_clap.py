@@ -26,7 +26,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -621,7 +621,7 @@ class ClapAudioLayer(nn.Module):
 
 
 # Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinStage with Swin->ClapAudio
-class ClapAudioStage(GradientCheckpointingLayer):
+class ClapAudioStage(ActivationCheckpointingLayer):
     def __init__(self, config, dim, input_resolution, depth, num_heads, drop_path, downsample):
         super().__init__()
         self.config = config
@@ -1171,7 +1171,7 @@ class ClapTextOutput(nn.Module):
 
 
 # Copied from transformers.models.align.modeling_align.AlignTextLayer with Align->Clap
-class ClapTextLayer(GradientCheckpointingLayer):
+class ClapTextLayer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -1251,7 +1251,7 @@ class ClapPreTrainedModel(PreTrainedModel):
     config: ClapConfig
     base_model_prefix = "clap"
     input_modalities = ("audio", "text")
-    supports_gradient_checkpointing = False
+    supports_activation_checkpointing = False
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):

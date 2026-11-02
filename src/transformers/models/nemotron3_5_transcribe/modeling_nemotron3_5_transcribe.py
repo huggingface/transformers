@@ -30,7 +30,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_recurrent_attention_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -108,7 +108,7 @@ class Nemotron3_5TranscribePreTrainedModel(PreTrainedModel):
     config: Nemotron3_5TranscribeConfig
     base_model_prefix = "model"
     input_modalities = ("audio", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = None
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
@@ -337,7 +337,7 @@ class Nemotron3_5TranscribeMLP(nn.Module):
         return hidden_states
 
 
-class Nemotron3_5TranscribeAsrAudioLayer(GradientCheckpointingLayer):
+class Nemotron3_5TranscribeAsrAudioLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Nemotron3_5TranscribeAsrAudioConfig, layer_idx: int):
         super().__init__()
         self.embed_dim = config.hidden_size

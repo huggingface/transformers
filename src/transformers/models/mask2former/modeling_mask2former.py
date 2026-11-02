@@ -25,7 +25,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import load_backbone
 from ...file_utils import ModelOutput, is_scipy_available, requires_backends
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import compile_compatible_method_lru_cache
@@ -1590,7 +1590,7 @@ class Mask2FormerAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-class Mask2FormerMaskedAttentionDecoderLayer(GradientCheckpointingLayer):
+class Mask2FormerMaskedAttentionDecoderLayer(ActivationCheckpointingLayer):
     """
     The Mask2FormerMaskedAttentionDecoderLayer is made up of self-attention, cross (masked) attention as well as FFN
     blocks. The cross attention block used as part of `Mask2FormerMaskedAttentionDecoderLayer` is actually a `masked

@@ -30,7 +30,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -78,7 +78,7 @@ class CanaryPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "input_features"
     input_modalities = "audio"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["CanaryDecoderLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -291,7 +291,7 @@ class CanaryCrossAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class CanaryDecoderLayer(GradientCheckpointingLayer):
+class CanaryDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.self_attn = CanarySelfAttention(config=config, layer_idx=layer_idx)

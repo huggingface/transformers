@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from ... import initialization as init
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, Wav2Vec2BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -206,7 +206,7 @@ class WavLMFeedForward(Wav2Vec2FeedForward):
     pass
 
 
-class WavLMEncoderLayer(GradientCheckpointingLayer):
+class WavLMEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: WavLMConfig, has_relative_position_bias: bool = True):
         super().__init__()
         self.attention = WavLMAttention(
@@ -249,7 +249,7 @@ class WavLMEncoderLayer(GradientCheckpointingLayer):
         return hidden_states, position_bias
 
 
-class WavLMEncoderLayerStableLayerNorm(GradientCheckpointingLayer):
+class WavLMEncoderLayerStableLayerNorm(ActivationCheckpointingLayer):
     def __init__(self, config: WavLMConfig, has_relative_position_bias: bool = True):
         super().__init__()
         self.attention = WavLMAttention(
@@ -464,7 +464,7 @@ class WavLMPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
     base_model_prefix = "wavlm"
     main_input_name = "input_values"
     input_modalities = "audio"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_flash_attn = False
     _supports_sdpa = False
     _supports_flex_attn = False

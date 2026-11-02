@@ -34,7 +34,7 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
@@ -511,7 +511,7 @@ class Sam2FeedForward(nn.Module):
         return hidden_states
 
 
-class Sam2MultiScaleBlock(GradientCheckpointingLayer):
+class Sam2MultiScaleBlock(ActivationCheckpointingLayer):
     def __init__(
         self,
         config: Sam2HieraDetConfig,
@@ -934,7 +934,7 @@ class Sam2Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class Sam2TwoWayAttentionBlock(SamTwoWayAttentionBlock, GradientCheckpointingLayer):
+class Sam2TwoWayAttentionBlock(SamTwoWayAttentionBlock, ActivationCheckpointingLayer):
     def __init__(self, config: Sam2MaskDecoderConfig, skip_first_layer_pe: bool = False):
         nn.Module.__init__(self)
         self.self_attn = Sam2Attention(config, downsample_rate=1)

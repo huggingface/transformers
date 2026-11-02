@@ -24,7 +24,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
@@ -593,7 +593,7 @@ class SwinLayer(ViTLayer):
         return hidden_states, attn_weights
 
 
-class SwinStage(GradientCheckpointingLayer):
+class SwinStage(ActivationCheckpointingLayer):
     def __init__(
         self,
         config: SwinConfig,

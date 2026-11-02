@@ -23,7 +23,7 @@ from torch.nn import CrossEntropyLoss
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -328,7 +328,7 @@ class BrosOutput(nn.Module):
         return hidden_states
 
 
-class BrosLayer(GradientCheckpointingLayer):
+class BrosLayer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward

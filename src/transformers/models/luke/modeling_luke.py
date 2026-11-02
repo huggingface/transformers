@@ -23,7 +23,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ... import initialization as init
 from ...activations import ACT2FN, gelu
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
@@ -596,7 +596,7 @@ class LukeOutput(nn.Module):
         return hidden_states
 
 
-class LukeLayer(GradientCheckpointingLayer):
+class LukeLayer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -763,7 +763,7 @@ class EntityPredictionHead(nn.Module):
 class LukePreTrainedModel(PreTrainedModel):
     config: LukeConfig
     base_model_prefix = "luke"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["LukeAttention", "LukeEntityEmbeddings"]
 
     @torch.no_grad()

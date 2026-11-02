@@ -31,7 +31,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
@@ -443,7 +443,7 @@ class MuseSparkResidualGate(nn.Module):
         return (alpha * residual + beta * hidden_states).to(residual.dtype)
 
 
-class MuseSparkTextDecoderLayer(GradientCheckpointingLayer):
+class MuseSparkTextDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: MuseSparkTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -494,7 +494,7 @@ class MuseSparkTextDecoderLayer(GradientCheckpointingLayer):
 class MuseSparkPreTrainedModel(PreTrainedModel):
     config: MuseSparkConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["MuseSparkTextDecoderLayer", "MuseSparkVisionEncoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
@@ -833,7 +833,7 @@ class MuseSparkVisionMLP(nn.Module):
         return self.fc2(self.act(self.fc1(x)))
 
 
-class MuseSparkVisionEncoderLayer(GradientCheckpointingLayer):
+class MuseSparkVisionEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config) -> None:
         super().__init__()
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=1e-5)

@@ -25,7 +25,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -282,7 +282,7 @@ class ImageGPTMLP(nn.Module):
         return hidden_states
 
 
-class ImageGPTBlock(GradientCheckpointingLayer):
+class ImageGPTBlock(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         hidden_size = config.hidden_size
@@ -360,7 +360,7 @@ class ImageGPTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     main_input_name = "input_ids"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["ImageGPTBlock"]
 
     @torch.no_grad()

@@ -24,7 +24,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
@@ -369,7 +369,7 @@ class Blip2MLP(nn.Module):
 
 
 # Copied from transformers.models.blip.modeling_blip.BlipEncoderLayer with Blip->Blip2
-class Blip2EncoderLayer(GradientCheckpointingLayer):
+class Blip2EncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Blip2Config):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -406,7 +406,7 @@ class Blip2PreTrainedModel(PreTrainedModel):
     config: Blip2Config
     base_model_prefix = "blip"
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_attention_backend = True
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -675,7 +675,7 @@ class Blip2QFormerOutput(nn.Module):
         return hidden_states
 
 
-class Blip2QFormerLayer(GradientCheckpointingLayer):
+class Blip2QFormerLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -1272,7 +1272,7 @@ class Blip2Model(Blip2PreTrainedModel):
 
 @auto_docstring
 class Blip2TextModelWithProjection(Blip2PreTrainedModel):
-    supports_gradient_checkpointing = False
+    supports_activation_checkpointing = False
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
     _supports_flash_attn = False  # because self.qformer does not support FA2
 

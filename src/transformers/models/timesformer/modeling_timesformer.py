@@ -21,7 +21,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -275,7 +275,7 @@ class TimesformerDropPath(nn.Module):
 
 
 # Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L89
-class TimesformerLayer(GradientCheckpointingLayer):
+class TimesformerLayer(ActivationCheckpointingLayer):
     def __init__(self, config: TimesformerConfig, layer_index: int) -> None:
         super().__init__()
 
@@ -444,7 +444,7 @@ class TimesformerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "timesformer"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["TimesformerLayer"]
 
     @torch.no_grad()

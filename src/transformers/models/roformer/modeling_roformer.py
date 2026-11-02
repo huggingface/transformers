@@ -26,7 +26,7 @@ from ...activations import ACT2FN, get_activation
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -320,7 +320,7 @@ class RoFormerOutput(nn.Module):
         return hidden_states
 
 
-class RoFormerLayer(GradientCheckpointingLayer):
+class RoFormerLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -620,7 +620,7 @@ class RoFormerOnlyMLMHead(nn.Module):
 class RoFormerPreTrainedModel(PreTrainedModel):
     config: RoFormerConfig
     base_model_prefix = "roformer"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
 
     @torch.no_grad()
     def _init_weights(self, module):

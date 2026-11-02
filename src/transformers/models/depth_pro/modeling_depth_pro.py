@@ -605,7 +605,7 @@ class DepthProPreTrainedModel(PreTrainedModel):
     base_model_prefix = "depth_pro"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _supports_sdpa = True
     _no_split_modules = ["DepthProPreActResidualLayer"]
     _keys_to_ignore_on_load_unexpected = ["fov_model.*"]

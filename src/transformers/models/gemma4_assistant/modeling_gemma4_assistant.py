@@ -90,7 +90,7 @@ class Gemma4AssistantMaskedEmbedder(nn.Module):
 class Gemma4AssistantPreTrainedModel(PreTrainedModel):
     config: Gemma4AssistantConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _skip_keys_device_placement = ["shared_kv_states"]
     _supports_flash_attn = True
     _supports_sdpa = True

@@ -447,7 +447,7 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if not model_class.supports_gradient_checkpointing:
+            if not model_class.supports_activation_checkpointing:
                 continue
 
             model = model_class(config)

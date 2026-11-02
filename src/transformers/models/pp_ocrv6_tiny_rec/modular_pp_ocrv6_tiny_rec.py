@@ -63,7 +63,7 @@ class PPOCRV6TinyRecConfig(PPOCRV6SmallRecConfig):
 
 @auto_docstring
 class PPOCRV6TinyRecPreTrainedModel(PPOCRV6SmallRecPreTrainedModel):
-    supports_gradient_checkpointing = False
+    supports_activation_checkpointing = False
     _no_split_modules = []
     _can_record_outputs = {}
 

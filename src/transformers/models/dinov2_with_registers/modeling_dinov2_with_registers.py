@@ -29,7 +29,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -297,7 +297,7 @@ class Dinov2WithRegistersDropPath(nn.Module):
         return f"p={self.drop_prob}"
 
 
-class Dinov2WithRegistersLayer(GradientCheckpointingLayer):
+class Dinov2WithRegistersLayer(ActivationCheckpointingLayer):
     """This corresponds to the Block class in the original implementation."""
 
     def __init__(self, config: Dinov2WithRegistersConfig) -> None:
@@ -340,7 +340,7 @@ class Dinov2WithRegistersPreTrainedModel(PreTrainedModel):
     base_model_prefix = "dinov2_with_registers"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Dinov2WithRegistersEmbeddings", "Dinov2WithRegistersLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True

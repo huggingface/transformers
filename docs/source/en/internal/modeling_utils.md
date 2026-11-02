@@ -48,7 +48,7 @@ Most of those are only useful if you are studying the code of the models in the 
 
 ## Layers
 
-[[autodoc]] GradientCheckpointingLayer
+[[autodoc]] ActivationCheckpointingLayer
 
 ## Attention Functions
 

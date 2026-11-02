@@ -104,7 +104,7 @@ class NemotronH_Omni_Reasoning_V3PreTrainedModel(PreTrainedModel):
     config: NemotronH_Omni_Reasoning_V3_Config
     main_input_name = "input_ids"
     input_modalities = ("image", "video", "audio", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True

@@ -27,7 +27,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -284,7 +284,7 @@ class VitPoseBackboneMLP(nn.Module):
         return hidden_state
 
 
-class VitPoseBackboneLayer(GradientCheckpointingLayer):
+class VitPoseBackboneLayer(ActivationCheckpointingLayer):
     def __init__(self, config: VitPoseBackboneConfig):
         super().__init__()
         self.num_experts = config.num_experts
@@ -331,7 +331,7 @@ class VitPoseBackbonePreTrainedModel(PreTrainedModel):
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["VitPoseBackboneEmbeddings", "VitPoseBackboneLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True

@@ -36,7 +36,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -114,7 +114,7 @@ class Qwen3OmniMoePreTrainedModel(PreTrainedModel):
     config: Qwen3OmniMoeConfig
     base_model_prefix = "model"
     input_modalities = ("image", "video", "audio", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = [
         "Qwen3OmniMoeThinkerTextDecoderLayer",
         "Qwen3OmniMoeAudioEncoderLayer",
@@ -595,7 +595,7 @@ class Qwen3OmniMoeAudioAttention(nn.Module):
         return attn_output
 
 
-class Qwen3OmniMoeAudioEncoderLayer(GradientCheckpointingLayer):
+class Qwen3OmniMoeAudioEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Qwen3OmniMoeAudioEncoderConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -1071,7 +1071,7 @@ class Qwen3OmniMoeVisionMLP(nn.Module):
         return self.linear_fc2(self.act_fn(self.linear_fc1(hidden_state)))
 
 
-class Qwen3OmniMoeVisionBlock(GradientCheckpointingLayer):
+class Qwen3OmniMoeVisionBlock(ActivationCheckpointingLayer):
     def __init__(self, config, attn_implementation: str = "sdpa") -> None:
         super().__init__()
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=1e-6)
@@ -1512,7 +1512,7 @@ class Qwen3OmniMoeThinkerTextMLP(nn.Module):
         return down_proj
 
 
-class Qwen3OmniMoeThinkerTextDecoderLayer(GradientCheckpointingLayer):
+class Qwen3OmniMoeThinkerTextDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.self_attn = Qwen3OmniMoeThinkerTextAttention(config, layer_idx)
@@ -1562,7 +1562,7 @@ class Qwen3OmniMoeThinkerTextDecoderLayer(GradientCheckpointingLayer):
 class Qwen3OmniMoeThinkerTextPreTrainedModel(PreTrainedModel):
     config: Qwen3OmniMoeTextConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["Qwen3OmniMoeThinkerTextDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
@@ -2526,7 +2526,7 @@ class Qwen3OmniMoeMLP(nn.Module):
         return down_proj
 
 
-class Qwen3OmniMoeTalkerCodePredictorDecoderLayer(GradientCheckpointingLayer):
+class Qwen3OmniMoeTalkerCodePredictorDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -2907,7 +2907,7 @@ class Qwen3OmniMoeTalkerTextSparseMoeBlock(nn.Module):
         return expert_output
 
 
-class Qwen3OmniMoeTalkerDecoderLayer(GradientCheckpointingLayer):
+class Qwen3OmniMoeTalkerDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.self_attn = Qwen3OmniMoeThinkerTextAttention(config, layer_idx)
@@ -3640,7 +3640,7 @@ class Qwen3OmniMoeCode2WavLayerScale(nn.Module):
         return self.scale * x
 
 
-class Qwen3OmniMoeCode2WavTransformerLayer(GradientCheckpointingLayer):
+class Qwen3OmniMoeCode2WavTransformerLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Qwen3OmniMoeCode2WavConfig, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size

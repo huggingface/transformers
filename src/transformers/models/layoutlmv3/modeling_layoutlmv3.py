@@ -24,7 +24,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     QuestionAnsweringModelOutput,
@@ -331,7 +331,7 @@ class LayoutLMv3Attention(nn.Module):
 
 
 # Copied from transformers.models.layoutlmv2.modeling_layoutlmv2.LayoutLMv2Layer with LayoutLMv2->LayoutLMv3
-class LayoutLMv3Layer(GradientCheckpointingLayer):
+class LayoutLMv3Layer(ActivationCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward

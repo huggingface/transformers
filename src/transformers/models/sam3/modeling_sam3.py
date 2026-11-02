@@ -25,7 +25,7 @@ from torch import Tensor
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -732,7 +732,7 @@ class Sam3ViTLayerScale(nn.Module):
         return hidden_state * self.lambda1
 
 
-class Sam3ViTLayer(GradientCheckpointingLayer):
+class Sam3ViTLayer(ActivationCheckpointingLayer):
     """Vision Transformer layer with rotary position embeddings and optional windowed attention."""
 
     def __init__(self, config: Sam3ViTConfig, window_size: int = 0) -> None:

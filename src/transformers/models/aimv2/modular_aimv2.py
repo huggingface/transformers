@@ -24,7 +24,7 @@ from torch import nn
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -203,7 +203,7 @@ class Aimv2Attention(SiglipAttention):
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
 
 
-class Aimv2EncoderLayer(GradientCheckpointingLayer):
+class Aimv2EncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: Aimv2VisionConfig):
         super().__init__()
         self.attention = Aimv2Attention(config)
@@ -276,7 +276,7 @@ class Aimv2PreTrainedModel(PreTrainedModel):
     config: Aimv2Config
     base_model_prefix = "aimv2"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = [
         "Aimv2EncoderLayer",
         "Aimv2AttentionPoolingHead",

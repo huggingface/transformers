@@ -30,7 +30,7 @@ import torch.nn.functional as F
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
 from ...backbone_utils import filter_output_hidden_states
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -225,7 +225,7 @@ class SLANeXtPreTrainedModel(PreTrainedModel):
     base_model_prefix = "backbone"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _keep_in_fp32_modules_strict = ["structure_attention_cell", "structure_generator"]
 
     @torch.no_grad()
@@ -296,7 +296,7 @@ class SLANeXtMLPBlock(nn.Module):
         return hidden_states
 
 
-class SLANeXtVisionLayer(GradientCheckpointingLayer):
+class SLANeXtVisionLayer(ActivationCheckpointingLayer):
     def __init__(self, config, window_size):
         super().__init__()
         self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)

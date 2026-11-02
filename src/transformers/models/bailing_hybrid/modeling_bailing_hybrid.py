@@ -39,7 +39,7 @@ from ...integrations import (
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -829,7 +829,7 @@ class BailingHybridMoE(nn.Module):
         return hidden_states
 
 
-class BailingHybridDecoderLayer(GradientCheckpointingLayer):
+class BailingHybridDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: BailingHybridConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -890,7 +890,7 @@ class BailingHybridDecoderLayer(GradientCheckpointingLayer):
 class BailingHybridPreTrainedModel(PreTrainedModel):
     config: BailingHybridConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["BailingHybridDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True

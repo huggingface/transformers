@@ -34,7 +34,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -619,7 +619,7 @@ class MistralLarge4TextMoE(nn.Module):
         return hidden_states
 
 
-class MistralLarge4TextDecoderLayer(GradientCheckpointingLayer):
+class MistralLarge4TextDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: MistralLarge4TextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -672,7 +672,7 @@ class MistralLarge4TextDecoderLayer(GradientCheckpointingLayer):
 class MistralLarge4PreTrainedModel(PreTrainedModel):
     config: MistralLarge4Config
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["MistralLarge4TextDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "shared_kv_states"]
     _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!

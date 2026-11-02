@@ -22,7 +22,7 @@ from torch.nn import functional as F
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from .configuration_seggpt import SegGptConfig
@@ -388,7 +388,7 @@ class SegGptDropPath(nn.Module):
         return f"p={self.drop_prob}"
 
 
-class SegGptLayer(GradientCheckpointingLayer):
+class SegGptLayer(ActivationCheckpointingLayer):
     def __init__(self, config: SegGptConfig, drop_path_rate: float) -> None:
         super().__init__()
         self.attention = SegGptAttention(config)
@@ -585,7 +585,7 @@ class SegGptPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["SegGptEmbeddings", "SegGptLayer"]
 
     @torch.no_grad()

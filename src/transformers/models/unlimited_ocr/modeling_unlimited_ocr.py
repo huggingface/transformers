@@ -39,7 +39,7 @@ from ...masking_utils import (
     create_sliding_window_causal_mask,
     or_masks,
 )
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import ActivationCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
@@ -282,7 +282,7 @@ class UnlimitedOcrPreTrainedModel(PreTrainedModel):
     config: UnlimitedOcrConfig
     base_model_prefix = "model"
     input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
     # SAM uses rel-pos bias, incompatible with flash attention.
     _supports_flash_attn = False
@@ -392,7 +392,7 @@ UNLIMITED_OCR_SAM_VISION_ATTENTION_CLASSES = {
 }
 
 
-class UnlimitedOcrSamVisionLayer(GradientCheckpointingLayer):
+class UnlimitedOcrSamVisionLayer(ActivationCheckpointingLayer):
     def __init__(self, config, window_size):
         super().__init__()
         self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -744,7 +744,7 @@ class UnlimitedOcrMLP(nn.Module):
         return hidden_states
 
 
-class UnlimitedOcrEncoderLayer(GradientCheckpointingLayer):
+class UnlimitedOcrEncoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config: UnlimitedOcrVisionConfig | UnlimitedOcrTextConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -1219,7 +1219,7 @@ class UnlimitedOcrTextRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class UnlimitedOcrTextDecoderLayer(GradientCheckpointingLayer):
+class UnlimitedOcrTextDecoderLayer(ActivationCheckpointingLayer):
     def __init__(self, config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -1269,7 +1269,7 @@ class UnlimitedOcrTextDecoderLayer(GradientCheckpointingLayer):
 class UnlimitedOcrTextPreTrainedModel(PreTrainedModel):
     config: UnlimitedOcrTextConfig
     base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    supports_activation_checkpointing = True
     _no_split_modules = ["UnlimitedOcrTextDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
