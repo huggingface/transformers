@@ -162,7 +162,9 @@ def get_vision_window_index(
         grid_t, grid_h, grid_w = int(grid_t), int(grid_h), int(grid_w)
         llm_grid_h = grid_h // spatial_merge_size
         llm_grid_w = grid_w // spatial_merge_size
-        index = torch.arange(grid_t * llm_grid_h * llm_grid_w).reshape(grid_t, llm_grid_h, llm_grid_w)
+        index = torch.arange(grid_t * llm_grid_h * llm_grid_w, device=grid_thw.device).reshape(
+            grid_t, llm_grid_h, llm_grid_w
+        )
         pad_h = vit_merger_window_size - llm_grid_h % vit_merger_window_size
         pad_w = vit_merger_window_size - llm_grid_w % vit_merger_window_size
         num_windows_h = (llm_grid_h + pad_h) // vit_merger_window_size
