@@ -409,10 +409,10 @@ class DeepseekV3Attention(nn.Module):
 
         self.scaling = yarn_apply_mscale(config.rope_parameters, self.qk_head_dim ** (-0.5))
 
-    def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def expand_kv(self, kv_nope: torch.Tensor, k_pe: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Expands the compressed latents into key and value states. Args:
             - kv_nope: key + value without positional encoding, shape [batch_size, 1, seqlen, self.kv_lora_rank]
-            - k_rot: shared key with positional encoding, shape [batch_size, 1, seqlen, self.qk_rope_head_dim]
+            - k_pe: shared key with positional encoding, shape [batch_size, 1, seqlen, self.qk_rope_head_dim]
         Returns the key and value states, two tensors of shape [batch, num_heads, seq, (k or v)_head_dim].
         """
         batch_size, _, seq_length, _ = kv_nope.shape
@@ -420,12 +420,12 @@ class DeepseekV3Attention(nn.Module):
 
         kv_nope = self.kv_b_proj(kv_nope).view(key_shape).transpose(1, 2)
         k_nope, value_states = torch.split(kv_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
-        k_rot = k_rot.expand(-1, k_nope.shape[1], -1, -1)  # does not affect the underlying storage
+        k_pe = k_pe.expand(-1, k_nope.shape[1], -1, -1)  # does not affect the underlying storage
 
-        # Concatenate k_nope and k_rot in a new tensor
+        # Concatenate k_nope and k_pe in a new tensor
         key_states = kv_nope.new_empty(*kv_nope.shape[:-1], self.qk_nope_head_dim + self.qk_rope_head_dim)
         key_states[..., : self.qk_nope_head_dim].copy_(k_nope)
-        key_states[..., self.qk_nope_head_dim :].copy_(k_rot)
+        key_states[..., self.qk_nope_head_dim :].copy_(k_pe)
         return key_states, value_states
 
     def forward(
@@ -440,32 +440,32 @@ class DeepseekV3Attention(nn.Module):
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
 
         if self.q_lora_rank is None:
-            q_states = self.q_proj(hidden_states)
+            q = self.q_proj(hidden_states)
         else:
-            q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
-        q_states = q_states.view(query_shape).transpose(1, 2)
-        q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
+            q = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
+        q = q.view(query_shape).transpose(1, 2)
+        q_nope, q_pe = torch.split(q, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        kv_nope, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        kv_nope = self.kv_a_layernorm(kv_nope)
+        kv_nope, k_pe = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        k_nope = self.kv_a_layernorm(kv_nope)
         # Both latents are viewed as single-head, 4D tensors so all cache layers handle them correctly
-        kv_nope = kv_nope.view(batch_size, 1, seq_length, self.kv_lora_rank)
-        k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
+        k_nope = k_nope.view(batch_size, 1, seq_length, self.kv_lora_rank)
+        k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         cos, sin = position_embeddings
         if self.config.rope_interleave:  # support using interleaved weights for efficiency
-            q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
+            q_pe, k_pe = apply_rotary_pos_emb_interleave(q_pe, k_pe, cos, sin)
         else:
-            q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
+            q_pe, k_pe = apply_rotary_pos_emb(q_pe, k_pe, cos, sin)
 
         # Cache read / write is performed while latent KV is still compressed
         if past_key_values is not None:
-            kv_nope, k_rot = past_key_values.update(kv_nope, k_rot, self.layer_idx)
+            k_nope, k_pe = past_key_values.update(k_nope, k_pe, self.layer_idx)
 
-        query_states = torch.cat((q_pass, q_rot), dim=-1)
+        query_states = torch.cat((q_nope, q_pe), dim=-1)
 
-        key_states, value_states = self.expand_kv(kv_nope, k_rot)
+        key_states, value_states = self.expand_kv(k_nope, k_pe)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward

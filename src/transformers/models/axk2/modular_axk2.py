@@ -31,17 +31,16 @@ from ...utils import auto_docstring, logging
 from ..clip.modeling_clip import CLIPMLP
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2SparseMoeBlock
 from ..deepseek_v3.modeling_deepseek_v3 import (
-    DeepseekV3Attention,
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
 )
 from ..deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
 from ..deepseek_v32.modeling_deepseek_v32 import (
+    DeepseekV32Attention,
     DeepseekV32ForCausalLM,
     DeepseekV32Indexer,
     DeepseekV32Model,
     DeepseekV32PreTrainedModel,
-    yarn_apply_mscale,
 )
 from ..glm4_moe.modeling_glm4_moe import Glm4MoeTopKRouter
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
@@ -268,57 +267,20 @@ class AXK2SparseMoeBlock(DeepseekV2SparseMoeBlock):
     pass
 
 
-class AXK2Attention(DeepseekV3Attention):
+class AXK2Attention(DeepseekV32Attention):
     """
     DeepSeek-V3 MLA, with a DSA indexer whose top-k sparse mask is folded into the attention mask.
     Qlora rank formulation is dropped as it is never used in released models.
     """
 
     def __init__(self, config: AXK2Config, layer_idx: int):
-        nn.Module.__init__(self)
-        self.config = config
-        self.layer_idx = layer_idx
-        self.attention_dropout = config.attention_dropout
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-
-        self.q_lora_rank = config.q_lora_rank
-        self.qk_rope_head_dim = config.qk_rope_head_dim
-        self.kv_lora_rank = config.kv_lora_rank
-        self.v_head_dim = config.v_head_dim
-        self.qk_nope_head_dim = config.qk_nope_head_dim
-        self.qk_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-
-        self.is_causal = True
+        super().__init__(config, layer_idx)
         # Unlike DeepseekV3.2, this model does not use q_b_proj
-        self.q_a_proj = nn.Linear(self.hidden_size, self.q_lora_rank, bias=config.attention_bias)
-        self.q_a_layernorm = AXK2RMSNorm(self.q_lora_rank)
+        del self.q_b_proj
         # Fused projection for q and gate, needs to be kept fused as the FP8 scales won't match otherwise when split
         self.q_gate_proj = nn.Linear(
             2 * self.q_lora_rank, self.num_heads * (self.qk_head_dim + self.v_head_dim), bias=False
         )
-
-        self.kv_a_proj_with_mqa = nn.Linear(
-            self.hidden_size,
-            self.kv_lora_rank + self.qk_rope_head_dim,
-            bias=config.attention_bias,
-        )
-        self.kv_a_layernorm = AXK2RMSNorm(self.kv_lora_rank)
-        self.kv_b_proj = nn.Linear(
-            self.kv_lora_rank,
-            self.num_heads * (self.qk_nope_head_dim + self.v_head_dim),
-            bias=False,
-        )
-
-        self.o_proj = nn.Linear(
-            self.num_heads * self.v_head_dim,
-            self.hidden_size,
-            bias=config.attention_bias,
-        )
-
-        self.scaling = yarn_apply_mscale(config.rope_parameters, self.qk_head_dim ** (-0.5))
-        self.indexer = AXK2Indexer(config, layer_idx)
 
     def forward(
         self,
@@ -337,28 +299,27 @@ class AXK2Attention(DeepseekV3Attention):
         q_resid = self.q_a_layernorm(q_compressed)
 
         query_gate_states = self.q_gate_proj(torch.cat([q_resid, q_compressed], dim=-1)).view(query_gate_shape)
-        query_states, gate_states = torch.split(query_gate_states, [self.qk_head_dim, self.v_head_dim], dim=-1)
-        query_states = query_states.transpose(1, 2)
+        q, gate_states = torch.split(query_gate_states, [self.qk_head_dim, self.v_head_dim], dim=-1)
+        q = q.transpose(1, 2)
         gate_states = gate_states.reshape(batch_size, seq_length, -1)
 
-        q_pass, q_rot = torch.split(query_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
+        q_nope, q_pe = torch.split(q, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        kv_nope, k_pe = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
         # Both latents are viewed as single-head, 4D tensors, as expected by `expand_kv`
-        k_pass = self.kv_a_layernorm(kv_pass).view(batch_size, 1, seq_length, self.kv_lora_rank)
-        k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
-
+        k_nope = self.kv_a_layernorm(kv_nope).view(batch_size, 1, seq_length, self.kv_lora_rank)
+        k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
         cos, sin = position_embeddings
-        q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
+        q_pe, k_pe = apply_rotary_pos_emb_interleave(q_pe, k_pe, cos, sin)
 
         # Cache read / write is performed while latent KV is still compressed
         if past_key_values is not None:
-            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
+            k_nope, k_pe = past_key_values.update(k_nope, k_pe, self.layer_idx)
 
-        query_states = torch.cat((q_pass, q_rot), dim=-1)
+        query_states = torch.cat((q_nope, q_pe), dim=-1)
 
-        key_states, value_states = self.expand_kv(k_pass, k_rot)
+        key_states, value_states = self.expand_kv(k_nope, k_pe)
 
         # The indexer scores against a 3D `[B, S, T]` mask; the attention mask is 4D `[B, 1, S, T]`.
         topk_indices = self.indexer(
@@ -368,15 +329,16 @@ class AXK2Attention(DeepseekV3Attention):
             attention_mask[:, 0, :, :],
             position_ids,  # Kept for BC
             past_key_values=past_key_values,
-        )
+        )  # [B, S, topk]
 
         sparse_indices = None
         if self.config._attn_implementation in ("eager", "sdpa"):
+            # Boolean mask: `True` at keys *not* selected by the indexer (to be masked out).
             index_mask = (
                 topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
                 .scatter(-1, topk_indices.long(), False)
                 .unsqueeze(1)
-            )
+            )  # [B, 1, S, T]; True = masked
 
             if attention_mask.dtype == torch.bool:
                 attention_mask = attention_mask & ~index_mask

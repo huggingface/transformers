@@ -1121,6 +1121,7 @@ class Glm5NextTextAttention(nn.Module):
 
     def __init__(self, config: Glm5NextTextConfig, layer_idx: int):
         super().__init__()
+        # Refer: https://arxiv.org/abs/2603.12201 for more details.
         self.skip_topk = config.indexer_types[layer_idx] == "shared"
         self.config = config
         self.layer_idx = layer_idx
@@ -1164,10 +1165,10 @@ class Glm5NextTextAttention(nn.Module):
             not self.skip_topk and config.indexer_types[min(layer_idx + 1, len(config.indexer_types) - 1)] == "shared"
         )
 
-    def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def expand_kv(self, kv_nope: torch.Tensor, k_pe: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Expands the compressed latents into key and value states. Args:
             - kv_nope: key + value without positional encoding, shape [batch_size, 1, seqlen, self.kv_lora_rank]
-            - k_rot: shared key with positional encoding, shape [batch_size, 1, seqlen, self.qk_rope_head_dim]
+            - k_pe: shared key with positional encoding, shape [batch_size, 1, seqlen, self.qk_rope_head_dim]
         Returns the key and value states, two tensors of shape [batch, num_heads, seq, (k or v)_head_dim].
         """
         batch_size, _, seq_length, _ = kv_nope.shape
@@ -1175,12 +1176,12 @@ class Glm5NextTextAttention(nn.Module):
 
         kv_nope = self.kv_b_proj(kv_nope).view(key_shape).transpose(1, 2)
         k_nope, value_states = torch.split(kv_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
-        k_rot = k_rot.expand(-1, k_nope.shape[1], -1, -1)  # does not affect the underlying storage
+        k_pe = k_pe.expand(-1, k_nope.shape[1], -1, -1)  # does not affect the underlying storage
 
-        # Concatenate k_nope and k_rot in a new tensor
+        # Concatenate k_nope and k_pe in a new tensor
         key_states = kv_nope.new_empty(*kv_nope.shape[:-1], self.qk_nope_head_dim + self.qk_rope_head_dim)
         key_states[..., : self.qk_nope_head_dim].copy_(k_nope)
-        key_states[..., self.qk_nope_head_dim :].copy_(k_rot)
+        key_states[..., self.qk_nope_head_dim :].copy_(k_pe)
         return key_states, value_states
 
     def forward(
@@ -1199,15 +1200,15 @@ class Glm5NextTextAttention(nn.Module):
         query_states = self.q_b_proj(q_resid).view(query_shape).transpose(1, 2)
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        k_pass = self.kv_a_layernorm(kv_pass).view(batch_size, 1, seq_length, self.kv_lora_rank)
-        k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
+        kv_nope, k_pe = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        k_nope = self.kv_a_layernorm(kv_nope).view(batch_size, 1, seq_length, self.kv_lora_rank)
+        k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         # Cache read / write is performed while latent KV is still compressed
         if past_key_values is not None:
-            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
+            k_nope, k_pe = past_key_values.update(k_nope, k_pe, self.layer_idx)
 
-        key_states, value_states = self.expand_kv(k_pass, k_rot)
+        key_states, value_states = self.expand_kv(k_nope, k_pe)
 
         if self.indexer is not None:
             topk_indices = self.indexer(

@@ -63,7 +63,6 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
-from ..axk1.modeling_axk1 import AXK1Attention
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2SparseMoeBlock
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3TopKRouter
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts, DeepseekV4HyperConnection
@@ -72,7 +71,7 @@ from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
 from ..glm46v.modeling_glm46v import Glm46VForConditionalGeneration
 from ..glm46v.processing_glm46v import Glm46VProcessor
 from ..glm_moe_dsa.configuration_glm_moe_dsa import GlmMoeDsaConfig
-from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaIndexer
+from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaAttention, GlmMoeDsaIndexer
 from ..glm_ocr.configuration_glm_ocr import GlmOcrVisionConfig
 from ..glm_ocr.modeling_glm_ocr import (
     GlmOcrVisionBlock,
@@ -1016,7 +1015,7 @@ class Glm5NextTextIndexer(GlmMoeDsaIndexer):
         return torch.cat([topk_indices, tail_indices], dim=-1)
 
 
-class Glm5NextTextAttention(AXK1Attention):
+class Glm5NextTextAttention(GlmMoeDsaAttention):
     """
     DeepSeek-V3.2 DSA extended with **cross-layer top-k sharing**.
 
@@ -1026,12 +1025,10 @@ class Glm5NextTextAttention(AXK1Attention):
     """
 
     def __init__(self, config: Glm5NextTextConfig, layer_idx: int):
-        self.skip_topk = config.indexer_types[layer_idx] == "shared"
         super().__init__(config, layer_idx)
         self.q_a_layernorm = Glm5NextTextRMSNorm(self.q_lora_rank, eps=config.rms_norm_eps)
         self.kv_a_layernorm = Glm5NextTextRMSNorm(self.kv_lora_rank, eps=config.rms_norm_eps)
         self.scaling = self.qk_head_dim ** (-0.5)
-        self.indexer = None if self.skip_topk else Glm5NextTextIndexer(config, layer_idx)
         self.next_skip_topk = (
             not self.skip_topk and config.indexer_types[min(layer_idx + 1, len(config.indexer_types) - 1)] == "shared"
         )
@@ -1052,15 +1049,15 @@ class Glm5NextTextAttention(AXK1Attention):
         query_states = self.q_b_proj(q_resid).view(query_shape).transpose(1, 2)
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        k_pass = self.kv_a_layernorm(kv_pass).view(batch_size, 1, seq_length, self.kv_lora_rank)
-        k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
+        kv_nope, k_pe = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        k_nope = self.kv_a_layernorm(kv_nope).view(batch_size, 1, seq_length, self.kv_lora_rank)
+        k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         # Cache read / write is performed while latent KV is still compressed
         if past_key_values is not None:
-            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
+            k_nope, k_pe = past_key_values.update(k_nope, k_pe, self.layer_idx)
 
-        key_states, value_states = self.expand_kv(k_pass, k_rot)
+        key_states, value_states = self.expand_kv(k_nope, k_pe)
 
         if self.indexer is not None:
             topk_indices = self.indexer(

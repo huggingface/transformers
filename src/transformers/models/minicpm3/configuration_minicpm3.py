@@ -50,6 +50,9 @@ class MiniCPM3Config(PreTrainedConfig):
     dim_model_base (`int`, *optional*, defaults to 256):
         Base model dimension used to scale logits before the language model head. If `None`,
         defaults to `hidden_size` (no-op scaling).
+    rope_interleave (`bool`, *optional*, defaults to `False`):
+        Whether to rotate interleaved pairs of the RoPE dimensions. MiniCPM3 uses the standard (non-interleaved)
+        cos/sin rotary.
 
     Example:
 
@@ -114,6 +117,9 @@ class MiniCPM3Config(PreTrainedConfig):
     scale_emb: int | float = 12
     scale_depth: int | float | None = 1.4
     dim_model_base: int | None = 256
+    # Same MLA forward as DeepSeek-V2/V3, except MiniCPM3 keeps the standard (non-interleaved)
+    # cos/sin rotary (`apply_rotary_pos_emb`) instead of DeepSeek's complex/interleaved variant.
+    rope_interleave: bool = False
 
     def __post_init__(self, **kwargs):
         # In MLA the per-head dim used by RoPE is the rotary part, not `hidden_size / num_attention_heads`.

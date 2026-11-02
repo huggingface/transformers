@@ -221,17 +221,17 @@ class HYV4Indexer(nn.Module):
         q = self.wq_b(q_resid)  # [B, S, H*D]
         q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
         # Flipped RoPE position (later portion instead of the first)
-        q_pass, q_rot = torch.split(q, [self.head_dim - self.qk_rope_head_dim, self.qk_rope_head_dim], dim=-1)
+        q_nope, q_pe = torch.split(q, [self.head_dim - self.qk_rope_head_dim, self.qk_rope_head_dim], dim=-1)
 
         # Norm is kept in fp32
         k = (
             self.k_norm(self.wk(hidden_states).to(self.k_norm.weight.dtype)).to(hidden_states.dtype).unsqueeze(2)
         )  # [B, S, 1, D]
-        k_pass, k_rot = torch.split(k, [self.head_dim - self.qk_rope_head_dim, self.qk_rope_head_dim], dim=-1)
+        k_nope, k_pe = torch.split(k, [self.head_dim - self.qk_rope_head_dim, self.qk_rope_head_dim], dim=-1)
 
-        q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
-        q = torch.cat([q_pass, q_rot], dim=-1)  # [B, S, H, D]
-        k = torch.cat([k_pass, k_rot], dim=-1).squeeze(2)  # [B, S, D]
+        q_pe, k_pe = apply_rotary_pos_emb(q_pe, k_pe, cos, sin, unsqueeze_dim=2)
+        q = torch.cat([q_nope, q_pe], dim=-1)  # [B, S, H, D]
+        k = torch.cat([k_nope, k_pe], dim=-1).squeeze(2)  # [B, S, D]
 
         if past_key_values is not None:
             k = past_key_values.update_indexer(k, self.layer_idx)
@@ -327,6 +327,7 @@ class HYV4Attention(nn.Module):
 
     def __init__(self, config: HYV4Config, layer_idx: int):
         super().__init__()
+        # Refer: https://arxiv.org/abs/2603.12201 for more details.
         self.skip_topk = config.indexer_types[layer_idx] == "shared"
         self.config = config
         self.layer_idx = layer_idx
@@ -371,10 +372,10 @@ class HYV4Attention(nn.Module):
         self.gate_proj = nn.Linear(config.hidden_size, self.num_heads * self.gate_projection_size, bias=False)
         self.sinks = nn.Parameter(torch.full((self.num_heads,), config.learnable_sink_init))
 
-    def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def expand_kv(self, kv_nope: torch.Tensor, k_pe: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Expands the compressed latents into key and value states. Args:
             - kv_nope: key + value without positional encoding, shape [batch_size, 1, seqlen, self.kv_lora_rank]
-            - k_rot: shared key with positional encoding, shape [batch_size, 1, seqlen, self.qk_rope_head_dim]
+            - k_pe: shared key with positional encoding, shape [batch_size, 1, seqlen, self.qk_rope_head_dim]
         Returns the key and value states, two tensors of shape [batch, num_heads, seq, (k or v)_head_dim].
         """
         batch_size, _, seq_length, _ = kv_nope.shape
@@ -382,12 +383,12 @@ class HYV4Attention(nn.Module):
 
         kv_nope = self.kv_b_proj(kv_nope).view(key_shape).transpose(1, 2)
         k_nope, value_states = torch.split(kv_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
-        k_rot = k_rot.expand(-1, k_nope.shape[1], -1, -1)  # does not affect the underlying storage
+        k_pe = k_pe.expand(-1, k_nope.shape[1], -1, -1)  # does not affect the underlying storage
 
-        # Concatenate k_nope and k_rot in a new tensor
+        # Concatenate k_nope and k_pe in a new tensor
         key_states = kv_nope.new_empty(*kv_nope.shape[:-1], self.qk_nope_head_dim + self.qk_rope_head_dim)
         key_states[..., : self.qk_nope_head_dim].copy_(k_nope)
-        key_states[..., self.qk_nope_head_dim :].copy_(k_rot)
+        key_states[..., self.qk_nope_head_dim :].copy_(k_pe)
         return key_states, value_states
 
     def forward(
@@ -407,26 +408,25 @@ class HYV4Attention(nn.Module):
         gate_states = self.gate_proj(hidden_states).view(batch_size, seq_length, -1, self.gate_projection_size)
 
         q_resid = self.q_a_layernorm(self.q_a_proj(hidden_states))
-        q_states = self.q_b_proj(q_resid).view(query_shape).transpose(1, 2)
-        q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
+        q = self.q_b_proj(q_resid).view(query_shape).transpose(1, 2)
+        q_nope, q_pe = torch.split(q, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        kv_nope, k_pe = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
         # Both latents are viewed as single-head, 4D tensors, as expected by `expand_kv`
-        k_pass = self.kv_a_layernorm(kv_pass).view(batch_size, 1, seq_length, self.kv_lora_rank)
-
-        k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
+        k_nope = self.kv_a_layernorm(kv_nope).view(batch_size, 1, seq_length, self.kv_lora_rank)
+        k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
         cos, sin = position_embeddings
         # Non-interleave RoPE
-        q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
+        q_pe, k_pe = apply_rotary_pos_emb(q_pe, k_pe, cos, sin)
 
         # Cache read / write is performed while latent KV is still compressed
         if past_key_values is not None:
-            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
+            k_nope, k_pe = past_key_values.update(k_nope, k_pe, self.layer_idx)
 
-        query_states = torch.cat((q_pass, q_rot), dim=-1)
+        query_states = torch.cat((q_nope, q_pe), dim=-1)
 
-        key_states, value_states = self.expand_kv(k_pass, k_rot)
+        key_states, value_states = self.expand_kv(k_nope, k_pe)
 
         # DSA: select this layer's top-k tokens, or reuse the previous full layer's on `"shared"` layers.
         if self.indexer is not None:
@@ -476,7 +476,8 @@ class HYV4Attention(nn.Module):
 
         attn_output = attn_output * torch.sigmoid(gate_states)
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
-        return self.o_proj(attn_output), attn_weights, topk_indices
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights, topk_indices
 
 
 class HYV4MLP(nn.Module):

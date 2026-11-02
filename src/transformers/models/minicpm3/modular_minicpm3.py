@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import math
-from collections.abc import Callable
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -21,7 +20,7 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention
@@ -36,8 +35,6 @@ from ..llama.modeling_llama import (
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
-    apply_rotary_pos_emb,
-    eager_attention_forward,
 )
 
 
@@ -67,6 +64,9 @@ class MiniCPM3Config(LlamaConfig):
     dim_model_base (`int`, *optional*, defaults to 256):
         Base model dimension used to scale logits before the language model head. If `None`,
         defaults to `hidden_size` (no-op scaling).
+    rope_interleave (`bool`, *optional*, defaults to `False`):
+        Whether to rotate interleaved pairs of the RoPE dimensions. MiniCPM3 uses the standard (non-interleaved)
+        cos/sin rotary.
 
     Example:
 
@@ -114,6 +114,9 @@ class MiniCPM3Config(LlamaConfig):
     scale_emb: int | float = 12
     scale_depth: int | float | None = 1.4
     dim_model_base: int | None = 256
+    # Same MLA forward as DeepSeek-V2/V3, except MiniCPM3 keeps the standard (non-interleaved)
+    # cos/sin rotary (`apply_rotary_pos_emb`) instead of DeepSeek's complex/interleaved variant.
+    rope_interleave: bool = False
 
     def __post_init__(self, **kwargs):
         # In MLA the per-head dim used by RoPE is the rotary part, not `hidden_size / num_attention_heads`.
@@ -158,63 +161,8 @@ class MiniCPM3Attention(DeepseekV3Attention):
     The only difference is the rotary convention: MiniCPM3 keeps the original cos/sin RoPE
     (`apply_rotary_pos_emb`) instead of DeepSeek-V2's complex rotary, so we inherit the
     module construction and override only `forward`.
+    The rotary choice is now selected by `config.rope_interleave = False`, so `forward` is inherited too.
     """
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        batch_size, seq_length = hidden_states.shape[:-1]
-        query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
-
-        if self.q_lora_rank is None:
-            q_states = self.q_proj(hidden_states)
-        else:
-            q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
-        q_states = q_states.view(query_shape).transpose(1, 2)
-        q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
-
-        compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        # Both latents are viewed as single-head, 4D tensors so all cache layers handle them correctly
-        k_pass = self.kv_a_layernorm(kv_pass).view(batch_size, 1, seq_length, self.kv_lora_rank)
-        k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
-
-        cos, sin = position_embeddings
-        # Same MLA forward as DeepSeek-V2/V3, except MiniCPM3 keeps the standard (non-interleaved)
-        # cos/sin rotary (`apply_rotary_pos_emb`) instead of DeepSeek's complex/interleaved variant.
-        q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
-
-        # Cache read / write is performed while the latent KV is still compressed
-        if past_key_values is not None:
-            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
-
-        query_states = torch.cat((q_pass, q_rot), dim=-1)
-
-        key_states, value_states = self.expand_kv(k_pass, k_rot)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
 
 
 class MiniCPM3DecoderLayer(LlamaDecoderLayer):

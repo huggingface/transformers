@@ -14,13 +14,13 @@ from ...utils import logging
 from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v2.modeling_deepseek_v2 import (
     DeepseekV2Attention,
+    DeepseekV2DecoderLayer,
     DeepseekV2ForCausalLM,
     DeepseekV2Model,
     DeepseekV2SparseMoeBlock,
     DeepseekV2TopKRouter,
 )
 from ..llama.modeling_llama import (
-    LlamaDecoderLayer,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
@@ -145,32 +145,32 @@ class DeepseekV3Attention(DeepseekV2Attention):
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
 
         if self.q_lora_rank is None:
-            q_states = self.q_proj(hidden_states)
+            q = self.q_proj(hidden_states)
         else:
-            q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
-        q_states = q_states.view(query_shape).transpose(1, 2)
-        q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
+            q = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
+        q = q.view(query_shape).transpose(1, 2)
+        q_nope, q_pe = torch.split(q, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        kv_nope, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        kv_nope = self.kv_a_layernorm(kv_nope)
+        kv_nope, k_pe = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
+        k_nope = self.kv_a_layernorm(kv_nope)
         # Both latents are viewed as single-head, 4D tensors so all cache layers handle them correctly
-        kv_nope = kv_nope.view(batch_size, 1, seq_length, self.kv_lora_rank)
-        k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
+        k_nope = k_nope.view(batch_size, 1, seq_length, self.kv_lora_rank)
+        k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         cos, sin = position_embeddings
         if self.config.rope_interleave:  # support using interleaved weights for efficiency
-            q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
+            q_pe, k_pe = apply_rotary_pos_emb_interleave(q_pe, k_pe, cos, sin)
         else:
-            q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
+            q_pe, k_pe = apply_rotary_pos_emb(q_pe, k_pe, cos, sin)
 
         # Cache read / write is performed while latent KV is still compressed
         if past_key_values is not None:
-            kv_nope, k_rot = past_key_values.update(kv_nope, k_rot, self.layer_idx)
+            k_nope, k_pe = past_key_values.update(k_nope, k_pe, self.layer_idx)
 
-        query_states = torch.cat((q_pass, q_rot), dim=-1)
+        query_states = torch.cat((q_nope, q_pe), dim=-1)
 
-        key_states, value_states = self.expand_kv(kv_nope, k_rot)
+        key_states, value_states = self.expand_kv(k_nope, k_pe)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -192,12 +192,8 @@ class DeepseekV3Attention(DeepseekV2Attention):
         return attn_output, attn_weights
 
 
-class DeepseekV3DecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: DeepseekV3Config, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.mlp = (
-            DeepseekV3SparseMoeBlock(config) if layer_idx >= config.first_k_dense_replace else DeepseekV3MLP(config)
-        )
+class DeepseekV3DecoderLayer(DeepseekV2DecoderLayer):
+    pass
 
 
 class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
