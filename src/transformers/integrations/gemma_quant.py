@@ -19,6 +19,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ..core_model_loading import ConversionOps
+from ..quantizers.quantizers_utils import get_module_from_name
+
 
 def apply_srq(x: torch.Tensor, scale: torch.Tensor, bits: int = 8) -> torch.Tensor:
     """Apply Static Range Quantization rounding and clipping (in x's dtype).
@@ -62,6 +65,28 @@ def _unpack_int2(packed: torch.Tensor, original_width: int) -> torch.Tensor:
     v3 = (packed >> 6).to(torch.int8) - 2
     interleaved = torch.stack([v0, v1, v2, v3], dim=-1).reshape(*packed.shape[:-1], -1)
     return interleaved[..., :original_width]
+
+
+class GemmaDequantize(ConversionOps):
+    """Dense weights from the int2/4/8 `weight` (or `embedding_quantized`) and its per-row block scales."""
+
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, torch.Tensor]:
+        tensors = {name: value[0] if isinstance(value, list) else value for name, value in input_dict.items()}
+        packed = tensors.get("weight", tensors.get("embedding_quantized"))
+        scale = tensors.get("weight_scale", tensors.get("embedding_scale"))
+        if scale is None:
+            return {"weight": packed}
+        module, _ = get_module_from_name(model, full_layer_name)
+        width = getattr(module, "in_features", None) or module.embedding_dim
+        if packed.dtype == torch.uint8:
+            packed = (_unpack_int4 if packed.shape[-1] == (width + 1) // 2 else _unpack_int2)(packed, width)
+        weight = getattr(module, "weight", None)
+        dtype = weight.dtype if weight is not None and weight.is_floating_point() else torch.float32
+        # The activation scales are dropped: a dense model doesn't round its activations
+        return {"weight": packed.to(dtype) * scale.repeat_interleave(width // scale.shape[-1], dim=-1).to(dtype)}
 
 
 class QuantizedLinear(nn.Linear):
