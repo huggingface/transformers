@@ -15,11 +15,10 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ...utils.import_utils import is_torch_available
 from ..metadata import ExportMetadata
-from ..utils import get_leaf_tensors
 from .base import ModelRunner
 
 
@@ -37,11 +36,15 @@ class DynamoModelRunner(ModelRunner):
         super().__init__(metadata)
         self.module = module
 
+    @property
+    def device(self) -> torch.device:
+        return next(self.module.parameters(), torch.empty(0)).device
+
     @classmethod
     def from_program(cls, program: ExportedProgram, metadata: ExportMetadata, device=None) -> DynamoModelRunner:
         module = program.module()
         return cls(module if device is None else module.to(device), metadata)
 
-    def __call__(self, **kwargs) -> dict[str, torch.Tensor]:
+    def __call__(self, **kwargs) -> Any:
         with torch.no_grad():
-            return get_leaf_tensors(self.module(**kwargs))
+            return self.module(**kwargs)

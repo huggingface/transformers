@@ -15,6 +15,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from ...utils.import_utils import is_openvino_available, is_torch_available
 from ..metadata import ExportMetadata
 from ..quantizers.utils import openvino_feed
@@ -40,12 +42,6 @@ def _openvino_device(device=None) -> str:
     raise ValueError(f"OpenVINO cannot run on {device}; pass `cpu`, `xpu` (Intel GPU), or no device for `AUTO`.")
 
 
-def _output_name(port) -> str:
-    """A port's readable name: compiling can merge a named output with an intermediate that kept a numeric id."""
-    names = sorted(port.get_names())
-    return next((name for name in names if not name.isdigit()), names[0]).removeprefix("output.")
-
-
 class OpenVINOModelRunner(ModelRunner):
     """Runs an `openvino.Model`, compiled for a device, through one infer request."""
 
@@ -53,16 +49,17 @@ class OpenVINOModelRunner(ModelRunner):
         super().__init__(metadata)
         self.compiled_model = compiled_model
         self.request = compiled_model.create_infer_request()
-        self.output_names = [_output_name(port) for port in compiled_model.outputs]
+
+    @property
+    def device(self) -> torch.device:
+        # Inputs and outputs live in host memory whichever device OpenVINO compiled for.
+        return torch.device("cpu")
 
     @classmethod
     def from_program(cls, program: openvino.Model, metadata: ExportMetadata, device=None) -> OpenVINOModelRunner:
         return cls(openvino.Core().compile_model(program, _openvino_device(device)), metadata)
 
-    def __call__(self, **kwargs) -> dict[str, torch.Tensor]:
+    def __call__(self, **kwargs) -> Any:
         outputs = self.request.infer(openvino_feed(self.compiled_model, kwargs))
         # Copied: the request writes its next outputs into the same buffers.
-        return {
-            name: torch.from_numpy(outputs[port].copy())
-            for name, port in zip(self.output_names, self.compiled_model.outputs)
-        }
+        return self.unflatten([torch.from_numpy(outputs[port].copy()) for port in self.compiled_model.outputs])

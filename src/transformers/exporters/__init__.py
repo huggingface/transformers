@@ -21,7 +21,6 @@ _import_structure = {
     "auto": [
         "EXPORT_BACKENDS",
         "AutoExportConfig",
-        "AutoExportedModel",
         "AutoHfExporter",
         "ExportBackend",
         "get_export_config_class",
@@ -62,7 +61,6 @@ if TYPE_CHECKING:
     from .auto import (
         EXPORT_BACKENDS,
         AutoExportConfig,
-        AutoExportedModel,
         AutoHfExporter,
         ExportBackend,
         get_export_config_class,

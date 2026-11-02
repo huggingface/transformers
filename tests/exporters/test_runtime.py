@@ -194,9 +194,9 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             entry, loaded = self._save_and_load_decode(ExecutorchExporter(), ExecutorchConfig(), directory)
             self.assertEqual(entry["file"], "model.pte")
-            # Positional binding needs these, and they can't be recovered from a saved `.pte`.
-            self.assertIn("num_user_outputs", entry["metadata"])
-            self.assertIn("constant_inputs", entry["metadata"])
+            # Binding inputs and rebuilding outputs need these, and they can't be recovered from a saved `.pte`.
+            self.assertIsNotNone(entry["metadata"]["in_spec"])
+            self.assertIsNotNone(entry["metadata"]["out_spec"])
             self.assertIsInstance(loaded.program, Program)
             self.assertIn("forward", loaded.program.method_names)
 
@@ -215,7 +215,6 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
             self.assertEqual(entry["metadata"]["input_names"], [node.name for node in session.get_inputs()])
             self.assertEqual(entry["metadata"]["output_names"], [node.name for node in session.get_outputs()])
         self.assertTrue(any(name.startswith("input.") for name in entry["metadata"]["input_names"]))
-        self.assertIsNone(entry["metadata"]["num_user_outputs"])
 
     @require_onnxscript
     @require_onnxruntime
@@ -297,7 +296,6 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
             self.assertEqual(entry["metadata"]["input_names"], [port.get_any_name() for port in ov_model.inputs])
             self.assertEqual(entry["metadata"]["output_names"], [port.get_any_name() for port in ov_model.outputs])
         self.assertIn("beam_idx", entry["metadata"]["input_names"])
-        self.assertIsNone(entry["metadata"]["num_user_outputs"])
 
     # ──────────────────────── ONNX Runtime ────────────────────────
 
@@ -421,23 +419,25 @@ class ExportedModelTest(unittest.TestCase):
         return BertModel(config).eval(), inputs
 
     def _check_runs_like_eager(self, exporter, config, atol, device=None):
-        from transformers.exporters import AutoExportedModel, ExportedModel
+        from transformers.exporters import ExportedModel
 
         model, inputs = self._model_and_inputs()
         with torch.no_grad():
-            expected = model(**inputs).last_hidden_state
+            expected = model(**inputs)
         exported = exporter.export(model, copy.deepcopy(inputs), config)
         with tempfile.TemporaryDirectory() as directory:
             exported.save_pretrained(directory)
             for name, runtime in (
                 ("runtime", exported.runtime(device=device)),
                 ("from_pretrained", ExportedModel.from_pretrained(directory, device=device)),
-                ("auto", AutoExportedModel.from_pretrained(directory, device=device)),
             ):
                 with self.subTest(name):
                     # Inputs the trace never saw are dropped, as when passing a processor's whole output.
                     outputs = runtime(**inputs, token_type_ids=torch.zeros(2, 7, dtype=torch.long))
-                    torch.testing.assert_close(outputs.last_hidden_state.cpu(), expected, atol=atol, rtol=atol)
+                    self.assertIs(type(outputs), type(expected))
+                    for key in expected:
+                        torch.testing.assert_close(outputs[key].cpu(), expected[key], atol=atol, rtol=atol)
+                    self.assertEqual(runtime.dtype, torch.float32)
 
     @pytest.mark.torch_export_test
     def test_dynamo(self):
@@ -472,6 +472,5 @@ class ExportedModelTest(unittest.TestCase):
 
         component = ExportedComponent("program", ExportMetadata())
         artifacts = ExportArtifacts({"prefill": component, "decode": component}, "dynamo")
-        self.assertTrue(artifacts.can_generate())
         with self.assertRaisesRegex(ValueError, "2 components"):
             artifacts.runtime()

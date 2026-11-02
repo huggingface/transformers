@@ -15,9 +15,10 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from ...utils.import_utils import is_onnxruntime_available, is_torch_available
 from ..metadata import ExportMetadata
-from ..utils import get_leaf_tensors
 from .base import ModelRunner
 
 
@@ -43,16 +44,20 @@ def _providers(device=None) -> list:
 
 
 class OnnxModelRunner(ModelRunner):
-    """Runs an `ONNXProgram` in an ONNX Runtime session. A loaded program's session opens the saved file; a fresh
-    one opens the in-memory graph, as `ONNXProgram` itself does."""
+    """Runs an `ONNXProgram` through its own `__call__`, in an ONNX Runtime session opened for the device. A loaded
+    program's session opens the saved file; a fresh one opens the in-memory graph."""
 
-    def __init__(self, session: ort.InferenceSession, metadata: ExportMetadata, program: ONNXProgram | None = None):
+    def __init__(self, program: ONNXProgram, metadata: ExportMetadata, session: ort.InferenceSession):
         super().__init__(metadata)
-        self.session = session
-        # Kept alive: a program past ~1.5GB opens its session on a temporary copy the program owns.
         self.program = program
-        self.input_names = [node.name for node in session.get_inputs()]
-        self.output_names = [node.name.removeprefix("output.") for node in session.get_outputs()]
+        self.session = session
+
+    @property
+    def device(self) -> torch.device:
+        provider, options = self.session.get_providers()[0], self.session.get_provider_options()
+        if provider in ("CUDAExecutionProvider", "TensorrtExecutionProvider"):
+            return torch.device("cuda", int(options[provider]["device_id"]))
+        return torch.device("cpu")
 
     @classmethod
     def from_program(cls, program: ONNXProgram, metadata: ExportMetadata, device=None) -> OnnxModelRunner:
@@ -63,10 +68,10 @@ class OnnxModelRunner(ModelRunner):
             return sessions[-1]
 
         program.initialize_inference_session(open_session)
-        return cls(sessions[0], metadata, program)
+        return cls(program, metadata, sessions[0])
 
-    def __call__(self, **kwargs) -> dict[str, torch.Tensor]:
-        leaves = get_leaf_tensors(kwargs)
-        feed = {name: leaves[name].detach().cpu().numpy() for name in self.input_names}
-        outputs = self.session.run(None, feed)
-        return {name: torch.from_numpy(value) for name, value in zip(self.output_names, outputs)}
+    def __call__(self, **kwargs) -> Any:
+        # `ONNXProgram` binds inputs by position, so they go in traced order.
+        return self.unflatten(
+            list(self.program(**{name: kwargs[name] for name in self.metadata.kwargs if name in kwargs}))
+        )

@@ -15,7 +15,9 @@
 
 from __future__ import annotations
 
+import importlib
 import json
+import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, fields
 from typing import Any
@@ -72,37 +74,40 @@ class ExportMetadata:
     # Flat graph order.
     input_names: list[str] = field(default_factory=list)
     output_names: list[str] = field(default_factory=list)
-    # Inputs that carry no tensor (e.g. a `None` mask slot).
-    constant_inputs: dict[str, Any] = field(default_factory=dict)
-    # Outputs before the mutated-input copies a lowering appends.
-    num_user_outputs: int | None = None
+    # `torch.export`'s input and output pytree specs, as `treespec_dumps` writes them.
+    in_spec: str | None = None
+    out_spec: str | None = None
     export_config: dict[str, Any] = field(default_factory=dict)
 
 
 def build_export_metadata(
     model, inputs: Mapping[str, Any], exported_program, packages: Iterable[str] = ()
 ) -> dict[str, Any]:
-    """Record a graph's precision, traced kwargs and flat input/output order."""
+    """Record a graph's precision, traced kwargs and flat input/output order. Precision and device are read off the
+    parameters, since a split-out component is a plain `nn.Module` with no `.dtype`."""
     metadata = {
         "architecture": type(model).__name__,
         "packages": _package_versions(packages),
-        # Off the parameters: a split-out component is a plain `nn.Module` with no `.dtype`.
         "dtype": str(
             next((p.dtype for p in model.parameters() if p.is_floating_point()), torch.get_default_dtype())
         ).removeprefix("torch."),
         "device": str(next((p.device for p in model.parameters()), torch.device("cpu"))),
         "kwargs": {name: _traced_kwarg(value) for name, value in inputs.items()},
     }
-    graph_signature = exported_program.graph_signature
-    # Includes `ConstantArgument` slots: a positional backend (ExecuTorch) must still bind them.
-    user_inputs = [spec.arg for spec in graph_signature.input_specs if spec.kind.name == "USER_INPUT"]
-    metadata["input_names"] = [arg.name for arg in user_inputs]
-    metadata["constant_inputs"] = {
-        arg.name: arg.value for arg in user_inputs if type(arg).__name__ == "ConstantArgument"
-    }
+    input_specs = exported_program.graph_signature.input_specs
+    metadata["input_names"] = [spec.arg.name for spec in input_specs if spec.kind.name == "USER_INPUT"]
     metadata["output_names"] = traced_output_names(exported_program)
-    metadata["num_user_outputs"] = sum(spec.kind.name == "USER_OUTPUT" for spec in graph_signature.output_specs)
+    metadata["in_spec"] = torch.utils._pytree.treespec_dumps(exported_program.call_spec.in_spec)
+    metadata["out_spec"] = torch.utils._pytree.treespec_dumps(exported_program.call_spec.out_spec)
     return metadata
+
+
+def load_treespec(dumped: str):
+    """A spec written by `treespec_dumps`. The transformers modules it names are imported first, since a
+    `ModelOutput` registers its pytree node when its module is."""
+    for module in re.findall(r'"type": "(transformers(?:\.\w+)+)[.:]\w+"', dumped):
+        importlib.import_module(module)
+    return torch.utils._pytree.treespec_loads(dumped)
 
 
 def export_config_metadata(config) -> dict[str, Any]:

@@ -155,8 +155,9 @@ class OnnxExporter(DynamoExporter):
     ) -> tuple[ONNXProgram, dict[str, Any]]:
         config = self._as_config(config)
 
-        with patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("onnx"):
+        with patch_model_outputs(model) as (inputs_names, outputs_names, out_specs), apply_patches("onnx"):
             exported_program, metadata = super().export_program(model, sample_inputs, config=config)
+            metadata["out_spec"] = torch.utils._pytree.treespec_dumps(out_specs[-1])
             inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
             apply_fx_node_fixes("onnx", exported_program.graph_module)
             onnx_program: ONNXProgram = torch.onnx.export(
@@ -202,9 +203,7 @@ class OnnxExporter(DynamoExporter):
 
 def update_onnx_metadata(metadata: dict[str, Any], onnx_program: ONNXProgram) -> None:
     """Record the ONNX graph's own input and output names, which differ from the traced program's (dotted leaf
-    paths, `input.` / `output.` prefixes on mutated inputs). The traced program's positional layout doesn't apply."""
-    metadata.pop("constant_inputs", None)
-    metadata.pop("num_user_outputs", None)
+    paths, `input.` / `output.` prefixes on mutated inputs)."""
     metadata["input_names"] = [value.name for value in onnx_program.model.graph.inputs]
     metadata["output_names"] = [value.name for value in onnx_program.model.graph.outputs]
 
@@ -213,23 +212,28 @@ def update_onnx_metadata(metadata: dict[str, Any], onnx_program: ONNXProgram) ->
 def patch_model_outputs(model):
     """Wrap `model.forward` to return a flat `dict[str, Tensor]` with duplicated outputs,
     and capture the input/output tensor names from the traced forward in the yielded
-    `(inputs_names, outputs_names)` lists.
+    `(inputs_names, outputs_names, out_specs)` lists, with the pytree spec of what the model returned. Traced ints
+    in it (a sliding cache's length) are no graph outputs, so they are made concrete and join the spec's context.
     """
 
     inputs_names: list[str] = []
     outputs_names: list[str] = []
+    out_specs: list[torch.utils._pytree.TreeSpec] = []
     original_forward = model.forward
 
     @functools.wraps(original_forward)
     def patched_forward(*args, **kwargs):
-        outputs = get_leaf_tensors(duplicate_leaf_tensors(original_forward(*args, **kwargs)))
+        original_outputs = original_forward(*args, **kwargs)
+        concrete = torch.utils._pytree.tree_map_only(torch.SymInt, lambda value: value.node.hint, original_outputs)
+        out_specs.append(torch.utils._pytree.tree_structure(concrete))
+        outputs = get_leaf_tensors(duplicate_leaf_tensors(original_outputs))
         inputs_names.extend(get_leaf_tensors(kwargs).keys())
         outputs_names.extend(outputs.keys())
         return outputs
 
     try:
         model.forward = patched_forward
-        yield inputs_names, outputs_names
+        yield inputs_names, outputs_names, out_specs
     finally:
         model.forward = original_forward
 

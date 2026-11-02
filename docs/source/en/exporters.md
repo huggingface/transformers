@@ -244,24 +244,28 @@ outputs = compiled(ov_inputs)
 
 ## Run an export
 
-[`AutoExportedModel.from_pretrained`] loads any saved export to run, from a local directory or the Hub, and
-[`~ExportArtifacts.runtime`] runs one straight from the export. A single-graph export runs as an [`ExportedModel`], on
-its backend's runtime (`torch.export`'s module, ONNX Runtime, OpenVINO, or the ExecuTorch runtime). Either is called like the model it came from and returns a [`~utils.ModelOutput`]. Inputs the
-export wasn't traced with are dropped, so a processor's whole output can be passed.
+An [`ExportedModel`] runs an export on its backend's runtime (`torch.export`'s module, ONNX Runtime, OpenVINO, or the
+ExecuTorch runtime) and is called like the model it came from: same kwargs, same [`~utils.ModelOutput`] class. The
+compute runs in the backend, which is often faster than eager PyTorch (OpenVINO on CPU, ONNX Runtime on CUDA), and
+quantized exports run the same way. Inputs the export wasn't traced with are dropped, so a processor's whole output
+can be passed.
+
+[`~ExportArtifacts.runtime`] runs a fresh export, and [`ExportedModel.from_pretrained`] loads a saved one from a local
+directory or the Hub.
 
 ```python
-from transformers.exporters import AutoExportedModel
+from transformers.exporters import ExportedModel
 
 outputs = exported.runtime()(**inputs)
 
 exported.save_pretrained("qwen3-onnx")
-model = AutoExportedModel.from_pretrained("qwen3-onnx", device="cuda")
+model = ExportedModel.from_pretrained("qwen3-onnx", device="cuda")
 logits = model(**inputs).logits
 ```
 
 `device` picks where it runs: an ONNX Runtime provider (`"cpu"`, `"cuda"`), an OpenVINO device (`"cpu"`, `"xpu"` for an
 Intel GPU, or `AUTO` by default), or where a `torch.export` module is moved. An ExecuTorch program runs where it was
-lowered for. Generation exports, with several components, are driven by a generation loop, which isn't covered here.
+lowered for. Exports with several components (generation) don't run yet.
 
 ## Dynamic shapes
 

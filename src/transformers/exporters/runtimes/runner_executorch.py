@@ -15,14 +15,16 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from ...utils.import_utils import is_executorch_available, is_torch_available
-from ..metadata import ExportMetadata
-from ..utils import get_leaf_tensors
+from ..metadata import ExportMetadata, load_treespec
 from .base import ModelRunner
 
 
 if is_torch_available():
     import torch
+    import torch.fx._pytree as fx_pytree
 
 if is_executorch_available():
     from executorch.exir import ExecutorchProgramManager
@@ -30,11 +32,16 @@ if is_executorch_available():
 
 
 class ExecutorchModelRunner(ModelRunner):
-    """Runs an ExecuTorch program's `forward` method. Inputs bind by position, in the order the export recorded."""
+    """Runs an ExecuTorch program's `forward` method, its inputs flattened as `torch.export` traced them."""
 
     def __init__(self, program: Program, metadata: ExportMetadata):
         super().__init__(metadata)
         self.method = program.load_method("forward")
+        self.in_spec = load_treespec(metadata.in_spec)
+
+    @property
+    def device(self) -> torch.device:
+        return torch.device("cpu")
 
     @classmethod
     def from_program(cls, program, metadata: ExportMetadata, device=None) -> ExecutorchModelRunner:
@@ -43,27 +50,7 @@ class ExecutorchModelRunner(ModelRunner):
             program = Runtime.get().load_program(program.buffer)
         return cls(program, metadata)
 
-    def __call__(self, **kwargs) -> dict[str, torch.Tensor]:
-        # Traced placeholders join a nested input's path with underscores (`encoder_outputs_last_hidden_state`), or,
-        # for a pytree like a `Cache`, number its flattened leaves (`past_key_values_0`).
-        leaves = {name.replace(".", "_"): tensor for name, tensor in get_leaf_tensors(kwargs).items()}
-        for name, nested in kwargs.items():
-            if not isinstance(nested, torch.Tensor):
-                for index, leaf in enumerate(torch.utils._pytree.tree_leaves(nested)):
-                    leaves.setdefault(f"{name}_{index}", leaf)
-        constants = self.metadata.constant_inputs
-
-        def value(name):
-            if name in constants:
-                return constants[name]
-            # A scalar kwarg the trace kept as an input of its own.
-            return leaves[name].contiguous() if name in leaves else kwargs[name]
-
-        feed = tuple(value(name) for name in self.metadata.input_names)
-        outputs = self.method.execute(feed)
-        # The model's own outputs come last, after the copies of mutated inputs a lowering adds. Integers a dynamic
-        # export returns (a static cache's positions) are dropped: the model returns them inside its cache, not as
-        # tensors.
-        num_user_outputs = self.metadata.num_user_outputs or len(outputs)
-        user_outputs = zip(self.metadata.output_names, outputs[len(outputs) - num_user_outputs :])
-        return {name: output for name, output in user_outputs if isinstance(output, torch.Tensor)}
+    def __call__(self, **kwargs) -> Any:
+        leaves = fx_pytree.tree_flatten_spec(((), kwargs), self.in_spec)
+        feed = [leaf.contiguous() if isinstance(leaf, torch.Tensor) else leaf for leaf in leaves]
+        return self.unflatten(list(self.method.execute(feed)))

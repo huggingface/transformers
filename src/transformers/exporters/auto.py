@@ -20,7 +20,7 @@ import importlib
 from dataclasses import dataclass
 
 from ..utils import logging
-from .base import ExportArtifacts, HfExporter
+from .base import HfExporter
 from .configs import (
     DynamoConfig,
     ExecutorchConfig,
@@ -29,7 +29,7 @@ from .configs import (
     OnnxConfig,
     OpenVINOConfig,
 )
-from .runtimes.base import ExportedModel, ModelRunner
+from .runtimes.base import ModelRunner
 
 
 logger = logging.get_logger(__name__)
@@ -167,21 +167,3 @@ class AutoHfExporter:
             "AutoHfExporter.from_pretrained is not implemented yet. "
             "Load/export configs explicitly and call AutoHfExporter.from_config(...) instead."
         )
-
-
-class AutoExportedModel:
-    """Loads any saved export to run, as `AutoModel` loads a checkpoint: what was saved decides what comes back
-    ([`ExportArtifacts.runtime`] picks it).
-
-    ```python
-    >>> model = AutoExportedModel.from_pretrained("org/model-onnx", device="cuda")
-    >>> outputs = model(**inputs)
-    ```
-    """
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *, device=None, **kwargs) -> ExportedModel:
-        """Load an export written by [`~ExportArtifacts.save_pretrained`], from a local directory or a Hub repo, to
-        run on `device`. `kwargs` go to [`~ExportArtifacts.from_pretrained`] (`subfolder`, `revision`, `token`,
-        `cache_dir`)."""
-        return ExportArtifacts.from_pretrained(pretrained_model_name_or_path, **kwargs).runtime(device=device)

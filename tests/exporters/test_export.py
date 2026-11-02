@@ -747,7 +747,7 @@ def _run_executorch_program(exported, inputs):
     XNNPACK-delegate failure): a runtime limitation, not a transformers export defect."""
     set_seed(1234)
     try:
-        return list(exported.runtime()(**inputs).values())
+        return list(get_leaf_tensors(exported.runtime()(**inputs)).values())
     except (RuntimeError, MemoryError) as e:
         if _is_executorch_runtime_limit(e):
             return None
@@ -913,14 +913,18 @@ class ExportTesterMixin:
             return decompose_multimodal(model, inputs_dict)
         return {"model": (model, inputs_dict)}
 
-    def _collect_eager_outputs(self, components):
-        """Run eager forward for each component and return a ``{name: leaf_tensors}`` dict."""
+    def _collect_eager_outputs(self, components, output_types=None):
+        """Run eager forward for each component and return a ``{name: leaf_tensors}`` dict. When given,
+        ``output_types`` is filled with each component's output class."""
         eager_outputs = {}
         for name, (model, inputs) in components.items():
             with torch.no_grad():
                 set_seed(1234)
-                eager_outputs[name] = get_leaf_tensors(model(**copy.deepcopy(inputs)))
+                outputs = model(**copy.deepcopy(inputs))
+                eager_outputs[name] = get_leaf_tensors(outputs)
                 assert eager_outputs[name], f"Eager outputs are empty for {name}."
+            if output_types is not None:
+                output_types[name] = type(outputs)
         return eager_outputs
 
     def _check_outputs_close(self, actual, expected, atol, rtol, check_device=True, inputs=None):
@@ -971,14 +975,17 @@ class ExportTesterMixin:
                 continue
 
             components = self._prepare_export_model_and_inputs(model_class)
-            eager_outputs = self._collect_eager_outputs(components)
+            eager_types = {}
+            eager_outputs = self._collect_eager_outputs(components, eager_types)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     runtime = exporter.export(model, inputs, config=config).runtime()
 
                     set_seed(1234)
-                    exported_outputs = dict(runtime(**copy.deepcopy(inputs)))
+                    outputs = runtime(**copy.deepcopy(inputs))
+                    self.assertIs(type(outputs), eager_types[name])
+                    exported_outputs = get_leaf_tensors(outputs)
                     self.assertTrue(exported_outputs, f"Exported outputs are empty for {name}.")
 
                     if not self._should_skip_exactness(model_class, dynamic=dynamic):
@@ -1007,13 +1014,16 @@ class ExportTesterMixin:
             config = OnnxConfig(dynamic=dynamic, optimize=optimize)
 
             components = self._prepare_export_model_and_inputs(model_class)
-            eager_outputs = self._collect_eager_outputs(components)
+            eager_types = {}
+            eager_outputs = self._collect_eager_outputs(components, eager_types)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     runtime = exporter.export(model, inputs, config=config).runtime()
                     set_seed(1234)
-                    onnx_outputs = dict(runtime(**inputs))
+                    outputs = runtime(**inputs)
+                    self.assertIs(type(outputs), eager_types[name])
+                    onnx_outputs = get_leaf_tensors(outputs)
                     self.assertTrue(onnx_outputs, f"ONNX outputs are empty for {name}.")
                     self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
                     if not self._should_skip_exactness(model_class, dynamic=dynamic, backend="onnx"):
@@ -1040,13 +1050,16 @@ class ExportTesterMixin:
                 continue
 
             components = self._prepare_export_model_and_inputs(model_class)
-            eager_outputs = self._collect_eager_outputs(components)
+            eager_types = {}
+            eager_outputs = self._collect_eager_outputs(components, eager_types)
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     runtime = exporter.export(model, inputs, config=config).runtime()
                     set_seed(1234)
-                    ov_outputs = dict(runtime(**inputs))
+                    outputs = runtime(**inputs)
+                    self.assertIs(type(outputs), eager_types[name])
+                    ov_outputs = get_leaf_tensors(outputs)
                     self.assertTrue(ov_outputs, f"OpenVINO outputs are empty for {name}.")
                     self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
                     if not self._should_skip_exactness(model_class, dynamic=dynamic, backend="openvino"):
