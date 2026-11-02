@@ -188,7 +188,7 @@ class Gemma3nTextConfig(Gemma3TextConfig):
         kv_sharing_modes = [None if i < first_shared_layer else "reuse" for i in range(self.num_hidden_layers)]
 
         # Compute the last index of the layers that will not be shared, for each unique `layer_types`
-        reversed_unshared_layer_types = self.layers_types[0:first_shared_layer:-1]
+        reversed_unshared_layer_types = self.layer_types[0:first_shared_layer:-1]
         last_non_consumer_indices = [
             first_shared_layer - 1 - reversed_unshared_layer_types.index(k) for k in set(self.layer_types)
         ]
