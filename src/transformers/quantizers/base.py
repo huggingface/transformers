@@ -265,8 +265,9 @@ class HfQuantizer(ABC):
             )
         operation = dequantize(self)
         for module_name, module in list(model.named_modules()):
-            # ponytail: leaf modules only, so quantized fused experts (3D params) stay as they are
-            if next(module.children(), None) is not None:
+            # ponytail: leaf linears only. Quantized fused experts (3D params) and embeddings stay as they are: their
+            # dense class is the model's own (e.g. a scaled embedding), not a generic one
+            if next(module.children(), None) is not None or hasattr(module, "embedding_dim"):
                 continue
             state = module.state_dict()
             for param, serialized in self.serialized_names.items():

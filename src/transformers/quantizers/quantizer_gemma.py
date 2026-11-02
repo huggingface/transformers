@@ -43,7 +43,26 @@ class GemmaQuantizer(HfQuantizer):
     quantization_config: "GemmaQuantizationConfig"
     requires_calibration = True
 
+    serialized_names = {
+        "weight": [
+            "weight",
+            "weight_scale",
+            "input_activation_scale",
+            "output_activation_scale",
+            "embedding_quantized",
+            "embedding_scale",
+        ]
+    }
+
+    def get_load_operations(self):
+        from ..integrations.gemma_quant import GemmaDequantize
+
+        return {"dequantize": GemmaDequantize}
+
     def _process_model_before_weight_loading(self, model, **kwargs):
+        if self.pre_quantized and self.quantization_config.dequantize:
+            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
+            return
         from ..integrations.gemma_quant import replace_with_quant_layers
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
