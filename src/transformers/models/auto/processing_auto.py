@@ -66,6 +66,7 @@ else:
             ("groupvit", "CLIPProcessor"),
             ("hubert", "Wav2Vec2Processor"),
             ("inkling_mm_model", "InklingProcessor"),
+            ("inkling2_mm_model", "Inkling2Processor"),
             ("lasr_ctc", "LasrProcessor"),
             ("lasr_encoder", "LasrProcessor"),
             ("metaclip_2", "CLIPProcessor"),

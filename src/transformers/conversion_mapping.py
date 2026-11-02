@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 from .core_model_loading import (
     Chunk,
     Concatenate,
+    DequantizeInkling2Experts,
     ErnieFuseAndSplitTextVisionExperts,
     GroupWeightRename,
     Interleave,
@@ -256,6 +257,113 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"mlp_sconv\.weight", target_patterns=r"mlp_sconv.conv1d.weight"),
             WeightRenaming(source_patterns=r"mlp_norm", target_patterns=r"post_attention_layernorm"),
             WeightRenaming(source_patterns=r"attn_norm", target_patterns=r"input_layernorm"),
+        ],
+        "inkling2_mm_model": [
+            WeightRenaming(source_patterns=r"model\.llm\.unembed\.weight", target_patterns=r"lm_head.weight"),
+            WeightRenaming(
+                source_patterns=r"model\.llm\.embed_norm\.weight",
+                target_patterns=r"model.language_model.embed_tokens.embed_norm.weight",
+            ),
+            WeightRenaming(
+                source_patterns=r"model\.llm\.embed\.weight",
+                target_patterns=r"model.language_model.embed_tokens.weight",
+            ),
+            WeightRenaming(source_patterns=r"model\.llm\.", target_patterns=r"model.language_model."),
+            WeightRenaming(
+                source_patterns=r"model\.visual\.backbone\.embeddings\.position_embedding$",
+                target_patterns=r"model.vision_tower.embeddings.position_embedding.weight",
+            ),
+            WeightRenaming(
+                source_patterns=r"model\.visual\.backbone\.embeddings\.",
+                target_patterns=r"model.vision_tower.embeddings.",
+            ),
+            WeightRenaming(
+                source_patterns=r"model\.visual\.backbone\.ln_pre\.",
+                target_patterns=r"model.vision_tower.pre_layernorm.",
+            ),
+            WeightRenaming(
+                source_patterns=r"model\.visual\.backbone\.layers\.", target_patterns=r"model.vision_tower.layers."
+            ),
+            WeightRenaming(
+                source_patterns=r"model\.visual\.proj_in\.", target_patterns=r"model.vision_tower.merger.linear_1."
+            ),
+            WeightRenaming(
+                source_patterns=r"model\.visual\.proj_out\.", target_patterns=r"model.vision_tower.merger.linear_2."
+            ),
+            WeightRenaming(
+                source_patterns=r"(vision_tower\.layers\.\d+)\.ln_1\.", target_patterns=r"\1.layernorm_before."
+            ),
+            WeightRenaming(
+                source_patterns=r"(vision_tower\.layers\.\d+)\.ln_2\.", target_patterns=r"\1.layernorm_after."
+            ),
+            WeightRenaming(
+                source_patterns=r"(vision_tower\.layers\.\d+)\.mlp\.c_fc\.", target_patterns=r"\1.mlp.fc1."
+            ),
+            WeightRenaming(
+                source_patterns=r"(vision_tower\.layers\.\d+)\.mlp\.c_proj\.", target_patterns=r"\1.mlp.fc2."
+            ),
+            WeightRenaming(
+                source_patterns=r"(vision_tower\.layers\.\d+)\.ls_1\.gamma$", target_patterns=r"\1.lambda_1"
+            ),
+            WeightRenaming(
+                source_patterns=r"(vision_tower\.layers\.\d+)\.ls_2\.gamma$", target_patterns=r"\1.lambda_2"
+            ),
+        ],
+        "inkling2_text": [
+            WeightRenaming(source_patterns=r"model\.llm\.unembed\.weight", target_patterns=r"lm_head.weight"),
+            WeightRenaming(
+                source_patterns=r"model\.llm\.embed_norm\.weight",
+                target_patterns=r"model.embed_tokens.embed_norm.weight",
+            ),
+            WeightRenaming(source_patterns=r"model\.llm\.embed\.weight", target_patterns=r"model.embed_tokens.weight"),
+            WeightRenaming(source_patterns=r"model\.llm\.", target_patterns=r"model."),
+            WeightConverter(
+                source_patterns="shared_w13_weight",
+                target_patterns=["gate_proj", "up_proj"],
+                operations=[Interleave(dim=1), Chunk(dim=1)],
+            ),
+            WeightRenaming(source_patterns=r"shared_w2_weight", target_patterns=r"down_proj"),
+            WeightConverter(
+                source_patterns=[
+                    r"mlp\.experts\.w13_weight$",
+                    r"mlp\.experts\.w13_weight_scale$",
+                    r"mlp\.experts\.w13_weight_amax$",
+                    r"mlp\.experts\.w13_weight_outer_scale_denominator$",
+                ],
+                target_patterns=["mlp.experts.gate_up_proj"],
+                operations=[DequantizeInkling2Experts(), Interleave(dim=1)],
+                force_cpu=True,
+            ),
+            WeightConverter(
+                source_patterns=[
+                    r"mlp\.experts\.w2_weight$",
+                    r"mlp\.experts\.w2_weight_scale$",
+                    r"mlp\.experts\.w2_weight_amax$",
+                    r"mlp\.experts\.w2_weight_outer_scale_denominator$",
+                ],
+                target_patterns=["mlp.experts.down_proj"],
+                operations=[DequantizeInkling2Experts()],
+                force_cpu=True,
+            ),
+            WeightRenaming(source_patterns=r"mlp.gate.bias", target_patterns=r"mlp.gate.e_score_correction_bias"),
+            WeightRenaming(source_patterns=r"attn\.wq_du", target_patterns=r"self_attn.q_proj"),
+            WeightRenaming(source_patterns=r"attn\.wk_dv", target_patterns=r"self_attn.k_proj"),
+            WeightRenaming(source_patterns=r"attn\.wv_dv", target_patterns=r"self_attn.v_proj"),
+            WeightRenaming(source_patterns=r"attn\.wr_du", target_patterns=r"self_attn.r_proj"),
+            WeightRenaming(source_patterns=r"attn\.wo_ud", target_patterns=r"self_attn.o_proj"),
+            WeightRenaming(source_patterns=r"attn\.gate_attn", target_patterns=r"self_attn.gate_proj"),
+            WeightRenaming(source_patterns=r"attn\.attn_sink_proj", target_patterns=r"self_attn.sink_proj"),
+            WeightRenaming(source_patterns=r"\.attn\.(q|k|rel)_l2_clip", target_patterns=r".self_attn.\1_l2_clip"),
+            WeightRenaming(
+                source_patterns=r"\.attn\.(k|v)_sconv\.weight$", target_patterns=r".self_attn.\1_sconv.conv1d.weight"
+            ),
+            WeightRenaming(source_patterns=r"\.attn\.(k|v)_sconv\.", target_patterns=r".self_attn.\1_sconv."),
+            WeightRenaming(source_patterns=r"\.attn\.rel_logits_proj", target_patterns=r".self_attn.rel_logits_proj"),
+            WeightRenaming(source_patterns=r"attn_sconv\.weight", target_patterns=r"attn_sconv.conv1d.weight"),
+            WeightRenaming(source_patterns=r"mlp_sconv\.weight", target_patterns=r"mlp_sconv.conv1d.weight"),
+            WeightRenaming(source_patterns=r"mlp_norm", target_patterns=r"post_attention_layernorm"),
+            WeightRenaming(source_patterns=r"attn_norm", target_patterns=r"input_layernorm"),
+            WeightRenaming(source_patterns=r"(q|k|v)_input_norm", target_patterns=r"\1_input_layernorm"),
         ],
         "GPTNeoXForCausalLM": [
             WeightRenaming(source_patterns=r"^embed_out\.", target_patterns="lm_head."),

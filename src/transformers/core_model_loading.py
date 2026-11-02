@@ -638,6 +638,53 @@ class VisionUnfuseAndPermuteForRope(ConversionOps):
         return VisionFuseAndPermuteForRope(self.dim, self.permute_layer_names, inverse=not self.inverse)
 
 
+class DequantizeInkling2Experts(ConversionOps):
+    r"""
+    Dequantizes Inkling2 expert weights. Source patterns are, in order: the weight, its block scales, its per-expert
+    `amax` and the shared `outer_scale_denominator`.
+
+    - NVFP4: packed E2M1 codes (even element in the low nibble), one float8 scale per 16 values, and a per-expert
+      factor `amax / outer_scale_denominator`.
+    - MXFP8: float8 values with one power-of-two scale `2 ** (scale - 127)` per 32 values.
+
+    A weight without scales is returned unchanged. Experts are processed in chunks to bound the memory spike.
+    """
+
+    E2M1_VALUES = (0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0)
+
+    def __init__(self, experts_per_chunk: int = 8):
+        self.experts_per_chunk = experts_per_chunk
+
+    def convert(self, input_dict, source_patterns, target_patterns, **kwargs):
+        tensors = [input_dict.get(pattern) for pattern in source_patterns]
+        weight, scale, amax, denominator = [tensor[0] if isinstance(tensor, list) else tensor for tensor in tensors]
+        if scale is None:
+            return {target_patterns[0]: weight}
+
+        output_dtype = weight.dtype
+        num_experts, rows = weight.shape[:2]
+        columns = weight.shape[2] * 2 if amax is not None else weight.shape[2]
+        output = torch.empty(num_experts, rows, columns, dtype=output_dtype, device=weight.device)
+        grid = torch.tensor(self.E2M1_VALUES, device=weight.device)
+        if amax is not None:
+            expert_factor = amax.float() / denominator.float()
+        for start in range(0, num_experts, self.experts_per_chunk):
+            experts = slice(start, start + self.experts_per_chunk)
+            block_scale = scale[experts].float()
+            if amax is None:
+                values = (
+                    weight[experts].float().view(*block_scale.shape, 32) * torch.exp2(block_scale - 127)[..., None]
+                )
+            else:
+                codes = weight[experts].to(torch.uint8)
+                codes = torch.stack((codes & 0xF, codes >> 4), dim=-1).flatten(-2).long()
+                values = grid[codes & 7] * (1 - 2 * (codes >> 3)).float()
+                values = values.view(*block_scale.shape, 16) * block_scale[..., None]
+                values = values * expert_factor[experts, None, None, None]
+            output[experts] = values.reshape(-1, rows, columns).to(output_dtype)
+        return {target_patterns[0]: output}
+
+
 class ErnieFuseAndSplitTextVisionExperts(ConversionOps):
     r"""
     Special operation that splits a module list over all keys and fuses over the number of original modules.
