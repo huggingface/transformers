@@ -1076,6 +1076,8 @@ class Gemma4TextKEqVAttention(Gemma4TextAttention):
 
 
 class Gemma4TextKVSharedAttention(Gemma3nTextKVSharedAttention):
+    """Same as `Gemma3nTextKVSharedAttention`, the only difference is the per-layer `head_dim` / `num_key_value_heads`."""
+
     def __init__(self, config: Gemma4TextConfig, layer_idx: int):
         layer_config = config.per_layer_config[layer_idx]
         super().__init__(config, layer_idx)

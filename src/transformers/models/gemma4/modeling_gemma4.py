@@ -1304,7 +1304,7 @@ class Gemma4TextKEqVAttention(nn.Module):
 
 @use_kernelized_func(apply_rotary_pos_emb)
 class Gemma4TextKVSharedAttention(nn.Module):
-    """Reuses the kv states of the last non-shared layer of the same type, so it has no k/v weights."""
+    """Same as `Gemma3nTextKVSharedAttention`, the only difference is the per-layer `head_dim` / `num_key_value_heads`."""
 
     def __init__(self, config: Gemma4TextConfig, layer_idx: int):
         super().__init__()
