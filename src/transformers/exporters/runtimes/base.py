@@ -118,15 +118,16 @@ class ExportedModel:
     def from_pretrained(
         cls, pretrained_model_name_or_path: str | Path, *, device=None, **kwargs: Unpack[DownloadKwargs]
     ) -> ExportedModel:
-        """Load an export of this class's kind written by [`~ExportArtifacts.save_pretrained`], from a local directory
-        or a Hub repo, to run on `device`. `kwargs` are download kwargs, as for [`~ExportArtifacts.from_pretrained`].
-        [`AutoExportedModel`] loads any kind."""
+        """Load an export written by [`~ExportArtifacts.save_pretrained`], from a local directory or a Hub repo, to
+        run on `device`, as the class it runs as ([`ExportArtifacts.runtime`] picks it): any kind from
+        [`ExportedModel`], this class's own kind from a subclass. `kwargs` are download kwargs, as for
+        [`~ExportArtifacts.from_pretrained`]."""
         from ..base import ExportArtifacts
 
         model = ExportArtifacts.from_pretrained(pretrained_model_name_or_path, **kwargs).runtime(device=device)
-        if type(model) is not cls:
+        if not isinstance(model, cls):
             raise TypeError(
                 f"{pretrained_model_name_or_path} runs as a {type(model).__name__}, not a {cls.__name__}: load it with "
-                f"`{type(model).__name__}.from_pretrained` or `AutoExportedModel.from_pretrained`."
+                f"`{type(model).__name__}.from_pretrained` or `ExportedModel.from_pretrained`."
             )
         return model

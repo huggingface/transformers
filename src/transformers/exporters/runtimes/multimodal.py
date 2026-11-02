@@ -55,6 +55,11 @@ class ExportedMultimodalModel(ExportedModel):
         self.modality_runners = [
             (spec, runners[spec.component]) for spec in _MODALITY_SPECS if spec.component in runners
         ]
+        # Their outputs are read within the call that makes them (what the model returns is copied out), so a backend
+        # can hand out its own buffers (OpenVINO).
+        for runner in (self.text_runner, *(runner for _, runner in self.modality_runners)):
+            if hasattr(runner, "share_outputs"):
+                runner.share_outputs = True
 
     def __call__(self, **kwargs) -> Any:
         input_ids = kwargs["input_ids"]
@@ -91,10 +96,12 @@ class ExportedMultimodalModel(ExportedModel):
         if features.get("vision_embeddings_model") is not None and "image_hidden_states" in getattr(
             outputs, "__dataclass_fields__", {}
         ):
-            outputs["image_hidden_states"] = features["vision_embeddings_model"]
+            outputs["image_hidden_states"] = features["vision_embeddings_model"].clone()
         # And Granite4-Vision its per-layer ones.
         if "deepstack_features" in features and "deepstack_features" in getattr(outputs, "__dataclass_fields__", {}):
-            outputs["deepstack_features"] = features["deepstack_features"]
+            outputs["deepstack_features"] = [
+                (layer, [image.clone() for image in images]) for layer, images in features["deepstack_features"]
+            ]
         return outputs
 
     def _deepstack_inputs(self, deepstack: list, inputs_embeds: torch.Tensor) -> dict[str, Any]:

@@ -61,11 +61,6 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 
 [[autodoc]] exporters.metadata.ExportMetadata
 
-## AutoExportedModel
-
-[[autodoc]] exporters.auto.AutoExportedModel
-    - from_pretrained
-
 ## ExportedModel
 
 [[autodoc]] exporters.runtimes.base.ExportedModel

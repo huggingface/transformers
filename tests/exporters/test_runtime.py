@@ -420,7 +420,7 @@ class ExportedModelTest(unittest.TestCase):
         return BertModel(config).eval(), inputs
 
     def _check_runs_like_eager(self, exporter, config, atol, device=None):
-        from transformers.exporters import ExportedModel
+        from transformers.exporters import ExportedModel, ExportedMultimodalModel
 
         model, inputs = self._model_and_inputs()
         with torch.no_grad():
@@ -443,6 +443,9 @@ class ExportedModelTest(unittest.TestCase):
                     with tempfile.TemporaryDirectory() as resaved:
                         runtime.save_pretrained(resaved)
                         self.assertEqual(sorted(os.listdir(resaved)), sorted(os.listdir(directory)))
+            # A subclass loads only its own kind.
+            with self.assertRaisesRegex(TypeError, "runs as a ExportedModel"):
+                ExportedMultimodalModel.from_pretrained(directory, device=device)
 
     @pytest.mark.torch_export_test
     def test_dynamo(self):
@@ -526,7 +529,7 @@ class ExportedMultimodalModelTest(unittest.TestCase):
 
     def _check_runs_like_eager(self, exporter, config, atol, device=None):
         from tests.exporters.test_utils import _tiny_llava
-        from transformers.exporters import AutoExportedModel, ExportedModel, ExportedMultimodalModel
+        from transformers.exporters import ExportedModel, ExportedMultimodalModel
 
         model, inputs = _tiny_llava()
         with torch.no_grad():
@@ -537,15 +540,13 @@ class ExportedMultimodalModelTest(unittest.TestCase):
             for name, runtime in (
                 ("runtime", exported.runtime(device=device)),
                 ("from_pretrained", ExportedMultimodalModel.from_pretrained(directory, device=device)),
-                ("auto", AutoExportedModel.from_pretrained(directory, device=device)),
+                ("any kind", ExportedModel.from_pretrained(directory, device=device)),
             ):
                 with self.subTest(name):
                     self.assertIsInstance(runtime, ExportedMultimodalModel)
                     outputs = runtime(**inputs)
                     self.assertIs(type(outputs), type(expected))
                     torch.testing.assert_close(outputs.logits.cpu(), expected.logits, atol=atol, rtol=atol)
-            with self.assertRaisesRegex(TypeError, "AutoExportedModel"):
-                ExportedModel.from_pretrained(directory, device=device)
 
     @pytest.mark.torch_export_test
     def test_dynamo(self):
