@@ -568,7 +568,7 @@ class Sam2HieraDetModelOutput(ModelOutput):
 
 @auto_docstring
 class Sam2PreTrainedModel(PreTrainedModel):
-    config_class = Sam2Config
+    config: Sam2Config
     base_model_prefix = "sam2"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
@@ -601,7 +601,7 @@ class Sam2PreTrainedModel(PreTrainedModel):
 
 
 class Sam2HieraDetModel(Sam2PreTrainedModel):
-    config_class = Sam2HieraDetConfig
+    config: Sam2HieraDetConfig
     main_input_name = "pixel_values"
     _can_record_outputs = {
         "hidden_states": Sam2MultiScaleBlock,
@@ -675,7 +675,7 @@ class Sam2HieraDetModel(Sam2PreTrainedModel):
     """
 )
 class Sam2VisionModel(Sam2PreTrainedModel):
-    config_class = Sam2VisionConfig
+    config: Sam2VisionConfig
     main_input_name = "pixel_values"
     _can_record_outputs = {
         "hidden_states": Sam2MultiScaleBlock,

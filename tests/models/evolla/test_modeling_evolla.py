@@ -109,13 +109,18 @@ class EvollaModelTester:
         batch_size = num_proteins if num_proteins is not None else self.batch_size
         text_input_ids = ids_tensor([batch_size, self.text_seq_length], self.text_vocab_size)
 
+        config = self.get_config()
+
         protein_input_ids = ids_tensor([batch_size, self.protein_seq_length], self.protein_vocab_size)
+        # With `token_dropout`, the protein embeddings divide by `1 - (#mask tokens / #attended tokens)`, which is
+        # 0 (→ NaN outputs) when random ids contain as many mask tokens as attended positions. Keep them out.
+        mask_token_id = config.protein_encoder_config.mask_token_id
+        protein_input_ids[protein_input_ids == mask_token_id] = (mask_token_id + 1) % self.protein_vocab_size
 
         if self.use_input_mask:
             text_input_mask = random_attention_mask([batch_size, self.text_seq_length])
             protein_input_mask = random_attention_mask([batch_size, self.protein_seq_length])
 
-        config = self.get_config()
         return (config, text_input_ids, text_input_mask, protein_input_ids, protein_input_mask)
 
     def get_config(self):

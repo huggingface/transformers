@@ -32,10 +32,9 @@ from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ..auto import AutoModel
 from .configuration_llava_onevision import LlavaOnevisionConfig
@@ -266,7 +265,7 @@ def unpad_image(tensor, original_size):
 class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
     base_model_prefix = "model"
 
-    def __init__(self, config):
+    def __init__(self, config: LlavaOnevisionConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
 
@@ -556,7 +555,6 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
 
     @merge_with_config_defaults
     @can_return_tuple
-    @deprecate_kwarg("pixel_values", version="v5.22.0", new_name="pixel_values_videos")
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower, apply multimodal projection and pooling."
     )
@@ -629,6 +627,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
 )
 class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: LlavaOnevisionConfig):
         super().__init__(config)
@@ -763,9 +762,8 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -785,7 +783,6 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
 
     @merge_with_config_defaults
     @can_return_tuple
-    @deprecate_kwarg("pixel_values", version="v5.22.0", new_name="pixel_values_videos")
     @auto_docstring
     def get_video_features(
         self,

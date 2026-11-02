@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -98,7 +98,6 @@ class MuseGlimmerTextConfig(PreTrainedConfig):
     model_type = "muse_glimmer_text"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
@@ -196,8 +195,8 @@ class MuseGlimmerConfig(PreTrainedConfig):
 
     model_type = "muse_glimmer"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=MuseGlimmerTextConfig),
-        "vision_config": SubConfigSpec(config_class=MuseGlimmerVisionConfig),
+        "text_config": MuseGlimmerTextConfig,
+        "vision_config": MuseGlimmerVisionConfig,
     }
     base_model_tp_plan = {
         "vision_adapter.fc1": "colwise",

@@ -34,8 +34,10 @@ from transformers.utils.import_utils import is_causal_conv1d_available, is_mamba
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -342,7 +344,10 @@ class NemotronHModelTester:
         input_ids = input_ids.to(torch_device)
         seq_idx = torch.zeros(input_ids.shape, dtype=torch.int32, device=torch_device)
         with torch.no_grad():
-            model(input_ids, seq_idx=seq_idx)
+            try:
+                model(input_ids, seq_idx=seq_idx)
+            except ValueError as error:  # without the kernels, the reference path refuses packing boundaries
+                self.parent.assertIn("packed sequences", str(error))
 
         self.parent.assertTrue(seen, "the linear-attention mixer was never called")
         self.parent.assertIn("seq_idx", seen[0])
@@ -398,7 +403,14 @@ class NemotronHModelTester:
 
 
 @require_torch
-class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class NemotronHModelTest(
+    ModelTesterMixin,
+    GenerationTesterMixin,
+    PipelineTesterMixin,
+    TensorParallelTesterMixin,
+    ExpertParallelTesterMixin,
+    unittest.TestCase,
+):
     all_model_classes = (
         (
             NemotronHModel,

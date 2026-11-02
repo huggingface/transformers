@@ -123,6 +123,7 @@ from .utils import (
     is_multipart_available,
     is_natten_available,
     is_nltk_available,
+    is_nncf_available,
     is_numba_available,
     is_onnx_available,
     is_onnxruntime_available,
@@ -178,6 +179,7 @@ from .utils import (
     is_torchao_available,
     is_torchaudio_available,
     is_torchcodec_available,
+    is_torchcodec_greater_or_equal,
     is_torchvision_available,
     is_triton_available,
     is_vision_available,
@@ -324,6 +326,7 @@ _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
 _run_agent_tests = parse_flag_from_env("RUN_AGENT_TESTS", default=False)
 _run_training_tests = parse_flag_from_env("RUN_TRAINING_TESTS", default=True)
 _run_tensor_parallel_tests = parse_flag_from_env("RUN_TENSOR_PARALLEL_TESTS", default=True)
+_run_expert_parallel_tests = parse_flag_from_env("RUN_EXPERT_PARALLEL_TESTS", default=True)
 _run_fsdp_tests = parse_flag_from_env("RUN_FSDP_TESTS", default=True)
 
 
@@ -405,6 +408,22 @@ def is_tensor_parallel_test(test_case):
             return test_case
         else:
             return pytest.mark.is_tensor_parallel_test()(test_case)
+
+
+def is_expert_parallel_test(test_case):
+    """
+    Decorator marking a test as an expert parallel test. If RUN_EXPERT_PARALLEL_TESTS is set to a falsy value, those
+    tests will be skipped.
+    """
+    if not _run_expert_parallel_tests:
+        return unittest.skip(reason="test is expert parallel test")(test_case)
+    else:
+        try:
+            import pytest  # We don't need a hard dependency on pytest in the main library
+        except ImportError:
+            return test_case
+        else:
+            return pytest.mark.is_expert_parallel_test()(test_case)
 
 
 def is_fsdp_test(test_case):
@@ -648,6 +667,10 @@ def require_openvino(test_case):
     return unittest.skipUnless(is_openvino_available(), "test requires OpenVINO")(test_case)
 
 
+def require_nncf(test_case):
+    return unittest.skipUnless(is_nncf_available(), "test requires NNCF")(test_case)
+
+
 def require_timm(test_case):
     """
     Decorator marking a test that requires Timm.
@@ -689,6 +712,21 @@ def require_torch_greater_or_equal(version: str):
         return unittest.skipUnless(is_torch_greater_or_equal(version), f"test requires PyTorch version >= {version}")(
             test_case
         )
+
+    return decorator
+
+
+def require_torchcodec_greater_or_equal(version: str):
+    """
+    Decorator marking a test that requires torchcodec version >= `version`.
+
+    These tests are skipped when PyTorch version is less than `version`.
+    """
+
+    def decorator(test_case):
+        return unittest.skipUnless(
+            is_torchcodec_greater_or_equal(version), f"test requires PyTorch version >= {version}"
+        )(test_case)
 
     return decorator
 
@@ -1981,6 +2019,7 @@ def assert_screenout(out, what):
 def set_config_for_less_flaky_test(config):
     target_attrs = [
         "rms_norm_eps",
+        "post_norm_eps",
         "layer_norm_eps",
         "norm_eps",
         "norm_epsilon",
@@ -2588,7 +2627,7 @@ def mockenv_context(*remove, **update):
 
 # --- pytest conf functions --- #
 
-# to avoid multiple invocation from tests/conftest.py and examples/conftest.py - make sure it's called only once
+# to avoid multiple invocation if several conftest.py files call it - make sure it's called only once
 pytest_opt_registered = {}
 
 

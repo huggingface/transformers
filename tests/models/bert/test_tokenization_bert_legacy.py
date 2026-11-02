@@ -15,8 +15,8 @@
 Tests for `BertTokenizerLegacy`, the pure-Python WordPiece tokenizer.
 
 It is not reachable through `AutoTokenizer` any more, but it is far from unused: `pipelines/token_classification.py`
-imports `BasicTokenizer` from this module, `data/processors/squad.py` imports `whitespace_tokenize`, and the
-tokenizers of tapas, roc_bert, prophetnet, bert_japanese and openai are all built on its helpers.
+imports `BasicTokenizer` from this module, and the tokenizers of tapas, roc_bert, prophetnet, bert_japanese and
+openai are all built on its helpers.
 
 The `BasicTokenizer` / `WordpieceTokenizer` casing and accent matrix is exercised in
 `tests/models/prophetnet/test_tokenization_prophetnet.py`, which imports those helpers from this module. What is
@@ -158,7 +158,7 @@ class BertTokenizerLegacyTest(unittest.TestCase):
 
 
 class WhitespaceTokenizeTest(unittest.TestCase):
-    """`whitespace_tokenize` is the helper `data/processors/squad.py` relies on to align answer spans."""
+    """`whitespace_tokenize` is the whitespace splitter `BasicTokenizer` and `WordpieceTokenizer` build on."""
 
     def test_splits_on_any_whitespace(self):
         self.assertListEqual(whitespace_tokenize("a  b\tc\nd"), ["a", "b", "c", "d"])

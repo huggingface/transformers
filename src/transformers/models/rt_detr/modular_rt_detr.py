@@ -47,7 +47,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     logging,
-    requires_backends,
     torch_int,
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
@@ -239,6 +238,7 @@ class RTDetrImageProcessor(DetrImageProcessor):
             raise ValueError(f"Format {format} is not supported.")
         return target
 
+    @requires(backends=("torch",))
     def post_process_object_detection(
         self,
         outputs,
@@ -266,7 +266,6 @@ class RTDetrImageProcessor(DetrImageProcessor):
             `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
-        requires_backends(self, ["torch"])
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
         # convert from relative cxcywh to absolute xyxy
         boxes = center_to_corners_format(out_bbox)
@@ -321,7 +320,6 @@ class RTDetrImageProcessor(DetrImageProcessor):
         raise NotImplementedError("Panoptic segmentation post-processing is not implemented for RT-DETR yet.")
 
 
-@requires(backends=("torch",))
 class RTDetrImageProcessorPil(DetrImageProcessorPil):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -502,7 +500,6 @@ class RTDetrImageProcessorPil(DetrImageProcessorPil):
             `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
-        requires_backends(self, ["torch"])
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
         # convert from relative cxcywh to absolute xyxy
         boxes = center_to_corners_format(out_bbox)

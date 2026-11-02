@@ -23,7 +23,6 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 from ..auto import AutoConfig
-from ..superpoint import SuperPointConfig
 
 
 @auto_docstring(checkpoint="ETH-CVG/lightglue_superpoint")
@@ -61,7 +60,7 @@ class LightGlueConfig(PreTrainedConfig):
         "keypoint_detector_config": SubConfigSpec(config_class=AutoConfig, model_type="superpoint"),
     }
 
-    keypoint_detector_config: dict | SuperPointConfig | None = None
+    keypoint_detector_config: dict | PreTrainedConfig | None = None
     descriptor_dim: int = 256
     num_hidden_layers: int = 9
     num_attention_heads: int = 4

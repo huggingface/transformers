@@ -26,7 +26,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ... import initialization as init
 from ...activations import ACT2FN, get_activation
 from ...generation import GenerationMixin
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_xlnet import XLNetConfig
@@ -851,7 +851,7 @@ class XLNetForQuestionAnsweringOutput(ModelOutput):
 
 @auto_docstring
 class XLNetModel(XLNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLNetConfig):
         super().__init__(config)
 
         self.mem_len = config.mem_len
@@ -1217,7 +1217,7 @@ class XLNetModel(XLNetPreTrainedModel):
 class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_loss.weight": "transformer.word_embedding.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: XLNetConfig):
         super().__init__(config)
         self.attn_type = config.attn_type
         self.same_length = config.same_length
@@ -1425,9 +1425,8 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = transformer_outputs[0]
-        # Only compute necessary logits
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_loss(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_loss(hidden_states)
 
         loss = None
         if labels is not None:
@@ -1463,7 +1462,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
     """
 )
 class XLNetForSequenceClassification(XLNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLNetConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1587,7 +1586,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
 
 @auto_docstring
 class XLNetForTokenClassification(XLNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLNetConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1695,7 +1694,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
 
 @auto_docstring
 class XLNetForMultipleChoice(XLNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLNetConfig):
         super().__init__(config)
 
         self.transformer = XLNetModel(config)
@@ -1839,7 +1838,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
     """
 )
 class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLNetConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1960,7 +1959,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
 
 @auto_docstring
 class XLNetForQuestionAnswering(XLNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLNetConfig):
         super().__init__(config)
         self.start_n_top = config.start_n_top
         self.end_n_top = config.end_n_top

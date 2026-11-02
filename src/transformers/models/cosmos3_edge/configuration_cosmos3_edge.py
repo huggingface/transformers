@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
@@ -156,8 +156,8 @@ class Cosmos3EdgeConfig(PreTrainedConfig):
 
     model_type = "cosmos3_edge"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Cosmos3EdgeVisionConfig),
-        "text_config": SubConfigSpec(config_class=Cosmos3EdgeTextConfig),
+        "vision_config": Cosmos3EdgeVisionConfig,
+        "text_config": Cosmos3EdgeTextConfig,
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 

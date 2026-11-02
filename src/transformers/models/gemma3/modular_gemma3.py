@@ -37,7 +37,7 @@ from ...modeling_rope_utils import (
     ROPE_INIT_FUNCTIONS,
     dynamic_rope_update,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import AutoConfig
@@ -204,7 +204,7 @@ class Gemma3Config(PreTrainedConfig):
         "eoi_token_id": "eoi_token_index",
     }
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Gemma3TextConfig),
+        "text_config": Gemma3TextConfig,
         "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="siglip_vision_model"),
     }
 
@@ -420,6 +420,7 @@ class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     _no_split_modules = ["Gemma3DecoderLayer"]
+    _supports_sdpa = True
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -832,9 +833,8 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

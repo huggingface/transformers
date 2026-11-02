@@ -541,9 +541,8 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
 @slow
 @require_torch_accelerator
 class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
-    model_id = "openbmb/MiniCPM-V-4_7"
+    model_id = "openbmb/MiniCPM-V-4.7-1B"
 
-    @slow
     def test_small_model_logits(self):
         processor = AutoProcessor.from_pretrained(self.model_id)
         model = MiniCPMV4_7ForConditionalGeneration.from_pretrained(
@@ -552,7 +551,12 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         messages = [{"role": "user", "content": [{"type": "text", "text": "Hi"}]}]
         inputs = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            enable_thinking=False,
         ).to(model.device)
 
         with torch.no_grad():
@@ -561,7 +565,6 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         self.assertEqual(logits.shape[0], 1)
         self.assertTrue(torch.isfinite(logits).all().item())
 
-    @slow
     def test_small_model_vision_generation(self):
         processor = AutoProcessor.from_pretrained(self.model_id)
         model = MiniCPMV4_7ForConditionalGeneration.from_pretrained(
@@ -583,7 +586,12 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             }
         ]
         inputs = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            enable_thinking=False,
         ).to(model.device, dtype=torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
@@ -591,13 +599,16 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         # fmt: off
         EXPECTED_TEXT = Expectations(
             {
-                ("cuda", (8, 0)): "So, let me figure out what kind of animal this is. The image shows a small, stocky cat-like animal with thick fur, walking in",
+                # enable_thinking defaults to false in the current chat template, so expectations are thinking-off texts.
+                ("cuda", (8, 6)): "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \n- The animal",
+                ("cuda", (8, 0)): "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \nThis is a",
+                ("rocm", (9, 4)): "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \nThis is a",
+                ("xpu", 5): "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \n- The animal",
             }
         ).get_expectation()
         # fmt: on
         self.assertEqual(EXPECTED_TEXT, decoded_text)
 
-    @slow
     def test_small_model_video_generation(self):
         processor = AutoProcessor.from_pretrained(self.model_id)
         model = MiniCPMV4_7ForConditionalGeneration.from_pretrained(
@@ -619,7 +630,12 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             }
         ]
         inputs = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            enable_thinking=False,
         ).to(model.device, dtype=torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
@@ -627,14 +643,15 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                ("cuda", (8, 0)): "So, let me analyze the video. The scene is an indoor tennis court. There are two people playing tennis. The main person in the foreground is",
+                # enable_thinking defaults to false in the current chat template, so expectations are thinking-off texts.
+                ("cuda", (8, 0)): "The video shows an indoor tennis court where a male player, wearing a white t-shirt, black shorts, and white socks, is preparing to hit a",
+                ("xpu", 5): "The video shows an indoor tennis court where a male player, wearing a white t-shirt, black shorts, and white socks, is preparing to hit a",
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
 
         self.assertEqual(EXPECTED_TEXT, decoded_text)
 
-    @slow
     def test_small_model_vision_generation_batch(self):
         processor = AutoProcessor.from_pretrained(self.model_id)
         model = MiniCPMV4_7ForConditionalGeneration.from_pretrained(
@@ -664,6 +681,7 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             return_dict=True,
             return_tensors="pt",
             padding=True,
+            enable_thinking=False,
         ).to(model.device, dtype=torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
@@ -671,15 +689,19 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         expected_texts = Expectations(
             {
+                # enable_thinking defaults to false in the current chat template, so expectations are thinking-off texts.
                 ("cuda", (8, 0)): [
-                    "So, let me figure out what kind of animal this is. The image shows a small, stocky cat-like animal with thick fur, walking in",
+                    'This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \nThis is a'
                 ] * 2,
+                ("xpu", 5): [
+                    'This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \nThis is a',
+                    'This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \n- The animal',
+                ],
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
         self.assertListEqual(decoded_texts, EXPECTED_TEXT)
 
-    @slow
     def test_small_model_vision_generation_batch_mixed(self):
         processor = AutoProcessor.from_pretrained(self.model_id)
         model = MiniCPMV4_7ForConditionalGeneration.from_pretrained(
@@ -710,6 +732,7 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             return_dict=True,
             return_tensors="pt",
             padding=True,
+            enable_thinking=False,
         ).to(model.device, dtype=torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
@@ -717,11 +740,24 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         expected_texts = Expectations(
             {
+                # enable_thinking defaults to false in the current chat template, so expectations are thinking-off texts.
+                ("cuda", (8, 6)): [
+                    "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \n- The animal",
+                    "I'm a model from the MiniCPM series, developed by ModelBest Inc. and the OpenBMB open-source community. For more details,",
+                ],
                 ("cuda", (8, 0)): [
-                    "So, let me figure out what kind of animal this is. The image shows a small, stocky cat-like animal with thick fur, walking in",
-                    'Okay, the user is asking "Who are you?" This is a straightforward question about my identity. I need to introduce myself clearly and concisely',
+                    "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \nThis is a",
+                    "I'm a model from the MiniCPM series, developed by ModelBest Inc. and the OpenBMB open-source community. For more details,",
+                ],
+                ("rocm", (9, 4)): [
+                    "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \n- The animal",
+                    "I'm a model from the MiniCPM series, developed by ModelBest Inc. and the OpenBMB open-source community. For more details,",
+                ],
+                ("xpu", 5): [
+                    "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \nThis is a",
+                    "I'm a model from the MiniCPM series, developed by ModelBest Inc. and the OpenBMB open-source community. For more details,",
                 ],
             }
-        )  # fmt: skip
+        )
         EXPECTED_TEXT = expected_texts.get_expectation()
         self.assertListEqual(decoded_texts, EXPECTED_TEXT)

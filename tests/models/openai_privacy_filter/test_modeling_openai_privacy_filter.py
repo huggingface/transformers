@@ -27,6 +27,7 @@ from transformers.models.openai_privacy_filter.configuration_openai_privacy_filt
 from transformers.testing_utils import Expectations, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
+from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
@@ -35,6 +36,7 @@ from ...test_modeling_common import (
     random_attention_mask,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -160,7 +162,9 @@ class OpenAIPrivacyFilterModelTester:
 
 
 @require_torch
-class OpenAIPrivacyFilterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class OpenAIPrivacyFilterModelTest(
+    ModelTesterMixin, PipelineTesterMixin, TensorParallelTesterMixin, ExpertParallelTesterMixin, unittest.TestCase
+):
     all_model_classes = (
         (
             OpenAIPrivacyFilterModel,
@@ -178,7 +182,13 @@ class OpenAIPrivacyFilterModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
         if is_torch_available()
         else {}
     )
-    test_all_params_have_gradient = False
+
+    @unittest.skip(
+        reason="The experts are stored transposed with biases: an intra-expert TP plan would add the down "
+        "projection's bias once per rank. It comes with the untransposed expert layout."
+    )
+    def test_moe_parallel_plans_shard_experts(self):
+        pass
 
     def setUp(self):
         self.model_tester = OpenAIPrivacyFilterModelTester(self)
