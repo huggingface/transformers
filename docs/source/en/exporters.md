@@ -421,6 +421,18 @@ components.save_pretrained("qwen2-vl-dynamo")
 
 Pass a `{component: config}` dict to configure each component on its own terms.
 
+[`~ExportArtifacts.runtime`] and [`AutoExportedModel.from_pretrained`] run the components as the model's own forward
+does, as an [`ExportedMultimodalModel`] called with the processor's whole output: the token ids are embedded, each
+modality's features are scattered into its placeholder tokens, and `language_model` returns what the model returns.
+[`AutoExportedModel`] loads any saved export, as the class it runs as.
+
+```python
+from transformers.exporters import AutoExportedModel
+
+model = AutoExportedModel.from_pretrained("qwen2-vl-dynamo")
+logits = model(**inputs).logits
+```
+
 ## Generative models
 
 For autoregressive generation, the model's `forward` has different shapes at the prefill step

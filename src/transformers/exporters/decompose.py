@@ -166,6 +166,34 @@ def flatten_anyres_patches(config: Any, pixel_values, image_sizes):
     return torch.cat([pix[:count] for pix, count in zip(pixel_values, counts)], dim=0)
 
 
+def pack_anyres_features(config: Any, features, image_sizes, image_newline=None):
+    """The `pack_image_features` step [`PatchVisionEncoder`] leaves out of the graph, with the modeling's own grid and
+    unpad helpers: each image's base patch, then its tiles unpadded to the image's aspect ratio."""
+    from ..models.llava_next.modeling_llava_next import get_anyres_image_grid_shape, unpad_image
+
+    pinpoints = _find_config_attr(config, "image_grid_pinpoints")
+    tile = _find_config_attr(config, "image_size")
+    # From the projected tensor, not the config: a projector can downsample the token grid.
+    side = round(features.shape[1] ** 0.5)
+    packed = []
+    for index, feature in enumerate(torch.split(features, anyres_patch_counts(config, image_sizes), dim=0)):
+        if feature.shape[0] > 1:
+            base, patches = feature[0], feature[1:]
+            num_patch_height, num_patch_width = get_anyres_image_grid_shape(image_sizes[index], pinpoints, tile)
+            patches = patches.view(num_patch_height, num_patch_width, side, side, -1).permute(4, 0, 2, 1, 3)
+            patches = unpad_image(patches.flatten(1, 2).flatten(2, 3), image_sizes[index])
+            if image_newline is not None:
+                column = image_newline[:, None, None].expand(*patches.shape[:-1], 1).to(patches)
+                patches = torch.cat((patches, column), dim=-1)
+            packed.append(torch.cat((base, patches.flatten(1, 2).transpose(0, 1)), dim=0))
+        else:
+            feature = feature[0]
+            if image_newline is not None:
+                feature = torch.cat((feature, image_newline[None].to(feature)), dim=0)
+            packed.append(feature)
+    return torch.cat(packed, dim=0)
+
+
 def packs_anyres_features(owner: Any, config: Any) -> bool:
     """Whether this image getter ends in the anyres `pack_image_features` (deepstack towers included)."""
     projectors = ("multi_modal_projector", "layerwise_projectors")
@@ -294,14 +322,15 @@ def embedded_inputs(call_inputs: dict, components: dict) -> dict:
 def _main_inputs(model: PreTrainedModel, inputs: dict[str, Any], decoder_call: dict[str, Any]) -> dict[str, Any]:
     """`model`'s own kwargs on `inputs_embeds`: the embeddings its text stack received, features scattered in,
     replace the token ids and modality inputs. Positions the model derived from those (M-RoPE) come along, since it
-    can't recompute them without."""
+    can't recompute them without; the config-only precompute is what the runtime computes them with."""
     if decoder_call.get("inputs_embeds") is None:
         return inputs
     main_inputs = copy.copy(inputs)
     accepted = inspect.signature(model.forward).parameters
-    if main_inputs.get("position_ids") is None and decoder_call.get("position_ids") is not None:
-        if "position_ids" in accepted:
-            main_inputs["position_ids"] = decoder_call["position_ids"]
+    if main_inputs.get("position_ids") is None and "position_ids" in accepted:
+        position_ids = precompute_export_inputs(model.config, inputs).get("position_ids")
+        if position_ids is not None:
+            main_inputs["position_ids"] = position_ids
     main_inputs = embedded_inputs(main_inputs, {})
     main_inputs.pop("input_ids", None)
     main_inputs["inputs_embeds"] = decoder_call["inputs_embeds"]

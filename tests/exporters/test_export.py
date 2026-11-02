@@ -24,6 +24,7 @@ import torch
 from parameterized import parameterized
 
 from transformers import GenerationConfig, set_seed
+from transformers.exporters.base import ExportArtifacts
 from transformers.exporters.decompose import decompose_multimodal, is_multimodal
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
@@ -881,7 +882,7 @@ class ExportTesterMixin:
         scopes = ["exactness" if scope == "all" else f"{scope}.exactness" for scope in scopes]
         return any(name in EXPORT_SKIPS.get(scope, {}) for scope in scopes)
 
-    def _prepare_export_model_and_inputs(self, model_class, device=torch_device):
+    def _prepare_export_model_and_inputs(self, model_class, device=torch_device, return_model=False):
         """Create model and forward inputs ready for export.
 
         ``device`` defaults to ``torch_device``; the ExecuTorch tests pass ``"cpu"`` since that
@@ -890,7 +891,8 @@ class ExportTesterMixin:
 
         Returns:
             `{name: (model, inputs)}`: one entry per component (a whole model, or decomposed submodels
-            for a multimodal model), each paired with its forward inputs.
+            for a multimodal model), each paired with its forward inputs. With ``return_model``, also the
+            whole model and its inputs: `(components, model, inputs)`.
         """
         if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
@@ -907,8 +909,10 @@ class ExportTesterMixin:
 
         if is_multimodal(model):
             components = decompose_multimodal(model, inputs_dict)
-            return {name: (component.module, component.inputs) for name, component in components.items()}
-        return {"model": (model, inputs_dict)}
+            components = {name: (component.module, component.inputs) for name, component in components.items()}
+        else:
+            components = {"model": (model, inputs_dict)}
+        return (components, model, inputs_dict) if return_model else components
 
     def _collect_eager_outputs(self, components, output_types=None):
         """Run eager forward for each component and return a ``{name: leaf_tensors}`` dict. When given,
@@ -923,6 +927,30 @@ class ExportTesterMixin:
             if output_types is not None:
                 output_types[name] = type(outputs)
         return eager_outputs
+
+    def _check_multimodal_runtime(self, exporter, exported, model, inputs, atol, rtol, check_exactness, check_device):
+        """The components of a multimodal model, exported one by one, run end to end through the runtime like the
+        whole model."""
+        if "text_embeddings_model" not in exported or "language_model" not in exported:
+            return
+        artifacts = ExportArtifacts(
+            {name: artifacts["model"] for name, artifacts in exported.items()}, exporter.export_format, model.config
+        )
+        with torch.no_grad():
+            set_seed(1234)
+            expected = model(**copy.deepcopy(inputs))
+        set_seed(1234)
+        outputs = artifacts.runtime()(**copy.deepcopy(inputs))
+        self.assertIs(type(outputs), type(expected))
+        if check_exactness:
+            self._check_outputs_close(
+                get_leaf_tensors(outputs),
+                get_leaf_tensors(expected),
+                atol=atol,
+                rtol=rtol,
+                check_device=check_device,
+                inputs=inputs,
+            )
 
     def _check_outputs_close(self, actual, expected, atol, rtol, check_device=True, inputs=None):
         """Assert outputs are close, allowing up to 5% element-level mismatch.
@@ -971,13 +999,15 @@ class ExportTesterMixin:
             if self._should_skip(model_class, dynamic=dynamic, backend="dynamo"):
                 continue
 
-            components = self._prepare_export_model_and_inputs(model_class)
+            components, full_model, full_inputs = self._prepare_export_model_and_inputs(model_class, return_model=True)
             eager_types = {}
             eager_outputs = self._collect_eager_outputs(components, eager_types)
+            exported = {}
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    runtime = exporter.export(model, inputs, config=config).runtime()
+                    exported[name] = exporter.export(model, inputs, config=config)
+                    runtime = exported[name].runtime()
 
                     set_seed(1234)
                     outputs = runtime(**copy.deepcopy(inputs))
@@ -987,6 +1017,13 @@ class ExportTesterMixin:
 
                     if not self._should_skip_exactness(model_class, dynamic=dynamic):
                         self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
+
+            if len(components) > 1:
+                with self.subTest(f"{model_class.__name__}/end to end"):
+                    check_exactness = not self._should_skip_exactness(model_class, dynamic=dynamic)
+                    self._check_multimodal_runtime(
+                        exporter, exported, full_model, full_inputs, atol, rtol, check_exactness, check_device=True
+                    )
 
     # ──────────────────────── ONNX tests ─────────────────────────
 
@@ -1010,13 +1047,15 @@ class ExportTesterMixin:
             exporter = OnnxExporter()
             config = OnnxConfig(dynamic=dynamic, optimize=optimize)
 
-            components = self._prepare_export_model_and_inputs(model_class)
+            components, full_model, full_inputs = self._prepare_export_model_and_inputs(model_class, return_model=True)
             eager_types = {}
             eager_outputs = self._collect_eager_outputs(components, eager_types)
+            exported = {}
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    runtime = exporter.export(model, inputs, config=config).runtime()
+                    exported[name] = exporter.export(model, inputs, config=config)
+                    runtime = exported[name].runtime()
                     set_seed(1234)
                     outputs = runtime(**inputs)
                     self.assertIs(type(outputs), eager_types[name])
@@ -1027,6 +1066,13 @@ class ExportTesterMixin:
                         self._check_outputs_close(
                             onnx_outputs, eager_outputs[name], atol=atol, rtol=rtol, check_device=False, inputs=inputs
                         )
+
+            if len(components) > 1:
+                with self.subTest(f"{model_class.__name__}/end to end"):
+                    check_exactness = not self._should_skip_exactness(model_class, dynamic=dynamic, backend="onnx")
+                    self._check_multimodal_runtime(
+                        exporter, exported, full_model, full_inputs, atol, rtol, check_exactness, check_device=False
+                    )
 
     # ──────────────────── OpenVINO tests ─────────────────────────
 
@@ -1046,13 +1092,15 @@ class ExportTesterMixin:
             if self._should_skip(model_class, dynamic=dynamic, backend="openvino"):
                 continue
 
-            components = self._prepare_export_model_and_inputs(model_class)
+            components, full_model, full_inputs = self._prepare_export_model_and_inputs(model_class, return_model=True)
             eager_types = {}
             eager_outputs = self._collect_eager_outputs(components, eager_types)
+            exported = {}
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    runtime = exporter.export(model, inputs, config=config).runtime()
+                    exported[name] = exporter.export(model, inputs, config=config)
+                    runtime = exported[name].runtime()
                     set_seed(1234)
                     outputs = runtime(**inputs)
                     self.assertIs(type(outputs), eager_types[name])
@@ -1063,6 +1111,13 @@ class ExportTesterMixin:
                         self._check_outputs_close(
                             ov_outputs, eager_outputs[name], atol=atol, rtol=rtol, check_device=False, inputs=inputs
                         )
+
+            if len(components) > 1:
+                with self.subTest(f"{model_class.__name__}/end to end"):
+                    check_exactness = not self._should_skip_exactness(model_class, dynamic=dynamic, backend="openvino")
+                    self._check_multimodal_runtime(
+                        exporter, exported, full_model, full_inputs, atol, rtol, check_exactness, check_device=False
+                    )
 
     # ──────────────────── ExecuTorch tests ───────────────────────
 

@@ -509,5 +509,63 @@ class ExportedModelTest(unittest.TestCase):
 
         component = ExportedComponent("program", ExportMetadata())
         artifacts = ExportArtifacts({"prefill": component, "decode": component}, "dynamo")
-        with self.assertRaisesRegex(ValueError, "2 components"):
+        with self.assertRaisesRegex(ValueError, "runtime isn.t available yet"):
             artifacts.runtime()
+
+
+@slow
+@require_torch
+class ExportedMultimodalModelTest(unittest.TestCase):
+    """A multimodal split (`export_multimodal`) runs end to end like the full model on every backend: embedded,
+    features scattered in, and the language model on top."""
+
+    def _check_runs_like_eager(self, exporter, config, atol, device=None):
+        from tests.exporters.test_utils import _tiny_llava
+        from transformers.exporters import AutoExportedModel, ExportedModel, ExportedMultimodalModel
+
+        model, inputs = _tiny_llava()
+        with torch.no_grad():
+            expected = model(**inputs)
+        exported = exporter.export_multimodal(model, copy.deepcopy(inputs), config)
+        with tempfile.TemporaryDirectory() as directory:
+            exported.save_pretrained(directory)
+            for name, runtime in (
+                ("runtime", exported.runtime(device=device)),
+                ("from_pretrained", ExportedMultimodalModel.from_pretrained(directory, device=device)),
+                ("auto", AutoExportedModel.from_pretrained(directory, device=device)),
+            ):
+                with self.subTest(name):
+                    self.assertIsInstance(runtime, ExportedMultimodalModel)
+                    outputs = runtime(**inputs)
+                    self.assertIs(type(outputs), type(expected))
+                    torch.testing.assert_close(outputs.logits.cpu(), expected.logits, atol=atol, rtol=atol)
+            with self.assertRaisesRegex(TypeError, "AutoExportedModel"):
+                ExportedModel.from_pretrained(directory, device=device)
+
+    @pytest.mark.torch_export_test
+    def test_dynamo(self):
+        from transformers.exporters import DynamoConfig, DynamoExporter
+
+        self._check_runs_like_eager(DynamoExporter(), DynamoConfig(), atol=1e-4)
+
+    @require_onnxscript
+    @require_onnxruntime
+    @pytest.mark.onnx_export_test
+    def test_onnx(self):
+        from transformers.exporters import OnnxConfig, OnnxExporter
+
+        self._check_runs_like_eager(OnnxExporter(), OnnxConfig(), atol=1e-3, device="cpu")
+
+    @require_openvino
+    @pytest.mark.openvino_export_test
+    def test_openvino(self):
+        from transformers.exporters import OpenVINOConfig, OpenVINOExporter
+
+        self._check_runs_like_eager(OpenVINOExporter(), OpenVINOConfig(), atol=1e-3, device="cpu")
+
+    @require_executorch
+    @pytest.mark.executorch_export_test
+    def test_executorch(self):
+        from transformers.exporters import ExecutorchConfig, ExecutorchExporter
+
+        self._check_runs_like_eager(ExecutorchExporter(), ExecutorchConfig(), atol=1e-3)

@@ -18,8 +18,10 @@ from __future__ import annotations
 
 import importlib
 from dataclasses import dataclass
+from typing import Unpack
 
 from ..utils import logging
+from ..utils.hub import DownloadKwargs
 from .base import HfExporter
 from .configs import (
     DynamoConfig,
@@ -167,3 +169,23 @@ class AutoHfExporter:
             "AutoHfExporter.from_pretrained is not implemented yet. "
             "Load/export configs explicitly and call AutoHfExporter.from_config(...) instead."
         )
+
+
+class AutoExportedModel:
+    """Loads any saved export to run, as `AutoModel` loads a checkpoint: what was saved decides the class that comes
+    back ([`ExportArtifacts.runtime`] picks it), an [`ExportedModel`] for a single graph or an
+    [`ExportedMultimodalModel`] for a multimodal split.
+
+    ```python
+    >>> model = AutoExportedModel.from_pretrained("org/model-openvino")
+    >>> outputs = model(**inputs)
+    ```
+    """
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *, device=None, **kwargs: Unpack[DownloadKwargs]):
+        """Load an export written by [`~ExportArtifacts.save_pretrained`], from a local directory or a Hub repo, to
+        run on `device`. `kwargs` are download kwargs, as for [`~ExportArtifacts.from_pretrained`]."""
+        from .base import ExportArtifacts
+
+        return ExportArtifacts.from_pretrained(pretrained_model_name_or_path, **kwargs).runtime(device=device)
