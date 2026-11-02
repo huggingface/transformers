@@ -58,7 +58,9 @@ class ExportedMultimodalModel(ExportedModel):
 
     def __call__(self, **kwargs) -> Any:
         input_ids = kwargs["input_ids"]
-        embedded = self.text_runner(input_ids=input_ids)
+        # The embedder's and modality graphs' outputs are read within this call (what the model returns is copied
+        # out), so a backend may hand out its own buffers.
+        embedded = self.text_runner(input_ids=input_ids, share_outputs=True)
         inputs_embeds = embedded["inputs_embeds"] if isinstance(embedded, dict) else embedded
         features, deepstack = {}, []
         for spec, runner in self.modality_runners:
@@ -91,10 +93,12 @@ class ExportedMultimodalModel(ExportedModel):
         if features.get("vision_embeddings_model") is not None and "image_hidden_states" in getattr(
             outputs, "__dataclass_fields__", {}
         ):
-            outputs["image_hidden_states"] = features["vision_embeddings_model"]
+            outputs["image_hidden_states"] = features["vision_embeddings_model"].clone()
         # And Granite4-Vision its per-layer ones.
         if "deepstack_features" in features and "deepstack_features" in getattr(outputs, "__dataclass_fields__", {}):
-            outputs["deepstack_features"] = features["deepstack_features"]
+            outputs["deepstack_features"] = [
+                (layer, [image.clone() for image in images]) for layer, images in features["deepstack_features"]
+            ]
         return outputs
 
     def _deepstack_inputs(self, deepstack: list, inputs_embeds: torch.Tensor) -> dict[str, Any]:
@@ -127,7 +131,7 @@ class ExportedMultimodalModel(ExportedModel):
             if (value := _find_config_attr(self.config, name)) is not None:
                 feed[name] = value
         feed = cast_leaf_tensors(feed, dtype=runner.dtype, device=runner.device)
-        outputs = runner(**{name: value for name, value in feed.items() if name in traced})
+        outputs = runner(share_outputs=True, **{name: value for name, value in feed.items() if name in traced})
         if not isinstance(outputs, dict):
             return outputs, None
         if "deepstack_features" in outputs:

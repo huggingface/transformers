@@ -80,9 +80,10 @@ class OnnxModelRunner(ModelRunner):
         program.initialize_inference_session(open_session)
         return cls(program, metadata, sessions[0])
 
-    def __call__(self, **kwargs) -> Any:
+    def __call__(self, share_inputs: bool = True, share_outputs: bool = False, **kwargs) -> Any:
         """Run with the inputs and outputs bound in place on the session's device (IO binding), instead of copied
-        through host arrays. The graph binds inputs by position, so they go in traced order."""
+        through host arrays: sharing either way already. The graph binds inputs by position, so they go in traced
+        order."""
         from torch.onnx._internal.exporter._core import torch_dtype_to_onnx_dtype
 
         inputs = {name: kwargs[name] for name in self.metadata.kwargs if name in kwargs}

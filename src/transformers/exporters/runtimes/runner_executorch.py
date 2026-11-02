@@ -50,7 +50,7 @@ class ExecutorchModelRunner(ModelRunner):
             program = Runtime.get().load_program(program.buffer)
         return cls(program, metadata)
 
-    def __call__(self, **kwargs) -> Any:
+    def __call__(self, share_inputs: bool = True, share_outputs: bool = False, **kwargs) -> Any:
         leaves = fx_pytree.tree_flatten_spec(((), kwargs), self.in_spec)
         # A string is a constant of the program, whose slot takes `None`: the runtime has no string value.
         feed = [

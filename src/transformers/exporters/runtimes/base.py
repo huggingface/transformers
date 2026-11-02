@@ -63,8 +63,11 @@ class ModelRunner(ABC):
         `device` (the backend's default when `None`)."""
 
     @abstractmethod
-    def __call__(self, **kwargs) -> Any:
-        """Run the program on the traced forward's kwargs."""
+    def __call__(self, share_inputs: bool = True, share_outputs: bool = False, **kwargs) -> Any:
+        """Run the program on the traced forward's kwargs. `share_inputs` reads them in place rather than from copies;
+        `share_outputs` returns views of the backend's own output buffers rather than copies, which its next call
+        overwrites. A backend that always does one or the other ignores them (ONNX Runtime binds inputs in place and
+        hands its outputs over, a torch program copies neither)."""
 
 
 class ExportedModel:
@@ -105,28 +108,31 @@ class ExportedModel:
         """Upload the export this runs, as [`~ExportArtifacts.push_to_hub`] does."""
         return self.artifacts.push_to_hub(repo_id, **kwargs)
 
-    def __call__(self, **kwargs) -> Any:
+    def __call__(self, share_inputs: bool = True, share_outputs: bool = False, **kwargs) -> Any:
         """Run the export, returning what the source model returns. Kwargs the export was not traced with are
-        dropped, so a processor's whole output can be passed."""
+        dropped, so a processor's whole output can be passed. `share_inputs` and `share_outputs` go to the runner
+        (see [`ModelRunner.__call__`]): with `share_outputs`, the outputs are valid until the next call."""
         traced = self.runner.metadata.kwargs
         unused = [name for name in kwargs if name not in traced]
         if unused:
             logger.warning_once(f"Dropping inputs the export was not traced with: {unused}.")
-        return self.runner(**{name: value for name, value in kwargs.items() if name in traced})
+        inputs = {name: value for name, value in kwargs.items() if name in traced}
+        return self.runner(share_inputs=share_inputs, share_outputs=share_outputs, **inputs)
 
     @classmethod
     def from_pretrained(
         cls, pretrained_model_name_or_path: str | Path, *, device=None, **kwargs: Unpack[DownloadKwargs]
     ) -> ExportedModel:
-        """Load an export of this class's kind written by [`~ExportArtifacts.save_pretrained`], from a local directory
-        or a Hub repo, to run on `device`. `kwargs` are download kwargs, as for [`~ExportArtifacts.from_pretrained`].
-        [`AutoExportedModel`] loads any kind."""
+        """Load an export written by [`~ExportArtifacts.save_pretrained`], from a local directory or a Hub repo, to
+        run on `device`, as the class it runs as ([`ExportArtifacts.runtime`] picks it): any kind from
+        [`ExportedModel`], this class's own kind from a subclass. `kwargs` are download kwargs, as for
+        [`~ExportArtifacts.from_pretrained`]."""
         from ..base import ExportArtifacts
 
         model = ExportArtifacts.from_pretrained(pretrained_model_name_or_path, **kwargs).runtime(device=device)
-        if type(model) is not cls:
+        if not isinstance(model, cls):
             raise TypeError(
                 f"{pretrained_model_name_or_path} runs as a {type(model).__name__}, not a {cls.__name__}: load it with "
-                f"`{type(model).__name__}.from_pretrained` or `AutoExportedModel.from_pretrained`."
+                f"`{type(model).__name__}.from_pretrained` or `ExportedModel.from_pretrained`."
             )
         return model
