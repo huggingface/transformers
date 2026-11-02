@@ -30,7 +30,8 @@ import os
 from transformers import MiMoV2FlashConfig
 
 
-def convert_config(original_config: dict):
+def convert_config_kwargs(original_config: dict) -> dict:
+    """Translate the Hub-format text settings into `MiMoV2FlashConfig` keyword arguments."""
     # Hub-only keys with no equivalent in `MiMoV2FlashConfig` (hardcoded or redundant in the native port).
     keys_to_drop = {
         "attention_chunk_size",
@@ -38,13 +39,7 @@ def convert_config(original_config: dict):
         "n_shared_experts",
         "scoring_func",
         "topk_method",
-        "swa_num_attention_heads",
-        "swa_num_key_value_heads",
         "swa_qk_head_dim",
-        "swa_head_dim",
-        "swa_v_head_dim",
-        "add_swa_attention_sink_bias",
-        "add_full_attention_sink_bias",
         "auto_map",
     }
     new_config_kwargs = {k: v for k, v in original_config.items() if k not in keys_to_drop}
@@ -85,10 +80,14 @@ def convert_config(original_config: dict):
         },
     }
     if rope_scaling is not None:
-        rope_parameters["full_attention"].update(rope_scaling)
+        # `type` is the legacy name of `rope_type`.
+        rope_parameters["full_attention"].update({k: v for k, v in rope_scaling.items() if k != "type"})
     new_config_kwargs["rope_parameters"] = rope_parameters
+    return new_config_kwargs
 
-    new_config = MiMoV2FlashConfig(**new_config_kwargs)
+
+def convert_config(original_config: dict):
+    new_config = MiMoV2FlashConfig(**convert_config_kwargs(original_config))
     return new_config
 
 

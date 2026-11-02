@@ -59,6 +59,18 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
     attention_value_scale (`float`, *optional*, defaults to 0.707 (which is the decimal approximation
         of `sqrt(hidden_size / (num_attention_heads * v_head_dim))`):
         Constant multiplier applied to rescale the attention values.
+    swa_num_attention_heads (`int`, *optional*):
+        Number of query heads in sliding attention. Defaults to `num_attention_heads`.
+    swa_num_key_value_heads (`int`, *optional*):
+        Number of sliding-attention KV heads. Defaults to twice `num_key_value_heads` for the original Flash model.
+    swa_head_dim (`int`, *optional*):
+        Sliding-attention query/key head dimension. Defaults to `head_dim`.
+    swa_v_head_dim (`int`, *optional*):
+        Sliding-attention value head dimension. Defaults to `v_head_dim`.
+    add_full_attention_sink_bias (`bool`, *optional*, defaults to `False`):
+        Whether global attention layers have learned softmax sinks.
+    add_swa_attention_sink_bias (`bool`, *optional*, defaults to `True`):
+        Whether sliding attention layers have learned softmax sinks.
     """
 
     model_type = "mimo_v2_flash"
@@ -102,6 +114,12 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
     layer_types: list[str] | None = None
     mlp_layer_types: list[str] | None = None
     attention_value_scale: float | None = 0.707
+    swa_num_attention_heads: int | None = None
+    swa_num_key_value_heads: int | None = None
+    swa_head_dim: int | None = None
+    swa_v_head_dim: int | None = None
+    add_full_attention_sink_bias: bool = False
+    add_swa_attention_sink_bias: bool = True
     # Remove unused attributes inherited from Glm4MoeConfig
     first_k_dense_replace = AttributeError()
     n_shared_experts = AttributeError()
@@ -118,6 +136,16 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
         # First layer is a dense MLP, the rest are MoE.
         if self.mlp_layer_types is None:
             self.mlp_layer_types = ["dense"] + ["sparse"] * (self.num_hidden_layers - 1)
+        # Sliding-window layers default to the full-attention shapes, except that the original
+        # XiaomiMiMo/MiMo-V2-Flash doubles the number of key/value heads.
+        if self.swa_num_attention_heads is None:
+            self.swa_num_attention_heads = self.num_attention_heads
+        if self.swa_num_key_value_heads is None:
+            self.swa_num_key_value_heads = 2 * self.num_key_value_heads
+        if self.swa_head_dim is None:
+            self.swa_head_dim = self.head_dim
+        if self.swa_v_head_dim is None:
+            self.swa_v_head_dim = self.v_head_dim
         # Per-layer rope defaults matching the XiaomiMiMo/MiMo-V2-Flash pretrained thetas.
         if self.rope_parameters is None:
             self.rope_parameters = {
@@ -127,7 +155,7 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
         # BC: The hub config.json stores `routed_scaling_factor` as null
         if self.routed_scaling_factor is None:
             self.routed_scaling_factor = 1.0
-        # The reference SGLang implementation attends to `sliding_window_size` previous tokens plus the query.
+        # `sliding_window_size` counts the previous tokens, `sliding_window` also includes the query.
         if kwargs.get("sliding_window_size") is not None:
             self.sliding_window = kwargs["sliding_window_size"] + 1
 
@@ -163,7 +191,7 @@ class MiMoV2FlashRotaryEmbedding(Gemma3RotaryEmbedding):
         """
         base = config.rope_parameters[layer_type]["rope_theta"]
         partial_rotary_factor = config.rope_parameters[layer_type].get("partial_rotary_factor", 0.334)
-        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        head_dim = config.swa_head_dim if layer_type == "sliding_attention" else config.head_dim
         dim = int(head_dim * partial_rotary_factor)
 
         attention_factor = 1.0  # Unused in this type of RoPE
@@ -238,21 +266,26 @@ def eager_attention_forward(
 @no_inherit_decorator
 class MiMoV2FlashAttention(Qwen2Attention):
     def __init__(self, config: MiMoV2FlashConfig, layer_idx: int):
-        # SWA layers double the kv heads vs full-attention and have attention sinks.
         is_swa = config.layer_types[layer_idx] == "sliding_attention"
-        num_key_value_heads = config.num_key_value_heads * 2 if is_swa else config.num_key_value_heads
-        num_attention_heads = config.num_attention_heads
-        super().__init__(config, layer_idx)
-        self.v_head_dim = config.v_head_dim
+        num_key_value_heads = config.swa_num_key_value_heads if is_swa else config.num_key_value_heads
+        num_attention_heads = config.swa_num_attention_heads if is_swa else config.num_attention_heads
+        nn.Module.__init__(self)
+        self.config = config
+        self.layer_idx = layer_idx
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = True
+        self.sliding_window = config.sliding_window if is_swa else None
+        self.head_dim = config.swa_head_dim if is_swa else config.head_dim
+        self.v_head_dim = config.swa_v_head_dim if is_swa else config.v_head_dim
+        self.scaling = self.head_dim**-0.5
         self.num_key_value_groups = num_attention_heads // num_key_value_heads
 
         self.q_proj = nn.Linear(config.hidden_size, num_attention_heads * self.head_dim, bias=config.attention_bias)
         self.k_proj = nn.Linear(config.hidden_size, num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(
-            config.hidden_size, num_key_value_heads * config.v_head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(num_attention_heads * config.v_head_dim, config.hidden_size, bias=False)
-        self.sinks = nn.Parameter(torch.empty(num_attention_heads)) if is_swa else None
+        self.v_proj = nn.Linear(config.hidden_size, num_key_value_heads * self.v_head_dim, bias=config.attention_bias)
+        self.o_proj = nn.Linear(num_attention_heads * self.v_head_dim, config.hidden_size, bias=False)
+        use_sink = config.add_swa_attention_sink_bias if is_swa else config.add_full_attention_sink_bias
+        self.sinks = nn.Parameter(torch.empty(num_attention_heads)) if use_sink else None
         self.v_scale = config.attention_value_scale if config.attention_value_scale is not None else 1.0
 
     def forward(

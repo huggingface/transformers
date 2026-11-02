@@ -104,7 +104,7 @@ class MiMoV2FlashRotaryEmbedding(nn.Module):
         """
         base = config.rope_parameters[layer_type]["rope_theta"]
         partial_rotary_factor = config.rope_parameters[layer_type].get("partial_rotary_factor", 0.334)
-        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        head_dim = config.swa_head_dim if layer_type == "sliding_attention" else config.head_dim
         dim = int(head_dim * partial_rotary_factor)
 
         attention_factor = 1.0  # Unused in this type of RoPE
@@ -335,29 +335,26 @@ class MiMoV2FlashAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: MiMoV2FlashConfig, layer_idx: int):
-        super().__init__()
-        # SWA layers double the kv heads vs full-attention and have attention sinks.
         is_swa = config.layer_types[layer_idx] == "sliding_attention"
-        num_key_value_heads = config.num_key_value_heads * 2 if is_swa else config.num_key_value_heads
-        num_attention_heads = config.num_attention_heads
-        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        num_key_value_heads = config.swa_num_key_value_heads if is_swa else config.num_key_value_heads
+        num_attention_heads = config.swa_num_attention_heads if is_swa else config.num_attention_heads
+        super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = num_attention_heads // num_key_value_heads
-        self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
+        self.sliding_window = config.sliding_window if is_swa else None
+        self.head_dim = config.swa_head_dim if is_swa else config.head_dim
+        self.v_head_dim = config.swa_v_head_dim if is_swa else config.v_head_dim
+        self.scaling = self.head_dim**-0.5
+        self.num_key_value_groups = num_attention_heads // num_key_value_heads
 
         self.q_proj = nn.Linear(config.hidden_size, num_attention_heads * self.head_dim, bias=config.attention_bias)
         self.k_proj = nn.Linear(config.hidden_size, num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(
-            config.hidden_size, num_key_value_heads * config.v_head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(num_attention_heads * config.v_head_dim, config.hidden_size, bias=False)
-        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
-        self.v_head_dim = config.v_head_dim
-        self.sinks = nn.Parameter(torch.empty(num_attention_heads)) if is_swa else None
+        self.v_proj = nn.Linear(config.hidden_size, num_key_value_heads * self.v_head_dim, bias=config.attention_bias)
+        self.o_proj = nn.Linear(num_attention_heads * self.v_head_dim, config.hidden_size, bias=False)
+        use_sink = config.add_swa_attention_sink_bias if is_swa else config.add_full_attention_sink_bias
+        self.sinks = nn.Parameter(torch.empty(num_attention_heads)) if use_sink else None
         self.v_scale = config.attention_value_scale if config.attention_value_scale is not None else 1.0
 
     def forward(

@@ -43,6 +43,18 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     attention_value_scale (`float`, *optional*, defaults to 0.707 (which is the decimal approximation
         of `sqrt(hidden_size / (num_attention_heads * v_head_dim))`):
         Constant multiplier applied to rescale the attention values.
+    swa_num_attention_heads (`int`, *optional*):
+        Number of query heads in sliding attention. Defaults to `num_attention_heads`.
+    swa_num_key_value_heads (`int`, *optional*):
+        Number of sliding-attention KV heads. Defaults to twice `num_key_value_heads` for the original Flash model.
+    swa_head_dim (`int`, *optional*):
+        Sliding-attention query/key head dimension. Defaults to `head_dim`.
+    swa_v_head_dim (`int`, *optional*):
+        Sliding-attention value head dimension. Defaults to `v_head_dim`.
+    add_full_attention_sink_bias (`bool`, *optional*, defaults to `False`):
+        Whether global attention layers have learned softmax sinks.
+    add_swa_attention_sink_bias (`bool`, *optional*, defaults to `True`):
+        Whether sliding attention layers have learned softmax sinks.
     """
 
     model_type = "mimo_v2_flash"
@@ -109,6 +121,12 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     layer_types: list[str] | None = None
     mlp_layer_types: list[str] | None = None
     attention_value_scale: float | None = 0.707
+    swa_num_attention_heads: int | None = None
+    swa_num_key_value_heads: int | None = None
+    swa_head_dim: int | None = None
+    swa_v_head_dim: int | None = None
+    add_full_attention_sink_bias: bool = False
+    add_swa_attention_sink_bias: bool = True
 
     def __post_init__(self, **kwargs):
         # Full attention for the first layer and every 6th layer; SWA for the rest.
@@ -120,6 +138,16 @@ class MiMoV2FlashConfig(PreTrainedConfig):
         # First layer is a dense MLP, the rest are MoE.
         if self.mlp_layer_types is None:
             self.mlp_layer_types = ["dense"] + ["sparse"] * (self.num_hidden_layers - 1)
+        # Sliding-window layers default to the full-attention shapes, except that the original
+        # XiaomiMiMo/MiMo-V2-Flash doubles the number of key/value heads.
+        if self.swa_num_attention_heads is None:
+            self.swa_num_attention_heads = self.num_attention_heads
+        if self.swa_num_key_value_heads is None:
+            self.swa_num_key_value_heads = 2 * self.num_key_value_heads
+        if self.swa_head_dim is None:
+            self.swa_head_dim = self.head_dim
+        if self.swa_v_head_dim is None:
+            self.swa_v_head_dim = self.v_head_dim
         # Per-layer rope defaults matching the XiaomiMiMo/MiMo-V2-Flash pretrained thetas.
         if self.rope_parameters is None:
             self.rope_parameters = {
@@ -129,7 +157,7 @@ class MiMoV2FlashConfig(PreTrainedConfig):
         # BC: The hub config.json stores `routed_scaling_factor` as null
         if self.routed_scaling_factor is None:
             self.routed_scaling_factor = 1.0
-        # The reference SGLang implementation attends to `sliding_window_size` previous tokens plus the query.
+        # `sliding_window_size` counts the previous tokens, `sliding_window` also includes the query.
         if kwargs.get("sliding_window_size") is not None:
             self.sliding_window = kwargs["sliding_window_size"] + 1
 

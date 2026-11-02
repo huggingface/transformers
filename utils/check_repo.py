@@ -113,6 +113,7 @@ PRIVATE_MODELS = [
     "Kosmos2_5VisionModel",
     "SmolVLMVisionTransformer",
     "MiniCPMV4_6VisionPreTrainedModel",
+    "MiMoV2VLVisionModel",  # Building part of MiMoV2VLModel and tested through its multimodal forward.
     "MiniCPMV4_6VisionModel",
     "MiniMaxM3VLVisionModel",
     "AriaTextForCausalLM",
