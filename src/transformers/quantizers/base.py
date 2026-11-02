@@ -347,10 +347,12 @@ class HfQuantizer(ABC):
         decide, e.g. for a merge of `experts.*.gate_proj.weight` into `experts.gate_up_proj`:
         - `experts.gate_up_proj_scale_inv` is a param: a copy merges `experts.*.gate_proj.weight_scale_inv` into it
         - otherwise the converter also collects `experts.*.gate_proj.weight_scale_inv`, the dequantize op runs first
+        A module keeping companions that aren't suffixes of the param (e.g. gptq's `qweight`) is left as is.
         """
         from ..core_model_loading import WeightConverter
 
-        param_names = "\n".join(name for name, _ in model.named_parameters())
+        # Buffers too: e.g. gptq modules keep their packed weights as buffers
+        param_names = "\n".join(model.state_dict())
         dequantize = self.get_load_operations().get("dequantize") if self.pre_quantized else None
         updated = []
         for converter in weight_conversions:
@@ -364,7 +366,14 @@ class HfQuantizer(ABC):
                 continue
             # `weight_scale_inv` -> `_scale_inv`
             suffixes = [name.removeprefix(param) for name in serialized if name.startswith(param) and name != param]
-            if suffixes and re.search(f"{targets[0]}{suffixes[0]}$", param_names, re.MULTILINE):
+            target = targets[0]
+            companions = [
+                re.sub(rf"{param}$", name, target) if target.endswith(param) else target + name.removeprefix(param)
+                for name in serialized
+                if name != param and (target.endswith(param) or name.startswith(param))
+            ]
+            keeps_companions = any(re.search(f"{name}$", param_names, re.MULTILINE) for name in companions)
+            if suffixes and re.search(f"{target}{suffixes[0]}$", param_names, re.MULTILINE):
                 # The module keeps the companions as params: each one gets its own copy of the converter
                 for suffix in suffixes:
                     suffixed_sources = [source + suffix for source in sources]
@@ -372,7 +381,7 @@ class HfQuantizer(ABC):
                     updated.append(
                         converter.copy(suffixed_sources, suffixed_targets, operations=list(converter.operations))
                     )
-            elif dequantize is not None:
+            elif dequantize is not None and not keeps_companions:
                 # The module only has `param`: the converter also collects the companions and dequantizes first
                 all_sources = [re.sub(rf"{param}$", name, source) for source in sources for name in serialized]
                 updated[-1] = converter.copy(
