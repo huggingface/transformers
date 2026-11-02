@@ -34,20 +34,19 @@ from .quantizers.utils import capture_calibration_inputs
 from .utils import check_packages, decompose_for_generation
 
 
-logger = logging.get_logger(__name__)
-
-
-# Backend, file and recorded metadata per component. Kept outside the artifacts because not every format
-# can carry the metadata (`torch.export` cannot).
-EXPORT_MANIFEST_FILE = "export.json"
-
-
 if TYPE_CHECKING:
     import torch
 
     from ..cache_utils import Cache
     from ..configuration_utils import PreTrainedConfig
     from ..modeling_utils import PreTrainedModel
+
+
+logger = logging.get_logger(__name__)
+
+# Backend, file and recorded metadata per component. Kept outside the artifacts because not every format
+# can carry the metadata (`torch.export` cannot).
+EXPORT_MANIFEST_FILE = "export.json"
 
 
 @dataclass
@@ -269,6 +268,11 @@ class HfExporter(ABC):
         any the format keeps beside it (weights, external data)."""
         return [filename]
 
+    def _export_component(self, model, sample_inputs, config: ExportConfigMixin | dict[str, Any]) -> ExportedComponent:
+        config = self._as_config(config)
+        program, metadata = self.export_program(model, sample_inputs, config=config)
+        return ExportedComponent(program, ExportMetadata(**metadata, export_config=export_config_metadata(config)))
+
     def export(
         self,
         model: PreTrainedModel,
@@ -284,11 +288,7 @@ class HfExporter(ABC):
             [`ExportArtifacts`]: A single `"model"` component; the backend's program is `.program`, and
             `save_pretrained` writes it with its metadata and the model config.
         """
-        config = self._as_config(config)
-        program, metadata = self.export_program(model, sample_inputs, config)
-        component = ExportedComponent(
-            program, ExportMetadata(**metadata, export_config=export_config_metadata(config))
-        )
+        component = self._export_component(model, sample_inputs, config)
         # A decomposed component (e.g. `FSMTEncoder`) is a plain `nn.Module` with no config.
         return ExportArtifacts({"model": component}, self.export_format, config=getattr(model, "config", None))
 
@@ -369,14 +369,12 @@ class HfExporter(ABC):
         exported: dict[str, ExportedComponent] = {}
         for name, (submodel, subinputs) in components.items():
             try:
-                program, metadata = self.export_program(submodel, subinputs, config=configs[name])
+                exported[name] = self._export_component(submodel, subinputs, configs[name])
             except Exception as e:
                 raise RuntimeError(
                     f"{self.__class__.__name__}.export_program failed on component '{name}' "
                     f"(submodel={type(submodel).__name__}, input keys={list(subinputs)})."
                 ) from e
-            metadata["export_config"] = export_config_metadata(self._as_config(configs[name]))
-            exported[name] = ExportedComponent(program, ExportMetadata(**metadata))
 
         return ExportArtifacts(
             exported, self.export_format, config=getattr(model, "config", None), generation_config=generation_config

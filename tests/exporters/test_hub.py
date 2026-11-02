@@ -21,7 +21,7 @@ from unittest import mock
 from huggingface_hub import HfApi
 
 from tests.exporters.test_export import _run_onnx_program
-from tests.exporters.test_utils import _StubConfig, _StubExporter
+from tests.exporters.test_utils import _StubExporter
 from transformers import BertConfig, GenerationConfig
 from transformers.exporters import EXPORT_BACKENDS, ExportArtifacts, ExportedComponent, register_backend
 from transformers.exporters.metadata import ExportMetadata
@@ -46,7 +46,7 @@ class ExportArtifactsMockedHubTest(unittest.TestCase):
         export in a model repo's subfolder doesn't pull the model's own weights."""
         components = {"decode": ExportedComponent("decode program", ExportMetadata())}
         with mock.patch.dict(EXPORT_BACKENDS), tempfile.TemporaryDirectory() as repo:
-            register_backend("stub", _StubConfig, _StubExporter)
+            register_backend(_StubExporter)
             ExportArtifacts(components, "stub").save_pretrained(Path(repo) / "stub")
 
             requested = []
@@ -79,7 +79,7 @@ class ExportArtifactsMockedHubTest(unittest.TestCase):
             mock.patch("transformers.exporters.base.hf_api", return_value=api),
             tempfile.TemporaryDirectory() as directory,
         ):
-            register_backend("stub", _StubConfig, _StubExporter)
+            register_backend(_StubExporter)
             artifacts.save_pretrained(directory, push_to_hub=True, repo_id="org/model")
         uploaded = {operation.path_in_repo for operation in api.create_commit.call_args.kwargs["operations"]}
         self.assertEqual(uploaded, {"decode.txt", "export.json", "generation_config.json"})

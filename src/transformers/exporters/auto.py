@@ -51,14 +51,15 @@ EXPORT_BACKENDS: dict[str, ExportBackend] = {
 }
 
 
-def register_backend(name: str, config: type[ExportConfigMixin], exporter: type[HfExporter]) -> None:
-    """Register a format's config and exporter, so the auto classes find them."""
-    for part, cls, base in (("config", config, ExportConfigMixin), ("exporter", exporter, HfExporter)):
-        if not (isinstance(cls, type) and issubclass(cls, base)):
-            raise TypeError(f"The {part} must extend {base.__name__}, got {cls!r}.")
-    if name in EXPORT_BACKENDS:
-        logger.warning(f"Export backend '{name}' is already registered and will be overwritten.")
-    EXPORT_BACKENDS[name] = ExportBackend(config, exporter)
+def register_backend(exporter: type[HfExporter]) -> None:
+    """Register an exporter, with its `config_class`, under its `export_format`, so the auto classes find them."""
+    if not (isinstance(exporter, type) and issubclass(exporter, HfExporter)):
+        raise TypeError(f"The exporter must extend HfExporter, got {exporter!r}.")
+    if not (isinstance(exporter.config_class, type) and issubclass(exporter.config_class, ExportConfigMixin)):
+        raise TypeError(f"The exporter's `config_class` must extend ExportConfigMixin, got {exporter.config_class!r}.")
+    if exporter.export_format in EXPORT_BACKENDS:
+        logger.warning(f"Export backend '{exporter.export_format}' is already registered and will be overwritten.")
+    EXPORT_BACKENDS[exporter.export_format] = ExportBackend(exporter.config_class, exporter)
 
 
 def _registered_backend(export_format: ExportFormat | str | None) -> ExportBackend:

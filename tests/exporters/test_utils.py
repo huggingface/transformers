@@ -172,15 +172,18 @@ class RegistrationTest(unittest.TestCase):
         class _NotAConfig:
             pass
 
+        class _BadConfigExporter(_StubExporter):
+            config_class = _NotAConfig
+
         with mock.patch.dict(EXPORT_BACKENDS):
             with self.assertRaisesRegex(TypeError, "HfExporter"):
-                register_backend("bad", DynamoConfig, _NotAnExporter)
+                register_backend(_NotAnExporter)
             with self.assertRaisesRegex(TypeError, "ExportConfigMixin"):
-                register_backend("bad", _NotAConfig, _StubExporter)
+                register_backend(_BadConfigExporter)
 
     def test_register_backend_installs_stub(self):
         with mock.patch.dict(EXPORT_BACKENDS):
-            register_backend("stub", _StubConfig, _StubExporter)
+            register_backend(_StubExporter)
             self.assertIs(get_exporter_class("stub"), _StubExporter)
             self.assertIsInstance(AutoHfExporter.from_config(_StubConfig()), _StubExporter)
             self.assertEqual(
@@ -209,7 +212,7 @@ class ExportArtifactsTest(unittest.TestCase):
         }
         config, generation_config = BertConfig(hidden_size=32), GenerationConfig(max_new_tokens=3)
         with mock.patch.dict(EXPORT_BACKENDS):
-            register_backend("stub", _StubConfig, _StubExporter)
+            register_backend(_StubExporter)
             with tempfile.TemporaryDirectory() as directory:
                 ExportArtifacts(components, "stub", config, generation_config).save_pretrained(directory)
                 self.assertTrue((Path(directory) / "decode.txt").is_file())

@@ -173,7 +173,7 @@ class MyExporter(DynamoExporter):
         return load(path)
 
 
-register_backend("my_format", MyConfig, MyExporter)
+register_backend(MyExporter)
 ```
 
 The auto classes then dispatch `"my_format"` to them, and [`ExportArtifacts.from_pretrained`] loads its saved exports:
