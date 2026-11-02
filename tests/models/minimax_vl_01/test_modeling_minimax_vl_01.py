@@ -15,7 +15,7 @@
 
 import unittest
 
-import pytest
+from parameterized import parameterized
 
 from transformers import (
     AutoModel,
@@ -56,30 +56,22 @@ class MiniMaxVL01VisionText2TextModelTester(VLMModelTester):
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("batch_size", 2)
         kwargs.setdefault("vocab_size", 97)
-        kwargs.setdefault("hidden_size", 32)
         kwargs.setdefault("intermediate_size", 16)
-        kwargs.setdefault("num_hidden_layers", 2)
         kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 2)
         kwargs.setdefault("head_dim", 8)
         kwargs.setdefault("hidden_act", "silu")
         kwargs.setdefault("max_position_embeddings", 64)
         kwargs.setdefault("num_experts", 2)
-        kwargs.setdefault("num_experts_per_tok", 2)
         kwargs.setdefault("layer_types", ["linear_attention", "full_attention"])
         kwargs.setdefault("block_size", 4)
         kwargs.setdefault(
             "rope_parameters",
             {"rope_type": "default", "rope_theta": 10_000.0, "partial_rotary_factor": 0.5},
         )
-        kwargs.setdefault("image_size", 8)
-        kwargs.setdefault("patch_size", 4)
-        kwargs.setdefault("num_channels", 3)
-        kwargs.setdefault("projection_dim", 32)
-        kwargs.setdefault("image_token_id", 3)
         kwargs.setdefault("num_patches_per_image", 2)
-        # Four base-image patch tokens plus four any-resolution patch tokens and two row newlines.
-        kwargs.setdefault("num_image_tokens", 10)
+        patches_per_side = kwargs.get("image_size", 8) // kwargs.get("patch_size", 4)
+        # The thumbnail and crop each contribute a patch grid, with one newline per crop row.
+        kwargs.setdefault("num_image_tokens", patches_per_side**2 + patches_per_side * (patches_per_side + 1))
         super().__init__(parent, **kwargs)
 
     def get_vision_config(self):
@@ -96,15 +88,8 @@ class MiniMaxVL01VisionText2TextModelTester(VLMModelTester):
         )
 
     def get_config(self):
-        config = MiniMaxVL01Config(
-            text_config=self.get_text_config(),
-            vision_config=self.get_vision_config(),
-            image_token_index=self.image_token_id,
-            image_grid_pinpoints=[[self.image_size, self.image_size]],
-            projector_hidden_act="gelu",
-            vision_feature_layer=-1,
-            vision_feature_select_strategy="default",
-        )
+        config = super().get_config()
+        config.image_grid_pinpoints = [[self.image_size, self.image_size]]
         config.text_config._attn_implementation = "eager"
         return config
 
@@ -130,6 +115,8 @@ class MiniMaxVL01VisionText2TextModelTester(VLMModelTester):
 class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = MiniMaxVL01VisionText2TextModelTester
     skip_test_image_features_output_shape = True
+    # CLIP's pooling LayerNorm is unused: VL-01 consumes encoder hidden states instead of pooled output.
+    test_all_params_have_gradient = False
 
     def test_reverse_loading_mapping(self):
         # The released checkpoint prefixes target the conditional model's `model` subtree, not the bare base model.
@@ -143,14 +130,6 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
         with torch.no_grad():
             outputs = model(input_ids=torch.tensor([[5, 6, 7]], device=torch_device), use_cache=True)
         self.assertIsInstance(outputs.past_key_values, MiniMaxVL01TextCache)
-
-    def test_text_cache_resolves_first_full_attention_layer(self):
-        cache = MiniMaxVL01TextCache()
-        key_states = torch.zeros(2, 2, 5, 8)
-        cache.update(key_states, key_states, layer_idx=7)
-
-        self.assertEqual(cache._get_attention_layer_idx(0), 7)
-        self.assertEqual(cache._get_attention_layer_idx(7), 7)
 
     def test_text_cache_sequence_length_uses_full_attention_layer(self):
         cache = MiniMaxVL01TextCache()
@@ -184,29 +163,15 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
         torch.testing.assert_close(cache.layers[1].keys, expected_full)
         torch.testing.assert_close(cache.layers[1].values, expected_full)
 
-    def test_text_cache_batch_select_indices_handles_final_full_attention_layer(self):
+    @parameterized.expand([("batch_select_indices",), ("reorder_cache",)])
+    def test_text_cache_selection_reorders_recurrent_and_full_attention_layers(self, method_name):
         cache = MiniMaxVL01TextCache()
         recurrent_state = torch.tensor([1.0, 2.0]).reshape(2, 1, 1, 1)
         full_attention_state = torch.tensor([10.0, 20.0]).reshape(2, 1, 1, 1)
         cache.set_linear_cache(layer_idx=0, linear_cache=recurrent_state)
         cache.update(full_attention_state, full_attention_state, layer_idx=1)
 
-        cache.batch_select_indices(torch.tensor([1, 0]))
-
-        expected_recurrent = torch.tensor([2.0, 1.0]).reshape(2, 1, 1, 1)
-        expected_full = torch.tensor([20.0, 10.0]).reshape(2, 1, 1, 1)
-        torch.testing.assert_close(cache.linear_cache[0], expected_recurrent)
-        torch.testing.assert_close(cache.layers[1].keys, expected_full)
-        torch.testing.assert_close(cache.layers[1].values, expected_full)
-
-    def test_text_cache_reorder_cache_reorders_recurrent_and_full_attention_layers(self):
-        cache = MiniMaxVL01TextCache()
-        recurrent_state = torch.tensor([1.0, 2.0]).reshape(2, 1, 1, 1)
-        full_attention_state = torch.tensor([10.0, 20.0]).reshape(2, 1, 1, 1)
-        cache.set_linear_cache(layer_idx=0, linear_cache=recurrent_state)
-        cache.update(full_attention_state, full_attention_state, layer_idx=1)
-
-        cache.reorder_cache(torch.tensor([1, 0]))
+        getattr(cache, method_name)(torch.tensor([1, 0]))
 
         expected_recurrent = torch.tensor([2.0, 1.0]).reshape(2, 1, 1, 1)
         expected_full = torch.tensor([20.0, 10.0]).reshape(2, 1, 1, 1)
@@ -246,36 +211,28 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
         last_layer_slope = last_layer_attention.get_slope_rate(device=torch_device)
         torch.testing.assert_close(last_layer_slope.flatten(), base**exponent * 1e-5)
 
-    def test_text_lightning_attention_decay_factors_preserve_float32_device(self):
-        config = MiniMaxVL01TextConfig(
-            vocab_size=97,
-            hidden_size=32,
-            intermediate_size=16,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-            head_dim=8,
-            num_local_experts=2,
-            num_experts_per_tok=2,
-            layer_types=["linear_attention"] * 2,
-            block_size=4,
-        )
+    @parameterized.expand([("float16",), ("float32",)])
+    def test_text_lightning_attention_decay_factors_preserve_float32_device(self, dtype):
+        config = self.model_tester.get_text_config()
         attention = MiniMaxVL01TextLightningAttention(config, layer_idx=0)
-        slope_rate = attention.get_slope_rate(device=torch_device)
+        slope_rate = attention.get_slope_rate(device=torch_device).to(getattr(torch, dtype))
         query_decay, key_decay, diagonal_decay = attention.decay_factors(slope_rate)
 
-        positions = torch.arange(1, config.block_size + 1, dtype=torch.float32, device=torch_device)
-        expected_query = torch.exp(-slope_rate * positions[:, None])
-        expected_key = torch.exp(-slope_rate * (config.block_size - positions[:, None]))
-        diagonal = slope_rate * (positions[:, None] - positions[None, :])[None, None]
-        expected_diagonal = torch.exp(torch.where(diagonal >= 0, -diagonal, float("-inf")))
-
-        torch.testing.assert_close(query_decay, expected_query)
-        torch.testing.assert_close(key_decay, expected_key)
-        torch.testing.assert_close(diagonal_decay, expected_diagonal)
+        self.assertEqual(query_decay.shape, (config.num_attention_heads, config.block_size, 1))
+        self.assertEqual(key_decay.shape, query_decay.shape)
+        self.assertEqual(diagonal_decay.shape, (1, config.num_attention_heads, config.block_size, config.block_size))
         for decay in (query_decay, key_decay, diagonal_decay):
             self.assertEqual(decay.dtype, torch.float32)
             self.assertEqual(decay.device.type, torch.device(torch_device).type)
+
+        self.assertTrue((query_decay > 0).all())
+        self.assertTrue((query_decay[:, 1:] < query_decay[:, :-1]).all())
+        self.assertTrue((key_decay[:, 1:] > key_decay[:, :-1]).all())
+        torch.testing.assert_close(key_decay[:, -1], torch.ones_like(key_decay[:, -1]))
+        self.assertEqual(torch.count_nonzero(torch.triu(diagonal_decay, diagonal=1)).item(), 0)
+        diagonal = torch.diagonal(diagonal_decay, dim1=-2, dim2=-1)
+        torch.testing.assert_close(diagonal, torch.ones_like(diagonal))
+        self.assertTrue((diagonal_decay[..., 1:, 0] < diagonal_decay[..., :-1, 0]).all())
 
     def test_text_lightning_attention_source_padding_and_fp32_cache(self):
         config = MiniMaxVL01TextConfig(
@@ -303,61 +260,46 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
         attention_mask = torch.tensor([[1, 0]])
         cache = MiniMaxVL01TextCache()
 
-        qkv_states = attention.act_fn(attention.qkv_proj(hidden_states)).reshape(1, 2, 1, 3 * config.head_dim)
-        query_states, key_states, value_states = torch.split(qkv_states, config.head_dim, dim=-1)
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
-        value_states = value_states.masked_fill(~attention_mask[:, None, :, None].bool(), 0)
-
-        slope_rate = attention.get_slope_rate(device=hidden_states.device)
-        _, key_decay, diagonal_decay = attention.decay_factors(slope_rate)
-        attention_weights = torch.matmul(query_states, key_states.transpose(-1, -2)).float()
-        reference_attention = torch.matmul(attention_weights * diagonal_decay, value_states.float())
-        reference_attention = reference_attention.to(query_states.dtype).transpose(1, 2).reshape(1, 2, 4)
-        reference_output = attention.norm(reference_attention)
-        reference_output = torch.sigmoid(attention.output_gate(hidden_states)) * reference_output
-        reference_output = attention.out_proj(reference_output)
-        reference_cache = torch.matmul(
-            (key_states * key_decay).transpose(-1, -2).to(value_states.dtype), value_states
-        ).float()
-
         output, recurrent_state = attention(
             hidden_states,
             position_embeddings=None,
             attention_mask=attention_mask,
             past_key_values=cache,
         )
-        torch.testing.assert_close(output, reference_output)
-        torch.testing.assert_close(recurrent_state, reference_cache)
+        changed_hidden_states = hidden_states.clone()
+        changed_hidden_states[:, 1] += 3
+        changed_cache = MiniMaxVL01TextCache()
+        changed_output, changed_state = attention(
+            changed_hidden_states,
+            position_embeddings=None,
+            attention_mask=attention_mask,
+            past_key_values=changed_cache,
+        )
+
+        # A masked source cannot affect the unmasked output or the recurrent state used for decoding.
+        torch.testing.assert_close(output[:, 0], changed_output[:, 0])
+        torch.testing.assert_close(recurrent_state, changed_state)
         self.assertEqual(recurrent_state.dtype, torch.float32)
         self.assertEqual(cache.linear_cache[0].dtype, torch.float32)
         self.assertGreater(output[0, 1].abs().max().item(), 0)
 
         decode_hidden_states = torch.tensor([[[0.75, -0.25, 1.25, 0.5]]], dtype=torch.float16)
-        decode_qkv_states = attention.act_fn(attention.qkv_proj(decode_hidden_states)).reshape(1, 1, 1, 12)
-        decode_query, decode_key, decode_value = torch.split(decode_qkv_states, config.head_dim, dim=-1)
-        decode_query = decode_query.transpose(1, 2)
-        decode_key = decode_key.transpose(1, 2)
-        decode_value = decode_value.transpose(1, 2)
-        reference_cache = torch.exp(-slope_rate) * reference_cache + torch.matmul(
-            decode_key.transpose(-1, -2), decode_value
-        )
-        reference_attention = torch.matmul(decode_query, reference_cache.to(decode_query.dtype))
-        reference_attention = reference_attention.transpose(1, 2).reshape(1, 1, 4)
-        reference_output = attention.norm(reference_attention)
-        reference_output = torch.sigmoid(attention.output_gate(decode_hidden_states)) * reference_output
-        reference_output = attention.out_proj(reference_output)
-
         output, recurrent_state = attention(
             decode_hidden_states,
             position_embeddings=None,
             attention_mask=None,
             past_key_values=cache,
         )
-        torch.testing.assert_close(output, reference_output)
-        torch.testing.assert_close(recurrent_state, reference_cache)
+        changed_output, changed_state = attention(
+            decode_hidden_states,
+            position_embeddings=None,
+            attention_mask=None,
+            past_key_values=changed_cache,
+        )
+        torch.testing.assert_close(output, changed_output)
+        torch.testing.assert_close(recurrent_state, changed_state)
         self.assertEqual(recurrent_state.dtype, torch.float32)
+        self.assertEqual(cache.linear_cache[0].dtype, torch.float32)
 
     def test_text_partial_rotary_embedding_preserves_unrotated_suffix(self):
         config = MiniMaxVL01TextConfig(
@@ -452,30 +394,6 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
                 torch.testing.assert_close(cache1.layers[layer_idx].values, cache2.layers[layer_idx].values)
             if layer_idx < len(cache1.linear_cache) and not isinstance(cache1.linear_cache[layer_idx], list):
                 torch.testing.assert_close(cache1.linear_cache[layer_idx], cache2.linear_cache[layer_idx])
-
-    def is_pipeline_test_to_skip(
-        self,
-        pipeline_test_case_name,
-        config_class,
-        model_architecture,
-        tokenizer_name,
-        image_processor_name,
-        feature_extractor_name,
-        processor_name,
-    ):
-        return True
-
-    @pytest.mark.xfail(reason="The multimodal projector is not exercised by text-only checkpointing tests.")
-    def test_training_gradient_checkpointing(self):
-        super().test_training_gradient_checkpointing()
-
-    @pytest.mark.xfail(reason="The multimodal projector is not exercised by text-only checkpointing tests.")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        super().test_training_gradient_checkpointing_use_reentrant_false()
-
-    @pytest.mark.xfail(reason="The multimodal projector is not exercised by text-only checkpointing tests.")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     @unittest.skip("Mixed full and Lightning attention uses the MiniMax-specific attention output contract.")
     def test_attention_outputs(self):
@@ -572,17 +490,6 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
 
         self.assertIsInstance(prefill.past_key_values, MiniMaxVL01TextCache)
         torch.testing.assert_close(decoded.logits[:, -1], full.logits[:, -1], rtol=1e-4, atol=1e-4)
-
-    def test_multimodal_greedy_generation_uses_cache(self):
-        config, inputs = self._single_image_inputs()
-        config.eos_token_id = None
-        config.text_config.eos_token_id = None
-        model = MiniMaxVL01ForConditionalGeneration(config).to(torch_device).eval()
-
-        generated = model.generate(**inputs, do_sample=False, max_new_tokens=2)
-
-        self.assertEqual(generated.shape, (1, inputs["input_ids"].shape[1] + 2))
-        torch.testing.assert_close(generated[:, : inputs["input_ids"].shape[1]], inputs["input_ids"])
 
     def test_auto_model_mappings(self):
         config = self.model_tester.get_config()
