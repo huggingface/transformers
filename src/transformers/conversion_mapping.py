@@ -817,7 +817,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(
                 source_patterns=r"^multi_modal_projector\.", target_patterns="model.multi_modal_projector."
             ),
-            WeightRenaming(source_patterns=r"^image_newline$", target_patterns="model.image_newline"),
+            WeightRenaming(source_patterns=r"^image_newline", target_patterns="model.image_newline"),
         ],
         # Important to refer to classes by name, not model-type! Several classes share the same model type
         "CLIPVisionModel": [PrefixChange(prefix_to_remove="vision_model")],
