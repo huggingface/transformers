@@ -227,26 +227,20 @@ class Gemma4TextConfig(PreTrainedConfig):
     @property
     def kv_sharing_modes(self) -> list[str | None]:
         # After this index, all layers are consumers
-        layer_sharing_boundary = self.num_hidden_layers - self.num_kv_shared_layers
-        # Accumulators to build the list of roles in one pass
-        last_non_consumer_index = {"full_attention": None, "sliding_attention": None}
-        kv_sharing_modes = []
+        first_shared_layer = self.num_hidden_layers - self.num_kv_shared_layers
+        kv_sharing_modes = [None if i < first_shared_layer else "reuse" for i in range(self.num_hidden_layers)]
 
-        for index, layer_type in enumerate(self.layer_types):
-            # Before the layer sharing boundary, all layers compute their cache. The layer mode is `None` (does not
-            # participate in KV sharing) but it can later be upgraded to "store" (see below)
-            if index < layer_sharing_boundary:
-                kv_sharing_modes.append(None)
-                last_non_consumer_index[layer_type] = index
-            # After the boundary, all layers reuse the cache of the last non-consumer layer of the same type
-            else:
-                kv_sharing_modes.append("reuse")
+        # Compute the last index of the layers that will not be shared, for each unique `layer_types`
+        reversed_unshared_layer_types = self.layers_types[0:first_shared_layer:-1]
+        last_non_consumer_indices = [
+            first_shared_layer - 1 - reversed_unshared_layer_types.index(k) for k in set(self.layer_types)
+        ]
 
         # The last non-consumer layer of each type stores its KV states, even if no layer reuses them: assistant
         # models (e.g. Gemma4Assistant) read them from the `shared_kv_states` returned by the target model
-        for producer_index in last_non_consumer_index.values():
-            if producer_index is not None:
-                kv_sharing_modes[producer_index] = "store"
+        for producer_index in last_non_consumer_indices:
+            kv_sharing_modes[producer_index] = "store"
+
         return kv_sharing_modes
 
     def to_dict(self) -> dict[str, Any]:
