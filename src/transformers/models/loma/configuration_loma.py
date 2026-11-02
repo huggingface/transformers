@@ -25,7 +25,6 @@ from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
-from ..superpoint import SuperPointConfig
 
 
 @auto_docstring
@@ -77,7 +76,7 @@ class LoMaDescriptorDecoderConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="ETH-CVG/loma_superpoint")
+@auto_docstring(checkpoint="Falcon7211/loma-b")
 @strict
 class LoMaConfig(PreTrainedConfig):
     r"""
@@ -118,7 +117,7 @@ class LoMaConfig(PreTrainedConfig):
         "keypoint_detector_config": SubConfigSpec(config_class=AutoConfig, model_type="superpoint"),
     }
 
-    keypoint_detector_config: dict | SuperPointConfig | None = None
+    keypoint_detector_config: dict | PreTrainedConfig | None = None
     descriptor_dim: int = 256
     num_hidden_layers: int = 9
     num_attention_heads: int | None = None

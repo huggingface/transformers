@@ -34,7 +34,7 @@ from pathlib import Path
 
 import torch
 
-from transformers import AutoModelForKeypointDetection, LoMaConfig, LoMaForKeypointMatching
+from transformers import AutoModelForKeypointDetection, LoMaConfig, LoMaForKeypointMatching, LoMaImageProcessor
 
 
 logger = logging.getLogger(__name__)
@@ -49,13 +49,36 @@ VARIANT_CONFIGS = {
 SUPERPOINT_CHECKPOINT = "magic-leap-community/superpoint"
 
 
-def _rename_matcher_key(key: str, num_hidden_layers: int) -> str | list[str] | None:
+def _split_interleaved_qkv(tensor: torch.Tensor, num_attention_heads: int) -> tuple[torch.Tensor, ...]:
+    """Split a fused QKV tensor that uses per-head interleaved layout.
+
+    The reference LoMa ``SelfBlock`` stores fused QKV weights in an interleaved layout where, for
+    each attention head and each channel, the q, k, v components are adjacent::
+
+        weight.shape == (3 * embed_dim, embed_dim)
+        weight.unflatten(0, (num_heads, head_dim, 3))  →  last axis selects q, k, v
+
+    This is **not** the same as ``chunk(3, dim=0)`` which would assume contiguous ``[q; k; v]``
+    blocks.  Using ``chunk(3)`` produces the same shapes but a completely different linear map.
+
+    Note: DINOv2's ``attn.qkv`` *is* genuinely contiguous ``[q; k; v]`` — this helper must only
+    be used for the LoMa matcher ``Wqkv`` keys, not for DINOv2.
+    """
+    if tensor.ndim == 2:  # weight: (3 * embed_dim, embed_dim)
+        q, k, v = tensor.reshape(num_attention_heads, -1, 3, tensor.shape[-1]).unbind(dim=2)
+        return q.flatten(0, 1), k.flatten(0, 1), v.flatten(0, 1)
+    # bias: (3 * embed_dim,)
+    q, k, v = tensor.reshape(num_attention_heads, -1, 3).unbind(dim=2)
+    return q.flatten(0, 1), k.flatten(0, 1), v.flatten(0, 1)
+
+
+def _rename_matcher_key(key: str, num_hidden_layers: int) -> str | list[str] | tuple[str, list[str]] | None:
     """Rename a matcher key from the reference checkpoint to the HF model format.
 
     Key mappings:
         posenc.Wr.weight → positional_encoder.projector.weight
         input_proj.* → input_projection.*
-        transformers.{i}.self_attn.Wqkv.{w,b} → layers.{i}.self_attention.{q,k,v}_proj.{w,b} (split 3-way)
+        transformers.{i}.self_attn.Wqkv.{w,b} → layers.{i}.self_attention.{q,k,v}_proj.{w,b} (interleaved split)
         transformers.{i}.self_attn.out_proj.* → layers.{i}.self_attention.o_proj.*
         transformers.{i}.self_attn.ffn.{0,1,3}.* → layers.{i}.self_mlp.{fc1,layer_norm,fc2}.*
         transformers.{i}.cross_attn.to_qk.{w,b} → layers.{i}.cross_attention.{q,k}_proj.{w,b} (duplicate)
@@ -74,14 +97,17 @@ def _rename_matcher_key(key: str, num_hidden_layers: int) -> str | list[str] | N
     if transformer_match is not None:
         layer_index, attention_type, suffix = transformer_match.groups()
         if attention_type == "self_attn":
-            # Fused QKV → separate q/k/v projections
+            # Fused QKV with per-head interleaved layout → separate q/k/v projections
             if suffix.startswith("Wqkv."):
                 param = suffix.split(".")[1]  # "weight" or "bias"
-                return [
-                    f"layers.{layer_index}.self_attention.q_proj.{param}",
-                    f"layers.{layer_index}.self_attention.k_proj.{param}",
-                    f"layers.{layer_index}.self_attention.v_proj.{param}",
-                ]
+                return (
+                    "interleaved",
+                    [
+                        f"layers.{layer_index}.self_attention.q_proj.{param}",
+                        f"layers.{layer_index}.self_attention.k_proj.{param}",
+                        f"layers.{layer_index}.self_attention.v_proj.{param}",
+                    ],
+                )
             replacements = {
                 "out_proj": "self_attention.o_proj",
                 "ffn.0": "self_mlp.fc1",
@@ -207,7 +233,7 @@ def _rename_dinov2_keys(key: str) -> str | list[str] | None:
 
 
 def convert_state_dict(
-    reference_state_dict: Mapping[str, torch.Tensor], num_hidden_layers: int
+    reference_state_dict: Mapping[str, torch.Tensor], num_hidden_layers: int, num_attention_heads: int
 ) -> dict[str, torch.Tensor]:
     """Extract and rename the matcher and descriptor tensors from a LoMa reference state dictionary."""
     converted_state_dict = {}
@@ -219,29 +245,23 @@ def convert_state_dict(
             destination_key = _rename_dinov2_keys(source_key)
 
         if destination_key is not None:
-            if isinstance(destination_key, tuple) and destination_key[0] == "duplicate":
+            if isinstance(destination_key, tuple) and destination_key[0] == "interleaved":
+                # Per-head interleaved QKV split (LoMa matcher Wqkv).
+                q, k, v = _split_interleaved_qkv(tensor, num_attention_heads)
+                for dest, split_tensor in zip(destination_key[1], [q, k, v]):
+                    converted_state_dict[dest] = split_tensor
+            elif isinstance(destination_key, tuple) and destination_key[0] == "duplicate":
                 # Duplicate: copy the full tensor to each destination key (e.g. to_qk → q_proj + k_proj).
                 for dest in destination_key[1]:
                     converted_state_dict[dest] = tensor
             elif isinstance(destination_key, list):
-                # Chunk: split the tensor along dim=0 (e.g. Wqkv → q/k/v, attn.qkv → q/k/v).
+                # Contiguous chunk split (e.g. DINOv2 attn.qkv → q/k/v).
                 chunks = tensor.chunk(len(destination_key), dim=0)
                 for dest, chunk in zip(destination_key, chunks):
                     converted_state_dict[dest] = chunk
             else:
                 converted_state_dict[destination_key] = tensor
     return converted_state_dict
-
-
-def convert_matcher_state_dict(
-    reference_state_dict: Mapping[str, torch.Tensor], num_hidden_layers: int
-) -> dict[str, torch.Tensor]:
-    """Extract and rename the matcher tensors from a LoMa reference state dictionary.
-
-    .. deprecated::
-        Use :func:`convert_state_dict` instead, which also handles descriptor network weights.
-    """
-    return convert_state_dict(reference_state_dict, num_hidden_layers)
 
 
 def convert_checkpoint(checkpoint_path: str | Path, variant: str, output_dir: str | Path) -> None:
@@ -254,7 +274,7 @@ def convert_checkpoint(checkpoint_path: str | Path, variant: str, output_dir: st
 
     config = LoMaConfig(**VARIANT_CONFIGS[variant])
     model = LoMaForKeypointMatching(config)
-    converted_state_dict = convert_state_dict(checkpoint, config.num_hidden_layers)
+    converted_state_dict = convert_state_dict(checkpoint, config.num_hidden_layers, config.num_attention_heads)
 
     # The reference LoMa checkpoints use DaD as their keypoint detector, while this integration uses SuperPoint.
     # Include its public weights in the same saved checkpoint so from_pretrained can load the complete model at once.
@@ -275,6 +295,8 @@ def convert_checkpoint(checkpoint_path: str | Path, variant: str, output_dir: st
 
     model.save_pretrained(output_dir)
     config.save_pretrained(output_dir)
+    image_processor = LoMaImageProcessor()
+    image_processor.save_pretrained(output_dir)
 
 
 if __name__ == "__main__":

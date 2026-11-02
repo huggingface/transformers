@@ -649,7 +649,7 @@ class LoMaForKeypointMatching(LoMaPreTrainedModel):
         keypoints: torch.Tensor,
         descriptors: torch.Tensor,
         mask: torch.Tensor,
-        output_hidden_states: bool,
+        output_hidden_states: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, tuple[torch.Tensor, ...] | None]:
         batch_size, _, num_keypoints, descriptor_dim = descriptors.shape
 
@@ -749,9 +749,11 @@ class LoMaForKeypointMatching(LoMaPreTrainedModel):
         descriptors = self.descriptor_network.describe_keypoints(pixel_values_flat, descriptor_keypoints)
         descriptors = descriptors.reshape(batch_size, 2, -1, self.config.input_descriptor_dim).to(pixel_values)
 
-        image_size = keypoints.new_tensor((width, height))
-        absolute_keypoints = keypoints * image_size
-        normalized_keypoints = (absolute_keypoints - image_size / 2) / (image_size.max() / 2)
+        # Reuse the already-normalized [-1, 1] descriptor keypoints for the matcher's positional encoding.
+        # This normalizes each axis independently (x and y both span [-1, 1]) which is required for the
+        # rotary positional encoding.  The previous code divided both axes by max(width, height), which
+        # compressed the shorter axis for non-square images.
+        normalized_keypoints = descriptor_keypoints.reshape(batch_size, 2, -1, 2)
 
         matches, matching_scores, prune, hidden_states = self._match_image_pair(
             normalized_keypoints, descriptors, mask, output_hidden_states

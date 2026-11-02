@@ -16,16 +16,20 @@ import unittest
 
 from transformers.models.loma.configuration_loma import LoMaConfig
 from transformers.testing_utils import get_device_properties, require_torch, require_vision, slow, torch_device
-from transformers.utils import is_torch_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
 
+if is_vision_available():
+    from PIL import Image
+
 if is_torch_available():
+    import requests
     import torch
 
-    from transformers import LoMaForKeypointMatching
+    from transformers import AutoImageProcessor, LoMaForKeypointMatching
     from transformers.models.loma.modeling_loma import (
         LoMaDescriptorNetwork,
         LoMaMatchAssignmentLayer,
@@ -434,6 +438,33 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "mask must have shape"):
             model(pixel_values, keypoints=keypoints, mask=mask)
 
+    def test_interleaved_qkv_split(self):
+        """Verify the per-head interleaved QKV split matches reference SelfBlock activations."""
+        from transformers.models.loma.convert_loma_to_hf import _split_interleaved_qkv
+
+        num_heads = 4
+        head_dim = 16
+        embed_dim = num_heads * head_dim
+        weight = torch.randn(3 * embed_dim, embed_dim, dtype=torch.float64)
+        bias = torch.randn(3 * embed_dim, dtype=torch.float64)
+
+        q_w, k_w, v_w = _split_interleaved_qkv(weight, num_heads)
+        q_b, k_b, v_b = _split_interleaved_qkv(bias, num_heads)
+
+        x = torch.randn(2, 5, embed_dim, dtype=torch.float64)
+        ref_qkv = torch.nn.functional.linear(x, weight, bias).unflatten(-1, (num_heads, -1, 3))
+        ref_q = ref_qkv[..., 0].flatten(2, 3)
+        ref_k = ref_qkv[..., 1].flatten(2, 3)
+        ref_v = ref_qkv[..., 2].flatten(2, 3)
+
+        hf_q = torch.nn.functional.linear(x, q_w, q_b)
+        hf_k = torch.nn.functional.linear(x, k_w, k_b)
+        hf_v = torch.nn.functional.linear(x, v_w, v_b)
+
+        torch.testing.assert_close(hf_q, ref_q)
+        torch.testing.assert_close(hf_k, ref_k)
+        torch.testing.assert_close(hf_v, ref_v)
+
 
 @require_torch
 @require_vision
@@ -462,19 +493,60 @@ class LoMaModelIntegrationTest(unittest.TestCase):
             mask = torch.ones(2, 4, dtype=torch.bool, device=torch_device)
             scores = model.match_assignment(descriptors_flat, mask)
 
-        # Values generated with davnords/LoMa's LoMaB matcher and its official loma_B.pt checkpoint.
+        # Values generated from official davnords/LoMa checkpoint loma_B.pt with correct per-head QKV unbind.
         expected_scores = torch.tensor(
             [
                 [
-                    [0.0080, 0.0086, 0.0023, 0.0013],
-                    [0.0100, 0.0178, 0.0076, 0.0062],
-                    [0.0087, 0.0254, 0.0184, 0.0240],
-                    [0.0236, 0.0955, 0.2061, 0.5697],
+                    [0.020573, 0.0025817, 0.00057579, 6.4956e-06],
+                    [0.16517, 0.0041020, 0.0011885, 2.3902e-05],
+                    [0.55115, 0.0038557, 0.0015510, 6.5036e-05],
+                    [0.0011464, 0.19158, 0.27597, 0.48650],
                 ]
             ],
             device=torch_device,
         )
         torch.testing.assert_close(scores, expected_scores, rtol=1e-3, atol=1e-4)
+
+        # Mutual matching on this score matrix yields [-1, -1, 0, 3] for image 0
+        maximum_scores_0, maximum_scores_1 = scores.max(dim=2), scores.max(dim=1)
+        matches_0, matches_1 = maximum_scores_0.indices, maximum_scores_1.indices
+        indices = torch.arange(4, device=scores.device)[None]
+        mutual_0 = indices == matches_1.gather(1, matches_0)
+        valid_0 = mutual_0 & (maximum_scores_0.values > 0.1)
+        matches_0 = torch.where(valid_0, matches_0, torch.full_like(matches_0, -1))
+        expected_matches_0 = torch.tensor([[-1, -1, 0, 3]], device=torch_device)
+        torch.testing.assert_close(matches_0, expected_matches_0)
+
+    @slow
+    def test_inference_documentation_image_pair(self):
+        """Test end-to-end inference on the documentation image pair with non-square dimensions (480x640)."""
+        image_processor = AutoImageProcessor.from_pretrained(self.checkpoint_id)
+        model = LoMaForKeypointMatching.from_pretrained(self.checkpoint_id).to(torch_device)
+        model.eval()
+
+        url_0 = (
+            "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/"
+            "phototourism_sample_images/united_states_capitol_98169888_3347710852.jpg"
+        )
+        url_1 = (
+            "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/"
+            "phototourism_sample_images/united_states_capitol_26757027_6717084061.jpg"
+        )
+        images = [Image.open(requests.get(url, stream=True).raw).convert("RGB") for url in (url_0, url_1)]
+        inputs = image_processor(images=images, return_tensors="pt").to(torch_device)
+
+        with torch.inference_mode():
+            outputs = model(**inputs)
+
+        valid_matches = outputs.matches[0, 0] >= 0
+        self.assertGreaterEqual(valid_matches.sum().item(), 250)
+        valid_indices = torch.where(valid_matches)[0]
+        expected_first_matches = torch.tensor([78, 105, 104, 117, 114], device=torch_device)
+        torch.testing.assert_close(outputs.matches[0, 0][valid_indices[:5]], expected_first_matches)
+        expected_first_scores = torch.tensor([0.9990, 0.9939, 0.9950, 0.9985, 0.9992], device=torch_device)
+        torch.testing.assert_close(
+            outputs.matching_scores[0, 0][valid_indices[:5]], expected_first_scores, atol=1e-3, rtol=1e-3
+        )
 
     @slow
     def test_inference(self):
