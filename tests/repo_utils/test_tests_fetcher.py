@@ -741,8 +741,17 @@ src/transformers/configuration_utils.py
             "tests/models/got_ocr2/test_modeling_got_ocr2.py",
         }
         assert expected_tests_for_qwen2.issubset(set(reverse_map[f"{models_dir}/qwen2/modeling_qwen2.py"]))
-        # Note: tokenization_qwen2.py correctly triggers qwen2_audio tests because those tests
-        # directly import Qwen2Tokenizer. The backbone mechanism is verified above via modeling_qwen2.py.
+        # PR #50253 fixed the "X as Y" import bug in extract_imports (imports like
+        # `from .tokenization_qwen2 import PRETOKENIZE_REGEX as _QWEN2_SPLIT` were silently
+        # dropped before the fix). After the fix, tokenization_qwen2.py is now correctly traced
+        # as a dep of qwen2_audio/got_ocr2 tests through the following chain:
+        #   tokenization_qwen2.py → gguf_tokenizer_mapping.py (PRETOKENIZE_REGEX as _QWEN2_SPLIT)
+        #     → modeling_gguf_pytorch_utils.py ← configuration_utils.py (lazy import)
+        #     ← all model configs ← all model tests (~1140 tests)
+        # This large blast radius is undesired, but reducing it (e.g. restructuring the lazy
+        # GGUF imports) is out of scope here and should be addressed in a separate PR as part
+        # of a series of progressive fixes.
+        # assert expected_tests_for_qwen2.isdisjoint(set(reverse_map[f"{models_dir}/qwen2/tokenization_qwen2.py"]))
 
     def test_preprocessor_files_trigger_their_tests_and_test_processing(self):
         """
