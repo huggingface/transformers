@@ -38,7 +38,7 @@ class SpQRHfQuantizer(HfQuantizer):
     quantization_config: "SpQRConfig"
 
     def validate_environment(self, *args, **kwargs):
-        if self.pre_quantized and self.quantization_config.dequantize:
+        if self.dequantizing:
             return  # dequantizing is pure torch
         if not torch.cuda.is_available():
             raise RuntimeError("GPU is required to run SpQR quantized model.")
@@ -50,7 +50,7 @@ class SpQRHfQuantizer(HfQuantizer):
             raise ImportError("Using `spqr` quantization requires SpQR: `pip install spqr_quant[gpu]`")
 
     def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        if dtype != torch.float16 and not (self.pre_quantized and self.quantization_config.dequantize):
+        if dtype != torch.float16 and not (self.dequantizing):
             raise ValueError(
                 "You cannot use any type other than torch.float16 for SpQR. Please set it totorch.float16 explicitly."
             )
@@ -61,7 +61,7 @@ class SpQRHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
-        if self.pre_quantized and self.quantization_config.dequantize:
+        if self.dequantizing:
             # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
             return
         self.modules_to_not_convert = self.get_modules_to_not_convert(

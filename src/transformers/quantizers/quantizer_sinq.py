@@ -213,7 +213,7 @@ class SinqHfQuantizer(HfQuantizer):
         """
         if self.pre_quantized and checkpoint_files:
             self.set_metadata(checkpoint_files)
-        if self.pre_quantized and self.quantization_config.dequantize:
+        if self.dequantizing:
             # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
             return
         from ..integrations.sinq import replace_with_sinq_linear

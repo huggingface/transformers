@@ -38,7 +38,7 @@ class AqlmHfQuantizer(HfQuantizer):
     quantization_config: "AqlmConfig"
 
     def validate_environment(self, *args, **kwargs):
-        if self.pre_quantized and self.quantization_config.dequantize:
+        if self.dequantizing:
             return  # dequantizing is pure torch
         if not is_accelerate_available():
             raise ImportError("Using `aqlm` quantization requires Accelerate: `pip install accelerate`")
@@ -51,7 +51,7 @@ class AqlmHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
-        if self.pre_quantized and self.quantization_config.dequantize:
+        if self.dequantizing:
             # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
             return
         from ..integrations import replace_with_aqlm_linear
