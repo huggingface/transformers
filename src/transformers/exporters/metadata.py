@@ -42,6 +42,9 @@ def _traced_kwarg(value: Any) -> dict[str, Any]:
         }
     if isinstance(value, Mapping):
         return {"leaves": {str(key): _traced_kwarg(leaf) for key, leaf in value.items()}}
+    # A scalar is a constant of the program: its value, which a torch program still takes.
+    if isinstance(value, (bool, int, float, str)):
+        return {"value": value}
     return {"container": type(value).__name__}
 
 
