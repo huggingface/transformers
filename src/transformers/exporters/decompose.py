@@ -291,32 +291,47 @@ def embedded_inputs(call_inputs: dict, components: dict) -> dict:
     return call_inputs
 
 
-# What a deepstack decoder adds at the visual positions inside its layers (Qwen3-VL's, Granite4-Vision's names).
-DEEPSTACK_INPUTS = ("visual_pos_masks", "deepstack_visual_embeds", "vision_mask", "deepstack_features")
+class DeepstackInputs(NamedTuple):
+    """A deepstack decoder's per-layer vision features, beside its mask: their name, whether they come by decoder layer
+    (`{layer: features}`) rather than as a list from the first layer, and the rank of the mask."""
+
+    features: str
+    by_layer: bool
+    mask_rank: int
 
 
-def dense_deepstack(inputs: dict[str, Any]) -> dict[str, Any]:
-    """`inputs` with their deepstack features over every position: an all-True mask, and each layer's features with
-    zeros at the text rows. Adding zeros changes nothing, and every step takes the same shapes, a decode step's too.
+# The deepstack decoders, by their mask's name: Qwen3-VL's and Granite4-Vision's.
+DEEPSTACK_INPUTS = {
+    "visual_pos_masks": DeepstackInputs("deepstack_visual_embeds", by_layer=False, mask_rank=2),
+    "vision_mask": DeepstackInputs("deepstack_features", by_layer=True, mask_rank=3),
+}
+
+
+def deepstack_layers(mask_name: str, features) -> list:
+    """The decoder layers `features` are for, as the decoder of `mask_name` lists them."""
+    return list(features) if DEEPSTACK_INPUTS[mask_name].by_layer else list(range(len(features)))
+
+
+def dense_deepstack(mask_name: str, like: torch.Tensor, layers, parts=()) -> dict[str, Any]:
+    """A deepstack decoder's inputs over every position, as its graph is traced and run: an all-True mask, and each
+    layer's features with zeros wherever none of `parts` sets them. Adding zeros changes nothing, and every step takes
+    the same shapes, a decode step (no image rows) included.
+
+    Args:
+        mask_name: The decoder's mask, a key of `DEEPSTACK_INPUTS`.
+        like: The step's `inputs_embeds`, `[batch, sequence, hidden]`.
+        layers: The decoder layers that take features (`deepstack_layers`).
+        parts: `(rows, features)` per modality: a `[batch, sequence]` mask of its rows, and its features by layer,
+            `[rows, hidden]` each.
     """
-
-    def spread(rows, features):
-        dense = features.new_zeros(rows.shape[0], features.shape[-1])
-        dense[rows] = features
-        return dense
-
-    inputs = dict(inputs)
-    # Qwen3-VL: a `[batch, sequence]` mask, one feature tensor per decoder layer from the first.
-    if (mask := inputs.get("visual_pos_masks")) is not None:
-        inputs["visual_pos_masks"] = torch.ones_like(mask)
-        inputs["deepstack_visual_embeds"] = [spread(mask.reshape(-1), f) for f in inputs["deepstack_visual_embeds"]]
-    # Granite4-Vision: a `[batch, sequence, 1]` mask, `{decoder layer: features}`.
-    if (mask := inputs.get("vision_mask")) is not None:
-        inputs["vision_mask"] = torch.ones_like(mask)
-        inputs["deepstack_features"] = {
-            layer: spread(mask.reshape(-1), features) for layer, features in inputs["deepstack_features"].items()
-        }
-    return inputs
+    spec = DEEPSTACK_INPUTS[mask_name]
+    batch_size, length, hidden_size = like.shape
+    dense = {layer: like.new_zeros(batch_size * length, hidden_size) for layer in layers}
+    for rows, features in parts:
+        for layer, values in features.items() if spec.by_layer else enumerate(features):
+            dense[layer][rows.reshape(-1)] = values.to(like)
+    mask = torch.ones(batch_size, length, *[1] * (spec.mask_rank - 2), dtype=torch.bool, device=like.device)
+    return {mask_name: mask, spec.features: dense if spec.by_layer else list(dense.values())}
 
 
 def _main_inputs(model: PreTrainedModel, inputs: dict[str, Any], decoder_call: dict[str, Any]) -> dict[str, Any]:
@@ -333,7 +348,10 @@ def _main_inputs(model: PreTrainedModel, inputs: dict[str, Any], decoder_call: d
     main_inputs = embedded_inputs(main_inputs, {})
     main_inputs.pop("input_ids", None)
     main_inputs["inputs_embeds"] = decoder_call["inputs_embeds"]
-    for name in DEEPSTACK_INPUTS:
-        if decoder_call.get(name) is not None:
-            main_inputs[name] = decoder_call[name]
-    return dense_deepstack(main_inputs)
+    for mask_name, spec in DEEPSTACK_INPUTS.items():
+        if (mask := decoder_call.get(mask_name)) is not None:
+            features = decoder_call[spec.features]
+            rows = mask.reshape(mask.shape[:2])
+            layers = deepstack_layers(mask_name, features)
+            main_inputs.update(dense_deepstack(mask_name, main_inputs["inputs_embeds"], layers, [(rows, features)]))
+    return main_inputs
