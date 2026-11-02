@@ -1630,10 +1630,9 @@ class Cache:
         """
         # NOTE: if we slightly break `update` arg order, we could combine this with it, and allow offloading support
         # out of the box
-        layer = self.layers[layer_idx]
-        if not isinstance(layer, LinearAttentionCacheLayerMixin):
+        if not isinstance(self.layers[layer_idx], LinearAttentionCacheLayerMixin):
             raise ValueError("Cannot call `update_conv_state` on a non-LinearAttention layer!")
-        conv_states = layer.update_conv_state(conv_states, state_idx, **kwargs)
+        conv_states = self.layers[layer_idx].update_conv_state(conv_states, state_idx, **kwargs)
         return conv_states
 
     def get_recurrent_state(self, layer_idx: int, state_idx: int = 0) -> torch.Tensor | None:
@@ -1666,10 +1665,9 @@ class Cache:
         """
         # NOTE: if we slightly break `update` arg order, we could combine this with it, and allow offloading support
         # out of the box
-        layer = self.layers[layer_idx]
-        if not isinstance(layer, LinearAttentionCacheLayerMixin):
+        if not isinstance(self.layers[layer_idx], LinearAttentionCacheLayerMixin):
             raise ValueError("Cannot call `update_conv_state` on a non-LinearAttention layer!")
-        recurrent_states = layer.update_recurrent_state(recurrent_states, state_idx, **kwargs)
+        recurrent_states = self.layers[layer_idx].update_recurrent_state(recurrent_states, state_idx, **kwargs)
         return recurrent_states
 
     def update_indexer(self, indexer_key_states: torch.Tensor, layer_idx: int) -> torch.Tensor:
@@ -1685,13 +1683,12 @@ class Cache:
         Return:
             `torch.Tensor`: The updated indexer key states (full cache).
         """
-        layer = self.layers[layer_idx]
-        if not hasattr(layer, "update_indexer"):
+        if not hasattr(self.layers[layer_idx], "update_indexer"):
             raise ValueError(
-                f"Cannot call `update_indexer` on layer {layer_idx} which is a {type(layer).__name__}; it has no "
+                f"Cannot call `update_indexer` on layer {layer_idx} which is a {type(self.layers[layer_idx]).__name__}; it has no "
                 "indexer key cache (expected a `DynamicIndexedLayer` or `StaticIndexedLayer`)."
             )
-        return layer.update_indexer(indexer_key_states)
+        return self.layers[layer_idx].update_indexer(indexer_key_states)
 
     def early_initialization(
         self,
@@ -1839,13 +1836,13 @@ class Cache:
 
     def reset(self):
         """Recursively reset all layers tensors"""
-        for layer in self.layers:
-            layer.reset()
+        for layer_idx in range(len(self.layers)):
+            self.layers[layer_idx].reset()
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorder the cache for beam search"""
-        for layer in self.layers:
-            layer.reorder_cache(beam_idx)
+        for layer_idx in range(len(self.layers)):
+            self.layers[layer_idx].reorder_cache(beam_idx)
 
     def crop(self, tokens_to_remove: int) -> None:
         """
@@ -1854,27 +1851,27 @@ class Cache:
         minimal working size. This means that `crop(0)` will not necessarily always be a no-op, as it may still remove useless states
         (i.e. states that are not needed for the next `forward`) from the Cache.
         """
-        for layer in self.layers:
-            layer.crop(tokens_to_remove)
+        for layer_idx in range(len(self.layers)):
+            self.layers[layer_idx].crop(tokens_to_remove)
 
     def batch_repeat_interleave(self, repeats: int):
         """Repeat and interleave the cache"""
-        for layer in self.layers:
-            layer.batch_repeat_interleave(repeats)
+        for layer_idx in range(len(self.layers)):
+            self.layers[layer_idx].batch_repeat_interleave(repeats)
 
     def batch_select_indices(self, indices: torch.Tensor):
         """Select indices from the cache"""
-        for layer in self.layers:
-            layer.batch_select_indices(indices)
+        for layer_idx in range(len(self.layers)):
+            self.layers[layer_idx].batch_select_indices(indices)
 
     def activate_past_recording(self):
         """
         Calling this function will activate past state recording, meaning that cache with fixed size such as a linear cache will
         wait for a call to `crop` before restricting the size of its cached states, in order to be able to retrieve previous full states.
         """
-        for layer in self.layers:
-            if hasattr(layer, "activate_past_recording"):
-                layer.activate_past_recording()
+        for layer_idx in range(len(self.layers)):
+            if hasattr(self.layers[layer_idx], "activate_past_recording"):
+                self.layers[layer_idx].activate_past_recording()
 
     def is_recording_past(self, layer_idx: int) -> bool:
         """Returns a boolean indicating if the layer at index `layer_idx` is recording past states. If the layer cannot
