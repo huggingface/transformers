@@ -96,10 +96,11 @@ class MiniMaxVL01VisionText2TextModelTester(VLMModelTester):
     def create_attention_mask(self, input_ids):
         return torch.ones_like(input_ids, device=torch_device)
 
-    def create_pixel_values(self):
+    def create_pixel_values(self, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         return floats_tensor(
             [
-                self.batch_size,
+                batch_size,
                 self.num_patches_per_image,
                 self.num_channels,
                 self.image_size,
@@ -107,8 +108,9 @@ class MiniMaxVL01VisionText2TextModelTester(VLMModelTester):
             ]
         )
 
-    def get_additional_inputs(self, config, input_ids, modality_inputs):
-        return {"image_sizes": torch.tensor([[self.image_size, self.image_size]] * self.batch_size)}
+    def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        return {"image_sizes": torch.tensor([[self.image_size, self.image_size]] * batch_size)}
 
 
 @require_torch
