@@ -877,3 +877,34 @@ src/transformers/configuration_utils.py
         assert parse_commit_message("[all test] commit") == {"skip": False, "no_filter": False, "test_all": True}
         assert parse_commit_message("[test-all] commit") == {"skip": False, "no_filter": False, "test_all": True}
         assert parse_commit_message("[all_test] commit") == {"skip": False, "no_filter": False, "test_all": True}
+
+    def test_no_windows_path_patterns_in_fetcher(self):
+        """
+        Regression test: tests_fetcher.py must never use os.path.sep, os.path.join, or
+        str(path.relative_to(...)) — all of which produce backslash-separated paths on Windows
+        and break comparisons against the posix paths used everywhere else in the fetcher.
+        Use '/' directly, f-strings, or path.relative_to(...).as_posix() instead.
+        """
+        import re
+
+        fetcher_path = Path(REPO_PATH) / "utils" / "tests_fetcher.py"
+        content = fetcher_path.read_text(encoding="utf-8")
+
+        # Note: these checks can be fooled if the banned string appears in an inline comment
+        # on a code line. Keep the code straightforward to avoid that edge case.
+        self.assertNotIn("os.path.sep", content, "Use '/' directly instead of os.path.sep")
+        # os.path.join produces OS-native separators (backslashes on Windows) for path strings
+        # used as dict keys or CI config values. If you need os.path.join for a genuine filesystem
+        # operation (subprocess args, temp files), remove this assertion and use code review instead.
+        self.assertNotIn("os.path.join(", content, "Use f-strings or pathlib / operator instead of os.path.join")
+        # Note: this check can be fooled if ".as_posix()" appears on the same line in a comment
+        # rather than in the actual expression. Keep the code straightforward to avoid that edge case.
+        bad_lines = [
+            line
+            for line in content.splitlines()
+            if re.search(r"str\(.*relative_to\(", line) and ".as_posix()" not in line
+        ]
+        self.assertFalse(
+            bad_lines,
+            "Use path.relative_to(...).as_posix() instead of str(path.relative_to(...)):\n" + "\n".join(bad_lines),
+        )

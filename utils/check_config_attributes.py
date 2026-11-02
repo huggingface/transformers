@@ -234,6 +234,7 @@ SPECIAL_CASES_TO_ALLOW = {
     ],
     "DeepseekV32Config": ["head_dim", "layer_types", "mlp_bias", "first_k_dense_replace", "n_routed_experts"],
     "GlmMoeDsaConfig": ["head_dim", "layer_types", "mlp_bias", "first_k_dense_replace", "n_routed_experts"],
+    "MistralLarge4TextConfig": ["layer_types", "first_k_dense_replace", "no_rope_layer_interval"],
     "EsmFoldConfig": ["esm_ablate_pairwise", "esm_ablate_sequence", "esm_input_dropout", "esm_type"],
     "TrunkConfig": ["cpu_grad_checkpoint", "layer_drop"],
     "Zamba2Config": ["use_mamba_kernels", "use_mem_eff_path"],

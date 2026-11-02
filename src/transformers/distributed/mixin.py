@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 
 import torch
 
+from ..core_model_loading import build_glob_alternation
 from ..dynamic_module_utils import custom_object_save
 from ..utils import is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
@@ -105,16 +106,16 @@ class DistributedMixin:
     @property
     def tp_plan(self) -> dict[str, str]:
         """The full tensor parallel plan for the model's modules."""
-        return self._tp_plan if self._tp_plan is not None else {}
+        return self._tp_plan
 
     @property
     def ep_plan(self) -> dict[str, str]:
         """The full expert parallel plan for the model's modules, kept separate from `tp_plan`."""
-        return self._ep_plan if self._ep_plan is not None else {}
+        return self._ep_plan
 
     @property
     def fsdp_plan(self) -> dict[str, str]:
-        return self._fsdp_plan if self._fsdp_plan is not None else {}
+        return self._fsdp_plan
 
     @property
     def pp_plan(self) -> dict[str, tuple[str, str]]:
@@ -187,7 +188,9 @@ class DistributedMixin:
 
         return distributed_config, device_map, mesh_manager
 
-    def _validate_parallel_plan(self, plan: dict[str, str], supported_styles, plan_name: str) -> None:
+    def _validate_parallel_plan(
+        self, plan: dict[str, str], supported_styles, plan_name: str, names: set[str] | None = None
+    ) -> None:
         """Raise on a style that `supported_styles` does not know, warn on a rule that names nothing in the model."""
         unsupported_styles = {style for style in plan.values() if style not in supported_styles}
         if unsupported_styles:
@@ -195,7 +198,10 @@ class DistributedMixin:
                 f"Unsupported `{plan_name}` styles: {unsupported_styles}. Supported styles are {list(supported_styles)}"
             )
 
-        names = {replace_layer_number_by_wildcard(n) for n, _ in chain(self.named_modules(), self.named_parameters())}
+        if names is None:
+            names = {
+                replace_layer_number_by_wildcard(n) for n, _ in chain(self.named_modules(), self.named_parameters())
+            }
         if unused := plan.keys() - names:
             if _get_torch_distributed_rank() == 0:
                 logger.warning(
@@ -232,7 +238,9 @@ class DistributedMixin:
         Each returned plan maps one concrete module or parameter name to a style, e.g. `model.layers.3.mlp.up_proj`
         instead of `model.layers.*.mlp.up_proj`. A module that has an EP rule keeps no TP rule.
         """
-        names = {replace_layer_number_by_wildcard(n) for n, _ in chain(self.named_modules(), self.named_parameters())}
+        module_names = {replace_layer_number_by_wildcard(n) for n, _ in self.named_modules()}
+        param_names = {replace_layer_number_by_wildcard(n) for n, _ in self.named_parameters()}
+        names = module_names | param_names
         for plan_name in ("tp_plan", "ep_plan", "fsdp_plan"):
             override = getattr(distributed_config, plan_name)
             if isinstance(override, dict):
@@ -245,47 +253,43 @@ class DistributedMixin:
         ep_plan = dict(self.ep_plan) if distributed_config.ep_size > 1 else {}
         fsdp_plan = dict(self.fsdp_plan) if distributed_config.fsdp_size > 1 else {}
 
-        if distributed_config.tp_size > 1 and not tp_plan:
-            raise ValueError(
-                f"Tensor parallelism was requested (`tp_size={distributed_config.tp_size}`), but `{type(self).__name__}` "
-                "does not define a tensor-parallel plan. Pass `tp_plan` in `DistributedConfig`, add a "
-                "`base_model_tp_plan` to the model's config, or disable tensor parallelism."
-            )
-
-        if distributed_config.ep_size > 1 and not ep_plan:
-            raise ValueError(
-                f"Expert parallelism was requested (`ep_size={distributed_config.ep_size}`), but `{type(self).__name__}` "
-                "does not define an expert-parallel plan. Pass `ep_plan` in `DistributedConfig`, add a "
-                "`base_model_ep_plan` to the model's config, or disable expert parallelism."
-            )
+        for kind, plan in (("tp", tp_plan), ("ep", ep_plan), ("fsdp", fsdp_plan)):
+            size = getattr(distributed_config, f"{kind}_size")
+            if size > 1 and not plan:
+                raise ValueError(
+                    f"`{kind}_size={size}` was requested, but `{type(self).__name__}` has no `{kind}_plan`. Pass "
+                    f"`{kind}_plan` in `DistributedConfig`, add `base_model_{kind}_plan` to the model's config, "
+                    f"or set `{kind}_size=1`."
+                )
 
         if "ep_dispatch_experts" in ep_plan.values() and "ep_router" in ep_plan.values():
             raise ValueError(
                 "`ep_dispatch_experts` routes tokens itself; remove the `ep_router` rules from `ep_plan`."
             )
 
-        if distributed_config.fsdp_size > 1 and not fsdp_plan:
-            raise ValueError(
-                f"FSDP was requested (`fsdp_size={distributed_config.fsdp_size}`), but `{type(self).__name__}` "
-                "does not define an FSDP plan. Pass `fsdp_plan` in `DistributedConfig`, add a "
-                "`base_model_fsdp_plan` to the model's config, or disable FSDP."
-            )
-
         # EP rules take precedence: drop TP rules on EP modules and their children.
         is_expert = re.compile(rf"(?:{'|'.join(map(re.escape, ep_plan))})(?:\..+)?").fullmatch
         tp_plan = {name: style for name, style in tp_plan.items() if not is_expert(name)}
 
-        self._validate_parallel_plan(tp_plan, ALL_PARALLEL_STYLES, "tp_plan")
-        self._validate_parallel_plan(ep_plan, ALL_PARALLEL_STYLES, "ep_plan")
-        self._validate_parallel_plan(fsdp_plan, ALL_FSDP_STYLES, "fsdp_plan")
+        self._validate_parallel_plan(tp_plan, ALL_PARALLEL_STYLES, "tp_plan", names)
+        self._validate_parallel_plan(ep_plan, ALL_PARALLEL_STYLES, "ep_plan", names)
+        self._validate_parallel_plan(fsdp_plan, ALL_FSDP_STYLES, "fsdp_plan", names)
         distributed_config._validate_resolved_ep_plan(ep_plan)
 
         # Tied embed/lm_head weights are wrapped once: fold the head's FSDP rule into the embedding's.
         fsdp_plan = _resolve_tied_embed_lm_head_plan(fsdp_plan, self)
 
+        # FSDP2 needs one group per dtype: give the modules kept in float32 their own group.
+        if fsdp_plan and (dtype_plan := self._get_dtype_plan(self.dtype)):
+            kept_in_fp32, _, _ = build_glob_alternation(list(dtype_plan))
+            fp32_modules = {name.rpartition(".")[0] for name in param_names if kept_in_fp32.search(name)}
+            fsdp_plan = dict.fromkeys(fp32_modules, "free_full_weight") | fsdp_plan
+
         tp_plan = self._expand_parallel_plan(tp_plan)
         ep_plan = self._expand_parallel_plan(ep_plan)
         fsdp_plan = self._expand_parallel_plan(fsdp_plan)
+        # FSDP2 needs a submodule sharded before the module containing it, e.g. `mlp.gate` before its layer.
+        fsdp_plan = dict(sorted(fsdp_plan.items(), key=lambda item: item[0].count("."), reverse=True))
 
         return tp_plan, ep_plan, fsdp_plan
 
@@ -312,10 +316,10 @@ class DistributedMixin:
         if distributed_config.pp_size > 1:
             model = apply_pipeline_parallelism(model, mesh_manager.get_mesh("pp"))
 
-        if distributed_config.tp_size > 1 and tp_plan:
+        if distributed_config.tp_size > 1:
             model = apply_tensor_parallelism(model, mesh_manager.get_mesh("tp"), tp_plan)
 
-        if distributed_config.ep_size > 1 and ep_plan:
+        if distributed_config.ep_size > 1:
             tp_mesh = mesh_manager.get_mesh("tp")
             ep_mesh = mesh_manager.get_mesh("ep")
 
@@ -329,7 +333,7 @@ class DistributedMixin:
                     model, ep_mesh, tp_mesh, ep_plan, ep_implementation=distributed_config.ep_implementation
                 )
 
-        if distributed_config.fsdp_size > 1 and fsdp_plan:
+        if distributed_config.fsdp_size > 1:
             model = apply_fully_sharded_data_parallelism(model, mesh_manager, fsdp_plan, ep_plan)
 
         return model

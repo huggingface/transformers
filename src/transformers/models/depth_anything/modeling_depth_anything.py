@@ -314,7 +314,7 @@ class DepthAnythingDepthEstimationHead(nn.Module):
     """
 )
 class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DepthAnythingConfig):
         super().__init__(config)
 
         self.backbone = load_backbone(config)
