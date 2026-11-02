@@ -82,7 +82,9 @@ class OnnxModelRunner(ModelRunner):
         leaves = [leaf for leaf in torch.utils._pytree.tree_leaves(inputs) if isinstance(leaf, torch.Tensor)]
         specs = self.session.get_inputs()
         if len(leaves) != len(specs):
-            raise ValueError(f"The graph takes {len(specs)} inputs, but got {len(leaves)} tensors from {list(inputs)}.")
+            raise ValueError(
+                f"The graph takes {len(specs)} inputs, but got {len(leaves)} tensors from {list(inputs)}."
+            )
         binding, kept = self.session.io_binding(), []
         for spec, leaf in zip(specs, leaves):
             # Integers bind on host: ORT reads them on its CPU, where a GPU pointer is an illegal access.
