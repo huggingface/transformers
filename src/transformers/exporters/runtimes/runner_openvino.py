@@ -49,9 +49,6 @@ class OpenVINOModelRunner(ModelRunner):
         super().__init__(metadata)
         self.compiled_model = compiled_model
         self.request = compiled_model.create_infer_request()
-        # Outputs as views of the request's buffers rather than copies, for a caller that reads each call's outputs
-        # before the next call overwrites them (`generate`).
-        self.share_outputs = False
 
     @property
     def device(self) -> torch.device:
@@ -59,14 +56,28 @@ class OpenVINOModelRunner(ModelRunner):
         return torch.device("cpu")
 
     @classmethod
-    def from_program(cls, program: openvino.Model, metadata: ExportMetadata, device=None) -> OpenVINOModelRunner:
-        return cls(openvino.Core().compile_model(program, _openvino_device(device)), metadata)
+    def from_program(
+        cls, program: openvino.Model, metadata: ExportMetadata, device=None, config: dict | None = None
+    ) -> OpenVINOModelRunner:
+        """`config`, OpenVINO compile properties, goes over the CPU defaults, which keep the export's precision:
+        inference and KV cache in its dtype (OpenVINO otherwise keeps a stateful cache in uint8, and may run fp32 in
+        bf16 on CPUs that have it), tuned for latency."""
+        device = _openvino_device(device)
+        defaults = {}
+        if device == "CPU":
+            precision = {"float32": "f32", "float16": "f16", "bfloat16": "bf16"}.get(metadata.dtype, "f32")
+            defaults = {
+                "PERFORMANCE_HINT": "LATENCY",
+                "INFERENCE_PRECISION_HINT": precision,
+                "KV_CACHE_PRECISION": precision,
+            }
+        return cls(openvino.Core().compile_model(program, device, {**defaults, **(config or {})}), metadata)
 
     def reset_state(self) -> None:
         """Start the state a stateful model keeps (its cache) over, for a new sequence."""
         self.request.reset_state()
 
-    def __call__(self, **kwargs) -> Any:
+    def __call__(self, share_inputs: bool = True, share_outputs: bool = False, **kwargs) -> Any:
         feed = openvino_feed(self.compiled_model, kwargs)
-        outputs = self.request.infer(feed, share_inputs=True, share_outputs=self.share_outputs)
+        outputs = self.request.infer(feed, share_inputs=share_inputs, share_outputs=share_outputs)
         return self.unflatten([torch.from_numpy(outputs[port]) for port in self.compiled_model.outputs])

@@ -56,7 +56,6 @@ from transformers import (
     T5ForConditionalGeneration,
 )
 from transformers.exporters import (
-    AutoExportedModel,
     DynamoConfig,
     DynamoExporter,
     ExecutorchConfig,
@@ -475,10 +474,23 @@ class ExportedModelTest(unittest.TestCase):
                     for key in expected:
                         torch.testing.assert_close(outputs[key].cpu(), expected[key], atol=atol, rtol=atol)
                     self.assertEqual(runtime.dtype, torch.float32)
+                    # Copied by default: the next call leaves them as they are.
+                    runtime(**{**inputs, "input_ids": inputs["input_ids"].flip(-1)})
+                    torch.testing.assert_close(
+                        outputs["last_hidden_state"].cpu(), expected["last_hidden_state"], atol=atol, rtol=atol
+                    )
+                    # Shared outputs are right until the next call.
+                    shared = runtime(**inputs, share_inputs=False, share_outputs=True)
+                    torch.testing.assert_close(
+                        shared["last_hidden_state"].cpu(), expected["last_hidden_state"], atol=atol, rtol=atol
+                    )
                     # A loaded runtime saves back what it runs.
                     with tempfile.TemporaryDirectory() as resaved:
                         runtime.save_pretrained(resaved)
                         self.assertEqual(sorted(os.listdir(resaved)), sorted(os.listdir(directory)))
+            # A subclass loads only its own kind.
+            with self.assertRaisesRegex(TypeError, "runs as a ExportedModel"):
+                ExportedMultimodalModel.from_pretrained(directory, device=device)
 
     @pytest.mark.torch_export_test
     def test_dynamo(self):
@@ -554,15 +566,13 @@ class ExportedMultimodalModelTest(unittest.TestCase):
             for name, runtime in (
                 ("runtime", exported.runtime(device=device)),
                 ("from_pretrained", ExportedMultimodalModel.from_pretrained(directory, device=device)),
-                ("auto", AutoExportedModel.from_pretrained(directory, device=device)),
+                ("any kind", ExportedModel.from_pretrained(directory, device=device)),
             ):
                 with self.subTest(name):
                     self.assertIsInstance(runtime, ExportedMultimodalModel)
                     outputs = runtime(**inputs)
                     self.assertIs(type(outputs), type(expected))
                     torch.testing.assert_close(outputs.logits.cpu(), expected.logits, atol=atol, rtol=atol)
-            with self.assertRaisesRegex(TypeError, "AutoExportedModel"):
-                ExportedModel.from_pretrained(directory, device=device)
 
     @pytest.mark.torch_export_test
     def test_dynamo(self):
@@ -589,7 +599,7 @@ class ExportedMultimodalModelTest(unittest.TestCase):
 @require_torch
 class ExportedModelForCausalLMTest(unittest.TestCase):
     """A generation export (`export_for_generation`) generates the same tokens as the model through `generate`, on
-    every backend: fresh, and loaded with `AutoExportedModel`."""
+    every backend: fresh, and loaded with `ExportedModel.from_pretrained`."""
 
     def _check_generates_like_eager(self, exporter, config, model, inputs, generation_config):
         with torch.no_grad():
@@ -601,7 +611,7 @@ class ExportedModelForCausalLMTest(unittest.TestCase):
             exported.save_pretrained(directory)
             for name, runtime in (
                 ("runtime", exported.runtime(device="cpu")),
-                ("auto", AutoExportedModel.from_pretrained(directory, device="cpu")),
+                ("any kind", ExportedModel.from_pretrained(directory, device="cpu")),
             ):
                 with self.subTest(name):
                     self.assertIsInstance(runtime, ExportedModelForCausalLM)

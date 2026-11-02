@@ -22,7 +22,7 @@ from ...generation import GenerationConfig, GenerationMixin
 from ...modeling_outputs import BaseModelOutput
 from ...utils import is_torch_available
 from ..cache import advance_cache_length, causal_mask, mask_width, materialize_cache_layers
-from ..decompose import _MODALITY_SPECS, decode_graph_name
+from ..decompose import _MODALITY_SPECS, DEEPSTACK_INPUTS, decode_graph_name
 from ..metadata import load_treespec
 from ..precompute import get_rope_index_from_config
 from .base import ExportedModel, ModelRunner
@@ -73,7 +73,7 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
     ```python
     >>> exported = OpenVINOExporter().export_for_generation(model, inputs, OpenVINOConfig(dynamic=True))
     >>> exported.save_pretrained("exported")
-    >>> model = AutoExportedModel.from_pretrained("exported")
+    >>> model = ExportedModel.from_pretrained("exported")
     >>> generated = model.generate(**inputs, max_new_tokens=32)
     ```
 
@@ -96,6 +96,7 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
             generation_config if generation_config is not None else GenerationConfig.from_model_config(config)
         )
         self.forward = _with_signature(lambda **kwargs: self._step(**kwargs), self._forward_names())
+        self._generating = False
 
     def _forward_names(self) -> list[str]:
         """What `forward` declares, so `generate` builds them: the kwargs the decode graph was traced with."""
@@ -121,16 +122,14 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
         return self.__call__
 
     def generate(self, *args, **kwargs):
-        """[`~GenerationMixin.generate`]. A stateful OpenVINO decode graph hands out its own output buffers instead of
-        copies meanwhile: it only returns the logits (the cache is its state), and `generate` copies the row it reads
-        before the next step overwrites them."""
-        if not ("beam_idx" in self.runner.metadata.input_names and hasattr(self.runner, "share_outputs")):
-            return super().generate(*args, **kwargs)
-        self.runner.share_outputs = True
+        """[`~GenerationMixin.generate`]. A stateful decode graph (OpenVINO's) hands out its own output buffers instead
+        of copies meanwhile: it only returns the logits (the cache is its state), and `generate` copies the row it
+        reads before the next step overwrites them."""
+        self._generating = True
         try:
             return super().generate(*args, **kwargs)
         finally:
-            self.runner.share_outputs = False
+            self._generating = False
 
     def _prepare_cache_for_generation(
         self, generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
@@ -198,7 +197,16 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
             )
 
         token = dict(kwargs)
+        features = {spec.features for spec in DEEPSTACK_INPUTS.values()}
         for name, value in kwargs.items():
+            if name in features and value is not None:
+                # One row per position of the step (`dense_deepstack`): the token's.
+                def rows(dense):
+                    return dense.view(-1, query_length, dense.shape[-1])[:, index]
+
+                is_dict = isinstance(value, dict)
+                token[name] = {key: rows(item) for key, item in value.items()} if is_dict else [rows(v) for v in value]
+                continue
             if name in ("attention_mask", "decoder_attention_mask"):
                 is_dict = isinstance(value, dict)
                 token[name] = (
@@ -230,7 +238,9 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
                     else value
                     for layer_type, value in mask.items()
                 }
-        outputs = self.runner(**{name: value for name, value in kwargs.items() if name in traced})
+        stateful = "beam_idx" in self.runner.metadata.input_names
+        inputs = {name: value for name, value in kwargs.items() if name in traced}
+        outputs = self.runner(share_outputs=stateful and self._generating, **inputs)
         # A backend keeping the cache as state (OpenVINO's stateful model) never hands the loop's cache back advanced.
         if "beam_idx" in self.runner.metadata.input_names and kwargs.get("past_key_values") is not None:
             text = next(

@@ -120,7 +120,7 @@ class ExportArtifacts(Mapping, PushToHubMixin):
         [`ExportedMultimodalModel`], or a generation export ([`~HfExporter.export_for_generation`]) that `generate`
         drives: an [`ExportedModelForCausalLM`], [`ExportedMultimodalModelForCausalLM`] or
         [`ExportedModelForSeq2SeqLM`]. `runner_kwargs` go to the backend's runners: `providers` and `session_options`
-        for ONNX Runtime."""
+        for ONNX Runtime, `config` (compile properties) for OpenVINO."""
         from .auto import get_runner_class
         from .runtimes.generation import (
             ExportedModelForCausalLM,
