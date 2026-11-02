@@ -1339,18 +1339,6 @@ class PreTrainedModel(
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
 
-    def dequantize(self, dtype=None):
-        """
-        Potentially dequantize the model in case it has been quantized by a quantization method that support
-        dequantization.
-        """
-        hf_quantizer = getattr(self, "hf_quantizer", None)
-
-        if hf_quantizer is None:
-            raise ValueError("You need to first quantize your model in order to dequantize it")
-
-        return hf_quantizer.dequantize(self, dtype=dtype)
-
     def _backward_compatibility_gradient_checkpointing(self):
         if self.supports_gradient_checkpointing and getattr(self.config, "gradient_checkpointing", False):
             self.activation_checkpointing_enable()

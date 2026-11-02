@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from ..utils import is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin, QuantizationMethod
-from .quantizers_utils import get_module_from_name, move_accelerate_hook
+from .quantizers_utils import get_module_from_name
 
 
 if TYPE_CHECKING:
@@ -27,7 +27,6 @@ if TYPE_CHECKING:
 
 if is_torch_available():
     import torch
-    from torch import nn
 
     if not TYPE_CHECKING:
         from torch.nn import ModuleList
@@ -236,57 +235,6 @@ class HfQuantizer(ABC):
         if hasattr(model, "quantization_method"):
             del model.quantization_method
         model.is_quantized = False
-
-    def dequantize(self, model, dtype=None):
-        """
-        Potentially dequantize the model to retrieve the original model, with some loss in accuracy / performance.
-        Note not all quantization schemes support this.
-        """
-        if dtype is None:
-            # using the same dtype we used to load the model. If we don't do that, we might have issues with modules we didn't quantize.
-            # or we need to upcast everything to the same dtype
-            dtype = model.config.dtype
-        model = self._dequantize(model, dtype=dtype)
-        self.remove_quantization_config(model)
-
-        return model
-
-    def _dequantize(self, model, dtype=None):
-        """
-        Replaces each quantized linear with an `nn.Linear`: the `dequantize` load operation runs on the serialized
-        tensors of its `state_dict`, as when loading the checkpoint with `dequantize=True`.
-        """
-        from ..core_model_loading import expand_target_names
-
-        dequantize = self.get_load_operations().get("dequantize")
-        if dequantize is None:
-            raise NotImplementedError(
-                f"{self.quantization_config.quant_method} has no `dequantize` load operation, please raise an issue on GitHub."
-            )
-        operation = dequantize(self)
-        for module_name, module in list(model.named_modules()):
-            # ponytail: leaf linears only. Quantized fused experts (3D params) and embeddings stay as they are: their
-            # dense class is the model's own (e.g. a scaled embedding), not a generic one
-            if next(module.children(), None) is not None or hasattr(module, "embedding_dim"):
-                continue
-            state = module.state_dict()
-            for param, serialized in self.serialized_names.items():
-                tensors = {name: [state[name]] for name in serialized if name in state}
-                if len(tensors) < 2:  # a weight without companions is not quantized
-                    continue
-                full_name = f"{module_name}.{param}"
-                weight = operation.convert(tensors, full_layer_name=full_name, model=model)
-                weight = expand_target_names(weight, full_name)[full_name]
-                weight = weight[0] if isinstance(weight, list) else weight
-                bias = getattr(module, "bias", None)
-                with torch.device("meta"):
-                    dense = nn.Linear(weight.shape[1], weight.shape[0], bias=bias is not None)
-                dense.weight = nn.Parameter(weight if dtype is None else weight.to(dtype), requires_grad=False)
-                if bias is not None:
-                    dense.bias = nn.Parameter(bias, requires_grad=False)
-                move_accelerate_hook(module, dense)
-                model.set_submodule(module_name, dense)
-        return model
 
     @staticmethod
     def get_modules_to_not_convert(

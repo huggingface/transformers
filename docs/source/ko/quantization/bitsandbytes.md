@@ -286,22 +286,3 @@ double_quant_config = BitsAndBytesConfig(
 
 model_double_quant = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-13b", quantization_config=double_quant_config)
 ```
-
-## `bitsandbytes` 모델의 비양자화[[dequantizing-`bitsandbytes`-models]]
-양자화된 후에는 모델을 원래의 정밀도로 비양자화할 수 있지만, 이는 모델의 품질이 약간 저하될 수 있습니다. 비양자화된 모델에 맞출 수 있는 충분한 GPU RAM이 있는지 확인하세요.
-
-```python
-from transformers import AutoModelForCausalLM, BitsAndBytesConfig, AutoTokenizer
-
-model_id = "facebook/opt-125m"
-
-model = AutoModelForCausalLM.from_pretrained(model_id, BitsAndBytesConfig(load_in_4bit=True))
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-
-model.dequantize()
-
-text = tokenizer("Hello my name is", return_tensors="pt").to(0)
-
-out = model.generate(**text)
-print(tokenizer.decode(out[0]))
-```
