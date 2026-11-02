@@ -1193,9 +1193,10 @@ class LayerPairCollapse(WeightRenaming):
     """
     Loads checkpoints that store each decoder layer as two consecutive blocks, `layers.{2i}` and `layers.{2i+1}`, into a
     single `layers.{i}`. `first_block`/`second_block` rename the submodules of each block, e.g. with
-    `first_block={"mixer": "self_attn"}` and `second_block={"mixer": "mlp"}`:
+    `first_block={"mixer.g_proj": "self_attn.gate_proj", "mixer": "self_attn"}` and `second_block={"mixer": "mlp"}`:
 
         layers.0.mixer.q_proj.weight -> layers.0.self_attn.q_proj.weight
+        layers.0.mixer.g_proj.weight -> layers.0.self_attn.gate_proj.weight
         layers.1.mixer.up_proj.weight -> layers.0.mlp.up_proj.weight
         layers.2.mixer.q_proj.weight -> layers.1.self_attn.q_proj.weight
     """
@@ -1207,7 +1208,9 @@ class LayerPairCollapse(WeightRenaming):
         self.second_block = second_block
         self.collapse = collapse
         names = {*first_block, *second_block} if collapse else {*first_block.values(), *second_block.values()}
-        self.pattern = re.compile(rf"layers\.(?P<index>\d+)\.(?P<name>{'|'.join(sorted(names))})(?=\.|$)")
+        # Longest names first, so a nested rename (`mixer.g_proj`) wins over its parent (`mixer`)
+        alternatives = "|".join(re.escape(name) for name in sorted(names, key=len, reverse=True))
+        self.pattern = re.compile(rf"layers\.(?P<index>\d+)\.(?P<name>{alternatives})(?=\.|$)")
         super().__init__(source_patterns=r"layers\.(\d+)", target_patterns=r"layers.\1")
 
     def rename_source_key(self, source_key: str) -> tuple[str, str | None]:

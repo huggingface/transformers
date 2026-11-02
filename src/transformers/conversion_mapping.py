@@ -157,12 +157,11 @@ def _build_checkpoint_conversion_mapping():
         # Dory checkpoints store each decoder layer as an attention block followed by an mlp block
         "dory": [
             LayerPairCollapse(
-                first_block={"mixer": "self_attn", "attn_alpha": "lambda_1"},
+                first_block={"mixer.g_proj": "self_attn.gate_proj", "mixer": "self_attn", "attn_alpha": "lambda_1"},
                 second_block={"mixer": "mlp", "mlp_alpha": "lambda_2"},
             ),
             WeightRenaming(r"^backbone\.", "model."),
-            WeightRenaming(r"model\.embeddings", "model.embed_tokens"),
-            WeightRenaming(r"self_attn\.g_proj", "self_attn.gate_proj"),
+            WeightRenaming(r"\.embeddings\.", ".embed_tokens."),
         ],
         "hy_v4": [
             # General HC prefix which is dropped

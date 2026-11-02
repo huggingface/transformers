@@ -94,6 +94,8 @@ class DoryRecurrentLayerMixin:
             return super().update(key_states, value_states, *args, **kwargs)
         while len(self.later_loops) < loop_idx:
             self.later_loops.append(type(self)(*self.init_args, **self.init_kwargs))
+            if getattr(self, "record_past", False):
+                self.later_loops[-1].activate_past_recording()
         return self.later_loops[loop_idx - 1].update(key_states, value_states, *args, **kwargs)
 
     def crop(self, tokens_to_remove: int) -> None:
@@ -132,6 +134,12 @@ class DoryRecurrentLayer(DoryRecurrentLayerMixin, DynamicLayer):
 
 class DoryRecurrentSlidingWindowLayer(DoryRecurrentLayerMixin, DynamicSlidingWindowLayer):
     _layer_type = "recurrent_sliding_attention"
+
+    def activate_past_recording(self):
+        # Generation turns recording on after prefill, when the later loops already exist
+        super().activate_past_recording()
+        for layer in self.later_loops:
+            layer.activate_past_recording()
 
     def read(self, key_states: torch.Tensor, value_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         if not self.is_initialized:
@@ -512,7 +520,10 @@ class DoryPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, DoryRotaryEmbedding):
             for layer_type in module.layer_types:
-                inv_freq, _ = module.compute_default_rope_parameters(module.config, layer_type=layer_type)
+                rope_init_fn = module.compute_default_rope_parameters
+                if module.rope_type[layer_type] != "default":
+                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
+                inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), inv_freq)
         elif isinstance(module, DoryAttention):
@@ -617,7 +628,7 @@ class DoryModel(DoryPreTrainedModel):
                     **kwargs,
                 )
 
-        for decoder_layer in self.layers[recurrent_end:]:
+        for decoder_layer in self.layers[self.config.num_hidden_layers - self.config.n_output_layers :]:
             hidden_states = decoder_layer(
                 hidden_states, past_key_values=past_key_values, **layer_inputs[decoder_layer.layer_type], **kwargs
             )

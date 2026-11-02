@@ -130,6 +130,8 @@ class DoryConfig(PreTrainedConfig):
     def validate_architecture(self):
         if self.n_input_layers + self.n_recurrent_layers + self.n_output_layers != self.num_hidden_layers:
             raise ValueError("n_input_layers + n_recurrent_layers + n_output_layers must equal num_hidden_layers")
+        if self.n_recurrent_loops < 1:
+            raise ValueError(f"n_recurrent_loops must be at least 1, got {self.n_recurrent_loops}")
         if self.recurrent_kv_cache_mode not in ("per_loop", "last_loop"):
             raise ValueError(
                 f"recurrent_kv_cache_mode must be per_loop or last_loop, got {self.recurrent_kv_cache_mode}"

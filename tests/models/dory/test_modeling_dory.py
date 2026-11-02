@@ -15,7 +15,9 @@
 
 import unittest
 
-from transformers import AutoTokenizer, is_torch_available
+from huggingface_hub.errors import StrictDataclassClassValidationError
+
+from transformers import AutoTokenizer, DoryConfig, is_torch_available
 from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -61,6 +63,23 @@ class DoryModelTest(CausalLMModelTest, unittest.TestCase):
                 outputs = model(input_ids[:, position : position + 1], past_key_values=outputs.past_key_values)
                 logits.append(outputs.logits)
         torch.testing.assert_close(torch.cat(logits, dim=1), full_logits, rtol=1e-4, atol=1e-4)
+
+    def test_prompt_lookup_past_sliding_window_with_loops(self):
+        # Assisted decoding rolls the cache back: the later loops' sliding layers must record their past too
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_hidden_layers, config.layer_types, config.rope_parameters = 4, None, None
+        config.n_input_layers, config.n_recurrent_layers, config.n_output_layers, config.n_recurrent_loops = 1, 2, 1, 3
+        config.sliding_window = 8
+        config.__post_init__()
+        model = DoryForCausalLM(config).to(torch_device).eval()
+        input_ids = torch.tensor([[1, 2, 3, 4, 5] * 3], device=torch_device)
+        greedy = model.generate(input_ids, max_new_tokens=24, do_sample=False)
+        prompt_lookup = model.generate(input_ids, max_new_tokens=24, do_sample=False, prompt_lookup_num_tokens=4)
+        self.assertTrue(torch.equal(greedy, prompt_lookup))
+
+    def test_at_least_one_recurrent_loop(self):
+        with self.assertRaises(StrictDataclassClassValidationError):
+            DoryConfig(n_recurrent_loops=0)
 
 
 @slow
