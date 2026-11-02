@@ -292,9 +292,15 @@ jobs:
               runner that reliably triggers the OOM killer.
 
               We monkey-patch popen_launch_server so every server launched by
-              the SGLang test suite gets --max-total-tokens 1024 unless the
-              caller already specified it.  1024 tokens is ample for correctness
-              tests while keeping the KV cache under ~500 MB.
+              the SGLang test suite gets --max-total-tokens 4096 unless the
+              caller already specified it.  4096 tokens is ample for correctness
+              tests (Whisper audio expands to ~1500 tokens) while keeping the
+              KV cache well under 1 GB.
+
+              The patch is applied to both sglang.test.test_utils and
+              sglang.test.runners because some test helpers (e.g. SRTRunner)
+              import popen_launch_server directly into their own module
+              namespace rather than looking it up via sglang.test.test_utils.
               """
               try:
                   import sglang.test.test_utils as _tu
@@ -306,14 +312,23 @@ jobs:
               def _patched(model, base_url, timeout, *args, other_args=None, **kwargs):
                   other_args = list(other_args or [])
                   if "--max-total-tokens" not in other_args:
-                      other_args += ["--max-total-tokens", "1024"]
+                      other_args += ["--max-total-tokens", "4096"]
                       print(
-                          "[CONFTEST] Injected --max-total-tokens 1024 into popen_launch_server",
+                          "[CONFTEST] Injected --max-total-tokens 4096 into popen_launch_server",
                           flush=True,
                       )
                   return _orig(model, base_url, timeout, *args, other_args=other_args, **kwargs)
 
               _tu.popen_launch_server = _patched
+
+              # Also patch the reference in sglang.test.runners (SRTRunner imports
+              # popen_launch_server directly into that module's namespace).
+              try:
+                  import sglang.test.runners as _runners
+                  if hasattr(_runners, "popen_launch_server"):
+                      _runners.popen_launch_server = _patched
+              except ImportError:
+                  pass
           CONFTEST
 
       - name: Run canonical SGLang integration tests
