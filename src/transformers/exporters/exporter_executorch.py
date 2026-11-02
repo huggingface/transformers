@@ -42,6 +42,7 @@ import math
 import operator
 import re
 from collections.abc import MutableMapping
+from pathlib import Path
 from typing import Any
 
 from ..utils import logging
@@ -160,16 +161,23 @@ class ExecutorchExporter(DynamoExporter):
         return executorch_programs_manager, metadata
 
     @classmethod
-    def save_program(cls, program: ExecutorchProgramManager, path) -> None:
-        """Stream the `.pte` to `path` (`.buffer` would materialize the whole program first)."""
+    def save_program(cls, program, path) -> None:
+        """Stream the `.pte` to `path` (`.buffer` would materialize the whole program first); a loaded program writes
+        back the bytes it was read from."""
         with open(path, "wb") as file:
-            program.write_to_file(file)
+            if isinstance(program, ExecutorchProgramManager):
+                program.write_to_file(file)
+            else:
+                file.write(program.pte)
 
     @classmethod
     def load_program(cls, path):
         """The saved `.pte` as an `executorch.runtime.Program`, ready to run: the export-time
-        `ExecutorchProgramManager` can't be rebuilt from the file."""
-        return Runtime.get().load_program(str(path))
+        `ExecutorchProgramManager` can't be rebuilt from the file, so the program keeps its bytes to be saved again."""
+        pte = Path(path).read_bytes()
+        program = Runtime.get().load_program(pte)
+        program.pte = pte
+        return program
 
 
 def _get_transform_passes(backend: str):

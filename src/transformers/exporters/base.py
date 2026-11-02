@@ -111,7 +111,9 @@ class ExportArtifacts(Mapping, PushToHubMixin):
             )
         component = next(iter(self.components.values()))
         runner = get_runner_class(self.export_format).from_program(component.program, component.metadata, device)
-        return ExportedModel(runner, self.config)
+        model = ExportedModel(runner, self.config)
+        model.artifacts = self
+        return model
 
     def save_pretrained(self, save_directory: str | Path, push_to_hub: bool = False, **kwargs) -> None:
         """Write the components (one file each), the configs, and a manifest naming each component's file and the
