@@ -22,7 +22,7 @@ import socket
 import tempfile
 import time
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from huggingface_hub.utils import httpx
 
@@ -534,6 +534,17 @@ class TestModelManager(unittest.TestCase):
         mm = ModelManager()
         self.assertIsNone(mm.get_quantization_config())
 
+    def test_model_class_is_cached_apart(self):
+        # A repo loaded with another class (a decision model) must not replace the model of the other endpoints
+        mm = ModelManager(model_timeout=-1)
+        load = patch.object(mm, "_load_model", side_effect=lambda *args, **kwargs: MagicMock())
+        with patch.object(mm, "_load_processor"), load:
+            default, _ = mm.load_model_and_processor("org/model@main")
+            other, _ = mm.load_model_and_processor("org/model@main", model_class=MagicMock)
+        self.assertIsNot(default, other)
+        self.assertIs(mm.load_model_and_processor("org/model@main")[0], default)
+        self.assertIs(mm.load_model_and_processor("org/model@main", model_class=MagicMock)[0], other)
+
 
 class TestTimedModel(unittest.TestCase):
     def test_delete_model(self):
@@ -682,10 +693,22 @@ class TestSystemOneEndpoint(ServeIntegrationTestCase):
         self.assertGreater(data["usage"]["input_tokens"], 0)
         self.assertEqual(data["usage"]["output_tokens"], 0)
 
-    def test_decision_with_text(self):
-        response = httpx.post(f"{self.base_url}/v1/systemone", json=self.body, timeout=120)
+    def _answers_like_the_pipeline(self, model):
+        """The server's answers to `self.body` for `model`, checked against `pipeline("decision")`."""
+        from transformers import pipeline
+
+        request = {"state": self.body["state"], "questions": self.body["questions"]}
+        response = httpx.post(f"{self.base_url}/v1/systemone", json={"model": model, **request}, timeout=600)
         self.assertEqual(response.status_code, 200)
         answers = response.json()["answers"]
+        expected = pipeline("decision", model=model, device=torch_device)(request)
+        self.assertEqual(answers["team"]["choice"], expected["team"]["choice"])
+        self.assertAlmostEqual(answers["urgency"]["score"], expected["urgency"]["score"], places=3)
+        self.assertAlmostEqual(answers["upset"]["noul"], expected["upset"]["noul"], places=3)
+        return answers
+
+    def test_decision_with_text(self):
+        answers = self._answers_like_the_pipeline(self.MODEL)
         self.assertEqual(answers["team"]["choice"], "technical")
         self.assertGreater(answers["urgency"]["score"], 1)
         self.assertGreater(answers["upset"]["noul"], 0.5)
@@ -697,37 +720,104 @@ class TestSystemOneEndpoint(ServeIntegrationTestCase):
         self.assertIn("A `choice` question needs `criteria`", response.json()["detail"][0]["msg"])
 
 
+@slow
 @require_serve
-class TestSystemOneDecisionConfig(unittest.TestCase):
-    @require_torch
-    def test_answers_are_the_pipelines(self):
-        from transformers import AutoTokenizer, pipeline
+@require_torch_accelerator
+class TestSystemOneDecisionModel(TestSystemOneEndpoint):
+    # vllm-sr/d3-nano ships a decision head next to its Qwen3.5 weights: the server answers with that decision model,
+    # like `pipeline("decision")`, not with the next-token logits of the Qwen3.5 causal LM
+    MODEL = "vllm-sr/d3-nano"
 
-        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+
+@require_serve
+class TestSystemOneHandler(unittest.TestCase):
+    @staticmethod
+    def _handler(repo, tokenizer):
+        """A handler serving a tiny model, as if loaded from the local `repo`."""
         model = tiny_qwen2(tokenizer)
-        decision_config = DecisionConfig(temperature={"noul": 1.5})
-        handler = SystemOneHandler(MagicMock(), GenerationState(), decision_config=decision_config)
-        request = {"state": "s", "questions": {"upset": {"type": "noul", "instructions": "Upset?"}}}
-        pipe = handler._pipeline("x", model, tokenizer)
-        self.assertIs(handler._pipeline("x", model, tokenizer), pipe)
-        answers, input_tokens = handler._answer(pipe, request)
-        expected = pipeline("decision", model=model, tokenizer=tokenizer, decision_config=decision_config)(request)
-        self.assertEqual(answers, expected)
-        self.assertGreater(input_tokens, 0)
+        model.config._name_or_path = model.name_or_path = repo
+        model_manager = MagicMock(force_model=None)
+        model_manager.process_model_name.side_effect = ModelManager.process_model_name
+        model_manager.load_model_and_processor.return_value = (model, tokenizer)
+        return SystemOneHandler(model_manager, GenerationState())
 
     @require_torch
-    def test_reads_the_decision_config_of_the_repo(self):
+    def test_decision_config(self):
         from transformers import AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
-        model = tiny_qwen2(tokenizer)
         template = "{{ state }}"
         with tempfile.TemporaryDirectory() as repo:
             DecisionConfig(temperature={"noul": 2.0}, chat_template=template).save_pretrained(repo)
-            model.config._name_or_path = model.name_or_path = repo  # as if loaded from the repo
-            pipe = SystemOneHandler(MagicMock(), GenerationState())._pipeline(repo, model, tokenizer)
-        self.assertEqual(pipe.decision_config.temperature, {"noul": 2.0})
-        self.assertEqual(pipe.decision_config.chat_template, template)
+            handler = self._handler(repo, tokenizer)
+            model, _ = handler.model_manager.load_model_and_processor.return_value
+            # The model's own, from its repo
+            decision_config = handler._pipeline(repo, model, tokenizer).decision_config
+            self.assertEqual(decision_config.temperature, {"noul": 2.0})
+            self.assertEqual(decision_config.chat_template, template)
+            # Or the one passed to serve (`--decision-config`), instead
+            passed = DecisionConfig(temperature={"noul": 1.5})
+            handler = SystemOneHandler(handler.model_manager, GenerationState(), decision_config=passed)
+            self.assertIs(handler._pipeline(repo, model, tokenizer).decision_config, passed)
+
+    @require_torch
+    def test_pipeline_is_built_once_per_model(self):
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+        handler = SystemOneHandler(MagicMock(), GenerationState())
+        model = tiny_qwen2(tokenizer)
+        pipe = handler._pipeline("x", model, tokenizer)
+        self.assertIs(handler._pipeline("x", model, tokenizer), pipe)
+        # Built again for a model loaded again after its timeout
+        self.assertIsNot(handler._pipeline("x", tiny_qwen2(tokenizer), tokenizer), pipe)
+
+    @require_torch
+    def test_questions_are_validated_with_the_models_decision_config(self):
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+        # 30 options: more than the default A-Z labels, as many as the labels of the model's decision config
+        labels = [*"ABCDEFGHIJKLMNOPQRSTUVWXYZ", *"abcd"]
+        criteria = {f"option {label}": "description" for label in labels}
+        request = {"state": "s", "questions": {"pick": {"type": "choice", "criteria": criteria}}}
+        with tempfile.TemporaryDirectory() as repo:
+            DecisionConfig(labels={"choice": labels}).save_pretrained(repo)
+            response = asyncio.run(self._handler(repo, tokenizer).handle_request({"model": repo, **request}, "req"))
+        self.assertEqual(len(json.loads(response.body)["answers"]["pick"]["probabilities"]), 30)
+
+        # A model without a decision config reads at most 26 options, with the default A-Z labels
+        with tempfile.TemporaryDirectory() as repo, self.assertRaises(HTTPException) as context:
+            asyncio.run(self._handler(repo, tokenizer).handle_request({"model": repo, **request}, "req"))
+        self.assertEqual(context.exception.status_code, 422)
+        self.assertIn("at most 26 options", context.exception.detail[0]["msg"])
+
+    @require_torch
+    def test_decision_checkpoint_loads_as_its_decision_model(self):
+        # The config files of a decision head next to a model's, like the `decision_config.json` of vllm-sr/d3-nano:
+        # /v1/systemone loads its decision model, the other endpoints the causal LM its config names
+        from transformers import JevForDecision, Qwen2Config
+
+        with tempfile.TemporaryDirectory() as repo:
+            Qwen2Config(architectures=["Qwen2ForCausalLM"]).save_pretrained(repo)
+            with open(f"{repo}/decision_config.json", "w", encoding="utf-8") as file:
+                json.dump({"codes": ["A", "B"], "temperature": 1.0, "prompt": "d3"}, file)
+            systemone = SystemOneHandler(MagicMock(), GenerationState())
+            chat = ChatCompletionHandler(MagicMock(), GenerationState())
+            self.assertIs(systemone._model_class(f"{repo}@main"), JevForDecision)
+            self.assertIsNone(chat._model_class(f"{repo}@main"))
+
+    @require_torch
+    def test_images_need_a_model_that_handles_them(self):
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")  # a text model: no image processor
+        asset = {"type": "image", "format": "png", "data_base64": "iVBORw0KGgo="}
+        request = {"state": "Is 7f3a red?", "assets": {"7f3a": asset}, "questions": {"red": {"type": "noul"}}}
+        with tempfile.TemporaryDirectory() as repo, self.assertRaises(HTTPException) as context:
+            asyncio.run(self._handler(repo, tokenizer).handle_request({"model": repo, **request}, "req"))
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertIn("Images need a model whose processor handles them", context.exception.detail)
 
 
 @slow

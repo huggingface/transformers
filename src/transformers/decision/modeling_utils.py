@@ -48,6 +48,21 @@ def process_scores(decision_config, input_ids, marks, questions, scores) -> list
     return [decision_config.logits_processors[q.type](tail, s.float()) for q, s in zip(questions, scores)]
 
 
+def maybe_get_decision_model_config(pretrained_model_name_or_path, **kwargs) -> PreTrainedConfig | None:
+    """
+    The config of the decision model that reads a checkpoint shipping its head next to its weights (see
+    [`~DecisionMixin.checkpoint_config`]), or `None` for any other repo. `pipeline("decision")` and `transformers serve`
+    load such checkpoints with that model.
+    """
+    from ..models.auto.modeling_auto import MODEL_FOR_DECISION_MAPPING
+
+    for model_class in MODEL_FOR_DECISION_MAPPING.values():
+        config = model_class.checkpoint_config(pretrained_model_name_or_path, **kwargs)[0]
+        if config is not None:
+            return config
+    return None
+
+
 class DecisionMixin:
     """
     The `decide` of the `XxxForDecision` models, with their `decision_config`: the decision config of their repo, or the

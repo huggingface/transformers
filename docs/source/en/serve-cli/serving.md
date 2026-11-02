@@ -1753,7 +1753,7 @@ Answers use the same question names. For example:
 
 `state`, optional `instructions`, and descriptions can contain text or JSON objects and arrays. Each request accepts up to 64 questions, with at least one choice or score level per question and at most one per answer label (26 with the default `A`–`Z` labels).
 
-Questions are validated like [`DecisionPipeline`]'s, before the model is loaded. An invalid request returns a `422` whose message lists every invalid question, each with an example of a valid one, and suggests close matches for misspelled types and fields:
+Questions are validated like [`DecisionPipeline`]'s, with the model's decision config. An invalid request returns a `422` whose message lists every invalid question, each with an example of a valid one, and suggests close matches for misspelled types and fields:
 
 ```text
 Question 'team': expected a `type` among noul, choice, score, got type 'Choice'. Did you mean 'choice'?
