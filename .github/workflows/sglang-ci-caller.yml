@@ -61,7 +61,8 @@ jobs:
           # and pins Transformers/tokenizers to releases instead of this checkout.
           uv pip install -e ./transformers pytest triton \
             aiohttp dill fastapi ipython msgspec orjson psutil pybase64 pyzmq requests sentencepiece
-          uv pip install --no-deps -e ./sglang/python
+          cp sglang/python/pyproject_cpu.toml sglang/python/pyproject.toml
+          SGLANG_BUILD_RUST_EXTS=none uv pip install --no-deps --no-build-isolation -e ./sglang/python
 
       - name: Pip freeze
         run: pip freeze
@@ -158,6 +159,7 @@ jobs:
           echo "=== Disk ===" && df -h
 
       - name: Run canonical SGLang integration tests
+        shell: bash
         env:
           PYTHONPATH: ${{ github.workspace }}/sglang/python
           REPORT_DIR: ${{ github.workspace }}/reports
