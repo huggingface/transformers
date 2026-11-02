@@ -107,7 +107,7 @@ class ExportArtifacts(Mapping, PushToHubMixin):
         """Run this export on `device` (the backend's default when `None`), as an [`ExportedModel`]: a single graph
         ([`~HfExporter.export`]), or a multimodal split ([`~HfExporter.export_multimodal`]) as an
         [`ExportedMultimodalModel`]. `runner_kwargs` go to the backend's runners: `providers` and `session_options`
-        for ONNX Runtime."""
+        for ONNX Runtime, `config` (compile properties) for OpenVINO."""
         from .auto import get_runner_class
         from .runtimes.multimodal import MULTIMODAL_COMPONENTS, ExportedMultimodalModel
 
