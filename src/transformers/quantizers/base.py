@@ -407,9 +407,9 @@ class HfQuantizer(ABC):
         if not suffixes:
             return []
         keys = set(model.state_dict())
-        # With their module, e.g. `experts.down_proj`: not `shared_experts.down_proj.weight`
+        # With their parents, e.g. `mlp.experts.down_proj`: not part of `mlp.shared_experts.down_proj.weight`
         names = {
-            ".".join(name.split(".")[-2:])
+            ".".join(name.split(".")[-3:])
             for name, param in model.named_parameters()
             if param.ndim > 1
             and name.rpartition(".")[2] not in self.serialized_names
