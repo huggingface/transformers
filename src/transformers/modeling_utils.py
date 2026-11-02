@@ -1441,8 +1441,8 @@ class PreTrainedModel(
 
             init_contexts.extend(
                 [
-                    prevent_arange_dtype_change(),  # needed to avoid changing dtype of RoPE buffers with zero.Init()
                     init.no_init_weights(),
+                    prevent_arange_dtype_change(),  # needed to avoid changing dtype of RoPE buffers with zero.Init()
                     deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
                     set_zero3_state(),
                 ]
@@ -3747,8 +3747,8 @@ class PreTrainedModel(
                 logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
                 init_contexts.extend(
                     [
-                        prevent_arange_dtype_change(),  # needed to avoid changing dtype of RoPE buffers with zero.Init()
                         init.no_init_weights(),
+                        prevent_arange_dtype_change(),  # needed to avoid changing dtype of RoPE buffers with zero.Init()
                         deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
                         set_zero3_state(),
                     ]
