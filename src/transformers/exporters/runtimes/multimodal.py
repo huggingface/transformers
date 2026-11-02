@@ -18,8 +18,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from ...utils import is_torch_available
-from ..decompose import _MODALITY_SPECS, ModalitySpec, flatten_anyres_patches, pack_anyres_features
-from ..precompute import _find_config_attr, precompute_export_inputs
+from ..decompose import (
+    _MODALITY_SPECS,
+    DEEPSTACK_INPUTS,
+    ModalitySpec,
+    dense_deepstack,
+    flatten_anyres_patches,
+    pack_anyres_features,
+)
+from ..precompute import _find_config_attr, get_rope_index_from_config, precompute_export_inputs
 from ..utils import cast_leaf_tensors
 from .base import ExportedModel, ModelRunner
 
@@ -60,14 +67,22 @@ class ExportedMultimodalModel(ExportedModel):
             features[spec.component], layers = self._features(spec, runner, kwargs)
             mask = (input_ids == getattr(self.config, spec.token_field)).unsqueeze(-1).to(inputs_embeds.device)
             if features[spec.component] is None:
-                # All of Granite4-Vision's features are added inside the decoder, over zeroed placeholder rows.
+                # All of Granite4-Vision's features are added inside the decoder, over zeroed placeholder rows; the
+                # model returns them too, one tensor per image.
                 inputs_embeds = inputs_embeds.masked_fill(mask, 0.0)
+                features["deepstack_features"] = list(layers.items())
+                layers = {layer: torch.cat(images) for layer, images in layers.items()}
             else:
                 inputs_embeds = inputs_embeds.masked_scatter(mask, features[spec.component].to(inputs_embeds))
             if layers is not None:
                 deepstack.append((mask[..., 0], layers))
+        inputs = dict(kwargs)
         # M-RoPE positions come from the token ids and grids, which the language model no longer takes.
-        inputs = precompute_export_inputs(self.config, kwargs)
+        if (
+            inputs.get("position_ids") is None
+            and (rope_index := get_rope_index_from_config(self.config, kwargs)) is not None
+        ):
+            inputs["position_ids"] = rope_index[0]
         inputs["inputs_embeds"] = inputs_embeds
         inputs.update(self._deepstack_inputs(deepstack, inputs_embeds))
         traced = self.runner.metadata.kwargs
@@ -77,39 +92,22 @@ class ExportedMultimodalModel(ExportedModel):
             outputs, "__dataclass_fields__", {}
         ):
             outputs["image_hidden_states"] = features["vision_embeddings_model"]
-        # And Granite4-Vision its per-layer ones, as `(decoder layer, one tensor per image)`.
-        if (
-            deepstack
-            and isinstance(deepstack[0][1], dict)
-            and "deepstack_features" in getattr(outputs, "__dataclass_fields__", {})
-        ):
-            outputs["deepstack_features"] = list(deepstack[0][1].items())
+        # And Granite4-Vision its per-layer ones.
+        if "deepstack_features" in features and "deepstack_features" in getattr(outputs, "__dataclass_fields__", {}):
+            outputs["deepstack_features"] = features["deepstack_features"]
         return outputs
 
     def _deepstack_inputs(self, deepstack: list, inputs_embeds: torch.Tensor) -> dict[str, Any]:
-        """What a deepstack decoder adds inside its layers, from each modality's `(placeholder mask, per-layer
-        features)`, in the dense form the language model was traced with (`dense_deepstack`): an all-True mask, and
-        each layer's features with zeros at the text rows. A step without images (a decode step) takes zeros."""
+        """What a deepstack decoder adds inside its layers, from each modality's `(rows, features by layer)`, in the
+        dense form its graph was traced with (`dense_deepstack`): zeros on a step without images."""
         traced = self.runner.metadata.kwargs
-        rows, hidden_size = inputs_embeds.shape[0] * inputs_embeds.shape[1], inputs_embeds.shape[-1]
-        mask = torch.ones(inputs_embeds.shape[:2], dtype=torch.bool, device=inputs_embeds.device)
-        if "deepstack_visual_embeds" in traced:
-            # Qwen3-VL: one tensor per decoder layer from the first.
-            dense = [inputs_embeds.new_zeros(rows, hidden_size) for _ in traced["deepstack_visual_embeds"]["items"]]
-            for rows_mask, layers in deepstack:
-                for index, features in enumerate(layers):
-                    dense[index][rows_mask.reshape(-1)] = features.to(inputs_embeds)
-            return {"visual_pos_masks": mask, "deepstack_visual_embeds": dense}
-        if "deepstack_features" in traced:
-            # Granite4-Vision: `{decoder layer: features}`, one tensor per image.
-            dense = {
-                int(layer): inputs_embeds.new_zeros(rows, hidden_size)
-                for layer in traced["deepstack_features"]["leaves"]
-            }
-            for rows_mask, layers in deepstack:
-                for layer, images in layers.items():
-                    dense[layer][rows_mask.reshape(-1)] = torch.cat(images).to(inputs_embeds)
-            return {"vision_mask": mask[..., None], "deepstack_features": dense}
+        for mask_name, spec in DEEPSTACK_INPUTS.items():
+            if spec.features in traced:
+                recorded = traced[spec.features]
+                layers = (
+                    [int(layer) for layer in recorded["leaves"]] if spec.by_layer else range(len(recorded["items"]))
+                )
+                return dense_deepstack(mask_name, inputs_embeds, layers, deepstack)
         return {}
 
     def _features(self, spec: ModalitySpec, runner: ModelRunner, kwargs: dict) -> tuple[torch.Tensor | None, Any]:
