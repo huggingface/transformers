@@ -920,7 +920,7 @@ class EmbeddingGemma2Processor(Gemma4Processor):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         videos: VideoInput = None,
         audio: AudioInput = None,
-        **kwargs: Unpack[EmbeddingGemma2ProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         OmniModalProcessorMixin.validate_inputs(self, images=images, text=text, **kwargs)
 

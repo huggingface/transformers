@@ -779,7 +779,6 @@ src/transformers/models/sew_d/configuration_sew_d.py linguist-generated=false
 src/transformers/models/sew_d/modeling_sew_d.py linguist-generated=false
 src/transformers/models/shieldgemma2/configuration_shieldgemma2.py linguist-generated=false
 src/transformers/models/shieldgemma2/modeling_shieldgemma2.py linguist-generated=false
-src/transformers/models/shieldgemma2/processing_shieldgemma2.py linguist-generated=false
 src/transformers/models/siglip/configuration_siglip.py linguist-generated=false
 src/transformers/models/siglip/image_processing_pil_siglip.py linguist-generated=false
 src/transformers/models/siglip/image_processing_siglip.py linguist-generated=false

@@ -2803,7 +2803,7 @@ class DeprecatedQwen3OmniMoeVideosKwargs(VideosKwargs, total=False):
 
 class Qwen3OmniMoeProcessorKwargs(Qwen2_5OmniProcessorKwargs, total=False):
     """
-    use_audio_in_video (`bool`, *optional*, defaults to `False`):
+    load_audio_from_video (`bool`, *optional*, defaults to `False`):
         Whether to incorporate audio information when processing videos. When enabled, audio tokens are
         interleaved with video tokens based on temporal alignment, creating a unified multimodal representation.
     seconds_per_chunk (`float`, *optional*, defaults to `2.0`):
@@ -2811,7 +2811,7 @@ class Qwen3OmniMoeProcessorKwargs(Qwen2_5OmniProcessorKwargs, total=False):
         videos are divided into temporal segments for processing.
     position_id_per_seconds (`int` or `float`, *optional*, defaults to `13.0`):
         The number of position IDs allocated per second of video. This parameter controls the temporal resolution
-        of position embeddings and is used to align video tokens with audio tokens when `use_audio_in_video=True`.
+        of position embeddings and is used to align video tokens with audio tokens when `load_audio_from_video=True`.
     n_window (`int`, *optional*, defaults to `50`):
         The audio encoder window size. This should match `n_window` in the model configuration.
     """
