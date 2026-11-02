@@ -52,7 +52,7 @@ Each MoE model defines two plans in its config: `base_model_tp_plan` for the den
 | :--- | :--- | :--- |
 | `"all_to_all"`, see [token dispatch](#token-dispatch) | Works for any layout, including `ep_size > tp_size`. Only the routed tokens move. | Two all-to-all collectives and one host sync per layer, so it does not capture in a CUDA graph. |
 | `"all_reduce"` | No tokens move and no host sync, so decode captures in a CUDA graph. | Requires `ep_size=tp_size`. Every rank runs its experts over the whole batch, so its cost grows with the batch. |
-| `"deepgemm_megamoe"` | DeepGEMM Mega MoE fuses the dispatch, the experts and the combine in one kernel. Every layer of an EP group shares its symmetric-memory buffers. Loading with `experts_implementation="deepgemm_megamoe"` selects it. | Requires `ep_size=tp_size`, and FP8 activations with FP4 experts on SM100+. Inference only. |
+| `"deepgemm_megamoe"` | DeepGEMM Mega MoE fuses the dispatch, the experts and the combine in one kernel. Every layer of an EP group shares its symmetric-memory buffers. | Requires `ep_size=tp_size`, and FP8 activations with FP4 experts on SM100+. Inference only. |
 | `"auto"`, the default | Runs `"all_reduce"` at inference when the ranks of an expert group share one batch, and `"all_to_all"` otherwise. | |
 
 `ep_implementation` only chooses within the parallel sizes set in [`DistributedConfig`]. When the ranks of an expert group hold different batches, for example `tp_size=1` with `fsdp_size=ep_size`, `"all_to_all"` is the only implementation that applies.
