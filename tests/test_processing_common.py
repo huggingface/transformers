@@ -1668,6 +1668,28 @@ class ProcessorTesterMixin:
             for input_ids, mask, expected in zip(inputs["input_ids"], masks, expected_ids):
                 self.assertEqual(input_ids[mask].tolist(), expected)
 
+    def test_apply_chat_template_merges_processor_kwargs_and_kwargs(self):
+        # Regression test: explicit `processor_kwargs` must not be dropped when
+        # extra processing kwargs are also passed through `**kwargs`.
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        messages = [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}]
+
+        with patch.object(type(processor), "__call__", return_value={"input_ids": [[0]]}) as mock_call:
+            processor.apply_chat_template(
+                messages,
+                tokenize=True,
+                return_dict=True,
+                processor_kwargs={"padding": True},
+                max_length=16,
+            )
+
+        _, call_kwargs = mock_call.call_args
+        self.assertTrue(call_kwargs.get("padding"))
+        self.assertEqual(call_kwargs.get("max_length"), 16)
+
     def test_apply_chat_template_tool_calls_no_content(self):
         processor = self.get_processor()
 
