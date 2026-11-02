@@ -14,6 +14,7 @@
 "HQQ (Half-Quadratic Quantization) integration file"
 
 from ..core_model_loading import ConversionOps
+from ..quantizers.quantizer_hqq import HQQ_SERIALIZED_NAMES
 from ..utils import is_hqq_available, is_torch_available, logging
 
 
@@ -131,27 +132,6 @@ def prepare_for_hqq_linear(model, quantization_config=None, modules_to_not_conve
 
 
 # What `HQQLinear.state_dict` saves for a weight, the encoded meta data included (bias aside)
-HQQ_SERIALIZED_NAMES = [
-    "W_q",
-    "nbits",
-    "group_size",
-    "shape",
-    "scale",
-    "zero",
-    "axis",
-    "packing",
-    "unpack_view_dtype",
-    "view_as_float",
-    "quant_scale",
-    "quant_zero",
-    "compute_dtype",
-    "offload_meta",
-    "encoded_state_dict",
-    "stores_quant_config",
-    "channel_wise",
-    "optimize",
-    "round_zero",
-]
 
 
 def _hqq_linears(input_dict, prefix=""):

@@ -17,7 +17,6 @@ import json
 import os
 from typing import TYPE_CHECKING
 
-from ..integrations.sinq import SINQ_META_TENSORS
 from ..utils import is_torch_available, logging
 from ..utils.quantization_config import SinqConfig
 from .base import HfQuantizer
@@ -31,6 +30,9 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
 logger = logging.get_logger(__name__)
+
+
+SINQ_META_TENSORS = ["scale", "zero", "scale2", "awq_scale"] + [f"{n}.{k}" for n in ("scale", "zero") for k in "xsm"]
 
 
 class SinqHfQuantizer(HfQuantizer):

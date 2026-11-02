@@ -85,11 +85,11 @@ You can define module replacement logic or any other utility method by creating 
 | `docs/source/en/quantization/your_method.md` | Document usage for users                                                                         |
 | `tests/quantization/your_method/`            | Add integration tests                                                                            |
 
-## Understanding `"quantize"` vs `get_weight_conversions`
+## Understanding the quantize operation vs `get_weight_conversions`
 
 These two methods handle different scenarios for loading weights. Understanding when to use each is essential.
 
-### `"quantize"` — Quantize on the fly
+### The quantize operation — Quantize on the fly
 
 Use this when loading a **non-quantized checkpoint** (e.g., float16/bfloat16 weights) and quantizing during load.
 

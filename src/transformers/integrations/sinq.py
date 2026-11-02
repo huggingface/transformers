@@ -119,7 +119,6 @@ class SinqQuantize(ConversionOps):
 
 # The tensors of a `SINQLinear` `meta` (`scale` / `zero` are dicts `x`, `s`, `m` with the "quantAux" methods), saved
 # as `<module>.meta.<path>`; the other entries of `meta` (shape, nbits, packing...) go in the checkpoint metadata.
-SINQ_META_TENSORS = ["scale", "zero", "scale2", "awq_scale"] + [f"{n}.{k}" for n in ("scale", "zero") for k in "xsm"]
 
 
 def _set_nested(meta: dict, path: str, value):

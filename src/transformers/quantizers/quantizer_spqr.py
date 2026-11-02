@@ -20,7 +20,6 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
     from ..utils.quantization_config import SpQRConfig
 
-from ..integrations import replace_with_spqr_linear
 from ..utils import is_accelerate_available, is_spqr_available, is_torch_available, logging
 
 
@@ -68,6 +67,8 @@ class SpQRHfQuantizer(HfQuantizer):
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
+        from ..integrations import replace_with_spqr_linear
+
         replace_with_spqr_linear(
             model,
             quantization_config=self.quantization_config,
