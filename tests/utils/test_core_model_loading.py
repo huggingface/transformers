@@ -1817,6 +1817,37 @@ class TestConversionMapping(unittest.TestCase):
         self.assertEqual(len(transforms), 1)
         self.assertIsNone(transforms[0].scope_prefix)
 
+    def test_alm_conversion_mapping_single_model_saving(self):
+        """ALM models (granite_speech, qwen2_audio, vibevoice_asr) must save with single .model
+        and load both legacy and regression-window (.model.model) checkpoints cleanly."""
+        from transformers.models.granite_speech_plus.configuration_granite_speech_plus import GraniteSpeechPlusConfig
+        from transformers.models.granite_speech_plus.modeling_granite_speech_plus import (
+            GraniteSpeechPlusForConditionalGeneration,
+        )
+
+        config = GraniteSpeechPlusConfig()
+        with torch.device("meta"):
+            model = GraniteSpeechPlusForConditionalGeneration(config)
+
+        # Test saving produces single .model
+        state_dict = model.state_dict()
+        reverted = revert_weight_conversion(model, state_dict)
+        self.assertIn("language_model.model.embed_tokens.weight", reverted)
+        self.assertNotIn("language_model.model.model.embed_tokens.weight", reverted)
+
+        # Test loading legacy single .model
+        load_transforms = get_model_conversion_mapping(model, add_legacy=True)
+        k_loaded = "language_model.model.embed_tokens.weight"
+        for t in load_transforms:
+            k_loaded, _ = rename_source_key(k_loaded, [t], {})
+        self.assertEqual(k_loaded, "model.language_model.embed_tokens.weight")
+
+        # Test loading regression-window double .model.model
+        k_loaded_double = "language_model.model.model.embed_tokens.weight"
+        for t in load_transforms:
+            k_loaded_double, _ = rename_source_key(k_loaded_double, [t], {})
+        self.assertEqual(k_loaded_double, "model.language_model.embed_tokens.weight")
+
 
 if __name__ == "__main__":
     unittest.main()

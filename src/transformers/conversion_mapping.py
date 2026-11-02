@@ -729,7 +729,7 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "qwen2_audio": [
-            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
             WeightRenaming(source_patterns=r"^audio_tower", target_patterns="model.audio_tower"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
@@ -738,7 +738,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
         ],
         "granite_speech": [
-            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
             WeightRenaming(source_patterns=r"^encoder", target_patterns="model.encoder"),
             WeightRenaming(source_patterns=r"^projector", target_patterns="model.projector"),
@@ -789,7 +789,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^decoder\.layers", target_patterns="decoder.decoder.layers"),
         ],
         "vibevoice_asr": [
-            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
             WeightRenaming(
                 source_patterns=r"^acoustic_tokenizer_encoder", target_patterns="model.acoustic_tokenizer_encoder"
@@ -1627,6 +1627,11 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(
                 source_patterns="LayerNorm.beta",
                 target_patterns="LayerNorm.bias",
+            ),
+            # Regression compatibility for ALM checkpoints saved with duplicate .model.model in v5.10.0-v5.23.0 (#45534)
+            WeightRenaming(
+                source_patterns=[r"^model\.language_model\.model", r"^language_model\.model\.model"],
+                target_patterns="model.language_model",
             ),
         ],
         "sapiens2": [
