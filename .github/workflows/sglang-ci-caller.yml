@@ -146,8 +146,10 @@ jobs:
           uv pip install pytest pytest-asyncio accelerate expecttest parameterized sentence-transformers
           uv pip install -e 'transformers/[sentencepiece,vision,testing]'
           # Install SGLang from source at the pinned revision.
+          # Use pyproject_cpu.toml to avoid CUDA dependencies; keep --no-build-isolation
+          # to skip Rust/C extensions (SGLANG_BUILD_RUST_EXTS=none), but allow Python deps.
           cp sglang/python/pyproject_cpu.toml sglang/python/pyproject.toml
-          SGLANG_BUILD_RUST_EXTS=none uv pip install --no-deps --no-build-isolation -e ./sglang/python
+          SGLANG_BUILD_RUST_EXTS=none uv pip install --no-build-isolation -e ./sglang/python
 
       - name: Pip freeze
         run: pip freeze
