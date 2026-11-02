@@ -20,38 +20,49 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 [MiniMax-VL-01](https://huggingface.co/MiniMaxAI/MiniMax-VL-01) is the vision-language model introduced in
-[MiniMax-01: Scaling Foundation Models with Lightning Attention](https://huggingface.co/papers/2501.08313). It combines
-a 24-layer CLIP vision encoder, a two-layer GELU projector, and the 456B-parameter MiniMax-Text-01 language model.
-The language model alternates seven Lightning Attention layers with one full-attention layer and uses a top-2
-Mixture-of-Experts feed-forward network in every layer.
+[MiniMax-01: Scaling Foundation Models with Lightning Attention](https://huggingface.co/papers/2501.08313) by MiniMax.
+It accepts images and text as input and generates text. The model combines three components:
 
-Images are processed at dynamic resolutions. Each image is represented by a 336×336 thumbnail and a grid of
-336×336 crops chosen for its aspect ratio. The projected crop features are reassembled spatially, unpadded, and
-separated by learned newline embeddings before replacing the expanded `<image>` tokens in the text prompt.
+- A 24-layer CLIP-style vision encoder, trained from scratch, processes 336×336 image crops with a patch size of 14.
+- A two-layer projector with a GELU activation maps vision features to the language model's hidden size.
+- The 456B-parameter MiniMax-Text-01 backbone has 80 decoder layers. Each group of eight layers contains seven
+  Lightning Attention layers followed by one full-attention layer. Each layer has 32 experts and selects two per token.
 
-The original project publishes its code under the MIT license and the model materials under the separate
-[MiniMax Model License](https://github.com/MiniMax-AI/MiniMax-01/blob/main/LICENSE-MODEL). Review the model license
-before downloading or using the weights.
+Images use an any-resolution layout: a 336×336 thumbnail followed by a grid of 336×336 crops selected for the image's
+aspect ratio. The projected crop features are reassembled, unpadded, and separated by learned newline embeddings.
+These features replace the expanded `<image>` tokens in the text prompt.
 
-> [!WARNING]
-> MiniMax-VL-01 is exceptionally large. The unquantized checkpoint contains about 456B parameters and requires
-> roughly 913 GB just to store the weights in 16-bit precision. Check available storage and accelerator memory before
-> downloading it.
+This model was contributed by [sushmanth](https://huggingface.co/sushmanth).
+The original code can be found in the [MiniMax-VL-01 checkpoint repository](https://huggingface.co/MiniMaxAI/MiniMax-VL-01/tree/main).
 
 ## Usage
 
-Convert the original checkpoint configuration to the native format before loading:
+### Prepare the configuration
+
+The released checkpoint uses a custom configuration schema. From the root of the Transformers repository, download
+its configuration and convert it to the native [`MiniMaxVL01Config`] format:
 
 ```bash
+hf download MiniMaxAI/MiniMax-VL-01 config.json --local-dir ./MiniMax-VL-01
+
 python src/transformers/models/minimax_vl_01/convert_minimax_vl_01_weights_to_hf.py \
-    /path/to/MiniMax-VL-01 /path/to/MiniMax-VL-01-hf
+    ./MiniMax-VL-01 ./MiniMax-VL-01-native-config
 ```
 
-The converter writes only `config.json`. Load the weights and processor assets from their original checkpoint,
-passing the converted configuration explicitly as shown below.
+If you already have the original `config.json` locally, use its directory as the converter's first argument.
+The converter writes only a new `config.json`; the output directory is not a complete checkpoint. The example below
+loads the converted configuration locally and the weights, tokenizer, and image processor from the original checkpoint.
+Pass the converted configuration to both the model and the processor when loading.
+Transformers applies the weight-name and expert-layout conversions during model loading.
 
-Use the processor's chat template so that image placeholders and role markers match the checkpoint. The processor
-expands each image placeholder to the exact number of visual features produced for that image.
+### Image-text generation
+
+Use [`MiniMaxVL01Processor`] to format the conversation and prepare images. Its chat template supplies the checkpoint's
+role markers, and the processor expands each image placeholder to match that image's visual features.
+
+> [!NOTE]
+> The full checkpoint occupies approximately 913 GB in 16-bit precision. The example uses `device_map="auto"` to
+> distribute the model across available devices.
 
 ```python
 import torch
@@ -61,7 +72,7 @@ from transformers.image_utils import load_image
 
 
 checkpoint = "MiniMaxAI/MiniMax-VL-01"
-config = MiniMaxVL01Config.from_pretrained("/path/to/MiniMax-VL-01-hf")
+config = MiniMaxVL01Config.from_pretrained("./MiniMax-VL-01-native-config")
 processor = MiniMaxVL01Processor.from_pretrained(checkpoint, config=config, trust_remote_code=False)
 model = AutoModelForImageTextToText.from_pretrained(
     checkpoint,
@@ -71,9 +82,7 @@ model = AutoModelForImageTextToText.from_pretrained(
     device_map="auto",
 )
 
-image = load_image(
-    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"
-)
+image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg")
 messages = [
     {
         "role": "user",
@@ -86,9 +95,27 @@ messages = [
 prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
 inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device)
 
-generated_ids = model.generate(**inputs, max_new_tokens=64, do_sample=False)
-print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
+with torch.inference_mode():
+    generated_ids = model.generate(
+        **inputs,
+        max_new_tokens=64,
+        do_sample=False,
+        eos_token_id=processor.tokenizer.eos_token_id,
+        pad_token_id=processor.tokenizer.eos_token_id,
+    )
+
+response_ids = generated_ids[:, inputs["input_ids"].shape[1]:]
+print(processor.batch_decode(response_ids, skip_special_tokens=True)[0])
 ```
+
+## Notes
+
+- The released checkpoint uses `process_image_mode="anyres"` and `vision_feature_select_strategy="default"`.
+  The default feature selection removes CLIP's CLS token before projection.
+- Pass the original images to the processor. It handles resizing, cropping, normalization, and image-token expansion.
+  Avoid truncating expanded image tokens, which must match the number of image features.
+- For batched generation, set `processor.tokenizer.padding_side = "left"` and pass `padding=True` to the processor.
+  If the tokenizer has no padding token, set `processor.tokenizer.pad_token = processor.tokenizer.eos_token`.
 
 ## MiniMaxVL01Config
 
