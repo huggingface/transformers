@@ -360,7 +360,7 @@ class NomicBertPooler(nn.Module):
 class NomicBertModel(NomicBertPreTrainedModel):
     _no_split_modules = ["NomicBertEmbeddings", "NomicBertLayer"]
 
-    def __init__(self, config, add_pooling_layer=False):
+    def __init__(self, config: NomicBertConfig, add_pooling_layer=False):
         r"""
         add_pooling_layer (`bool`, *optional*, defaults to `False`):
             Whether to add a pooling layer.
@@ -478,7 +478,7 @@ class NomicBertForMaskedLM(NomicBertPreTrainedModel):
         "cls.predictions.decoder.bias": "cls.predictions.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: NomicBertConfig):
         super().__init__(config)
 
         self.nomic_bert = NomicBertModel(config)
@@ -539,7 +539,7 @@ class NomicBertForMaskedLM(NomicBertPreTrainedModel):
     """
 )
 class NomicBertForSequenceClassification(NomicBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: NomicBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -613,7 +613,7 @@ class NomicBertForSequenceClassification(NomicBertPreTrainedModel):
 
 @auto_docstring
 class NomicBertForTokenClassification(NomicBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: NomicBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

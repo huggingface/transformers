@@ -280,7 +280,7 @@ class RegNetPreTrainedModel(PreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.resnet.modeling_resnet.ResNetModel with RESNET->REGNET,ResNet->RegNet
 class RegNetModel(RegNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RegNetConfig):
         super().__init__(config)
         self.config = config
         self.embedder = RegNetEmbeddings(config)
@@ -330,7 +330,7 @@ class RegNetModel(RegNetPreTrainedModel):
 )
 # Copied from transformers.models.resnet.modeling_resnet.ResNetForImageClassification with RESNET->REGNET,ResNet->RegNet,resnet->regnet
 class RegNetForImageClassification(RegNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RegNetConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.regnet = RegNetModel(config)

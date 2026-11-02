@@ -186,7 +186,7 @@ class AudioFlamingo3Model(VoxtralModel):
     _pp_plan = None
     _keep_in_fp32_modules_strict = None
 
-    def __init__(self, config):
+    def __init__(self, config: AudioFlamingo3Config):
         super().__init__(config)
 
     @can_return_tuple
@@ -279,7 +279,7 @@ class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
     _keep_in_fp32_modules_strict = AttributeError()
     _tied_weights_keys = None
 
-    def __init__(self, config):
+    def __init__(self, config: AudioFlamingo3Config):
         super().__init__(config)
         self.model = AudioFlamingo3Model(config)
         self.post_init()

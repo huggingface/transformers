@@ -144,6 +144,20 @@ class ClapFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
             pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
             self.assertTrue(pt_processed.input_features.dtype == torch.float32)
 
+    def test_padding_boolean(self):
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        speech_inputs = floats_list((1, 800))[0]
+
+        np.random.seed(0)
+        out_default = feature_extractor(speech_inputs, return_tensors="np").input_features
+        np.random.seed(0)
+        out_bool = feature_extractor(speech_inputs, padding=True, return_tensors="np").input_features
+        np.random.seed(0)
+        out_repeatpad = feature_extractor(speech_inputs, padding="repeatpad", return_tensors="np").input_features
+
+        self.assertTrue(np.allclose(out_bool, out_default, atol=1e-3))
+        self.assertTrue(np.allclose(out_bool, out_repeatpad, atol=1e-3))
+
     # Copied from tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest._load_datasamples
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")

@@ -1,7 +1,7 @@
 # make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
 export PYTHONPATH = src
 
-.PHONY: style typing check-code-quality check-repository-consistency check-repo fix-repo test benchmark codex claude clean-ai
+.PHONY: style typing check-code-quality check-repository-consistency check-repo fix-repo test codex claude clean-ai
 
 
 # Checker lists. The two CI jobs (CircleCI runs `make check-code-quality` and
@@ -31,6 +31,7 @@ REPO_CONSISTENCY_CHECKERS := \
 	config_docstrings, \
 	config_attributes, \
 	doctest_list, \
+	gitattributes, \
 	update_metadata, \
 	add_dates, \
 	deps_table
@@ -65,10 +66,6 @@ fix-repo:
 # Run tests for the library, requires pytest-random-order
 test:
 	python -m pytest -p random_order -n auto --dist=loadfile -s -v --random-order-bucket=module ./tests/
-
-# Run benchmark
-benchmark:
-	python3 benchmark/benchmark.py --config-dir benchmark/config --config-name generation --commit=diff backend.model=google/gemma-2b backend.cache_implementation=null,static backend.torch_compile=false,true --multirun
 
 codex:
 	mkdir -p .agents

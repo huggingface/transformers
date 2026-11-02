@@ -26,7 +26,7 @@ from .parallel_utils import (
     _use_local_dtensor_params,
     replace_layer_number_by_wildcard,
 )
-from .utils import _get_torch_distributed_rank
+from .utils import _get_torch_distributed_rank, _warning_once_on_rank_zero
 
 
 if TYPE_CHECKING:
@@ -553,7 +553,7 @@ class MoeExpertsParallel(TensorParallelLayer):
     def should_use_local_tensors(self, module):
         return True
 
-    def transform_inputs_pre_forward(self, module, args, kwargs, mesh, *, is_expert_parallel=False):
+    def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         hidden_states, *routing_args = args
         tp_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
         if isinstance(hidden_states, DTensor):
@@ -564,36 +564,12 @@ class MoeExpertsParallel(TensorParallelLayer):
             top_k_index, top_k_weights, *extra_args = routing_args
             if isinstance(top_k_weights, DTensor):
                 top_k_weights = top_k_weights.to_local()
-            if not is_expert_parallel:
-                top_k_weights = _all_reduce_backward(top_k_weights, tp_group)
+            top_k_weights = _all_reduce_backward(top_k_weights, tp_group)
             routing_args = [top_k_index, top_k_weights, *extra_args]
 
         return (hidden_states, *routing_args), kwargs
 
-    def install_forward(self, module, mesh, *, is_expert_parallel=False):
-        """Install the transforms but pass `is_expert_parallel` in the forward call."""
-        original_forward = module.forward
-        output_source = (
-            Partial()
-            if any(
-                isinstance(param, DTensor) and any(not placement.is_replicate() for placement in param.placements)
-                for param in module.parameters()
-            )
-            else Replicate()
-        )
-
-        def tp_forward(*args, **kwargs):
-            args, kwargs = self.transform_inputs_pre_forward(
-                module, args, kwargs, mesh, is_expert_parallel=is_expert_parallel
-            )
-            with self.context_around_forward(module, mesh):
-                output = original_forward(*args, **kwargs)
-            return self.transform_output_post_forward(module, output, mesh, source=output_source)
-
-        module.forward = tp_forward
-        return module
-
-    def transform_output_post_forward(self, module, output, mesh, source=None):
+    def transform_output_post_forward(self, module, output, mesh):
         if output is None:
             return None
 
@@ -619,6 +595,14 @@ class MoeIdentityParallel(TensorParallelLayer):
         return (input_tensor / mesh.size(), *args[1:]), kwargs
 
 
+class LocalParamsParallel(TensorParallelLayer):
+    """Runs the module's forward with its own sharded parameters as local tensors. For a bare `nn.Parameter` such as
+    attention sinks, which has no forward to hook: its own plan entry shards it, and this style goes on its owner."""
+
+    def should_use_local_tensors(self, module):
+        return True
+
+
 if is_torch_distributed_available():
     ALL_PARALLEL_STYLES.register("embedding_rowwise", EmbeddingParallel(shard_dim=0))
     ALL_PARALLEL_STYLES.register("embedding_colwise", EmbeddingParallel(shard_dim=1))
@@ -640,6 +624,7 @@ if is_torch_distributed_available():
     ALL_PARALLEL_STYLES.register("all_reduce", AllReduceParallel())
     ALL_PARALLEL_STYLES.register("moe_tp_experts", MoeExpertsParallel())
     ALL_PARALLEL_STYLES.register("moe_identity_expert", MoeIdentityParallel())
+    ALL_PARALLEL_STYLES.register("local_params", LocalParamsParallel())
     # Every rank keeps the full param, e.g. a per-tensor quantization scale
     ALL_PARALLEL_STYLES.register("replicate", TensorParallelLayer())
 
@@ -650,13 +635,10 @@ def resolve_parallel_plans(
     """
     Merge the `DistributedConfig` overrides into the model's plans and split them between TP and EP.
     """
-    if _get_torch_distributed_rank() == 0:
-        warnings.warn(
-            "`resolve_parallel_plans` is deprecated and will be removed in v5.23: the model resolves its plans itself "
-            "in `_resolve_parallel_plans`, which also returns the FSDP plan.",
-            FutureWarning,
-            stacklevel=2,
-        )
+    _warning_once_on_rank_zero(
+        "`resolve_parallel_plans` is deprecated and will be removed in v5.23: the model resolves its plans itself "
+        "in `_resolve_parallel_plans`, which also returns the FSDP plan."
+    )
     tp_plan, ep_plan, _ = model._resolve_parallel_plans(distributed_config)
     return tp_plan, ep_plan
 
@@ -712,7 +694,6 @@ def gather_state_dict_for_save(
 # Lazy import because expert_parallel.py imports from this file (circular import otherwise).
 _MOVED_TO_EXPERT_PARALLEL = (
     "MoEParamShard",
-    "EpRouterParallel",
     "EpDispatchExpertsParallel",
     "apply_expert_parallelism",
 )

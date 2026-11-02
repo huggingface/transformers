@@ -921,7 +921,7 @@ class DPTDepthEstimationHead(nn.Module):
     """
 )
 class DPTForDepthEstimation(DPTPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DPTConfig):
         super().__init__(config)
 
         self.backbone = None

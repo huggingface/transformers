@@ -1126,7 +1126,7 @@ class FalconForTokenClassification(FalconPreTrainedModel):
 
 @auto_docstring
 class FalconForQuestionAnswering(FalconPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: FalconConfig):
         super().__init__(config)
         self.transformer = FalconModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)

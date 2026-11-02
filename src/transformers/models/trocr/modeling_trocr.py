@@ -622,7 +622,7 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
     """
 )
 class TrOCRDecoderWrapper(TrOCRPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: TrOCRConfig):
         super().__init__(config)
         self.decoder = TrOCRDecoder(config)
         self.post_init()
@@ -639,7 +639,7 @@ class TrOCRDecoderWrapper(TrOCRPreTrainedModel):
 class TrOCRForCausalLM(TrOCRPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"output_projection.weight": "model.decoder.embed_tokens.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: TrOCRConfig):
         config.is_decoder = True
         config.is_encoder_decoder = False
         super().__init__(config)

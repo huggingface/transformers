@@ -63,13 +63,17 @@ class DistributedConfig:
             `ep_size > 1`, and its rules take precedence over `tp_plan` rules for the same modules. An
             `"ep_dispatch_experts"` rule lets `ep_implementation` pick how tokens reach the experts.
         ep_implementation (`str`, *optional*, defaults to `"auto"`):
-            How an `"ep_dispatch_experts"` rule brings the experts their tokens: the name of an `EPImplementation`
-            registered in `ALL_EP_IMPLEMENTATIONS`. `"all_to_all"` exchanges the routed (token, expert) pairs with
-            all-to-all collectives; `"all_reduce"` masks each rank's experts on a batch the EP group shares and sums the
-            outputs, and requires `ep_size == tp_size`; `"deepgemm_megamoe"` hands that batch to DeepGEMM Mega MoE, whose
-            kernel exchanges the tokens itself (loading with `experts_implementation="deepgemm_megamoe"` selects it).
-            `"auto"` runs `"all_reduce"` at inference when the EP group
-            shares one batch, and `"all_to_all"` in training and wherever the ranks hold different batches.
+            How an `"ep_dispatch_experts"` rule brings the experts their tokens. It names an `EPImplementation`
+            registered in `ALL_EP_IMPLEMENTATIONS`:
+
+            - `"all_to_all"` exchanges the routed tokens with all-to-all collectives.
+            - `"all_reduce"` runs each rank's experts on the batch the EP group shares, and sums the outputs. It
+              requires `ep_size == tp_size`.
+            - `"deepgemm_megamoe"` hands that batch to DeepGEMM Mega MoE, whose kernel exchanges the tokens itself.
+              Loading with `experts_implementation="deepgemm_megamoe"` selects it.
+            - `"deepep"` exchanges the routed tokens with DeepEP's kernels. It captures in a CUDA graph.
+            - `"auto"` runs `"all_reduce"` at inference when the EP group shares one batch. Otherwise it dispatches
+              tokens with `"deepep"` where DeepEP runs, and `"all_to_all"` elsewhere.
     """
 
     tp_size: int | None = None

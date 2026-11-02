@@ -85,8 +85,8 @@ class ExpertParallelLayer:
 class MoEParamShard(ExpertParallelLayer):
     """Param-only EP style for MoE expert weights (``grouped_gemm``).
 
-    Shards dim 0 and updates module.num_experts to the per-rank local count so the
-    experts forward and ep_router sentinel agree.
+    Shards dim 0 and updates module.num_experts to the per-rank local count, so the experts forward skips the
+    expert ids the EP implementations mark as off-rank.
     """
 
     def __init__(self, placement, *, shards_expert_dim: bool = False):
@@ -112,77 +112,6 @@ class MoEParamShard(ExpertParallelLayer):
             distribute_tensor(meta, mesh, [self.placement], src_data_rank=None),
             requires_grad=meta.requires_grad,
         )
-
-
-class EpRouterParallel(ExpertParallelLayer):
-    """Expert-parallel router: forward-only slicing of router outputs to local experts.
-
-    Expects the router to return `(router_logits, router_scores, router_indices, *extra)`.
-    `router_logits` and any trailing `extra` outputs are passed through unchanged.
-
-    The gate runs replicated on every rank and emits global expert IDs and scores.
-    Under EP each rank owns `num_experts // ep_size` experts, so this post-forward hook:
-
-    - zeroes scores for non-local experts
-    - remaps surviving global indices to local indices (`fmod` after masking non-local slots)
-    - sets dropped slots to sentinel `num_local_experts` (skipped by grouped_gemm experts forward)
-
-    Downstream `moe_tp_experts` allreduce-sums partial per-rank expert outputs.
-
-    Example: 4 tokens, top_k=4, 128 experts, EP=8 → num_local_experts=16.
-
-    Router output (identical on all ranks):
-        router_indices:
-            [ 52,  42, 119,  67],
-            [102,  89,  61,  40],
-            [ 82, 103,   4,  34],
-            [ 93,  23, 109,  11]
-
-    Owning rank (`index // 16`):
-            [ 3,  2,  7,  4],
-            [ 6,  5,  3,  2],
-            [ 5,  6,  0,  2],
-            [ 5,  1,  6,  0],
-
-    After slicing on rank 0 (owns experts 0-15):
-        router_indices:          router_scores (illustrative):
-            [16, 16, 16, 16],       [0.0, 0.0, 0.0, 0.0],
-            [16, 16, 16, 16],       [0.0, 0.0, 0.0, 0.0],
-            [16, 16,  4, 16],       [0.0, 0.0, 0.3, 0.0],
-            [16, 16, 16, 11],       [0.0, 0.0, 0.0, 0.1],
-
-    On rank 1 (owns experts 16-31), global expert 23 remaps to local index 7 via `23 % 16`.
-
-    Scores and indices stay paired element-wise in `(seq, top_k)` shape.
-    """
-
-    def transform_output_post_forward(self, module, output, mesh):
-        ep_rank, ep_size = mesh.get_local_rank(), mesh.size()
-        num_experts = getattr(module, "num_experts", None)
-        if num_experts is None:
-            num_experts = getattr(getattr(module, "config", None), "num_experts", None)
-        if num_experts is None:
-            raise AttributeError(
-                f"Router module {type(module).__name__} is missing `num_experts` and `config.num_experts`"
-            )
-        if num_experts % ep_size != 0:
-            raise ValueError(f"num_experts must be divisible by ep_size: {num_experts} % {ep_size} != 0")
-        num_local_experts = num_experts // ep_size
-
-        router_logits, router_scores, router_indices, *extra_outputs = output
-        # Each rank's score gradient covers only its local experts' slots; sum the per-rank partials
-        # before the mask (each slot has exactly one owning rank, so the sum is exact).
-        process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
-        router_scores = _all_reduce_backward(router_scores, process_group)
-        non_local_mask = (router_indices // num_local_experts) != ep_rank
-        router_scores = router_scores.masked_fill(non_local_mask, 0.0)
-        router_indices = router_indices.masked_fill(non_local_mask, -1)
-        if num_local_experts > 1:
-            router_indices = torch.fmod(router_indices, num_local_experts)
-        else:
-            router_indices = router_indices.masked_fill(router_indices > 0, 0).masked_fill(router_indices < 0, -1)
-        router_indices = router_indices.masked_fill(router_indices == -1, num_local_experts)
-        return router_logits, router_scores, router_indices, *extra_outputs
 
 
 def _slice_over_tp(tp_mesh, *tensors):
@@ -494,32 +423,33 @@ def _deepep_runs(ep_mesh) -> bool:
     return False
 
 
-class PassthroughEP(EPImplementation):
-    """Pass through a batch to an expert kernel that performs its own dispatch and combine."""
-
-    needs_shared_batch = True
-
-    def __call__(self, hidden_states, top_k_index, top_k_weights):
-        with _use_local_dtensor_params(self.experts):
-            output = self.experts_forward(hidden_states, top_k_index, top_k_weights, self.ep_mesh.get_group())
-        return output.to(hidden_states.dtype)
-
-
 class MegaMoEEP(EPImplementation):
     """
-    DeepGEMM Mega MoE, whose kernel fuses the token dispatch, the experts and the combine. The kernel treats each
-    rank's rows as that rank's own tokens, while every rank of the EP group holds the same batch here: each rank hands
-    it an equal slice of that batch, with global expert ids and unmasked weights, and the combined slices are gathered
-    back, so every token goes through the experts once. The kernel exchanges tokens through symmetric-memory buffers,
-    which this implementation keeps per EP group and shares between every layer, since the layers run one after another.
-    The kernel has no backward, so this runs at inference only.
+    DeepGEMM Mega MoE, whose kernel fuses the token dispatch, the experts and the combine. It treats each rank's rows as
+    that rank's own tokens. Here every rank of the EP group holds the same batch, so each rank hands the kernel an equal
+    slice of it, with global expert ids and unmasked weights, and the slices' outputs are gathered back. Every token goes
+    through the experts once. The kernel has no backward, so this runs at inference only.
+
+    Example: 4 tokens on 2 ranks.
+
+    GPU                    0                      1
+                           |                      |
+    batch           [t0, t1, t2, t3]       [t0, t1, t2, t3]     the same tokens on both ranks
+    kernel input        [t0, t1]               [t2, t3]          each rank's slice
+    kernel output    [y0, y1]               [y2, y3]            the kernel exchanges tokens between ranks
+    after all-gather         [y0, y1, y2, y3] on both ranks
     """
 
     # TODO: Mega MoE is built for ranks holding different batches (data-parallel attention + EP), where neither the
-    # slicing nor the gather is needed; until inference supports data parallelism, it runs on the shared batch.
+    # slicing nor the gather is needed. Until inference supports data parallelism, it runs on the shared batch.
     needs_shared_batch = True
-    # EP group name -> the kernel's symmetric buffers, by shape; `symm_buffers.clear()` frees them
+    # The kernel's symmetric-memory buffers, by EP group. They are slow to allocate, so every layer of a group shares
+    # them, as the layers run one after another. `MegaMoEEP.symm_buffers.clear()` frees them.
     symm_buffers: dict[str, dict] = {}
+
+    def __init__(self, experts, ep_mesh, tp_mesh=None):
+        super().__init__(experts, ep_mesh, tp_mesh)
+        self.group_symm_buffers = self.symm_buffers.setdefault(ep_mesh.get_group().group_name, {})
 
     def __call__(self, hidden_states, top_k_index, top_k_weights):
         ep_group, ep_size, ep_rank = self.ep_mesh.get_group(), self.ep_mesh.size(), self.ep_mesh.get_local_rank()
@@ -533,10 +463,9 @@ class MegaMoEEP(EPImplementation):
             top_k_weights = torch.nn.functional.pad(top_k_weights, (0, 0, 0, padding))
         rows = slice(ep_rank * rows_per_rank, (ep_rank + 1) * rows_per_rank)
 
-        symm_buffers = self.symm_buffers.setdefault(ep_group.group_name, {})
         with _use_local_dtensor_params(self.experts):
             local_output = self.experts_forward(
-                hidden_states[rows], top_k_index[rows], top_k_weights[rows], ep_group, symm_buffers
+                hidden_states[rows], top_k_index[rows], top_k_weights[rows], ep_group, self.group_symm_buffers
             )
         output = local_output.new_empty(rows_per_rank * ep_size, local_output.size(-1))
         all_gather_into_tensor(output, local_output.contiguous(), group=ep_group)
@@ -551,7 +480,6 @@ class EPImplementationInterface(GeneralInterface):
         "all_to_all": AllToAllEP,
         "all_reduce": AllReduceEP,
         "deepep": DeepEP,
-        "passthrough": PassthroughEP,
         "deepgemm_megamoe": MegaMoEEP,
     }
 
@@ -586,7 +514,6 @@ class EpDispatchExpertsParallel(ExpertParallelLayer):
 
 if is_torch_distributed_available():
     ALL_PARALLEL_STYLES.register("grouped_gemm", MoEParamShard(Shard(0), shards_expert_dim=True))
-    ALL_PARALLEL_STYLES.register("ep_router", EpRouterParallel())
     ALL_PARALLEL_STYLES.register("ep_dispatch_experts", EpDispatchExpertsParallel())
 
 

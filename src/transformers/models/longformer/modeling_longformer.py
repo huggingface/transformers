@@ -1289,7 +1289,7 @@ class LongformerModel(LongformerPreTrainedModel):
 
     """
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: LongformerConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -1525,7 +1525,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: LongformerConfig):
         super().__init__(config)
 
         self.longformer = LongformerModel(config, add_pooling_layer=False)
@@ -1637,7 +1637,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
     """
 )
 class LongformerForSequenceClassification(LongformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LongformerConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1756,7 +1756,7 @@ class LongformerClassificationHead(nn.Module):
 
 @auto_docstring
 class LongformerForQuestionAnswering(LongformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LongformerConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1885,7 +1885,7 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
 
 @auto_docstring
 class LongformerForTokenClassification(LongformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LongformerConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1964,7 +1964,7 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
 
 @auto_docstring
 class LongformerForMultipleChoice(LongformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LongformerConfig):
         super().__init__(config)
 
         self.longformer = LongformerModel(config)

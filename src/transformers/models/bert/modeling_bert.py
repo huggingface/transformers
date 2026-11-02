@@ -594,7 +594,7 @@ class BertForPreTrainingOutput(ModelOutput):
 class BertModel(BertPreTrainedModel):
     _no_split_modules = ["BertEmbeddings", "BertLayer"]
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: BertConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -730,7 +730,7 @@ class BertForPreTraining(BertPreTrainedModel):
         "cls.predictions.decoder.bias": "cls.predictions.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__(config)
 
         self.bert = BertModel(config)
@@ -827,7 +827,7 @@ class BertLMHeadModel(BertPreTrainedModel, GenerationMixin):
         "cls.predictions.decoder.bias": "cls.predictions.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -911,7 +911,7 @@ class BertForMaskedLM(BertPreTrainedModel):
         "cls.predictions.decoder.bias": "cls.predictions.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -981,7 +981,7 @@ class BertForMaskedLM(BertPreTrainedModel):
     """
 )
 class BertForNextSentencePrediction(BertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__(config)
 
         self.bert = BertModel(config)
@@ -1063,7 +1063,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
     """
 )
 class BertForSequenceClassification(BertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1138,7 +1138,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
 
 @auto_docstring
 class BertForMultipleChoice(BertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__(config)
 
         self.bert = BertModel(config)
@@ -1232,7 +1232,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
 
 @auto_docstring
 class BertForTokenClassification(BertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1288,7 +1288,7 @@ class BertForTokenClassification(BertPreTrainedModel):
 
 @auto_docstring
 class BertForQuestionAnswering(BertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
