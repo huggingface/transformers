@@ -19,7 +19,7 @@ import unittest
 from pathlib import Path
 
 import torch
-from huggingface_hub.errors import StrictDataclassClassValidationError
+from huggingface_hub.errors import StrictDataclassClassValidationError, StrictDataclassFieldValidationError
 
 from transformers import (
     AutoModel,
@@ -160,14 +160,14 @@ class Qwen3TTSTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_quantizer_configs_reject_invalid_codebook_counts(self):
         invalid_configs = (
-            (Qwen3TTSTokenizerAcousticQuantizerConfig, -1),
-            (Qwen3TTSTokenizerSemanticQuantizerConfig, -1),
-            (Qwen3TTSTokenizerSemanticQuantizerConfig, 0),
+            (Qwen3TTSTokenizerAcousticQuantizerConfig, -1, StrictDataclassClassValidationError),
+            (Qwen3TTSTokenizerSemanticQuantizerConfig, -1, StrictDataclassFieldValidationError),
+            (Qwen3TTSTokenizerSemanticQuantizerConfig, 0, StrictDataclassFieldValidationError),
         )
-        for config_class, num_quantizers in invalid_configs:
+        for config_class, num_quantizers, error in invalid_configs:
             with (
                 self.subTest(config_class=config_class.__name__, num_quantizers=num_quantizers),
-                self.assertRaises(StrictDataclassClassValidationError),
+                self.assertRaises(error),
             ):
                 config_class(num_quantizers=num_quantizers)
 

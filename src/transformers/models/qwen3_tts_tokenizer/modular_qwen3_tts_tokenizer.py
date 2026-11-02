@@ -25,6 +25,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.type_validators import positive_int_field
 from ..dac.modeling_dac import DacDecoderOutput
 from ..mimi.configuration_mimi import MimiConfig
 from ..mimi.modeling_mimi import (
@@ -68,16 +69,9 @@ class Qwen3TTSTokenizerSemanticQuantizerConfig(PreTrainedConfig):
 
     codebook_size: int = 2048
     codebook_dim: int = 256
-    num_quantizers: int = 1
+    num_quantizers: int = positive_int_field(default=1)
     vector_quantization_hidden_dimension: int = 256
     hidden_size: int = 512
-
-    def validate_architecture(self):
-        """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if self.num_quantizers < 1:
-            raise ValueError(
-                f"The semantic quantizer needs at least one codebook, but `num_quantizers` is {self.num_quantizers}."
-            )
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")

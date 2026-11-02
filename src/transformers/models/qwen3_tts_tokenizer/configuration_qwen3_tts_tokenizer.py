@@ -26,6 +26,7 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
+from ...utils.type_validators import positive_int_field
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")
@@ -43,16 +44,9 @@ class Qwen3TTSTokenizerSemanticQuantizerConfig(PreTrainedConfig):
 
     codebook_size: int = 2048
     codebook_dim: int = 256
-    num_quantizers: int = 1
+    num_quantizers: int = positive_int_field(default=1)
     vector_quantization_hidden_dimension: int = 256
     hidden_size: int = 512
-
-    def validate_architecture(self):
-        """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if self.num_quantizers < 1:
-            raise ValueError(
-                f"The semantic quantizer needs at least one codebook, but `num_quantizers` is {self.num_quantizers}."
-            )
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")
