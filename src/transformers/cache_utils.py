@@ -1713,8 +1713,8 @@ class Cache:
             # If this is called with non-default arg, raise
             if layer_idx != 0:
                 raise ValueError(
-                    f"You called `get_seq_length` on layer index {layer_idx}, but this layer is a LinearAttention layer, which "
-                    "does not track sequence length."
+                    f"You called `get_seq_length` on layer index {layer_idx}, but this layer is a {type(self.layers[layer_idx]).__name__} "
+                    "layer, which does not track sequence length."
                 )
             try:
                 # Use the first attention layer
@@ -1763,8 +1763,8 @@ class Cache:
                 )
         elif not isinstance(self.layers[layer_idx], LinearAttentionCacheLayerMixin):
             raise ValueError(
-                f"You called `has_previous_state` on layer index {layer_idx}, but this layer is an Attention layer, which "
-                "does not support calling it."
+                f"You called `has_previous_state` on layer index {layer_idx}, but this layer is an {type(self.layers[layer_idx]).__name__} "
+                "layer, which does not support calling it."
             )
 
         # We may have several conv/recurrent states in the same layers. In this case, if `state_idx` is not provided, check if all
@@ -1789,8 +1789,8 @@ class Cache:
             # If this is called with non-default arg, raise
             if layer_idx != 0:
                 raise ValueError(
-                    f"You called `get_mask_sizes` on layer index {layer_idx}, but this layer is a LinearAttention layer, which "
-                    "does not track sequence length."
+                    f"You called `get_mask_sizes` on layer index {layer_idx}, but this layer is a {type(self.layers[layer_idx]).__name__} "
+                    "layer, which does not track sequence length."
                 )
             try:
                 # Use the first attention layer
