@@ -166,15 +166,11 @@ class GlmMoeDsaIndexer(DeepseekV32Indexer):
         cos, sin = position_embeddings
         q = self.wq_b(q_resid)  # [B, S, H*D]
         q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
-        q_rot, q_pass = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
-
         k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
-        k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
 
-        # GLM-MoE-DSA uses interleaved RoPE in the indexer
-        q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
-        q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
-        k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
+        # GLM-MoE-DSA uses interleaved RoPE in the indexer, on the first `qk_rope_head_dim` dims
+        q, k = apply_rotary_pos_emb_interleave(q, k, cos, sin, unsqueeze_dim=2)
+        k = k.squeeze(2)  # [B, S, D]
 
         if past_key_values is not None:
             k = past_key_values.update_indexer(k, self.layer_idx)

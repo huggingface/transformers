@@ -140,11 +140,9 @@ class MistralLarge4TextSoftmaxScaling(nn.Module):
         return query_states * scale.unsqueeze(-1)
 
 
-def apply_rotary_pos_emb_interleave(
-    q: torch.Tensor, k: torch.Tensor | None, cos: torch.Tensor, sin: torch.Tensor, unsqueeze_dim: int = 1
-) -> tuple[torch.Tensor, torch.Tensor | None]:
+def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     r"""
-    Applies interleaved Rotary Position Embedding to the query and (optionally) the key tensors.
+    Applies interleaved Rotary Position Embedding to the query and key tensors.
 
     DeepSeek lays the rotary dimensions out in interleaved pairs `(x0, x1), (x2, x3), ...`, each rotated by a
     single frequency. We compute that rotation directly on the even/odd slices instead of de-interleaving with a
@@ -153,9 +151,12 @@ def apply_rotary_pos_emb_interleave(
 
     Args:
         q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`, *optional*): The key tensor if there is one, otherwise `None`.
+        k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`):
+            The position indices of the tokens corresponding to the query and key tensors. For example, this can be
+            used to pass offsetted position ids when working with a KV-cache.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -164,22 +165,23 @@ def apply_rotary_pos_emb_interleave(
             cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
             the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
     Returns:
-        `tuple(torch.Tensor)` comprising of the query and (optionally) the key tensors rotated using the Rotary Position
-        Embedding.
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
+    # Keep half or full tensor for later concatenation
+    rotary_dim = cos.shape[-1]
+    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
+    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
+
     # `cos`/`sin` are `cat(freqs, freqs)`; the first half holds the per-pair angle.
-    cos = cos[..., : cos.shape[-1] // 2].unsqueeze(unsqueeze_dim)
-    sin = sin[..., : sin.shape[-1] // 2].unsqueeze(unsqueeze_dim)
+    cos = cos[..., : rotary_dim // 2].unsqueeze(unsqueeze_dim)
+    sin = sin[..., : rotary_dim // 2].unsqueeze(unsqueeze_dim)
 
-    q1, q2 = q[..., 0::2], q[..., 1::2]
-    q_embed = torch.cat([q1 * cos - q2 * sin, q2 * cos + q1 * sin], dim=-1)
+    q1, q2 = q_rot[..., 0::2], q_rot[..., 1::2]
+    k1, k2 = k_rot[..., 0::2], k_rot[..., 1::2]
 
-    if k is not None:
-        k1, k2 = k[..., 0::2], k[..., 1::2]
-        k_embed = torch.cat([k1 * cos - k2 * sin, k2 * cos + k1 * sin], dim=-1)
-    else:
-        k_embed = None
-
+    # Rotate the first `rotary_dim` dims and concatenate back to full shape
+    q_embed = torch.cat([q1 * cos - q2 * sin, q2 * cos + q1 * sin, q_pass], dim=-1)
+    k_embed = torch.cat([k1 * cos - k2 * sin, k2 * cos + k1 * sin, k_pass], dim=-1)
     return q_embed, k_embed
 
 
@@ -241,13 +243,9 @@ class MistralLarge4TextIndexer(nn.Module):
         # Same for the keys
         k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
 
-        # Apply interleaved RoPE
+        # Apply interleaved RoPE on the first `qk_rope_head_dim` dims
         cos, sin = position_embeddings
-        q_rot, q_pass = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
-        k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
-        q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
-        q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
-        k = torch.cat([k_rot, k_pass], dim=-1)  # [B, S, 1, D]
+        q, k = apply_rotary_pos_emb_interleave(q, k, cos, sin, unsqueeze_dim=2)
         k = k.squeeze(2)
 
         if past_key_values is not None:
@@ -932,7 +930,7 @@ class MistralLarge4TextMoE(nn.Module):
         return hidden_states
 
 
-MISTRAL_LARGE4_TEXT_ATTENTION_CLASSES = {
+MISTRAL_LARGE4_TEXT_ATTENTION_CLASSES = {  # trf-ignore: TRF052
     "rope": MistralLarge4TextAttention,
     "nope": MistralLarge4TextNoRopeAttention,
     "nope_kv_shared": MistralLarge4TextNoRopeKVSharedAttention,
