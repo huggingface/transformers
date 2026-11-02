@@ -54,8 +54,6 @@ class NVFP4HfQuantizer(HfQuantizer):
     def validate_environment(self, device_map, **kwargs):
         if self.pre_quantized and self.quantization_config.dequantize:
             return  # the `dequantize` load operation is pure torch
-        if self.pre_quantized:
-            raise ValueError("Loading pre-quantized NVFP4 checkpoints is not supported yet.")
         if not is_kernels_available():
             raise ImportError(
                 "NVFP4 quantization requires the `kernels` package. "
@@ -109,9 +107,9 @@ class NVFP4HfQuantizer(HfQuantizer):
         replace_with_nvfp4_linear(model, modules_to_not_convert=self.modules_to_not_convert)
 
     def get_load_operations(self):
-        from ..integrations.nvfp4 import NVFP4Dequantize, NVFP4Quantize
+        from ..integrations.nvfp4 import NVFP4Dequantize, NVFP4Deserialize, NVFP4Quantize
 
-        return {"dequantize": NVFP4Dequantize, "quantize": NVFP4Quantize}
+        return {"deserialize": NVFP4Deserialize, "dequantize": NVFP4Dequantize, "quantize": NVFP4Quantize}
 
     @property
     def is_serializable(self) -> bool:

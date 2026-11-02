@@ -158,6 +158,39 @@ class NVFP4Quantize(ConversionOps):
         return output
 
 
+def swizzle_sf(sf_rowmajor: torch.Tensor) -> torch.Tensor:
+    """
+    The block-scaled GEMM layout of row-major FP8 block scales `(rows, cols)`: padded to 128-row x 4-column tiles,
+    each tile stored as 32x16 bytes (rows `r`, `r + 32`, `r + 64`, `r + 96` interleaved).
+    """
+    rows, cols = sf_rowmajor.shape
+    row_tiles, col_tiles = -(-rows // 128), -(-cols // 4)
+    padded = sf_rowmajor.new_zeros(row_tiles * 128, col_tiles * 4)
+    padded[:rows, :cols] = sf_rowmajor
+    tiles = padded.view(row_tiles, 128, col_tiles, 4).permute(0, 2, 1, 3)
+    return tiles.reshape(-1, 4, 32, 4).transpose(1, 2).reshape(-1)
+
+
+class NVFP4Deserialize(ConversionOps):
+    """
+    The `NVFP4Linear` buffers from a checkpoint's `weight`, `weight_sf_rowmajor` and `weight_global_scale`: the kernel's
+    swizzled `weight_sf` is derived from the row-major scales.
+    """
+
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(self, input_dict, **kwargs) -> dict[str, torch.Tensor]:
+        tensors = {name: value[0] if isinstance(value, list) else value for name, value in input_dict.items()}
+        if "weight_sf_rowmajor" in tensors and "weight_sf" not in tensors:
+            out_features, in_features = tensors["weight"].shape[0], tensors["weight"].shape[1] * 2
+            sf_shape = load_nvfp4_kernel().swizzled_sf_shape(out_features, in_features)
+            tensors["weight_sf"] = swizzle_sf(tensors["weight_sf_rowmajor"]).view(torch.int32).view(sf_shape)
+        return tensors
+
+    # TODO: a reverse op, so that NVFP4 checkpoints can be saved (`swizzle_sf` is invertible)
+
+
 class NVFP4Dequantize(ConversionOps):
     """
     Dense weights from the packed `weight` (two e2m1 values per byte, low nibble first), its row-major FP8 block
