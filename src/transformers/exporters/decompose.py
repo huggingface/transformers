@@ -29,7 +29,7 @@ from typing import Any, NamedTuple
 
 from ..utils.import_utils import is_torch_available
 from .components import Component, ModalityEncoder, PatchVisionEncoder, TokenEmbedder
-from .precompute import _find_config_attr, precompute_export_inputs
+from .precompute import _find_config_attr, get_rope_index_from_config, precompute_export_inputs
 
 
 if is_torch_available():
@@ -366,16 +366,15 @@ def dense_deepstack(mask_name: str, like: torch.Tensor, layers, parts=()) -> dic
 def _main_inputs(model: PreTrainedModel, inputs: dict[str, Any], decoder_call: dict[str, Any]) -> dict[str, Any]:
     """`model`'s own kwargs on `inputs_embeds`: the embeddings its text stack received, features scattered in,
     replace the token ids and modality inputs. What the model derived from those and can't recompute without them
-    comes along: M-RoPE positions, computed by the config-only precompute as the runtime computes them, and deepstack
-    features."""
+    comes along: M-RoPE positions, computed from the config as the runtime computes them, and deepstack features."""
     if decoder_call.get("inputs_embeds") is None:
         return inputs
     main_inputs = copy.copy(inputs)
     accepted = inspect.signature(model.forward).parameters
+    # The rope index alone: the precompute's modality preparers reuse the name (MiniCPM-V's vision `position_ids`).
     if main_inputs.get("position_ids") is None and "position_ids" in accepted:
-        position_ids = precompute_export_inputs(model.config, inputs).get("position_ids")
-        if position_ids is not None:
-            main_inputs["position_ids"] = position_ids
+        if (rope_index := get_rope_index_from_config(model.config, inputs)) is not None:
+            main_inputs["position_ids"] = rope_index[0]
     main_inputs = embedded_inputs(main_inputs, {})
     main_inputs.pop("input_ids", None)
     main_inputs["inputs_embeds"] = decoder_call["inputs_embeds"]
