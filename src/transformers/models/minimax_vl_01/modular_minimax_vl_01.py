@@ -24,11 +24,9 @@ from torch import nn
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
-from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
     ChannelDimension,
+    ImageInput,
     PILImageResampling,
     SizeDict,
     get_image_size,
@@ -36,7 +34,7 @@ from ...image_utils import (
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import ProcessingKwargs, Unpack
-from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ..auto import AutoConfig
 from ..glm4_moe.modeling_glm4_moe import (
@@ -396,19 +394,10 @@ class MiniMaxVL01ImageProcessorKwargs(LlavaNextImageProcessorKwargs, total=False
 
 
 class MiniMaxVL01ImageProcessor(LlavaNextImageProcessor):
-    model_input_names = ["pixel_values", "image_sizes"]
     valid_kwargs = MiniMaxVL01ImageProcessorKwargs
-    resample = PILImageResampling.BICUBIC
-    image_mean = OPENAI_CLIP_MEAN
-    image_std = OPENAI_CLIP_STD
     size = {"height": 336, "width": 336}
     crop_size = None
-    default_to_square = False
-    do_resize = True
     do_center_crop = False
-    do_rescale = True
-    do_normalize = True
-    do_convert_rgb = True
     do_pad = False
     image_grid_pinpoints = MINIMAX_VL_01_IMAGE_GRID_PINPOINTS
     process_image_mode = "anyres"
@@ -442,85 +431,25 @@ class MiniMaxVL01ImageProcessor(LlavaNextImageProcessor):
             resample=resample,
         )
 
-    def _preprocess(
-        self,
-        images: list["torch.Tensor"],
-        do_resize: bool,
-        size: SizeDict,
-        image_grid_pinpoints: list[list[int]],
-        resample: "PILImageResampling | int | None",
-        do_center_crop: bool,
-        crop_size: SizeDict,
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: float | list[float] | None,
-        image_std: float | list[float] | None,
-        do_pad: bool | None,
-        disable_grouping: bool | None,
-        return_tensors: str | TensorType | None,
-        **kwargs,
+    @auto_docstring
+    def preprocess(
+        self, images: ImageInput | list[ImageInput], *args, **kwargs: Unpack[MiniMaxVL01ImageProcessorKwargs]
     ) -> BatchFeature:
         if kwargs.get("process_image_mode", self.process_image_mode) != "anyres":
             raise ValueError("MiniMax-VL-01 supports only `process_image_mode='anyres'`.")
-        if do_pad:
+        if kwargs.get("do_pad", self.do_pad):
             raise ValueError("MiniMax-VL-01 does not support `do_pad=True`.")
-
-        processed_images = []
-        image_sizes = []
-        if size and size.height and size.width:
-            size_tuple = (size.height, size.width)
-        else:
-            size_tuple = (size.shortest_edge, size.shortest_edge)
-        patch_size = size.height if size and size.height else size.shortest_edge
-
-        for image in images:
-            image_patches = self._get_image_patches(
-                image,
-                image_grid_pinpoints,
-                size=size_tuple,
-                patch_size=patch_size,
-                resample=resample,
-            )
-            processed_image_patches_grouped = {}
-            grouped_image_patches, grouped_image_patches_index = group_images_by_shape(
-                image_patches, disable_grouping=disable_grouping
-            )
-            for shape, stacked_image_patches in grouped_image_patches.items():
-                if do_resize:
-                    stacked_image_patches = self.resize(image=stacked_image_patches, size=size, resample=resample)
-                if do_center_crop:
-                    stacked_image_patches = self.center_crop(stacked_image_patches, crop_size)
-                image_mean_tuple = tuple(image_mean) if isinstance(image_mean, list) else image_mean
-                image_std_tuple = tuple(image_std) if isinstance(image_std, list) else image_std
-                stacked_image_patches = self.rescale_and_normalize(
-                    stacked_image_patches, do_rescale, rescale_factor, do_normalize, image_mean_tuple, image_std_tuple
-                )
-                processed_image_patches_grouped[shape] = stacked_image_patches
-            processed_image_patches = reorder_images(processed_image_patches_grouped, grouped_image_patches_index)
-            processed_images.append(torch.stack(processed_image_patches, dim=0))
-            image_sizes.append(get_image_size(image, ChannelDimension.FIRST))
-
-        pixel_values = torch.cat(processed_images, dim=0)
-        return BatchFeature(
-            data={"pixel_values": pixel_values, "image_sizes": image_sizes}, tensor_type=return_tensors
-        )
+        return_tensors = kwargs.pop("return_tensors", None)
+        image_inputs = super().preprocess(images, *args, return_tensors=None, **kwargs)
+        image_inputs["pixel_values"] = torch.cat(image_inputs["pixel_values"], dim=0)
+        return image_inputs.convert_to_tensors(return_tensors)
 
 
 class MiniMaxVL01ImageProcessorPil(LlavaNextImageProcessorPil):
-    model_input_names = ["pixel_values", "image_sizes"]
     valid_kwargs = MiniMaxVL01ImageProcessorKwargs
-    resample = PILImageResampling.BICUBIC
-    image_mean = OPENAI_CLIP_MEAN
-    image_std = OPENAI_CLIP_STD
     size = {"height": 336, "width": 336}
     crop_size = None
-    default_to_square = False
-    do_resize = True
     do_center_crop = False
-    do_rescale = True
-    do_normalize = True
-    do_convert_rgb = True
     do_pad = False
     image_grid_pinpoints = MINIMAX_VL_01_IMAGE_GRID_PINPOINTS
     process_image_mode = "anyres"
@@ -553,63 +482,18 @@ class MiniMaxVL01ImageProcessorPil(LlavaNextImageProcessorPil):
             resample=resample,
         )
 
-    def _preprocess(
-        self,
-        images: list[np.ndarray],
-        do_resize: bool,
-        size: SizeDict,
-        image_grid_pinpoints: list[list[int]],
-        resample: "PILImageResampling | None",
-        do_center_crop: bool,
-        crop_size: SizeDict,
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: float | list[float] | None,
-        image_std: float | list[float] | None,
-        do_pad: bool | None,
-        return_tensors: str | TensorType | None,
-        **kwargs,
+    @auto_docstring
+    def preprocess(
+        self, images: ImageInput | list[ImageInput], *args, **kwargs: Unpack[MiniMaxVL01ImageProcessorKwargs]
     ) -> BatchFeature:
         if kwargs.get("process_image_mode", self.process_image_mode) != "anyres":
             raise ValueError("MiniMax-VL-01 supports only `process_image_mode='anyres'`.")
-        if do_pad:
+        if kwargs.get("do_pad", self.do_pad):
             raise ValueError("MiniMax-VL-01 does not support `do_pad=True`.")
-
-        processed_images = []
-        image_sizes = []
-        if size and size.height and size.width:
-            size_tuple = (size.height, size.width)
-        else:
-            size_tuple = (size.shortest_edge, size.shortest_edge)
-        patch_size = size.height if size and size.height else size.shortest_edge
-
-        for image in images:
-            image_patches = self.get_image_patches(
-                image,
-                image_grid_pinpoints,
-                size=size_tuple,
-                patch_size=patch_size,
-                resample=resample,
-            )
-            pixel_values = []
-            for patch in image_patches:
-                if do_resize:
-                    patch = self.resize(image=patch, size=size, resample=resample)
-                if do_center_crop:
-                    patch = self.center_crop(image=patch, size=crop_size)
-                if do_rescale:
-                    patch = self.rescale(image=patch, scale=rescale_factor)
-                if do_normalize:
-                    patch = self.normalize(image=patch, mean=image_mean, std=image_std)
-                pixel_values.append(patch)
-            processed_images.append(np.asarray(pixel_values))
-            image_sizes.append(image.shape[-2:])
-
-        pixel_values = np.concatenate(processed_images, axis=0)
-        return BatchFeature(
-            data={"pixel_values": pixel_values, "image_sizes": image_sizes}, tensor_type=return_tensors
-        )
+        return_tensors = kwargs.pop("return_tensors", None)
+        image_inputs = super().preprocess(images, *args, return_tensors=None, **kwargs)
+        image_inputs["pixel_values"] = np.concatenate(image_inputs["pixel_values"], axis=0)
+        return image_inputs.convert_to_tensors(return_tensors)
 
 
 class MiniMaxVL01ProcessorKwargs(ProcessingKwargs, total=False):

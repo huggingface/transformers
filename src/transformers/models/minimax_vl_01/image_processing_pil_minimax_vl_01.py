@@ -86,6 +86,7 @@ class MiniMaxVL01ImageProcessorKwargs(ImagesKwargs, total=False):
 class MiniMaxVL01ImageProcessorPil(PilBackend):
     model_input_names = ["pixel_values", "image_sizes"]
     valid_kwargs = MiniMaxVL01ImageProcessorKwargs
+
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
@@ -113,7 +114,14 @@ class MiniMaxVL01ImageProcessorPil(PilBackend):
     def preprocess(
         self, images: ImageInput | list[ImageInput], *args, **kwargs: Unpack[MiniMaxVL01ImageProcessorKwargs]
     ) -> BatchFeature:
-        return super().preprocess(images, *args, **kwargs)
+        if kwargs.get("process_image_mode", self.process_image_mode) != "anyres":
+            raise ValueError("MiniMax-VL-01 supports only `process_image_mode='anyres'`.")
+        if kwargs.get("do_pad", self.do_pad):
+            raise ValueError("MiniMax-VL-01 does not support `do_pad=True`.")
+        return_tensors = kwargs.pop("return_tensors", None)
+        image_inputs = super().preprocess(images, *args, return_tensors=None, **kwargs)
+        image_inputs["pixel_values"] = np.concatenate(image_inputs["pixel_values"], axis=0)
+        return image_inputs.convert_to_tensors(return_tensors)
 
     def _get_padding_size(self, original_resolution: tuple, target_resolution: tuple):
         """Get padding size for patching (returns tuple format for np.pad)."""
@@ -226,20 +234,27 @@ class MiniMaxVL01ImageProcessorPil(PilBackend):
         **kwargs,
     ) -> BatchFeature:
         """Custom preprocessing for LLaVA-NeXT with patch processing."""
-        if kwargs.get("process_image_mode", self.process_image_mode) != "anyres":
-            raise ValueError("MiniMax-VL-01 supports only `process_image_mode='anyres'`.")
-        if do_pad:
-            raise ValueError("MiniMax-VL-01 does not support `do_pad=True`.")
-
         processed_images = []
         image_sizes = []
+
+        # Backend's resize method handles resample conversion, so we can pass it directly
+        # Determine the size tuple
         if size and size.height and size.width:
             size_tuple = (size.height, size.width)
         else:
             size_tuple = (size.shortest_edge, size.shortest_edge)
-        patch_size = size.height if size and size.height else size.shortest_edge
+
+        # Determine the patch size
+        if crop_size and crop_size.height:
+            patch_size = crop_size.height
+        elif size and size.height:
+            patch_size = size.height
+        else:
+            patch_size = size.shortest_edge
 
         for image in images:
+            # convert image into a list of patches
+            # we intentionally use the same data format as the input data format
             image_patches = self.get_image_patches(
                 image,
                 image_grid_pinpoints,
@@ -247,23 +262,33 @@ class MiniMaxVL01ImageProcessorPil(PilBackend):
                 patch_size=patch_size,
                 resample=resample,
             )
+
+            # preprocess patches
             pixel_values = []
             for patch in image_patches:
                 if do_resize:
                     patch = self.resize(image=patch, size=size, resample=resample)
+
                 if do_center_crop:
                     patch = self.center_crop(image=patch, size=crop_size)
+
                 if do_rescale:
                     patch = self.rescale(image=patch, scale=rescale_factor)
+
                 if do_normalize:
                     patch = self.normalize(image=patch, mean=image_mean, std=image_std)
+
                 pixel_values.append(patch)
-            processed_images.append(np.asarray(pixel_values))
+
+            pixel_values = np.array(pixel_values)
+            processed_images.append(pixel_values)
             image_sizes.append(image.shape[-2:])
 
-        pixel_values = np.concatenate(processed_images, axis=0)
+        if do_pad:
+            processed_images = self._pad_for_batching(processed_images)
+
         return BatchFeature(
-            data={"pixel_values": pixel_values, "image_sizes": image_sizes}, tensor_type=return_tensors
+            data={"pixel_values": processed_images, "image_sizes": image_sizes}, tensor_type=return_tensors
         )
 
 
