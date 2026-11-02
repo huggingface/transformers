@@ -24,6 +24,7 @@ import torch
 from parameterized import parameterized
 
 from transformers import GenerationConfig, set_seed
+from transformers.exporters.decompose import decompose_multimodal, is_multimodal
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
@@ -32,9 +33,7 @@ from transformers.exporters.quantizers.utils import openvino_feed
 from transformers.exporters.utils import (
     cast_leaf_tensors,
     decompose_for_generation,
-    decompose_multimodal,
     get_leaf_tensors,
-    is_multimodal,
     module_device,
     module_dtype,
 )
@@ -726,12 +725,9 @@ def _run_openvino_model(ov_model, inputs) -> dict:
 
     results = request.infer(feed)
     outputs = {}
-    for port in compiled.outputs:
-        # Compilation may merge a named output tensor with an intermediate that kept its
-        # numeric id — prefer the human-readable alias over ``get_any_name``'s sorted-first.
-        names = sorted(port.get_names())
-        name = next((n for n in names if not n.isdigit()), names[0])
-        outputs[re.sub(r"^output\.", "", name)] = torch.as_tensor(results[port])
+    # Named from the uncompiled model: compiling can merge an output's name with those of the intermediates it folds.
+    for model_port, port in zip(ov_model.outputs, compiled.outputs):
+        outputs[re.sub(r"^output\.", "", model_port.get_any_name())] = torch.as_tensor(results[port])
 
     # Folded state tensors are outputs too — read them back so the returned dict covers the
     # same leaves eager returns.
@@ -910,7 +906,8 @@ class ExportTesterMixin:
         inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
 
         if is_multimodal(model):
-            return decompose_multimodal(model, inputs_dict)
+            components = decompose_multimodal(model, inputs_dict)
+            return {name: (component.module, component.inputs) for name, component in components.items()}
         return {"model": (model, inputs_dict)}
 
     def _collect_eager_outputs(self, components, output_types=None):

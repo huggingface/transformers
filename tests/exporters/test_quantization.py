@@ -397,27 +397,30 @@ class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
     @disable_hub_kernels
     def test_vlm_per_component_quantization(self):
         """A VLM is quantized component by component, each with its own recipe, via a `{component: config}`
-        dict on `export_for_generation` (multi-token decode): static int8 on the prompt's `language_model`,
-        the lighter dynamic int8 on `decode`, and `lm_head` left in fp32."""
+        dict on `export_for_generation` (multi-token decode): static int8 on the `vision_embeddings_model` and the
+        prompt's `language_model`, the lighter dynamic int8 on `decode`, and the `text_embeddings_model` left in
+        fp32."""
         from transformers.exporters import DynamoConfig, DynamoExporter
 
         model, inputs = self._vlm_model()
         static, dynamic = self._pt2e_quantizer("x86"), self._pt2e_quantizer("x86", dynamic=True)
         config = {
+            "text_embeddings_model": DynamoConfig(dynamic=True),
+            "vision_embeddings_model": DynamoConfig(dynamic=True, quantizer=static),
             "language_model": DynamoConfig(dynamic=True, quantizer=static),
             "decode": DynamoConfig(dynamic=True, quantizer=dynamic),
-            "lm_head": DynamoConfig(dynamic=True),
         }
         components = DynamoExporter().export_for_generation(model, inputs, config, multi_token_decode=True)
 
-        self.assertTrue(_has_quantize_ops(components["language_model"].program), "language_model should be quantized")
-        self.assertTrue(_has_quantize_ops(components["decode"].program), "decode should be quantized")
-        self.assertFalse(_has_quantize_ops(components["lm_head"].program), "lm_head should stay fp32")
-        # the recipes really differ: decode is dynamically quantized, language_model statically
-        self.assertTrue(_has_dynamic_quant_ops(components["decode"].program), "decode should be dynamically quantized")
-        self.assertFalse(
-            _has_dynamic_quant_ops(components["language_model"].program), "language_model should be static"
+        vision, decode, text = (
+            components[name].program for name in ("vision_embeddings_model", "decode", "text_embeddings_model")
         )
+        self.assertTrue(_has_quantize_ops(vision), "the vision embeddings should be quantized")
+        self.assertTrue(_has_quantize_ops(decode), "decode should be quantized")
+        self.assertFalse(_has_quantize_ops(text), "the text embeddings should stay fp32")
+        # the recipes really differ: decode is dynamically quantized, the vision embeddings statically
+        self.assertTrue(_has_dynamic_quant_ops(decode), "decode should be dynamically quantized")
+        self.assertFalse(_has_dynamic_quant_ops(vision), "the vision embeddings should be static")
 
 
 @slow

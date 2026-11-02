@@ -15,7 +15,7 @@
 
 """Shared export utilities used by all exporter backends.
 
-Organised into five sections (search for the `# ── Name ──` banners):
+Organised into sections (search for the `# ── Name ──` banners):
 
 - **Patch and fix registries** — backend-keyed `_PATCHES` / `_FX_NODE_FIXES` /
   `_FX_PROGRAM_FIXES` populated via `@register_patch(backend, *paths)` /
@@ -26,12 +26,9 @@ Organised into five sections (search for the `# ── Name ──` banners):
 - **Public tensor utilities** — `get_leaf_tensors`, `duplicate_leaf_tensors`,
   `cast_leaf_tensors`, and `prepare_for_export` (sets attention/experts impl,
   patches non-exportable patterns, strips output flags).
-- **Export input preparers** — `@register_export_input_preparer(marker)`
-  registry that precomputes the per-encoder kwargs (`cu_seqlens`, `position_ids`,
-  audio chunks, …) the model would otherwise need data-dependent ops for.
 - **Decomposition** — `decompose_prefill_decode` (split a generative forward
-  into prefill + decode) and `decompose_multimodal` + `is_multimodal` (split a
-  multimodal forward into one entry per submodule), backed by `_capture_forward`.
+  into prefill + decode), backed by `_capture_forward`. A multi-modal forward is
+  split by `exporters.decompose`.
 """
 
 from __future__ import annotations
@@ -41,15 +38,15 @@ import copy
 import enum
 import functools
 import inspect
-import sys
 from collections.abc import Iterable, Mapping, MutableMapping
 from typing import Any
 
 from packaging import version
 
 from ..utils import logging
-from ..utils.generic import get_max_seqlen
 from ..utils.import_utils import _is_package_available, is_torch_available
+from .decompose import decompose_multimodal, is_multimodal
+from .precompute import precompute_export_inputs
 
 
 logger = logging.get_logger(__name__)
@@ -72,14 +69,6 @@ if is_torch_available():
 
     from .. import masking_utils
     from ..modeling_utils import PreTrainedModel
-    from ..vision_utils import (
-        get_vision_attention_seqlens,
-        get_vision_interpolation_indices_and_weights,
-        get_vision_merged_shape,
-        get_vision_nearest_position_ids,
-        get_vision_position_ids,
-        get_vision_window_index,
-    )
 
 
 # ── Patch and fix registries ────────────────────────────────────────────────
@@ -447,7 +436,7 @@ def prepare_for_export(
     # repeat_interleave, or itertools.groupby — untraceable by dynamo.
     # TODO: use the collator API once it covers these cases.
     with torch.no_grad():
-        precompute_export_inputs(model, inputs)
+        inputs.update(precompute_export_inputs(model.config, inputs))
 
     # Cast all input tensors to match the model's dtype and device (e.g. cache objects
     # created before the model was moved to bfloat16/CUDA by a backend preparation step).
@@ -459,243 +448,11 @@ def prepare_for_export(
     return model, inputs, output_flags
 
 
-# ── Export input preparers ────────────────────────────────────────────────────
-# Registry of `model_type -> (model, inputs) -> None` callables that precompute the
-# data-dependent tensors (cu_seqlens, position_ids, padded audio chunks, …) the model
-# would otherwise compute in its forward via `.tolist()` / `nonzero()` / etc. Inject
-# the results into `inputs` so the forward skips the untraceable branch.
-
-
-def _find_submodule_attr(model: torch.nn.Module, name: str) -> Any | None:
-    """Return the first non-None value of `name` found on `model` or any of its submodules."""
-    for module in model.modules():
-        if (value := getattr(module, name, None)) is not None:
-            return value
-    return None
-
-
-_EXPORT_INPUT_PREPARERS: dict[tuple[str, ...], callable] = {}
-
-
-def register_export_input_preparer(*markers: str):
-    """Register `fn(model, inputs) -> None`. Dispatched when every `marker` is a key in
-    `inputs` with a non-`None` value — no model_type list to maintain. Use multiple
-    markers to narrow the match when a single kwarg is too ambiguous (e.g.
-    `("input_features", "feature_lens")` for omni audio encoders)."""
-
-    def decorator(fn):
-        _EXPORT_INPUT_PREPARERS[markers] = fn
-        return fn
-
-    return decorator
-
-
-@register_export_input_preparer("grid_thw")
-def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
-    """Precompute helpers driven by `grid_thw`: `cu_seqlens`, `max_seqlen`, `position_ids`, plus optional
-    `window_index`/`cu_window_seqlens`/`max_window_seqlen` (XNet-style window attn) and
-    `bilinear_indices`/`bilinear_weights` (interpolation-based merging).
-
-    Optional helpers are gated by a submodule attribute (`window_size`+`patch_size` for window
-    attention, `num_grid_per_side` for bilinear) or, for model-specific ones, by the encoder's
-    modeling module defining the helper (`get_vision_frame_index` / `get_vision_temporal_merge_index`
-    for kimi_k25) — so a model that doesn't use a feature won't get its kwarg injected.
-    """
-    grid_thw = inputs["grid_thw"]
-    spatial_merge_size = _find_submodule_attr(model, "spatial_merge_size")
-    if spatial_merge_size is None:
-        # Video-Llama-3 carries per-image merge sizes as an input tensor; PaddleOCR-VL has
-        # none (its encoder hard-codes `1` because spatial merging happens in the projector).
-        spatial_merge_size = inputs.get("merge_sizes", 1)
-
-    # kimi_k25-style encoders define their own per-frame / temporal-merge precompute helpers in their
-    # modeling module (resolved below) and attend over the whole clip, so `cu_seqlens` is per-clip
-    # (matching the encoder's util call). Other grid_thw encoders lack these and stay per-frame.
-    module = sys.modules[type(model).__module__]
-    temporal_encoder = hasattr(module, "get_vision_frame_index")
-    inputs["cu_seqlens"], inputs["max_seqlen"] = get_vision_attention_seqlens(
-        grid_thw, model.config, merge_temporal=temporal_encoder, kwargs=inputs
-    )
-    # 3-axis (t, h, w) rotary encoders expose an ``axis_dim`` attr on their rotary_emb
-    # (minimax_m3_vl); default 2-axis (h, w) covers qwen2_5_vl / qwen3_vl / glm4v / paddleocr_vl.
-    include_temporal = _find_submodule_attr(model, "axis_dim") is not None
-    inputs["position_ids"] = get_vision_position_ids(grid_thw, spatial_merge_size, include_temporal=include_temporal)
-
-    window_size = _find_submodule_attr(model, "window_size")
-    patch_size = _find_submodule_attr(model, "patch_size")
-    if window_size is not None and patch_size is not None:
-        inputs["window_index"], inputs["cu_window_seqlens"] = get_vision_window_index(
-            grid_thw, spatial_merge_size, window_size, patch_size
-        )
-        inputs["max_window_seqlen"] = get_max_seqlen(
-            inputs["cu_window_seqlens"], model.config, kwargs=inputs, kwarg_name="max_window_seqlen"
-        )
-
-    num_grid_per_side = _find_submodule_attr(model, "num_grid_per_side")
-    if num_grid_per_side is not None:
-        # The vision embedding module declares how it resamples its learned grid (kimi_k25 uses
-        # bicubic, the qwen3_vl / qwen3_5 / paddleocr_vl families use bilinear, muse_glimmer uses a
-        # grid_sample-style zeros padding); read the flags rather than inferring, so the precomputed
-        # tensors match exactly what the model computes.
-        mode = _find_submodule_attr(model, "interpolation_mode") or "bilinear"
-        padding = _find_submodule_attr(model, "interpolation_padding") or "border"
-        align_corners = _find_submodule_attr(model, "interpolation_align_corners") is True
-        inputs["interp_indices"], inputs["interp_weights"] = get_vision_interpolation_indices_and_weights(
-            grid_thw,
-            num_grid_per_side,
-            mode=mode,
-            align_corners=align_corners,
-            spatial_merge_size=spatial_merge_size,
-            padding=padding,
-        )
-
-    # Per-frame additive position table (kimi_k25): gathered by frame index instead of a per-clip loop.
-    if temporal_encoder:
-        inputs["frame_index"] = module.get_vision_frame_index(grid_thw)
-
-    # Temporal-pooling spatial merger (kimi_k25): one gather index replaces its per-clip merge loop.
-    if hasattr(module, "get_vision_temporal_merge_index"):
-        merge_kernel_size = _find_submodule_attr(model, "merge_kernel_size")
-        kernel_height, kernel_width = (
-            merge_kernel_size if not isinstance(merge_kernel_size, int) else (merge_kernel_size, merge_kernel_size)
-        )
-        inputs["temporal_merge_index"] = module.get_vision_temporal_merge_index(grid_thw, kernel_height, kernel_width)
-
-    # Pixel-shuffle spatial merger (muse_glimmer): one gather index replaces its per-image merge loop.
-    if hasattr(module, "get_vision_pixel_shuffle_index"):
-        merge_size = _find_submodule_attr(model, "merge_size")
-        inputs["pixel_shuffle_index"] = module.get_vision_pixel_shuffle_index(grid_thw, merge_size)
-
-
-@register_export_input_preparer("target_sizes")
-def _prepare_navit_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
-    """NaViT-style packed encoders carry per-image `(h, w)` as `target_sizes` instead of `grid_thw`.
-    Synthesise `grid_thw = [1, h, w]` and run the nearest-position-id / window-index /
-    merged-shape / maximum-sequence-length helpers outside the traced graph."""
-    target_sizes = inputs["target_sizes"]
-    num_patches_per_side = _find_submodule_attr(model, "num_patches_per_side")
-    if num_patches_per_side is not None:
-        inputs["position_ids"] = get_vision_nearest_position_ids(target_sizes, num_patches_per_side)
-
-    window_kernel_size = _find_submodule_attr(model, "window_kernel_size")
-    if window_kernel_size is not None:
-        grid_thw = torch.nn.functional.pad(target_sizes, (1, 0), value=1)
-        inputs["window_index"], inputs["cu_window_seqlens"] = get_vision_window_index(
-            grid_thw, spatial_merge_size=1, window_size=window_kernel_size[0], patch_size=1
-        )
-        inputs["merged_shape"] = get_vision_merged_shape(target_sizes, window_kernel_size)
-        cu_seqlens = torch.nn.functional.pad(
-            torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32), (1, 0)
-        )
-        inputs["max_seqlen"] = get_max_seqlen(cu_seqlens, model.config, kwargs=inputs)
-
-
-@register_export_input_preparer("image_sizes")
-def _prepare_image_sizes_as_ints(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
-    """Replace a tensor `image_sizes` with a python list of `(h, w)` int-tuples (the `.tolist()` runs here,
-    outside the traced graph).
-
-    `image_sizes` is per-image geometry, and encoders crop/split each image by it — e.g.
-    `image_sizes[i] // patch_size` (Pixtral) or `int(image_sizes[i] / factor)` (Emu3 VQVAE). As a tensor
-    those bounds become unbacked symints under `torch.export`; as python ints they stay static (matching
-    each encoder's own `image_sizes is None` fallback, which already builds int-tuples). Models that route
-    `image_sizes` around the traced graph (e.g. LLaVA-NeXT resolves anyres before tracing) never hit this.
-    """
-    image_sizes = inputs["image_sizes"]
-    if not torch.is_tensor(image_sizes):
-        return
-    inputs["image_sizes"] = [tuple(int(v) for v in row) for row in image_sizes.tolist()]
-
-
-@register_export_input_preparer("input_features", "feature_lens")
-def _prepare_omni_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
-    """Replace `input_features`/`feature_lens` with precomputed `padded_feature`, `chunk_lengths`,
-    `cu_seqlens`, `max_seqlen`, `valid_indices` (+ `pool_indices` on Qwen2.5-Omni-style encoders) so the
-    encoder's `.split(.tolist(), dim=0)` and related data-dependent ops happen outside the
-    traced graph.
-
-    The helpers (`chunk_and_pad_features`, `get_audio_cu_seqlens`, …) all live in the model's
-    own ``modeling_*.py`` module, so we resolve them via ``type(model).__module__`` rather than
-    hard-coding one Omni variant. ``n_window_infer`` selects the Qwen3-Omni-style four-arg
-    ``get_audio_cu_seqlens`` over the Qwen2.5-Omni-style single-arg form.
-    """
-    feature_lens = inputs["feature_lens"]
-    input_features = inputs["input_features"]
-    module = sys.modules[type(model).__module__]
-
-    chunk_and_pad_features = getattr(module, "chunk_and_pad_features")
-    get_audio_cu_seqlens = getattr(module, "get_audio_cu_seqlens")
-    get_valid_indices = getattr(module, "get_valid_indices")
-
-    padded_feature, chunk_lengths = chunk_and_pad_features(input_features, feature_lens, model.n_window)
-    inputs["padded_feature"] = padded_feature
-    inputs["chunk_lengths"] = chunk_lengths
-    if hasattr(model, "n_window_infer"):
-        inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths, feature_lens, model.n_window_infer, model.n_window)
-        inputs["valid_indices"] = get_valid_indices(chunk_lengths, model.n_window)
-    else:
-        inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths)
-        inputs["valid_indices"] = get_valid_indices(chunk_lengths)
-        inputs["pool_indices"] = getattr(module, "get_pool_indices")(feature_lens)
-    inputs["max_seqlen"] = get_max_seqlen(inputs["cu_seqlens"], model.config, kwargs=inputs)
-
-
-@register_export_input_preparer("input_features", "input_features_mask")
-def _prepare_qwen3_asr_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
-    """Precompute `cu_seqlens` and `max_seqlen` for Qwen3-ASR so the encoder pops them from
-    ``kwargs``. Mirrors the few lines that build ``feature_lens``/``chunk_lengths`` in
-    ``Qwen3ASREncoder.forward``.
-    """
-    from ..models.qwen3_asr.modeling_qwen3_asr import get_audio_cu_seqlens
-
-    n_window = _find_submodule_attr(model, "n_window")
-    n_window_infer = _find_submodule_attr(model, "n_window_infer")
-    if n_window is None or n_window_infer is None:
-        return
-
-    input_features_mask = inputs["input_features_mask"]
-    batch_size, padded_feature_length = input_features_mask.shape
-    num_chunks = padded_feature_length // (n_window * 2)
-    feature_lens = input_features_mask.sum(-1).to(torch.long)
-    chunk_lengths = input_features_mask.view(batch_size, num_chunks, -1).sum(dim=-1).reshape(-1).to(torch.long)
-    inputs["cu_seqlens"] = get_audio_cu_seqlens(chunk_lengths, feature_lens, n_window_infer, n_window)
-    inputs["max_seqlen"] = get_max_seqlen(inputs["cu_seqlens"], model.config, kwargs=inputs)
-
-
-def precompute_export_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
-    """Inject precomputed tensors for data-dependent ops the model would otherwise hit during tracing.
-
-    Two layers:
-    - Outer LLM rope index (`get_rope_index`) — generic `hasattr` probe; covers Qwen-VL / GLM-4V etc.
-    - Per-encoder preparer dispatched by marker kwargs present in `inputs` (e.g. `grid_thw`,
-      `target_sizes`, `(input_features, feature_lens)`) — see `register_export_input_preparer`.
-      A preparer fires only when every one of its markers is present in `inputs`.
-    """
-    # Outer-model: LLM rope index. Self-detecting via `hasattr` since model_type at this level
-    # varies (qwen2_vl vs qwen2_5_omni_thinker vs ...) and the get_rope_index signature is stable.
-    if inputs.get("position_ids") is None and hasattr(model, "get_rope_index"):
-        input_ids = inputs.get("input_ids")
-        attn_mask = inputs.get("attention_mask")
-        is_prefill = attn_mask is None or input_ids is None or input_ids.shape[1] == attn_mask.shape[1]
-        if is_prefill:
-            rope_params = set(inspect.signature(model.get_rope_index).parameters)
-            rope_inputs = {k: inputs[k] for k in rope_params if k in inputs}
-            position_ids, _ = model.get_rope_index(**rope_inputs)
-            inputs["position_ids"] = position_ids
-
-    # Encoder-level: dispatch by marker kwargs (preparer fires when every marker is in `inputs`
-    # with a non-`None` value).
-    for markers, preparer in _EXPORT_INPUT_PREPARERS.items():
-        if all(inputs.get(m) is not None for m in markers):
-            preparer(model, inputs)
-
-
 # ── Decomposition ─────────────────────────────────────────────────────────────
 # Split a model into independently exportable components. `decompose_prefill_decode`
 # captures the prefill and decode forward kwargs from a real `model.generate()` call;
-# `decompose_multimodal` runs a single forward and captures per-submodule kwargs (one
-# entry per encoder / projector / language model). Both rely on `_capture_forward` to
-# wrap a target submodule and record every call's kwargs.
+# a multi-modal prefill is further split by `exporters.decompose.decompose_multimodal`.
+# `_capture_forward` wraps a target submodule and records every call's kwargs.
 
 
 @contextlib.contextmanager
@@ -840,8 +597,13 @@ def decompose_prefill_decode(
     capture_config = copy.deepcopy(generation_config if generation_config is not None else model.generation_config)
     capture_config.max_new_tokens = num_new_tokens
     capture_config.min_new_tokens = num_new_tokens
+    # Features precomputed by `generate` would reach the prefill as `mm_encoder_outputs`, hiding the modality inputs
+    # its split looks for.
+    no_mm_encoder_outputs = []
+    if hasattr(model, "_supports_mm_encoder_outputs"):
+        no_mm_encoder_outputs.append((model, "_supports_mm_encoder_outputs", lambda original: lambda: False))
     try:
-        with _capture_forward(model) as calls:
+        with _capture_forward(model) as calls, patch_attributes(no_mm_encoder_outputs):
             model.generate(**copy.deepcopy(inputs), generation_config=capture_config)
     except Exception as e:
         raise RuntimeError(
@@ -875,102 +637,6 @@ def decompose_prefill_decode(
     }
 
 
-# Projector attribute names — no canonical accessor on `PreTrainedModel`, kept as a heuristic.
-# Encoders and language model are resolved via `get_encoder(modality)` / `get_decoder()`.
-_MULTIMODAL_PROJECTOR_NAMES = ("multi_modal_projector", "connector", "embed_vision", "embed_audio")
-_MULTIMODAL_LM_HEAD_NAMES = ("lm_head",)
-
-
-def _find_multimodal_submodules(model: PreTrainedModel) -> dict[str, torch.nn.Module]:
-    """Return `{attr_name: module}` for multi-modal submodules found on `model`.
-
-    Uses the canonical `PreTrainedModel.get_encoder("image"/"audio")` and `get_decoder()`
-    accessors for encoders and the language model. Projectors and `lm_head` are looked
-    up by name on `model` and its `base_model` (e.g. `LlavaModel` under `LlavaForConditionalGeneration`).
-
-    Only returns results when at least one modal encoder AND a language model are found —
-    otherwise the model is not multi-modal and should be exported as a single unit.
-    """
-    found: dict[str, torch.nn.Module] = {}
-
-    has_encoder = False
-    for modality in ("image", "audio"):
-        encoder = model.get_encoder(modality=modality)
-        # `get_encoder` returns `self` as the "no match" fallback, and some models keep
-        # `self.audio_tower = None` / `self.vision_tower = None` when the corresponding
-        # sub-config is absent — `hasattr` is True but `getattr` is None.
-        if encoder is not None and encoder is not model:
-            found[f"{modality}_encoder"] = encoder
-            has_encoder = True
-
-    decoder = model.get_decoder()
-    if decoder is not None and decoder is not model:
-        found["language_model"] = decoder
-
-    for root in {model, model.base_model}:
-        for name in _MULTIMODAL_PROJECTOR_NAMES + _MULTIMODAL_LM_HEAD_NAMES:
-            if name not in found and getattr(root, name, None) is not None:
-                found[name] = getattr(root, name)
-
-    if not has_encoder or "language_model" not in found:
-        return {}
-
-    return found
-
-
-def is_multimodal(model: PreTrainedModel | torch.nn.Module) -> bool:
-    """Returns `True` if the model is multi-modal with modal encoders and a language model.
-
-    A non-`PreTrainedModel` (e.g. a bare `nn.Module`) has no canonical `get_encoder`/`get_decoder`
-    accessors and is trivially not multi-modal, so it short-circuits to `False`.
-    """
-    return isinstance(model, PreTrainedModel) and bool(_find_multimodal_submodules(model))
-
-
-def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict[str, tuple[torch.nn.Module, dict]]:
-    """Capture inputs to each multi-modal submodule via a single forward pass.
-
-    Detects all known multi-modal submodules by attribute name (vision tower, projector,
-    language model, lm_head, …) and captures their forward kwargs during one
-    `model(**inputs)` call.
-
-    Each submodule is returned as a separate `name: (module, inputs)` entry for
-    independent export. The token-merge step (e.g. `masked_scatter` for multi-modal models)
-    is intentionally left outside the exported graphs — it is the caller's responsibility
-    to assemble `inputs_embeds` from the encoder outputs before running the decoder.
-
-    Returns:
-        `dict[str, tuple[torch.nn.Module, dict]]`: One `name: (module, inputs)`
-        entry per detected submodule (image/audio encoder, projector, language model, lm_head).
-
-    Raises:
-        `ValueError`: if no known multi-modal submodules are found on the model.
-    """
-    submodules = _find_multimodal_submodules(model)
-    if not submodules:
-        raise ValueError(
-            f"decompose_multimodal found no multi-modal submodules on {type(model).__name__}. "
-            f"Expected an image/audio encoder + language model, found neither."
-        )
-
-    try:
-        with contextlib.ExitStack() as stack, torch.no_grad():
-            submodule_inputs = {
-                name: stack.enter_context(_capture_forward(module)) for name, module in submodules.items()
-            }
-            model(**copy.deepcopy(inputs))
-    except Exception as e:
-        raise RuntimeError(
-            f"decompose_multimodal failed for {type(model).__name__}. Inputs passed: {list(inputs.keys())}."
-        ) from e
-
-    return {
-        name: (module, submodule_inputs[name][-1])
-        for name, module in submodules.items()
-        if submodule_inputs[name]  # skip submodules not called (e.g. lm_head on base models)
-    }
-
-
 def decompose_for_generation(
     model: PreTrainedModel, inputs: dict[str, Any], generation_config: Any = None, multi_token_decode: bool = False
 ) -> dict[str, tuple[torch.nn.Module, dict]]:
@@ -978,8 +644,8 @@ def decompose_for_generation(
 
     Runs `decompose_prefill_decode` to capture prefill and decode forward kwargs from a real
     `model.generate(**inputs, max_new_tokens=2)`. If the prefill is multi-modal (per `is_multimodal`),
-    further splits it into one entry per submodule (vision/audio encoder, projector, language model,
-    `lm_head`) via `decompose_multimodal`.
+    further splits it into its token embedder, one encoder per modality and the language model via
+    `decompose_multimodal`.
 
     Args:
         model: Generative model. Must support `model.generate(**inputs)`.
@@ -993,8 +659,8 @@ def decompose_for_generation(
 
     Returns:
         `{component_name: (submodel, forward_inputs)}`. Keys are `"prefill"` / `"decode"` for
-        plain generative models and `"<modality>_encoder"` / `"multi_modal_projector"` /
-        `"language_model"` / `"lm_head"` / `"decode"` for multi-modal generative models.
+        plain generative models and `"text_embeddings_model"` / `"<modality>_embeddings_model"` /
+        `"language_model"` / `"decode"` for multi-modal generative models.
     """
     stages = decompose_prefill_decode(
         model, inputs, generation_config=generation_config, multi_token_decode=multi_token_decode
@@ -1004,7 +670,10 @@ def decompose_for_generation(
     if not is_multimodal(prefill_model):
         return stages
 
-    components = decompose_multimodal(prefill_model, prefill_inputs)
+    components = {
+        name: (component.module, component.inputs)
+        for name, component in decompose_multimodal(prefill_model, prefill_inputs).items()
+    }
     components["decode"] = stages["decode"]
     return components
 

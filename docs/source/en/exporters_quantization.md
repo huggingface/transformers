@@ -83,8 +83,8 @@ config = ExecutorchConfig(backend="xnnpack", quantizer=PT2EQuantizer(xnnpack, ca
 
 Quantize generative models through [`~HfExporter.export_for_generation`]. Here `calibration_dataset` holds generate
 kwargs, like `inputs`, and each component calibrates on the inputs captured for it. A text-only model has a `prefill`
-and a `decode` component; a multimodal model splits its prefill further, into its modality encoders (such as
-`image_encoder`), its projector, its `language_model` and its `lm_head` (see
+and a `decode` component; a multimodal model splits its prefill further, into its `text_embeddings_model`, one
+`<modality>_embeddings_model` per modality (such as `vision_embeddings_model`) and its `language_model` (see
 [How `export_for_generation` works](./exporters#how-exportforgeneration-works)).
 
 ```python
@@ -188,7 +188,7 @@ components = DynamoExporter().export_for_generation(model, inputs, config)
 ```
 
 The dict must name every component [`~exporters.utils.decompose_for_generation`] produces (a multimodal model adds its
-encoders, and may split out `language_model` and `lm_head`). A component whose config sets no quantizer stays in full
+`text_embeddings_model`, its `<modality>_embeddings_model`s and its `language_model`). A component whose config sets no quantizer stays in full
 precision. In this dict, a quantizer's `calibration_dataset` holds the component's forward kwargs, not generate
 kwargs.
 

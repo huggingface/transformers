@@ -51,6 +51,7 @@ from transformers.exporters import (
 from transformers.exporters import utils as exporter_utils
 from transformers.exporters.base import ExportArtifacts, ExportedComponent, HfExporter
 from transformers.exporters.configs import DynamoConfig, ExecutorchConfig, ExportFormat, OnnxConfig
+from transformers.exporters.decompose import decompose_multimodal
 from transformers.exporters.metadata import ExportMetadata
 from transformers.testing_utils import require_executorch, require_onnx, require_onnxscript, require_torch
 from transformers.utils.import_utils import is_torch_available
@@ -360,3 +361,53 @@ class DecomposePrefillDecodeGuardTest(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "captured 1"):
             decompose_prefill_decode(_FakeGenerator(), {"input_ids": torch.zeros(1, 1, dtype=torch.long)})
+
+
+def _tiny_llava():
+    """A two-layer LLaVA and forward inputs with one 30x30 image (25 patch tokens)."""
+    from transformers import CLIPVisionConfig, LlamaConfig, LlavaConfig, LlavaForConditionalGeneration
+
+    vision_config = CLIPVisionConfig(
+        hidden_size=32, intermediate_size=37, num_hidden_layers=2, num_attention_heads=4, image_size=30, patch_size=6
+    )
+    text_config = LlamaConfig(
+        vocab_size=99, hidden_size=32, intermediate_size=37, num_hidden_layers=2, num_attention_heads=4, pad_token_id=0
+    )
+    config = LlavaConfig(vision_config=vision_config, text_config=text_config, image_token_index=98)
+    model = LlavaForConditionalGeneration(config).eval()
+    input_ids = torch.cat([torch.full((1, 25), 98), torch.randint(1, 98, (1, 7))], dim=1)
+    inputs = {
+        "input_ids": input_ids,
+        "attention_mask": torch.ones_like(input_ids),
+        "pixel_values": torch.randn(1, 3, 30, 30),
+    }
+    return model, inputs
+
+
+@require_torch
+class DecomposeMultimodalTest(unittest.TestCase):
+    def test_language_model_is_the_model_on_inputs_embeds(self):
+        """The main graph is the model itself on the embeddings its text stack received, so it returns what the whole
+        model does, head included."""
+        model, inputs = _tiny_llava()
+        components = decompose_multimodal(model, inputs)
+        self.assertEqual(set(components), {"text_embeddings_model", "vision_embeddings_model", "language_model"})
+        main = components["language_model"]
+        self.assertIs(main.module, model)
+        self.assertNotIn("pixel_values", main.inputs)
+        self.assertNotIn("input_ids", main.inputs)
+        with torch.no_grad():
+            expected = model(**inputs).logits
+            actual = main.module(**main.inputs).logits
+        torch.testing.assert_close(actual, expected)
+
+    def test_export_multimodal_exports_each_component(self):
+        from transformers.exporters import DynamoExporter
+
+        model, inputs = _tiny_llava()
+        artifacts = DynamoExporter().export_multimodal(model, inputs, DynamoConfig())
+        names = {"text_embeddings_model", "vision_embeddings_model", "language_model"}
+        self.assertEqual(set(artifacts), names)
+        with tempfile.TemporaryDirectory() as directory:
+            artifacts.save_pretrained(directory)
+            self.assertEqual(set(ExportArtifacts.from_pretrained(directory)), names)

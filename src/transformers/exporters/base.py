@@ -28,7 +28,9 @@ from ..generation import GenerationConfig
 from ..models.auto.configuration_auto import AutoConfig
 from ..utils import CONFIG_NAME, GENERATION_CONFIG_NAME, PushToHubMixin, logging
 from ..utils.hub import DownloadKwargs, cached_file, cached_files, hf_api
+from .components import Component
 from .configs import ExportConfigMixin, ExportFormat
+from .decompose import decompose_multimodal
 from .metadata import ExportMetadata, export_config_metadata, register_treespec_types
 from .quantizers.utils import capture_calibration_inputs
 from .runtimes.base import ExportedModel
@@ -63,7 +65,8 @@ class ExportArtifacts(Mapping, PushToHubMixin):
     against.
 
     [`~HfExporter.export`] produces a single `"model"` component, whose program is `.program`;
-    [`~HfExporter.export_for_generation`] produces one component per generation stage.
+    [`~HfExporter.export_multimodal`] one component per modality, plus the text embeddings and the model on
+    `inputs_embeds`; [`~HfExporter.export_for_generation`] one component per generation stage.
     """
 
     def __init__(
@@ -289,6 +292,29 @@ class HfExporter(ABC):
         program, metadata = self.export_program(model, sample_inputs, config=config)
         return ExportedComponent(program, ExportMetadata(**metadata, export_config=export_config_metadata(config)))
 
+    def _export_components(
+        self, components: dict[str, Component], config: ExportConfigMixin | dict[str, ExportConfigMixin]
+    ) -> dict[str, ExportedComponent]:
+        """Export each component with `config`, or with its entry in a per-component `config` dict."""
+        if isinstance(config, dict):
+            missing = set(components) - set(config)
+            if missing:
+                raise ValueError(
+                    f"Per-component `config` dict is missing entries for: {sorted(missing)}. "
+                    f"Expected one entry per component: {sorted(components)}."
+                )
+        exported: dict[str, ExportedComponent] = {}
+        for name, component in components.items():
+            component_config = config[name] if isinstance(config, dict) else config
+            try:
+                exported[name] = self._export_component(component.module, component.inputs, component_config)
+            except Exception as e:
+                raise RuntimeError(
+                    f"{self.__class__.__name__}.export_program failed on component '{name}' "
+                    f"(submodel={type(component.module).__name__}, input keys={list(component.inputs)})."
+                ) from e
+        return exported
+
     def export(
         self,
         model: PreTrainedModel,
@@ -307,6 +333,52 @@ class HfExporter(ABC):
         """
         component = self._export_component(model, sample_inputs, config)
         return ExportArtifacts({"model": component}, self.export_format, config=getattr(model, "config", None))
+
+    def export_multimodal(
+        self,
+        model: PreTrainedModel,
+        sample_inputs: MutableMapping[str, torch.Tensor | Cache],
+        config: ExportConfigMixin | dict[str, ExportConfigMixin],
+    ) -> ExportArtifacts:
+        """
+        Split a multi-modal model and export each component.
+
+        Takes **forward** kwargs, like [`~HfExporter.export`]. The model is split by
+        [`~exporters.decompose.decompose_multimodal`]: the token embeddings (`"text_embeddings_model"`), one graph per
+        modality present (`"vision_embeddings_model"`, `"audio_embeddings_model"`, ...), and the model itself on
+        `inputs_embeds` (`"language_model"`), its head included. Scattering the features into the embeddings stays
+        outside the graphs.
+
+        Args:
+            model ([`PreTrainedModel`]):
+                The multi-modal model to export.
+            sample_inputs (`dict[str, torch.Tensor]`):
+                **Forward** kwargs, typically a processor's output: `input_ids`, `attention_mask` and the modality
+                inputs (`pixel_values`, `input_features`, ...).
+            config ([`~transformers.exporters.configs.ExportConfigMixin`] or `dict[str, ExportConfigMixin]`):
+                Backend settings: one for all components, or a dict naming every component. With one config whose
+                quantizer has a `calibration_dataset` of forward kwargs, each component calibrates on its own inputs
+                to those samples.
+
+        Returns:
+            [`ExportArtifacts`]: One [`ExportedComponent`] per component.
+        """
+        components = decompose_multimodal(model, sample_inputs)
+        quantizer = getattr(config, "quantizer", None)
+        if not isinstance(config, dict) and quantizer is not None and quantizer.calibration_dataset:
+            calibration: dict[str, list] = {}
+            for sample in quantizer.calibration_dataset:
+                for name, component in decompose_multimodal(model, sample).items():
+                    calibration.setdefault(name, []).append(component.inputs)
+            config = {
+                name: dataclasses.replace(config, quantizer=quantizer.with_calibration(calibration[name]))
+                for name in components
+            }
+        return ExportArtifacts(
+            self._export_components(components, config),
+            self.export_format,
+            config=getattr(model, "config", None),
+        )
 
     def export_for_generation(
         self,
@@ -335,8 +407,8 @@ class HfExporter(ABC):
                 kwargs are captured internally.
             config ([`~transformers.exporters.configs.ExportConfigMixin`] or `dict[str, ExportConfigMixin]`):
                 Backend-specific configuration. Pass a single config to apply to every
-                component, or a `dict` keyed by component name (e.g. `"image_encoder"`,
-                `"language_model"`, `"lm_head"`, `"decode"`) to override per-component —
+                component, or a `dict` keyed by component name (e.g. `"vision_embeddings_model"`,
+                `"language_model"`, `"decode"`) to override per-component —
                 all component names must be present in the dict.
             generation_config ([`~generation.GenerationConfig`], *optional*):
                 Forwarded to the `generate()` capture (defaults to the model's own). Pass one with
@@ -358,16 +430,7 @@ class HfExporter(ABC):
             multi_token_decode=multi_token_decode,
         )
 
-        if isinstance(config, dict):
-            missing = set(components) - set(config)
-            if missing:
-                raise ValueError(
-                    f"Per-component `config` dict is missing entries for: {sorted(missing)}. "
-                    f"Expected one entry per component: {sorted(components)}."
-                )
-            configs = config
-        else:
-            configs = dict.fromkeys(components, config)
+        if not isinstance(config, dict):
             quantizer = config.quantizer
             if quantizer is not None and quantizer.calibration_dataset:
                 # Generate-level samples: capture each component's own forward inputs from them.
@@ -377,21 +440,15 @@ class HfExporter(ABC):
                     generation_config=generation_config,
                     multi_token_decode=multi_token_decode,
                 )
-                configs = {
+                config = {
                     name: dataclasses.replace(config, quantizer=quantizer.with_calibration(calibration[name]))
                     for name in components
                 }
 
-        exported: dict[str, ExportedComponent] = {}
-        for name, (submodel, subinputs) in components.items():
-            try:
-                exported[name] = self._export_component(submodel, subinputs, configs[name])
-            except Exception as e:
-                raise RuntimeError(
-                    f"{self.__class__.__name__}.export_program failed on component '{name}' "
-                    f"(submodel={type(submodel).__name__}, input keys={list(subinputs)})."
-                ) from e
-
+        components = {name: Component(submodel, subinputs) for name, (submodel, subinputs) in components.items()}
         return ExportArtifacts(
-            exported, self.export_format, config=getattr(model, "config", None), generation_config=generation_config
+            self._export_components(components, config),
+            self.export_format,
+            config=getattr(model, "config", None),
+            generation_config=generation_config,
         )
