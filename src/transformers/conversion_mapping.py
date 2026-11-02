@@ -1352,6 +1352,17 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.fc2"),
             WeightRenaming(r"encoder.encoder.(\d+).layers", r"encoder.aifi.\1.layers"),
         ],
+        "PPDocLayoutV2ReadingOrder": [
+            WeightRenaming(r"encoder\.layer\.", r"encoder.layers."),
+            WeightRenaming(r"(layers\.\d+)\.attention\.self\.query\.", r"\1.self_attn.q_proj."),
+            WeightRenaming(r"(layers\.\d+)\.attention\.self\.key\.", r"\1.self_attn.k_proj."),
+            WeightRenaming(r"(layers\.\d+)\.attention\.self\.value\.", r"\1.self_attn.v_proj."),
+            WeightRenaming(r"(layers\.\d+)\.attention\.output\.dense\.", r"\1.self_attn.o_proj."),
+            WeightRenaming(r"(layers\.\d+)\.attention\.output\.norm\.", r"\1.self_attn_layer_norm."),
+            WeightRenaming(r"(layers\.\d+)\.intermediate\.dense\.", r"\1.mlp.fc1."),
+            WeightRenaming(r"(layers\.\d+)\.output\.dense\.", r"\1.mlp.fc2."),
+            WeightRenaming(r"(layers\.\d+)\.output\.norm\.", r"\1.final_layer_norm."),
+        ],
         "pp_doclayout_v4": [
             WeightRenaming("decoder_roor_order_head.", "decoder.successor_order_head.proj."),
             WeightRenaming("decoder_roor_global_pointer.", "decoder.successor_order_head.global_pointer."),

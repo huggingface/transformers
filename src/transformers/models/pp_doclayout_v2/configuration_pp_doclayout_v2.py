@@ -68,13 +68,21 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
         The dropout probability in the global pointer head.
     """
 
+    attribute_map = {
+        "attention_probs_dropout_prob": "attention_dropout",
+        "dropout": "hidden_dropout_prob",
+        "activation_function": "hidden_act",
+    }
+
     hidden_size: int = 512
     num_attention_heads: int = 8
-    attention_probs_dropout_prob: float | int = 0.1
+    attention_dropout: float | int = 0.1
+    qkv_bias: bool = True
     has_relative_attention_bias: bool = False
     has_spatial_attention_bias: bool = True
     layer_norm_eps: float = 1e-5
     hidden_dropout_prob: float | int = 0.1
+    activation_dropout: float | int = 0.0
     intermediate_size: int = 2048
     hidden_act: str = "gelu"
     num_hidden_layers: int = 6

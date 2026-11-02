@@ -37,7 +37,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import apply_chunking_to_forward, compile_compatible_method_lru_cache
+from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import (
     ModelOutput,
     TransformersKwargs,
@@ -48,7 +48,7 @@ from ...utils import (
 )
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from .configuration_pp_doclayout_v2 import PPDocLayoutV2Config
+from .configuration_pp_doclayout_v2 import PPDocLayoutV2Config, PPDocLayoutV2ReadingOrderConfig
 
 
 class PPDocLayoutV2GlobalPointer(nn.Module):
@@ -137,260 +137,158 @@ class PPDocLayoutV2PositionRelationEmbedding(nn.Module):
         return out
 
 
-class PPDocLayoutV2ReadingOrderSelfAttention(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({config.num_attention_heads})"
-            )
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
 
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
 
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.has_relative_attention_bias = config.has_relative_attention_bias
-        self.has_spatial_attention_bias = config.has_spatial_attention_bias
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
-    def cogview_attention(self, attention_scores, alpha=32):
-        """
-        https://huggingface.co/papers/2105.13290 Section 2.4 Stabilization of training: Precision Bottleneck Relaxation
-        (PB-Relax). A replacement of the original nn.Softmax(dim=-1)(attention_scores). Seems the new attention_probs
-        will result in a slower speed and a little bias. Can use torch.allclose(standard_attention_probs,
-        cogview_attention_probs, atol=1e-08) for comparison. The smaller atol (e.g., 1e-08), the better.
-        """
-        scaled_attention_scores = attention_scores / alpha
-        max_value = scaled_attention_scores.amax(dim=(-1)).unsqueeze(-1)
-        new_attention_scores = (scaled_attention_scores - max_value) * alpha
-        return nn.Softmax(dim=-1)(new_attention_scores)
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
 
-    def forward(
-        self, hidden_states, attention_mask=None, rel_pos=None, rel_2d_pos=None, **kwargs: Unpack[TransformersKwargs]
-    ):
-        batch_size, seq_length, _ = hidden_states.shape
-        query_layer = (
-            self.query(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        key_layer = (
-            self.key(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        value_layer = (
-            self.value(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        # The attention scores QT K/√d could be significantly larger than input elements, and result in overflow.
-        # Changing the computational order into QT(K/√d) alleviates the problem. (https://huggingface.co/papers/2105.13290)
-        attention_scores = torch.matmul(query_layer / math.sqrt(self.attention_head_size), key_layer.transpose(-1, -2))
-
-        # NOTE:
-        # PPDocLayoutV2ReadingOrder applies unscaled rel_2d_pos
-        # unlike LayoutLMv3 which uses (rel_pos + rel_2d_pos) / math.sqrt(self.attention_head_size)
-        if rel_2d_pos is not None:
-            attention_scores += rel_2d_pos
-        elif self.has_relative_attention_bias:
-            attention_scores += rel_pos / math.sqrt(self.attention_head_size)
-
-        if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in RobertaModel forward() function)
-            attention_scores = attention_scores + attention_mask
-
-        # Normalize the attention scores to probabilities.
-        # Use the trick of the CogView paper to stabilize training
-        attention_probs = self.cogview_attention(attention_scores)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        context_layer = torch.matmul(attention_probs, value_layer)
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(*new_context_layer_shape)
-
-        return context_layer, attention_probs
-
-
-class PPDocLayoutV2ReadingOrderSelfOutput(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.norm(hidden_states + input_tensor)
-        return hidden_states
-
-
-class PPDocLayoutV2ReadingOrderIntermediate(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.intermediate_act_fn = config.hidden_act
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-        return hidden_states
-
-
-class PPDocLayoutV2ReadingOrderOutput(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.norm(hidden_states + input_tensor)
-        return hidden_states
+    return attn_output, attn_weights
 
 
 class PPDocLayoutV2ReadingOrderAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: PPDocLayoutV2ReadingOrderConfig):
         super().__init__()
-        self.self = PPDocLayoutV2ReadingOrderSelfAttention(config)
-        self.output = PPDocLayoutV2ReadingOrderSelfOutput(config)
+        self.config = config
+        self.num_attention_heads = config.num_attention_heads
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.attention_dropout = config.attention_probs_dropout_prob
+        self.scaling = self.head_dim**-0.5
+        self.is_causal = False
+
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        rel_pos=None,
-        rel_2d_pos=None,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
-        residual = hidden_states
-        attention_output, _ = self.self(
-            hidden_states,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
             attention_mask,
-            rel_pos=rel_pos,
-            rel_2d_pos=rel_2d_pos,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
             **kwargs,
         )
-        attention_output = self.output(attention_output, residual)
-        return attention_output
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+
+        return attn_output, attn_weights
+
+
+class PPDocLayoutV2ReadingOrderMLP(nn.Module):
+    def __init__(self, config: PPDocLayoutV2Config, hidden_size: int, intermediate_size: int):
+        super().__init__()
+        self.fc1 = nn.Linear(hidden_size, intermediate_size)
+        self.fc2 = nn.Linear(intermediate_size, hidden_size)
+        self.activation_fn = ACT2FN[config.activation_function]
+        self.activation_dropout = config.activation_dropout
+        self.dropout = config.dropout
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        return hidden_states
 
 
 class PPDocLayoutV2ReadingOrderLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.seq_len_dim = 1
-        self.attention = PPDocLayoutV2ReadingOrderAttention(config)
-        self.intermediate = PPDocLayoutV2ReadingOrderIntermediate(config)
-        self.output = PPDocLayoutV2ReadingOrderOutput(config)
+        self.hidden_size = config.hidden_size
+        self.self_attn = PPDocLayoutV2ReadingOrderAttention(config)
+        self.self_attn_layer_norm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = config.dropout
+        self.mlp = PPDocLayoutV2ReadingOrderMLP(config, self.hidden_size, config.intermediate_size)
+        self.final_layer_norm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
-        rel_pos=None,
-        rel_2d_pos=None,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        spatial_position_embeddings: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
-        attention_output = self.attention(
-            hidden_states,
-            attention_mask,
-            rel_pos=rel_pos,
-            rel_2d_pos=rel_2d_pos,
+    ) -> torch.Tensor:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, hidden_size)`
+            attention_mask (`torch.FloatTensor`): attention mask of size
+                `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
+                values.
+            spatial_position_embeddings (`torch.FloatTensor`, *optional*):
+                Spatial position embeddings (2D positional encodings of image locations), to be added to both
+                the queries and keys in self-attention (but not to values).
+        """
+        residual = hidden_states
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_embeddings=spatial_position_embeddings,
+            **kwargs,
         )
 
-        layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
-        )
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
 
-        return layer_output
+        residual = hidden_states
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
 
-    def feed_forward_chunk(self, attention_output):
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output, attention_output)
-        return layer_output
+        if self.training:
+            if not torch.isfinite(hidden_states).all():
+                clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+                hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+
+        return hidden_states
 
 
 class PPDocLayoutV2ReadingOrderEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([PPDocLayoutV2ReadingOrderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-        self.has_relative_attention_bias = config.has_relative_attention_bias
-        self.has_spatial_attention_bias = config.has_spatial_attention_bias
-
-        if self.has_relative_attention_bias:
-            self.rel_pos_bins = config.rel_pos_bins
-            self.max_rel_pos = config.max_rel_pos
-            self.rel_pos_bias = nn.Linear(self.rel_pos_bins, config.num_attention_heads, bias=False)
-
-        if self.has_spatial_attention_bias:
-            self.max_rel_2d_pos = config.max_rel_2d_pos
-            self.rel_2d_pos_bins = config.rel_2d_pos_bins
-            self.rel_pos_x_bias = nn.Linear(self.rel_2d_pos_bins, config.num_attention_heads, bias=False)
-            self.rel_pos_y_bias = nn.Linear(self.rel_2d_pos_bins, config.num_attention_heads, bias=False)
+        self.layers = nn.ModuleList([PPDocLayoutV2ReadingOrderLayer(config) for _ in range(config.num_hidden_layers)])
         self.rel_bias_module = PPDocLayoutV2PositionRelationEmbedding(config)
-
-    def relative_position_bucket(self, relative_position, bidirectional=True, num_buckets=32, max_distance=128):
-        ret = 0
-        if bidirectional:
-            num_buckets //= 2
-            ret += (relative_position > 0).long() * num_buckets
-            n = torch.abs(relative_position)
-        else:
-            n = torch.max(-relative_position, torch.zeros_like(relative_position))
-        # now n is in the range [0, inf)
-
-        # half of the buckets are for exact increments in positions
-        max_exact = num_buckets // 2
-        is_small = n < max_exact
-
-        # The other half of the buckets are for logarithmically bigger bins in positions up to max_distance
-        val_if_large = max_exact + (
-            torch.log(n.float() / max_exact) / math.log(max_distance / max_exact) * (num_buckets - max_exact)
-        ).to(torch.long)
-        val_if_large = torch.min(val_if_large, torch.full_like(val_if_large, num_buckets - 1))
-
-        ret += torch.where(is_small, n, val_if_large)
-        return ret
-
-    def _cal_1d_pos_emb(self, position_ids):
-        rel_pos_mat = position_ids.unsqueeze(-2) - position_ids.unsqueeze(-1)
-
-        rel_pos = self.relative_position_bucket(
-            rel_pos_mat,
-            num_buckets=self.rel_pos_bins,
-            max_distance=self.max_rel_pos,
-        )
-        # Since this is a simple indexing operation that is independent of the input,
-        # no need to track gradients for this operation
-        #
-        # Without this no_grad context, training speed slows down significantly
-        with torch.no_grad():
-            rel_pos = self.rel_pos_bias.weight.t()[rel_pos].permute(0, 3, 1, 2)
-        rel_pos = rel_pos.contiguous()
-        return rel_pos
 
     def _cal_2d_pos_emb(self, bbox):
         x_min, y_min, x_max, y_max = (
@@ -414,25 +312,26 @@ class PPDocLayoutV2ReadingOrderEncoder(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        bbox=None,
-        attention_mask=None,
-        position_ids=None,
-        patch_height=None,
-        patch_width=None,
+        hidden_states: torch.Tensor,
+        bbox: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
-        rel_pos = self._cal_1d_pos_emb(position_ids) if self.has_relative_attention_bias else None
-        rel_2d_pos = self._cal_2d_pos_emb(bbox) if self.has_spatial_attention_bias else None
+    ) -> BaseModelOutput:
+        # NOTE:
+        # PPDocLayoutV2ReadingOrder applies unscaled rel_2d_pos
+        # unlike LayoutLMv3 which uses (rel_pos + rel_2d_pos) / math.sqrt(self.attention_head_size)
+        attention_bias = self._cal_2d_pos_emb(bbox) if self.config.has_spatial_attention_bias else None
 
-        for layer_module in self.layer:
-            hidden_states = layer_module(
-                hidden_states,
-                attention_mask,
-                rel_pos=rel_pos,
-                rel_2d_pos=rel_2d_pos,
-                **kwargs,
-            )
+        # The relation bias is added to the attention scores through the (float) attention mask
+        if attention_bias is not None:
+            if attention_mask is not None and attention_mask.dtype == torch.bool:
+                attention_mask = torch.zeros_like(attention_mask, dtype=attention_bias.dtype).masked_fill(
+                    ~attention_mask, torch.finfo(attention_bias.dtype).min
+                )
+            attention_mask = attention_bias if attention_mask is None else attention_mask + attention_bias
+
+        for encoder_layer in self.layers:
+            hidden_states = encoder_layer(hidden_states, attention_mask, **kwargs)
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 
@@ -801,10 +700,10 @@ class PPDocLayoutV2PreTrainedModel(PreTrainedModel):
     """
 )
 class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
-    # Attention is based on LayoutLMv3 (no interface)
-    _supports_sdpa = False
+    # Attention is based on ViT; the relation bias is passed as a float attention mask (no flash/flex support)
+    _supports_sdpa = True
     _supports_flash_attn = False
-    _supports_attention_backend = False
+    _supports_attention_backend = True
     _supports_flex_attn = False
 
     def __init__(self, config: PPDocLayoutV2Config):
@@ -1116,34 +1015,6 @@ class PPDocLayoutV2FrozenBatchNorm2d(nn.Module):
         scale = weight * (running_var + epsilon).rsqrt()
         bias = bias - running_mean * scale
         return x * scale + bias
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float | None = None,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    if scaling is None:
-        scaling = query.size(-1) ** -0.5
-
-    # Take the dot product between "query" and "key" to get the raw attention scores.
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
-
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    attn_output = torch.matmul(attn_weights, value)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
 
 
 class PPDocLayoutV2SelfAttention(nn.Module):
