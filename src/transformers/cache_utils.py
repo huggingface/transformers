@@ -1394,6 +1394,8 @@ class DummyLayer:
     """
     A dummy cache layer that does not store any cache. It is used either for layers that do not need any cache (e.g. layers without any
     attention mechanism but only MoE/mlp), or for shared-cache layers that consume cache producer by other layers.
+    This is mostly syntactic sugar to keep a Cache as a container of `num_hidden_layers` CacheLayer instead of setting the dummy layers
+    to None, as we otherwise have to perform a `is not None` check everywhere
     """
 
     supports_early_init = False  # added so that DummyLayer are properly skipped during `early_initialization`
@@ -1403,7 +1405,7 @@ class DummyLayer:
 
     def __init__(self, **kwargs):
         self.is_initialized = True
-        # Setting keeps and values to None saves issues with exporters and multi-GPU gather
+        # Setting keys and values to None avoids issues with exporters and multi-GPU gather
         self.keys = None
         self.values = None
 
@@ -1415,7 +1417,7 @@ class DummyLayer:
             return None, None
         raise NotImplementedError("Dummy layer don't store cache: they cannot be updated.")
 
-    # Dummy methods - just do nothing when called as the layer does not hold any data
+    # Dummy methods - just do nothing when called as the layer does not hold any data by design
     def offload(self): ...
     def prefetch(self): ...
     def reset(self): ...
@@ -1954,7 +1956,7 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], lis
                 layer_types.append("full_attention")
 
     # Copy to avoid modifying the original list when assigning "dummy" layers
-    layer_types = layer_types[:]
+    layer_types = layer_types.copy()
 
     # Some models implement KV cache sharing between layers (e.g. Gemma4): for layers that consume other layers' KV
     # cache, we replace their layer type with a "dummy" layer that will never store any cache
