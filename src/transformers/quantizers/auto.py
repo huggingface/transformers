@@ -137,17 +137,6 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "gemma": GemmaQuantizationConfig,
 }
 
-LOADING_ATTRIBUTES_CONFIG_TYPES = (
-    GPTQConfig,
-    AwqConfig,
-    AutoRoundConfig,
-    FbgemmFp8Config,
-    CompressedTensorsConfig,
-    Mxfp4Config,
-    MetalConfig,
-    FineGrainedFP8Config,
-)
-
 logger = logging.get_logger(__name__)
 
 
@@ -265,9 +254,7 @@ class AutoHfQuantizer:
                 "Please make sure to pass the same quantization config class to `from_pretrained` with different loading attributes."
             )
 
-        if isinstance(quantization_config, LOADING_ATTRIBUTES_CONFIG_TYPES) and isinstance(
-            quantization_config_from_args, LOADING_ATTRIBUTES_CONFIG_TYPES
-        ):
+        if quantization_config_from_args is not None:
             loading_attr_dict = quantization_config_from_args.get_loading_attributes()
             for attr, val in loading_attr_dict.items():
                 setattr(quantization_config, attr, val)
