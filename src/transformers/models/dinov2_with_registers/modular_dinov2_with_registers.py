@@ -221,7 +221,7 @@ class Dinov2WithRegistersForImageClassification(Dinov2ForImageClassification):
 
 
 class Dinov2WithRegistersBackbone(Dinov2Backbone):
-    def __init__(self, config):
+    def __init__(self, config: Dinov2WithRegistersConfig):
         super().__init__(config)
         self.num_register_tokens = config.num_register_tokens
 

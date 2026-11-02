@@ -315,6 +315,10 @@ def initialize_weights_zero3(model):
                 _apply_zero3(child, fn)
 
         params = list(model_or_module.parameters(recurse=False))
+        # `_init_weights` may also touch direct children's params (e.g. `module.q_proj.weight`)
+        for child in model_or_module.children():
+            if not isinstance(child, PreTrainedModel):
+                params.extend(child.parameters(recurse=False))
         if params:
             with deepspeed.zero.GatheredParameters(params, modifier_rank=0):
                 if deepspeed.comm.get_rank() == 0:

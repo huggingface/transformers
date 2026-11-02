@@ -586,7 +586,7 @@ class GteForSequenceClassification(GtePreTrainedModel):
 
 @auto_docstring
 class GteForTokenClassification(GtePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GteConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
