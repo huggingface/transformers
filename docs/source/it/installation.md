@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 
 Installa 🤗 Transformers per qualsiasi libreria di deep learning con cui stai lavorando, imposta la tua cache, e opzionalmente configura 🤗 Transformers per l'esecuzione offline.
 
-🤗 Transformers è testato su Python 3.10+ e PyTorch 2.4+. Segui le istruzioni di installazione seguenti per la libreria di deep learning che stai utilizzando:
+🤗 Transformers è testato su Python 3.11+ e PyTorch 2.4+. Segui le istruzioni di installazione seguenti per la libreria di deep learning che stai utilizzando:
 
 * [PyTorch](https://pytorch.org/get-started/locally/) istruzioni di installazione.
 
@@ -97,7 +97,7 @@ cd transformers
 pip install -e .
 ```
 
-Questi comandi collegheranno la cartella in cui è stato clonato il repository e i path delle librerie Python. Python guarderà ora all'interno della cartella clonata, oltre ai normali path delle librerie. Per esempio, se i tuoi pacchetti Python sono installati tipicamente in `~/anaconda3/envs/main/lib/python3.10/site-packages/`, Python cercherà anche nella cartella clonata: `~/transformers/`.
+Questi comandi collegheranno la cartella in cui è stato clonato il repository e i path delle librerie Python. Python guarderà ora all'interno della cartella clonata, oltre ai normali path delle librerie. Per esempio, se i tuoi pacchetti Python sono installati tipicamente in `~/anaconda3/envs/main/lib/python3.11/site-packages/`, Python cercherà anche nella cartella clonata: `~/transformers/`.
 
 <Tip warning={true}>
 
@@ -139,21 +139,6 @@ I modelli pre-allenati sono scaricati e memorizzati localmente nella cache in: `
 Aggiungi [🤗 Datasets](https://huggingface.co/docs/datasets/) al tuo flusso di lavoro offline di training impostando la variabile d'ambiente `HF_DATASETS_OFFLINE=1`.
 
 </Tip>
-
-Ad esempio, in genere si esegue un programma su una rete normale, protetta da firewall per le istanze esterne, con il seguente comando:
-
-```bash
-python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
-```
-
-Esegui lo stesso programma in un'istanza offline con:
-
-```bash
-HF_DATASETS_OFFLINE=1 HF_HUB_OFFLINE=1 \
-python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
-```
-
-Lo script viene ora eseguito senza bloccarsi o attendere il timeout, perché sa di dover cercare solo file locali.
 
 ### Ottenere modelli e tokenizer per l'uso offline
 

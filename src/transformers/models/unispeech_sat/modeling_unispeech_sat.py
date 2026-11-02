@@ -714,6 +714,12 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 init.uniform_(module.bias, a=-k, b=k)
+        elif isinstance(module, UniSpeechSatModel) and hasattr(module, "masked_spec_embed"):
+            init.uniform_(module.masked_spec_embed)
+        elif isinstance(module, UniSpeechSatForPreTraining):
+            init.zeros_(module.label_embeddings_concat)
+        elif isinstance(module, AMSoftmaxLoss):  # noqa: F821
+            init.normal_(module.weight)
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor | int):
         """
@@ -1085,7 +1091,7 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
     """
 )
 class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
-    def __init__(self, config, target_lang: str | None = None):
+    def __init__(self, config: UniSpeechSatConfig, target_lang: str | None = None):
         r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
@@ -1190,26 +1196,15 @@ class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
                 attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
             )
             input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
-
-            # assuming that padded tokens are filled with -100
-            # when not being attended to
-            labels_mask = labels >= 0
-            target_lengths = labels_mask.sum(-1)
-            flattened_targets = labels.masked_select(labels_mask)
-
-            # ctc_loss doesn't support fp16
-            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
-
-            with torch.backends.cudnn.flags(enabled=False):
-                loss = nn.functional.ctc_loss(
-                    log_probs,
-                    flattened_targets,
-                    input_lengths,
-                    target_lengths,
-                    blank=self.config.pad_token_id,
-                    reduction=self.config.ctc_loss_reduction,
-                    zero_infinity=self.config.ctc_zero_infinity,
-                )
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                logit_lengths=input_lengths,
+                blank_token_id=self.config.pad_token_id,
+                reduction=self.config.ctc_loss_reduction,
+                zero_infinity=self.config.ctc_zero_infinity,
+                **kwargs,
+            )
 
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
@@ -1223,7 +1218,7 @@ class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
     """
 )
 class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: UniSpeechSatConfig):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -1272,10 +1267,6 @@ class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
             (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
             To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and conversion
             into a tensor of type `torch.FloatTensor`. See [`UniSpeechSatProcessor.__call__`] for details.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         if self.config.use_weighted_layer_sum:
             kwargs["output_hidden_states"] = True
@@ -1320,7 +1311,7 @@ class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
 
 @auto_docstring
 class UniSpeechSatForAudioFrameClassification(UniSpeechSatPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: UniSpeechSatConfig):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -1466,7 +1457,7 @@ class TDNNLayer(nn.Module):
     """
 )
 class UniSpeechSatForXVector(UniSpeechSatPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: UniSpeechSatConfig):
         super().__init__(config)
 
         self.unispeech_sat = UniSpeechSatModel(config)

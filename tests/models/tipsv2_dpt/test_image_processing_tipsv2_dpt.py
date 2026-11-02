@@ -33,43 +33,14 @@ if is_torch_available():
 
 
 class Tipsv2DptImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_rescale=True,
-        rescale_factor=1 / 255,
-        do_normalize=False,
-        do_convert_rgb=True,
-        num_labels=3,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size if size is not None else {"height": 18, "width": 18}
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.do_convert_rgb = do_convert_rgb
-        self.num_labels = num_labels
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_labels", 3)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_rescale": self.do_rescale,
-            "rescale_factor": self.rescale_factor,
-            "do_normalize": self.do_normalize,
-            "do_convert_rgb": self.do_convert_rgb,
-        }
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+
+        super().__init__(**kwargs)
 
 
 @require_torch
@@ -77,32 +48,7 @@ class Tipsv2DptImageProcessingTester(ImageProcessingTester):
 class Tipsv2DptImageProcessingTest(
     ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase
 ):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Tipsv2DptImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "size"))
-            self.assertTrue(hasattr(image_processing, "do_rescale"))
-            self.assertTrue(hasattr(image_processing, "rescale_factor"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"height": 18, "width": 18})
-            self.assertFalse(image_processor.do_normalize)
-
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
-            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+    image_processor_tester_class = Tipsv2DptImageProcessingTester
 
     def test_post_process_depth_estimation(self):
         image_processor = Tipsv2DptImageProcessor()

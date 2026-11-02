@@ -31,6 +31,7 @@ from ...utils import (
     logging,
 )
 from ...utils.generic import maybe_autocast
+from .configuration_esm import EsmConfig, EsmFoldConfig
 from .modeling_esm import EsmModel, EsmPreTrainedModel
 from .openfold_utils import (
     OFProtein,
@@ -860,7 +861,7 @@ class EsmFoldTriangleMultiplicativeUpdate(nn.Module):
         b = b * self.sigmoid(self.linear_b_g(z))
         b = b * self.linear_b_p(z)
 
-        device_type = a.device.type if a.device.type != "mps" else "cpu"
+        device_type = a.device.type
         if is_fp16_enabled(device_type):
             with maybe_autocast(device_type=device_type, enabled=False):
                 x = self._combine_projections(a.float(), b.float())
@@ -881,6 +882,8 @@ class EsmFoldPreTrainedModel(EsmPreTrainedModel):
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
+
+    config: EsmFoldConfig
 
     # Subclass `EsMPreTrainedModel` to deal with special init
     @torch.no_grad()
@@ -904,7 +907,7 @@ class EsmFoldPreTrainedModel(EsmPreTrainedModel):
                     init.xavier_uniform_(module.weight, gain=1)
                 elif module.init == "gating":
                     init.zeros_(module.weight)
-                    if module.bias:
+                    if getattr(module, "bias", None) is not None:
                         init.ones_(module.bias)
                 elif module.init == "normal":
                     init.kaiming_normal_(module.weight, nonlinearity="linear")
@@ -1483,7 +1486,7 @@ class EsmFoldInvariantPointAttention(nn.Module):
             z[0] = z[0].cpu()
 
         # [*, H, N_res, N_res]
-        device_type = q.device.type if q.device.type != "mps" else "cpu"
+        device_type = q.device.type
         if is_fp16_enabled(device_type):
             with maybe_autocast(device_type=device_type, enabled=False):
                 a = torch.matmul(
@@ -1973,7 +1976,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         if isinstance(module, EsmForProteinFolding):
             init.copy_(module.af2_to_esm, module._af2_to_esm_from_vocab_list(module.config.vocab_list))
 
-    def __init__(self, config):
+    def __init__(self, config: EsmConfig):
         super().__init__(config)
 
         self.config = config

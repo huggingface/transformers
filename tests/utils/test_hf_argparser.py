@@ -15,7 +15,6 @@
 import argparse
 import json
 import os
-import sys
 import tempfile
 import unittest
 from argparse import Namespace
@@ -30,11 +29,6 @@ import yaml
 from transformers import HfArgumentParser, TrainingArguments
 from transformers.hf_argparser import make_choice_type_function, string_to_bool
 from transformers.testing_utils import require_torch
-
-
-# Since Python 3.10, we can use the builtin `|` operator for Union types
-# See PEP 604: https://peps.python.org/pep-0604
-is_python_no_less_than_3_10 = sys.version_info >= (3, 10)
 
 
 def list_field(default=None, metadata=None):
@@ -125,23 +119,6 @@ class StringLiteralAnnotationExample:
     foo_str: "list[str]" = list_field(default=["Hallo", "Bonjour", "Hello"])
 
 
-if is_python_no_less_than_3_10:
-
-    @dataclass
-    class WithDefaultBoolExamplePep604:
-        foo: bool = False
-        baz: bool = True
-        opt: bool | None = None
-
-    @dataclass
-    class OptionalExamplePep604:
-        foo: int | None = None
-        bar: float | None = field(default=None, metadata={"help": "help message"})
-        baz: str | None = None
-        ces: list[str] | None = list_field(default=[])
-        des: list[int] | None = list_field(default=[])
-
-
 class HfArgumentParserTest(unittest.TestCase):
     def argparsersEqual(self, a: argparse.ArgumentParser, b: argparse.ArgumentParser):
         """
@@ -192,31 +169,26 @@ class HfArgumentParserTest(unittest.TestCase):
         expected.add_argument("--no_baz", "--no-baz", action="store_false", default=False, dest="baz")
         expected.add_argument("--opt", type=string_to_bool, default=None)
 
-        dataclass_types = [WithDefaultBoolExample]
-        if is_python_no_less_than_3_10:
-            dataclass_types.append(WithDefaultBoolExamplePep604)
+        parser = HfArgumentParser(WithDefaultBoolExample)
+        self.argparsersEqual(parser, expected)
 
-        for dataclass_type in dataclass_types:
-            parser = HfArgumentParser(dataclass_type)
-            self.argparsersEqual(parser, expected)
+        args = parser.parse_args([])
+        self.assertEqual(args, Namespace(foo=False, baz=True, opt=None))
 
-            args = parser.parse_args([])
-            self.assertEqual(args, Namespace(foo=False, baz=True, opt=None))
+        args = parser.parse_args(["--foo", "--no_baz"])
+        self.assertEqual(args, Namespace(foo=True, baz=False, opt=None))
 
-            args = parser.parse_args(["--foo", "--no_baz"])
-            self.assertEqual(args, Namespace(foo=True, baz=False, opt=None))
+        args = parser.parse_args(["--foo", "--no-baz"])
+        self.assertEqual(args, Namespace(foo=True, baz=False, opt=None))
 
-            args = parser.parse_args(["--foo", "--no-baz"])
-            self.assertEqual(args, Namespace(foo=True, baz=False, opt=None))
+        args = parser.parse_args(["--foo", "--baz"])
+        self.assertEqual(args, Namespace(foo=True, baz=True, opt=None))
 
-            args = parser.parse_args(["--foo", "--baz"])
-            self.assertEqual(args, Namespace(foo=True, baz=True, opt=None))
+        args = parser.parse_args(["--foo", "True", "--baz", "True", "--opt", "True"])
+        self.assertEqual(args, Namespace(foo=True, baz=True, opt=True))
 
-            args = parser.parse_args(["--foo", "True", "--baz", "True", "--opt", "True"])
-            self.assertEqual(args, Namespace(foo=True, baz=True, opt=True))
-
-            args = parser.parse_args(["--foo", "False", "--baz", "False", "--opt", "False"])
-            self.assertEqual(args, Namespace(foo=False, baz=False, opt=False))
+        args = parser.parse_args(["--foo", "False", "--baz", "False", "--opt", "False"])
+        self.assertEqual(args, Namespace(foo=False, baz=False, opt=False))
 
     def test_03_with_enum(self):
         parser = HfArgumentParser(MixedTypeEnumExample)
@@ -301,20 +273,15 @@ class HfArgumentParserTest(unittest.TestCase):
         expected.add_argument("--ces", nargs="+", default=[], type=str)
         expected.add_argument("--des", nargs="+", default=[], type=int)
 
-        dataclass_types = [OptionalExample]
-        if is_python_no_less_than_3_10:
-            dataclass_types.append(OptionalExamplePep604)
+        parser = HfArgumentParser(OptionalExample)
 
-        for dataclass_type in dataclass_types:
-            parser = HfArgumentParser(dataclass_type)
+        self.argparsersEqual(parser, expected)
 
-            self.argparsersEqual(parser, expected)
+        args = parser.parse_args([])
+        self.assertEqual(args, Namespace(foo=None, bar=None, baz=None, ces=[], des=[]))
 
-            args = parser.parse_args([])
-            self.assertEqual(args, Namespace(foo=None, bar=None, baz=None, ces=[], des=[]))
-
-            args = parser.parse_args("--foo 12 --bar 3.14 --baz 42 --ces a b c --des 1 2 3".split())
-            self.assertEqual(args, Namespace(foo=12, bar=3.14, baz="42", ces=["a", "b", "c"], des=[1, 2, 3]))
+        args = parser.parse_args("--foo 12 --bar 3.14 --baz 42 --ces a b c --des 1 2 3".split())
+        self.assertEqual(args, Namespace(foo=12, bar=3.14, baz="42", ces=["a", "b", "c"], des=[1, 2, 3]))
 
     def test_07_with_required(self):
         parser = HfArgumentParser(RequiredExample)
@@ -387,7 +354,7 @@ class HfArgumentParserTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             temp_local_path = os.path.join(tmp_dir, "temp_json")
             os.mkdir(temp_local_path)
-            with open(temp_local_path + ".json", "w+") as f:
+            with open(temp_local_path + ".json", "w+", encoding="utf-8") as f:
                 json.dump(args_dict_for_json, f)
             parsed_args = parser.parse_json_file(Path(temp_local_path + ".json"))[0]
 
@@ -406,7 +373,7 @@ class HfArgumentParserTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             temp_local_path = os.path.join(tmp_dir, "temp_yaml")
             os.mkdir(temp_local_path)
-            with open(temp_local_path + ".yaml", "w+") as f:
+            with open(temp_local_path + ".yaml", "w+", encoding="utf-8") as f:
                 yaml.dump(args_dict_for_yaml, f)
             parsed_args = parser.parse_yaml_file(Path(temp_local_path + ".yaml"))[0]
         args = BasicExample(**args_dict_for_yaml)

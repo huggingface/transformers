@@ -33,7 +33,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...test_modeling_common import floats_tensor
 from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -105,9 +104,6 @@ class QianfanOCRVisionText2TextModelTester(VLMModelTester):
             vision_feature_layer=self.vision_feature_layer,
             pad_token_id=self.pad_token_id,
         )
-
-    def create_pixel_values(self):
-        return floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
     def place_image_tokens(self, input_ids, config):
         input_ids = input_ids.clone()
@@ -221,7 +217,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_outputs = Expectations(
             {
-                ("cuda", (8, 6)): "The image features two striped cats lying down and sleeping on a pink couch. They",
+                ("cuda", (8, 6)): "The image features two striped cats lying down on a couch, both appearing to be",
                 ("cuda", (8, 9)): "The image features two striped cats lying down on a pink couch, seemingly asleep.",
                 ("xpu", None): "The image features two striped cats lying down on a couch, both appearing to be",
             }
@@ -300,7 +296,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         )  # fmt: skip
         expected_outputs_1 = Expectations(
             {
-                ("cuda", (8, 6)): "The image features two striped cats lying down and sleeping on a pink couch. The",
+                ("cuda", (8, 6)): "The image features two striped cats lying down on a couch, both appearing to be",
                 ("cuda", (8, 9)): "The image features two striped cats lying down on a pink couch, seemingly asleep.",
                 ("xpu", None): "The image features two striped cats lying down on a couch, both appearing to be",
             }

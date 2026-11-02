@@ -1502,7 +1502,7 @@ class EsmFold2ConfidenceHead(nn.Module):
 
             complex_plddt = (plddt_per_atom * atom_mask_float).sum(dim=-1) / (atom_mask_float.sum(dim=-1) + self.eps)
 
-            is_ligand = (expanded_type == 4).float()  # 4 = non-polymer (ligand) molecule type
+            is_ligand = (expanded_type == 3).float()  # 3 = non-polymer (ligand) molecule type
             inter_chain = (expanded_asym.unsqueeze(-1) != expanded_asym.unsqueeze(-2)).float()
             near_contact = (rep_distances < 8).float()  # 8 Å: the conventional interface-contact cutoff
             interface_per_token = (near_contact * inter_chain * (1.0 - is_ligand).unsqueeze(-1)).amax(dim=-1)
@@ -1846,7 +1846,7 @@ def _inverse_softplus(value: float) -> float:
 
 @auto_docstring
 class EsmFold2PreTrainedModel(PreTrainedModel):
-    config_class = EsmFold2Config
+    config: EsmFold2Config
     base_model_prefix = "esmfold2"
     main_input_name = "token_index"
     _no_split_modules = [
@@ -1922,7 +1922,8 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
         )
         self.confidence_head = EsmFold2ConfidenceHead(config)
 
-        self.msa_encoder = EsmFold2MSAEncoder(config)
+        # Checkpoints trained without MSA conditioning (e.g. `biohub/ESMFold2-Fast`) ship no MSA-encoder weights.
+        self.msa_encoder = EsmFold2MSAEncoder(config) if config.msa_encoder.enabled else None
 
         self.post_init()
 
@@ -2115,7 +2116,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
         single_inputs: Tensor,
     ) -> dict | None:
         """Assemble the transposed/padded one-hot MSA tensors the MSA encoder consumes."""
-        if msa is None:
+        if msa is None or self.msa_encoder is None:
             return None
         batch_size, msa_depth, num_tokens = msa.shape
         msa_one_hot = F.one_hot(msa.permute(0, 2, 1), num_classes=self.config.num_res_types).float()
@@ -2227,7 +2228,8 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
         entity_id (`torch.Tensor` of shape `(batch_size, num_tokens)`):
             Entity ID grouping tokens that belong to the same molecular entity.
         mol_type (`torch.Tensor` of shape `(batch_size, num_tokens)`):
-            Molecule-type code for each token (``0`` = protein).
+            Molecule-type code for each token: ``0`` = protein, ``1`` = DNA, ``2`` = RNA,
+            ``3`` = non-polymer (ligand).
         res_type (`torch.Tensor` of shape `(batch_size, num_tokens)`):
             Residue-type (amino-acid identity) index for each token.
         token_bonds (`torch.Tensor` of shape `(batch_size, num_tokens, num_tokens, 1)`):

@@ -164,6 +164,10 @@ def batched_mm_experts_forward(
         proj_out, selected_weights, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
 
+    # Apply optional post expert norm
+    if self.has_post_expert_norm:
+        proj_out = self.post_expert_norm(proj_out)
+
     # Apply routing weights
     if sentinel_mask is not None:
         # Zero weights already drop these from the output; the mask keeps them out of the router gradient.
@@ -277,6 +281,11 @@ def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.T
     Returns:
         `bool`: True if grouped_mm can be used, False otherwise.
     """
+    # On TPU, `grouped_mm` is lowered natively in eager and under torch.compile for every dtype, so none
+    # of the inductor / CPU restrictions below apply.
+    if weight.device.type == "tpu":
+        return hasattr(torch.nn.functional, "grouped_mm") or hasattr(torch, "_grouped_mm")
+
     # accept_dev=True is necessary for "+cpu"/"+xpu" etc.
     if (
         (is_torchdynamo_compiling() and weight.dtype != torch.bfloat16)
@@ -475,6 +484,10 @@ def grouped_mm_experts_forward(
     if sentinel_mask is not None:
         proj_out = proj_out.masked_fill(sentinel_mask, 0.0)
 
+    # Apply optional post expert norm
+    if self.has_post_expert_norm:
+        proj_out = self.post_expert_norm(proj_out)
+
     # Apply routing weights
     weighted_out = proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
 
@@ -542,6 +555,7 @@ def use_experts_implementation(
     is_transposed: bool = False,
     has_bias: bool = False,
     has_gate: bool = True,
+    has_post_expert_norm: bool = False,
 ) -> type[torch.nn.Module]:
     """Decorator to modify experts class to support different experts implementations.
 
@@ -560,6 +574,8 @@ def use_experts_implementation(
         has_gate (`bool`, *optional*, defaults to `True`):
             Whether the experts use a gating mechanism or not.
             Whether it has gate_up_proj weights or just up_proj weights.
+        has_post_expert_norm (`bool`, *optional*, defaults to `False`):
+            Whether a post norm is applied after each expert application (up (-> gate) -> down).
 
     Returns:
         `type[torch.nn.Module]`: The modified experts class.
@@ -575,6 +591,7 @@ def use_experts_implementation(
             self.config = config
             self.has_gate = has_gate
             self.has_bias = has_bias
+            self.has_post_expert_norm = has_post_expert_norm
             self.is_transposed = is_transposed
             self.is_concatenated = is_concatenated
             self._is_expert_parallel = False

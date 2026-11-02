@@ -30,6 +30,8 @@ recognition and speech translation has *e.g.* been shown in [Large-Scale Self- a
 Translation](https://huggingface.co/papers/2104.06678) by Changhan Wang, Anne Wu, Juan Pino, Alexei Baevski, Michael Auli,
 Alexis Conneau.
 
+An example of how to use a [`SpeechEncoderDecoderModel`] for inference can be seen with the Speech2Text2 decoder.
+
 ## Randomly initializing `SpeechEncoderDecoderModel` from model configurations
 
 [`SpeechEncoderDecoderModel`] can be randomly initialized from an encoder and a decoder config. In the following example, we show how to do this using the default [`Wav2Vec2Model`] configuration for the encoder
@@ -66,7 +68,7 @@ model = SpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
 
 To load fine-tuned checkpoints of the `SpeechEncoderDecoderModel` class, [`SpeechEncoderDecoderModel`] provides the `from_pretrained(...)` method just like any other model architecture in Transformers.
 
-To perform inference, one uses the [`generate`] method, which allows to autoregressively generate text. This method supports various forms of decoding, such as greedy, beam search and multinomial sampling.
+To perform inference, one uses the [`generate`] method, which allows you to autoregressively generate text. This method supports various forms of decoding, such as greedy, beam search and multinomial sampling.
 
 ```python
 from transformers import Wav2Vec2Processor, SpeechEncoderDecoderModel

@@ -299,6 +299,7 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
     config: Qwen2AudioEncoderConfig
     main_input_name = "input_features"
     input_modalities = "audio"
+    _input_embed_layer = "conv1"
     _no_split_modules = ["Qwen2AudioEncoderLayer"]
     _can_record_outputs = {"hidden_states": Qwen2AudioEncoderLayer, "attentions": Qwen2AudioAttention}
 
@@ -332,25 +333,19 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
             param.requires_grad = False
         self._requires_grad = False
 
-    def get_input_embeddings(self) -> nn.Module:
-        return self.conv1
-
-    def set_input_embeddings(self, value: nn.Module):
-        self.conv1 = value
-
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
-        input_features,
+        input_features: torch.FloatTensor,
         attention_mask=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
-        Args:
-            attention_mask (`torch.Tensor`)`, *optional*):
-                Qwen2Audio does not support masking of the `input_features`, this argument is preserved for compatibility,
-                but it is not used. By default the silence in the input log mel spectrogram are ignored.
+        attention_mask (`torch.Tensor`)`, *optional*):
+            Qwen2Audio does not support masking of the `input_features`, this argument is preserved for compatibility,
+            but it is not used. By default the silence in the input log mel spectrogram are ignored.
         """
 
         expected_seq_length = self.config.max_source_positions * self.conv1.stride[0] * self.conv2.stride[0]
@@ -801,10 +796,6 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 

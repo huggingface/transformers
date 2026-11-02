@@ -34,6 +34,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 from ...test_processing_common import url_to_local_path
@@ -171,12 +172,10 @@ class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
 
 @require_torch
-class Cohere2IntegrationTest(unittest.TestCase):
+class Cohere2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def setUp(self):
+        super().setUp()
         self.model_checkpoint = "CohereLabs/command-a-vision-07-2025"
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     def get_model(self, dummy=True):
         device_type, major, _ = get_device_properties()

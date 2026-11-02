@@ -495,6 +495,20 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
             common_properties=["num_query_tokens", "image_token_index"],
         )
 
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        # override - old testers that is composed of separate classes for vision/text
+        try:
+            original_batch_size = self.model_tester.batch_size
+            self.model_tester.text_model_tester.batch_size = batch_size
+            self.model_tester.vision_model_tester.batch_size = batch_size
+            self.model_tester.qformer_model_tester.batch_size = batch_size
+            config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
+        finally:
+            self.model_tester.text_model_tester.batch_size = original_batch_size
+            self.model_tester.vision_model_tester.batch_size = original_batch_size
+            self.model_tester.qformer_model_tester.batch_size = original_batch_size
+        return config, inputs_dict
+
     @staticmethod
     def _prepare_config_headdim(config, requested_dim):
         return _prepare_qformer_config_headdim(config, requested_dim)

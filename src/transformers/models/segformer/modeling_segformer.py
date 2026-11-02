@@ -374,7 +374,7 @@ class SegformerPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class SegformerModel(SegformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SegformerConfig):
         super().__init__(config)
         self.config = config
 
@@ -408,7 +408,7 @@ class SegformerModel(SegformerPreTrainedModel):
     """
 )
 class SegformerForImageClassification(SegformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SegformerConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -428,12 +428,6 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> SegFormerImageClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         outputs = self.segformer(pixel_values, **kwargs)
 
         sequence_output = outputs.last_hidden_state
@@ -538,7 +532,7 @@ class SegformerDecodeHead(nn.Module):
     """
 )
 class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SegformerConfig):
         super().__init__(config)
         self.segformer = SegformerModel(config)
         self.decode_head = SegformerDecodeHead(config)
@@ -556,10 +550,6 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> SemanticSegmenterOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
-
         Examples:
 
         ```python

@@ -91,7 +91,7 @@ def _configure_library_root_logger() -> None:
         _default_handler = logging.StreamHandler()  # Set sys.stderr as stream.
         # set defaults based on https://github.com/pyinstaller/pyinstaller/issues/7334#issuecomment-1357447176
         if sys.stderr is None:
-            sys.stderr = open(os.devnull, "w")
+            sys.stderr = open(os.devnull, "w", encoding="utf-8")
 
         _default_handler.flush = sys.stderr.flush
 

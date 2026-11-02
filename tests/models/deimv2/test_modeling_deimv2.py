@@ -294,8 +294,6 @@ class Deimv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     test_resize_embeddings = False
 
-    test_missing_keys = False
-
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
@@ -347,10 +345,6 @@ class Deimv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Base test asserts get_input_embeddings() returns nn.Embedding which vision models lack")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="Decoder heads are shared via reference assignment so untied saving is not applicable")
-    def test_load_save_without_tied_weights(self):
         pass
 
     # Override: Multi-scale deformable attention outputs have different shapes than standard self-attention
@@ -878,8 +872,6 @@ class Deimv2LiteEncoderModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
     test_resize_embeddings = False
     has_attentions = False
 
-    test_missing_keys = False
-
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
@@ -931,10 +923,6 @@ class Deimv2LiteEncoderModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
 
     @unittest.skip(reason="Base test asserts get_input_embeddings() returns nn.Embedding which vision models lack")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="Decoder heads are shared via reference assignment so untied saving is not applicable")
-    def test_load_save_without_tied_weights(self):
         pass
 
     @unittest.skip(
@@ -1221,8 +1209,6 @@ class Deimv2DINOv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     is_encoder_decoder = True
     test_resize_embeddings = False
 
-    test_missing_keys = False
-
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
@@ -1274,10 +1260,6 @@ class Deimv2DINOv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     @unittest.skip(reason="Base test asserts get_input_embeddings() returns nn.Embedding which vision models lack")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="Decoder heads are shared via reference assignment so untied saving is not applicable")
-    def test_load_save_without_tied_weights(self):
         pass
 
     @unittest.skip(reason="DINOv3 RoPE with dynamic interpolation causes torch.compile inductor overflow")

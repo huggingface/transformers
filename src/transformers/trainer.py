@@ -28,6 +28,7 @@ import sys
 import tempfile
 import time
 import warnings
+from collections import defaultdict
 from collections.abc import Callable, Iterator, Mapping
 from functools import partial
 from pathlib import Path
@@ -80,7 +81,6 @@ from .models.auto.modeling_auto import (
 )
 from .optimization import GreedyLR, get_scheduler
 from .processing_utils import ProcessorMixin
-from .pytorch_utils import is_torch_greater_or_equal_than_2_6
 from .tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -96,6 +96,7 @@ from .trainer_optimizer import (
     _OPTIMIZER_HANDLERS,
     OptimizerContext,
     _parse_optim_args,
+    has_mixed_dtensor,
     is_optimizer_factory,
 )
 from .trainer_pt_utils import (
@@ -228,7 +229,7 @@ if is_accelerate_available():
         save_fsdp_model,
         save_fsdp_optimizer,
     )
-    from accelerate.utils.memory import clear_device_cache
+    from accelerate.utils.memory import clear_device_cache, should_reduce_batch_size
 
     if is_deepspeed_available():
         from accelerate.utils import DeepSpeedSchedulerWrapper
@@ -350,6 +351,11 @@ class Trainer:
           overridden by subclassing `TrainingArguments` and overriding the `place_model_on_device` property.
         - **is_in_train** -- Whether or not a model is currently running `train` (e.g. when `evaluate` is called while
           in `train`)
+        - **loss_is_scaled_for_ga** -- Whether the loss returned by `compute_loss` is already scaled for gradient
+          accumulation. `True`: `training_step` uses it as is. `False`: `training_step` divides it by the number of
+          gradient accumulation steps. `None` (default): the loss counts as scaled when it was normalized by
+          `num_items_in_batch`, i.e. when the model accepts loss kwargs or a `compute_loss_func` is passed. Subclasses
+          that compute their own loss should set it.
 
     """
 
@@ -363,6 +369,10 @@ class Trainer:
         save_metrics,
         save_state,
     )
+
+    # Whether the loss returned by `compute_loss` is already scaled for gradient accumulation. `None` decides from
+    # `model_accepts_loss_kwargs` and `compute_loss_func`, see the class docstring.
+    loss_is_scaled_for_ga: bool | None = None
 
     # ---- Initialization & Validation ----
 
@@ -454,6 +464,10 @@ class Trainer:
             elif len(devices) == 1:
                 self.is_model_parallel = self.args.device != torch.device(devices[0])
 
+        # Sharded at load time by `from_pretrained(distributed_config=...)`, whatever the parallelism: the model owns
+        # its placement and gradient reduction, so Accelerate must not wrap or shard it again.
+        self.is_distributed_loading_by_transformers = getattr(model, "is_distributed_loading_by_transformers", False)
+
         self.is_fsdp_xla_enabled = args.fsdp and args.fsdp_config.get("xla", False)
         if args.fsdp:
             if self.is_deepspeed_enabled:
@@ -473,6 +487,9 @@ class Trainer:
             or self.is_fsdp_xla_enabled
             or self.is_fsdp_enabled
             or is_sagemaker_mp_enabled()
+            # Sharded at load time (`DistributedConfig`): the model manages its own placement, and
+            # `.to()` on FSDP2-managed (possibly CPU-offloaded) parameters raises in `_apply`.
+            or self.is_distributed_loading_by_transformers
         ):
             self.place_model_on_device = False
         else:
@@ -612,6 +629,15 @@ class Trainer:
         self._created_lr_scheduler = False
         # Resolved lazily at the first gradient clip; see `_has_mixed_mesh_grads`.
         self._mixed_mesh_grads: bool | None = None
+        if (
+            self.is_distributed_loading_by_transformers
+            and args.save_strategy != SaveStrategy.NO
+            and not args.save_only_model
+        ):
+            raise ValueError(
+                "Resuming is not supported for models sharded at load time (`DistributedConfig`), so their "
+                "optimizer state cannot be checkpointed. Pass `save_only_model=True` or `save_strategy='no'`."
+            )
 
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
 
@@ -748,17 +774,20 @@ class Trainer:
                 )
             args["parallelism_config"] = self.args.parallelism_config
 
-        if getattr(self.model, "tp_size", None) is not None and self.model.tp_size > 1:
-            if self.args.parallelism_config is None:
-                if is_accelerate_available("1.12.0"):
-                    if self.args.parallelism_config is None:
-                        from accelerate import ParallelismConfig
+        model_tp_size = getattr(self.model, "tp_size", None) or 1
+        model_fsdp_size = getattr(self.model, "fsdp_size", None) or 1
+        if model_tp_size > 1:
+            # Sharded at load time (tensor/expert parallelism, optionally with FSDP2 on a second mesh
+            # dimension): accelerate has to know both sizes.
+            if not is_accelerate_available("1.12.0"):
+                raise ValueError("Requires accelerate>1.12.0 to use Tensor Parallelism.")
+            if args.get("parallelism_config") is None:
+                from accelerate import ParallelismConfig
 
-                        args["parallelism_config"] = ParallelismConfig(tp_size=self.model.tp_size)
-                else:
-                    raise ValueError("Requires accelerate>1.12.0 to use Tensor Parallelism.")
-            elif args["parallelism_config"].tp_size != self.model.tp_size:
-                args["parallelism_config"].tp_size = self.model.tp_size
+                args["parallelism_config"] = ParallelismConfig(tp_size=model_tp_size, dp_shard_size=model_fsdp_size)
+            else:
+                args["parallelism_config"].tp_size = model_tp_size
+                args["parallelism_config"].dp_shard_size = model_fsdp_size
 
         if is_accelerate_available("1.2.0"):
             # it we don't have the correct version, we will rely on env var instead that were set in TrainingArguments
@@ -997,10 +1026,8 @@ class Trainer:
             "persistent_workers": self.args.dataloader_persistent_workers,
             "multiprocessing_context": self.args.dataloader_multiprocessing_context,
             "prefetch_factor": self.args.dataloader_prefetch_factor,
+            "in_order": self.args.dataloader_in_order,
         }
-        # `in_order` was added in torch 2.6; on older versions the loader always behaves as `in_order=True`.
-        if is_torch_greater_or_equal_than_2_6:
-            dataloader_params["in_order"] = self.args.dataloader_in_order
 
         sampler = None
         if not isinstance(dataset, torch.utils.data.IterableDataset):
@@ -1254,6 +1281,18 @@ class Trainer:
                     "weight_decay": 0.0,
                 },
             ]
+            if has_mixed_dtensor(p for group in optimizer_grouped_parameters for p in group["params"]):
+                # Parameters on different device meshes (expert parallelism, alone or with FSDP2 on a 2-D
+                # mesh) cannot share one fused/foreach kernel call: give each mesh its own param group.
+                from torch.distributed.tensor import DTensor
+
+                split_groups = []
+                for group in optimizer_grouped_parameters:
+                    by_mesh = defaultdict(list)
+                    for p in group["params"]:
+                        by_mesh[p.device_mesh if isinstance(p, DTensor) else None].append(p)
+                    split_groups.extend({**group, "params": params} for params in by_mesh.values())
+                optimizer_grouped_parameters = split_groups
 
             if self.optimizer_cls_and_kwargs is not None:
                 optimizer_cls, optimizer_kwargs = self.optimizer_cls_and_kwargs
@@ -1584,6 +1623,8 @@ class Trainer:
         start_time = time.time()
         # needed to calculate tokens/s
         self._initial_num_input_tokens_seen = self.state.num_input_tokens_seen
+        # needed to report loss and throughput for this `train()` call only when resuming from a checkpoint
+        self._initial_global_step = self.state.global_step
         # Logging state: _tr_loss accumulates on-device between logging steps (avoiding costly .item() syncs
         # on TPUs), then gets drained into _total_loss_scalar at each logging step.
         self._tr_loss = torch.tensor(0.0, device=args.device)
@@ -1683,7 +1724,13 @@ class Trainer:
         use_accelerator_prepare = model is self.model
 
         # prepare using `accelerator` prepare
-        if use_accelerator_prepare:
+        if self.is_distributed_loading_by_transformers:
+            # The model already owns placement and gradient reduction. Prepare autocast and compilation only,
+            # without asking Accelerate to wrap the DTensor parameters in DDP or to shard them again.
+            model = self.accelerator.prepare_model(model, device_placement=False, evaluation_mode=True)
+            self.optimizer = self.accelerator.prepare(self.optimizer)
+            self._sync_replicated_trainable_parameters(model)
+        elif use_accelerator_prepare:
             if delay_optimizer_creation:
                 # TODO: check if we can move this somewhere else
                 if self.is_fsdp_enabled and _is_peft_model(self.model):
@@ -1929,14 +1976,15 @@ class Trainer:
 
         # add remaining tr_loss
         self._total_loss_scalar += self._tr_loss.item()
-        effective_global_step = max(self.state.global_step, 0.001)  # Avoid ZeroDivisionError
-        train_loss = self._total_loss_scalar / effective_global_step
+        num_steps_trained = self.state.global_step - self._initial_global_step
+        train_loss = self._total_loss_scalar / max(num_steps_trained, 0.001)  # Avoid ZeroDivisionError
 
         metrics = speed_metrics(
             "train",
             start_time,
-            num_samples=num_train_samples,
-            num_steps=self.state.max_steps,
+            # `num_train_samples` covers the whole schedule: only count the share of the steps run in this call
+            num_samples=num_train_samples * num_steps_trained / max(self.state.max_steps, 1),
+            num_steps=num_steps_trained,
         )
         self.store_flos()
         metrics["total_flos"] = self.state.total_flos
@@ -2032,8 +2080,14 @@ class Trainer:
                 loss = loss.mean()  # mean() to average on multi-gpu parallel training
 
             # Finally we need to normalize the loss for reporting if GA loss bug is not fixed during compute loss
-            if (not self.model_accepts_loss_kwargs or num_items_in_batch is None) and self.compute_loss_func is None:
-                # If the model does not accept loss kwargs, we need to normalize the loss by the number of gradient accumulation steps
+            if self.loss_is_scaled_for_ga is not None:
+                loss_is_scaled_for_ga = self.loss_is_scaled_for_ga
+            else:
+                # The loss is scaled when it was normalized by `num_items_in_batch`, by the model or by `compute_loss_func`
+                loss_is_scaled_for_ga = (
+                    self.model_accepts_loss_kwargs and num_items_in_batch is not None
+                ) or self.compute_loss_func is not None
+            if not loss_is_scaled_for_ga:
                 loss = loss / self.current_gradient_accumulation_steps
 
             # Turning off loss scaling w.r.t. gradient accumulation when DeepSpeed is enabled
@@ -2069,8 +2123,10 @@ class Trainer:
         Returns:
             The loss of the model along with its output if return_outputs was set to True
 
-        Subclass and override for custom behavior. If you are not using `num_items_in_batch` when computing your loss,
-        make sure to overwrite `self.model_accepts_loss_kwargs` to `False`. Otherwise, the loss calculation might be slightly inaccurate when performing gradient accumulation.
+        Subclass and override for custom behavior. If you compute your own loss, set `loss_is_scaled_for_ga` to say
+        whether it is already scaled for gradient accumulation: `False` if it is a per-batch mean (the Trainer then
+        divides it by the number of gradient accumulation steps), `True` if you already normalized it over the whole
+        accumulated batch.
         """
         pc = getattr(self.accelerator, "parallelism_config", None)
         if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled and self.model.training:
@@ -2125,11 +2181,9 @@ class Trainer:
             and (self.model_accepts_loss_kwargs or self.compute_loss_func)
             and num_items_in_batch is not None
         ):
-            # TP and EP-as-TP ranks see replicated batches; `num_processes` over-counts
-            # them by `tp_size`. Mirror the divisor used in `_get_num_items_in_batch`.
-            loss_scale = self.accelerator.num_processes
-            if (pc := getattr(self.accelerator, "parallelism_config", None)) is not None:
-                loss_scale //= pc.tp_size
+            # TP ranks (and the expert-parallel ranks sharing their batch) see replicated batches; `num_processes`
+            # over-counts them by `tp_size`. Mirror the divisor used in `_get_num_items_in_batch`.
+            loss_scale = self.accelerator.num_processes // self.get_tp_size()
             loss *= loss_scale if self.args.n_gpu <= 1 else self.args.n_gpu
 
         return (loss, outputs) if return_outputs else loss
@@ -2278,8 +2332,9 @@ class Trainer:
                     # In the DataParallel case, convert the scalar tensor into a 2-dim tensor with the same value repeated
                     num_items_in_batch = num_items_in_batch.unsqueeze(0).expand(self.args.n_gpu, -1)
                 # Divide by number of devices with the same batch
-                if pc := getattr(self.accelerator, "parallelism_config", None):
-                    num_items_in_batch = num_items_in_batch // pc.non_data_parallel_size
+                num_items_in_batch = num_items_in_batch / (
+                    self.get_tp_size() * self.get_cp_size() * self.get_sp_size()
+                )
 
         return num_items_in_batch
 
@@ -2524,8 +2579,42 @@ class Trainer:
         if self.is_deepspeed_enabled and (deepspeed_config := getattr(self.args, "hf_deepspeed_config", None)):
             return deepspeed_config.config.get("tensor_parallel", {}).get("autotp_size", 1)
 
-        # 3. Default fallback
+        # 3. Fall back to accelerate, for tensor parallelism configured outside `DistributedConfig`
+        if (pc := getattr(self.accelerator, "parallelism_config", None)) is not None:
+            return pc.tp_size
+
+        # 4. Default fallback
         return 1
+
+    def _sync_replicated_trainable_parameters(self, model: nn.Module) -> None:
+        """
+        Keep the trainable parameters that FSDP2 does not manage identical across ranks.
+
+        A parameter added after `fully_shard` (a PEFT adapter attached to a model sharded at load time) stays a plain
+        replicated tensor next to the DTensor base weights. FSDP2 reduce-scatters only what it sharded and the DDP
+        wrap is skipped for such a model, so each rank would init its own copy and train it on its own batch.
+        Broadcast these parameters from rank 0, then average their gradient over all ranks at the end of each
+        accumulation window.
+        """
+        if not dist.is_available() or not dist.is_initialized() or dist.get_world_size() == 1:
+            return
+
+        from torch.distributed.tensor import DTensor
+
+        def average_gradient(param):
+            # Averaging the accumulated micro-batch gradients once gives the same result as after every backward.
+            if self.accelerator.sync_gradients:
+                dist.all_reduce(param.grad, op=dist.ReduceOp.AVG)
+
+        for param in model.parameters():
+            if not param.requires_grad or isinstance(param.data, DTensor):
+                continue
+            with torch.no_grad():
+                dist.broadcast(param.data, src=0)
+            # `train()` can run more than once on the same model: register the hook only once.
+            if not getattr(param, "_replicated_grad_hook_registered", False):
+                param.register_post_accumulate_grad_hook(average_gradient)
+                param._replicated_grad_hook_registered = True
 
     def _wrap_model(self, model: nn.Module, training: bool = True, dataloader: DataLoader | None = None) -> nn.Module:
         """Wrap `model` for distributed training if needed (DDP, FSDP, SageMaker, etc.)."""
@@ -2616,48 +2705,33 @@ class Trainer:
         self.state.num_input_tokens_seen += self.accelerator.gather(input_tokens).sum().item()
 
     def _mixed_mesh_grad_norm(self, model, max_norm):
-        """Gradient norm (and clip) when only some parameters are sharded, as under expert parallelism.
-
-        Expert parallelism shards the expert weights and leaves everything else replicated, so
-        `model.parameters()` holds a mix of `DTensor` and plain tensors and `_foreach_norm` cannot span
-        both. Take the two groups separately: the sharded gradients contribute their local norms summed
-        across the mesh, the replicated ones are identical on every rank and are counted once.
+        """
+        Gradient norm (and clip) when the gradients live on different device meshes, which `clip_grad_norm_` cannot
+        span: one norm per mesh, each already reduced over its own mesh.
         """
         from torch.distributed.tensor import DTensor
+        from torch.nn.utils import clip_grads_with_norm_, get_total_norm
 
-        sharded, replicated = [], []
+        params_by_mesh = defaultdict(list)
         for param in model.parameters():
-            if param.grad is None:
-                continue
-            (sharded if isinstance(param.grad, DTensor) else replicated).append(param.grad)
+            if param.grad is not None:
+                params_by_mesh[param.grad.device_mesh if isinstance(param.grad, DTensor) else None].append(param)
 
-        device = (sharded or replicated)[0].device
-        replicated_sq = torch.zeros((), device=device, dtype=torch.float32)
-        if replicated:
-            replicated_sq = torch.linalg.vector_norm(torch.stack([g.norm(2) for g in replicated])) ** 2
+        norms = []
+        for params in params_by_mesh.values():
+            norm = get_total_norm([p.grad for p in params])
+            norms.append(norm.full_tensor() if isinstance(norm, DTensor) else norm)
+        total_norm = torch.linalg.vector_norm(torch.stack(norms))
 
-        sharded_sq = torch.zeros((), device=device, dtype=torch.float32)
-        if sharded:
-            local = [g.to_local() for g in sharded]
-            sharded_sq = torch.linalg.vector_norm(torch.stack([g.norm(2) for g in local])) ** 2
-            # Sum the per-shard contributions over the mesh the experts are sharded on.
-            torch.distributed.all_reduce(sharded_sq, group=sharded[0].device_mesh.get_group())
-
-        total_norm = (replicated_sq + sharded_sq).sqrt()
         if max_norm != float("inf"):
-            clip = (max_norm / (total_norm + 1e-6)).clamp(max=1.0)
-            for g in replicated:
-                g.mul_(clip)
-            for g in sharded:
-                g.to_local().mul_(clip)
+            for params in params_by_mesh.values():
+                clip_grads_with_norm_(params, max_norm, total_norm)
         return total_norm
 
     def _has_mixed_mesh_grads(self, model) -> bool:
         # Static for the life of the run (sharding never changes after setup), so scan the
         # parameters only on the first call.
         if self._mixed_mesh_grads is None:
-            from .trainer_optimizer import has_mixed_dtensor
-
             self._mixed_mesh_grads = has_mixed_dtensor(p.grad for p in model.parameters() if p.grad is not None)
         return self._mixed_mesh_grads
 
@@ -2977,10 +3051,12 @@ class Trainer:
         # To be JSON-serializable, we need to remove numpy types or zero-d tensors
         metrics = denumpify_detensorize(metrics)
 
-        if isinstance(all_losses, list) and all_losses:
-            metrics[f"{metric_key_prefix}_loss"] = np.concatenate(all_losses).mean().item()
-        elif isinstance(all_losses, np.ndarray):
-            metrics[f"{metric_key_prefix}_loss"] = all_losses.mean().item()
+        losses = np.concatenate(all_losses) if isinstance(all_losses, list) and all_losses else all_losses
+        if isinstance(losses, np.ndarray):
+            finite = np.isfinite(losses)
+            if self.args.logging_nan_inf_filter and finite.any():
+                losses = losses[finite]
+            metrics[f"{metric_key_prefix}_loss"] = losses.mean().item()
         if hasattr(self, "model_preparation_time"):
             metrics[f"{metric_key_prefix}_model_preparation_time"] = self.model_preparation_time
 
@@ -2990,6 +3066,25 @@ class Trainer:
                 metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
 
         return EvalLoopOutput(predictions=all_preds, label_ids=all_labels, metrics=metrics, num_samples=num_samples)
+
+    def end(self):
+        """
+        Finish the trackers and destroy the distributed process group.
+
+        Call this once, at the very end of a script, after everything that needs the other processes:
+        [`~Trainer.train`], [`~Trainer.evaluate`], [`~Trainer.predict`], [`~Trainer.save_model`] and
+        [`~Trainer.push_to_hub`] all communicate between processes and will fail once the group is gone.
+
+        Example:
+
+        ```python
+        trainer.train()
+        trainer.evaluate()
+        trainer.push_to_hub()
+        trainer.end()
+        ```
+        """
+        self.accelerator.end_training()
 
     def predict(
         self, test_dataset: Dataset, ignore_keys: list[str] | None = None, metric_key_prefix: str = "test"
@@ -3168,7 +3263,17 @@ class Trainer:
         skip_scheduler: bool = False,
     ) -> dict[str, float]:
         """Run evaluation, report to HP search, and step ReduceLROnPlateau/GreedyLR if needed."""
-        metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
+        try:
+            metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
+        except RuntimeError as e:
+            # `auto_find_batch_size` only shrinks the train batch size, so letting an eval OOM reach the batch size
+            # finder would restart training with a smaller train batch size until it hits zero.
+            if self.args.auto_find_batch_size and should_reduce_batch_size(e):
+                raise RuntimeError(
+                    "Evaluation hit an out-of-memory error. `auto_find_batch_size` only adjusts the training batch size, "
+                    "reduce `per_device_eval_batch_size` instead."
+                ) from e
+            raise
         self._report_to_hp_search(trial, self.state.global_step, metrics)
 
         # Run delayed LR scheduler now that metrics are populated
@@ -3819,7 +3924,10 @@ class Trainer:
                     # We use the CPU when training on one GPU to avoid OOM for GPU RAM when training big models.
                     # In distributed training however, we load directly on each GPU and risk the GPU OOM as it's more
                     # likely to get OOM on CPU (since we load num_gpu times the optimizer state
-                    map_location = self.args.device if self.args.world_size > 1 else "cpu"
+                    # An indexed CPU device (e.g. "cpu:0") can't be restored by torch - use plain "cpu".
+                    map_location = (
+                        self.args.device if self.args.world_size > 1 and self.args.device.type != "cpu" else "cpu"
+                    )
                     if self.is_fsdp_enabled:
                         load_fsdp_optimizer(
                             self.accelerator.state.fsdp_plugin,
@@ -3945,14 +4053,12 @@ class Trainer:
             # Calling the state_dict needs to be done on the wrapped model and on all processes.
             os.makedirs(output_dir, exist_ok=True)
             state_dict = self.model_wrapped.state_dict()
-            if self.args.should_save:
-                self._save(output_dir, state_dict=state_dict)
+            self._save(output_dir, state_dict=state_dict)
             Path(os.path.join(output_dir, "user_content.pt")).touch()
         elif self.is_fsdp_enabled:
             if "FULL_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type):
                 state_dict = self.accelerator.get_state_dict(self.model)
-                if self.args.should_save:
-                    self._save(output_dir, state_dict=state_dict)
+                self._save(output_dir, state_dict=state_dict)
         elif self.is_deepspeed_enabled:
             try:
                 accept_exclude_frozen_parameters = "exclude_frozen_parameters" in set(
@@ -3965,20 +4071,18 @@ class Trainer:
                     state_dict = self.deepspeed._zero3_consolidated_16bit_state_dict(exclude_frozen_parameters=True)
                 else:
                     state_dict = self.accelerator.get_state_dict(self.deepspeed)
-                if self.args.should_save:
-                    self._save(output_dir, state_dict=state_dict)
+                self._save(output_dir, state_dict=state_dict)
             except ValueError:
                 logger.warning(
                     " stage3_gather_16bit_weights_on_model_save=false. Saving the full checkpoint instead, use"
                     " zero_to_fp32.py to recover weights"
                 )
-                if self.args.should_save:
-                    self._save(output_dir, state_dict={})
+                self._save(output_dir, state_dict={})
                 # remove the dummy state_dict
                 remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
                 self.model_wrapped.save_checkpoint(output_dir)
 
-        elif self.args.should_save:
+        else:
             self._save(output_dir)
 
         # Push to the Hub when `save_model` is called by the user.
@@ -3987,10 +4091,15 @@ class Trainer:
 
     def _save(self, output_dir: str | None = None, state_dict: dict | None = None) -> None:
         """Save model weights, configuration, and processing class to `output_dir`."""
-        # If we are executing this function, we are the process zero, so we don't check for that.
         output_dir = output_dir if output_dir is not None else self.args.output_dir
-        os.makedirs(output_dir, exist_ok=True)
-        logger.info(f"Saving model checkpoint to {output_dir}")
+
+        # Non-writer ranks only stay when the model was sharded at load time, to join the collective gathers below.
+        if not self.args.should_save and not self.is_distributed_loading_by_transformers:
+            return
+
+        if self.args.should_save:
+            os.makedirs(output_dir, exist_ok=True)
+            logger.info(f"Saving model checkpoint to {output_dir}")
 
         supported_classes = (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
         # Save a trained model and configuration using `save_pretrained()`.
@@ -4001,15 +4110,19 @@ class Trainer:
 
             if isinstance(self.accelerator.unwrap_model(self.model, keep_torch_compile=False), supported_classes):
                 self.accelerator.unwrap_model(self.model, keep_torch_compile=False).save_pretrained(
-                    output_dir, state_dict=state_dict
+                    output_dir, state_dict=state_dict, is_main_process=self.args.should_save
                 )
-            else:
+            elif self.args.should_save:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
                 safetensors.torch.save_file(
                     state_dict, os.path.join(output_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"}
                 )
         else:
-            self.model.save_pretrained(output_dir, state_dict=state_dict)
+            self.model.save_pretrained(output_dir, state_dict=state_dict, is_main_process=self.args.should_save)
+
+        # A non-writer rank of a model sharded at load time is only here for the collectives above.
+        if not self.args.should_save:
+            return
 
         if self.processing_class is not None:
             self.processing_class.save_pretrained(output_dir)
@@ -4082,9 +4195,16 @@ class Trainer:
 
     # ---- Hub Integration ----
 
-    def init_hf_repo(self, token: str | None = None) -> None:
+    def init_hf_repo(self, token: str | None = None, private: bool | None = None) -> None:
         """
         Initializes a git repo in `self.args.hub_model_id`.
+
+        Args:
+            token (`str`, *optional*):
+                Token with write permission. Defaults to `self.args.hub_token`.
+            private (`bool`, *optional*):
+                Whether to make the repo private when it is created. Defaults to `self.args.hub_private_repo`. Has
+                no effect if the repo already exists.
         """
         # Only on process zero
         if not self.is_world_process_zero():
@@ -4096,7 +4216,8 @@ class Trainer:
             repo_name = self.args.hub_model_id
 
         token = token if token is not None else self.args.hub_token
-        repo_url = hf_api().create_repo(repo_name, token=token, private=self.args.hub_private_repo, exist_ok=True)
+        private = private if private is not None else self.args.hub_private_repo
+        repo_url = hf_api().create_repo(repo_name, token=token, private=private, exist_ok=True)
         self.hub_model_id = repo_url.repo_id
         self.push_in_progress = None
 
@@ -4168,7 +4289,7 @@ class Trainer:
             dataset_args=dataset_args,
         )
         model_card = training_summary.to_model_card()
-        with open(model_card_filepath, "w") as f:
+        with open(model_card_filepath, "w", encoding="utf-8") as f:
             f.write(model_card)
 
         if is_peft_library:
@@ -4180,6 +4301,7 @@ class Trainer:
         blocking: bool = True,
         token: str | None = None,
         revision: str | None = None,
+        private: bool | None = None,
         **kwargs,
     ) -> CommitInfo:
         """
@@ -4194,6 +4316,9 @@ class Trainer:
                 Token with write permission to overwrite Trainer's original args.
             revision (`str`, *optional*):
                 The git revision to commit from. Defaults to the head of the "main" branch.
+            private (`bool`, *optional*):
+                Whether to make the repo private when it is created. Defaults to `args.hub_private_repo`. Has no
+                effect if the repo already exists.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional keyword arguments passed along to [`~Trainer.create_model_card`].
 
@@ -4213,7 +4338,7 @@ class Trainer:
 
         # In case the user calls this method with args.push_to_hub = False
         if self.hub_model_id is None:
-            self.init_hf_repo(token=token)
+            self.init_hf_repo(token=token, private=private)
 
         # Needs to be executed on all processes for TPU training, but will only save on the processed determined by
         # self.args.should_save.
@@ -4273,7 +4398,7 @@ class Trainer:
             index_path = os.path.join(checkpoint_folder, index_file)
             if os.path.isfile(index_path):
                 modeling_files.append(index_file)
-                with open(index_path) as f:
+                with open(index_path, encoding="utf-8") as f:
                     index = json.loads(f.read())
                 shard_files = list(set(index["weight_map"].values()))
                 modeling_files.extend(shard_files)

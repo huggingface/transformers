@@ -35,7 +35,6 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.generic import TensorType, merge_with_config_defaults
-from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..got_ocr2.configuration_got_ocr2 import GotOcr2VisionConfig
 from ..got_ocr2.modeling_got_ocr2 import (
@@ -77,7 +76,9 @@ class SLANeXtConfig(PreTrainedConfig):
     """
 
     model_type = "slanext"
-    sub_configs = {"vision_config": SLANeXtVisionConfig}
+    sub_configs_defaults = {
+        "vision_config": SLANeXtVisionConfig,
+    }
 
     vision_config: dict | SLANeXtVisionConfig | None = None
     post_conv_in_channels: int = 256
@@ -85,13 +86,6 @@ class SLANeXtConfig(PreTrainedConfig):
     out_channels: int = 50
     hidden_size: int = 512
     max_text_length: int = 500
-
-    def __post_init__(self, **kwargs):
-        if self.vision_config is None:
-            self.vision_config = SLANeXtVisionConfig()
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = SLANeXtVisionConfig(**self.vision_config)
-        super().__post_init__(**kwargs)
 
 
 class SLANeXtAttentionGRUCell(nn.Module):
@@ -311,7 +305,6 @@ class SLANeXtForTableRecognition(SLANeXtPreTrainedModel):
 
 
 @auto_docstring
-@requires(backends=("torch",))
 class SLANeXtImageProcessor(TorchvisionBackend):
     resample = 2  # PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -532,6 +525,7 @@ class SLANeXtImageProcessor(TorchvisionBackend):
 __all__ = [
     "SLANeXtImageProcessor",
     "SLANeXtConfig",
+    "SLANeXtVisionConfig",
     "SLANeXtSLAHead",
     "SLANeXtBackbone",
     "SLANeXtForTableRecognition",

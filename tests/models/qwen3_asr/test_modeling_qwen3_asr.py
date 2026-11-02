@@ -63,7 +63,7 @@ class Qwen3ASRModelTester(ALMModelTester):
         kwargs.setdefault("max_position_embeddings", 13)
         super().__init__(parent, **kwargs)
 
-    def create_audio_mask(self):
+    def create_audio_mask(self, batch_size: int | None = None):
         return torch.ones([self.batch_size, self.feat_seq_length], dtype=torch.long).to(torch_device)
 
     def get_audio_embeds_mask(self, audio_mask):

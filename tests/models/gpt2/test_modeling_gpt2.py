@@ -446,6 +446,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
                 ("rocm", (9, 5)): "Today is a nice day and if you don't know anything about the state of play during your holiday",
                 ("cuda", None): "Today is a nice day and if you don't know anything about the state of play during your holiday",
                 ("xpu", 3): "Today is a nice day and if you don't know anything about the state of play during your holiday",
+                ("tpu", None): 'Today is a nice day and I think everyone gets on well with the sun. No need to be',
             }
         )  # fmt: skip
         EXPECTED_OUTPUT = expected_outputs.get_expectation()
@@ -490,7 +491,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
                     "Hello this is a very long sentence. I'm sorry. I'm sorry. I'm sorry. I'm sorry. I'm sorry",
                 ],
                 ("rocm", (9, 4)): [
-                    '<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>hi, who was also a member of the group, said: "We are very happy to have been',
+                    "<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>hi, who was born in the city of Kolkata, was a member of the Kolkata",
                     "Hello this is a very long sentence. I'm sorry. I'm sorry. I'm sorry. I'm sorry. I'm sorry",
                 ],
             }

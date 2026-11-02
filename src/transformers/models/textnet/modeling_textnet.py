@@ -222,7 +222,7 @@ class TextNetPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class TextNetModel(TextNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: TextNetConfig):
         super().__init__(config)
         self.stem = TextNetConvLayer(config)
         self.encoder = TextNetEncoder(config)
@@ -269,7 +269,7 @@ class TextNetModel(TextNetPreTrainedModel):
     """
 )
 class TextNetForImageClassification(TextNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: TextNetConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.textnet = TextNetModel(config)
@@ -293,11 +293,6 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         **kwargs,
     ) -> ImageClassifierOutputWithNoAttention:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
         Examples:
         ```python
         >>> import torch
@@ -346,7 +341,7 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
 class TextNetBackbone(BackboneMixin, TextNetPreTrainedModel):
     has_attentions = False
 
-    def __init__(self, config):
+    def __init__(self, config: TextNetConfig):
         super().__init__(config)
 
         self.textnet = TextNetModel(config)

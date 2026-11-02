@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 Transformers integrates directly with the PEFT library through [`~integrations.PeftAdapterMixin`], added to all [`PreTrainedModel`] classes. You can load, add, train, switch, and delete adapters without wrapping your model in a separate [`~peft.PeftModel`]. All non-prompt-learning PEFT methods are supported (LoRA, IA3, AdaLoRA). Prompt-based methods like prompt tuning and prefix tuning require using the [PEFT library](https://huggingface.co/docs/peft/index) directly.
 
-Install PEFT to get started. The integration requires `peft >= 0.19.1`.
+Install PEFT to get started. The integration requires `peft >= 0.20.0`.
 
 ```shell
 pip install -U peft
@@ -111,6 +111,8 @@ PEFT adapters work with distributed training out of the box.
 For ZeRO-3, [`Trainer`] passes `exclude_frozen_parameters=True` when saving checkpoints with a PEFT model. Frozen base model weights are skipped. Only the trainable adapter parameters are saved, reducing checkpoint size and save time.
 
 For FSDP, [`Trainer`] updates the FSDP auto-wrap policy to correctly handle LoRA layers. For QLoRA (quantized base model + LoRA), [`Trainer`] also adjusts the mixed precision policy to match the quantization storage dtype.
+
+You can load PEFT adapters onto a tensor parallel base model and let PEFT handle sharding the adapter weights. Loading an adapter requires `peft >= 0.21.1`. See [Tensor parallelism](./tensor_parallelism) for training with TP.
 
 ## Loading an adapter
 

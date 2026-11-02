@@ -328,7 +328,7 @@ def get_chat_template() -> str | None:
         return None
 
     if _CHAT_TEMPLATE_PATH.value:
-        with open(_CHAT_TEMPLATE_PATH.value, "r") as f:
+        with open(_CHAT_TEMPLATE_PATH.value, "r", encoding="utf-8") as f:
             return f.read()
 
     return _CHAT_TEMPLATE

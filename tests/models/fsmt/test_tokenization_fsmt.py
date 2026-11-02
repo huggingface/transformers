@@ -75,13 +75,13 @@ class FSMTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         cls.tgt_vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["tgt_vocab_file"])
         config_file = os.path.join(cls.tmpdirname, "tokenizer_config.json")
         cls.merges_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        with open(cls.src_vocab_file, "w") as fp:
+        with open(cls.src_vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens))
-        with open(cls.tgt_vocab_file, "w") as fp:
+        with open(cls.tgt_vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens))
-        with open(cls.merges_file, "w") as fp:
+        with open(cls.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
-        with open(config_file, "w") as fp:
+        with open(config_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(config))
 
     @cached_property

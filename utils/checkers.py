@@ -199,7 +199,6 @@ _INLINE_CACHE_GLOBS = {
         "utils/**/*.py",
         "scripts/**/*.py",
         ".circleci/create_circleci_config.py",
-        "benchmark/**/*.py",
         "benchmark_v2/**/*.py",
         "setup.py",
         "conftest.py",
@@ -211,7 +210,6 @@ _INLINE_CACHE_GLOBS = {
         "utils/**/*.py",
         "scripts/**/*.py",
         ".circleci/create_circleci_config.py",
-        "benchmark/**/*.py",
         "benchmark_v2/**/*.py",
         "setup.py",
         "conftest.py",
@@ -426,7 +424,7 @@ def run_deps_table_checker(fix=False, line_callback=None):
     if before != after:
         msg = (
             "Error: the version dependency table is outdated.\n"
-            "Please run 'make fix-repo' and commit the changes. This requires Python 3.10.\n"
+            "Please run 'make fix-repo' and commit the changes. This requires Python 3.11.\n"
         )
         return 1, output + msg
     return 0, output
@@ -447,7 +445,6 @@ RUFF_TARGETS = [
     "utils",
     "scripts",
     ".circleci/create_circleci_config.py",
-    "benchmark",
     "benchmark_v2",
     "setup.py",
     "conftest.py",

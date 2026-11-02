@@ -38,7 +38,7 @@ logger = logging.get_logger(__name__)
 def get_config(model_name):
     repo_id = "huggingface/label-files"
     filename = "imagenet-1k-id2label.json"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
     id2label = {int(k): v for k, v in id2label.items()}
     label2id = {v: k for k, v in id2label.items()}
 
