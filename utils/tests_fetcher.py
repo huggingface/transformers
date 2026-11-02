@@ -635,7 +635,7 @@ def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None
     splits = content.split('\"\"\"')  # fmt: skip
     content = "".join(splits[::2])
 
-    module_parts = str(module_fname).replace("\\", "/").split("/")
+    module_parts = str(module_fname).split("/")
     imported_modules = []
 
     # Let's start with relative imports
