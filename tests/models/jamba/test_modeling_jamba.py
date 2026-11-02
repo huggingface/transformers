@@ -277,6 +277,35 @@ class JambaModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
+    def create_and_check_jamba_chunked_prefill(self, config, input_ids, *args, device="cpu"):
+        model = JambaModel(config)
+        model.to(device)
+        model.eval()
+
+        input_ids = input_ids[:1].to(device)
+        split = input_ids.shape[1] // 2
+
+        with torch.no_grad():
+            full_output = model(input_ids, use_cache=False).last_hidden_state
+            chunked_cache = model(input_ids[:, :split], use_cache=True).past_key_values
+            chunked_output = model(
+                input_ids[:, split:], use_cache=True, past_key_values=chunked_cache
+            ).last_hidden_state
+
+            full_cache = model(input_ids, use_cache=True).past_key_values
+
+        full_recurrent_state = full_cache.get_recurrent_state(0)
+        chunked_recurrent_state = chunked_cache.get_recurrent_state(0)
+
+        self.parent.assertTrue(
+            torch.allclose(full_recurrent_state, chunked_recurrent_state, atol=1e-6, rtol=1e-4),
+            msg=f"Max diff between chunked cache and full cache: {(full_recurrent_state - chunked_recurrent_state).abs().max().item()}",
+        )
+        self.parent.assertTrue(
+            torch.allclose(full_output[:, split:], chunked_output, atol=1e-5, rtol=1e-4),
+            msg=f"Max diff between chunked and full: {(full_output[:, split:] - chunked_output).abs().max().item()}",
+        )
+
     def create_and_check_for_sequence_classification(
         self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -358,6 +387,10 @@ class JambaModelTest(
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+
+    def test_jamba_chunked_prefill_cpu(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_jamba_chunked_prefill(*config_and_inputs, device="cpu")
 
     # After #40617, we still have 0.01 % of failure rate here.
     @is_flaky(max_attempts=2)
