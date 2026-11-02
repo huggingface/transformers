@@ -454,10 +454,9 @@ class Qwen3TTSTokenizerModel(VibeVoiceAcousticTokenizerModel, PreTrainedAudioTok
 
         audio_codes_mask = None
         if padding_mask is not None:
-            frame_size = self.encoder.config.frame_size
-            codes_length = (padding_mask.sum(dim=-1, keepdim=True) + frame_size - 1) // frame_size
-            frame_index = torch.arange(audio_codes.shape[1], device=padding_mask.device).view(1, -1)
-            audio_codes_mask = (frame_index < codes_length).to(padding_mask.dtype)
+            codes_length = self.encoder.get_encoded_length(padding_mask.sum(dim=-1)).to(padding_mask.device)
+            frame_index = torch.arange(audio_codes.shape[1], device=padding_mask.device)
+            audio_codes_mask = (frame_index < codes_length[:, None]).to(padding_mask.dtype)
 
         return Qwen3TTSTokenizerEncoderOutput(audio_codes=audio_codes, audio_codes_mask=audio_codes_mask)
 
