@@ -100,8 +100,9 @@ class ExportArtifacts(Mapping, PushToHubMixin):
             )
         return next(iter(self.components.values())).program
 
-    def runtime(self, device=None) -> ExportedModel:
-        """Run this single-graph export on `device` (the backend's default when `None`), as an [`ExportedModel`]."""
+    def runtime(self, device=None, **runner_kwargs) -> ExportedModel:
+        """Run this single-graph export on `device` (the backend's default when `None`), as an [`ExportedModel`].
+        `runner_kwargs` go to the backend's runner: `providers` and `session_options` for ONNX Runtime."""
         from .auto import get_runner_class
 
         if len(self.components) != 1:
@@ -110,7 +111,9 @@ class ExportArtifacts(Mapping, PushToHubMixin):
                 "available yet. `runtime()` runs a single-graph export, as `HfExporter.export` returns."
             )
         component = next(iter(self.components.values()))
-        runner = get_runner_class(self.export_format).from_program(component.program, component.metadata, device)
+        runner = get_runner_class(self.export_format).from_program(
+            component.program, component.metadata, device, **runner_kwargs
+        )
         model = ExportedModel(runner, self.config)
         model.artifacts = self
         return model
