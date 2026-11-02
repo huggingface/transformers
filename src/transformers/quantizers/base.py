@@ -382,7 +382,38 @@ class HfQuantizer(ABC):
                 updated[-1] = converter.copy(
                     all_sources, targets, operations=[dequantize(self)] + converter.operations
                 )
+        if dequantize is not None:
+            updated += self._dequantize_own_name_params(model, param_names, dequantize)
         return updated + self.get_weight_conversions()
+
+    def _dequantize_own_name_params(self, model, param_names, dequantize):
+        """
+        Dense params stored under their own name, e.g. fused experts `gate_up_proj` with `gate_up_proj_scale_inv`:
+        their companions are the suffixes of the `weight` ones, and the dequantize op gets them together.
+        """
+        from ..core_model_loading import WeightConverter
+
+        serialized = self.serialized_names.get("weight", [])
+        suffixes = [
+            name.removeprefix("weight") for name in serialized if name.startswith("weight") and name != "weight"
+        ]
+        # With their module, e.g. `experts.down_proj`: not `shared_experts.down_proj.weight`
+        names = {
+            ".".join(name.split(".")[-2:])
+            for name, param in model.named_parameters()
+            if param.ndim > 1
+            and not name.endswith(tuple(suffixes))  # a companion itself
+            and not any(f"{name}{suffix}\n" in f"{param_names}\n" for suffix in suffixes)  # the module keeps them
+        }
+        names = {name for name in names if name.rpartition(".")[2] not in self.serialized_names}
+        return (
+            [
+                WeightConverter([name] + [name + suffix for suffix in suffixes], name, [dequantize(self)])
+                for name in sorted(names)
+            ]
+            if suffixes
+            else []
+        )
 
 
 class SequentialLlama4TextExperts(ModuleList):
