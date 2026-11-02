@@ -23,7 +23,6 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
     from ..utils.quantization_config import AqlmConfig
 
-from ..integrations import replace_with_aqlm_linear
 from ..utils import is_accelerate_available, is_aqlm_available, logging
 
 
@@ -55,6 +54,8 @@ class AqlmHfQuantizer(HfQuantizer):
         if self.pre_quantized and self.quantization_config.dequantize:
             # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
             return
+        from ..integrations import replace_with_aqlm_linear
+
         replace_with_aqlm_linear(
             model,
             modules_to_not_convert=self.quantization_config.linear_weights_not_to_quantize,
