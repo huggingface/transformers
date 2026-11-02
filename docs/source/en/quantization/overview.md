@@ -16,49 +16,96 @@ rendered properly in your Markdown viewer.
 
 # Overview
 
-Quantization lowers the memory requirements of loading and using a model by storing the weights in a lower precision while trying to preserve as much accuracy as possible. Weights are typically stored in full-precision (fp32) floating point representations, but half-precision (fp16 or bf16) are increasingly popular data types given the large size of models today. Some quantization methods can reduce the precision even further to integer representations, like int8 or int4.
+Quantization stores a model's weights, and sometimes its activations, in fewer bits so the model needs less memory. Models are usually loaded in bf16, which takes 2 bytes per parameter. An 8B model needs about 16GB for its weights in bf16, about 8GB at 8 bits, and about 4–5GB at 4 bits. Fewer bits cost some accuracy, and each quantization method makes a different tradeoff between memory, speed, and accuracy.
 
-Transformers supports many quantization methods, each with their pros and cons, so you can pick the best one for your specific use case. Some methods require calibration for greater accuracy and extreme compression (1-2 bits), while other methods work out of the box with on-the-fly quantization.
+Transformers integrates more than 20 quantization methods through [`~PreTrainedModel.from_pretrained`], so you use the same loading code whichever method you choose.
 
-Use the Space below to help you pick a quantization method depending on your hardware and number of bits to quantize to.
+## Two ways to use a quantized model
 
-| Quantization Method                       | On the fly quantization | CPU             | CUDA GPU | ROCm GPU  | Metal (Apple Silicon)              | Intel GPU       | Torch compile() | Bits         | PEFT Fine Tuning | Serializable with 🤗Transformers | 🤗Transformers Support  | Link to library                             |
-|-------------------------------------------|----------------------|-----------------|----------|-----------|------------------------------------|-----------------|-----------------|--------------|------------------|-----------------------------|-------------------------|---------------------------------------------|
-| [AQLM](./aqlm)                            | 🔴                   | 🟢              |     🟢     | 🔴        | 🔴                                 | 🟢              | 🟢              | 1/2          | 🟢               | 🟢                          | 🟢                      | https://github.com/Vahe1994/AQLM            |
-| [AutoRound](./auto_round)                 | 🔴                   | 🟢               | 🟢          |   🔴        |   🔴                                |   🟢              |   🔴               | 2/3/4/8      |    🔴              |       🟢                      |    🟢                       |      https://github.com/intel/auto-round                                       |
-| [AWQ](./awq)                              | 🔴                   | 🟢              | 🟢        | 🟢        | 🔴                                 | 🟢              | ?               | 4            | 🟢               | 🟢                          | 🟢                      | https://github.com/casper-hansen/AutoAWQ    |
-| [bitsandbytes](./bitsandbytes)            | 🟢                   | 🟢 |     🟢     | 🟡 | 🟡                    | 🟢 | 🟢 | 4/8          | 🟢               | 🟢                          | 🟢                      | https://github.com/bitsandbytes-foundation/bitsandbytes |
-| [compressed-tensors](./compressed_tensors) | 🔴                   | 🟢              |     🟢     | 🟢        | 🔴                                 | 🟢              | 🔴              | 1/8          | 🟢               | 🟢                          | 🟢                      | https://github.com/neuralmagic/compressed-tensors |
-| [EETQ](./eetq)                            | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🔴              | ?               | 8            | 🟢               | 🟢                          | 🟢                      | https://github.com/NetEase-FuXi/EETQ        |
-| [Four Over Six](./fouroversix)            | 🟢                   | 🟢              | 🟢        | 🔴        | 🔴                                 | 🔴              | 🟢              | 4            | 🔴               | 🟢                          | 🟢                      | https://github.com/mit-han-lab/fouroversix |
-| [FP-Quant](./fp_quant)                          | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🔴              | 🟢              | 4           | 🔴               | 🟢                          | 🟢                      | https://github.com/IST-DASLab/FP-Quant      |
-| [GGUF / GGML (llama.cpp)](./gguf)        | 🔴                   | 🟢              | 🟢        | 🔴        | 🟢                                 | 🟢              | 🟢              | 1/8          | 🔴               | 🔴                          | [See Notes](./gguf) | https://github.com/ggerganov/llama.cpp      |
-| [GPT-QModel](./gptq)                     | 🔴                   | 🟢 | 🟢        | 🟢        | 🟢                                 | 🟢 | 🔴              | 2/3/4/8      | 🟢               | 🟢                          | 🟢                      | https://github.com/ModelCloud/GPTQModel        |
-| [HIGGS](./higgs)                          | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🔴              | 🟢              | 2/4          | 🔴               | 🟢                          | 🟢                      | https://github.com/HanGuo97/flute           |
-| [HQQ](./hqq)                              | 🟢                   | 🟢              | 🟢        | 🔴        | 🔴                                 | 🟢              | 🟢              | 1/8          | 🟢               | 🔴                          | 🟢                      | https://github.com/mobiusml/hqq/            |
-| [Metal](./metal)                          | 🟢                   | 🔴              | 🔴        | 🔴        | 🟢                                 | 🔴              | 🔴              | 2/4/8        | 🔴               | 🟢                          | 🟢                      | [Hub Kernels](https://huggingface.co/kernels-community/mlx-quantization-metal-kernels) |
-| [NVFP4](./nvfp4)                          | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🔴              | 🟢              | 4            | 🔴               | 🔴                          | 🟢                      | [Hub Kernels](https://huggingface.co/kernels-community/nvfp4-gemm) |
-| [optimum-quanto](./quanto)                | 🟢                   | 🟢              | 🟢        | 🔴        | 🟢                                 | 🟢              | 🟢              | 2/4/8        | 🔴               | 🔴                          | 🟢                      | https://github.com/huggingface/optimum-quanto       |
-| [SINQ](./sinq)                          | 🟢                     | 🟢 | 🟢      | 🟡      | 🟡                   | 🟡       | 🟡               | 2/3/4/6/8 | 🔴                | 🟢                               | 🟢                       | https://github.com/huawei-csl/SINQ                      |
-| [FBGEMM_FP8](./fbgemm_fp8)                | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🔴              | 🔴              | 8            | 🔴               | 🟢                          | 🟢                      | https://github.com/pytorch/FBGEMM       |
-| [torchao](./torchao)                      | 🟢                   | 🟢               | 🟢        | 🔴        | 🟡 | 🟢              |                 | 4/8          |                  | 🟢🔴                        | 🟢                      | https://github.com/pytorch/ao       |
-| [VPTQ](./vptq)                            | 🔴                   | 🔴              |     🟢     | 🟡        | 🔴                                 | 🔴              | 🟢              | 1/8          | 🔴               | 🟢                          | 🟢                      | https://github.com/microsoft/VPTQ            |
-| [FINEGRAINED_FP8](./finegrained_fp8)      | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🟢              | 🔴              | 8            | 🔴               | 🟢                          | 🟢                      | Built-in |
-| [SpQR](./spqr)                            | 🔴                     |  🔴   | 🟢        | 🔴              |    🔴    | 🔴         |         🟢              | 3            |              🔴                     | 🟢           | 🟢                      | https://github.com/Vahe1994/SpQR/       |
-| [Quark](./quark)                          | 🔴                     | 🟢 | 🟢      | 🟢      | 🟢                   | 🟢       | ?               | 2/4/6/8/9/16 | 🔴                | 🔴                               | 🟢                       | https://quark.docs.amd.com/latest/                      |
+How you use quantization depends on whether your checkpoint is already quantized.
+
+| You have | What you do | Methods |
+|---|---|---|
+| A full-precision checkpoint | Pass a quantization config to `from_pretrained`, and the weights are quantized as they load. | [Quantize a model while loading](#quantize-a-model-while-loading) |
+| A checkpoint that's already quantized | Call `from_pretrained` without a quantization config. Transformers reads the method from the checkpoint's `config.json`, or from the GGUF file you name. | [Load a pre-quantized checkpoint](#load-a-pre-quantized-checkpoint) |
+
+Some methods, such as AWQ, AutoRound, AQLM, compressed-tensors, and GGUF, can only be loaded from a checkpoint. You quantize the model with the method's own library first, and then load the result in Transformers.
+
+## Quantize a model while loading
+
+Create the method's config class and pass it to `quantization_config`. The example below loads an 8B model in 4 bits with [bitsandbytes](./bitsandbytes).
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
+
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_compute_dtype=torch.bfloat16,
+)
+model = AutoModelForCausalLM.from_pretrained(
+    "meta-llama/Llama-3.1-8B-Instruct",
+    quantization_config=quantization_config,
+    device_map="auto",
+)
+```
+
+Every method in this group has its own config class, like [`TorchAoConfig`] or [`BitsAndBytesConfig`]. Most of them don't need a calibration dataset. [GPTQ](./gptq) is the exception because it calibrates on a dataset while the model loads.
+
+## Load a pre-quantized checkpoint
+
+A pre-quantized checkpoint stores a `quantization_config` in its `config.json`. When `from_pretrained` finds it, the matching quantizer is selected automatically.
+
+```py
+from transformers import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained(
+    "TheBloke/zephyr-7B-alpha-AWQ",
+    device_map="auto",
+)
+print(model.config.quantization_config.quant_method)
+```
+
+Install the library that the method depends on before loading the checkpoint. Each method page lists what to install. To change loading options, like which kernel backend runs, pass a config of the same type. Its options are merged with the ones stored in the checkpoint.
+
+### GGUF checkpoints
+
+A GGUF checkpoint is a single file that holds the weights, config, and tokenizer, and it has no `config.json` for `from_pretrained` to read. Name the file with `gguf_file`.
+
+```py
+from transformers import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained(
+    "unsloth/Qwen3.5-4B-GGUF",
+    gguf_file="Qwen3.5-4B-Q4_K_M.gguf",
+)
+```
+
+Most GGUF models are dequantized to full precision as they load, so they use as much memory as an unquantized model. Weights stay packed only on MPS with the [kernels](https://huggingface.co/docs/kernels/index) package installed, for Qwen3.5 and Qwen3.5 MoE. See [GGUF](./gguf) for details.
+
+## Save a quantized model
+
+Call [`~PreTrainedModel.save_pretrained`] or [`~PreTrainedModel.push_to_hub`] to save the quantized weights and their `quantization_config`. Not every method can save its quantized weights.
+
+## Choose a method
+
+[Choose a method](./selecting) recommends a starting point for common goals and compares every method by hardware, bit width, saving, fine-tuning, and `torch.compile` support. Use the [quantization picker](https://huggingface.co/spaces/stevhliu/quantization-picker) to check whether a model fits in your hardware's memory at each precision.
+
+## Other tools
+
+These tools quantize models outside Transformers.
+
+- [Optimum](https://huggingface.co/docs/optimum/index) quantizes models for specific hardware and runtimes, like Intel CPUs and ONNX Runtime.
+- Hub Spaces quantize a model and push the result to your account: [bitsandbytes](https://huggingface.co/spaces/bnb-community/bnb-my-repo), [GGUF](https://huggingface.co/spaces/ggml-org/gguf-my-repo), and [MLX](https://huggingface.co/spaces/mlx-community/mlx-my-repo).
 
 ## Resources
 
-If you are new to quantization, we recommend checking out these beginner-friendly quantization courses in collaboration with DeepLearning.AI.
+- [Quantization Fundamentals with Hugging Face](https://www.deeplearning.ai/short-courses/quantization-fundamentals-with-hugging-face/) course
+- [Quantization in Depth](https://www.deeplearning.ai/short-courses/quantization-in-depth) course
 
-* [Quantization Fundamentals with Hugging Face](https://www.deeplearning.ai/short-courses/quantization-fundamentals-with-hugging-face/)
-* [Quantization in Depth](https://www.deeplearning.ai/short-courses/quantization-in-depth)
+## Next steps
 
-## User-Friendly Quantization Tools
-
-If you are looking for a user-friendly quantization experience, you can use the following community spaces and notebooks:
-
-* [Bitsandbytes Space](https://huggingface.co/spaces/bnb-community/bnb-my-repo)
-* [GGUF Space](https://huggingface.co/spaces/ggml-org/gguf-my-repo)
-* [MLX Space](https://huggingface.co/spaces/mlx-community/mlx-my-repo)
-* [AutoQuant Notebook](https://colab.research.google.com/drive/1b6nqC7UZVt8bx4MksX7s656GXPM-eWw4?usp=sharing#scrollTo=ZC9Nsr9u5WhN)
+- Read [Quantization concepts](./concept_guide) for how quantization schemes, granularity, and techniques work.
+- Quantize the KV cache to save memory during long generations with the [quantized cache](../kv_cache#quantized-cache).
+- Quantize a model while exporting it with [Quantizing exports](../exporters_quantization).
+- Contribute a new method with [Contribute a quantization method](./contribute).

@@ -27,67 +27,17 @@ if is_torch_available():
 
 
 class GotOcr2ImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_normalize=True,
-        image_mean=[0.48145466, 0.4578275, 0.40821073],
-        image_std=[0.26862954, 0.26130258, 0.27577711],
-        do_convert_rgb=True,
-    ):
-        super().__init__()
-        size = size if size is not None else {"height": 20, "width": 20}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 20, "width": 20})
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_convert_rgb": self.do_convert_rgb,
-        }
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_vision
 class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = GotOcr2ImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processor, "do_resize"))
-            self.assertTrue(hasattr(image_processor, "size"))
-            self.assertTrue(hasattr(image_processor, "do_normalize"))
-            self.assertTrue(hasattr(image_processor, "image_mean"))
-            self.assertTrue(hasattr(image_processor, "image_std"))
-            self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
+    image_processor_tester_class = GotOcr2ImageProcessingTester
 
     def test_backends_equivalence_crop_to_patches(self):
         if len(self.image_processing_classes) < 2:

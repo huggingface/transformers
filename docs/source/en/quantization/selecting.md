@@ -14,139 +14,74 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Selecting a quantization method
+# Choose a method
 
-There are many quantization methods available in Transformers for inference and fine-tuning. This guide helps you choose the most common and production-ready quantization techniques depending on your use case, and presents the advantages and disadvantages of each technique.
+If your checkpoint is already quantized, the checkpoint decides the method. Load it as shown in [Load a pre-quantized checkpoint](./overview#load-a-pre-quantized-checkpoint). Otherwise, pick a method based on your hardware and what you need to do with the model after loading it.
 
-For a comprehensive overview of all supported methods and their features, refer back to the table in the [Overview](./overview).
+## Start from your goal
 
-## Inference
+Each row recommends a first method to try. Check the full comparison table before you commit to one.
 
-Consider the quantization methods below for inference.
+| Goal | Start with | Why |
+|---|---|---|
+| Fit a model in less memory with the least setup | [bitsandbytes](./bitsandbytes) | Quantizes to 4 or 8 bits while loading without calibration, runs on CUDA, XPU, HPU, and CPU, and supports saving and fine-tuning. |
+| Fine-tune with QLoRA | [bitsandbytes](./bitsandbytes#qlora) | Supports 4-bit NF4 with PEFT. [HQQ](./hqq), [EETQ](./eetq), [GPTQ](./gptq), [SINQ](./sinq), and [Quanto](./quanto) also support fine-tuning. |
+| Speed up inference with `torch.compile` | [torchao](./torchao) | `generate` compiles torchao models automatically with a static cache, and torchao has int4, int8, and FP8 schemes for CUDA, XPU, and CPU. |
+| Get the best 4-bit accuracy | [GPTQ](./gptq) | Calibrates on a dataset while loading. To use [AWQ](./awq) or [AutoRound](./auto_round) instead, quantize with their libraries and load the checkpoint. |
+| Run FP8 on Ada, Hopper, or Intel XPU | [Fine-grained FP8](./finegrained_fp8) | Needs CUDA compute capability 8.9 or higher, or an XPU. [FBGEMM FP8](./fbgemm_fp8) needs compute capability 9.0 or higher, or an XPU. |
+| Run FP4 on Blackwell | [NVFP4](./nvfp4) | Quantizes to NVIDIA's 4-bit float format while loading. [MXFP4](./mxfp4) runs on compute capability 7.5 or higher, XPU, and CPU. |
+| Run on Apple silicon | [Metal](./metal) | Quantizes to 2, 4, or 8 bits on MPS while loading. [GGUF](./gguf) files also load on MPS. |
+| Load checkpoints made with llm-compressor | [compressed-tensors](./compressed_tensors) | Loads FP8, int4, and int8 checkpoints in the compressed-tensors format. |
+| Compress below 4 bits | [HQQ](./hqq) or [SINQ](./sinq) | Quantize to 2 or 3 bits while loading without calibration. [AQLM](./aqlm), [VPTQ](./vptq), and [SpQR](./spqr) checkpoints go lower but must be quantized with their own libraries. |
 
-| quantization method | use case |
-|---|---|
-| bitsandbytes | ease of use and QLoRA fine-tuning on NVIDIA and Intel GPUs |
-| compressed-tensors | loading specific quantized formats (FP8) |
-| GPTQModel or AWQ | good 4-bit accuracy with upfront calibration |
-| HQQ | fast on the fly quantization without calibration |
-| SINQ | super-fast but high-quality on the fly quantization without calibration |
-| torchao | flexibility and fast inference with torch.compile |
+<details>
+<summary>Show the full comparison table</summary>
 
-### No Calibration Required (On-the-fly Quantization)
+| Method | `quant_method` | Workflow | Bits | Hardware | Save | Fine-tune | Auto-compile |
+|---|---|---|---|---|---|---|---|
+| [AQLM](./aqlm) | `aqlm` | Pre-quantized only | 1–2 | CUDA, CPU | ✅ | ✅ with `aqlm>=1.0.2` | ❌ |
+| [AutoRound](./auto_round) | `auto-round` | Pre-quantized only | 2–8 | CUDA, XPU, CPU | ✅ | ❌ | ❌ |
+| [AWQ](./awq) | `awq` | Pre-quantized only | 4 | CUDA, ROCm, XPU, CPU | ✅ except ExLlama backends | ✅ with `gptqmodel>=5.0.0` | ❌ |
+| [BitNet](./bitnet) | `bitnet` | Pre-quantized only | 1.58 | CUDA | ✅ | Only `autobitlinear` in `online` mode | ❌ |
+| [bitsandbytes](./bitsandbytes) | `bitsandbytes` | While loading | 4, 8 | CUDA, XPU, HPU, CPU | ✅ | ✅ | ❌ |
+| [compressed-tensors](./compressed_tensors) | `compressed-tensors` | Pre-quantized only | Set by checkpoint | CUDA, XPU, MPS, CPU | ✅ | ✅ except with FP8 kernels | ✅ |
+| [EETQ](./eetq) | `eetq` | While loading | 8 | CUDA | ✅ | ✅ | ❌ |
+| [FBGEMM FP8](./fbgemm_fp8) | `fbgemm_fp8` | While loading | 8 | CUDA (compute capability 9.0+), XPU | ✅ | ❌ | ❌ |
+| [Fine-grained FP8](./finegrained_fp8) | `fp8`, `mxfp8` | While loading | 8 | CUDA (compute capability 8.9+), XPU | ✅ | ❌ | ✅ |
+| [Four Over Six](./fouroversix) | `fouroversix` | While loading | 4 | CUDA (fastest on Blackwell), CPU | ✅ | Only with `keep_master_weights=True` | ❌ |
+| [FP-Quant](./fp_quant) | `fp_quant` | While loading | 4 | CUDA, XPU | ✅ | Only with `store_master_weights=True` | ❌ |
+| [GGUF](./gguf) | `gguf` | Pre-quantized only | 1–8 | CUDA, MPS, XPU, CPU | ❌ | ❌ | ✅ |
+| [GPTQ](./gptq) | `gptq` | While loading, with calibration | 2, 3, 4, 8 | CUDA, ROCm, XPU, CPU | ✅ | ✅ | ❌ |
+| [HIGGS](./higgs) | `higgs` | While loading | 2, 3, 4 | CUDA | ✅ | ❌ | ❌ |
+| [HQQ](./hqq) | `hqq` | While loading | 1, 2, 3, 4, 8 | CUDA, XPU | ✅ | ✅ | ❌ |
+| [Metal](./metal) | `metal` | While loading | 2, 4, 8 | MPS | ✅ | ❌ | ❌ |
+| [MXFP4](./mxfp4) | `mxfp4` | While loading | 4 | CUDA (compute capability 7.5+), XPU, CPU | ✅ | ❌ | ❌ |
+| [NVFP4](./nvfp4) | `nvfp4` | While loading | 4 | One Blackwell GPU | ❌ | ❌ | ✅ |
+| [Quanto](./quanto) | `quanto` | While loading | 2, 4, 8 | CUDA, MPS, XPU, CPU | ❌ | ✅ | ❌ |
+| [Quark](./quark) | `quark` | Pre-quantized only | Set by checkpoint | CUDA, ROCm, CPU | ❌ | ❌ | ❌ |
+| [SINQ](./sinq) | `sinq` | While loading | 2, 3, 4, 6, 8 | One CUDA GPU, CPU | ✅ | ✅ | ❌ |
+| [SpQR](./spqr) | `spqr` | Pre-quantized only | 3 | CUDA | ✅ | ❌ | ❌ |
+| [torchao](./torchao) | `torchao` | While loading | 4, 8 | CUDA, XPU, CPU | ✅ | Only 8-bit schemes | ✅ |
+| [VPTQ](./vptq) | `vptq` | Pre-quantized only | 1–8 | CUDA | ✅ | ❌ | ❌ |
 
-These methods are generally easier to use as they don't need a separate calibration dataset or step.
+</details>
 
-#### bitsandbytes
+## Check memory with the quantization picker
 
-| Pros                                                         | Cons                                                    |
-|--------------------------------------------------------------|---------------------------------------------------------|
-| Very simple, no calibration dataset required for inference.  | Primarily optimized for NVIDIA GPUs (CUDA).             |
-| Good community support and widely adopted.                   | Inference speedup isn't guaranteed.                     |
+The [quantization picker](https://huggingface.co/spaces/stevhliu/quantization-picker) estimates whether a model fits on your hardware at each precision, including the KV cache. Pick a model, your hardware, and what you need the method to do, and the **Compare** view lists the methods that match.
 
-See the [bitsandbytes documentation](./bitsandbytes) for more details.
+<iframe
+	src="https://stevhliu-quantization-picker.hf.space"
+	frameborder="0"
+	width="100%"
+	height="420"
+></iframe>
 
-#### HQQ (Half-Quadratic Quantization)
+## Benchmarks
 
-| Pros                                                                 | Cons                                                                       |
-|----------------------------------------------------------------------|----------------------------------------------------------------------------|
-| Fast quantization process, no calibration data needed.              | Accuracy can degrade significantly at bit depths <4-bit.                     |
-| Multiple backends for fast inference.                                | Inference speed may not match others unless using `torch.compile` or backends. |
-| Compatible with `torch.compile`.                                     |                                                                            |
-| Supports wide range of bit depths (8, 4, 3, 2, 1-bit).              |                                                                            |
+The benchmarks below compare several methods on Llama 3.1 8B and 70B. They report accuracy, throughput in tokens per second, peak memory in GB, and quantization time.
 
-See the [HQQ documentation](./hqq) for more details.
-
-#### SINQ
-
-| Pros                                                                 | Cons                                                                       |
-|----------------------------------------------------------------------|----------------------------------------------------------------------------|
-| Super-fast but high-quality quantization process, no calibration data needed.              | Accuracy can degrade significantly at bit widths <=2-bit.                     |
-| GemLite backend for faster inference.                                  | Slower inference for 3-bit models (no gemlite kernel)
-| Supports wide range of bit widths (8, 4, 3, 2 bits).              |                                                                            |
-
-See the [SINQ documentation](./sinq) for more details.
-
-#### torchao
-
-| Pros                                                                 | Cons                                                                 |
-|----------------------------------------------------------------------|----------------------------------------------------------------------|
-| Strong integration with `torch.compile` for potential speedups.     | Newer library, ecosystem still evolving.                             |
-| Offers decent CPU quantization support.                              | Performance depends on `torch.compile` working well.                 |
-| Flexibility in quantization schemes (int8, int4, fp8).           | 4-bit quantization (int4wo) may not match GPTQ/AWQ in accuracy.              |
-
-See the [torchao documentation](./torchao) for more details.
-
-### Calibration-based Quantization
-
-These methods require an upfront calibration step using a dataset to potentially achieve higher accuracy.
-
-#### GPTQ/GPTQModel
-
-Calibration for 8B model takes ~20 minutes on one A100 gpu.
-
-| Pros                                                                 | Cons                                                                 |
-|----------------------------------------------------------------------|----------------------------------------------------------------------|
-| Often achieves high accuracy.                                        | Requires a calibration dataset and a separate calibration step.      |
-| Can lead to inference speedups.                                      | Possible to overfit on calibration data.                             |
-| Many pre-quantized GPTQ models on [Hugging Face Hub](https://huggingface.co/models?other=gptq). |                                           |
-
-See the [GPTQ documentation](./gptq) for more details.
-
-#### AWQ (Activation-aware Weight Quantization)
-
-Calibration for 8B model takes ~10 minutes on one A100 gpu.
-
-| Pros                                                                 | Cons                                                |
-|----------------------------------------------------------------------|-----------------------------------------------------|
-| Often achieves high accuracy at 4-bit. (Sometimes surpasses GPTQ on specific tasks.) | Requires calibration if quantizing yourself.        |
-| Can lead to inference speedups.                                      |                                                     |
-| Shorter calibration time than GPTQ.                                  |                                                     |
-| Many pre-quantized AWQ models on [Hugging Face Hub](https://huggingface.co/models?other=awq). |                                                     |
-
-See the [AWQ documentation](./awq) for more details.
-
-### Loading Specific Formats
-
-#### compressed-tensors
-
-| Pros                                                         | Cons                                                        |
-|--------------------------------------------------------------|-------------------------------------------------------------|
-| Supports flexible formats like FP8.        | Primarily for loading pre-quantized models.                 |
-| FP8 kernel acceleration on NVIDIA (SM89+) and Intel XPU.    |                                                             |
-
-See the [compressed-tensors documentation](./compressed_tensors) for more details.
-
-## Fine-tuning
-
-Consider the quantization method below during fine-tuning to save memory.
-
-### bitsandbytes[[training]]
-
-* **Description:** The standard method for QLoRA fine-tuning via PEFT.
-* **Pros:** Enables fine-tuning large models on consumer GPUs; widely supported and documented for PEFT.
-* **Cons:** Primarily for NVIDIA GPUs.
-
-Other methods offer PEFT compatibility, though bitsandbytes is the most established and straightforward path for QLoRA.
-
-See the [bitsandbytes documentation](./bitsandbytes#qlora) and [PEFT Docs](https://huggingface.co/docs/peft/developer_guides/quantization#quantize-a-model) for more details.
-
-## Research
-
-Methods like [AQLM](./aqlm), [SpQR](./spqr), [VPTQ](./vptq), [HIGGS](./higgs), etc., push the boundaries of compression (< 2-bit) or explore novel techniques.
-
-* Consider these if:
-  * You need extreme compression (sub-4-bit).
-  * You are conducting research or require state-of-the-art results from their respective papers.
-  * You have significant compute resources available for potentially complex quantization procedures.
-We recommend consulting each methods documentation and associated papers carefully before choosing one for use in production.
-
-## Benchmark Comparison
-
-To provide a quantitative comparison of different quantization methods, we benchmarked several popular techniques on the Llama 3.1 8B and 70B models. The following tables show results for accuracy (higher is better), inference throughput measured in tokens/second (higher is better), peak VRAM usage measured in GB (lower is better), and quantization time.
-
-Performance metrics were measured on 2 NVIDIA A100 80GB GPU for Llama 3.1 70B (bfloat16), 1 NVIDIA H100 80GB GPU for FP8 methods, and 1 NVIDIA A100 80GB GPU for all other methods. Throughput was measured with a batch size of 1 and generating 64 tokens.
-Results for `torch.compile` and Marlin kernels are included where applicable and supported.
+Llama 3.1 70B in bf16 ran on 2 NVIDIA A100 80GB GPUs. FP8 methods ran on 1 NVIDIA H100 80GB GPU, and all other methods ran on 1 NVIDIA A100 80GB GPU. Throughput was measured at batch size 1, generating 64 tokens. Results include `torch.compile` and Marlin kernels where a method supports them.
 
 <iframe
   src="https://huggingface.co/datasets/derekl35/quantization-benchmarks/embed/viewer/default/train"
@@ -156,13 +91,13 @@ Results for `torch.compile` and Marlin kernels are included where applicable and
   title="benchmarking results dataset"
 ></iframe>
 
-The key takeaways are:
+The results group into three bit ranges.
 
-| Quantization & Methods                      | Memory Savings (vs bf16) | Accuracy             | Other Notes                                                        |
-|-------------------------------------------- |------------------------- |--------------------- |------------------------------------------------------------------- |
-| **8-bit** (bnb-int8, HQQ, Quanto, torchao, fp8) | ~2x             | Very close to baseline bf16 model   |                                                                    |
-| **4-bit** (AWQ, GPTQ, HQQ, bnb-nf4, SINQ)    | ~4x                      | Relatively high accuracy            | AWQ/GPTQ often lead in accuracy but need calibration. HQQ/bnb-nf4/SINQ are easy on-the-fly. |
-| **Sub-4-bit** (VPTQ, AQLM, 2-bit GPTQ) | Extreme (>4x)            | Noticeable drop, especially at 2-bit | Quantization times can be very long (AQLM, VPTQ). Performance varies. |
+| Bits | Methods benchmarked | Memory vs. bf16 | Accuracy |
+|---|---|---|---|
+| 8 | bitsandbytes int8, HQQ, Quanto, torchao, FP8 | About 2x smaller | Very close to bf16 |
+| 4 | AWQ, GPTQ, HQQ, bitsandbytes NF4, SINQ | About 4x smaller | High. AWQ and GPTQ often lead but need calibration. |
+| Below 4 | VPTQ, AQLM, 2-bit GPTQ | More than 4x smaller | Noticeable drop, especially at 2 bits. AQLM and VPTQ take a long time to quantize. |
 
 > [!TIP]
-> Always benchmark the performance (accuracy and speed) of the quantized model on your specific task and hardware to ensure it meets your requirements. Refer to the individual documentation pages linked above for detailed usage instructions.
+> Benchmark accuracy and speed on your own task and hardware before you pick a method for production.

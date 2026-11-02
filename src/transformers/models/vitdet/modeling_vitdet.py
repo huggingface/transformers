@@ -674,7 +674,7 @@ class VitDetModel(VitDetPreTrainedModel):
     """
 )
 class VitDetBackbone(BackboneMixin, VitDetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: VitDetConfig):
         super().__init__(config)
 
         self.embeddings = VitDetEmbeddings(config)

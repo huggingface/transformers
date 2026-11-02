@@ -1022,7 +1022,7 @@ class LukeForMaskedLM(LukePreTrainedModel):
         "lm_head.bias": "lm_head.decoder.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: LukeConfig):
         super().__init__(config)
 
         self.luke = LukeModel(config)
@@ -1080,10 +1080,6 @@ class LukeForMaskedLM(LukePreTrainedModel):
         entity_position_ids (`torch.LongTensor` of shape `(batch_size, entity_length, max_mention_length)`, *optional*):
             Indices of positions of each input entity in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         entity_labels (`torch.LongTensor` of shape `(batch_size, entity_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
@@ -1164,7 +1160,7 @@ class LukeForMaskedLM(LukePreTrainedModel):
     """
 )
 class LukeForEntityClassification(LukePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LukeConfig):
         super().__init__(config)
 
         self.luke = LukeModel(config)
@@ -1293,7 +1289,7 @@ class LukeForEntityClassification(LukePreTrainedModel):
     """
 )
 class LukeForEntityPairClassification(LukePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LukeConfig):
         super().__init__(config)
 
         self.luke = LukeModel(config)
@@ -1427,7 +1423,7 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
     """
 )
 class LukeForEntitySpanClassification(LukePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LukeConfig):
         super().__init__(config)
 
         self.luke = LukeModel(config)
@@ -1585,7 +1581,7 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
     """
 )
 class LukeForSequenceClassification(LukePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LukeConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.luke = LukeModel(config)
@@ -1635,10 +1631,6 @@ class LukeForSequenceClassification(LukePreTrainedModel):
         entity_position_ids (`torch.LongTensor` of shape `(batch_size, entity_length, max_mention_length)`, *optional*):
             Indices of positions of each input entity in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
@@ -1711,7 +1703,7 @@ class LukeForSequenceClassification(LukePreTrainedModel):
     """
 )
 class LukeForTokenClassification(LukePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LukeConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1814,7 +1806,7 @@ class LukeForTokenClassification(LukePreTrainedModel):
 
 @auto_docstring
 class LukeForQuestionAnswering(LukePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LukeConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -1932,7 +1924,7 @@ class LukeForQuestionAnswering(LukePreTrainedModel):
 
 @auto_docstring
 class LukeForMultipleChoice(LukePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LukeConfig):
         super().__init__(config)
 
         self.luke = LukeModel(config)
@@ -2006,10 +1998,6 @@ class LukeForMultipleChoice(LukePreTrainedModel):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]

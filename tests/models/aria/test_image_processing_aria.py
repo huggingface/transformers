@@ -17,7 +17,6 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import PILImageResampling
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -32,54 +31,18 @@ if is_torch_available():
 
 
 class AriaImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        num_images=1,
-        min_resolution=30,
-        max_resolution=40,
-        size=None,
-        max_image_size=980,
-        min_image_size=336,
-        split_resolutions=None,
-        split_image=True,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        do_convert_rgb=True,
-        resample=PILImageResampling.BICUBIC,
-    ):
-        self.size = size if size is not None else {"longest_edge": max_resolution}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.num_images = num_images
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.resample = resample
-        self.max_image_size = max_image_size
-        self.min_image_size = min_image_size
-        self.split_resolutions = split_resolutions if split_resolutions is not None else [[980, 980]]
-        self.split_image = split_image
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("max_resolution", 40)
+        kwargs.setdefault("num_images", 1)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "max_image_size": self.max_image_size,
-            "min_image_size": self.min_image_size,
-            "split_resolutions": self.split_resolutions,
-            "split_image": self.split_image,
-            "do_convert_rgb": self.do_convert_rgb,
-            "do_normalize": self.do_normalize,
-            "resample": self.resample,
-        }
+        # Image processor init kwargs
+        kwargs.setdefault("max_image_size", 980)
+        kwargs.setdefault("split_resolutions", [[980, 980]])
+        kwargs.setdefault("split_image", True)
+        kwargs.setdefault("size", {"longest_edge": 40})
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         return self.num_channels, self.max_image_size, self.max_image_size
@@ -124,24 +87,7 @@ class AriaImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class AriaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = AriaImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
-            self.assertTrue(hasattr(image_processing, "max_image_size"))
-            self.assertTrue(hasattr(image_processing, "min_image_size"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "split_image"))
+    image_processor_tester_class = AriaImageProcessingTester
 
     def test_call_numpy(self):
         for image_processing_class in self.image_processing_classes.values():

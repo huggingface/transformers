@@ -711,7 +711,7 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
     # TODO: This part is necessary for Gemma3Model!
     # TODO: Make this part much better without duplicating the code and less error prone
     if not isinstance(config, config_class):
-        model_tester_class_name = config_class_to_model_tester_map.get(config_class.__name__, None)
+        model_tester_class_name = config_class_to_model_tester_map.get(config_class.__name__)
         if model_tester_class_name is not None:
             test_module = get_test_module(test_file)
             new_model_tester_class = getattr(test_module, model_tester_class_name)
@@ -1399,7 +1399,7 @@ def get_config_overrides(config_class, processors):
 def _read_mem_used_gb() -> float | None:
     """Return current memory used (GB) from /proc/meminfo, or None if unavailable."""
     try:
-        with open("/proc/meminfo") as f:
+        with open("/proc/meminfo", encoding="utf-8") as f:
             meminfo = {k: int(v.split()[0]) for k, v in (line.split(":", 1) for line in f)}
         return (meminfo["MemTotal"] - meminfo["MemAvailable"]) / 1024**2
     except Exception:
@@ -1430,7 +1430,7 @@ def _log_disk_usage(label: str) -> None:
         print(f"[disk] {label}: could not read disk usage: {e}", flush=True)
 
     try:
-        with open("/proc/meminfo") as f:
+        with open("/proc/meminfo", encoding="utf-8") as f:
             meminfo = {k: int(v.split()[0]) for k, v in (line.split(":", 1) for line in f)}
         total = meminfo["MemTotal"] / 1024**2
         free = meminfo["MemFree"] / 1024**2
@@ -1831,9 +1831,9 @@ def build_simple_report(results):
 
 
 def update_tiny_model_summary_file(report_path):
-    with open(os.path.join(report_path, "tiny_model_summary.json")) as fp:
+    with open(os.path.join(report_path, "tiny_model_summary.json"), encoding="utf-8") as fp:
         new_data = json.load(fp)
-    with open("tests/utils/tiny_model_summary.json") as fp:
+    with open("tests/utils/tiny_model_summary.json", encoding="utf-8") as fp:
         data = json.load(fp)
     for key, value in new_data.items():
         if key not in data:
@@ -1853,7 +1853,7 @@ def update_tiny_model_summary_file(report_path):
             # deduplication and sort
             updated_data[key][attr] = sorted(set(value)) if attr != "sha" else value
 
-    with open(os.path.join(report_path, "updated_tiny_model_summary.json"), "w") as fp:
+    with open(os.path.join(report_path, "updated_tiny_model_summary.json"), "w", encoding="utf-8") as fp:
         json.dump(updated_data, fp, indent=4, ensure_ascii=False)
 
 
@@ -1941,7 +1941,7 @@ def create_tiny_models(
                     logger.error(error)
                     upload_results[model_dir] = error
 
-        with open(os.path.join(report_path, "failed_uploads.json"), "w") as fp:
+        with open(os.path.join(report_path, "failed_uploads.json"), "w", encoding="utf-8") as fp:
             json.dump(upload_results, fp, indent=4)
 
     # Build the tiny model summary file. The `tokenizer_classes` and `processor_classes` could be both empty lists.
@@ -1950,26 +1950,26 @@ def create_tiny_models(
     # `tests/utils/tiny_model_summary.json`.
 
     tiny_model_summary = build_tiny_model_summary(results, organization=organization, token=token)
-    with open(os.path.join(report_path, "tiny_model_summary.json"), "w") as fp:
+    with open(os.path.join(report_path, "tiny_model_summary.json"), "w", encoding="utf-8") as fp:
         json.dump(tiny_model_summary, fp, indent=4)
 
-    with open(os.path.join(report_path, "tiny_model_creation_report.json"), "w") as fp:
+    with open(os.path.join(report_path, "tiny_model_creation_report.json"), "w", encoding="utf-8") as fp:
         json.dump(results, fp, indent=4)
 
     # Build the warning/failure report (json format): same format as the complete `results` except this contains only
     # warnings or errors.
     failed_results = build_failed_report(results)
-    with open(os.path.join(report_path, "failed_report.json"), "w") as fp:
+    with open(os.path.join(report_path, "failed_report.json"), "w", encoding="utf-8") as fp:
         json.dump(failed_results, fp, indent=4)
 
     simple_report, failed_report = build_simple_report(results)
     # The simplified report: a .txt file with each line of format:
     # {model architecture name}: {OK or error message}
-    with open(os.path.join(report_path, "simple_report.txt"), "w") as fp:
+    with open(os.path.join(report_path, "simple_report.txt"), "w", encoding="utf-8") as fp:
         fp.write(simple_report)
 
     # The simplified failure report: same above except this only contains line with errors
-    with open(os.path.join(report_path, "simple_failed_report.txt"), "w") as fp:
+    with open(os.path.join(report_path, "simple_failed_report.txt"), "w", encoding="utf-8") as fp:
         fp.write(failed_report)
 
     update_tiny_model_summary_file(report_path=os.path.join(output_path, "reports"))

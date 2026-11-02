@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import math
 
 import torch
@@ -18,10 +19,9 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..grounding_dino.modeling_grounding_dino import (
     GroundingDinoContrastiveEmbedding,
@@ -77,6 +77,10 @@ class MMGroundingDinoConfig(PreTrainedConfig):
         The dimension of the query vector.
     positional_embedding_temperature (`float`, *optional*, defaults to 20):
         The temperature for Sine Positional Embedding that is used together with vision backbone.
+    decoder_bbox_embed_share (`bool`, *optional*, defaults to `True`):
+        Whether to share the bbox regression head for all decoder layers.
+    decoder_cls_embed_share (`bool`, *optional*, defaults to `True`):
+        Whether to share the class embedding head for all decoder layers.
 
     Examples:
 
@@ -94,7 +98,12 @@ class MMGroundingDinoConfig(PreTrainedConfig):
     ```"""
 
     model_type = "mm-grounding-dino"
-    sub_configs = {"backbone_config": AutoConfig, "text_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig, model_type="swin", init_kwargs={"out_indices": [2, 3, 4]}
+        ),
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="bert"),
+    }
     attribute_map = {
         "hidden_size": "d_model",
         "num_attention_heads": "encoder_attention_heads",
@@ -135,27 +144,11 @@ class MMGroundingDinoConfig(PreTrainedConfig):
     embedding_init_target: bool = True
     query_dim: int = 4
     positional_embedding_temperature: int = 20
+    decoder_bbox_embed_share: bool = True
+    decoder_cls_embed_share: bool = True
     init_std: float = 0.02
     layer_norm_eps: float = 1e-5
     tie_word_embeddings: bool = True
-
-    def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="swin",
-            default_config_kwargs={"out_indices": [2, 3, 4]},
-            **kwargs,
-        )
-
-        # Text backbone
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "bert")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            logger.info("text_config is None. Initializing the text config with default values (`BertConfig`).")
-            self.text_config = CONFIG_MAPPING["bert"]()
-
-        super().__post_init__(**kwargs)
 
 
 class MMGroundingDinoContrastiveEmbedding(GroundingDinoContrastiveEmbedding):
@@ -273,6 +266,12 @@ class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection, MMGroun
         MMGroundingDinoPreTrainedModel.__init__(self, config)
 
         self.model = MMGroundingDinoModel(config)
+        if not config.decoder_bbox_embed_share:
+            self._tied_weights_keys = self._tied_weights_keys.copy()
+            del self._tied_weights_keys[r"bbox_embed.(?![0])\d+"]
+        if not config.decoder_cls_embed_share:
+            self._tied_weights_keys = self._tied_weights_keys.copy()
+            del self._tied_weights_keys[r"class_embed.(?![0])\d+"]
 
         self.class_embed = nn.ModuleList(
             [MMGroundingDinoContrastiveEmbedding(config) for _ in range(config.decoder_layers)]
@@ -287,8 +286,8 @@ class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection, MMGroun
             ]
         )
         # Initialize weights and apply final processing
-        self.model.decoder.class_embed = self.class_embed  # class embed has no weights so nothing to tie
-        self.model.decoder.bbox_embed = self.bbox_embed
+        self.model.decoder.class_embed = copy.deepcopy(self.class_embed)
+        self.model.decoder.bbox_embed = copy.deepcopy(self.bbox_embed)
         self.post_init()
 
 

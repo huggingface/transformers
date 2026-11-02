@@ -391,13 +391,6 @@ class ViTModel(ViTPreTrainedModel):
 @auto_docstring(
     custom_intro="""
     ViT Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://huggingface.co/papers/2111.09886).
-
-    <Tip>
-
-    Note that we provide a script to pre-train this model on custom data in our [examples
-    directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-
-    </Tip>
     """
 )
 class ViTForMaskedImageModeling(ViTPreTrainedModel):
@@ -542,13 +535,6 @@ class ViTForImageClassification(ViTPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-
         outputs: BaseModelOutputWithPooling = self.vit(
             pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,

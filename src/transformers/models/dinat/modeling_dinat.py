@@ -539,7 +539,7 @@ class DinatPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class DinatModel(DinatPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: DinatConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -620,7 +620,7 @@ class DinatModel(DinatPreTrainedModel):
     """
 )
 class DinatForImageClassification(DinatPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DinatConfig):
         super().__init__(config)
 
         requires_backends(self, ["natten"])
@@ -646,12 +646,6 @@ class DinatForImageClassification(DinatPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | DinatImageClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.dinat(
@@ -688,7 +682,7 @@ class DinatForImageClassification(DinatPreTrainedModel):
     """
 )
 class DinatBackbone(BackboneMixin, DinatPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DinatConfig):
         super().__init__(config)
 
         requires_backends(self, ["natten"])

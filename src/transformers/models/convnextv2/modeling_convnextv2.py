@@ -232,7 +232,7 @@ class ConvNextV2Encoder(ConvNextV2PreTrainedModel):
     main_input_name = "hidden_states"
     _can_record_outputs = {"hidden_states": ConvNextV2Stage}
 
-    def __init__(self, config):
+    def __init__(self, config: ConvNextV2Config):
         super().__init__(config)
         self.stages = nn.ModuleList()
         drop_path_rates = [
@@ -271,7 +271,7 @@ class ConvNextV2Encoder(ConvNextV2PreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextModel with CONVNEXT->CONVNEXTV2, ConvNext->ConvNextV2
 class ConvNextV2Model(ConvNextV2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ConvNextV2Config):
         super().__init__(config)
         self.config = config
 
@@ -316,7 +316,7 @@ class ConvNextV2Model(ConvNextV2PreTrainedModel):
 class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
     accepts_loss_kwargs = False
 
-    def __init__(self, config):
+    def __init__(self, config: ConvNextV2Config):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -336,12 +336,6 @@ class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
     def forward(
         self, pixel_values: torch.FloatTensor | None = None, labels: torch.LongTensor | None = None, **kwargs
     ) -> ImageClassifierOutputWithNoAttention:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         outputs: BaseModelOutputWithPoolingAndNoAttention = self.convnextv2(pixel_values, **kwargs)
         pooled_output = outputs.pooler_output
         logits = self.classifier(pooled_output)
@@ -366,7 +360,7 @@ class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
 class ConvNextV2Backbone(BackboneMixin, ConvNextV2PreTrainedModel):
     has_attentions = False
 
-    def __init__(self, config):
+    def __init__(self, config: ConvNextV2Config):
         super().__init__(config)
 
         self.embeddings = ConvNextV2Embeddings(config)

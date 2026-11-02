@@ -458,12 +458,6 @@ class Dinov2WithRegistersForImageClassification(Dinov2WithRegistersPreTrainedMod
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         outputs: BaseModelOutputWithPooling = self.dinov2_with_registers(
             pixel_values, attention_mask=attention_mask, **kwargs
         )
@@ -493,7 +487,7 @@ class Dinov2WithRegistersForImageClassification(Dinov2WithRegistersPreTrainedMod
     """
 )
 class Dinov2WithRegistersBackbone(BackboneMixin, Dinov2WithRegistersPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Dinov2WithRegistersConfig):
         super().__init__(config)
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.embeddings = Dinov2WithRegistersEmbeddings(config)

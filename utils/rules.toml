@@ -167,8 +167,8 @@ default_enabled = true
 # RobertaTokenizer. The alternatives are deleting a public name or copying a whole WordPiece/BPE
 # implementation into six files. Same population as the TRF038 entries below.
 #
-# generation_*.py: `nemotron3_5_asr`, `nemotron_asr_streaming`. Both subclass another model's RNNT generation
-# mixin and cache, which the rule says belongs in a modular file -- but the modular converter has no
+# generation_*.py: `nemotron3_5_asr`, `nemotron_asr_streaming`, `gradium_phonon_tts`. They subclass another model's
+# generation mixin (RNNT mixin and cache; Pocket TTS's flow sampling loop), which the rule says belongs in a modular file -- but the modular converter has no
 # generation_*.py support (no generated one exists in the repo, and the converter never mentions the file
 # kind), so the prescribed remedy is unavailable. Either the converter learns this file kind or the rule
 # stops checking it; flagged upstream rather than worked around here.
@@ -187,7 +187,7 @@ default_enabled = true
 # routes its sub-*configs* through CONFIG_MAPPING as the rule prescribes; this last import is a runtime cache
 # class, which CONFIG_MAPPING cannot supply. It also sits in a generation_*.py file, so it hits the same
 # missing converter support as the nemotron entries above.
-allowlist_models = ["bart", "convbert", "distilbert", "dpr", "fnet", "mobilebert", "nemotron3_5_asr", "nemotron_asr_streaming", "sam3", "sam3_video", "shieldgemma2", "squeezebert", "vibevoice", "vision_text_dual_encoder"]
+allowlist_models = ["bart", "convbert", "distilbert", "dpr", "fnet", "gradium_phonon_tts", "mobilebert", "nemotron3_5_asr", "nemotron_asr_streaming", "sam3", "sam3_video", "shieldgemma2", "squeezebert", "vibevoice", "vision_text_dual_encoder"]
 
 [rules.TRF009.explanation]
 what_it_does = "Flags imports into another model's package from a model's shipped implementation files: modeling_*, configuration_*, processing_*, image_processing_*, video_processing_*, feature_extraction_*, tokenization_* and generation_*.py. Three forms count: package path (`from transformers.models.other.modeling_other import X`), relative path (`from ..other.configuration_other import X`) and public API (`from transformers import OtherModel`) -- for the last the owning directory is inferred from the class name and confirmed against the classes it defines, so an unresolvable name is left alone. Out of scope: `modular_*.py` (building on another model is its purpose, and the converter flattens those imports away), `convert_*.py`, `__init__.py` and files under `auto`. Allowed targets: the model's own directory, `auto` and `timm_wrapper`."
@@ -315,7 +315,7 @@ default_enabled = true
 # (`video_processing_kimi_k25.py:98`, `video_processing_minimax_m3_vl.py:45`) but never read by the
 # `_preprocess` override, so only the model owner can say whether the flag is dead or the override lost a
 # step. Left to the follow-ups with the two owners.
-allowlist_models = ["kimi_k25", "minimax_m3_vl"]
+allowlist_models = ["kimi_k25", "minimax_m3_vl", "ernie4_5_vl_moe", "glm4v", "instructblipvideo", "internvl", "qwen2_vl", "smolvlm", "gemma4", "minicpmv4_6"]
 
 [rules.TRF016.explanation]
 what_it_does = "When an image_processing_*.py or video_processing_*.py class declares boolean do_* attributes (do_resize, do_rescale, do_normalize, do_convert_rgb, ...) and overrides preprocess() or _preprocess(), checks each flag is still consumed there: referenced directly, delegated via super().preprocess/_preprocess(..., **kwargs), or -- image processors only -- forwarded through _preprocess_image_like_inputs/_prepare_image_like_inputs. do_sample_frames is exempt: the base preprocess() consumes it before _preprocess() runs."
@@ -844,7 +844,10 @@ default_enabled = false
 # Down from 35 findings over 13 models: the rule now exempts guards (an `if` with no `else` that only raises
 # or only logs) and a `DEFAULT_EXEMPT_ATTRIBUTES` list of framework plumbing, which cleared `openai`(11),
 # `timm_backbone`(2), `timm_wrapper`(2), `vitpose_backbone`(1) and `glm5_next` outright and trimmed the rest.
-allowlist_models = ["axk2", "cohere_compass", "dinov3_vit", "inkling", "kimi_k25", "kosmos2", "muse_glimmer", "tipsv2", "x_clip", "hy_v4"]
+# `embedding_gemma2`(4): the optional vision/audio tower branches it inherits from `gemma4`, which gate on
+# `config.vision_config is not None` / `config.audio_config is not None`. Whether a tower is configured is
+# composition, not checkpoint divergence, so a `# CODEPATH:` note would restate the condition.
+allowlist_models = ["axk2", "cohere_compass", "dinov3_vit", "embedding_gemma2", "inkling", "kimi_k25", "kosmos2", "muse_glimmer", "pp_doclayout_v4", "tipsv2", "x_clip", "hy_v4"]
 cutoff_date = "2026-06-20"
 
 [rules.TRF041.explanation]
@@ -1048,7 +1051,7 @@ default_enabled = true
 # attention-interface owner. Legacy dispatch in plain `modeling_*.py`: decision_transformer, falcon, gpt2.
 # Backend-conditional tensor handling in modular MLA/DSA-style models the interface cannot express yet:
 # axk2, deepseek_v32, diffusion_gemma, glm_moe_dsa, minimax_m3_vl, qwen2_5_omni. Follow-ups either way.
-allowlist_models = ["axk2", "decision_transformer", "deepseek_v32", "diffusion_gemma", "falcon", "glm_moe_dsa", "gpt2", "minimax_m3_vl", "qwen2_5_omni", "glm5_next", "hy_v4"]
+allowlist_models = ["axk2", "decision_transformer", "deepseek_v32", "diffusion_gemma", "falcon", "glm_moe_dsa", "gpt2", "minimax_m3_vl", "mistral_large4", "qwen2_5_omni", "glm5_next", "hy_v4"]
 
 [rules.TRF051.explanation]
 what_it_does = "Flags comparisons against a _attn_implementation attribute in modeling_*.py and modular_*.py."

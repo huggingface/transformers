@@ -783,7 +783,7 @@ class DonutSwinPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class DonutSwinModel(DonutSwinPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
+    def __init__(self, config: DonutSwinConfig, add_pooling_layer=True, use_mask_token=False):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -879,7 +879,7 @@ class DonutSwinModel(DonutSwinPreTrainedModel):
 )
 # Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinForImageClassification with Swin->DonutSwin,swin->donut
 class DonutSwinForImageClassification(DonutSwinPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DonutSwinConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -904,12 +904,6 @@ class DonutSwinForImageClassification(DonutSwinPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | DonutSwinImageClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.donut(

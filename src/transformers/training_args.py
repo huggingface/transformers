@@ -349,8 +349,8 @@ class TrainingArguments:
             Number of steps to wait before calling `torch.<device>.empty_cache()`. If left unset or set to None, cache will not be emptied.
             This can help avoid CUDA out-of-memory errors by lowering peak VRAM usage at a cost of about [10% slower performance](https://github.com/huggingface/transformers/issues/31372).
         auto_find_batch_size (`bool`, *optional*, defaults to `False`)
-            Whether to find a batch size that will fit into memory automatically through exponential decay, avoiding
-            CUDA Out-of-Memory errors.
+            Whether to find a training batch size that will fit into memory automatically through exponential decay,
+            avoiding CUDA Out-of-Memory errors. The evaluation batch size is not adjusted.
 
         > Logging & Monitoring Training
 
@@ -368,8 +368,9 @@ class TrainingArguments:
             In multinode distributed training, whether to log using `log_level` once per node, or only on the main
             node.
         logging_nan_inf_filter (`bool`, *optional*, defaults to `True`):
-             Filter out NaN and Inf losses when logging. If `True`, replaces NaN/Inf losses with the
-            average of recent valid losses. Does not affect gradient computation, only logging.
+            Filter out NaN and Inf losses when logging. If `True`, replaces NaN/Inf training losses with the
+            average of recent valid losses, and leaves NaN/Inf batches (e.g. batches without label tokens) out of the
+            evaluation loss. Does not affect gradient computation, only logging.
         include_num_input_tokens_seen (`Optional[Union[str, bool]]`, *optional*, defaults to "no"):
             Whether to track the number of input tokens seen. Must be one of ["all", "non_padding", "no"] or a boolean value which map to "all" or "no".
             May be slower in distributed training as gather operations must be called.
@@ -738,21 +739,17 @@ class TrainingArguments:
 
         do_train (`bool`, *optional*, defaults to `False`):
             Whether to run training or not. This argument is not directly used by [`Trainer`], it's intended to be used
-            by your training/evaluation scripts instead. See the [example
-            scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
+            by your training/evaluation scripts instead.
         do_eval (`bool`, *optional*):
             Whether to run evaluation on the validation set or not. Will be set to `True` if `eval_strategy` is
             different from `"no"`. This argument is not directly used by [`Trainer`], it's intended to be used by your
-            training/evaluation scripts instead. See the [example
-            scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
+            training/evaluation scripts instead.
         do_predict (`bool`, *optional*, defaults to `False`):
             Whether to run predictions on the test set or not. This argument is not directly used by [`Trainer`], it's
-            intended to be used by your training/evaluation scripts instead. See the [example
-            scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
+            intended to be used by your training/evaluation scripts instead.
         resume_from_checkpoint (`str`, *optional*):
             The path to a folder with a valid checkpoint for your model. This argument is not directly used by
-            [`Trainer`], it's intended to be used by your training/evaluation scripts instead. See the [example
-            scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
+            [`Trainer`], it's intended to be used by your training/evaluation scripts instead.
     """
 
     # Fields that accept dict values via CLI as JSON strings (e.g., '{"key": "value"}').
@@ -971,7 +968,7 @@ class TrainingArguments:
     auto_find_batch_size: bool = field(
         default=False,
         metadata={
-            "help": "Whether to find a batch size that will fit into memory automatically through exponential decay, avoiding CUDA Out-of-Memory errors."
+            "help": "Whether to find a training batch size that will fit into memory automatically through exponential decay, avoiding CUDA Out-of-Memory errors. The evaluation batch size is not adjusted."
         },
     )
 
@@ -1004,7 +1001,7 @@ class TrainingArguments:
     logging_nan_inf_filter: bool = field(
         default=True,
         metadata={
-            "help": "Filter out NaN and Inf losses when logging. Does not affect gradient computation, only logging."
+            "help": "Filter out NaN and Inf training and evaluation losses when logging. Does not affect gradient computation, only logging."
         },
     )
     include_num_input_tokens_seen: str | bool = field(
@@ -1907,7 +1904,7 @@ class TrainingArguments:
                 torch.neuron.set_device(device)
             elif is_torch_tpu_available():
                 device = torch.device("tpu:0")
-                torch.tpu.set_device(device)
+                torch.accelerator.set_device_index(device)
             else:
                 # Default to cuda:0 (respects CUDA_VISIBLE_DEVICES); nn.DataParallel handles n_gpu > 1
                 device = torch.device(
@@ -2218,7 +2215,7 @@ class TrainingArguments:
             weight_decay (`float`, *optional*, defaults to 0):
                 The weight decay to apply (if not zero) to all layers except all bias and LayerNorm weights in the
                 optimizer.
-            num_train_epochs(`float`, *optional*, defaults to 3.0):
+            num_epochs (`float`, *optional*, defaults to 3.0):
                 Total number of training epochs to perform (if not an integer, will perform the decimal part percents
                 of the last epoch before stopping training).
             max_steps (`int`, *optional*, defaults to -1):

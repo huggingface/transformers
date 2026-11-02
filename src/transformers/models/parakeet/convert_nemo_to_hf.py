@@ -239,7 +239,6 @@ def convert_encoder_config(nemo_config):
         "causal_downsampling",
         "stochastic_depth_start_layer",
         "feat_out",
-        "stochastic_depth_drop_prob",
         "_target_",
         "ff_expansion_factor",
         "untie_biases",
@@ -268,8 +267,10 @@ def convert_encoder_config(nemo_config):
         "dropout_att": "attention_dropout",
         "xscaling": "scale_input",
         "use_bias": "attention_bias",
+        "stochastic_depth_drop_prob": "layerdrop",
     }
-    converted_encoder_config = {}
+    # NeMo's default (no stochastic depth), which differs from ParakeetEncoderConfig's
+    converted_encoder_config = {"layerdrop": 0.0}
 
     for key, value in nemo_config["encoder"].items():
         if key in encoder_keys_to_ignore:
@@ -512,7 +513,7 @@ def main(
     filepath = cached_file(hf_repo_id, nemo_filename)
 
     model_files = extract_nemo_archive(filepath, os.path.dirname(filepath))
-    nemo_config = yaml.load(open(model_files["model_config"], "r"), Loader=yaml.FullLoader)
+    nemo_config = yaml.load(open(model_files["model_config"], "r", encoding="utf-8"), Loader=yaml.FullLoader)
 
     # When revision is given (e.g. "refs/pr/3"), both pushes target that existing PR branch.
     # Otherwise, write_processor creates a new PR and returns its revision for write_model.

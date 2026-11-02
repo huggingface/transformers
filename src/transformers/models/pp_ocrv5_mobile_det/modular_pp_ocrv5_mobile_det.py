@@ -19,8 +19,8 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ...activations import ACT2FN
-from ...backbone_utils import consolidate_backbone_kwargs_to_config, load_backbone
-from ...configuration_utils import PreTrainedConfig
+from ...backbone_utils import load_backbone
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...processing_utils import Unpack
 from ...utils import (
@@ -63,7 +63,18 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
     """
 
     model_type = "pp_ocrv5_mobile_det"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="pp_lcnet_v3",
+            init_kwargs={
+                "scale": 0.75,
+                "out_features": ["stage2", "stage3", "stage4", "stage5"],
+                "out_indices": [2, 3, 4, 5],
+                "divisor": 16,
+            },
+        ),
+    }
 
     backbone_config: dict | PreTrainedConfig | None = None
     reduction: int = 4
@@ -73,18 +84,6 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
     layer_list_out_channels: list[int] | tuple[int, ...] = (12, 18, 42, 360)
 
     def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="pp_lcnet_v3",
-            default_config_kwargs={
-                "scale": 0.75,
-                "out_features": ["stage2", "stage3", "stage4", "stage5"],
-                "out_indices": [2, 3, 4, 5],
-                "divisor": 16,
-            },
-            **kwargs,
-        )
-
         # For object detection pipeline compatibility: single class "text"
         self.id2label = {0: "text"} if self.id2label is None else self.id2label
         super().__post_init__(**kwargs)

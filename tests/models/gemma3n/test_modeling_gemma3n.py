@@ -15,15 +15,18 @@
 
 import copy
 import inspect
+import os
+import tempfile
 import unittest
 
 import numpy as np
 import pytest
-from datasets import load_dataset
+from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
 from transformers import (
     AutoModelForCausalLM,
+    AutoModelForImageTextToText,
     AutoProcessor,
     AutoTokenizer,
     Gemma3nAudioConfig,
@@ -44,6 +47,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import WEIGHTS_NAME
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
@@ -415,11 +419,6 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass
 
-    @pytest.mark.generate
-    @unittest.skip("Gemma3n does not support QuantizedCache as it performs cache manipulation in the forward pass")
-    def test_generate_with_quant_cache(self):
-        pass
-
     @unittest.skip("Gemma3n applies key/query norm which doesn't work with packing")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass
@@ -704,7 +703,9 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     test_missing_keys = False
     _is_stateful = True
     has_attentions = False
-    model_split_percents = [0.5, 0.6]
+    # The unsplittable timm vision tower is ~60% of the test model: at 0.6 it does not fit on
+    # GPU 0, the whole model lands on GPU 1 and `test_model_parallelism` sees no split.
+    model_split_percents = [0.5, 0.7]
 
     # MP works but offload doesn't work when the SigLIP MultiheadAttention is offloaded
     # TODO: One potential solution would be to add to set preload_module_classes = ["SiglipMultiheadAttentionPoolingHead"]
@@ -722,12 +723,6 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
             text_config={"activation_sparsity_pattern": None},
         )
 
-    @unittest.skip(
-        reason="Siglip has no FLEX attention, and we don't have a proper way to set/test attn in VLMs. TODO @raushan"
-    )
-    def test_flex_attention_with_grads(self):
-        pass
-
     @unittest.skip("Gemma3n applies key/query norm which doesn't work with packing")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass
@@ -736,21 +731,31 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    @unittest.skip("timm model has no gradient")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip("timm model has no gradient")
+    @unittest.skip("audio tower has no gradient")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip("timm model has no gradient")
+    @unittest.skip("audio tower has no gradient")
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
-    @unittest.skip("timm model has no gradient")
+    @unittest.skip("audio tower has no gradient")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
+
+    def test_from_pretrained_fp16_initializes_gradient_clipping(self):
+        config = self.model_tester.get_config()
+        checkpoint_model = Gemma3nForConditionalGeneration(config)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            torch.save(checkpoint_model.state_dict(), os.path.join(tmp_dir, WEIGHTS_NAME))
+
+            model = AutoModelForImageTextToText.from_pretrained(tmp_dir, dtype=torch.float16)
+
+        gradient_clipping = model.model.audio_tower.conformer[0].attention.gradient_clipping
+        self.assertEqual(gradient_clipping.dtype, torch.float16)
+        self.assertEqual(gradient_clipping.item(), torch.finfo(torch.float16).max)
 
     def _image_features_get_expected_num_hidden_states(self, model_tester=None):
         return 2
@@ -766,11 +771,6 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
 
     @unittest.skip("Audio modality is not tested here")
     def test_get_audio_features_attentions(self, return_dict: bool | None):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip("Gemma3n does not support QuantizedCache as it performs cache manipulation in the forward pass")
-    def test_generate_with_quant_cache(self):
         pass
 
     @unittest.skip(
@@ -881,10 +881,11 @@ class Gemma3nIntegrationTest(unittest.TestCase):
             },
         ]
 
-        audio_ds = load_dataset(
-            "etechgrid/28.5k_wavfiles_dataset", "default", data_files="wav_dataset/103-1240-0000.wav"
+        self.audio_file_path = hf_hub_download(
+            repo_id="etechgrid/28.5k_wavfiles_dataset",
+            filename="wav_dataset/103-1240-0000.wav",
+            repo_type="dataset",
         )
-        self.audio_file_path = audio_ds["train"][0]["audio"].metadata.path
         cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
@@ -909,6 +910,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
             ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
             ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The cow is facing the viewer with its head slightly turned'],
             ("xpu", 5): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
+            ("tpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -999,6 +1001,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
             ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nHere's a breakdown of the differences:\n\n* **Subject:** The first image features a cow"],
             ("xpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The cow is facing the viewer with its head slightly turned', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nHere's a breakdown of the differences:\n\n* **Subject:** The first image features a cow"],
             ("xpu", 5): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The sky is blue with a few white clouds. The', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nHere's a breakdown of the differences:\n\n* **Subject:** The first image features a cow"],
+            ("tpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly', "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, the images are **not identical**.\n\nHere's a breakdown of the differences:\n\n* **Subject Matter:** The first image shows a"],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -1025,6 +1028,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
             ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
             ("xpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
             ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. The cow is facing the viewer with its head slightly turned'],
+            ("tpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach next to a clear blue ocean. The cow is facing the viewer with its head slightly'],
         }).get_expectation()  # fmt: skip
         self.assertEqual(len(inputs["pixel_values"]), EXPECTED_NUM_IMAGES)
         self.assertEqual(output_text, EXPECTED_TEXTS)
@@ -1068,7 +1072,8 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations({
             ("cuda", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are the key elements:\n\n* **A prominent red'],
             ("xpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are the key elements:\n\n* **A prominent red'],
-            ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. Here are the key elements:\n\n* **A prominent red'],
+            ("rocm", (9, 4)): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. \n\nHere are some key elements:\n\n* **A'],
+            ("tpu", None): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nIn the image, I see a street scene in what appears to be a Chinatown district. \n\nHere are some key elements:\n\n* **A'],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -1114,6 +1119,7 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         EXPECTED_COMPLETIONS = Expectations({
             ("cuda", None): [" and I find it very relaxing. I also like the food, which is very delicious. I also", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
             ("rocm", (9, 4)): [' and the food is delicious. The staff is friendly and helpful. The atmosphere is relaxed and welcoming.', ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
+            ("tpu", None): [" and I'm sure others will too. This is a nice place. This is a nice place", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
 
@@ -1144,7 +1150,8 @@ class Gemma3nIntegrationTest(unittest.TestCase):
         EXPECTED_COMPLETIONS = Expectations({
             # FIXME: This test is VERY flaky on ROCm
             ("cuda", None): [" and I'm glad I came here. This is a nice place. This is a nice place", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
-            ("rocm", (9, 4)): [" and I think it's a nice place to visit. This is a nice place. This is", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
+            ("rocm", (9, 4)): [" and I'm glad I came here. This is a nice place. This is a nice place", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
             ("xpu", None): [" and I think it's a nice place to visit. This is a nice place. This is", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
+            ("tpu", None): [" and I'm very happy to be here. This is a nice place. This is a nice", ", green, yellow, orange, purple, pink, brown, black, white.\n\nHere'"],
         }).get_expectation()  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)

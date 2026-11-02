@@ -23,6 +23,8 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
+from ...utils.output_capturing import OutputRecorder
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM
 from ..lfm2.modeling_lfm2 import (
     Lfm2Attention,
     Lfm2DecoderLayer,
@@ -30,7 +32,7 @@ from ..lfm2.modeling_lfm2 import (
     Lfm2RotaryEmbedding,
     Lfm2ShortConv,
 )
-from ..llama.modeling_llama import LlamaForCausalLM, LlamaPreTrainedModel, LlamaRMSNorm
+from ..llama.modeling_llama import LlamaPreTrainedModel, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import MixtralModel
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeTopKRouter
 from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
@@ -121,6 +123,12 @@ class Lfm2MoeDecoderLayer(Lfm2DecoderLayer):
 
 
 class Lfm2MoePreTrainedModel(LlamaPreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": Lfm2MoeDecoderLayer,
+        "attentions": Lfm2MoeAttention,
+        "router_logits": OutputRecorder(Lfm2MoeTopKRouter, index=0),
+    }
+
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
@@ -201,7 +209,7 @@ class Lfm2MoeModel(MixtralModel):
         )
 
 
-class Lfm2MoeForCausalLM(LlamaForCausalLM):
+class Lfm2MoeForCausalLM(DeepseekV2ForCausalLM):
     pass
 
 

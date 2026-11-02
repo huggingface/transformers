@@ -21,11 +21,11 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..granite.modeling_granite import GraniteRMSNorm, GraniteRotaryEmbedding
 from ..llama.modeling_llama import LlamaAttention, LlamaPreTrainedModel
 from ..mixtral.modeling_mixtral import (
@@ -49,7 +49,7 @@ class GraniteMoeRotaryEmbedding(GraniteRotaryEmbedding):
 class GraniteMoeTopKRouter(nn.Module):
     """Top-k gating that returns the routing decisions without grouping tokens by expert.
 
-    Returns ``(top_k_index, top_k_weights, router_logits)``; the grouping/scattering used to live
+    Returns ``(router_logits, top_k_weights, top_k_index)``; the grouping/scattering used to live
     here (via ``expert_size.tolist()``, which broke fullgraph compile) and now happens inside the
     experts forward via ``use_experts_implementation`` so the default ``grouped_mm`` / ``batched_mm``
     paths can compile cleanly.
@@ -65,7 +65,7 @@ class GraniteMoeTopKRouter(nn.Module):
         router_logits = F.linear(hidden_states, self.weight).float()  # (num_tokens, num_experts)
         top_k_logits, top_k_index = router_logits.topk(self.top_k, dim=-1)  # (num_tokens, top_k)
         top_k_weights = torch.softmax(top_k_logits, dim=-1).type_as(hidden_states)  # (num_tokens, top_k)
-        return top_k_index, top_k_weights, router_logits
+        return router_logits, top_k_weights, top_k_index
 
 
 class GraniteMoeExperts(MixtralExperts):
@@ -84,7 +84,7 @@ class GraniteMoeMoE(nn.Module):
     def forward(self, layer_input: torch.Tensor) -> torch.Tensor:
         bsz, length, emb_size = layer_input.size()
         hidden_states = layer_input.reshape(-1, emb_size)
-        top_k_index, top_k_weights, _ = self.router(hidden_states)
+        _, top_k_weights, top_k_index = self.router(hidden_states)
         layer_output = self.experts(hidden_states, top_k_index, top_k_weights)
         return layer_output.view(bsz, length, self.input_size)
 
@@ -140,6 +140,11 @@ class GraniteMoePreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _can_compile_fullgraph = True
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(GraniteMoeTopKRouter, index=0),
+        "hidden_states": GraniteMoeDecoderLayer,
+        "attentions": GraniteMoeAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -241,11 +246,6 @@ class GraniteMoeForCausalLM(MixtralForCausalLM):
         **kwargs,
     ) -> tuple | MoeCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -272,13 +272,14 @@ class GraniteMoeForCausalLM(MixtralForCausalLM):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 
         # Only compute necessary logits
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         logits = logits / self.config.logits_scaling
 
         loss = None

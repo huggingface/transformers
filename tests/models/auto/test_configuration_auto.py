@@ -156,7 +156,7 @@ class AutoConfigTest(unittest.TestCase):
             }
             config_path = os.path.join(tmp_dir, "config.json")
 
-            with open(config_path, "w") as f:
+            with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(config_dict, f)
 
             with self.assertRaisesRegex(ValueError, "Should have a `model_type` key"):

@@ -33,13 +33,16 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_smolvlm import SmolVLMConfig, SmolVLMVisionConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring
@@ -116,9 +119,6 @@ class SmolVLMVisionEmbeddings(nn.Module):
 
         fractional_coords_h = torch.clamp(fractional_coords_h, max=(1.0 - 1e-6))
         fractional_coords_w = torch.clamp(fractional_coords_w, max=(1.0 - 1e-6))
-
-        fractional_coords_h = fractional_coords_h.to(pixel_values.dtype)
-        fractional_coords_w = fractional_coords_w.to(pixel_values.dtype)
 
         bucket_coords_h = torch.bucketize(fractional_coords_h, boundaries, right=True)
         bucket_coords_w = torch.bucketize(fractional_coords_w, boundaries, right=True)
@@ -334,7 +334,7 @@ class SmolVLMVisionTransformer(SmolVLMPreTrainedModel):
         pixel_values,
         patch_attention_mask: torch.BoolTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutput:
+    ) -> tuple | BaseModelOutputWithPooling:
         batch_size = pixel_values.size(0)
         if patch_attention_mask is None:
             patch_size = self.patch_size
@@ -365,7 +365,7 @@ class SmolVLMVisionTransformer(SmolVLMPreTrainedModel):
         last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.post_layernorm(last_hidden_state)
 
-        return BaseModelOutput(
+        return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
         )
 
@@ -435,11 +435,6 @@ class SmolVLMConnector(nn.Module):
     """
 )
 class SmolVLMModel(SmolVLMPreTrainedModel):
-    """
-    A subclass of Idefics3Model. We do *not* remove or block the call to inputs_merger
-    in forward. Instead, we override inputs_merger here with custom logic.
-    """
-
     def __init__(self, config: SmolVLMConfig):
         super().__init__(config)
         self.padding_idx = self.config.text_config.pad_token_id
@@ -461,48 +456,6 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.text_model.set_input_embeddings(value)
-
-    def inputs_merger(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_hidden_states: torch.Tensor
-    ):
-        """
-        This method aims at merging the token embeddings with the image hidden states into one single sequence of vectors that are fed to the transformer LM.
-        The merging happens as follows:
-        - The text token sequence is: `tok_1 tok_2 tok_3 <fake_token_around_image> <image> <image> ... <image> <fake_token_around_image> tok_4`.
-        - We get the image hidden states for the image through the vision encoder and that hidden state, after a pixel shuffle operation, is then projected into the text embedding space.
-        We thus have a sequence of image hidden states of size (1, image_seq_len, hidden_dim), where 1 is for batch_size of 1 image and hidden_dim is the hidden_dim of the LM transformer.
-        - The merging happens so that we obtain the following sequence: `vector_tok_1 vector_tok_2 vector_tok_3 vector_fake_tok_around_image {sequence of image_seq_len image hidden states} vector_fake_toke_around_image vector_tok_4`. That sequence is fed to the LM.
-        - To fit the format of that sequence, `input_ids`, `inputs_embeds`, `attention_mask` are all 3 adapted to insert the image hidden states.
-        """
-        _, patch_size, _ = image_hidden_states.shape
-
-        if input_ids is None:
-            image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            image_mask = image_mask[..., 0]  # slice off the hidden dim
-        else:
-            image_mask = input_ids == self.config.image_token_id
-
-        num_image_tokens = image_mask.sum(dim=1)
-        torch_compilable_check(
-            torch.all(num_image_tokens % patch_size == 0),
-            "At least one sample has <image> tokens not divisible by patch_size.",
-        )
-        blocks_per_sample = num_image_tokens // patch_size
-
-        offsets = torch.nn.functional.pad(blocks_per_sample.cumsum(dim=0), (1, 0), value=0)
-        block_offset = offsets[:-1]
-        row_cum = image_mask.cumsum(dim=-1)
-        chunk_idx = (row_cum - 1) // patch_size
-        local_idx = (row_cum - 1) % patch_size
-        block_idx = block_offset.unsqueeze(1) + chunk_idx
-
-        image_embeds = torch.zeros_like(inputs_embeds)
-        image_embeds[image_mask] = image_hidden_states[block_idx[image_mask], local_idx[image_mask], :]
-
-        merged_embeds = torch.where(image_mask.unsqueeze(-1), image_embeds, inputs_embeds)
-        return merged_embeds
 
     @can_return_tuple
     @auto_docstring(
@@ -530,6 +483,7 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
 
         # If no images, leave one empty image.
         real_images_inds[0] |= ~torch.any(real_images_inds)
+        num_real_images_per_batch = real_images_inds.view(batch_size, num_images).sum(dim=1)
 
         pixel_values = pixel_values[real_images_inds].contiguous()
         # Handle the vision attention mask
@@ -556,7 +510,9 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
 
         # Modality projection & resampling
         image_features = self.connector(image_hidden_states)
-        image_outputs.pooler_output = image_features
+        image_outputs.pooler_output = [
+            f.reshape(-1, f.shape[-1]) for f in image_features.split(num_real_images_per_batch.tolist())
+        ]
 
         return image_outputs
 
@@ -582,25 +538,16 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
         pixel_attention_mask: torch.BoolTensor | None = None,
-        image_hidden_states: torch.FloatTensor | None = None,
+        mm_encoder_outputs: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | SmolVLMBaseModelOutputWithPast:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
             Mask to avoid performing attention on padding pixel indices.
-        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The hidden states of the image encoder after modality projection. Pass this instead of `pixel_values`
-            to reuse a previous call's vision-tower output and skip recomputing it (e.g. across turns in a
-            conversation). Do not pass both at once: clear `pixel_values` from the inputs first, or a `ValueError`
-            is raised.
         """
-        if input_ids is not None:
-            batch_size, seq_length = input_ids.shape
-        elif inputs_embeds is not None:
-            batch_size, seq_length, _ = inputs_embeds.shape
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
@@ -608,26 +555,35 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.text_model.get_input_embeddings()(input_ids).to(input_ids.device)
 
-        if pixel_values is not None and image_hidden_states is not None:
-            raise ValueError(
-                "You cannot specify both pixel_values and image_hidden_states at the same time. To reuse a "
-                "previous call's image_hidden_states, remove pixel_values from the inputs instead of passing both."
-            )
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
-        if pixel_values is not None:
-            image_hidden_states = self.get_image_features(
-                pixel_values, pixel_attention_mask, return_dict=True
-            ).pooler_output
-            image_hidden_states = image_hidden_states.to(inputs_embeds.device)
-        elif image_hidden_states is not None:
-            image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=inputs_embeds.device)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if (isinstance(mm_encoder_outputs, dict) and mm_encoder_outputs.get("image")) or pixel_values is not None:
+            if mm_encoder_outputs.get("image") is None:
+                mm_encoder_outputs["image"] = self.get_image_features(
+                    pixel_values, pixel_attention_mask, return_dict=True
+                )
+            image_hidden_states = mm_encoder_outputs["image"].pooler_output
+        elif isinstance(mm_encoder_outputs, torch.Tensor):
+            logger.warning(
+                "Passing `mm_encoder_outputs` (prev `image_hidden_states`) as a single tensor for pooled outputs "
+                "is deprecated and will be removed in v5.20. Please pass the whole output dict as `mm_encoder_outputs`"
+            )
+            image_hidden_states = mm_encoder_outputs
+        else:
+            image_hidden_states = None
 
         if image_hidden_states is not None:
-            inputs_embeds = self.inputs_merger(
-                input_ids=input_ids,
-                inputs_embeds=inputs_embeds,
-                image_hidden_states=image_hidden_states,
+            if isinstance(image_hidden_states, (list, tuple)):
+                image_hidden_states = torch.cat(image_hidden_states, dim=0)
+            image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=inputs_embeds.device)
+            # When we generate, we don't want to replace the potential image_token_id that we generated by images
+            # that simply don't exist
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_hidden_states
             )
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_hidden_states)
 
         outputs = self.text_model(
             inputs_embeds=inputs_embeds,
@@ -643,8 +599,31 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_hidden_states,
+            image_hidden_states=mm_encoder_outputs.get("image"),
         )
+
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
+        torch_compilable_check(
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
+        )
+        return special_image_mask
 
 
 @auto_docstring(
@@ -685,8 +664,9 @@ class SmolVLMCausalLMOutputWithPast(ModelOutput):
 )
 class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
-    def __init__(self, config):
+    def __init__(self, config: SmolVLMConfig):
         super().__init__(config)
         self.model = SmolVLMModel(config)
         self.image_token_id = self.config.image_token_id
@@ -731,7 +711,7 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.FloatTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
         pixel_attention_mask: torch.BoolTensor | None = None,
-        image_hidden_states: torch.FloatTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -740,11 +720,6 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
             Mask to avoid performing attention on padding pixel indices.
-        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The hidden states of the image encoder after modality projection. Pass this instead of `pixel_values`
-            to reuse a previous call's vision-tower output and skip recomputing it (e.g. across turns in a
-            conversation). Do not pass both at once: clear `pixel_values` from the inputs first, or a `ValueError`
-            is raised.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or `model.image_token_id`. Tokens with indices set to `model.image_token_id` are
@@ -798,16 +773,15 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             pixel_values=pixel_values,
             pixel_attention_mask=pixel_attention_mask,
-            image_hidden_states=image_hidden_states,
+            mm_encoder_outputs=mm_encoder_outputs,
             use_cache=use_cache,
             return_dict=True,
             **kwargs,
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

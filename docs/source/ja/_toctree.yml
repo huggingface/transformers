@@ -15,8 +15,6 @@
     title: データの前処理
   - local: training
     title: 事前トレーニングされたモデルを微調整する
-  - local: run_scripts
-    title: スクリプトを使用してトレーニングする
   - local: accelerate
     title: 🤗 Accelerate を使用して分散トレーニングをセットアップする
   - local: peft

@@ -690,7 +690,7 @@ class FlaubertPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class FlaubertModel(FlaubertPreTrainedModel):
-    def __init__(self, config):  # , dico, is_encoder, with_output):
+    def __init__(self, config: FlaubertConfig):  # , dico, is_encoder, with_output):
         super().__init__(config)
 
         # encoder / decoder, output layer
@@ -942,7 +942,7 @@ class FlaubertModel(FlaubertPreTrainedModel):
 class FlaubertWithLMHeadModel(FlaubertPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"pred_layer.proj.weight": "transformer.embeddings.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: FlaubertConfig):
         super().__init__(config)
         self.transformer = FlaubertModel(config)
         self.pred_layer = FlaubertPredLayer(config)
@@ -1049,7 +1049,7 @@ class FlaubertWithLMHeadModel(FlaubertPreTrainedModel, GenerationMixin):
 )
 # Copied from transformers.models.xlm.modeling_xlm.XLMForSequenceClassification with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
 class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: FlaubertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1093,10 +1093,6 @@ class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
         cache (`dict[str, torch.FloatTensor]`, *optional*):
             Instance of `EncoderDecoderCache` that contains precomputed KV states. Can be used to speed up sequential
             decoding.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
@@ -1155,7 +1151,7 @@ class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.xlm.modeling_xlm.XLMForTokenClassification with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
 class FlaubertForTokenClassification(FlaubertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: FlaubertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1199,8 +1195,6 @@ class FlaubertForTokenClassification(FlaubertPreTrainedModel):
         cache (`dict[str, torch.FloatTensor]`, *optional*):
             Instance of `EncoderDecoderCache` that contains precomputed KV states. Can be used to speed up sequential
             decoding.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
@@ -1248,7 +1242,7 @@ class FlaubertForTokenClassification(FlaubertPreTrainedModel):
 )
 # Copied from transformers.models.xlm.modeling_xlm.XLMForQuestionAnsweringSimple with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
 class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: FlaubertConfig):
         super().__init__(config)
 
         self.transformer = FlaubertModel(config)
@@ -1383,7 +1377,7 @@ class FlaubertForQuestionAnsweringOutput(ModelOutput):
 @auto_docstring
 # Copied from transformers.models.xlm.modeling_xlm.XLMForQuestionAnswering with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
 class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: FlaubertConfig):
         super().__init__(config)
 
         self.transformer = FlaubertModel(config)
@@ -1502,7 +1496,7 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.xlm.modeling_xlm.XLMForMultipleChoice with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
 class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
-    def __init__(self, config, *inputs, **kwargs):
+    def __init__(self, config: FlaubertConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         self.transformer = FlaubertModel(config)
@@ -1569,10 +1563,6 @@ class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]

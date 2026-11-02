@@ -42,7 +42,6 @@ class GgufHfQuantizer(HfQuantizer):
     quantization_config: "GgufConfig"
     header: "GgufHeader"  # set by `read_header`, before any of the loading hooks run
     requires_calibration = False
-    requires_parameters_quantization = False
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -54,6 +53,7 @@ class GgufHfQuantizer(HfQuantizer):
         self.header = None
         self.kernel = None
         self.dtype = None
+        self.attn_requested = True
         # TODO: only for the legacy loader — drop this, and every hook that guards on it, once all
         # architectures go through this path and there is no fallback left
         self.supported = False
@@ -95,6 +95,11 @@ class GgufHfQuantizer(HfQuantizer):
             logger.info(f"No `device_map` was passed; loading the GGUF weights on {device_map['']}.")
         return device_map
 
+    def update_attn_implementation(self, config):
+        """Remember whether an attention was asked for. The default itself is set once the weights are loaded."""
+        self.attn_requested = config._attn_implementation is not None
+        return config
+
     def read_header(self, gguf_file: str):
         """Parse the file's metadata, once `from_pretrained` knows where the file is."""
         metadata, _ = read_gguf_metadata(gguf_file)
@@ -119,6 +124,10 @@ class GgufHfQuantizer(HfQuantizer):
             )
         self.dtype = dtype
         return dtype
+
+    def get_new_dtype(self, converter, param, dtype):
+        # supperted architectures will cast themselves.
+        return None if self.supported else super().get_new_dtype(converter, param, dtype)
 
     def get_state_dict(self, checkpoint_file: str, model):
         """The file's tensors, quantized ones kept as raw blocks."""
@@ -153,11 +162,20 @@ class GgufHfQuantizer(HfQuantizer):
             if permutation is not None:
                 module.input_permutation = permutation.to(module.weight.device)
         kernelize_ggml_layers(model)
+        if not self.quantization_config.dequantize and not self.attn_requested:
+            GGML_ATTN = "ggml-org/ggml-attn"
+            try:
+                model.set_attn_implementation(GGML_ATTN)
+            except Exception as error:
+                logger.warning(
+                    f"Could not use the `{GGML_ATTN}` attention kernel ({error}); keeping "
+                    f"`{model.config._attn_implementation}`. Pass `attn_implementation=` to choose one explicitly."
+                )
         # Dropping the weight_conversions related to GGUF ops. When saving, it will fetch back the original specific ops of the model.
         model._weight_conversions = None
         return model
 
-    def update_weight_conversions(self, weight_conversions):
+    def update_weight_conversions(self, weight_conversions, model):
         """Swap in this file's conversions, dropping the model's own.
 
         The model's describe a safetensors checkpoint, and match nothing in a GGUF.

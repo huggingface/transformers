@@ -96,14 +96,13 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
         "hyper_connection_mixer.input_mix_weight_down": "rowwise_split_input",
         # It's extremely important to shard this embedding as its size is ~45B == 90 GiB - we shard on dim 1, as the checkpoints
         # for it are sharded on dim0 (this way Concatenate and tp do not work on the same dim and everything is easy)
-        "layers.*.ple.ple_embedding.ngram_embedding": "colwise_gather_output",
+        "layers.*.ple.ple_embedding.ngram_embedding": "embedding_colwise",
     }
     base_model_pp_plan = None
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     vocab_size: int = 248320
@@ -174,20 +173,20 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
         if self.layer_types is None:
             interval_pattern = kwargs.pop("full_attention_interval", 4)
             self.layer_types = [
-                "linear_attention" if (i + 1) % interval_pattern else "qwen_sparse_attention"
+                "linear_attention" if (i + 1) % interval_pattern else "indexed_attention"
                 for i in range(self.num_hidden_layers)
             ]
         # The real checkpoint contains "full_attention" entries for layers that are actually using an indexer
         elif "full_attention" in self.layer_types:
             self.layer_types = [
-                "qwen_sparse_attention" if layer == "full_attention" else layer for layer in self.layer_types
+                "indexed_attention" if layer == "full_attention" else layer for layer in self.layer_types
             ]
 
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates Qwen4-Exp architecture invariants."""
-        unsupported_layer_types = sorted(set(self.layer_types) - {"linear_attention", "qwen_sparse_attention"})
+        unsupported_layer_types = sorted(set(self.layer_types) - {"linear_attention", "indexed_attention"})
         if unsupported_layer_types:
             raise ValueError(f"Unsupported Qwen4-Exp layer types: {unsupported_layer_types}.")
         output_gate_type = self.output_gate_type or self.hidden_act
@@ -304,7 +303,10 @@ class Qwen4ExpConfig(PreTrainedConfig):
     """
 
     model_type = "qwen4_exp"
-    sub_configs = {"vision_config": Qwen4ExpVisionConfig, "text_config": Qwen4ExpTextConfig}
+    sub_configs_defaults = {
+        "vision_config": Qwen4ExpVisionConfig,
+        "text_config": Qwen4ExpTextConfig,
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -318,19 +320,9 @@ class Qwen4ExpConfig(PreTrainedConfig):
     base_model_fsdp_plan = None
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
+        if isinstance(self.vision_config, dict) and self.vision_config.get("model_type") == "qwen4_exp":
             # old ckpt with incorrect model type -> override manually
-            if self.vision_config.get("model_type") == "qwen4_exp":
-                self.vision_config["model_type"] = "qwen4_exp_vision"
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"]()
-
+            self.vision_config["model_type"] = "qwen4_exp_vision"
         super().__post_init__(**kwargs)
 
 
