@@ -131,9 +131,6 @@ def prepare_for_hqq_linear(model, quantization_config=None, modules_to_not_conve
     return model
 
 
-# What `HQQLinear.state_dict` saves for a weight, the encoded meta data included (bias aside)
-
-
 def _hqq_linears(input_dict, prefix=""):
     "One `HQQLinear` per value of `{prefix}W_q` (one per expert when they are lists), loaded from its serialized state"
     from hqq.core.quantize import HQQLinear
@@ -158,8 +155,7 @@ class HqqDeserialize(ConversionOps):
         self.hf_quantizer = hf_quantizer
 
     def convert(self, input_dict, model=None, full_layer_name=None, missing_keys=None, **kwargs):
-        _swap_in(model, full_layer_name, _hqq_linears(input_dict)[0], missing_keys)
-        return {}
+        return _swap_in(model, full_layer_name, _hqq_linears(input_dict)[0], missing_keys)
 
 
 class HqqQuantize(ConversionOps):
@@ -177,8 +173,7 @@ class HqqQuantize(ConversionOps):
         layer = HQQLinear.from_weights(
             weight, None, module.quant_config, compute_dtype=weight.dtype, device=weight.device
         )
-        _swap_in(model, full_layer_name, layer, missing_keys)
-        return {}
+        return _swap_in(model, full_layer_name, layer, missing_keys)
 
 
 def _swap_in(model, full_layer_name, layer, missing_keys):
@@ -189,6 +184,7 @@ def _swap_in(model, full_layer_name, layer, missing_keys):
     model.set_submodule(module_name, layer)
     if missing_keys is not None:
         missing_keys.discard(full_layer_name)
+    return {}  # the module was swapped in place
 
 
 class HqqDequantize(ConversionOps):

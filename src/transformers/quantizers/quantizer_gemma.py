@@ -60,7 +60,7 @@ class GemmaQuantizer(HfQuantizer):
         return {"dequantize": GemmaDequantize}
 
     def _process_model_before_weight_loading(self, model, **kwargs):
-        if self.pre_quantized and self.quantization_config.dequantize:
+        if self.dequantizing:
             # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
             return
         from ..integrations.gemma_quant import replace_with_quant_layers

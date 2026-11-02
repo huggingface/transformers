@@ -2,7 +2,6 @@ from ..core_model_loading import ConversionOps, expand_target_names
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 from ..utils import (
     get_available_devices,
-    is_accelerate_available,
     is_bitsandbytes_available,
     is_torch_available,
     logging,
@@ -18,8 +17,6 @@ if is_torch_available():
 
     from ..pytorch_utils import Conv1D
 
-if is_accelerate_available():
-    pass
 
 logger = logging.get_logger(__name__)
 

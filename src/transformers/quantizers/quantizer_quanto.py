@@ -84,7 +84,7 @@ class QuantoHfQuantizer(HfQuantizer):
         return max_memory
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        if self.pre_quantized and self.quantization_config.dequantize:
+        if self.dequantizing:
             # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
             return
         from ..integrations import replace_with_quanto_layers

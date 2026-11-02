@@ -110,7 +110,7 @@ class FPQuantHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
-        if self.pre_quantized and self.quantization_config.dequantize:
+        if self.dequantizing:
             # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
             return
         from fp_quant import replace_with_fp_quant_linear

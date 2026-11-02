@@ -26,6 +26,7 @@ from ..utils.import_utils import (
     is_kernels_available,
 )
 from .hub_kernels import lazy_load_kernel
+from .mxfp4 import FP4_VALUES
 
 
 if is_torch_available():
@@ -35,8 +36,6 @@ if is_torch_available():
 
 # NVFP4 uses one FP8 scale factor for every 16 consecutive weight values.
 SF_VEC_SIZE = 16
-# The e2m1 values of the 16 FP4 codes: sign bit, 2 exponent bits, 1 mantissa bit.
-FP4_E2M1_VALUES = [0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0]
 
 
 @dataclass(frozen=True)
@@ -185,7 +184,7 @@ class NVFP4Dequantize(ConversionOps):
         return output
 
     def _dequantize(self, packed, scales, global_scale):
-        values = torch.tensor(FP4_E2M1_VALUES, device=packed.device)
+        values = torch.tensor(FP4_VALUES, device=packed.device)
         weight = torch.stack([values[(packed & 0xF).int()], values[(packed >> 4).int()]], dim=-1)
         weight = weight.view(packed.shape[0], -1, SF_VEC_SIZE)
         scales = scales.view(torch.float8_e4m3fn).float().unsqueeze(-1)

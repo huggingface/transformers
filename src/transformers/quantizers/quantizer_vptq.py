@@ -45,7 +45,7 @@ class VptqHfQuantizer(HfQuantizer):
             raise ImportError("Using `vptq` quantization requires VPTQ>=0.0.4: `pip install -U vptq`")
 
         # Dequantizing runs vptq's torch implementation
-        if not torch.cuda.is_available() and not (self.pre_quantized and self.quantization_config.dequantize):
+        if not torch.cuda.is_available() and not (self.dequantizing):
             raise RuntimeError("GPU is required to run VTPQ quantized model.")
 
     def _process_model_before_weight_loading(
@@ -53,7 +53,7 @@ class VptqHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
-        if self.pre_quantized and self.quantization_config.dequantize:
+        if self.dequantizing:
             # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
             return
         from ..integrations import replace_with_vptq_linear
