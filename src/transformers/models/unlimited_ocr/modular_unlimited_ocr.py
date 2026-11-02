@@ -974,7 +974,7 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
         self.v_head_dim = value_states.shape[-1]
         self.k_head_dim = key_states.shape[-1]
 
-        self.cumulative_length = self.cumulative_length.to(self.device)
+        self.cumulative_length = torch.zeros((), dtype=torch.long, device=self.device)
         if not is_torchdynamo_compiling():
             torch._dynamo.mark_static_address(self.cumulative_length)
 

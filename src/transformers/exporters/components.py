@@ -11,12 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""What a component is, shared by the stages that pass one along.
+"""What a component is, shared by the three stages that pass one along.
 
-A decomposition produces components, an exporter turns each into a graph, and a runtime drives them. A multi-modal
-model's are named as Optimum Intel names them: `"text_embeddings_model"`, one `"<modality>_embeddings_model"` per
-modality, and `"language_model"`. This holds `Component`, and the modules a decomposition wraps a model's own methods
-in so each can be exported on its own.
+A decomposition produces components, an exporter turns each into a graph, and a runtime drives them. Components
+are keyed by optimum-intel's names (`"model"`, `"encoder_model"` / `"decoder_model"`, `"language_model"`,
+`"text_embeddings_model"`, `"<modality>_embeddings_model"`). This holds `Component`, and the modules a
+decomposition wraps a model's own methods in so each can be exported on its own.
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..utils.import_utils import is_torch_available
+from .utils import get_leaf_tensors
 
 
 if is_torch_available():
@@ -128,6 +129,52 @@ class PatchVisionEncoder(_ModelComponent):
             features = {f"image_features.{llm}": project(layer, proj) for llm, layer, proj in specs}
         features["image_newline"] = self.model.image_newline
         return features
+
+
+class CrossAttentionEncoder(_ModelComponent):
+    """The encoder, plus the cross-attention keys and values its output determines.
+
+    A decode graph traced after the first step only reads the cross cache, so the encoder graph computes it
+    instead: `forward` returns the encoder outputs alongside `cross_keys_<layer>` / `cross_values_<layer>`.
+    The writers (`capture_cross_writers`) are replayed with their captured arguments and a one-token zero
+    query; the attention output is discarded.
+    """
+
+    def __init__(self, encoder, writers: dict):
+        super().__init__(encoder)
+        self.writers = torch.nn.ModuleList(writer.module for _index, writer in sorted(writers.items()))
+        self._calls = [writer for _index, writer in sorted(writers.items())]
+
+    def forward(self, **encoder_inputs):
+        from ..cache_utils import DynamicCache, EncoderDecoderCache
+
+        encoded = self.model(**encoder_inputs)
+        states = encoded.last_hidden_state if hasattr(encoded, "last_hidden_state") else encoded[0]
+        cache = EncoderDecoderCache(DynamicCache(), DynamicCache())
+        for writer in self._calls:
+            args, kwargs = list(writer.args), dict(writer.kwargs)
+            for slot, value in (
+                (writer.states_at, states),
+                (writer.cache_at, cache),
+                # Live batch, captured width: a query at the captured batch would not broadcast.
+                (
+                    writer.query_at,
+                    None if writer.width is None else states.new_zeros(states.shape[0], 1, writer.width),
+                ),
+            ):
+                if slot is None or value is None:
+                    continue
+                if slot[0] == "arg":
+                    args[slot[1]] = value
+                else:
+                    kwargs[slot[1]] = value
+            writer.module(*args, **kwargs)
+        # All encoder outputs, not just hidden states: parakeet's decoder reads its frame mask.
+        outputs = dict(get_leaf_tensors(encoded))
+        for index, layer in enumerate(cache.cross_attention_cache.layers):
+            outputs[f"cross_keys_{index}"] = layer.keys
+            outputs[f"cross_values_{index}"] = layer.values
+        return outputs
 
 
 class TokenEmbedder(_ModelComponent):

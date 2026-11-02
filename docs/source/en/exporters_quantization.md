@@ -82,10 +82,10 @@ config = ExecutorchConfig(backend="xnnpack", quantizer=PT2EQuantizer(xnnpack, ca
 ```
 
 Quantize generative models through [`~HfExporter.export_for_generation`]. Here `calibration_dataset` holds generate
-kwargs, like `inputs`, and each component calibrates on the inputs captured for it. A text-only model has a `prefill`
-and a `decode` component; a multimodal model splits its prefill further, into its `text_embeddings_model`, one
-`<modality>_embeddings_model` per modality (such as `vision_embeddings_model`) and its `language_model` (see
-[How `export_for_generation` works](./exporters#how-exportforgeneration-works)).
+kwargs, like `inputs`, and each component calibrates on the inputs captured for it. A text-only model has one decode
+graph, `model`, which also calibrates on the prompt it serves; a multimodal model's decode graph is its
+`language_model`, beside its `text_embeddings_model` and one `<modality>_embeddings_model` per modality (such as
+`vision_embeddings_model`) (see [How `export_for_generation` works](./exporters#how-exportforgeneration-works)).
 
 ```python
 from torchao.quantization.pt2e.quantizer.x86_inductor_quantizer import (
@@ -105,7 +105,7 @@ inputs = tokenizer("Once upon a time", return_tensors="pt")
 
 x86 = X86InductorQuantizer().set_global(get_default_x86_inductor_quantization_config())
 config = DynamoConfig(dynamic=True, quantizer=PT2EQuantizer(x86, calibration_dataset=calibration_dataset))
-components = DynamoExporter().export_for_generation(model, inputs, config)  # "prefill" and "decode" components
+components = DynamoExporter().export_for_generation(model, inputs, config)  # a "model" component
 ```
 
 On OpenVINO, PT2E weights stay in full precision behind quantize/dequantize pairs, which OpenVINO converts to
@@ -175,20 +175,22 @@ data (dynamic ONNX Runtime quantization, int8 weight compression) never read it.
 ## A different recipe per component
 
 Pass a `{component: config}` dict to [`~HfExporter.export_for_generation`] to quantize each component on its own
-terms. For the model above, static int8 on `prefill` and the lighter dynamic int8 on `decode`:
+terms. For a multimodal model, static int8 on the `vision_embeddings_model` and the lighter dynamic int8 on the
+`language_model`:
 
 ```python
 dynamic_x86 = X86InductorQuantizer().set_global(get_default_x86_inductor_quantization_config(is_dynamic=True))
 
 config = {
-    "prefill": DynamoConfig(dynamic=True, quantizer=PT2EQuantizer(x86)),
-    "decode": DynamoConfig(dynamic=True, quantizer=PT2EQuantizer(dynamic_x86)),
+    "text_embeddings_model": DynamoConfig(dynamic=True),
+    "vision_embeddings_model": DynamoConfig(dynamic=True, quantizer=PT2EQuantizer(x86)),
+    "language_model": DynamoConfig(dynamic=True, quantizer=PT2EQuantizer(dynamic_x86)),
 }
 components = DynamoExporter().export_for_generation(model, inputs, config)
 ```
 
-The dict must name every component [`~exporters.utils.decompose_for_generation`] produces (a multimodal model adds its
-`text_embeddings_model`, its `<modality>_embeddings_model`s and its `language_model`). A component whose config sets no quantizer stays in full
+The dict must name every component [`~exporters.decompose.decompose_for_generation`] produces (a multimodal model adds its
+`text_embeddings_model` and its `<modality>_embeddings_model`s). A component whose config sets no quantizer stays in full
 precision. In this dict, a quantizer's `calibration_dataset` holds the component's forward kwargs, not generate
 kwargs.
 
