@@ -22,7 +22,6 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
@@ -1055,7 +1054,7 @@ class Qwen3TTSTokenizerDecoderModel(Qwen3TTSTokenizerCode2WavPreTrainedModel):
 
     def __init__(self, config: Qwen3TTSTokenizerDecoderConfig):
         super().__init__(config)
-        self.total_upsample = int(np.prod(list(config.upsample_rates) + list(config.upsampling_ratios)))
+        self.total_upsample = math.prod(config.upsample_rates) * math.prod(config.upsampling_ratios)
         self.pre_transformer = Qwen3TTSTokenizerDecoderTransformerModel(config)
         self.input_proj = nn.Linear(config.latent_dim, config.hidden_size)
         self.output_proj = nn.Linear(config.hidden_size, config.latent_dim)
