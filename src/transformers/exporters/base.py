@@ -22,16 +22,14 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
-
-from huggingface_hub import hf_hub_download, snapshot_download
+from typing import TYPE_CHECKING, Any, Unpack
 
 from ..generation import GenerationConfig
 from ..models.auto.configuration_auto import AutoConfig
 from ..utils import CONFIG_NAME, GENERATION_CONFIG_NAME, PushToHubMixin, logging
-from ..utils.hub import hf_api
+from ..utils.hub import DownloadKwargs, cached_file, cached_files, hf_api
 from .configs import ExportConfigMixin, ExportFormat
-from .metadata import ExportMetadata
+from .metadata import ExportMetadata, export_config_metadata
 from .quantizers.utils import capture_calibration_inputs
 from .utils import check_packages, decompose_for_generation
 
@@ -130,7 +128,7 @@ class ExportArtifacts(Mapping, PushToHubMixin):
         for name, component in self.components.items():
             filename = f"{exporter.program_prefix}{name}{exporter.program_suffix}"
             exporter.save_program(component.program, directory / filename)
-            components[name] = {"file": filename, "metadata": dict(component.metadata.raw)}
+            components[name] = {"file": filename, "metadata": dataclasses.asdict(component.metadata)}
 
         manifest = {"schema_version": 1, "export_format": str(self.export_format), "components": components}
         (directory / EXPORT_MANIFEST_FILE).write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
@@ -145,13 +143,7 @@ class ExportArtifacts(Mapping, PushToHubMixin):
 
     @classmethod
     def from_pretrained(
-        cls,
-        pretrained_model_name_or_path: str | Path,
-        *,
-        subfolder: str = "",
-        revision: str | None = None,
-        token: str | bool | None = None,
-        cache_dir: str | Path | None = None,
+        cls, pretrained_model_name_or_path: str | Path, **kwargs: Unpack[DownloadKwargs]
     ) -> ExportArtifacts:
         """Load what [`~ExportArtifacts.save_pretrained`] wrote: each component through its backend's
         [`~HfExporter.load_program`], with its metadata, and the configs saved next to them.
@@ -160,30 +152,28 @@ class ExportArtifacts(Mapping, PushToHubMixin):
             pretrained_model_name_or_path (`str` or `Path`):
                 A local directory, or a Hub repo id. From the Hub, only the files the manifest names are
                 downloaded, so an export can sit next to the model's own weights.
-            subfolder (`str`, *optional*):
-                The directory of the export inside the repo or local directory, e.g. `"onnx"`.
-            revision (`str`, *optional*):
-                The Hub revision (branch, tag, or commit) to load from.
-            token (`str` or `bool`, *optional*):
-                The Hub token, for private repos.
-            cache_dir (`str` or `Path`, *optional*):
-                Where Hub downloads are cached.
+            kwargs ([`~utils.hub.DownloadKwargs`], *optional*):
+                Download kwargs, as for [`~PreTrainedModel.from_pretrained`] (`subfolder`, `revision`, `token`, ...).
         """
         from .auto import get_exporter_class
 
-        directory = Path(pretrained_model_name_or_path) / subfolder
-        if Path(pretrained_model_name_or_path).is_dir():
-            if not (directory / EXPORT_MANIFEST_FILE).is_file():
-                raise FileNotFoundError(f"No `{EXPORT_MANIFEST_FILE}` in {directory}: it holds no saved export.")
-        else:
-            directory = cls._download(
-                str(pretrained_model_name_or_path), subfolder, revision=revision, token=token, cache_dir=cache_dir
-            )
-        manifest = json.loads((directory / EXPORT_MANIFEST_FILE).read_text(encoding="utf-8"))
+        manifest_file = cached_file(pretrained_model_name_or_path, EXPORT_MANIFEST_FILE, **kwargs)
+        manifest = json.loads(Path(manifest_file).read_text(encoding="utf-8"))
         exporter = get_exporter_class(manifest["export_format"])
+        program_files = [
+            file for entry in manifest["components"].values() for file in exporter.program_files(entry["file"])
+        ]
+        cached_files(pretrained_model_name_or_path, program_files, **kwargs)
+        cached_files(
+            pretrained_model_name_or_path,
+            [CONFIG_NAME, GENERATION_CONFIG_NAME],
+            _raise_exceptions_for_missing_entries=False,
+            **kwargs,
+        )
+        directory = Path(manifest_file).parent
         components = {
             name: ExportedComponent(
-                exporter.load_program(directory / entry["file"]), ExportMetadata.from_dict(entry["metadata"])
+                exporter.load_program(directory / entry["file"]), ExportMetadata(**entry["metadata"])
             )
             for name, entry in manifest["components"].items()
         }
@@ -192,22 +182,6 @@ class ExportArtifacts(Mapping, PushToHubMixin):
             GenerationConfig.from_pretrained(directory) if (directory / GENERATION_CONFIG_NAME).exists() else None
         )
         return cls(components, exporter.export_format, config=config, generation_config=generation_config)
-
-    @staticmethod
-    def _download(repo_id: str, subfolder: str, **hub_kwargs) -> Path:
-        """Download an export from the Hub: its manifest first, then only the files the manifest names (each
-        component's [`~HfExporter.program_files`]) and the configs. Returns the export's local directory."""
-        from .auto import get_exporter_class
-
-        manifest_path = hf_hub_download(repo_id, EXPORT_MANIFEST_FILE, subfolder=subfolder or None, **hub_kwargs)
-        manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
-        exporter = get_exporter_class(manifest["export_format"])
-        files = [EXPORT_MANIFEST_FILE, CONFIG_NAME, GENERATION_CONFIG_NAME]
-        for entry in manifest["components"].values():
-            files += exporter.program_files(entry["file"])
-        prefix = f"{subfolder.strip('/')}/" if subfolder else ""
-        root = snapshot_download(repo_id, allow_patterns=[prefix + file for file in files], **hub_kwargs)
-        return Path(root) / subfolder
 
 
 class HfExporter(ABC):
@@ -310,8 +284,11 @@ class HfExporter(ABC):
             [`ExportArtifacts`]: A single `"model"` component; the backend's program is `.program`, and
             `save_pretrained` writes it with its metadata and the model config.
         """
+        config = self._as_config(config)
         program, metadata = self.export_program(model, sample_inputs, config)
-        component = ExportedComponent(program, ExportMetadata.from_dict(metadata))
+        component = ExportedComponent(
+            program, ExportMetadata(**metadata, export_config=export_config_metadata(config))
+        )
         # A decomposed component (e.g. `FSMTEncoder`) is a plain `nn.Module` with no config.
         return ExportArtifacts({"model": component}, self.export_format, config=getattr(model, "config", None))
 
@@ -398,7 +375,8 @@ class HfExporter(ABC):
                     f"{self.__class__.__name__}.export_program failed on component '{name}' "
                     f"(submodel={type(submodel).__name__}, input keys={list(subinputs)})."
                 ) from e
-            exported[name] = ExportedComponent(program, ExportMetadata.from_dict(metadata))
+            metadata["export_config"] = export_config_metadata(self._as_config(configs[name]))
+            exported[name] = ExportedComponent(program, ExportMetadata(**metadata))
 
         return ExportArtifacts(
             exported, self.export_format, config=getattr(model, "config", None), generation_config=generation_config

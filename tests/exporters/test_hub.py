@@ -49,21 +49,23 @@ class ExportArtifactsMockedHubTest(unittest.TestCase):
             register_backend("stub", _StubConfig, _StubExporter)
             ExportArtifacts(components, "stub").save_pretrained(Path(repo) / "stub")
 
-            def hf_hub_download(repo_id, filename, subfolder=None, **kwargs):
-                return str(Path(repo) / (subfolder or "") / filename)
+            requested = []
 
-            def snapshot_download(repo_id, allow_patterns, **kwargs):
-                self.assertEqual(
-                    sorted(allow_patterns),
-                    ["stub/config.json", "stub/decode.txt", "stub/export.json", "stub/generation_config.json"],
-                )
-                return repo
+            def cached_file(repo_id, filename, subfolder="", **kwargs):
+                requested.append(filename)
+                return str(Path(repo) / subfolder / filename)
+
+            def cached_files(repo_id, filenames, subfolder="", **kwargs):
+                requested.extend(filenames)
+                paths = [Path(repo) / subfolder / filename for filename in filenames]
+                return [str(path) for path in paths if path.exists()]
 
             with (
-                mock.patch("transformers.exporters.base.hf_hub_download", hf_hub_download),
-                mock.patch("transformers.exporters.base.snapshot_download", snapshot_download),
+                mock.patch("transformers.exporters.base.cached_file", cached_file),
+                mock.patch("transformers.exporters.base.cached_files", cached_files),
             ):
                 loaded = ExportArtifacts.from_pretrained("org/model", subfolder="stub")
+        self.assertEqual(sorted(requested), ["config.json", "decode.txt", "export.json", "generation_config.json"])
         self.assertEqual(loaded["decode"].program, "decode program")
 
     def test_save_pretrained_pushes_to_hub(self):

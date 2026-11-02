@@ -176,7 +176,18 @@ class MyExporter(DynamoExporter):
 register_backend("my_format", MyConfig, MyExporter)
 ```
 
-[`AutoExportConfig`] and [`AutoHfExporter`] then dispatch `{"export_format": "my_format"}` to them.
+The auto classes then dispatch `"my_format"` to them, and [`ExportArtifacts.from_pretrained`] loads its saved exports:
+
+```python
+from transformers.exporters import AutoExportConfig, AutoHfExporter, ExportArtifacts
+
+config = AutoExportConfig.from_dict({"export_format": "my_format", "dynamic": True})
+exported = AutoHfExporter.from_config(config).export(model, inputs, config)
+exported.save_pretrained("my-model-my_format")  # model.bin, export.json, config.json
+exported.push_to_hub("my-org/my-model-my_format")
+
+loaded = ExportArtifacts.from_pretrained("my-org/my-model-my_format")
+```
 
 ## Known upstream workarounds
 

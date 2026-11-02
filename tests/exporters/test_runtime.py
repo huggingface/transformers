@@ -215,7 +215,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
             self.assertEqual(entry["metadata"]["input_names"], [node.name for node in session.get_inputs()])
             self.assertEqual(entry["metadata"]["output_names"], [node.name for node in session.get_outputs()])
         self.assertTrue(any(name.startswith("input.") for name in entry["metadata"]["input_names"]))
-        self.assertNotIn("num_user_outputs", entry["metadata"])
+        self.assertIsNone(entry["metadata"]["num_user_outputs"])
 
     @require_onnxscript
     @require_onnxruntime
@@ -297,7 +297,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
             self.assertEqual(entry["metadata"]["input_names"], [port.get_any_name() for port in ov_model.inputs])
             self.assertEqual(entry["metadata"]["output_names"], [port.get_any_name() for port in ov_model.outputs])
         self.assertIn("beam_idx", entry["metadata"]["input_names"])
-        self.assertNotIn("num_user_outputs", entry["metadata"])
+        self.assertIsNone(entry["metadata"]["num_user_outputs"])
 
     # ──────────────────────── ONNX Runtime ────────────────────────
 

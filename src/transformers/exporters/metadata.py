@@ -15,8 +15,9 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Any
 
 from .. import __version__
@@ -59,55 +60,23 @@ def _package_versions(packages: Iterable[str]) -> dict[str, str]:
     return versions
 
 
-@dataclass(frozen=True)
+@dataclass
 class ExportMetadata:
-    """What the exporter recorded about one graph (`build_export_metadata`), parsed.
+    """What the exporter recorded about one graph ([`~exporters.metadata.build_export_metadata`])."""
 
-    Empty for an program without it; every accessor then answers `None`/empty.
-    """
-
-    raw: Mapping[str, Any] = field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, metadata: Any) -> ExportMetadata:
-        return cls(metadata) if isinstance(metadata, Mapping) else cls()
-
-    @property
-    def input_names(self) -> tuple[str, ...]:
-        """What the graph takes, in the flat order it takes them."""
-        return tuple(self.raw.get("input_names", ()))
-
-    @property
-    def output_names(self) -> tuple[str, ...]:
-        """What the graph returns, in the flat order it returns them."""
-        return tuple(self.raw.get("output_names", ()))
-
-    @property
-    def num_user_outputs(self) -> int | None:
-        """How many returned leaves are the model's own, before the copies of mutated inputs a lowering appends."""
-        return self.raw.get("num_user_outputs")
-
-    @property
-    def constant_inputs(self) -> dict[str, Any]:
-        """Declared inputs that carry no tensor (e.g. a `None` mask slot), with their values."""
-        return self.raw.get("constant_inputs") or {}
-
-    @property
-    def dtype(self) -> torch.dtype | None:
-        """The precision the graph was exported at."""
-        dtype = getattr(torch, self.raw.get("dtype") or "", None)
-        return dtype if isinstance(dtype, torch.dtype) else None
-
-    @property
-    def device(self) -> torch.device | None:
-        """The device the graph was exported on."""
-        device = self.raw.get("device")
-        return torch.device(device) if device else None
-
-    @property
-    def kwargs(self) -> dict[str, dict]:
-        """The traced kwargs under the model forward's own names."""
-        return self.raw.get("kwargs") or {}
+    architecture: str | None = None
+    packages: dict[str, str] = field(default_factory=dict)
+    dtype: str | None = None
+    device: str | None = None
+    kwargs: dict[str, dict] = field(default_factory=dict)
+    # Flat graph order.
+    input_names: list[str] = field(default_factory=list)
+    output_names: list[str] = field(default_factory=list)
+    # Inputs that carry no tensor (e.g. a `None` mask slot).
+    constant_inputs: dict[str, Any] = field(default_factory=dict)
+    # Outputs before the mutated-input copies a lowering appends.
+    num_user_outputs: int | None = None
+    export_config: dict[str, Any] = field(default_factory=dict)
 
 
 def build_export_metadata(
@@ -134,3 +103,9 @@ def build_export_metadata(
     metadata["output_names"] = traced_output_names(exported_program)
     metadata["num_user_outputs"] = sum(spec.kind.name == "USER_OUTPUT" for spec in graph_signature.output_specs)
     return metadata
+
+
+def export_config_metadata(config) -> dict[str, Any]:
+    """`config` as JSON, without its quantizer. Values JSON can't hold (`Dim`s) are written as their `repr`."""
+    values = {f.name: getattr(config, f.name) for f in fields(config) if f.name != "quantizer"}
+    return json.loads(json.dumps(values, default=repr))

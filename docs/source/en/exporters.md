@@ -40,12 +40,13 @@ in the modeling code.
 
 Every export returns an [`ExportArtifacts`], a mapping of component names to [`ExportedComponent`]s. A
 component holds the backend's program (`.program`) and the [`ExportMetadata`] recorded while tracing it
-(input and output names, precision, traced input shapes). [`~HfExporter.export`] produces a single `"model"`
+(input and output names, precision, traced input shapes, export config). [`~HfExporter.export`] produces a single `"model"`
 component, so its program is directly `exported.program`. [`~ExportArtifacts.save_pretrained`] writes one
 file per component, an `export.json` manifest with each component's file and metadata, and the model config.
 
-[`~ExportArtifacts.from_pretrained`] loads it back, from a local directory or a Hub repo (pass `subfolder` for an
-export kept next to the model's weights; only the export's own files are downloaded). Dynamo, ONNX, and OpenVINO
+[`~ExportArtifacts.from_pretrained`] loads it back, from a local directory or a Hub repo, with the same download kwargs
+as [`~PreTrainedModel.from_pretrained`]. Pass `subfolder` for an export kept next to the model's weights; only the
+export's own files are downloaded. Dynamo, ONNX, and OpenVINO
 programs load as the type the export returned. A loaded ONNX program reads its graph without the weights, and calling
 it runs the saved file in ONNX Runtime, which reads `model.onnx.data` from beside it. An ExecuTorch `.pte` loads as an
 `executorch.runtime.Program`, since the `ExecutorchProgramManager` can't be rebuilt from the file.

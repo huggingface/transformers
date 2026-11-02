@@ -194,7 +194,7 @@ class ExportArtifactsTest(unittest.TestCase):
         artifacts = _StubExporter().export(object(), {"input_ids": None}, _StubConfig())
         self.assertEqual(list(artifacts), ["model"])
         self.assertEqual(artifacts.program, "program")
-        self.assertEqual(artifacts["model"].metadata.input_names, ("input_ids",))
+        self.assertEqual(artifacts["model"].metadata.input_names, ["input_ids"])
 
     def test_program_refuses_several_components(self):
         component = ExportedComponent("program", ExportMetadata())
@@ -204,7 +204,7 @@ class ExportArtifactsTest(unittest.TestCase):
 
     def test_save_pretrained_from_pretrained_roundtrip(self):
         components = {
-            "prefill": ExportedComponent("prefill program", ExportMetadata({"input_names": ["input_ids"]})),
+            "prefill": ExportedComponent("prefill program", ExportMetadata(input_names=["input_ids"])),
             "decode": ExportedComponent("decode program", ExportMetadata()),
         }
         config, generation_config = BertConfig(hidden_size=32), GenerationConfig(max_new_tokens=3)
@@ -228,9 +228,9 @@ class ExportArtifactsTest(unittest.TestCase):
 
     def test_from_pretrained_refuses_a_local_directory_without_an_export(self):
         with tempfile.TemporaryDirectory() as directory:
-            with self.assertRaisesRegex(FileNotFoundError, "export.json"):
+            with self.assertRaisesRegex(OSError, "export.json"):
                 ExportArtifacts.from_pretrained(directory)
-            with self.assertRaisesRegex(FileNotFoundError, "export.json"):
+            with self.assertRaisesRegex(OSError, "export.json"):
                 ExportArtifacts.from_pretrained(directory, subfolder="onnx")
 
 
