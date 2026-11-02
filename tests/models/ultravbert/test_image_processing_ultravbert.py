@@ -78,7 +78,11 @@ class UltraVBertImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         self.image_processor_tester.num_channels = 4
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
         self.check_pixel_values_shape(
-            image_inputs, input_data_format="channels_last", image_mean=[0.0] * 4, image_std=[1.0] * 4
+            image_inputs,
+            do_convert_rgb=False,
+            input_data_format="channels_last",
+            image_mean=[0.0] * 4,
+            image_std=[1.0] * 4,
         )
 
     def test_get_number_of_image_patches(self):

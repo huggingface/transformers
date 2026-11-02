@@ -979,6 +979,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
         use_cache: bool | None = None,
         image_position_ids: torch.LongTensor | None = None,
         video_position_ids: torch.LongTensor | None = None,
+        num_frames_per_video: torch.LongTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4UnifiedModelOutputWithPast:
@@ -991,6 +992,9 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
         video_position_ids (`torch.LongTensor` of shape `(total_num_frames, max_patches, 2)`, *optional*):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
+        num_frames_per_video (`torch.LongTensor` of shape `(num_videos,)`, *optional*):
+            Number of frames belonging to each video. Required whenever `pixel_values_videos` is passed,
+            since the frames of all videos are concatenated along a single axis.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1035,7 +1039,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
 
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
             mm_encoder_outputs["video"] = self.get_video_features(
-                pixel_values_videos, video_position_ids, return_dict=True
+                pixel_values_videos, video_position_ids, num_frames_per_video=num_frames_per_video, return_dict=True
             )
 
         if mm_encoder_outputs.get("video") is not None:
@@ -1344,6 +1348,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
             use_cache=use_cache,
             image_position_ids=image_position_ids,
             video_position_ids=video_position_ids,
+            num_frames_per_video=num_frames_per_video,
             mm_encoder_outputs=mm_encoder_outputs,
             return_dict=True,
             **kwargs,

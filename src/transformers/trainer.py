@@ -2332,7 +2332,7 @@ class Trainer:
                     # In the DataParallel case, convert the scalar tensor into a 2-dim tensor with the same value repeated
                     num_items_in_batch = num_items_in_batch.unsqueeze(0).expand(self.args.n_gpu, -1)
                 # Divide by number of devices with the same batch
-                num_items_in_batch = num_items_in_batch // (
+                num_items_in_batch = num_items_in_batch / (
                     self.get_tp_size() * self.get_cp_size() * self.get_sp_size()
                 )
 
@@ -3051,10 +3051,12 @@ class Trainer:
         # To be JSON-serializable, we need to remove numpy types or zero-d tensors
         metrics = denumpify_detensorize(metrics)
 
-        if isinstance(all_losses, list) and all_losses:
-            metrics[f"{metric_key_prefix}_loss"] = np.concatenate(all_losses).mean().item()
-        elif isinstance(all_losses, np.ndarray):
-            metrics[f"{metric_key_prefix}_loss"] = all_losses.mean().item()
+        losses = np.concatenate(all_losses) if isinstance(all_losses, list) and all_losses else all_losses
+        if isinstance(losses, np.ndarray):
+            finite = np.isfinite(losses)
+            if self.args.logging_nan_inf_filter and finite.any():
+                losses = losses[finite]
+            metrics[f"{metric_key_prefix}_loss"] = losses.mean().item()
         if hasattr(self, "model_preparation_time"):
             metrics[f"{metric_key_prefix}_model_preparation_time"] = self.model_preparation_time
 
@@ -4051,14 +4053,12 @@ class Trainer:
             # Calling the state_dict needs to be done on the wrapped model and on all processes.
             os.makedirs(output_dir, exist_ok=True)
             state_dict = self.model_wrapped.state_dict()
-            if self.args.should_save:
-                self._save(output_dir, state_dict=state_dict)
+            self._save(output_dir, state_dict=state_dict)
             Path(os.path.join(output_dir, "user_content.pt")).touch()
         elif self.is_fsdp_enabled:
             if "FULL_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type):
                 state_dict = self.accelerator.get_state_dict(self.model)
-                if self.args.should_save:
-                    self._save(output_dir, state_dict=state_dict)
+                self._save(output_dir, state_dict=state_dict)
         elif self.is_deepspeed_enabled:
             try:
                 accept_exclude_frozen_parameters = "exclude_frozen_parameters" in set(
@@ -4071,40 +4071,18 @@ class Trainer:
                     state_dict = self.deepspeed._zero3_consolidated_16bit_state_dict(exclude_frozen_parameters=True)
                 else:
                     state_dict = self.accelerator.get_state_dict(self.deepspeed)
-                if self.args.should_save:
-                    self._save(output_dir, state_dict=state_dict)
+                self._save(output_dir, state_dict=state_dict)
             except ValueError:
                 logger.warning(
                     " stage3_gather_16bit_weights_on_model_save=false. Saving the full checkpoint instead, use"
                     " zero_to_fp32.py to recover weights"
                 )
-                if self.args.should_save:
-                    self._save(output_dir, state_dict={})
+                self._save(output_dir, state_dict={})
                 # remove the dummy state_dict
                 remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
                 self.model_wrapped.save_checkpoint(output_dir)
 
-        elif self.is_distributed_loading_by_transformers:
-            # Sharded at load time (`DistributedConfig`): gathering a `DTensor` is collective, so every rank gathers
-            # and only the main process writes.
-            if _is_peft_model(self.model):
-                # The adapter is the trainable parameters. PEFT would otherwise gather the whole sharded model, on the
-                # main process only.
-                from torch.distributed.tensor import DTensor
-
-                state_dict = {
-                    name: param.full_tensor() if isinstance(param, DTensor) else param
-                    for name, param in self.model.named_parameters()
-                    if param.requires_grad
-                }
-                if self.args.should_save:
-                    self._save(output_dir, state_dict=state_dict)
-            else:
-                # `save_pretrained` gathers the weights itself, so every rank calls it; the others leave at the
-                # closing barrier.
-                self._save(output_dir)
-
-        elif self.args.should_save:
+        else:
             self._save(output_dir)
 
         # Push to the Hub when `save_model` is called by the user.
@@ -4114,8 +4092,13 @@ class Trainer:
     def _save(self, output_dir: str | None = None, state_dict: dict | None = None) -> None:
         """Save model weights, configuration, and processing class to `output_dir`."""
         output_dir = output_dir if output_dir is not None else self.args.output_dir
-        os.makedirs(output_dir, exist_ok=True)
+
+        # Non-writer ranks only stay when the model was sharded at load time, to join the collective gathers below.
+        if not self.args.should_save and not self.is_distributed_loading_by_transformers:
+            return
+
         if self.args.should_save:
+            os.makedirs(output_dir, exist_ok=True)
             logger.info(f"Saving model checkpoint to {output_dir}")
 
         supported_classes = (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
@@ -4127,15 +4110,15 @@ class Trainer:
 
             if isinstance(self.accelerator.unwrap_model(self.model, keep_torch_compile=False), supported_classes):
                 self.accelerator.unwrap_model(self.model, keep_torch_compile=False).save_pretrained(
-                    output_dir, state_dict=state_dict
+                    output_dir, state_dict=state_dict, is_main_process=self.args.should_save
                 )
-            else:
+            elif self.args.should_save:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
                 safetensors.torch.save_file(
                     state_dict, os.path.join(output_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"}
                 )
         else:
-            self.model.save_pretrained(output_dir, state_dict=state_dict)
+            self.model.save_pretrained(output_dir, state_dict=state_dict, is_main_process=self.args.should_save)
 
         # A non-writer rank of a model sharded at load time is only here for the collectives above.
         if not self.args.should_save:
@@ -4212,9 +4195,16 @@ class Trainer:
 
     # ---- Hub Integration ----
 
-    def init_hf_repo(self, token: str | None = None) -> None:
+    def init_hf_repo(self, token: str | None = None, private: bool | None = None) -> None:
         """
         Initializes a git repo in `self.args.hub_model_id`.
+
+        Args:
+            token (`str`, *optional*):
+                Token with write permission. Defaults to `self.args.hub_token`.
+            private (`bool`, *optional*):
+                Whether to make the repo private when it is created. Defaults to `self.args.hub_private_repo`. Has
+                no effect if the repo already exists.
         """
         # Only on process zero
         if not self.is_world_process_zero():
@@ -4226,7 +4216,8 @@ class Trainer:
             repo_name = self.args.hub_model_id
 
         token = token if token is not None else self.args.hub_token
-        repo_url = hf_api().create_repo(repo_name, token=token, private=self.args.hub_private_repo, exist_ok=True)
+        private = private if private is not None else self.args.hub_private_repo
+        repo_url = hf_api().create_repo(repo_name, token=token, private=private, exist_ok=True)
         self.hub_model_id = repo_url.repo_id
         self.push_in_progress = None
 
@@ -4310,6 +4301,7 @@ class Trainer:
         blocking: bool = True,
         token: str | None = None,
         revision: str | None = None,
+        private: bool | None = None,
         **kwargs,
     ) -> CommitInfo:
         """
@@ -4324,6 +4316,9 @@ class Trainer:
                 Token with write permission to overwrite Trainer's original args.
             revision (`str`, *optional*):
                 The git revision to commit from. Defaults to the head of the "main" branch.
+            private (`bool`, *optional*):
+                Whether to make the repo private when it is created. Defaults to `args.hub_private_repo`. Has no
+                effect if the repo already exists.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional keyword arguments passed along to [`~Trainer.create_model_card`].
 
@@ -4343,7 +4338,7 @@ class Trainer:
 
         # In case the user calls this method with args.push_to_hub = False
         if self.hub_model_id is None:
-            self.init_hf_repo(token=token)
+            self.init_hf_repo(token=token, private=private)
 
         # Needs to be executed on all processes for TPU training, but will only save on the processed determined by
         # self.args.should_save.

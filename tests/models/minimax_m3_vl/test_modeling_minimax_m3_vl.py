@@ -32,6 +32,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     require_torch,
+    require_torch_accelerator_memory,
     slow,
     torch_device,
 )
@@ -176,9 +177,9 @@ class MiniMaxM3VLModelTest(VLMModelTest, unittest.TestCase):
         heads_differ = (block_indices[0, 0] != block_indices[0, 1]).any()
         self.assertTrue(bool(heads_differ), "indexer heads selected identical blocks -- head axis was collapsed")
 
-    @unittest.skip(reason="IDK exactly why, can be adressed later")
     def test_reverse_loading_mapping(self):
-        pass
+        # As in llava, the base model has no `model.` prefix to reverse the `^language_model\.model\.` rename onto
+        super().test_reverse_loading_mapping(skip_base_model=True)
 
     @unittest.skip(
         reason=(
@@ -380,6 +381,7 @@ class MiniMaxM3VLModelTest(VLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch
+@require_torch_accelerator_memory(memory=480)  # 413 GiB of MXFP8 weights, plus activations
 class MiniMaxM3VLIntegrationTest(unittest.TestCase):
     model_id = "MiniMaxAI/MiniMax-M3-MXFP8"
 

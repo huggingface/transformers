@@ -45,7 +45,7 @@ class TimmBackbone(BackboneMixin, PreTrainedModel):
     # `timm` attention layers already dispatch to `F.scaled_dot_product_attention` by default
     _supports_sdpa = True
 
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: TimmBackboneConfig, **kwargs):
         requires_backends(self, "timm")
 
         if config.backbone is None:

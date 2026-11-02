@@ -132,7 +132,7 @@ class GotOcr2Config(PreTrainedConfig):
                 "attention_dropout": 0.0,
             },
         ),
-        "vision_config": SubConfigSpec(config_class=GotOcr2VisionConfig),
+        "vision_config": GotOcr2VisionConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -182,6 +182,7 @@ class GotOcr2PreTrainedModel(SamPreTrainedModel):
 
 class GotOcr2VisionEncoder(SamVisionEncoder, GotOcr2PreTrainedModel):
     input_modalities = ("image",)
+    config: GotOcr2VisionConfig
 
 
 class GotOcr2MultiModalProjector(nn.Module):

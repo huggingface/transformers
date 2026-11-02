@@ -458,6 +458,34 @@ class TestFetcherTester(unittest.TestCase):
             with patch_transformer_repo_path(tmp_folder):
                 assert extract_imports(BERT_MODELING_FILE) == expected_bert_imports
 
+    def test_extract_imports_x_as_x(self):
+        """extract_imports must not drop 'import X as X' or 'import X as Y' forms (regression for #39729)."""
+        with tempfile.TemporaryDirectory() as tmp_folder:
+            tmp_folder = Path(tmp_folder)
+            create_tmp_repo(tmp_folder)
+
+            # X as X form (PEP 484 / mypy public re-export convention): name must be preserved
+            with open(tmp_folder / BERT_MODELING_FILE, "w", encoding="utf-8") as f:
+                f.write(
+                    "from ...modeling_utils import PreTrainedModel as PreTrainedModel\n"
+                    "from ...utils import is_torch_available as is_torch_available\n"
+                    "from .configuration_bert import BertConfig as BertConfig\n"
+                )
+            expected = [
+                ("src/transformers/modeling_utils.py", ["PreTrainedModel"]),
+                ("src/transformers/utils/__init__.py", ["is_torch_available"]),
+                ("src/transformers/models/bert/configuration_bert.py", ["BertConfig"]),
+            ]
+            with patch_transformer_repo_path(tmp_folder):
+                assert extract_imports(BERT_MODELING_FILE) == expected
+
+            # X as Y form: definition-side name (X) is recorded; alias (Y) is not tracked
+            with open(tmp_folder / BERT_MODELING_FILE, "w", encoding="utf-8") as f:
+                f.write("from ...modeling_utils import PreTrainedModel as BaseModel\n")
+            with patch_transformer_repo_path(tmp_folder):
+                result = extract_imports(BERT_MODELING_FILE)
+            assert result == [("src/transformers/modeling_utils.py", ["PreTrainedModel"])]
+
     def test_extract_imports_skips_modules_without_files(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
             tmp_folder = Path(tmp_folder)
@@ -524,6 +552,28 @@ class TestFetcherTester(unittest.TestCase):
             ]
             with patch_transformer_repo_path(tmp_folder):
                 assert get_module_dependencies(BERT_MODELING_FILE) == expected_bert_dependencies
+
+    def test_get_module_dependencies_same_module_multiple_single_line_imports(self):
+        """Multiple single-line imports from the same module must all be collected (regression: dict() collapsed them)."""
+        with tempfile.TemporaryDirectory() as tmp_folder:
+            tmp_folder = Path(tmp_folder)
+            create_tmp_repo(tmp_folder)
+
+            # Replace the top-level __init__ with individual X as X lines, two targeting .utils
+            init_file = tmp_folder / "src/transformers/__init__.py"
+            with open(init_file, "w", encoding="utf-8") as f:
+                f.write(
+                    "from .utils import cached_file as cached_file\n"
+                    "from .utils import is_torch_available as is_torch_available\n"
+                    "from .models.bert import BertConfig as BertConfig\n"
+                    "from .models.bert import BertModel as BertModel\n"
+                )
+            with patch_transformer_repo_path(tmp_folder):
+                deps = get_module_dependencies("src/transformers/__init__.py")
+
+            # Both .utils symbols must resolve to their source files; the old dict() bug dropped the first one
+            assert "src/transformers/utils/hub.py" in deps, "cached_file (first .utils import) was dropped"
+            assert "src/transformers/utils/imports.py" in deps, "is_torch_available (second .utils import) was dropped"
 
     def test_create_reverse_dependency_tree(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
@@ -691,7 +741,17 @@ src/transformers/configuration_utils.py
             "tests/models/got_ocr2/test_modeling_got_ocr2.py",
         }
         assert expected_tests_for_qwen2.issubset(set(reverse_map[f"{models_dir}/qwen2/modeling_qwen2.py"]))
-        assert expected_tests_for_qwen2.isdisjoint(set(reverse_map[f"{models_dir}/qwen2/tokenization_qwen2.py"]))
+        # PR #50253 fixed the "X as Y" import bug in extract_imports (imports like
+        # `from .tokenization_qwen2 import PRETOKENIZE_REGEX as _QWEN2_SPLIT` were silently
+        # dropped before the fix). After the fix, tokenization_qwen2.py is now correctly traced
+        # as a dep of qwen2_audio/got_ocr2 tests through the following chain:
+        #   tokenization_qwen2.py → gguf_tokenizer_mapping.py (PRETOKENIZE_REGEX as _QWEN2_SPLIT)
+        #     → modeling_gguf_pytorch_utils.py ← configuration_utils.py (lazy import)
+        #     ← all model configs ← all model tests (~1140 tests)
+        # This large blast radius is undesired, but reducing it (e.g. restructuring the lazy
+        # GGUF imports) is out of scope here and should be addressed in a separate PR as part
+        # of a series of progressive fixes.
+        # assert expected_tests_for_qwen2.isdisjoint(set(reverse_map[f"{models_dir}/qwen2/tokenization_qwen2.py"]))
 
     def test_preprocessor_files_trigger_their_tests_and_test_processing(self):
         """
@@ -877,3 +937,34 @@ src/transformers/configuration_utils.py
         assert parse_commit_message("[all test] commit") == {"skip": False, "no_filter": False, "test_all": True}
         assert parse_commit_message("[test-all] commit") == {"skip": False, "no_filter": False, "test_all": True}
         assert parse_commit_message("[all_test] commit") == {"skip": False, "no_filter": False, "test_all": True}
+
+    def test_no_windows_path_patterns_in_fetcher(self):
+        """
+        Regression test: tests_fetcher.py must never use os.path.sep, os.path.join, or
+        str(path.relative_to(...)) — all of which produce backslash-separated paths on Windows
+        and break comparisons against the posix paths used everywhere else in the fetcher.
+        Use '/' directly, f-strings, or path.relative_to(...).as_posix() instead.
+        """
+        import re
+
+        fetcher_path = Path(REPO_PATH) / "utils" / "tests_fetcher.py"
+        content = fetcher_path.read_text(encoding="utf-8")
+
+        # Note: these checks can be fooled if the banned string appears in an inline comment
+        # on a code line. Keep the code straightforward to avoid that edge case.
+        self.assertNotIn("os.path.sep", content, "Use '/' directly instead of os.path.sep")
+        # os.path.join produces OS-native separators (backslashes on Windows) for path strings
+        # used as dict keys or CI config values. If you need os.path.join for a genuine filesystem
+        # operation (subprocess args, temp files), remove this assertion and use code review instead.
+        self.assertNotIn("os.path.join(", content, "Use f-strings or pathlib / operator instead of os.path.join")
+        # Note: this check can be fooled if ".as_posix()" appears on the same line in a comment
+        # rather than in the actual expression. Keep the code straightforward to avoid that edge case.
+        bad_lines = [
+            line
+            for line in content.splitlines()
+            if re.search(r"str\(.*relative_to\(", line) and ".as_posix()" not in line
+        ]
+        self.assertFalse(
+            bad_lines,
+            "Use path.relative_to(...).as_posix() instead of str(path.relative_to(...)):\n" + "\n".join(bad_lines),
+        )

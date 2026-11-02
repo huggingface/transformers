@@ -30,6 +30,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_configuration_common import ConfigTester
+from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
@@ -187,7 +188,9 @@ class DiffusionGemmaVisionText2TextModelTester:
 
 
 @require_torch
-class DiffusionGemmaVisionText2TextModelTest(ModelTesterMixin, TensorParallelTesterMixin, unittest.TestCase):
+class DiffusionGemmaVisionText2TextModelTest(
+    ModelTesterMixin, TensorParallelTesterMixin, ExpertParallelTesterMixin, unittest.TestCase
+):
     all_model_classes = (DiffusionGemmaModel, DiffusionGemmaForBlockDiffusion) if is_torch_available() else ()
     all_generative_model_classes = ()  # No class inherits `GenerationMixin`
     additional_model_inputs = ["mm_token_type_ids", "decoder_input_ids", "image_position_ids"]
