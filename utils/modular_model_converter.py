@@ -1806,6 +1806,12 @@ class ModularFileMapper(ModuleMapper):
                 raise ValueError(
                     f"{class_name} was defined with more than 1 model-specific super class. This is unsupported. We found {(*modeling_bases,)}."
                 )
+            deprecated_bases = [base for base in modeling_bases if base.startswith("Deprecated")]
+            if deprecated_bases:
+                raise ValueError(
+                    f"{class_name} inherits from {deprecated_bases[0]}, but inheriting from `Deprecated` classes is "
+                    "unsupported. Please define the class explicitly instead."
+                )
             if len(modeling_bases) == 1:
                 filename = self.model_specific_imported_objects[modeling_bases[0]]
                 cased_model_name = cased_default_name  # the default name prefix

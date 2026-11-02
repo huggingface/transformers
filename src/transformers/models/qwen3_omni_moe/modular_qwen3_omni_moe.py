@@ -43,7 +43,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import ProcessorMixin, Unpack
+from ...processing_utils import ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_attr
@@ -70,7 +70,6 @@ from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     Qwen2_5OmniThinkerModel,
 )
 from ..qwen2_5_omni.processing_qwen2_5_omni import (
-    DeprecatedQwen2_5_OmniVideosKwargs,
     Qwen2_5OmniProcessor,
     Qwen2_5OmniProcessorKwargs,
     SinusoidsPositionEmbedding,
@@ -2753,8 +2752,53 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         return thinker_result.sequences, talker_wavs
 
 
-class DeprecatedQwen3OmniMoeVideosKwargs(DeprecatedQwen2_5_OmniVideosKwargs, total=False):
-    pass
+class DeprecatedQwen3OmniMoeVideosKwargs(VideosKwargs, total=False):
+    """
+    min_pixels (`int`, *optional*):
+        Minimum number of pixels (height × width) for video frames after resizing. Frames smaller than this
+        threshold will be upscaled to meet the minimum requirement.
+    max_pixels (`int`, *optional*):
+        Maximum number of pixels (height × width) for video frames after resizing. Frames larger than this
+        threshold will be downscaled to fit within the limit.
+    patch_size (`int`, *optional*):
+        The spatial patch size used by the vision encoder. Video frames are divided into patches of this size
+        in both height and width dimensions.
+    temporal_patch_size (`int`, *optional*):
+        The temporal patch size used by the vision encoder. This determines how many consecutive frames are
+        grouped together as a single temporal patch.
+    merge_size (`int`, *optional*):
+        The merge size used for combining spatial patches. Multiple patches are merged together to reduce the
+        sequence length while maintaining spatial information.
+    min_frames (`int`, *optional*):
+        Minimum number of frames to extract from the video. Videos with fewer frames will be padded or repeated
+        to meet this requirement.
+    max_frames (`int`, *optional*):
+        Maximum number of frames to extract from the video. Longer videos will be truncated or sampled to fit
+        within this limit.
+    use_audio_in_video (`bool`, *optional*, defaults to `False`):
+        Deprecated, use [`Qwen3OmniMoeProcessorKwargs.use_audio_in_video`] instead.
+        Whether to incorporate audio information when processing videos. When enabled, audio tokens are
+        interleaved with video tokens based on temporal alignment, creating a unified multimodal representation.
+    seconds_per_chunk (`float`, *optional*, defaults to `2.0`):
+        Deprecated, use [`Qwen3OmniMoeProcessorKwargs.seconds_per_chunk`] instead.
+        The duration (in seconds) of each video chunk when splitting long videos. This parameter controls how
+        videos are divided into temporal segments for processing.
+    position_id_per_seconds (`int` or `float`, *optional*, defaults to `25`):
+        Deprecated, use [`Qwen3OmniMoeProcessorKwargs.position_id_per_seconds`] instead.
+        The number of position IDs allocated per second of video. This parameter controls the temporal resolution
+        of position embeddings and is used to align video tokens with audio tokens when `use_audio_in_video=True`.
+    """
+
+    min_pixels: int
+    max_pixels: int
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
+    min_frames: int
+    max_frames: int
+    use_audio_in_video: bool
+    seconds_per_chunk: float
+    position_id_per_seconds: int | float
 
 
 class Qwen3OmniMoeProcessorKwargs(Qwen2_5OmniProcessorKwargs, total=False):
