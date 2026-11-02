@@ -144,7 +144,7 @@ jobs:
         run: |
           apt-get update && apt-get install -y --no-install-recommends ffmpeg
           uv pip install setuptools setuptools-scm wheel scikit-build-core ninja cmake
-          uv pip install pytest pytest-asyncio accelerate expecttest parameterized sentence-transformers
+          uv pip install pytest pytest-asyncio accelerate expecttest parameterized sentence-transformers psutil
           # Keep the image's PyTorch; compile this revision's CPU kernels against it.
           cp python/pyproject_cpu.toml python/pyproject.toml
           SGLANG_BUILD_RUST_EXTS=none uv pip install --no-deps --no-build-isolation -e ./python
@@ -163,11 +163,49 @@ jobs:
           echo "=== Memory ===" && free -h
           echo "=== Disk ===" && df -h
 
+      - name: Write memory-monitor conftest
+        run: |
+          cat > test/conftest.py << 'CONFTEST'
+          import logging
+          import os
+          import threading
+          import psutil
+
+          _logger = logging.getLogger("mem_monitor")
+          _stop = threading.Event()
+
+
+          def _monitor():
+              proc = psutil.Process(os.getpid())
+              while not _stop.wait(timeout=1.0):
+                  vm = psutil.virtual_memory()
+                  rss = proc.memory_info().rss / (1024 ** 3)
+                  _logger.warning(
+                      "[MEM] sys used=%.1fGB / %.1fGB (%.0f%% used, %.1fGB avail) | proc RSS=%.2fGB",
+                      vm.used / (1024 ** 3),
+                      vm.total / (1024 ** 3),
+                      vm.percent,
+                      vm.available / (1024 ** 3),
+                      rss,
+                  )
+
+
+          def pytest_sessionstart(session):
+              _stop.clear()
+              t = threading.Thread(target=_monitor, daemon=True, name="mem_monitor")
+              t.start()
+              session._mem_monitor_thread = t
+
+
+          def pytest_sessionfinish(session, exitstatus):
+              _stop.set()
+          CONFTEST
+
       - name: Run canonical SGLang integration tests
         run: |
           mkdir -p "${REPORT_DIR}"
           read -r -a targets <<< "${TEST_TARGETS}"
-          python3 -m pytest -v "${targets[@]}" --junitxml="${REPORT_DIR}/results.xml"
+          python3 -m pytest -v --log-cli-level=WARNING "${targets[@]}" --junitxml="${REPORT_DIR}/results.xml"
 
       - name: Upload integration test results
         if: always()
