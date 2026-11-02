@@ -4265,6 +4265,18 @@ class GradientCheckpointingDeprecatedAliasTest(unittest.TestCase):
             model.gradient_checkpointing_disable()
         self.assertFalse(model.is_activation_checkpointing)
 
+    def test_deprecated_layer_and_support_flag(self):
+        from transformers import ActivationCheckpointingLayer, GradientCheckpointingLayer, LlamaModel
+
+        self.assertIs(GradientCheckpointingLayer, ActivationCheckpointingLayer)
+
+        # A subclass that still sets the old flag (e.g. remote code) gets the new one, and the old one stays readable
+        class OldStyleModel(PreTrainedModel):
+            supports_gradient_checkpointing = True
+
+        self.assertTrue(OldStyleModel.supports_activation_checkpointing)
+        self.assertTrue(LlamaModel.supports_gradient_checkpointing)
+
 
 @require_torch_accelerator
 class GradientCheckpointingOffloadTest(unittest.TestCase):
