@@ -2333,6 +2333,14 @@ class EncoderDecoderCache(Cache):
         return self.self_attention_cache.is_sliding
 
     @property
+    def is_linear(self):
+        return self.self_attention_cache.is_linear
+
+    @property
+    def is_dummy(self):
+        return self.self_attention_cache.is_dummy
+
+    @property
     def is_compileable(self) -> bool:
         return self.self_attention_cache.is_compileable
 
