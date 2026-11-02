@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
+from typing import TypeGuard
 
 from ..models.auto.configuration_auto import AutoConfig
 from ..utils import logging
@@ -336,7 +337,7 @@ def register_quantizer(name: str):
     return register_quantizer_fn
 
 
-def is_quantization_plan(quantization_config) -> bool:
+def is_quantization_plan(quantization_config) -> TypeGuard[dict]:
     "A plan maps glob patterns (like the dtype plan's) to the config quantizing the modules they match"
     return (
         isinstance(quantization_config, dict)
@@ -426,12 +427,12 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
     ):
         pre_quantized = False
 
-    user_plan = is_quantization_plan(quantization_config)
-    if plan_from_config or user_plan:
+    saved_plan = quantization_params_from_config if is_quantization_plan(quantization_params_from_config) else None
+    user_plan = quantization_config if is_quantization_plan(quantization_config) else None
+    if (plan := saved_plan or user_plan) is not None:
         # One quantizer per pattern. Loading attributes update the saved configs: for every pattern (e.g.
         # `{"dequantize": True}`), or per pattern (a plan of them)
-        plan = quantization_params_from_config if plan_from_config else quantization_config
-        loading_attributes = quantization_config if user_plan else dict.fromkeys(plan, quantization_config)
+        loading_attributes = user_plan if user_plan is not None else dict.fromkeys(plan, quantization_config)
         quantizers = {}
         for pattern, pattern_config in plan.items():
             if plan_from_config:
