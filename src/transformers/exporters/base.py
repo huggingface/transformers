@@ -145,10 +145,13 @@ class ExportArtifacts(Mapping, PushToHubMixin):
                 generator_class = ExportedMultimodalModelForCausalLM
             else:
                 generator_class = ExportedModelForCausalLM
-            return generator_class(runners, self.config, self.generation_config)
-        if self.multimodal:
-            return ExportedMultimodalModel(runners, self.config)
-        return ExportedModel(next(iter(runners.values())), self.config)
+            model = generator_class(runners, self.config, self.generation_config)
+        elif self.multimodal:
+            model = ExportedMultimodalModel(runners, self.config)
+        else:
+            model = ExportedModel(next(iter(runners.values())), self.config)
+        model.artifacts = self
+        return model
 
     def save_pretrained(self, save_directory: str | Path, push_to_hub: bool = False, **kwargs) -> None:
         """Write the components (one file each), the configs, and a manifest naming each component's file and the

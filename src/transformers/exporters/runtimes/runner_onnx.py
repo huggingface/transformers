@@ -44,8 +44,8 @@ def _providers(device=None) -> list:
 
 
 class OnnxModelRunner(ModelRunner):
-    """Runs an `ONNXProgram` through its own `__call__`, in an ONNX Runtime session opened for the device. A loaded
-    program's session opens the saved file; a fresh one opens the in-memory graph."""
+    """Runs an `ONNXProgram` in an ONNX Runtime session opened for the device, its inputs and outputs bound in place.
+    A loaded program's session opens the saved file; a fresh one opens the in-memory graph."""
 
     def __init__(self, program: ONNXProgram, metadata: ExportMetadata, session: ort.InferenceSession):
         super().__init__(metadata)
@@ -71,7 +71,39 @@ class OnnxModelRunner(ModelRunner):
         return cls(program, metadata, sessions[0])
 
     def __call__(self, **kwargs) -> Any:
-        # `ONNXProgram` binds inputs by position, so they go in traced order.
-        return self.unflatten(
-            list(self.program(**{name: kwargs[name] for name in self.metadata.kwargs if name in kwargs}))
-        )
+        """Run with the inputs and outputs bound in place on the session's device (IO binding), instead of copied
+        through host arrays. The graph binds inputs by position, so they go in traced order."""
+        from torch.onnx._internal.exporter._core import torch_dtype_to_onnx_dtype
+
+        inputs = {name: kwargs[name] for name in self.metadata.kwargs if name in kwargs}
+        device = self.device
+        on_gpu = device.type == "cuda"
+        # Flattened as `ONNXProgram` flattens them: pytree leaves, `None`s dropped.
+        leaves = [leaf for leaf in torch.utils._pytree.tree_leaves(inputs) if leaf is not None]
+        binding, kept = self.session.io_binding(), []
+        for spec, leaf in zip(self.session.get_inputs(), leaves):
+            leaf = leaf if isinstance(leaf, torch.Tensor) else torch.tensor(leaf)
+            # Integers bind on host: ORT reads them on its CPU, where a GPU pointer is an illegal access.
+            on_host = not (on_gpu and leaf.is_floating_point())
+            tensor = (leaf.cpu() if on_host else leaf.to(device)).contiguous()
+            # ORT refuses the null pointer of an empty tensor; a one-element stand-in serves.
+            buffer = tensor if tensor.numel() else torch.empty(1, dtype=tensor.dtype, device=tensor.device)
+            kept.append(buffer)
+            binding.bind_input(
+                spec.name,
+                "cpu" if on_host else "cuda",
+                0 if on_host else device.index,
+                int(torch_dtype_to_onnx_dtype(tensor.dtype)),
+                list(tensor.shape),
+                buffer.data_ptr(),
+            )
+        for spec in self.session.get_outputs():
+            binding.bind_output(spec.name, device.type, device.index or 0)
+        # ORT runs on its own stream: sync both ways, or it reads half-written inputs.
+        if on_gpu:
+            torch.cuda.current_stream(device).synchronize()
+        self.session.run_with_iobinding(binding)
+        if on_gpu:
+            binding.synchronize_outputs()
+        outputs = [torch.from_dlpack(value._ortvalue.to_dlpack()) for value in binding.get_outputs()]
+        return self.unflatten(outputs)
