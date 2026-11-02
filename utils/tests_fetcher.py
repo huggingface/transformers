@@ -683,7 +683,8 @@ def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None
         else:
             # Some supported imports, such as deprecated module aliases, have no file on disk.
             continue
-        imports = [imp for imp in imports if len(imp) > 0 and re.match("^[A-Za-z0-9_]*$", imp)]
+        imports = [imp.split(" as ")[0].strip() for imp in imports]
+        imports = [imp for imp in imports if imp and re.match("^[A-Za-z0-9_]*$", imp)]
         if len(imports) > 0:
             result.append((module_file, imports))
 
@@ -726,7 +727,12 @@ def get_module_dependencies(module_fname: str, cache: dict[str, list[str]] | Non
             # the object is fully defined in the __init__)
             if module.endswith("__init__.py"):
                 # So we get the imports from that init then try to find where our objects come from.
-                new_imported_modules = dict(extract_imports(module, cache=cache))
+                new_imported_modules = {}
+                for _mod, _names in extract_imports(module, cache=cache):
+                    if _mod not in new_imported_modules:
+                        new_imported_modules[_mod] = list(_names)
+                    else:
+                        new_imported_modules[_mod].extend(n for n in _names if n not in new_imported_modules[_mod])
 
                 # Add imports via `define_import_structure` after the #35167 as we remove explicit import in `__init__.py`
                 from transformers.utils.import_utils import define_import_structure
