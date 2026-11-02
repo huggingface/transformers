@@ -61,7 +61,7 @@ class QuantizationPlanTest(unittest.TestCase):
             check_layers(model)
             model.save_pretrained(quantized_dir)
 
-            with open(os.path.join(quantized_dir, "config.json")) as f:
+            with open(os.path.join(quantized_dir, "config.json"), encoding="utf-8") as f:
                 saved_plan = json.load(f)["quantization_config"]
             self.assertEqual(saved_plan["self_attn"]["quant_method"], "torchao")
             self.assertEqual(saved_plan["mlp"]["quant_method"], "bitsandbytes")

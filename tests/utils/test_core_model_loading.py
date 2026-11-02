@@ -579,6 +579,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             param_needs_quantization=lambda model, name: "down_proj" not in name or name.startswith("mlp."),
             get_load_operations=lambda: {"quantize": DoubleQuantize},
         )
+        quantizer.quantizer_for = lambda name: quantizer
         raw = {
             "model.layers.0.experts.0.w1.weight": torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
             "model.layers.0.experts.1.w1.weight": torch.tensor([[10.0, 11.0], [12.0, 13.0]]),

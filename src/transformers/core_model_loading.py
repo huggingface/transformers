@@ -1676,8 +1676,9 @@ def convert_and_load_state_dict_in_model(
         )
         # Like the dtype plan, the pattern of a quantization plan matching the key picks its quantizer
         quantizer = hf_quantizer.quantizer_for(renamed_key) if hf_quantizer is not None else None
-        key_conversions = plan_conversions.get(quantizer, (renamings, converters, pattern_to_converter))
-        if quantizer in plan_conversions:
+        key_conversions = (renamings, converters, pattern_to_converter)
+        if quantizer is not hf_quantizer and quantizer is not None:
+            key_conversions = plan_conversions[quantizer]
             renamed_key, source_pattern = rename_source_key(
                 original_key, *key_conversions[:2], base_model_prefix, meta_model_state_dict
             )
