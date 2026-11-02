@@ -21,7 +21,7 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationMixin
 from ...image_utils import ImageInput
@@ -168,9 +168,9 @@ class GlmImageConfig(PreTrainedConfig):
 
     model_type = "glm_image"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=GlmImageTextConfig),
-        "vision_config": SubConfigSpec(config_class=GlmImageVisionConfig),
-        "vq_config": SubConfigSpec(config_class=GlmImageVQVAEConfig),
+        "text_config": GlmImageTextConfig,
+        "vision_config": GlmImageVisionConfig,
+        "vq_config": GlmImageVQVAEConfig,
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 
@@ -460,7 +460,7 @@ class GlmImageTextModel(Glm4vTextModel):
 
 
 class GlmImageModel(Glm4vModel):
-    def __init__(self, config):
+    def __init__(self, config: GlmImageConfig):
         super().__init__(config)
         self.visual = GlmImageVisionModel._from_config(config.vision_config)
         self.language_model = GlmImageTextModel._from_config(config.text_config)
@@ -871,7 +871,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
     base_model_prefix = "model"
     config: GlmImageConfig
 
-    def __init__(self, config):
+    def __init__(self, config: GlmImageConfig):
         super().__init__(config)
         self.model = GlmImageModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vision_vocab_size, bias=False)

@@ -191,7 +191,7 @@ class EmbeddingGemma2Config(PreTrainedConfig):
     model_type = "embedding_gemma2"
     sub_configs_defaults = {
         "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="gemma4_vision", optional=True),
-        "text_config": SubConfigSpec(config_class=EmbeddingGemma2TextConfig),
+        "text_config": EmbeddingGemma2TextConfig,
         "audio_config": SubConfigSpec(config_class=AutoConfig, model_type="gemma4_audio", optional=True),
     }
 
@@ -841,8 +841,6 @@ class EmbeddingGemma2VideoProcessor(Gemma4VideoProcessor):
 
 
 class EmbeddingGemma2ProcessorKwargs(Gemma4ProcessorKwargs):
-    images_kwargs = AttributeError()
-
     _defaults = {
         "text_kwargs": {
             "padding": True,

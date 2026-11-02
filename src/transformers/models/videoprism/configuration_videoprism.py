@@ -21,7 +21,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
@@ -122,8 +122,8 @@ class VideoPrismConfig(PreTrainedConfig):
 
     model_type = "videoprism"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=VideoPrismVisionConfig),
-        "text_config": SubConfigSpec(config_class=VideoPrismTextConfig),
+        "vision_config": VideoPrismVisionConfig,
+        "text_config": VideoPrismTextConfig,
     }
 
     text_config: dict | PreTrainedConfig | None = None

@@ -871,7 +871,7 @@ class BlenderbotSmallDecoderWrapper(BlenderbotSmallPreTrainedModel):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: BlenderbotSmallConfig):
         super().__init__(config)
         self.decoder = BlenderbotSmallDecoder(config)
         self.post_init()
@@ -886,7 +886,7 @@ class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel, GenerationMixin
         "lm_head.weight": "model.decoder.embed_tokens.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: BlenderbotSmallConfig):
         config.is_decoder = True
         config.is_encoder_decoder = False
         super().__init__(config)

@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -192,8 +192,8 @@ class Glm4vMoeConfig(PreTrainedConfig):
 
     model_type = "glm4v_moe"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Glm4vMoeVisionConfig),
-        "text_config": SubConfigSpec(config_class=Glm4vMoeTextConfig),
+        "vision_config": Glm4vMoeVisionConfig,
+        "text_config": Glm4vMoeTextConfig,
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 

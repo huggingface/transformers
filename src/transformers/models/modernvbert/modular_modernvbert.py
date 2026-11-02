@@ -191,7 +191,7 @@ class ModernVBertConnector(nn.Module):
 
 @auto_docstring
 class ModernVBertPreTrainedModel(SmolVLMPreTrainedModel):
-    config_class = ModernVBertConfig
+    config: ModernVBertConfig
     _no_split_modules = []
 
     @torch.no_grad()

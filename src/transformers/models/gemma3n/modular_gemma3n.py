@@ -26,7 +26,7 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
@@ -397,9 +397,9 @@ class Gemma3nConfig(PreTrainedConfig):
 
     model_type = "gemma3n"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Gemma3nTextConfig),
-        "vision_config": SubConfigSpec(config_class=Gemma3nVisionConfig),
-        "audio_config": SubConfigSpec(config_class=Gemma3nAudioConfig),
+        "text_config": Gemma3nTextConfig,
+        "vision_config": Gemma3nVisionConfig,
+        "audio_config": Gemma3nAudioConfig,
     }
 
     text_config: Gemma3nTextConfig | dict[str, Any] | None = None

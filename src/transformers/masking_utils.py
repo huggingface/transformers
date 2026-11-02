@@ -631,9 +631,9 @@ def flash_attention_mask(
     if attention_mask is not None:
         # Here we need to slice from the right if using sliding or chunked (for full attention, this is equivalent to doing nothing)
         attention_mask = attention_mask[:, -kv_length:]
-        # We only return an actual mask if there is at least 1 padding token AND the length is the same as the kv_length (it can only
-        # be smaller, if and only if we use a StaticCache, in which case we need a mask to properly slice k/v), otherwise we return
-        # `None` and use `is_causal` in FA2 (note that the attention_mask is a boolean dtype here)
+        # We only return an actual mask if there is at least 1 padding token OR the mask length is different from the kv_length (it
+        # can only be smaller, if and only if we use a StaticCache, in which case we need a mask to properly slice k/v), otherwise we
+        # return `None` and use `is_causal` in FA2 (note that the attention_mask is of boolean dtype here)
         if attention_mask.shape[1] == kv_length and attention_mask.all():
             attention_mask = None
 
@@ -909,10 +909,14 @@ def create_causal_mask(
             allow_is_bidirectional_skip=allow_is_causal_skip,
         )
 
-    # If we have a hybrid cache structure, here we want to create the mask for the full layers
+    # If we have a hybrid cache structure (i.e. sliding or linear layers), here we want to create the mask for the full layers
     if layer_idx is None:
-        if hasattr(past_key_values, "is_sliding") and False in past_key_values.is_sliding:
-            layer_idx = past_key_values.is_sliding.index(False)
+        if hasattr(past_key_values, "is_sliding") and hasattr(past_key_values, "is_linear"):
+            is_full = [
+                not is_sliding and not is_linear
+                for is_sliding, is_linear in zip(past_key_values.is_sliding, past_key_values.is_linear)
+            ]
+            layer_idx = is_full.index(True) if True in is_full else 0
         else:
             layer_idx = 0
 
@@ -1016,9 +1020,13 @@ def create_bidirectional_mask(
             `False` to always materialize the mask, e.g. when it is later concatenated with another mask. Defaults to
             `True`.
     """
-    # If we have a hybrid cache structure, here we want to create the mask for the full layers
-    if hasattr(past_key_values, "is_sliding") and False in past_key_values.is_sliding:
-        layer_idx = past_key_values.is_sliding.index(False)
+    # If we have a hybrid cache structure (i.e. sliding or linear layers), here we want to create the mask for the full layers
+    if hasattr(past_key_values, "is_sliding") and hasattr(past_key_values, "is_linear"):
+        is_full = [
+            not is_sliding and not is_linear
+            for is_sliding, is_linear in zip(past_key_values.is_sliding, past_key_values.is_linear)
+        ]
+        layer_idx = is_full.index(True) if True in is_full else 0
     else:
         layer_idx = 0
 

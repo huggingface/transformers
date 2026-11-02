@@ -729,7 +729,7 @@ class Mamba2CausalLMOutput(ModelOutput):
 
 @auto_docstring
 class Mamba2Model(Mamba2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Mamba2Config):
         super().__init__(config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
@@ -834,7 +834,7 @@ class Mamba2Model(Mamba2PreTrainedModel):
 class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "backbone.embeddings.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: Mamba2Config):
         super().__init__(config)
         self.backbone = Mamba2Model(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
