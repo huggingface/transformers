@@ -20,7 +20,7 @@ from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ChannelD
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_torch_available():
@@ -30,7 +30,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class MiniMaxVL01ImageProcessingTester:
+class MiniMaxVL01ImageProcessingTester(ImageProcessingTester):
     def __init__(
         self,
         parent,
@@ -45,12 +45,14 @@ class MiniMaxVL01ImageProcessingTester:
         image_std=OPENAI_CLIP_STD,
         do_convert_rgb=True,
     ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
+        super().__init__(
+            parent=parent,
+            batch_size=batch_size,
+            num_channels=num_channels,
+            min_resolution=min_resolution,
+            max_resolution=max_resolution,
+        )
         self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
         self.do_resize = do_resize
         self.do_normalize = do_normalize
         self.image_mean = image_mean
@@ -72,30 +74,12 @@ class MiniMaxVL01ImageProcessingTester:
         # The single-cell grid produces a thumbnail and one crop for each image.
         return 2 * len(images), self.num_channels, self.image_size, self.image_size
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
-
 
 @require_torch
 @require_vision
 class MiniMaxVL01ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processor_tester_class = MiniMaxVL01ImageProcessingTester
     test_cast_dtype = True
-
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = MiniMaxVL01ImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
 
     def _test_call(self, numpify=False, torchify=False, **kwargs):
         image_inputs = self.image_processor_tester.prepare_image_inputs(numpify=numpify, torchify=torchify)
@@ -200,7 +184,7 @@ class MiniMaxVL01ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         for backend_name, image_processing_class in self.image_processing_classes.items():
             with self.subTest(backend=backend_name):
                 image_processor = image_processing_class(**self._processor_kwargs(grid_pinpoints))
-                output = image_processor(list(images), return_tensors="pt")
+                output = image_processor(list(images), input_data_format=ChannelDimension.LAST, return_tensors="pt")
 
                 self.assertEqual(tuple(output.pixel_values.shape), (8, 3, 2, 2))
                 self.assertEqual(output.image_sizes.tolist(), [[2, 2], [4, 2], [2, 4]])
