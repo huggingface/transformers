@@ -2285,7 +2285,7 @@ class ModelArgs:
     Boolean mask marking the image token positions, where `deepstack_features` are added. Derived from the pixel
     values when they are passed.
     """,
-        "shape": "of shape `(batch_size, sequence_length, hidden_size)`",
+        "shape": "of shape `(batch_size, sequence_length, 1)`",
     }
 
     deepstack_features = {
