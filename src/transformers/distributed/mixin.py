@@ -264,7 +264,7 @@ class DistributedMixin:
 
         if "ep_router" in ep_plan.values():
             raise ValueError(
-                "The `ep_router` style was removed: name the experts `ep_dispatch_experts` and drop the router rule. "
+                "The `ep_router` style was removed. Name the experts `ep_dispatch_experts` and drop the router rule. "
                 '`DistributedConfig(ep_implementation="all_reduce")` gives the same masking and all-reduce.'
             )
 
