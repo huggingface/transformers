@@ -794,7 +794,7 @@ def decompose_for_generation(
     if multimodal:
         split = decompose_multimodal(prompt.module, prompt.inputs, recorded_features, inputs.get("input_ids"))
         # The decode component serves the text stack; keeping `language_model` would duplicate its parameters.
-        split.pop("language_model", None)
+        language_model = split.pop("language_model", None)
         components.update(split)
 
     writes_cross_cache = False
@@ -819,10 +819,20 @@ def decompose_for_generation(
         decode = components["decode"] = replace(
             decode, inputs={**decode.inputs, "token_type_ids": token_types.new_zeros(text.shape[:2])}
         )
+    deepstack = {}
     if multimodal:
         decode = components["decode"] = replace(decode, inputs=embedded_inputs(decode.inputs, components))
+        for mask_name, spec in DEEPSTACK_INPUTS.items():
+            if language_model is not None and mask_name in language_model.inputs:
+                deepstack = {name: language_model.inputs[name] for name in (mask_name, spec.features)}
+                layers = deepstack_layers(mask_name, deepstack[spec.features])
+                # A decode step has no image rows: zeros, so the one graph takes the prompt's features too.
+                step = dense_deepstack(mask_name, decode.inputs["inputs_embeds"], layers)
+                decode = components["decode"] = replace(decode, inputs={**decode.inputs, **step})
     # The prefill step as the decode graph takes it.
-    components["prefill"] = replace(decode, inputs=_prefill_call(model, prompt.inputs, decode.inputs, components))
+    components["prefill"] = replace(
+        decode, inputs=_prefill_call(model, {**prompt.inputs, **deepstack}, decode.inputs, components)
+    )
     decode_name = "decoder_model" if "encoder" in components else "language_model" if multimodal else "model"
     names = {"decode": decode_name, "encoder": "encoder_model"}
     return {names.get(name, name): component for name, component in components.items()}
