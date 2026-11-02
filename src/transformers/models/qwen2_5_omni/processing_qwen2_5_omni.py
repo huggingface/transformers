@@ -17,7 +17,6 @@ Processor class for Qwen2.5Omni.
 """
 
 import math
-import re
 
 import numpy as np
 
@@ -119,6 +118,9 @@ class Qwen2_5OmniProcessor(OmniModalProcessorMixin):
         self.image_token = self.tokenizer.image_token
         self.audio_token = self.tokenizer.audio_token
         self.video_token = self.tokenizer.video_token
+        self.image_token_id = self.tokenizer.image_token_id
+        self.audio_token_id = self.tokenizer.audio_token_id
+        self.video_token_id = self.tokenizer.video_token_id
         self.vision_bos_token = self.tokenizer.vision_bos_token
         self.vision_eos_token = self.tokenizer.vision_eos_token
         self.audio_bos_token = self.tokenizer.audio_bos_token
@@ -133,166 +135,142 @@ class Qwen2_5OmniProcessor(OmniModalProcessorMixin):
         audio: AudioInput | None = None,
         **kwargs: Unpack[Qwen2_5OmniProcessorKwargs],
     ) -> BatchFeature:
-        if text is None:
-            raise ValueError("You need to specify either a `text` input to process.")
-
-        output_kwargs = self._merge_kwargs(
-            Qwen2_5OmniProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        seconds_per_chunk = output_kwargs["videos_kwargs"].pop("seconds_per_chunk")
-        position_id_per_seconds = output_kwargs["videos_kwargs"].pop("position_id_per_seconds")
-        use_audio_in_video = output_kwargs["videos_kwargs"].pop("use_audio_in_video")
-        load_audio_from_video = output_kwargs["videos_kwargs"].pop("load_audio_from_video", False)
-        if use_audio_in_video:
+        videos_kwargs = kwargs.get("videos_kwargs") or {}
+        if kwargs.pop("use_audio_in_video", False) or videos_kwargs.get("use_audio_in_video"):
             logger.warning(
                 "`use_audio_in_video` is depreacted and will be removed in v5.25, use `load_audio_from_video` instead"
             )
-            load_audio_from_video = True
+            if not (kwargs.get("load_audio_from_video") or videos_kwargs.get("load_audio_from_video")):
+                kwargs.update(load_audio_from_video=True, audio_from_video_indices=None)
+        return super().__call__(images=images, text=text, videos=videos, audio=audio, **kwargs)
 
-        if load_audio_from_video:
-            audio, video_to_audio_indices = self._resolve_audio_from_video(
-                videos,
-                audio=audio,
-                audio_from_video_indices=None,
-            )
-
-        if audio is not None:
-            output_kwargs["audio_kwargs"]["padding"] = "max_length"  # Support "max_length" padding only here
-            audio_inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
-            audio_inputs["feature_attention_mask"] = audio_inputs.pop(
-                "attention_mask"
-            )  # rename feature_attention_mask to prevent conflicts later on
-            audio_inputs["input_features"] = audio_inputs.pop(
-                "input_features"
-            )  # rename input_features to prevent conflicts later on
-            input_lengths = (audio_inputs["feature_attention_mask"].sum(-1) - 1) // 2 + 1
-            audio_lengths = iter((input_lengths - 2) // 2 + 1)
-        else:
-            audio_inputs = {}
-            audio_lengths = iter([])
-
-        if images is not None:
-            images_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-            image_grid_thw = iter(images_inputs["image_grid_thw"])
-        else:
-            images_inputs = {}
-            image_grid_thw = iter([])
-
-        if videos is not None:
-            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-
-            fps = output_kwargs["videos_kwargs"].get("fps")
-            fps = fps if fps is not None else 2.0  # default fps not saved in official ckpt, hardcode
-            video_grid_thw = videos_inputs["video_grid_thw"]
-            second_per_grid_ts = [self.video_processor.temporal_patch_size / fps] * len(video_grid_thw)
-            videos_inputs["video_second_per_grid"] = second_per_grid_ts
-
-            video_grid_thw = iter(video_grid_thw)
-            video_second_per_grid = iter(second_per_grid_ts)
-        else:
-            videos_inputs = {}
-            video_grid_thw = iter([])
-            video_second_per_grid = iter([])
-
-        if not isinstance(text, list):
-            text = [text]
-
-        images_replacements, videos_replacements, audio_replacements = [], [], []
-        if images is not None or videos is not None or audio is not None:
-            images_replacements, videos_replacements, audio_replacements = self.replace_multimodal_special_tokens(
-                text,
-                audio_lengths,
-                image_grid_thw,
-                video_grid_thw,
-                video_second_per_grid=video_second_per_grid,
-                use_audio_in_video=load_audio_from_video,
-                position_id_per_seconds=position_id_per_seconds,
-                seconds_per_chunk=seconds_per_chunk,
-            )
-
-        return_text_replacement_offsets = output_kwargs["text_kwargs"].pop("return_text_replacement_offsets", False)
-        text, text_replacement_offsets = self.get_text_with_replacements(
-            list(text),
-            images_replacements=images_replacements,
-            videos_replacements=videos_replacements,
-            audio_replacements=audio_replacements,
-        )
-
-        texts_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        if return_text_replacement_offsets:
-            texts_inputs["text_replacement_offsets"] = text_replacement_offsets
-
-        return BatchFeature(
-            data={**texts_inputs, **images_inputs, **videos_inputs, **audio_inputs},
-            tensor_type=kwargs.get("return_tensors"),
-            skip_tensor_conversion=self.skip_tensor_conversion,
-        )
-
-    def replace_multimodal_special_tokens(
+    def validate_inputs(
         self,
-        text,
-        audio_lengths,
-        image_grid_thw,
-        video_grid_thw,
-        video_second_per_grid,
-        use_audio_in_video,
-        position_id_per_seconds,
-        seconds_per_chunk,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
     ):
-        # Extend mm token length
-        merge_length_image = self.image_processor.merge_size**2
-        merge_length_video = self.video_processor.merge_size**2
+        super().validate_inputs(images=images, text=text, **kwargs)
 
-        images_replacements, videos_replacements, audio_replacements = [], [], []
-        for sample in text:
-            positions = []
-            special_tokens = [re.escape(tok) for tok in [self.audio_token, self.image_token, self.video_token]]
-            pattern = "|".join(special_tokens)
-            positions = sorted([(match.start(), match.group()) for match in re.finditer(pattern, sample)])
-            positions.sort(key=lambda x: x[0])
+        if text is None:
+            raise ValueError("You need to specify either a `text` input to process.")
 
-            for _, special_token in positions:
-                if special_token == self.audio_token:
-                    audio_replacements.append(self.audio_token * next(audio_lengths))
-                elif special_token == self.image_token:
-                    image_seq_length = next(image_grid_thw).prod() // merge_length_image
-                    images_replacements.append(self.image_token * image_seq_length)
-                elif special_token == self.video_token:
-                    if not use_audio_in_video:
-                        video_seq_length = next(video_grid_thw).prod() // merge_length_video
-                        videos_replacements.append(self.video_token * video_seq_length)
-                    else:
-                        audio_token_indices = np.arange(next(audio_lengths))
-                        curr_video_grid_thw = next(video_grid_thw)
-                        height = curr_video_grid_thw[1] // self.video_processor.merge_size
-                        width = curr_video_grid_thw[2] // self.video_processor.merge_size
-                        video_token_indices = np.arange(curr_video_grid_thw[0]).reshape(-1, 1, 1)
-                        video_token_indices = np.broadcast_to(
-                            video_token_indices, (video_token_indices.shape[0], height, width)
-                        ).reshape(-1)
-                        video_token_indices = (
-                            video_token_indices * next(video_second_per_grid) * position_id_per_seconds
-                        )
+    def _process_audio(self, audio: AudioInput, **kwargs):
+        kwargs["padding"] = "max_length"  # Support "max_length" padding only here
+        audio_inputs = self.feature_extractor(audio, **kwargs)
+        audio_inputs["feature_attention_mask"] = audio_inputs.pop(
+            "attention_mask"
+        )  # rename feature_attention_mask to prevent conflicts later on
+        audio_inputs["input_features"] = audio_inputs.pop(
+            "input_features"
+        )  # rename input_features to prevent conflicts later on
+        input_lengths = (audio_inputs["feature_attention_mask"].sum(-1) - 1) // 2 + 1
+        audio_inputs["num_audio_tokens"] = (input_lengths - 2) // 2 + 1
 
-                        tokens_per_chunk = int(position_id_per_seconds * seconds_per_chunk)
-                        video_chunk_indexes = self.get_chunked_index(video_token_indices, tokens_per_chunk)
-                        audio_chunk_indexes = self.get_chunked_index(audio_token_indices, tokens_per_chunk)
+        audio_replacements = []
+        for idx in range(len(audio)):
+            replacement_text = self.replace_audio_token(audio_inputs, audio_idx=idx)
+            audio_replacements.append(replacement_text)
 
-                        placeholder_string = self.audio_bos_token
-                        for j in range(max(len(video_chunk_indexes), len(audio_chunk_indexes))):
-                            if j < len(video_chunk_indexes):
-                                video_seq_length = video_chunk_indexes[j][1] - video_chunk_indexes[j][0]
-                                placeholder_string += self.video_token * video_seq_length
-                            if j < len(audio_chunk_indexes):
-                                audio_seq_length = audio_chunk_indexes[j][1] - audio_chunk_indexes[j][0]
-                                placeholder_string += self.audio_token * audio_seq_length
-                        placeholder_string += self.audio_eos_token
-                        videos_replacements.append(placeholder_string)
+        return audio_inputs, audio_replacements
 
-        return images_replacements, videos_replacements, audio_replacements
+    def _process_videos(
+        self,
+        videos: VideoInput,
+        audio: AudioInput | None = None,
+        processed_audio: dict | None = None,
+        audio_kwargs: dict | None = None,
+        video_to_audio_indices: list | None = None,
+        **kwargs: Unpack[Qwen2_5_OmniVideosKwargs],
+    ):
+        # pop so they are not passed down to video processor
+        load_audio_from_video = kwargs.pop("load_audio_from_video", None)
+        seconds_per_chunk = kwargs.pop("seconds_per_chunk")
+        position_id_per_seconds = kwargs.pop("position_id_per_seconds")
+        kwargs.pop("use_audio_in_video", None)
+        processed_videos = self.video_processor(videos, **kwargs)
+
+        fps = kwargs.get("fps")
+        fps = fps if fps is not None else 2.0  # default fps not saved in official ckpt, hardcode
+        video_grid_thw = processed_videos["video_grid_thw"]
+        processed_videos["video_second_per_grid"] = [self.video_processor.temporal_patch_size / fps] * len(
+            video_grid_thw
+        )
+
+        video_replacements = []
+        for idx in range(len(video_grid_thw)):
+            replacement_text = self.replace_video_token(
+                processed_videos,
+                video_idx=idx,
+                processed_audio=processed_audio,
+                load_audio_from_video=load_audio_from_video,
+                video_to_audio_indices=video_to_audio_indices,
+                seconds_per_chunk=seconds_per_chunk,
+                position_id_per_seconds=position_id_per_seconds,
+            )
+            video_replacements.append(replacement_text)
+        return processed_videos, video_replacements
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        image_seq_length = image_inputs["image_grid_thw"][image_idx].prod() // self.image_processor.merge_size**2
+        return self.image_token * image_seq_length
+
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
+        num_audio_tokens = audio_inputs["num_audio_tokens"][audio_idx]
+        return self.audio_token * num_audio_tokens
+
+    def replace_video_token(
+        self,
+        video_inputs: dict,
+        video_idx: int,
+        processed_audio: dict | None = None,
+        video_to_audio_indices: list | None = None,
+        **kwargs: Unpack[Qwen2_5_OmniVideosKwargs],
+    ) -> str:
+        # When loading audio from video and if current video has an associated audio, i.e. no silent
+        if kwargs.get("load_audio_from_video") and video_to_audio_indices[video_idx] is not None:
+            return self.replace_video_with_audio_token(
+                video_inputs, video_idx, processed_audio, video_to_audio_indices[video_idx], **kwargs
+            )
+
+        video_seq_length = video_inputs["video_grid_thw"][video_idx].prod() // self.video_processor.merge_size**2
+        return self.video_token * video_seq_length
+
+    def replace_video_with_audio_token(
+        self,
+        video_inputs: dict,
+        video_idx: int,
+        audio_inputs: dict,
+        audio_idx: int,
+        **kwargs: Unpack[Qwen2_5_OmniVideosKwargs],
+    ) -> str:
+        position_id_per_seconds = kwargs["position_id_per_seconds"]
+        audio_token_indices = np.arange(audio_inputs["num_audio_tokens"][audio_idx])
+        curr_video_grid_thw = video_inputs["video_grid_thw"][video_idx]
+        height = curr_video_grid_thw[1] // self.video_processor.merge_size
+        width = curr_video_grid_thw[2] // self.video_processor.merge_size
+        video_token_indices = np.arange(curr_video_grid_thw[0]).reshape(-1, 1, 1)
+        video_token_indices = np.broadcast_to(
+            video_token_indices, (video_token_indices.shape[0], height, width)
+        ).reshape(-1)
+        video_token_indices = (
+            video_token_indices * video_inputs["video_second_per_grid"][video_idx] * position_id_per_seconds
+        )
+
+        tokens_per_chunk = int(position_id_per_seconds * kwargs["seconds_per_chunk"])
+        video_chunk_indexes = self.get_chunked_index(video_token_indices, tokens_per_chunk)
+        audio_chunk_indexes = self.get_chunked_index(audio_token_indices, tokens_per_chunk)
+
+        placeholder_string = self.audio_bos_token
+        for j in range(max(len(video_chunk_indexes), len(audio_chunk_indexes))):
+            if j < len(video_chunk_indexes):
+                video_seq_length = video_chunk_indexes[j][1] - video_chunk_indexes[j][0]
+                placeholder_string += self.video_token * video_seq_length
+            if j < len(audio_chunk_indexes):
+                audio_seq_length = audio_chunk_indexes[j][1] - audio_chunk_indexes[j][0]
+                placeholder_string += self.audio_token * audio_seq_length
+        placeholder_string += self.audio_eos_token
+        return placeholder_string
 
     def get_chunked_index(self, token_indices: np.ndarray, tokens_per_chunk: int) -> list[tuple[int, int]]:
         """
@@ -441,6 +419,11 @@ class Qwen2_5OmniProcessor(OmniModalProcessorMixin):
         )
         input_lengths = (input_lengths - 1) // 2 + 1
         return (input_lengths - 2) // 2 + 1
+
+    @property
+    def unused_input_names(self) -> list[str]:
+        "Input names returned always by subprocessors but not used in model's `forward`"
+        return ["num_audio_tokens"]
 
     @property
     def model_input_names(self):

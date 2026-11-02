@@ -2451,6 +2451,7 @@ class OmniModalProcessorMixin(ProcessorMixin):
             A list that describes the source of each audio slot where
                 - `None` -> standalone audio associated with no video track
                 - `i`    -> audio extracted from videos[i]
+            If `audio` has one entry per slot, the audio of `videos[i]` is taken from it instead of decoded.
         """
         images, text, videos, audio = self.prepare_inputs_layout(
             images=images, text=text, videos=videos, audio=audio, **kwargs
@@ -2541,6 +2542,7 @@ class OmniModalProcessorMixin(ProcessorMixin):
         `audio_from_video_indices` describes the source of each audio slot:
             - `None` -> standalone audio associated with no video track
             - `i`    -> audio extracted from videos[i]
+        If `audio` has one entry per slot, the audio of `videos[i]` is taken from it instead of decoded.
 
         Returns:
             `audio (list[str | np.ndarray | torch.Tensor])`:
@@ -2561,12 +2563,13 @@ class OmniModalProcessorMixin(ProcessorMixin):
                 )
             audio_from_video_indices = list(range(len(videos)))  # videos only: one audio per video
 
-        if audio_from_video_indices.count(None) != len(audio):
+        audio_per_slot = len(audio) == len(audio_from_video_indices)
+        if not audio_per_slot and audio_from_video_indices.count(None) != len(audio):
             raise ValueError(
                 f"`audio_from_video_indices` has {audio_from_video_indices.count(None)} standalone slots but {len(audio)} audio inputs."
             )
 
-        if not is_torchcodec_greater_or_equal("0.17"):
+        if not audio_per_slot and not is_torchcodec_greater_or_equal("0.17"):
             raise ValueError("Loading audio track from video file requires torchcodec>=0.17 installed!")
 
         standalone_audio = iter(audio)
@@ -2578,17 +2581,20 @@ class OmniModalProcessorMixin(ProcessorMixin):
                 audio_resolved.append(next(standalone_audio))
                 continue
 
-            # Only `torchcodec` can decode audio track from all types of video file formats
-            # Don't raise a load-error if video is silent and instead skip it
-            cont_metadata = torchcodec.decoders.get_container_metadata(videos[video_idx])
-            if not any(stream.media_type == "audio" for stream in cont_metadata.streams):
-                continue
+            if audio_per_slot:
+                loaded_audio = next(standalone_audio)
+            else:
+                # Only `torchcodec` can decode audio track from all types of video file formats
+                # Don't raise a load-error if video is silent and instead skip it
+                cont_metadata = torchcodec.decoders.get_container_metadata(videos[video_idx])
+                if not any(stream.media_type == "audio" for stream in cont_metadata.streams):
+                    continue
 
-            loaded_audio = load_audio(
-                videos[video_idx],
-                backend="torchcodec",
-                sampling_rate=self._audio_processor.sampling_rate,
-            )
+                loaded_audio = load_audio(
+                    videos[video_idx],
+                    backend="torchcodec",
+                    sampling_rate=self._audio_processor.sampling_rate,
+                )
             video_to_audio[video_idx] = len(audio_resolved)
             audio_resolved.append(loaded_audio)
 

@@ -15,7 +15,6 @@
 """PyTorch Qwen3Omni model (Audio, Image, Video)."""
 
 import math
-import re
 from dataclasses import dataclass
 
 import numpy as np
@@ -29,9 +28,7 @@ from ...activations import ACT2FN
 from ...audio_utils import AudioInput
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationMixin
-from ...image_utils import ImageInput
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -44,7 +41,6 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import OmniModalProcessorMixin, Unpack
-from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.generic import (
     TransformersKwargs,
@@ -2787,175 +2783,92 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor):
         input_lengths = audio_length // self.feature_extractor.hop_length
         return int(_get_feat_extract_output_lengths(input_lengths, n_window))
 
-    def replace_multimodal_special_tokens(
+    def _process_audio(self, audio: AudioInput, **kwargs):
+        n_window = kwargs.pop("n_window", 50)
+        audio_inputs = self.feature_extractor(audio, **kwargs)
+        audio_inputs["feature_attention_mask"] = audio_inputs.pop(
+            "attention_mask"
+        )  # rename feature_attention_mask to prevent conflicts later on
+        audio_inputs["input_features"] = audio_inputs.pop(
+            "input_features"
+        )  # rename input_features to prevent conflicts later on
+        audio_inputs["num_audio_tokens"] = _get_feat_extract_output_lengths(
+            audio_inputs["feature_attention_mask"].sum(-1), n_window
+        )
+
+        audio_replacements = []
+        for idx in range(len(audio)):
+            replacement_text = self.replace_audio_token(audio_inputs, audio_idx=idx)
+            audio_replacements.append(replacement_text)
+
+        return audio_inputs, audio_replacements
+
+    def _process_videos(
         self,
-        text,
-        audio_lengths,
-        image_grid_thw,
-        video_grid_thw,
-        video_second_per_grid,
-        use_audio_in_video,
-        position_id_per_seconds,
-        seconds_per_chunk,
-    ):
-        # Extend mm token length
-        merge_length_image = self.image_processor.merge_size**2
-        merge_length_video = self.video_processor.merge_size**2
-
-        images_replacements, videos_replacements, audio_replacements = [], [], []
-        for sample in text:
-            positions = []
-            special_tokens = [re.escape(tok) for tok in [self.audio_token, self.image_token, self.video_token]]
-            pattern = "|".join(special_tokens)
-            positions = sorted([(match.start(), match.group()) for match in re.finditer(pattern, sample)])
-            positions.sort(key=lambda x: x[0])
-
-            for _, special_token in positions:
-                if special_token == self.audio_token:
-                    audio_replacements.append(self.audio_token * next(audio_lengths))
-                elif special_token == self.image_token:
-                    image_seq_length = next(image_grid_thw).prod() // merge_length_image
-                    images_replacements.append(self.image_token * image_seq_length)
-                elif special_token == self.video_token:
-                    if not use_audio_in_video:
-                        video_seq_length = next(video_grid_thw).prod() // merge_length_video
-                        videos_replacements.append(self.video_token * video_seq_length)
-                    else:
-                        audio_token_indices = np.arange(next(audio_lengths))
-                        curr_video_grid_thw = next(video_grid_thw)
-                        height = curr_video_grid_thw[1] // self.video_processor.merge_size
-                        width = curr_video_grid_thw[2] // self.video_processor.merge_size
-                        video_token_indices = np.arange(curr_video_grid_thw[0]).reshape(-1, 1, 1)
-                        video_token_indices = np.broadcast_to(
-                            video_token_indices, (video_token_indices.shape[0], height, width)
-                        ).reshape(-1)
-                        video_token_indices = (
-                            video_token_indices * next(video_second_per_grid) * position_id_per_seconds
-                        )
-
-                        video_data_index, audio_data_index = 0, 0
-                        placeholder_string = self.audio_bos_token
-                        while video_data_index < len(video_token_indices) and audio_data_index < len(
-                            audio_token_indices
-                        ):
-                            if video_token_indices[video_data_index] <= audio_token_indices[audio_data_index]:
-                                placeholder_string += self.video_token
-                                video_data_index += 1
-                            else:
-                                placeholder_string += self.audio_token
-                                audio_data_index += 1
-                        if video_data_index < len(video_token_indices):
-                            placeholder_string += self.video_token * (len(video_token_indices) - video_data_index)
-                        if audio_data_index < len(audio_token_indices):
-                            placeholder_string += self.audio_token * (len(audio_token_indices) - audio_data_index)
-                        placeholder_string += self.audio_eos_token
-                        videos_replacements.append(placeholder_string)
-
-        return images_replacements, videos_replacements, audio_replacements
-
-    def __call__(
-        self,
-        text: TextInput = None,
-        images: ImageInput | None = None,
-        videos: VideoInput | None = None,
+        videos: VideoInput,
         audio: AudioInput | None = None,
-        **kwargs: Unpack[Qwen3OmniMoeProcessorKwargs],
+        processed_audio: dict | None = None,
+        audio_kwargs: dict | None = None,
+        video_to_audio_indices: list | None = None,
+        **kwargs,
     ):
-        if text is None:
-            raise ValueError("You need to specify either a `text` input to process.")
+        # pop so they are not passed down to video processor
+        load_audio_from_video = kwargs.pop("load_audio_from_video", None)
+        seconds_per_chunk = kwargs.pop("seconds_per_chunk")
+        position_id_per_seconds = kwargs.pop("position_id_per_seconds")
+        kwargs.pop("use_audio_in_video", None)
+        processed_videos = self.video_processor(videos, **kwargs)
 
-        output_kwargs = self._merge_kwargs(
-            Qwen3OmniMoeProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        seconds_per_chunk = output_kwargs["videos_kwargs"].pop("seconds_per_chunk")
-        position_id_per_seconds = output_kwargs["videos_kwargs"].pop("position_id_per_seconds")
-        use_audio_in_video = output_kwargs["videos_kwargs"].pop("use_audio_in_video")
-        fps = output_kwargs["videos_kwargs"].get("fps", 1.0)
+        fps = kwargs.get("fps")
         fps = fps if fps is not None else 1.0
-        n_window = output_kwargs["audio_kwargs"].pop("n_window", 50)
-        load_audio_from_video = output_kwargs["videos_kwargs"].pop("load_audio_from_video", False)
-        if use_audio_in_video:
-            logger.warning(
-                "`use_audio_in_video` is depreacted and will be removed in v5.25, use `load_audio_from_video` instead"
-            )
-            load_audio_from_video = True
-
-        if load_audio_from_video:
-            audio, video_to_audio_indices = self._resolve_audio_from_video(
-                videos,
-                audio=audio,
-                audio_from_video_indices=None,
-            )
-
-        if audio is not None:
-            audio_inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
-            audio_inputs["feature_attention_mask"] = audio_inputs.pop(
-                "attention_mask"
-            )  # rename feature_attention_mask to prevent conflicts later on
-            audio_inputs["input_features"] = audio_inputs.pop(
-                "input_features"
-            )  # rename input_features to prevent conflicts later on
-            audio_lengths = iter(
-                _get_feat_extract_output_lengths(audio_inputs["feature_attention_mask"].sum(-1), n_window)
-            )
-        else:
-            audio_inputs = {}
-            audio_lengths = iter([])
-
-        if images is not None:
-            images_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-            image_grid_thw = iter(images_inputs["image_grid_thw"])
-        else:
-            images_inputs = {}
-            image_grid_thw = iter([])
-
-        if videos is not None:
-            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            fps = [fps] * len(videos_inputs["video_grid_thw"])
-            videos_inputs["video_second_per_grid"] = [
-                self.video_processor.temporal_patch_size / fps[i] for i in range(len(fps))
-            ]
-            video_grid_thw = iter(videos_inputs["video_grid_thw"])
-            video_second_per_grid = iter(videos_inputs["video_second_per_grid"])
-        else:
-            videos_inputs = {}
-            video_grid_thw = iter([])
-            video_second_per_grid = iter([])
-
-        if not isinstance(text, list):
-            text = [text]
-
-        images_replacements, videos_replacements, audio_replacements = self.replace_multimodal_special_tokens(
-            text,
-            audio_lengths,
-            image_grid_thw,
-            video_grid_thw,
-            video_second_per_grid=video_second_per_grid,
-            use_audio_in_video=load_audio_from_video,
-            position_id_per_seconds=position_id_per_seconds,
-            seconds_per_chunk=seconds_per_chunk,
+        video_grid_thw = processed_videos["video_grid_thw"]
+        processed_videos["video_second_per_grid"] = [self.video_processor.temporal_patch_size / fps] * len(
+            video_grid_thw
         )
 
-        return_text_replacement_offsets = output_kwargs["text_kwargs"].pop("return_text_replacement_offsets", False)
-        text, text_replacement_offsets = self.get_text_with_replacements(
-            list(text),
-            images_replacements=images_replacements,
-            videos_replacements=videos_replacements,
-            audio_replacements=audio_replacements,
-        )
+        video_replacements = []
+        for idx in range(len(video_grid_thw)):
+            replacement_text = self.replace_video_token(
+                processed_videos,
+                video_idx=idx,
+                processed_audio=processed_audio,
+                load_audio_from_video=load_audio_from_video,
+                video_to_audio_indices=video_to_audio_indices,
+                seconds_per_chunk=seconds_per_chunk,
+                position_id_per_seconds=position_id_per_seconds,
+            )
+            video_replacements.append(replacement_text)
+        return processed_videos, video_replacements
 
-        texts_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        if return_text_replacement_offsets:
-            texts_inputs["text_replacement_offsets"] = text_replacement_offsets
-
-        return BatchFeature(
-            data={**texts_inputs, **images_inputs, **videos_inputs, **audio_inputs},
-            tensor_type=kwargs.get("return_tensors"),
-            skip_tensor_conversion=self.skip_tensor_conversion,
+    def replace_video_with_audio_token(
+        self, video_inputs: dict, video_idx: int, audio_inputs: dict, audio_idx: int, **kwargs
+    ) -> str:
+        audio_token_indices = np.arange(audio_inputs["num_audio_tokens"][audio_idx])
+        curr_video_grid_thw = video_inputs["video_grid_thw"][video_idx]
+        height = curr_video_grid_thw[1] // self.video_processor.merge_size
+        width = curr_video_grid_thw[2] // self.video_processor.merge_size
+        video_token_indices = np.arange(curr_video_grid_thw[0]).reshape(-1, 1, 1)
+        video_token_indices = np.broadcast_to(
+            video_token_indices, (video_token_indices.shape[0], height, width)
+        ).reshape(-1)
+        video_token_indices = (
+            video_token_indices * video_inputs["video_second_per_grid"][video_idx] * kwargs["position_id_per_seconds"]
         )
+        video_data_index, audio_data_index = 0, 0
+        placeholder_string = self.audio_bos_token
+        while video_data_index < len(video_token_indices) and audio_data_index < len(audio_token_indices):
+            if video_token_indices[video_data_index] <= audio_token_indices[audio_data_index]:
+                placeholder_string += self.video_token
+                video_data_index += 1
+            else:
+                placeholder_string += self.audio_token
+                audio_data_index += 1
+        if video_data_index < len(video_token_indices):
+            placeholder_string += self.video_token * (len(video_token_indices) - video_data_index)
+        if audio_data_index < len(audio_token_indices):
+            placeholder_string += self.audio_token * (len(audio_token_indices) - audio_data_index)
+        placeholder_string += self.audio_eos_token
+        return placeholder_string
 
     def apply_chat_template(self, conversations, chat_template=None, **kwargs):
         return OmniModalProcessorMixin.apply_chat_template(self, conversations, chat_template, **kwargs)
