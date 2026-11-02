@@ -46,14 +46,17 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
 from .configuration_minimax_vl_01 import MiniMaxVL01Config, MiniMaxVL01TextConfig
 
 
 class MiniMaxVL01TextCache(DynamicCache):
+    # `crop` raises below, so a rollback cannot be undone here. The inherited property only inspects
+    # `self.layers`, which are all plain dynamic layers, and would otherwise wrongly report `True`.
+    is_croppable = False
+
     def __init__(self):
         super().__init__()
         self.linear_cache: list[torch.Tensor] = []
@@ -86,8 +89,8 @@ class MiniMaxVL01TextCache(DynamicCache):
             elif layer_idx < len(self.layers) and self.layers[layer_idx].is_initialized:
                 self.layers[layer_idx].batch_select_indices(indices)
 
-    def crop(self, max_length: int):
-        raise RuntimeError("MiniMaxVL01TextCache doesnot support `crop` method")
+    def crop(self, tokens_to_remove: int) -> None:
+        raise RuntimeError("MiniMaxVL01TextCache does not support `crop` method")
 
     def _get_attention_layer_idx(self, layer_idx: int) -> int:
         if layer_idx != 0 or super().get_seq_length(layer_idx) > 0:
@@ -286,8 +289,7 @@ class MiniMaxVL01TextLightningAttention(nn.Module):
 
 
 class MiniMaxVL01TextRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: MiniMaxVL01TextConfig, device=None):
+    def __init__(self, config: MiniMaxVL01TextConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -298,13 +300,12 @@ class MiniMaxVL01TextRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(
         config: MiniMaxVL01TextConfig, device=None, **kwargs
     ) -> tuple[torch.Tensor, float]:
@@ -330,18 +331,10 @@ class MiniMaxVL01TextRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        # Disable any outside autocast context if any, to really force fp32
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -525,7 +518,7 @@ class MiniMaxVL01TextExperts(nn.Module):
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
@@ -552,7 +545,7 @@ class MiniMaxVL01TextSparseMoeBlock(nn.Module):
         self.gate = MiniMaxVL01TextTopKRouter(config)
         self.experts = MiniMaxVL01TextExperts(config)
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         if self.training and self.jitter_noise > 0:
             hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
@@ -745,9 +738,13 @@ class MiniMaxVL01ModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     image_hidden_states (`torch.FloatTensor` of shape `(num_image_tokens, hidden_size)`, *optional*):
         Packed and projected image features inserted at image placeholder positions.
+    router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
+        Tuple of router logits, one per text layer, of shape `(batch_size * sequence_length, num_local_experts)`.
     """
 
     image_hidden_states: torch.FloatTensor | None = None
+
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring(custom_intro="Base class for MiniMax-VL-01 causal language model outputs.")
@@ -760,6 +757,8 @@ class MiniMaxVL01CausalLMOutputWithPast(ModelOutput):
         Float32 prediction scores before softmax.
     image_hidden_states (`torch.FloatTensor` of shape `(num_image_tokens, hidden_size)`, *optional*):
         Packed and projected image features inserted at image placeholder positions.
+    router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
+        Tuple of router logits, one per text layer, of shape `(batch_size * sequence_length, num_local_experts)`.
     """
 
     loss: torch.FloatTensor | None = None
@@ -768,6 +767,8 @@ class MiniMaxVL01CausalLMOutputWithPast(ModelOutput):
     hidden_states: tuple[torch.FloatTensor] | None = None
     attentions: tuple[torch.FloatTensor] | None = None
     image_hidden_states: torch.FloatTensor | None = None
+
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 class MiniMaxVL01MultiModalProjector(nn.Module):
@@ -997,7 +998,6 @@ class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
         image_sizes: torch.Tensor,
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
-        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1026,7 +1026,8 @@ class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
         elif pixel_values.dim() != 4:
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expected 4 or 5 dimensions")
 
-        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True, return_dict=True, **kwargs)
+        kwargs["output_hidden_states"] = True
+        image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
         if isinstance(vision_feature_layer, int):
             selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
         else:
@@ -1085,6 +1086,7 @@ class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MiniMaxVL01ModelOutputWithPast:
         r"""
@@ -1104,18 +1106,26 @@ class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None and pixel_values.size(0) > 0:
-            image_features = self.get_image_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None and pixel_values.size(0) > 0:
+            mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values,
                 image_sizes,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 return_dict=True,
-            ).pooler_output
-            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -1135,7 +1145,8 @@ class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
+            router_logits=outputs.router_logits,
         )
 
     @staticmethod
@@ -1158,6 +1169,7 @@ class MiniMaxVL01Model(MiniMaxVL01PreTrainedModel):
 )
 class MiniMaxVL01ForConditionalGeneration(MiniMaxVL01PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: MiniMaxVL01Config):
         super().__init__(config)
@@ -1220,6 +1232,7 @@ class MiniMaxVL01ForConditionalGeneration(MiniMaxVL01PreTrainedModel, Generation
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MiniMaxVL01CausalLMOutputWithPast:
         r"""
@@ -1245,6 +1258,7 @@ class MiniMaxVL01ForConditionalGeneration(MiniMaxVL01PreTrainedModel, Generation
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             return_dict=True,
             **kwargs,
         )
@@ -1275,6 +1289,7 @@ class MiniMaxVL01ForConditionalGeneration(MiniMaxVL01PreTrainedModel, Generation
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
+            router_logits=outputs.router_logits,
         )
 
 
