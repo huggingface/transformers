@@ -166,9 +166,10 @@ def flatten_anyres_patches(config: Any, pixel_values, image_sizes):
     return torch.cat([pix[:count] for pix, count in zip(pixel_values, counts)], dim=0)
 
 
-def pack_anyres_features(config: Any, features, image_sizes, image_newline=None):
+def pack_anyres_features(config: Any, features, image_sizes, image_newline=None, per_image: bool = False):
     """The `pack_image_features` step [`PatchVisionEncoder`] leaves out of the graph, with the modeling's own grid and
-    unpad helpers: each image's base patch, then its tiles unpadded to the image's aspect ratio."""
+    unpad helpers: each image's base patch, then its tiles unpadded to the image's aspect ratio. Concatenated, or one
+    tensor per image with `per_image`."""
     from ..models.llava_next.modeling_llava_next import get_anyres_image_grid_shape, unpad_image
 
     pinpoints = _find_config_attr(config, "image_grid_pinpoints")
@@ -191,7 +192,7 @@ def pack_anyres_features(config: Any, features, image_sizes, image_newline=None)
             if image_newline is not None:
                 feature = torch.cat((feature, image_newline[None].to(feature)), dim=0)
             packed.append(feature)
-    return torch.cat(packed, dim=0)
+    return packed if per_image else torch.cat(packed, dim=0)
 
 
 def packs_anyres_features(owner: Any, config: Any) -> bool:
