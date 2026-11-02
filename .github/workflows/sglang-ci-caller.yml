@@ -281,6 +281,39 @@ jobs:
 
           def pytest_sessionfinish(session, exitstatus):
               _stop.set()
+
+
+          def pytest_configure(config):
+              """Cap KV-cache token count on the CPU engine to prevent OOM.
+
+              SGLang's CPU engine uses total NUMA-node RAM (~126 GB) as its
+              "GPU memory capacity", computes mem_fraction_static≈0.898, and
+              pre-allocates ~102 GB of KV-cache at server startup.  On a 128 GB
+              runner that reliably triggers the OOM killer.
+
+              We monkey-patch popen_launch_server so every server launched by
+              the SGLang test suite gets --max-total-tokens 1024 unless the
+              caller already specified it.  1024 tokens is ample for correctness
+              tests while keeping the KV cache under ~500 MB.
+              """
+              try:
+                  import sglang.test.test_utils as _tu
+              except ImportError:
+                  return
+
+              _orig = _tu.popen_launch_server
+
+              def _patched(model, base_url, timeout, *args, other_args=None, **kwargs):
+                  other_args = list(other_args or [])
+                  if "--max-total-tokens" not in other_args:
+                      other_args += ["--max-total-tokens", "1024"]
+                      print(
+                          "[CONFTEST] Injected --max-total-tokens 1024 into popen_launch_server",
+                          flush=True,
+                      )
+                  return _orig(model, base_url, timeout, *args, other_args=other_args, **kwargs)
+
+              _tu.popen_launch_server = _patched
           CONFTEST
 
       - name: Run canonical SGLang integration tests
