@@ -631,7 +631,7 @@ class Gemma4UnifiedTextKVSharedAttention(Gemma4TextKVSharedAttention):
     pass
 
 
-GEMMA4_UNIFIED_TEXT_ATTENTION_CLASSES = {
+GEMMA4_UNIFIED_TEXT_ATTENTION_CLASSES = {  # trf-ignore: TRF052
     "attention": Gemma4UnifiedTextAttention,
     "k_eq_v_attention": Gemma4UnifiedTextKEqVAttention,
     "kv_shared": Gemma4UnifiedTextKVSharedAttention,

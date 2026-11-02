@@ -40,7 +40,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..gemma2.modeling_gemma2 import (
@@ -57,6 +57,7 @@ from ..gemma3.modeling_gemma3 import (
     Gemma3RotaryEmbedding,
     Gemma3TextModel,
     Gemma3TextScaledWordEmbedding,
+    apply_rotary_pos_emb,
 )
 from ..paligemma.modeling_paligemma import (
     PaliGemmaCausalLMOutputWithPast,
@@ -1439,29 +1440,6 @@ class Gemma3nTextAltUp(nn.Module):
         return self.forward(corrected)
 
 
-def apply_rotary_pos_emb(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, unsqueeze_dim: int = 1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        x (`torch.Tensor`): The tensor to embed.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    return (x * cos) + (rotate_half(x) * sin)
-
-
-@no_inherit_decorator
 class Gemma3nTextAttention(Gemma3Attention):
     def __init__(self, config: Gemma3nTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -1484,20 +1462,12 @@ class Gemma3nTextAttention(Gemma3Attention):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        value_states = self.v_norm(self.v_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+
         cos, sin = position_embeddings
-        query_states = self.q_proj(hidden_states).view(hidden_shape)
-        query_states = self.q_norm(query_states)
-        query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
-        query_states = query_states.transpose(1, 2)
-
-        key_states = self.k_proj(hidden_states).view(hidden_shape)
-        key_states = self.k_norm(key_states)
-        key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
-        key_states = key_states.transpose(1, 2)
-
-        value_states = self.v_proj(hidden_states).view(hidden_shape)
-        value_states = self.v_norm(value_states)
-        value_states = value_states.transpose(1, 2)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
@@ -1525,7 +1495,7 @@ class Gemma3nTextAttention(Gemma3Attention):
         return attn_output, attn_weights
 
 
-class Gemma3nTextKVSharedAttention(Gemma3nTextAttention):
+class Gemma3nTextKVSharedAttention(Gemma3nTextAttention):  # trf-ignore: TRF006
     """Reuses the kv states of the last non-shared layer of the same type, so it has no k/v weights."""
 
     def __init__(self, config: Gemma3nTextConfig, layer_idx: int):
@@ -1548,11 +1518,11 @@ class Gemma3nTextKVSharedAttention(Gemma3nTextAttention):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+
+        # Only the queries are rotated, the kv states come rotated from the last non-shared layer of this type
         cos, sin = position_embeddings
-        query_states = self.q_proj(hidden_states).view(hidden_shape)
-        query_states = self.q_norm(query_states)
-        query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
-        query_states = query_states.transpose(1, 2)
+        query_states = (query_states * cos.unsqueeze(1)) + (rotate_half(query_states) * sin.unsqueeze(1))
 
         # We cannot simply reuse the cached state if we have a Cache, as sliding layers will not remember the full states in their Cache
         # once we are past the sliding window - so we always use `shared_kv_states` instead, even when past_key_values is not None
@@ -1582,7 +1552,7 @@ class Gemma3nTextKVSharedAttention(Gemma3nTextAttention):
         return attn_output, attn_weights
 
 
-GEMMA3N_TEXT_ATTENTION_CLASSES = {
+GEMMA3N_TEXT_ATTENTION_CLASSES = {  # trf-ignore: TRF052
     "attention": Gemma3nTextAttention,
     "kv_shared": Gemma3nTextKVSharedAttention,
 }

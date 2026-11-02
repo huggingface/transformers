@@ -309,23 +309,15 @@ class DiffusionGemmaEncoderTextAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        cos, sin = position_embeddings
-
-        query_states = self.q_proj(hidden_states).view(hidden_shape)
-        query_states = self.q_norm(query_states)
-        query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
-        query_states = query_states.transpose(1, 2)
-
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(hidden_shape)
         # CHANGED: full attention layers use their keys as values
         value_states = self.v_proj(hidden_states).view(hidden_shape) if self.v_proj is not None else key_states
+        value_states = self.v_norm(value_states).transpose(1, 2)
+        key_states = self.k_norm(key_states).transpose(1, 2)
 
-        key_states = self.k_norm(key_states)
-        key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
-        key_states = key_states.transpose(1, 2)
-
-        value_states = self.v_norm(value_states)
-        value_states = value_states.transpose(1, 2)
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
@@ -411,23 +403,15 @@ class DiffusionGemmaDecoderTextAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        cos, sin = position_embeddings
-
-        query_states = self.q_proj(hidden_states).view(hidden_shape)
-        query_states = self.q_norm(query_states)
-        query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
-        query_states = query_states.transpose(1, 2)
-
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(hidden_shape)
         # CHANGED: full attention layers use their keys as values
         value_states = self.v_proj(hidden_states).view(hidden_shape) if self.v_proj is not None else key_states
+        value_states = self.v_norm(value_states).transpose(1, 2)
+        key_states = self.k_norm(key_states).transpose(1, 2)
 
-        key_states = self.k_norm(key_states)
-        key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
-        key_states = key_states.transpose(1, 2)
-
-        value_states = self.v_norm(value_states)
-        value_states = value_states.transpose(1, 2)
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # CHANGED: the encoder cache is read-only from the decoder

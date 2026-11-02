@@ -58,6 +58,7 @@ from ..gemma3.modeling_gemma3 import (
     Gemma3RotaryEmbedding,
     Gemma3TextModel,
     Gemma3TextScaledWordEmbedding,
+    rotate_half,
 )
 from ..gemma3n.modeling_gemma3n import (
     Gemma3nCausalLMOutputWithPast,
@@ -750,9 +751,8 @@ def apply_multidimensional_rope(
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
         position_ids (`torch.Tensor`, *optional*):
-            If position_ids.ndim + 2 == x.ndim, then this function passes through to `apply_rotary_pos_emb()`.
-            Otherwise, position_ids is used to split the inputs, x, into multiple pieces, where each piece is fed to
-            `apply_rotary_pos_emb()`, and then concatenated back together.
+            Used to split the inputs, x, into one piece per position dimension; each piece is rotated with its own
+            slice of `cos`/`sin`, and the pieces are then concatenated back together.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -781,12 +781,8 @@ def apply_multidimensional_rope(
     cos_parts = torch.split(cos, split_sizes, dim=-1)
     sin_parts = torch.split(sin, split_sizes, dim=-1)
     y_parts = [
-        apply_rotary_pos_emb(
-            x=x_parts[k],
-            cos=cos_parts[k],
-            sin=sin_parts[k],
-            unsqueeze_dim=unsqueeze_dim,
-        )
+        (x_parts[k] * cos_parts[k].unsqueeze(unsqueeze_dim))
+        + (rotate_half(x_parts[k]) * sin_parts[k].unsqueeze(unsqueeze_dim))
         for k in range(ndim)
     ]
     return torch.cat(y_parts, dim=-1)
@@ -1012,22 +1008,16 @@ class Gemma4TextRotaryEmbedding(Gemma3RotaryEmbedding):
 
 class Gemma4TextAttention(Gemma3nTextAttention):
     def __init__(self, config: Gemma4TextConfig, layer_idx: int):
+        layer_config = config.per_layer_config[layer_idx]
         super().__init__(config, layer_idx)
-        # `head_dim` and `num_key_value_heads` vary per layer type
-        self.head_dim = config.per_layer_config[layer_idx].head_dim
-        self.num_key_value_groups = (
-            config.num_attention_heads // config.per_layer_config[layer_idx].num_key_value_heads
-        )
+        self.head_dim = layer_config.head_dim
+        self.num_key_value_groups = config.num_attention_heads // layer_config.num_key_value_heads
         self.is_causal = config.use_bidirectional_attention != "all"
         self.k_proj = nn.Linear(
-            config.hidden_size,
-            config.per_layer_config[layer_idx].num_key_value_heads * self.head_dim,
-            bias=config.attention_bias,
+            config.hidden_size, layer_config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
         self.v_proj = nn.Linear(
-            config.hidden_size,
-            config.per_layer_config[layer_idx].num_key_value_heads * self.head_dim,
-            bias=config.attention_bias,
+            config.hidden_size, layer_config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
 
 
@@ -1050,20 +1040,14 @@ class Gemma4TextKEqVAttention(Gemma4TextAttention):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        cos, sin = position_embeddings
-        query_states = self.q_proj(hidden_states).view(hidden_shape)
-        query_states = self.q_norm(query_states)
-        query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
-        query_states = query_states.transpose(1, 2)
-
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(hidden_shape)
         # Keys double as values
-        value_states = self.v_norm(key_states)
-        value_states = value_states.transpose(1, 2)
+        value_states = self.v_norm(key_states).transpose(1, 2)
+        key_states = self.k_norm(key_states).transpose(1, 2)
 
-        key_states = self.k_norm(key_states)
-        key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
-        key_states = key_states.transpose(1, 2)
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
@@ -1093,16 +1077,14 @@ class Gemma4TextKEqVAttention(Gemma4TextAttention):
 
 class Gemma4TextKVSharedAttention(Gemma3nTextKVSharedAttention):
     def __init__(self, config: Gemma4TextConfig, layer_idx: int):
+        layer_config = config.per_layer_config[layer_idx]
         super().__init__(config, layer_idx)
-        # `head_dim` and `num_key_value_heads` vary per layer type
-        self.head_dim = config.per_layer_config[layer_idx].head_dim
-        self.num_key_value_groups = (
-            config.num_attention_heads // config.per_layer_config[layer_idx].num_key_value_heads
-        )
+        self.head_dim = layer_config.head_dim
+        self.num_key_value_groups = config.num_attention_heads // layer_config.num_key_value_heads
         self.is_causal = config.use_bidirectional_attention != "all"
 
 
-GEMMA4_TEXT_ATTENTION_CLASSES = {
+GEMMA4_TEXT_ATTENTION_CLASSES = {  # trf-ignore: TRF052
     "attention": Gemma4TextAttention,
     "k_eq_v_attention": Gemma4TextKEqVAttention,
     "kv_shared": Gemma4TextKVSharedAttention,
