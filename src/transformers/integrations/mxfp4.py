@@ -20,7 +20,6 @@ if is_torch_available():
     from torch import nn
 
 from ..core_model_loading import ConversionOps, _IdentityOp
-from ..distributed.utils import _is_torch_distributed_initialized
 from ..quantizers.quantizers_utils import get_module_from_name, on_device, should_convert_module
 from .hub_kernels import use_kernel_forward_from_hub
 
@@ -143,6 +142,8 @@ class Mxfp4Deserialize(ConversionOps):
     ) -> dict[str, torch.Tensor]:
         param_data = {}
         proj = "gate_up_proj" if "gate_up_proj" in full_layer_name else "down_proj"
+        import torch.distributed as _d
+        print("DBG", _d.get_rank(), full_layer_name, {k: [tuple(t.shape) for t in v] if isinstance(v, list) else tuple(v.shape) for k, v in input_dict.items()}, flush=True)
 
         if f"{proj}_blocks" in input_dict.keys():
             if isinstance(input_dict[f"{proj}_blocks"], list):
@@ -317,8 +318,10 @@ class Mxfp4GptOssExperts(nn.Module):
         self.intermediate_size = config.intermediate_size
         self.hidden_size = config.hidden_size
 
+        # The packed FP4 bytes, two values per byte. They are declared 3-D like the scales, so expert parallelism
+        # shards the checkpoint's blocks and scales the same way.
         self.gate_up_proj = nn.Parameter(
-            torch.zeros(self.num_experts, 2 * self.intermediate_size, self.hidden_size // 32, 16, dtype=torch.uint8),
+            torch.zeros(self.num_experts, 2 * self.intermediate_size, self.hidden_size // 2, dtype=torch.uint8),
             requires_grad=False,
         )
 
@@ -327,7 +330,7 @@ class Mxfp4GptOssExperts(nn.Module):
         )
 
         self.down_proj = nn.Parameter(
-            torch.zeros((self.num_experts, self.hidden_size, self.intermediate_size // 32, 16), dtype=torch.uint8),
+            torch.zeros(self.num_experts, self.hidden_size, self.intermediate_size // 2, dtype=torch.uint8),
             requires_grad=False,
         )
 
@@ -343,8 +346,8 @@ class Mxfp4GptOssExperts(nn.Module):
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
-        """Experts on `top_k_index` ids in `[0, num_experts)`; other ids (another rank's routes under expert
-        parallelism) are skipped."""
+        """Run the routes to this module's experts, the ids in `[0, num_experts)`. Expert parallelism marks other
+        ranks' routes with ids outside that range, and they are skipped."""
         with on_device(hidden_states.device):
             routing_data, gather_idx, scatter_idx = routing_from_top_k(top_k_index, top_k_weights, self.num_experts)
         return self.forward_routed(hidden_states, routing_data, gather_idx, scatter_idx)
@@ -386,8 +389,8 @@ class Mxfp4GptOssExperts(nn.Module):
 # Adapted from GPT_OSS repo
 # TODO: Add absolute link when the repo is public
 def routing_from_top_k(top_k_index, top_k_weights, num_experts):
-    """Triton routing metadata for `num_experts` experts from routes already selected: `top_k_index` holds expert ids
-    in `[0, num_experts)` and `top_k_weights` their weights; routes outside that range are skipped."""
+    """Build the Triton routing metadata of `num_experts` experts from selected routes. Ids outside
+    `[0, num_experts)` are skipped."""
     GatherIndx, RoutingData, ScatterIndx, compute_expt_data_torch = (
         triton_kernels_hub.routing.GatherIndx,
         triton_kernels_hub.routing.RoutingData,
@@ -427,8 +430,8 @@ class Mxfp4GptOssMLP(nn.Module):
     def forward(self, hidden_states):
         batch_size = hidden_states.shape[0]
         hidden_states = hidden_states.reshape(-1, self.router.hidden_dim)
-        if _is_torch_distributed_initialized() and hasattr(self, "_is_hooked"):
-            # expert parallelism: the `ep_dispatch_experts` strategy brings the experts the routes they own
+        if getattr(self.experts, "_is_hooked", False):
+            # the expert-parallel forward brings the experts the routes they own
             router_logits, router_scores, router_indices = self.router(hidden_states)
             routed_out = self.experts(hidden_states, router_indices, router_scores)
         else:
