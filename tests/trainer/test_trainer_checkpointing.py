@@ -454,6 +454,30 @@ class TrainerResumeTrainingTest(TestCasePlus, TrainerIntegrationCommon):
             self.check_trainer_state_are_the_same(state, state1)
 
     @require_torch_up_to_2_accelerators
+    def test_resume_training_calls_get_resumed_dataloader(self):
+        class RecordingTrainer(Trainer):
+            def get_resumed_dataloader(self, dataloader, num_batches):
+                self.resumed_num_batches.append(num_batches)
+                return super().get_resumed_dataloader(dataloader, num_batches)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            kwargs = {"output_dir": tmpdir, "train_len": 128, "save_steps": 5, "learning_rate": 0.1}
+            trainer = get_regression_trainer(**kwargs)
+            trainer.train()
+
+            # 128 samples / batch size 8 = 16 steps per epoch, so checkpoint-5 is 5 batches into the epoch
+            args = RegressionTrainingArguments(tmpdir, a=0, b=0, save_steps=5, learning_rate=0.1)
+            trainer = RecordingTrainer(
+                model=RegressionPreTrainedModel(RegressionModelConfig(a=0, b=0)),
+                args=args,
+                train_dataset=RegressionDataset(length=128),
+            )
+            trainer.model_accepts_loss_kwargs = False
+            trainer.resumed_num_batches = []
+            trainer.train(resume_from_checkpoint=os.path.join(tmpdir, "checkpoint-5"))
+            self.assertEqual(trainer.resumed_num_batches, [5])
+
+    @require_torch_up_to_2_accelerators
     def test_resume_training_with_checkpoint(self):
         # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
         # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
