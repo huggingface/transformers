@@ -32,9 +32,9 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_tokenizers_available():
-    from tokenizers import Tokenizer
-    from tokenizers.models import WordLevel
-    from tokenizers.pre_tokenizers import Whitespace
+    from tokenizers import Tokenizer, decoders
+    from tokenizers.models import BPE
+    from tokenizers.pre_tokenizers import ByteLevel
 
 
 if is_torch_available():
@@ -66,22 +66,11 @@ class MiniMaxVL01ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "<bos>": 2,
             "<eos>": 3,
             "<image>": 4,
-            "lower": 5,
-            "newer": 6,
-            "upper": 7,
-            "older": 8,
-            "longer": 9,
-            "string": 10,
-            "USER": 11,
-            "ASSISTANT": 12,
-            ":": 13,
-            "Describe": 14,
-            "this": 15,
-            ".": 16,
-            "Question": 17,
         }
-        tokenizer = Tokenizer(WordLevel(vocab=vocab, unk_token="<unk>"))
-        tokenizer.pre_tokenizer = Whitespace()
+        vocab.update({token: index for index, token in enumerate(sorted(ByteLevel.alphabet()), start=len(vocab))})
+        tokenizer = Tokenizer(BPE(vocab=vocab, merges=[], unk_token="<unk>"))
+        tokenizer.pre_tokenizer = ByteLevel(add_prefix_space=False)
+        tokenizer.decoder = decoders.ByteLevel()
         return PreTrainedTokenizerFast(
             tokenizer_object=tokenizer,
             unk_token="<unk>",
