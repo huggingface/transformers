@@ -1657,7 +1657,7 @@ def convert_and_load_state_dict_in_model(
         converters = [entry for entry in conversions if isinstance(entry, WeightConverter)]
         return renamings, converters, {k: converter for converter in converters for k in converter.source_patterns}
 
-    renamings, converters, pattern_to_converter = split_conversions(weight_mapping)
+    model_conversions = split_conversions(weight_mapping)
     # A quantization plan loads a param with the converters of the quantizer of its pattern
     plan_conversions = {
         quantizer: split_conversions(quantizer.update_weight_conversions(weight_mapping, model))
@@ -1670,17 +1670,17 @@ def convert_and_load_state_dict_in_model(
 
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
+        renamings, converters, pattern_to_converter = model_conversions
         # 1. Rename the key according to all renaming and weight conversion patterns.
         renamed_key, source_pattern = rename_source_key(
             original_key, renamings, converters, base_model_prefix, meta_model_state_dict
         )
         # Like the dtype plan, the pattern of a quantization plan matching the key picks its quantizer
         quantizer = hf_quantizer.quantizer_for(renamed_key) if hf_quantizer is not None else None
-        key_conversions = (renamings, converters, pattern_to_converter)
-        if quantizer is not hf_quantizer and quantizer is not None:
-            key_conversions = plan_conversions[quantizer]
+        if quantizer is not None and quantizer is not hf_quantizer:
+            renamings, converters, pattern_to_converter = plan_conversions[quantizer]
             renamed_key, source_pattern = rename_source_key(
-                original_key, *key_conversions[:2], base_model_prefix, meta_model_state_dict
+                original_key, renamings, converters, base_model_prefix, meta_model_state_dict
             )
         if renamed_key not in meta_model_state_dict and original_key in meta_model_state_dict:
             # Key should probably not have been renamed but we might need the `prefix` to be added.
@@ -1697,7 +1697,7 @@ def convert_and_load_state_dict_in_model(
                     quantize = quantizer.get_load_operations()["quantize"](quantizer)
             # If we enter here, we have a WeightConverter operation to perform
             if source_pattern is not None:
-                new_converter = deepcopy(key_conversions[2][source_pattern])
+                new_converter = deepcopy(pattern_to_converter[source_pattern])
                 if quantize is not None:
                     new_converter.operations = new_converter.operations + [quantize]
                 # each target key gets its own converter instance
@@ -1757,7 +1757,7 @@ def convert_and_load_state_dict_in_model(
 
             mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
         elif source_pattern is not None:  # add all target keys as unexpected
-            mapping = key_conversions[2][source_pattern]
+            mapping = pattern_to_converter[source_pattern]
             for name in expand_target_names(dict.fromkeys(mapping.target_patterns), renamed_key):
                 _add_unmatched_checkpoint_key(name, model, loading_info)
         else:

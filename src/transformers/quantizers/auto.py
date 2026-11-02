@@ -353,10 +353,6 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         match = self.alternation.search(name)
         return self.quantizers[self.group_to_pattern[match.lastgroup]] if match else None
 
-    def param_needs_quantization(self, model, param_name, **kwargs):
-        quantizer = self.quantizer_for(param_name)
-        return quantizer is not None and quantizer.param_needs_quantization(model, param_name, **kwargs)
-
     def param_element_size(self, model, param_name, param):
         quantizer = self.quantizer_for(param_name)
         return param.element_size() if quantizer is None else quantizer.param_element_size(model, param_name, param)
@@ -375,11 +371,6 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
             device_map = quantizer.update_device_map(device_map)
         return device_map
 
-    def update_attn_implementation(self, config):
-        for quantizer in self.quantizers.values():
-            config = quantizer.update_attn_implementation(config)
-        return config
-
     def adjust_max_memory(self, max_memory):
         for quantizer in self.quantizers.values():
             max_memory = quantizer.adjust_max_memory(max_memory)
@@ -395,14 +386,6 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
     @property
     def is_trainable(self):
         return all(quantizer.is_trainable for quantizer in self.quantizers.values())
-
-    @property
-    def is_qat_trainable(self):
-        return all(quantizer.is_qat_trainable for quantizer in self.quantizers.values())
-
-    @property
-    def is_compileable(self):
-        return all(quantizer.is_compileable for quantizer in self.quantizers.values())
 
 
 def get_hf_quantizer(config, quantization_config, device_map, weights_only, user_agent, gguf_file=None):
@@ -429,15 +412,12 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
     ):
         pre_quantized = False
 
-    if plan_from_config or is_quantization_plan(quantization_config):
+    user_plan = is_quantization_plan(quantization_config)
+    if plan_from_config or user_plan:
         # One quantizer per pattern. Loading attributes update the saved configs: for every pattern (e.g.
         # `{"dequantize": True}`), or per pattern (a plan of them)
         plan = quantization_params_from_config if plan_from_config else quantization_config
-        loading_attributes = (
-            quantization_config
-            if is_quantization_plan(quantization_config)
-            else dict.fromkeys(plan, quantization_config)
-        )
+        loading_attributes = quantization_config if user_plan else dict.fromkeys(plan, quantization_config)
         quantizers = {}
         for pattern, pattern_config in plan.items():
             if plan_from_config:

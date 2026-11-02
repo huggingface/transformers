@@ -313,10 +313,7 @@ class HfQuantizer(ABC):
         # Names that aren't `module.tensor`, e.g. bnb's `q_proj.weight.absmax`
         for tensors in modules.values():
             state_dict.update(tensors)
-        metadata = {}
-        for operation in operations.values():
-            metadata.update(getattr(operation, "metadata", {}))
-        return state_dict, metadata
+        return state_dict, {k: v for op in operations.values() for k, v in getattr(op, "metadata", {}).items()}
 
     @abstractmethod
     def is_serializable(self): ...

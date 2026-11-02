@@ -295,13 +295,9 @@ class classproperty(property):
 
 def _quantization_config_to_dict(quantization_config):
     "A quantization config, or a plan mapping glob patterns to configs"
-    if hasattr(quantization_config, "to_dict"):
-        return quantization_config.to_dict()
     if isinstance(quantization_config, dict):
-        return {
-            key: value.to_dict() if hasattr(value, "to_dict") else value for key, value in quantization_config.items()
-        }
-    return quantization_config
+        return {key: getattr(value, "to_dict", lambda: value)() for key, value in quantization_config.items()}
+    return quantization_config.to_dict() if quantization_config is not None else None
 
 
 @dataclass_transform(kw_only_default=True)
