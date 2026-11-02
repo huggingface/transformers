@@ -92,36 +92,45 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         if self.quantization_config.dequantize:
             # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
             return
-        ct_config = self.compressor.quantization_config
-        remaining_groups = dict(ct_config.config_groups)
+        from compressed_tensors.quantization import apply_quantization_config
 
+        ct_config = deepcopy(self.compressor.quantization_config)
         if self.use_fp8_kernel:
             from ..integrations.compressed_tensors import replace_with_compressed_tensors_fp8_linear
 
             # Quantization may only target a subset of the layers: each config group scopes
             # its scheme with `targets` (class names or `re:` regexes) minus `ignore`.
-            fp8_groups = {name: group for name, group in remaining_groups.items() if _is_fp8_scheme(group)}
-            remaining_groups = {name: group for name, group in remaining_groups.items() if name not in fp8_groups}
-
+            fp8_groups = {name: group for name, group in ct_config.config_groups.items() if _is_fp8_scheme(group)}
+            ct_config.config_groups = {
+                name: group for name, group in ct_config.config_groups.items() if name not in fp8_groups
+            }
             self.modules_to_not_convert = self.get_modules_to_not_convert(model, None, model._keep_in_fp32_modules)
-            targets = [target for group in fp8_groups.values() for target in group.targets]
             replace_with_compressed_tensors_fp8_linear(
                 model,
-                targets=targets,
+                targets=[target for group in fp8_groups.values() for target in group.targets],
                 ignore=ct_config.ignore,
                 modules_to_not_convert=self.modules_to_not_convert,
             )
+            apply_quantization_config(model, ct_config, run_compressed=False)
+            # Packed formats (e.g. int4 `weight_packed`) need the compressed module layout to
+            # receive the checkpoint tensors.
+            if self.quantization_config.is_quantization_compressed:
+                self.compressor.compress_model(model=model)
+            return
 
-        from compressed_tensors.quantization import apply_quantization_config
+        # No kernel runs these weights compressed: the `deserialize` load operation decompresses them, and
+        # compressed-tensors only sets up what quantizes at inference (activations, kv cache)
+        from compressed_tensors.quantization import QuantizationStatus
 
-        remaining_config = deepcopy(ct_config)
-        remaining_config.config_groups = remaining_groups
-
-        apply_quantization_config(model, remaining_config, run_compressed=False)
-        # Packed formats (e.g. int4 `weight_packed`) need the compressed module layout to
-        # receive the checkpoint tensors.
-        if self.quantization_config.is_quantization_compressed:
-            self.compressor.compress_model(model=model)
+        ct_config.quantization_status = QuantizationStatus.FROZEN
+        for group in ct_config.config_groups.values():
+            group.weights = None
+        ct_config.config_groups = {
+            name: group
+            for name, group in ct_config.config_groups.items()
+            if group.input_activations is not None or group.output_activations is not None
+        }
+        apply_quantization_config(model, ct_config, run_compressed=False)
 
     @property
     def is_trainable(self):
@@ -173,4 +182,5 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     }
 
     def get_load_operations(self):
-        return {"dequantize": CompressedTensorsDequantize}
+        # Without kernels nothing runs compressed, so deserializing decompresses as well
+        return {"deserialize": CompressedTensorsDequantize, "dequantize": CompressedTensorsDequantize}
