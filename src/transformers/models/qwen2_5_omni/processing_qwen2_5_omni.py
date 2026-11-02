@@ -141,6 +141,7 @@ class Qwen2_5OmniProcessor(OmniModalProcessorMixin):
                 "`use_audio_in_video` is depreacted and will be removed in v5.25, use `load_audio_from_video` instead"
             )
             if not (kwargs.get("load_audio_from_video") or videos_kwargs.get("load_audio_from_video")):
+                # Keep the deprecated flag's behaviour of loading the audio track of every video
                 kwargs.update(load_audio_from_video=True, audio_from_video_indices=None)
         return super().__call__(images=images, text=text, videos=videos, audio=audio, **kwargs)
 

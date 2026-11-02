@@ -2465,7 +2465,8 @@ class OmniModalProcessorMixin(ProcessorMixin):
         )
 
         # TODO @guarin: move it to processor level argument. Used by EG2 and qwen-omni series
-        load_audio_from_video = merged_kwargs["videos_kwargs"].get("load_audio_from_video")
+        # Without videos there is no audio track to load, so `audio` is processed as usual
+        load_audio_from_video = merged_kwargs["videos_kwargs"].get("load_audio_from_video") and videos is not None
         if load_audio_from_video:
             audio, video_to_audio_indices = self._resolve_audio_from_video(
                 videos,
@@ -2563,6 +2564,7 @@ class OmniModalProcessorMixin(ProcessorMixin):
                 )
             audio_from_video_indices = list(range(len(videos)))  # videos only: one audio per video
 
+        # Callers that already decoded the audio track of each video (e.g. vLLM) pass one audio per slot
         audio_per_slot = len(audio) == len(audio_from_video_indices)
         if not audio_per_slot and audio_from_video_indices.count(None) != len(audio):
             raise ValueError(
