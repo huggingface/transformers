@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
     require_deterministic_for_xpu,
+    require_kernels,
     require_torch,
     require_torch_accelerator,
     require_torch_large_accelerator,
@@ -344,6 +345,12 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     def test_falcon_mamba_chunked_prefill_cpu(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_falcon_mamba_chunked_prefill(*config_and_inputs, device="cpu")
+
+    @require_kernels
+    @require_torch_accelerator
+    def test_falcon_mamba_chunked_prefill_torch_device(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_falcon_mamba_chunked_prefill(*config_and_inputs, device=torch_device)
 
     def test_falcon_mamba_cached_slow_forward_and_backwards(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

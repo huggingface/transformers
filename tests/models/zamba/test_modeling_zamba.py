@@ -21,7 +21,9 @@ import pytest
 from transformers import AutoTokenizer, ZambaConfig, is_torch_available
 from transformers.testing_utils import (
     cleanup,
+    require_kernels,
     require_torch,
+    require_torch_accelerator,
     require_torch_greater_or_equal,
     slow,
     torch_device,
@@ -379,6 +381,12 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_zamba_chunked_prefill_cpu(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_zamba_chunked_prefill(*config_and_inputs, device="cpu")
+
+    @require_kernels
+    @require_torch_accelerator
+    def test_zamba_chunked_prefill_torch_device(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_zamba_chunked_prefill(*config_and_inputs, device=torch_device)
 
     def test_attention_outputs(self):
         r"""

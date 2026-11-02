@@ -28,6 +28,7 @@ from transformers.testing_utils import (
     is_flaky,
     require_bitsandbytes,
     require_flash_attn,
+    require_kernels,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -391,6 +392,12 @@ class JambaModelTest(
     def test_jamba_chunked_prefill_cpu(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_jamba_chunked_prefill(*config_and_inputs, device="cpu")
+
+    @require_kernels
+    @require_torch_accelerator
+    def test_jamba_chunked_prefill_torch_device(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_jamba_chunked_prefill(*config_and_inputs, device=torch_device)
 
     # After #40617, we still have 0.01 % of failure rate here.
     @is_flaky(max_attempts=2)

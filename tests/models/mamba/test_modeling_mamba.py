@@ -20,7 +20,14 @@ import pytest
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, MambaConfig, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_greater_or_equal, slow, torch_device
+from transformers.testing_utils import (
+    require_kernels,
+    require_torch,
+    require_torch_accelerator,
+    require_torch_greater_or_equal,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -312,6 +319,12 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_mamba_chunked_prefill_cpu(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba_chunked_prefill(*config_and_inputs, device="cpu")
+
+    @require_torch_accelerator
+    @require_kernels
+    def test_mamba_chunked_prefill_torch_device(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba_chunked_prefill(*config_and_inputs, device=torch_device)
 
     def test_mamba_cached_slow_forward_and_backwards(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
