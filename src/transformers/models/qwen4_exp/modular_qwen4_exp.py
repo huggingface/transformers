@@ -458,7 +458,9 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         seen_raw_keys = raw_keys.gather(1, seen_order[:, :keys_end, None].expand(-1, -1, self.index_head_dim))
         token_offsets = torch.arange(self.compress_ratio, device=hidden_states.device)
         grids = {}
-        for offset in block_offsets[num_blocks > 0].unique().tolist():
+        for offset in range(self.compress_ratio):
+            if not ((block_offsets == offset) & (num_blocks > 0)).any():
+                continue
             grid_blocks = (keys_end - offset) // self.compress_ratio
             key_groups = seen_raw_keys[:, offset : offset + grid_blocks * self.compress_ratio].view(
                 batch_size, grid_blocks, self.compress_ratio, self.index_head_dim
@@ -521,7 +523,7 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
             selected_token_indices[:, start:end, : chunk_indices.shape[-1]] = chunk_indices
 
         # A query with gaps has blocks of its own, so it pools them alone
-        for batch_idx, query_idx in has_gaps.nonzero().tolist():
+        for batch_idx, query_idx in has_gaps.nonzero():
             local_visible_indices = torch.nonzero(
                 visible_token_indices[batch_idx, 0, query_idx], as_tuple=False
             ).flatten()
