@@ -39,6 +39,7 @@ from transformers.cli.serving.utils import (
     GenerationState,
     Modality,
     ToolCall,
+    _StreamError,
     get_response_template,
     parse_assistant_message,
     response_events_to_chunks,
@@ -87,6 +88,16 @@ def _start_serve(**kwargs) -> tuple["Serve", int]:
             pass
         time.sleep(1)
     raise RuntimeError(f"Server on port {port} did not become healthy in time")
+
+
+async def _read_sse_error(response) -> dict:
+    """Return the first error event from an SSE response."""
+    async for part in response.body_iterator:
+        if part.startswith("data: "):
+            payload = json.loads(part[len("data: ") :].strip())
+            if "error" in payload:
+                return payload
+    raise AssertionError("No error event was streamed")
 
 
 class ServeIntegrationTestCase(MemoryCleanupMixin, unittest.TestCase):
@@ -723,6 +734,14 @@ class TestChatCompletion(ServeIntegrationTestCase):
                 text += chunk.choices[0].delta.content
         self.assertTrue(len(text) > 0)
 
+    def test_streaming_error_is_valid_json(self):
+        handler = ChatCompletionHandler(model_manager=MagicMock(), generation_state=GenerationState())
+        queue = asyncio.Queue()
+        queue.put_nowait(_StreamError('a "b"\nC:\\d'))
+        gen_manager = MagicMock(generate_streaming=lambda *args, **kwargs: (queue, MagicMock()))
+        response = handler._streaming("req", MagicMock(), None, "m", {"input_ids": [1]}, MagicMock(), gen_manager)
+        self.assertIn("error", asyncio.run(_read_sse_error(response)))
+
     def test_early_return_due_to_length(self):
         """When max_tokens is hit, finish_reason should be 'length'."""
         chunks = list(
@@ -969,6 +988,14 @@ class TestCompletion(ServeIntegrationTestCase):
         texts = [c.choices[0].text for c in chunks]
         self.assertTrue(any(t != "" for t in texts))
         self.assertIn(chunks[-1].choices[0].finish_reason, ("stop", "length"))
+
+    def test_streaming_error_is_valid_json(self):
+        handler = CompletionHandler(model_manager=MagicMock(), generation_state=GenerationState())
+        queue = asyncio.Queue()
+        queue.put_nowait(_StreamError('a "b"\nC:\\d'))
+        gen_manager = MagicMock(generate_streaming=lambda *args, **kwargs: (queue, MagicMock()))
+        response = handler._streaming("req", MagicMock(), None, "m", {"input_ids": [1]}, MagicMock(), gen_manager)
+        self.assertIn("error", asyncio.run(_read_sse_error(response)))
 
     def test_streaming_usage(self):
         chunks = list(
@@ -2689,6 +2716,17 @@ class TestTranscription(ServeIntegrationTestCase):
         self.assertGreater(len(chunks), 0, "No streaming chunks received")
         full_text = "".join(chunks)
         self.assertIn("dream", full_text.lower())
+
+    def test_streaming_error_is_valid_json(self):
+        handler = TranscriptionHandler(model_manager=MagicMock(), generation_state=GenerationState())
+        model = MagicMock()
+        model.generate.side_effect = RuntimeError('a "b"\nC:\\d')
+        gen_manager = MagicMock(submit=lambda run: run())
+
+        async def read_error():
+            return await _read_sse_error(handler._streaming(gen_manager, model, MagicMock(), {}))
+
+        self.assertIn("error", asyncio.run(read_error()))
 
     def test_transcription_missing_file(self):
         """POST without a file should fail."""

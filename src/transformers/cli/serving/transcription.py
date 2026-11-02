@@ -16,6 +16,7 @@ Handler for the /v1/audio/transcriptions endpoint.
 """
 
 import io
+import json
 from typing import TYPE_CHECKING
 
 from ...utils import logging
@@ -185,7 +186,7 @@ class TranscriptionHandler:
                 if text is None:
                     break
                 if isinstance(text, _StreamError):
-                    yield f'data: {{"error": "{text.msg}"}}\n\n'
+                    yield f"data: {json.dumps({'error': text.msg})}\n\n"
                     return
                 yield f"data: {text}\n\n"
 
