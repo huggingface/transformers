@@ -43,14 +43,7 @@ class Ovis2_5VideoProcessingTester:
         num_channels=3,
         min_resolution=32,
         max_resolution=96,
-        do_resize=True,
         size=None,
-        do_rescale=True,
-        do_normalize=True,
-        image_mean=None,
-        image_std=None,
-        do_convert_rgb=True,
-        do_sample_frames=False,
         patch_size=16,
         temporal_patch_size=1,
         merge_size=2,
@@ -61,28 +54,14 @@ class Ovis2_5VideoProcessingTester:
         self.num_channels = num_channels
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
-        self.do_resize = do_resize
         self.size = size if size is not None else {"shortest_edge": 32 * 32, "longest_edge": 96 * 96}
-        self.do_rescale = do_rescale
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else [0.5, 0.5, 0.5]
-        self.image_std = image_std if image_std is not None else [0.5, 0.5, 0.5]
-        self.do_convert_rgb = do_convert_rgb
-        self.do_sample_frames = do_sample_frames
         self.patch_size = patch_size
         self.temporal_patch_size = temporal_patch_size
         self.merge_size = merge_size
 
     def prepare_video_processor_dict(self):
         return {
-            "do_resize": self.do_resize,
             "size": self.size,
-            "do_rescale": self.do_rescale,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_convert_rgb": self.do_convert_rgb,
-            "do_sample_frames": self.do_sample_frames,
             "patch_size": self.patch_size,
             "temporal_patch_size": self.temporal_patch_size,
             "merge_size": self.merge_size,
@@ -130,6 +109,9 @@ class Ovis2_5VideoProcessingTester:
         patch_dim = num_channels * self.temporal_patch_size * self.patch_size**2
         return (num_patches, patch_dim), grids
 
+    def expected_output_video_shape(self, videos):
+        return self.expected_output(videos)[0]
+
 
 @require_torch
 @require_vision
@@ -145,6 +127,10 @@ class Ovis2_5VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
     @property
     def video_processor_dict(self):
         return self.video_processor_tester.prepare_video_processor_dict()
+
+    def assert_expected_videos_shape(self, encoded_videos, expected_output_video_shape, num_videos):
+        # The patches of every video are concatenated along one axis instead of stacked on a `num_videos` axis.
+        self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
 
     def test_video_processor_from_dict_with_kwargs(self):
         video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict)
@@ -170,37 +156,6 @@ class Ovis2_5VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             expected_shape, expected_grid = self.video_processor_tester.expected_output(video_inputs)
             self.assertEqual(tuple(output[self.input_name].shape), expected_shape)
             self.assertEqual(output.video_grid_thw.tolist(), expected_grid)
-
-    def test_call_pil(self):
-        video_inputs = self.video_processor_tester.prepare_video_inputs(
-            equal_resolution=False,
-            return_tensors="pil",
-        )
-        self.assertTrue(all(isinstance(video[0], Image.Image) for video in video_inputs))
-        self._check_input_type(video_inputs)
-
-    def test_call_numpy(self):
-        video_inputs = self.video_processor_tester.prepare_video_inputs(
-            equal_resolution=False,
-            return_tensors="np",
-        )
-        self.assertTrue(all(isinstance(video, np.ndarray) for video in video_inputs))
-        self._check_input_type(video_inputs)
-
-    def test_call_pytorch(self):
-        video_inputs = self.video_processor_tester.prepare_video_inputs(
-            equal_resolution=False,
-            return_tensors="torch",
-        )
-        self.assertTrue(all(isinstance(video, torch.Tensor) for video in video_inputs))
-        self._check_input_type(video_inputs)
-
-    def test_nested_input(self):
-        video_inputs = self.video_processor_tester.prepare_video_inputs(
-            equal_resolution=False,
-            return_tensors="np",
-        )
-        self._check_input_type([list(video) for video in video_inputs])
 
     def test_call_numpy_4_channels(self):
         self.video_processor_tester.num_channels = 4

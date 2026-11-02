@@ -33,16 +33,10 @@ if is_vision_available():
 class Ovis2_5ImageProcessingTester(ImageProcessingTester):
     def __init__(self, **kwargs):
         kwargs.setdefault("batch_size", 3)
-        kwargs.setdefault("num_channels", 3)
         kwargs.setdefault("min_resolution", 32)
         kwargs.setdefault("max_resolution", 96)
-        kwargs.setdefault("do_resize", True)
         kwargs.setdefault("size", {"shortest_edge": 32 * 32, "longest_edge": 96 * 96})
-        kwargs.setdefault("do_rescale", True)
-        kwargs.setdefault("do_normalize", True)
-        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
-        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
-        kwargs.setdefault("do_convert_rgb", True)
+        # Read by `expected_output` to compute the patch grid.
         kwargs.setdefault("patch_size", 16)
         kwargs.setdefault("temporal_patch_size", 1)
         kwargs.setdefault("merge_size", 2)
