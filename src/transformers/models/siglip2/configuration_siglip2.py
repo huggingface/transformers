@@ -21,7 +21,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
@@ -139,8 +139,8 @@ class Siglip2Config(PreTrainedConfig):
 
     model_type = "siglip2"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Siglip2VisionConfig),
-        "text_config": SubConfigSpec(config_class=Siglip2TextConfig),
+        "vision_config": Siglip2VisionConfig,
+        "text_config": Siglip2TextConfig,
     }
 
     text_config: dict | PreTrainedConfig | None = None

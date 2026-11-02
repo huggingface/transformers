@@ -22,7 +22,7 @@ import torch.nn.functional as F
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import AutoModel
@@ -34,6 +34,7 @@ from ..voxtral.modeling_voxtral import (
     VoxtralMultiModalProjector,
     VoxtralPreTrainedModel,
 )
+from .configuration_vibevoice import VibeVoiceConfig
 from .generation_vibevoice import VibeVoiceGenerationMixin
 
 
@@ -186,7 +187,7 @@ class VibeVoicePreTrainedModel(VoxtralPreTrainedModel):
     """
 )
 class VibeVoiceModel(VoxtralModel):
-    def __init__(self, config):
+    def __init__(self, config: VibeVoiceConfig):
         super().__init__(config)
         self.multi_modal_projector = VibeVoiceMultiModalProjector(
             config.audio_config.hidden_size, config.text_config.hidden_size
@@ -274,7 +275,7 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
-    def __init__(self, config):
+    def __init__(self, config: VibeVoiceConfig):
         super().__init__(config)
         self.model = VibeVoiceModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
@@ -367,8 +368,8 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

@@ -42,12 +42,14 @@ import enum
 import functools
 import inspect
 import sys
-from collections.abc import MutableMapping
+from collections.abc import Iterable, Mapping, MutableMapping
 from typing import Any
+
+from packaging import version
 
 from ..utils import logging
 from ..utils.generic import get_max_seqlen
-from ..utils.import_utils import is_torch_available
+from ..utils.import_utils import _is_package_available, is_torch_available
 
 
 logger = logging.get_logger(__name__)
@@ -87,7 +89,7 @@ if is_torch_available():
 # `@register_fx_node_fix` decorators, or direct list-append for cases that can't be expressed
 # as dotted paths). The export pipeline drives them via the backend-keyed helpers below.
 
-_PATCHES: dict[str, list[tuple[Any, str, callable]]] = {}
+_PATCHES: dict[str, list[tuple[str, str, callable]]] = {}
 _FX_NODE_FIXES: dict[str, list[callable]] = {}
 _FX_PROGRAM_FIXES: dict[str, list[callable]] = {}
 
@@ -119,7 +121,12 @@ def patch_attributes(patches: list[tuple[Any, str, callable]]):
 @contextlib.contextmanager
 def apply_patches(backend: str):
     """Install `_PATCHES[backend]` for the duration of the block."""
-    with patch_attributes(_PATCHES.get(backend, [])):
+    resolved = [
+        (obj, attribute, fn)
+        for obj_path, attribute, fn in _PATCHES.get(backend, [])
+        if (obj := _resolve_dotted_path(obj_path)) is not None
+    ]
+    with patch_attributes(resolved):
         yield
 
 
@@ -159,9 +166,9 @@ def register_patch(backend: str, *paths: str):
     Each `path` is a dotted Python path like `"torch.where"`, `"torch.Tensor.unsqueeze"`,
     or `"transformers.models.nllb_moe.modeling_nllb_moe.NllbMoeTop2Router._cast_classifier"`.
     The rightmost segment is the attribute to swap; the rest is the object that owns it.
-    Paths are resolved at decoration time — submodules are imported as needed, falling
-    back to `getattr` for class attributes. A path that fails to resolve (e.g. the backend
-    isn't installed) is silently skipped so the module still imports.
+    Paths are resolved lazily at export time (inside `apply_patches`) — submodules are
+    imported as needed, falling back to `getattr` for class attributes. A path that fails
+    to resolve (e.g. the backend isn't installed) is silently skipped.
 
     Passing multiple paths registers the SAME factory against each — useful for swapping
     the same method or torch op across several call sites (e.g. ``torch.unsqueeze`` +
@@ -171,10 +178,7 @@ def register_patch(backend: str, *paths: str):
     def decorator(fn):
         for path in paths:
             obj_path, _, attribute = path.rpartition(".")
-            obj = _resolve_dotted_path(obj_path)
-            if obj is None:
-                continue
-            _PATCHES.setdefault(backend, []).append((obj, attribute, fn))
+            _PATCHES.setdefault(backend, []).append((obj_path, attribute, fn))
         return fn
 
     return decorator
@@ -275,12 +279,58 @@ def _iter_leaf_tensors(obj: Any, prefix: str = ""):
         for index, item in enumerate(obj):
             path = f"{prefix}.{index}" if prefix else str(index)
             yield from _iter_leaf_tensors(item, path)
-    elif isinstance(obj, dict):
+    elif isinstance(obj, Mapping):
         for key, value in obj.items():
             path = f"{prefix}.{key}" if prefix else key
             yield from _iter_leaf_tensors(value, path)
     elif hasattr(obj, "__dict__"):
         yield from _iter_leaf_tensors(vars(obj), prefix)
+
+
+def check_packages(
+    owner: str, required_packages: Iterable[str], min_versions: dict[str, str], tested_versions: dict[str, str]
+) -> None:
+    """Raise if one of `required_packages` is missing or older than its `min_versions` entry, and warn when one differs
+    from its `tested_versions` entry. Shared by the exporters and the quantizers; `owner` names the one checking.
+    Missing and outdated packages are reported together, in one error."""
+    installed = {}
+    for package in {*required_packages, *min_versions}:
+        exists, package_version = _is_package_available(package, return_version=True)
+        if exists:
+            # The local build suffix (`+cu126`, `+cpu`) doesn't change the API
+            installed[package] = package_version.split("+", 1)[0]
+
+    missing = [package for package in dict.fromkeys([*required_packages, *min_versions]) if package not in installed]
+    outdated = [
+        f"{package}>={minimum} (found {installed[package]})"
+        for package, minimum in min_versions.items()
+        if package in installed
+        and (installed[package] == "N/A" or version.parse(installed[package]) < version.parse(minimum))
+    ]
+    if missing or outdated:
+        fixes = []
+        if missing:
+            fixes.append(
+                "install "
+                + ", ".join(
+                    f"{package}=={tested_versions[package]}" if package in tested_versions else package
+                    for package in missing
+                )
+            )
+        if outdated:
+            fixes.append(f"upgrade {', '.join(outdated)}")
+        raise ImportError(f"To use {owner}, please {' and '.join(fixes)}.")
+
+    drift = [
+        f"{package}: installed {installed[package]}, tested {tested.split('+', 1)[0]}"
+        for package, tested in tested_versions.items()
+        if package in required_packages and installed[package] not in ("N/A", tested.split("+", 1)[0])
+    ]
+    if drift:
+        logger.warning(
+            f"{owner} is experimental and patches many backend internals; behaviour may differ from what was "
+            f"validated. Version drift detected — {', '.join(drift)}. If you hit issues, try the tested versions."
+        )
 
 
 # ── Public tensor utilities ────────────────────────────────────────────────

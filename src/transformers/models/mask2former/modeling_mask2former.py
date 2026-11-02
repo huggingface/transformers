@@ -2076,7 +2076,7 @@ class Mask2FormerTransformerModule(nn.Module):
         )
         self.queries_embedder = nn.Embedding(config.num_queries, hidden_dim)
         self.queries_features = nn.Embedding(config.num_queries, hidden_dim)
-        self.input_projections = []
+        self.input_projections = nn.ModuleList()
 
         for _ in range(self.num_feature_levels):
             if in_features != hidden_dim or config.enforce_input_projection:

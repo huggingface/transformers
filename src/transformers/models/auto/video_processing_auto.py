@@ -61,6 +61,7 @@ else:
             ("hyperclovax_vision_v2", {"torchvision": "Qwen2VLVideoProcessor"}),
             ("instructblip", {"torchvision": "InstructBlipVideoVideoProcessor"}),
             ("minicpmv4_7", {"torchvision": "MiniCPMV4_6VideoProcessor"}),
+            ("muse_spark", {"torchvision": "MuseGlimmerVideoProcessor"}),
             ("pe_audio_video", {"torchvision": "PeVideoVideoProcessor"}),
             ("qwen2_5_omni", {"torchvision": "Qwen2VLVideoProcessor"}),
             ("qwen2_5_vl", {"torchvision": "Qwen2VLVideoProcessor"}),
@@ -93,8 +94,8 @@ def video_processor_class_from_name(class_name: str):
             if isinstance(cls, type) and cls.__name__ == class_name:
                 return cls
 
-    # 2. Built-in classes: compare classes which is how LazyMapping stores data
-    for model_type, extractors_dict in VIDEO_PROCESSOR_MAPPING.items():
+    # 2. Built-in classes: compare names without resolving unrelated classes
+    for model_type, extractors_dict in VIDEO_PROCESSOR_MAPPING_NAMES.items():
         if extractors_dict is None:
             continue
         if class_name in extractors_dict.values():
@@ -123,7 +124,7 @@ def _load_backend_class(video_processor_class_name: str, backend: str):
     mapping = {"torchvision": video_processor_class_name}
     for mapping_dict in (
         *VIDEO_PROCESSOR_MAPPING._extra_content.values(),
-        *VIDEO_PROCESSOR_MAPPING.values(),
+        *VIDEO_PROCESSOR_MAPPING_NAMES.values(),
     ):
         if any(
             video_processor_class_name == (v if not isinstance(v, type) else v.__name__) for v in mapping_dict.values()
@@ -424,7 +425,6 @@ class AutoVideoProcessor:
             )
 
         if has_remote_code and trust_remote_code and not explicit_local_code:
-            class_ref = video_processor_auto_map
             video_processor_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
             _ = kwargs.pop("code_revision", None)
             video_processor_class.register_for_auto_class()

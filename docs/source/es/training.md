@@ -365,7 +365,4 @@ De la misma manera que necesitas añadir una función de evaluación al [`Traine
 
 Para más ejemplos de fine-tuning consulta:
 
-- [🤗 Transformers Examples](https://github.com/huggingface/transformers/tree/main/examples) incluye scripts
-  para entrenar tareas comunes de NLP en PyTorch y TensorFlow.
-
 - [🤗 Transformers Notebooks](notebooks) contiene varios notebooks sobre cómo aplicar fine-tuning a un modelo para tareas específicas en PyTorch y TensorFlow.

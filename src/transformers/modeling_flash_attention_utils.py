@@ -27,13 +27,14 @@ from .utils import (
     is_flash_attn_4_available,
     is_rocm_platform,
     is_torch_cuda_available,
+    is_torch_greater_or_equal,
     is_torch_mlu_available,
     is_torch_musa_available,
     is_torch_npu_available,
     is_torch_xpu_available,
     logging,
 )
-from .utils.import_utils import PACKAGE_DISTRIBUTION_MAPPING, is_tracing
+from .utils.import_utils import _package_distribution_mapping, is_tracing
 
 
 logger = logging.get_logger(__name__)
@@ -63,7 +64,9 @@ def is_flash_attn_available():
 # Mapping from flash attention implementations to their kernel fallback repositories.
 
 FLASH_ATTN_KERNEL_FALLBACK = {
-    "flash_attention_2": "kernels-community/flash-attn2",
+    "flash_attention_2": (
+        "kernels-community/aiter-flash-attn" if is_rocm_platform() else "kernels-community/flash-attn2"
+    ),
     "flash_attention_3": (
         "kernels-community/aiter-flash-attn" if is_rocm_platform() else "kernels-community/vllm-flash-attn3"
     ),
@@ -71,7 +74,8 @@ FLASH_ATTN_KERNEL_FALLBACK = {
 }
 
 FLASH_ATTN_KERNEL_VERSIONS = {
-    "kernels-community/flash-attn2": 3,
+    # v4 was only tested on 2.10 and upwards
+    "kernels-community/flash-attn2": 4 if is_torch_greater_or_equal("2.10", accept_dev=True) else 3,
     "kernels-community/flash-attn3": 1,
     "kernels-community/vllm-flash-attn3": 1,
     "kernels-community/aiter-flash-attn": 2,
@@ -99,7 +103,8 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
         "general_availability_check": is_flash_attn_2_available,
         "pkg_availability_check": lambda *args, **kwargs: (
             importlib.util.find_spec("flash_attn") is not None
-            and "flash-attn" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])]
+            and "flash-attn"
+            in [pkg.replace("_", "-") for pkg in _package_distribution_mapping().get("flash_attn", [])]
         ),
         "supported_devices": (
             (is_torch_cuda_available, "cuda"),
@@ -122,7 +127,7 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
         "pkg_availability_check": lambda *args, **kwargs: (
             importlib.util.find_spec("flash_attn_interface") is not None
             and "flash-attn-3"
-            in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn_interface", [])]
+            in [pkg.replace("_", "-") for pkg in _package_distribution_mapping().get("flash_attn_interface", [])]
         ),
         "supported_devices": ((is_torch_cuda_available, "cuda"),),
         "cuda_min_major_version": 8,  # Ampere
@@ -132,7 +137,8 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
         "general_availability_check": is_flash_attn_4_available,
         "pkg_availability_check": lambda *args, **kwargs: (
             importlib.util.find_spec("flash_attn") is not None
-            and "flash-attn-4" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])]
+            and "flash-attn-4"
+            in [pkg.replace("_", "-") for pkg in _package_distribution_mapping().get("flash_attn", [])]
         ),
         "supported_devices": ((is_torch_cuda_available, "cuda"),),
         "cuda_min_major_version": 9,  # Hopper
@@ -560,15 +566,18 @@ def _is_packed_sequence(position_ids, batch_size):
     Check the position ids whether packed sequences are indicated or not
         1. Position ids exist
         2. Flattened sequences only are supported
-        3. Compile-friendly `not (torch.diff(position_ids, dim=-1) >= 0).all()`, i.e. we have multiple increasing sequences
+        3. More than one position, as a single position (decode) is a single sequence
+        4. Compile-friendly `not (torch.diff(position_ids, dim=-1) >= 0).all()`, i.e. we have multiple increasing sequences
+
+    1. to 3. only look at shapes, while 4. reads the values and forces a device sync in every layer.
     """
-    if position_ids is None:
+    if position_ids is None or batch_size != 1 or position_ids.shape[-1] == 1:
         return False
 
     increasing_position_sequences = (
         torch.arange(position_ids.shape[1], device=position_ids.device) + position_ids.min()
     )
-    return batch_size == 1 and (increasing_position_sequences - position_ids).abs().sum().bool()
+    return (increasing_position_sequences - position_ids).abs().sum().bool()
 
 
 def fa_peft_integration_check(
@@ -687,8 +696,13 @@ def _process_flash_attention_kwargs(
             deterministic if deterministic is not None else os.getenv("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
         )
 
-    if supports_mapping["softcap"] and softcap is not None:
-        flash_kwargs["softcap"] = softcap
+    if softcap is not None:
+        if supports_mapping["softcap"]:
+            flash_kwargs["softcap"] = softcap
+        else:
+            raise ValueError(
+                "This flash attention implementation does not support `softcap`. Try using `eager` or `flex_attention` instead."
+            )
 
     if s_aux is not None:
         if supports_mapping["s_aux"]:

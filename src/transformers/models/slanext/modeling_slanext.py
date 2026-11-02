@@ -462,6 +462,7 @@ class SLANeXtVisionNeck(nn.Module):
 
 
 class SLANeXtVisionEncoder(SLANeXtPreTrainedModel):
+    config: SLANeXtVisionConfig
     _can_record_outputs = {"hidden_states": SLANeXtVisionLayer, "attentions": SLANeXtVisionAttention}
     input_modalities = ("image",)
 

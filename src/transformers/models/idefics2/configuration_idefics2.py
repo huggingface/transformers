@@ -124,8 +124,8 @@ class Idefics2Config(PreTrainedConfig):
                 "pad_token_id": 0,
             },
         ),
-        "vision_config": SubConfigSpec(config_class=Idefics2VisionConfig),
-        "perceiver_config": SubConfigSpec(config_class=Idefics2PerceiverConfig),
+        "vision_config": Idefics2VisionConfig,
+        "perceiver_config": Idefics2PerceiverConfig,
     }
 
     use_cache: bool = True

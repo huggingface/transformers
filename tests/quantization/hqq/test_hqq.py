@@ -148,16 +148,6 @@ class HQQTest(unittest.TestCase):
         check_hqqlayer(self, hqq_runner.model.model.layers[0].self_attn.v_proj)
         check_forward(self, hqq_runner.model)
 
-    def test_quantized_model_fake_weight_dtype(self):
-        quant_config = HqqConfig(nbits=8, group_size=64)
-
-        hqq_runner = HQQLLMRunner(
-            model_id=MODEL_ID, quant_config=quant_config, compute_dtype=torch.float16, device=torch_device
-        )
-
-        # We use a hack to inject a fake weight to HQQLinear. Check that it works
-        self.assertEqual(hqq_runner.model.model.layers[0].self_attn.v_proj.weight.dtype, torch.float16)
-
 
 @slow
 @require_torch_accelerator

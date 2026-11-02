@@ -105,7 +105,7 @@ class PeAudioVideoConfig(PreTrainedConfig):
                 "num_attention_heads": 16,
             },
         ),
-        "audio_video_config": SubConfigSpec(config_class=PeAudioVideoEncoderConfig),
+        "audio_video_config": PeAudioVideoEncoderConfig,
     }
 
     text_config: dict | PreTrainedConfig | None = None

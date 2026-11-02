@@ -313,6 +313,8 @@ class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
     config: DecisionTransformerConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
+    _supports_sdpa = True
+    _supports_attention_backend = True
     _can_compile_fullgraph = False
     _can_record_outputs = {
         "hidden_states": DecisionTransformerGPT2Block,
@@ -342,7 +344,7 @@ class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
 
 
 class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DecisionTransformerConfig):
         super().__init__(config)
 
         self.embed_dim = config.hidden_size
@@ -491,6 +493,8 @@ class DecisionTransformerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "decision_transformer"
     main_input_name = "states"
     supports_gradient_checkpointing = False
+    _supports_sdpa = True
+    _supports_attention_backend = True
 
 
 @auto_docstring(
@@ -506,7 +510,7 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
 
     """
 
-    def __init__(self, config):
+    def __init__(self, config: DecisionTransformerConfig):
         super().__init__(config)
         self.config = config
         self.hidden_size = config.hidden_size

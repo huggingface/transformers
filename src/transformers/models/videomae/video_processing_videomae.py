@@ -13,10 +13,15 @@
 # limitations under the License.
 """Video processor class for VideoMAE."""
 
+from ...image_processing_utils import BatchFeature
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
+from ...processing_utils import Unpack, VideosKwargs
+from ...utils import auto_docstring
 from ...video_processing_utils import BaseVideoProcessor
+from ...video_utils import VideoInput
 
 
+@auto_docstring
 class VideoMAEVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN
@@ -33,7 +38,8 @@ class VideoMAEVideoProcessor(BaseVideoProcessor):
     do_sample_frames = False  # Set to False for backward compatibility with image processor workflows.
     model_input_names = ["pixel_values"]
 
-    def preprocess(self, videos, **kwargs):
+    @auto_docstring
+    def preprocess(self, videos: VideoInput, **kwargs: Unpack[VideosKwargs]) -> BatchFeature:
         batch = super().preprocess(videos, **kwargs)
         batch["pixel_values"] = batch.pop("pixel_values_videos")
         return batch

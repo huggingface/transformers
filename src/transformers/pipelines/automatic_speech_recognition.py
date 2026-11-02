@@ -220,6 +220,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             self.type = "ctc"
 
         super().__init__(model, tokenizer, feature_extractor, device=device, **kwargs)
+        if self.type == "tdt":
+            # The pipeline defaults (e.g. beam search) target seq2seq models, transducers decode with their own
+            # generation config
+            self._generation_defaults = {}
+        elif self.model.config.model_type == "kyutai_speech_to_text":
+            # Kyutai's `generate()` sets the generation length from the audio length
+            self._generation_defaults.pop("max_new_tokens", None)
 
     def __call__(self, inputs: np.ndarray | bytes | str | dict, **kwargs: Any) -> list[dict[str, Any]]:
         """
@@ -338,8 +345,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
         # Parameter used in more than one place
         # in some models like whisper, the generation config has a `return_timestamps` key
-        if hasattr(self, "generation_config") and hasattr(self.generation_config, "return_timestamps"):
-            return_timestamps = return_timestamps or self.generation_config.return_timestamps
+        generation_config = getattr(self.model, "generation_config", None)
+        if getattr(generation_config, "return_timestamps", False):
+            return_timestamps = return_timestamps or generation_config.return_timestamps
 
         if return_timestamps is not None:
             # Check whether we have a valid setting for return_timestamps and throw an error before we perform a forward pass
@@ -538,16 +546,14 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 )
 
             # custom processing for Whisper timestamps and word-level timestamps
-            return_timestamps = return_timestamps or getattr(self.generation_config, "return_timestamps", False)
+            return_timestamps = return_timestamps or getattr(self.model.generation_config, "return_timestamps", False)
             if return_timestamps and self.type == "seq2seq_whisper":
                 generate_kwargs["return_timestamps"] = bool(return_timestamps)
                 if return_timestamps == "word":
                     generate_kwargs["return_token_timestamps"] = True
                     generate_kwargs["return_segments"] = True
 
-            # User-defined `generation_config` passed to the pipeline call take precedence
-            if "generation_config" not in generate_kwargs:
-                generate_kwargs["generation_config"] = self.generation_config
+            generate_kwargs = self._prepare_generate_kwargs(generate_kwargs)
 
             main_input_name = self.model.main_input_name if hasattr(self.model, "main_input_name") else "inputs"
             generate_kwargs = {
@@ -588,7 +594,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     if segments and segments[0]:
                         result = segments[0][0]["result"]
                         full_seq = result["sequences"] if isinstance(result, dict) else result
-                        gen_config = generate_kwargs.get("generation_config", self.generation_config)
+                        gen_config = generate_kwargs.get("generation_config", self.model.generation_config)
                         if hasattr(gen_config, "lang_to_id"):
                             lang_ids = set(gen_config.lang_to_id.values())
                             for token_id in full_seq.tolist():
@@ -618,12 +624,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 else:
                     out["stride"] = rescale_stride(stride, ratio)
         elif self.type == "tdt":
-            inputs = {
-                self.model.main_input_name: model_inputs.pop(self.model.main_input_name),
-            }
-            if "attention_mask" in model_inputs:
-                inputs["attention_mask"] = model_inputs.pop("attention_mask")
-            outputs = self.model.generate(**inputs)
+            inputs = {self.model.main_input_name: model_inputs.pop(self.model.main_input_name)}
+            if attention_mask is not None:
+                inputs["attention_mask"] = attention_mask
+            outputs = self.model.generate(**inputs, **self._prepare_generate_kwargs(generate_kwargs))
             out = {"tokens": outputs.sequences}
         else:
             raise ValueError(f"Unsupported model type {self.type}.")

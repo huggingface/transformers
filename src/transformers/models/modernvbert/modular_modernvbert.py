@@ -191,7 +191,7 @@ class ModernVBertConnector(nn.Module):
 
 @auto_docstring
 class ModernVBertPreTrainedModel(SmolVLMPreTrainedModel):
-    config_class = ModernVBertConfig
+    config: ModernVBertConfig
     _no_split_modules = []
 
     @torch.no_grad()
@@ -296,10 +296,12 @@ class ModernVBertModel(SmolVLMModel):
 
         # Merge image and text embeddings
         if image_hidden_states is not None:
+            image_hidden_states = torch.cat(image_hidden_states, dim=0)
             image_hidden_states = image_hidden_states.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
-            inputs_embeds = self.inputs_merger(
-                input_ids=input_ids, inputs_embeds=inputs_embeds, image_hidden_states=image_hidden_states
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_hidden_states
             )
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_hidden_states)
 
         # Language model pass
         outputs = self.text_model(

@@ -15,7 +15,7 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, is_torch_available
+from transformers import AutoTokenizer, MiMoV2FlashConfig, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -74,6 +74,12 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
             num_kv_heads = config.num_key_value_heads * 2 if is_swa else config.num_key_value_heads
             self.assertEqual(layer.keys.shape, (batch_size, num_kv_heads, seq_length, config.head_dim))
             self.assertEqual(layer.values.shape, (batch_size, num_kv_heads, seq_length, config.v_head_dim))
+
+    def test_sliding_window_from_hub_config(self):
+        # The hub config.json stores `sliding_window_size`, the previous tokens an SWA query attends to.
+        config = MiMoV2FlashConfig(sliding_window=128, sliding_window_size=128)
+        self.assertEqual(config.sliding_window, 129)
+        self.assertEqual(MiMoV2FlashConfig.from_dict(config.to_dict()).sliding_window, 129)
 
     # Tests from Gemma3 adapted to MiMo
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])

@@ -245,7 +245,7 @@ class OlmoeModel(MixtralModel):
 class OlmoeForCausalLM(MixtralForCausalLM, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: OlmoeConfig):
         super().__init__(config)
         self.model = OlmoeModel(config)
         self.num_experts = config.num_experts

@@ -28,7 +28,7 @@ from ...image_utils import (
     get_image_size,
 )
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType
+from ...utils import TensorType, auto_docstring
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import group_videos_by_shape, reorder_videos
 
@@ -75,7 +75,7 @@ class Kimi_K25VideoProcessorInitKwargs(VideosKwargs, total=False):
         The max limit to resize the video.
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.
-    merge_kernel_size (`int`, *optional*, defaults to 2):
+    merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
     temporal_patch_size (`int`, *optional*, defaults to 4):
         The temporal patch size of the vision encoder.
@@ -87,6 +87,7 @@ class Kimi_K25VideoProcessorInitKwargs(VideosKwargs, total=False):
     temporal_patch_size: int
 
 
+@auto_docstring
 class Kimi_K25VideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     size = {"max_height": 512, "max_width": 512}

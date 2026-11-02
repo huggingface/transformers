@@ -25,7 +25,7 @@ from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, requires_backends
+from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import AutoConfig
 from ..depth_anything.modeling_depth_anything import (
     DepthAnythingPreActResidualLayer,
@@ -166,7 +166,6 @@ class CHMv2ImageProcessor(DPTImageProcessor):
             `List[Dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
             predictions.
         """
-        requires_backends(self, "torch")
 
         predicted_depth = outputs.predicted_depth
 

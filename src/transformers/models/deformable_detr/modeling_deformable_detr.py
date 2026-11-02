@@ -17,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import math
 import warnings
 from collections.abc import Callable
@@ -1569,10 +1570,10 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         # Convert to instance attribute before modifying
         self._tied_weights_keys = self._tied_weights_keys.copy()
         if config.with_box_refine:
-            self.model.decoder.bbox_embed = self.bbox_embed
+            self.model.decoder.bbox_embed = copy.deepcopy(self.bbox_embed)
             self._tied_weights_keys["bbox_embed"] = "model.decoder.bbox_embed"
         if config.two_stage:
-            self.model.decoder.class_embed = self.class_embed
+            self.model.decoder.class_embed = copy.deepcopy(self.class_embed)
             self._tied_weights_keys["class_embed"] = "model.decoder.class_embed"
         self.post_init()
 

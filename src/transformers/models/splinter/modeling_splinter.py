@@ -316,7 +316,7 @@ class SplinterModel(SplinterPreTrainedModel):
     Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: SplinterConfig):
         super().__init__(config)
         self.config = config
 
@@ -460,7 +460,7 @@ class QuestionAwareSpanSelectionHead(nn.Module):
 
 @auto_docstring
 class SplinterForQuestionAnswering(SplinterPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SplinterConfig):
         super().__init__(config)
 
         self.splinter = SplinterModel(config)
@@ -593,7 +593,7 @@ class SplinterForPreTrainingOutput(ModelOutput):
     """
 )
 class SplinterForPreTraining(SplinterPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SplinterConfig):
         super().__init__(config)
 
         self.splinter = SplinterModel(config)

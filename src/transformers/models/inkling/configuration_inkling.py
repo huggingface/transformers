@@ -21,7 +21,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
@@ -76,7 +76,6 @@ class InklingTextConfig(PreTrainedConfig):
     model_type = "inkling_text"
     base_config_key = "text_config"
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
         "layers.*.mlp.experts.gate_up_proj": "colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
@@ -170,6 +169,10 @@ class InklingTextConfig(PreTrainedConfig):
             self.mlp_layer_types = ["dense" if i < dense_mlp_idx else "sparse" for i in range(self.num_hidden_layers)]
 
         if kwargs.get("dense_intermediate_size") is not None:
+            # In checkpoints with `dense_intermediate_size`, `intermediate_size` is the routed experts' width and
+            # `dense_intermediate_size` is the dense MLP's width. Keep the experts' width before it is
+            # overwritten below (see #49416).
+            self.moe_intermediate_size = self.intermediate_size
             self.intermediate_size = kwargs.pop("dense_intermediate_size")
 
         # The architecture contains 4 conv modules per layer, each needing a different conv cache
@@ -261,9 +264,9 @@ class InklingConfig(PreTrainedConfig):
 
     model_type = "inkling_mm_model"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=InklingTextConfig),
-        "vision_config": SubConfigSpec(config_class=InklingVisionConfig),
-        "audio_config": SubConfigSpec(config_class=InklingAudioConfig),
+        "text_config": InklingTextConfig,
+        "vision_config": InklingVisionConfig,
+        "audio_config": InklingAudioConfig,
     }
 
     text_config: InklingTextConfig | dict | None = None
