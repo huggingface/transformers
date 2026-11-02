@@ -221,6 +221,8 @@ class AutoRoundConfig(QuantizationConfigMixin):
         group_size (`int`, *optional*, defaults to 128): Group-size value
         sym (`bool`, *optional*, defaults to `True`): Symmetric quantization or not
         backend (`str`, *optional*, defaults to `"auto"`): The inference backend. By default, AutoRound selects a compatible backend based on the device, quantization settings, and installed libraries. See [Specify inference backend](https://github.com/intel/auto-round/blob/main/docs/step_by_step.md#specify-inference-backend) for all backend options.
+        dequantize (`bool`, *optional*, defaults to `False`):
+            Whether to dequantize a pre-quantized checkpoint while loading it.
     """
 
     def __init__(
@@ -229,8 +231,10 @@ class AutoRoundConfig(QuantizationConfigMixin):
         group_size: int = 128,
         sym: bool = True,
         backend: str = "auto",
+        dequantize: bool = False,
         **kwargs,
     ):
+        self.dequantize = dequantize
         self.bits = bits
         self.group_size = group_size
         self.sym = sym
@@ -690,6 +694,8 @@ class GPTQConfig(QuantizationConfigMixin):
             In this example, we will first quantize the q,k,v layers simultaneously since they are independent.
             Then, we will quantize `self_attn.o_proj` layer with the q,k,v layers quantized. This way, we will get
             better results since it reflects the real input `self_attn.o_proj` will get when the model is quantized.
+        dequantize (`bool`, *optional*, defaults to `False`):
+            Whether to dequantize a pre-quantized checkpoint while loading it.
     """
 
     def __init__(
@@ -714,8 +720,10 @@ class GPTQConfig(QuantizationConfigMixin):
         max_input_length: int | None = None,
         cache_block_outputs: bool = True,
         modules_in_block_to_quantize: list[list[str]] | None = None,
+        dequantize: bool = False,
         **kwargs,
     ):
+        self.dequantize = dequantize
         self.quant_method = QuantizationMethod.GPTQ
         self.bits = bits
         self.tokenizer = tokenizer
@@ -827,6 +835,8 @@ class AwqConfig(GPTQConfig):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision (e.g. Whisper encoder, Llava encoder, Mixtral gate layers).
             Note you cannot quantize directly with transformers, please refer to `AutoAWQ` documentation for quantizing HF models.
+        dequantize (`bool`, *optional*, defaults to `False`):
+            Whether to dequantize a pre-quantized checkpoint while loading it.
     """
 
     def __init__(
@@ -836,6 +846,7 @@ class AwqConfig(GPTQConfig):
         zero_point: bool = True,
         backend: AwqBackend = AwqBackend.AUTO,
         modules_to_not_convert: list | None = None,
+        dequantize: bool = False,
         **kwargs,
     ):
         format = kwargs.pop("format", AwqFormat.GEMM)
@@ -848,7 +859,9 @@ class AwqConfig(GPTQConfig):
         self.zero_point = zero_point
         self.modules_to_not_convert = modules_to_not_convert
 
-        super().__init__(bits=bits, group_size=group_size, backend=backend, format=format, **kwargs)
+        super().__init__(
+            bits=bits, group_size=group_size, backend=backend, format=format, dequantize=dequantize, **kwargs
+        )
         self.quant_method = QuantizationMethod.AWQ
 
     def post_init(self):
@@ -1802,8 +1815,10 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
 class QuarkConfig(QuantizationConfigMixin):
     def __init__(
         self,
+        dequantize: bool = False,
         **kwargs,
     ):
+        self.dequantize = dequantize
         if is_torch_available() and is_quark_available():
             from quark import __version__ as quark_version
             from quark.torch.export.config.config import JsonExporterConfig

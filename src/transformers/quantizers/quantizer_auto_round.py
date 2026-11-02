@@ -35,12 +35,19 @@ class AutoRoundQuantizer(HfQuantizer):
 
     def validate_environment(self, *args, **kwargs):
         self.device_map = kwargs.get("device_map")
+        if self.pre_quantized and self.quantization_config.dequantize:
+            return  # dequantizing is pure torch
         if not is_auto_round_available():
             raise ImportError(
                 "Loading an AutoRound quantized model requires auto-round library (`pip install 'auto-round>=0.5'`)"
             )
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        if self.pre_quantized and self.quantization_config.dequantize:
+            if getattr(self.quantization_config, "data_type", "int") != "int":
+                raise NotImplementedError("Only the int AutoRound formats can be dequantized.")
+            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
+            return
         if model.__class__.main_input_name != "input_ids":
             logger.warning("AutoRound offers only limited support for models that are not strictly text-based.")
         from auto_round.inference.convert_model import convert_hf_model, infer_target_device
@@ -51,6 +58,8 @@ class AutoRoundQuantizer(HfQuantizer):
             self.used_backends = used_backends
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        if self.pre_quantized and self.quantization_config.dequantize:
+            return
         if self.pre_quantized:
             from auto_round.inference.convert_model import post_init
 
@@ -65,3 +74,15 @@ class AutoRoundQuantizer(HfQuantizer):
     def is_serializable(self):
         ## for gptq/awq models, the quantization config will be changed
         return True
+
+    # The int formats: `auto_round` and `auto_round:gptq` pack like gptq, `auto_round:awq` like awq
+    serialized_names = {"weight": ["qweight", "qzeros", "scales", "g_idx"]}
+
+    def get_load_operations(self):
+        if "awq" in self.quantization_config.packing_format:
+            from ..integrations.awq import AwqDequantize
+
+            return {"dequantize": AwqDequantize}
+        from ..integrations.gptq import GptqDequantize
+
+        return {"dequantize": GptqDequantize}

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from importlib import metadata
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 from packaging import version
@@ -48,6 +49,8 @@ class GptqHfQuantizer(HfQuantizer):
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)
+        if self.pre_quantized and self.quantization_config.dequantize:
+            return  # dequantizing is pure torch
 
         if not is_optimum_available():
             raise ImportError("Loading a GPTQ quantized model requires optimum (`pip install optimum`)")
@@ -56,6 +59,8 @@ class GptqHfQuantizer(HfQuantizer):
         self.optimum_quantizer = GPTQQuantizer.from_dict(self.quantization_config.to_dict_optimum())
 
     def validate_environment(self, *args, **kwargs):
+        if self.pre_quantized and self.quantization_config.dequantize:
+            return  # dequantizing is pure torch
         if not is_optimum_available():
             raise ImportError("Loading a GPTQ quantized model requires optimum (`pip install optimum`)")
 
@@ -83,6 +88,9 @@ class GptqHfQuantizer(HfQuantizer):
         return device_map
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        if self.pre_quantized and self.quantization_config.dequantize:
+            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
+            return
         if model.__class__.main_input_name != "input_ids":
             raise RuntimeError("We can only quantize pure text model.")
 
@@ -94,8 +102,14 @@ class GptqHfQuantizer(HfQuantizer):
                 model = self.optimum_quantizer.convert_model(model, **kwargs)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        if self.pre_quantized and self.quantization_config.dequantize:
+            return
         if self.pre_quantized:
-            model = self.optimum_quantizer.post_init_model(model)
+            # What optimum's `post_init_model` does that is not per layer, the rest ran in `GptqDeserialize`
+            from ..integrations.gptq import gptqmodel_post_init
+
+            model.quantize_config = SimpleNamespace(desc_act=self.quantization_config.desc_act)
+            gptqmodel_post_init(model, use_act_order=self.quantization_config.desc_act)
         else:
             if self.quantization_config.tokenizer is None:
                 self.quantization_config.tokenizer = model.name_or_path
@@ -109,3 +123,19 @@ class GptqHfQuantizer(HfQuantizer):
 
     def is_serializable(self):
         return True
+
+    serialized_names = {"weight": ["qweight", "qzeros", "scales", "g_idx"]}
+
+    def get_load_operations(self):
+        from ..integrations.gptq import GptqDequantize, GptqDeserialize
+
+        return {"deserialize": GptqDeserialize, "dequantize": GptqDequantize}
+
+    def get_weight_conversions(self):
+        if self.pre_quantized and not self.quantization_config.dequantize:
+            from ..core_model_loading import WeightConverter
+            from ..integrations.gptq import GptqDeserialize
+
+            # The gptqmodel layers have no `weight`: their tensors gather under `qweight`
+            return [WeightConverter(self.serialized_names["weight"], "qweight", [GptqDeserialize(self)])]
+        return super().get_weight_conversions()

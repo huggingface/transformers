@@ -13,8 +13,10 @@
 # limitations under the License.
 "AWQ (Activation aware Weight Quantization) integration file"
 
+from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import is_torch_available, logging
+from .gptq import dequantize_groups, unpack_int32
 
 
 if is_torch_available():
@@ -34,6 +36,42 @@ AWQ_SCALES_MAPPINGS = {
     "gpt_bigcode": {"act": "act", "layer_before_act": "c_fc"},
     "bloom": {"act": "gelu_impl", "layer_before_act": "dense_h_to_4h"},
 }
+
+
+# AWQ packs the 8 int4 codes of an int32 in the `[0, 2, 4, 6, 1, 3, 5, 7]` order, this is its inverse
+AWQ_REVERSE_ORDER = [0, 4, 1, 5, 2, 6, 3, 7]
+
+
+class AwqDequantize(ConversionOps):
+    """Dense weights from the AWQ gemm format: `qweight` and `qzeros` pack output features in int32, then `scales`."""
+
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+        checkpoint_format = getattr(hf_quantizer.quantization_config, "format", "gemm")
+        if checkpoint_format != "gemm":
+            raise NotImplementedError(f"Dequantizing the `{checkpoint_format}` AWQ format is not supported.")
+
+    def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, list[torch.Tensor]]:
+        config = self.hf_quantizer.quantization_config
+        output = {}
+        for key, qweights in input_dict.items():
+            if not key.endswith("qweight"):
+                continue
+            prefix = key.removesuffix("qweight")
+            qweights = qweights if isinstance(qweights, list) else [qweights]
+            others = [input_dict.get(prefix + name) for name in ("qzeros", "scales")]
+            others = [other if isinstance(other, list) else [other] * len(qweights) for other in others]
+            weights = []
+            for qweight, qzeros, scales in zip(qweights, *others):
+                weight, zeros = unpack_int32(qweight, config.bits, dim=1), unpack_int32(qzeros, config.bits, dim=1)
+                if config.bits == 4:
+                    order = (
+                        torch.arange(weight.shape[1], device=weight.device).view(-1, 8)[:, AWQ_REVERSE_ORDER].flatten()
+                    )
+                    weight, zeros = weight[:, order], zeros[:, order]
+                weights.append(dequantize_groups(weight, zeros, scales, config.group_size))
+            output[prefix + "weight"] = weights
+        return output
 
 
 def replace_quantization_scales(model, model_type):

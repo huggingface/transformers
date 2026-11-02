@@ -43,6 +43,8 @@ class AwqQuantizer(HfQuantizer):
     quantization_config: "AwqConfig"
 
     def validate_environment(self, **kwargs):
+        if self.pre_quantized and self.quantization_config.dequantize:
+            return  # dequantizing is pure torch
         if not is_gptqmodel_available():
             raise ImportError(
                 "Loading an AWQ quantized model requires gptqmodel. Please install it with `pip install gptqmodel`"
@@ -62,6 +64,9 @@ class AwqQuantizer(HfQuantizer):
         return dtype
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        if self.pre_quantized and self.quantization_config.dequantize:
+            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
+            return
         from ..integrations import replace_quantization_scales, replace_with_awq_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
@@ -78,9 +83,12 @@ class AwqQuantizer(HfQuantizer):
         model = replace_quantization_scales(model, model.config.model_type)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
-        from gptqmodel.utils.model import hf_gptqmodel_post_init
+        if self.pre_quantized and self.quantization_config.dequantize:
+            return
+        # The per-layer part of `hf_gptqmodel_post_init` ran in `GptqDeserialize`
+        from ..integrations.gptq import gptqmodel_post_init
 
-        hf_gptqmodel_post_init(model, use_act_order=self.quantization_config.desc_act)
+        gptqmodel_post_init(model, use_act_order=self.quantization_config.desc_act)
 
     def is_serializable(self):
         if self.quantization_config.backend in [AwqBackend.EXLLAMA_V1, AwqBackend.EXLLAMA_V2]:
@@ -92,3 +100,20 @@ class AwqQuantizer(HfQuantizer):
     @property
     def is_trainable(self):
         return version.parse(importlib.metadata.version("gptqmodel")) >= version.parse("5.0.0")
+
+    serialized_names = {"weight": ["qweight", "qzeros", "scales"]}
+
+    def get_load_operations(self):
+        from ..integrations.awq import AwqDequantize
+        from ..integrations.gptq import GptqDeserialize
+
+        return {"deserialize": GptqDeserialize, "dequantize": AwqDequantize}
+
+    def get_weight_conversions(self):
+        if self.pre_quantized and not self.quantization_config.dequantize:
+            from ..core_model_loading import WeightConverter
+            from ..integrations.gptq import GptqDeserialize
+
+            # The gptqmodel layers have no `weight`: their tensors gather under `qweight`
+            return [WeightConverter(self.serialized_names["weight"], "qweight", [GptqDeserialize(self)])]
+        return super().get_weight_conversions()
