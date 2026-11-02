@@ -151,7 +151,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return False
 
-    def get_quantize_ops(self):
+    def get_load_operations(self):
         from ..integrations.fbgemm_fp8 import FbgemmFp8Quantize
 
-        return FbgemmFp8Quantize(self)
+        return {"quantize": FbgemmFp8Quantize}

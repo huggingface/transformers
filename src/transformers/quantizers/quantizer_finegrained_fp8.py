@@ -162,17 +162,12 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     def is_compileable(self) -> bool:
         return True
 
-    def get_quantize_ops(self):
-        from ..integrations.finegrained_fp8 import Fp8Quantize
-
-        return Fp8Quantize(self)
-
     serialized_names = {"weight": ["weight", "weight_scale_inv", "activation_scale"]}
 
     def get_load_operations(self):
-        from ..integrations.finegrained_fp8 import Fp8Dequantize
+        from ..integrations.finegrained_fp8 import Fp8Dequantize, Fp8Quantize
 
-        return {"dequantize": Fp8Dequantize}
+        return {"dequantize": Fp8Dequantize, "quantize": Fp8Quantize}
 
     def update_weight_conversions(self, weight_conversions, model):
         from ..core_model_loading import WeightRenaming

@@ -1,6 +1,6 @@
 import inspect
 
-from ..core_model_loading import ConversionOps
+from ..core_model_loading import ConversionOps, expand_target_names
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 from ..utils import (
     get_available_devices,
@@ -42,7 +42,7 @@ class Bnb4bitQuantize(ConversionOps):
         we need to store some parameters to create the quantized weight. For example, bnb requires 6 values that are stored in the checkpoint to recover the quantized weight. So we store them in a dict that is stored in hf_quantizer for now as we can't save it in the op since we create an op per tensor.
         """
         result = {}
-        for param_name, value in input_dict.items():
+        for param_name, value in expand_target_names(input_dict, full_layer_name).items():
             if isinstance(value, list):
                 value = value[0]
 
@@ -108,7 +108,7 @@ class Bnb8bitQuantize(ConversionOps):
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         result = {}
-        for param_name, value in input_dict.items():
+        for param_name, value in expand_target_names(input_dict, full_layer_name).items():
             value = value[0] if isinstance(value, list) else value
 
             module, _ = get_module_from_name(model, param_name)

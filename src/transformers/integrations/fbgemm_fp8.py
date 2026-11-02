@@ -15,7 +15,7 @@
 from functools import lru_cache
 
 from ..activations import ACT2FN
-from ..core_model_loading import ConversionOps
+from ..core_model_loading import ConversionOps, expand_target_names
 from ..quantizers.quantizers_utils import get_module_from_name, on_device, should_convert_module
 from ..utils import (
     is_accelerate_available,
@@ -49,9 +49,10 @@ class FbgemmFp8Quantize(ConversionOps):
         self,
         input_dict: dict[str, torch.Tensor | list[torch.Tensor]],
         model: torch.nn.Module | None = None,
+        full_layer_name: str | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        target_key, value = tuple(input_dict.items())[0]
+        target_key, value = tuple(expand_target_names(input_dict, full_layer_name).items())[0]
         value = value[0]
 
         from ..integrations import FbgemmFp8Llama4TextExperts

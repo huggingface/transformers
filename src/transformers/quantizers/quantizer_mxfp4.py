@@ -212,17 +212,12 @@ class Mxfp4HfQuantizer(HfQuantizer):
         )
         return False
 
-    def get_quantize_ops(self):
-        from ..integrations.mxfp4 import Mxfp4Quantize
-
-        return Mxfp4Quantize(self)
-
     serialized_names = {
         "gate_up_proj": ["gate_up_proj_blocks", "gate_up_proj_scales"],
         "down_proj": ["down_proj_blocks", "down_proj_scales"],
     }
 
     def get_load_operations(self):
-        from ..integrations.mxfp4 import Mxfp4Dequantize, Mxfp4Deserialize
+        from ..integrations.mxfp4 import Mxfp4Dequantize, Mxfp4Deserialize, Mxfp4Quantize
 
-        return {"deserialize": Mxfp4Deserialize, "dequantize": Mxfp4Dequantize}
+        return {"deserialize": Mxfp4Deserialize, "dequantize": Mxfp4Dequantize, "quantize": Mxfp4Quantize}

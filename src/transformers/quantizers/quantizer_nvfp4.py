@@ -101,10 +101,10 @@ class NVFP4HfQuantizer(HfQuantizer):
         )
         replace_with_nvfp4_linear(model, modules_to_not_convert=self.modules_to_not_convert)
 
-    def get_quantize_ops(self):
+    def get_load_operations(self):
         from ..integrations.nvfp4 import NVFP4Quantize
 
-        return NVFP4Quantize(self.quantization_device)
+        return {"quantize": NVFP4Quantize}
 
     @property
     def is_serializable(self) -> bool:

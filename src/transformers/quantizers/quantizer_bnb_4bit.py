@@ -151,11 +151,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         model = dequantize_and_replace(model, quantization_config=self.quantization_config, dtype=dtype)
         return model
 
-    def get_quantize_ops(self):
-        from ..integrations.bitsandbytes import Bnb4bitQuantize
-
-        return Bnb4bitQuantize(self)
-
     serialized_names = {
         "weight": [
             "weight",
@@ -169,6 +164,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     }
 
     def get_load_operations(self):
-        from ..integrations.bitsandbytes import Bnb4bitDeserialize
+        from ..integrations.bitsandbytes import Bnb4bitDeserialize, Bnb4bitQuantize
 
-        return {"deserialize": Bnb4bitDeserialize}
+        return {"deserialize": Bnb4bitDeserialize, "quantize": Bnb4bitQuantize}

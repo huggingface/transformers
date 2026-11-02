@@ -158,22 +158,13 @@ class SinqHfQuantizer(HfQuantizer):
         result = is_sinq and not is_ready
         return result
 
-    def get_quantize_ops(self):
-        """
-        Return the ConversionOps used for param-level quantization (Sinq).
-        The actual SINQLinear construction is in integrations/sinq.py.
-        """
-        from ..integrations.sinq import SinqQuantize
-
-        return SinqQuantize(self)
-
     # A checkpoint produced by `SINQLinear.state_dict`, rebuilt into a `SINQLinear`
     serialized_names = {".weight": [".W_q", ".meta", ".bias"]}
 
     def get_load_operations(self):
-        from ..integrations.sinq import SinqDeserialize
+        from ..integrations.sinq import SinqDeserialize, SinqQuantize
 
-        return {"deserialize": SinqDeserialize}
+        return {"deserialize": SinqDeserialize, "quantize": SinqQuantize}
 
     def _process_model_before_weight_loading(
         self,

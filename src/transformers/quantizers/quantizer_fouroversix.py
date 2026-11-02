@@ -89,10 +89,10 @@ class FourOverSixHfQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return self.quantization_config.keep_master_weights
 
-    def get_quantize_ops(self):
+    def get_load_operations(self):
         from ..integrations.fouroversix import FourOverSixQuantize
 
-        return FourOverSixQuantize(self)
+        return {"quantize": FourOverSixQuantize}
 
     def get_weight_conversions(self):
         # Pre-quantized checkpoints of other formats are converted by fouroversix itself

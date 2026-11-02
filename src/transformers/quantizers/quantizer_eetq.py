@@ -101,7 +101,7 @@ class EetqHfQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return True
 
-    def get_quantize_ops(self):
+    def get_load_operations(self):
         from ..integrations.eetq import EetqQuantize
 
-        return EetqQuantize(self)
+        return {"quantize": EetqQuantize}

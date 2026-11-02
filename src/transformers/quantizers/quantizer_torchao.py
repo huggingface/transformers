@@ -155,11 +155,6 @@ class TorchAoHfQuantizer(HfQuantizer):
             # Save it
             self.metadata = metadata
 
-    def get_quantize_ops(self):
-        from ..integrations.torchao import TorchAoQuantize
-
-        return TorchAoQuantize(self)
-
     def _discover_quantized_param_names(self) -> set[str]:
         """Extract unique parameter names of quantized params from torchao safetensors metadata.
 
@@ -199,6 +194,6 @@ class TorchAoHfQuantizer(HfQuantizer):
         return {name: [f"_{name}_{s}" for s in suffixes] for name in sorted(self._discover_quantized_param_names())}
 
     def get_load_operations(self):
-        from ..integrations.torchao import TorchAoDeserialize
+        from ..integrations.torchao import TorchAoDeserialize, TorchAoQuantize
 
-        return {"deserialize": TorchAoDeserialize}
+        return {"deserialize": TorchAoDeserialize, "quantize": TorchAoQuantize}

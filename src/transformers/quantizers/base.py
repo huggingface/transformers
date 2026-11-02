@@ -311,11 +311,6 @@ class HfQuantizer(ABC):
                         model.config.get_text_config()
                     )
 
-    def get_quantize_ops(self):
-        raise NotImplementedError(
-            f"{self.quantization_config.quant_method} is not available yet and will be supported soon."
-        )
-
     # Maps a non quantized parameter name to its corresponding quantized names
     # e.g. `{"weight": ["weight", "weight_scale_inv"]}` means a weight becomes weight + scale inv.
     serialized_names: dict[str, list[str]] = {}
@@ -324,7 +319,9 @@ class HfQuantizer(ABC):
         """
         Op classes loading the serialized tensors, e.g. `{"deserialize": Mxfp4Deserialize, "dequantize": Mxfp4Dequantize}`.
         A deserialization builds the params of one module, so it only runs on the general converters. A dequantization
-        also runs before the ops of the model's converters, e.g. before a per-expert merge.
+        also runs before the ops of the model's converters, e.g. before a per-expert merge. A quantization (e.g.
+        `{"quantize": Fp8Quantize}`) quantizes a non pre-quantized checkpoint on the fly: it is the last op of every
+        param that `param_needs_quantization`.
         """
         return {}
 
