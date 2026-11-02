@@ -790,7 +790,7 @@ class ZayaForCausalLM(ZayaPreTrainedModel, GenerationMixin):
     _fsdp_plan = {"lm_head": "keep_full_weight"}
     _is_stateful = True
 
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: ZayaConfig, **kwargs):
         super().__init__(config)
         self.model = ZayaModel(config)
         self.vocab_size = config.vocab_size

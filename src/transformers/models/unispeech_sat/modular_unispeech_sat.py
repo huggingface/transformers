@@ -190,6 +190,12 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 init.uniform_(module.bias, a=-k, b=k)
+        elif isinstance(module, UniSpeechSatModel) and hasattr(module, "masked_spec_embed"):
+            init.uniform_(module.masked_spec_embed)
+        elif isinstance(module, UniSpeechSatForPreTraining):
+            init.zeros_(module.label_embeddings_concat)
+        elif isinstance(module, AMSoftmaxLoss):  # noqa: F821
+            init.normal_(module.weight)
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor | int):
         """

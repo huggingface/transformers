@@ -29,7 +29,7 @@ from transformers.distributed.expert_parallel import (
 from transformers.distributed.parallel_utils import ALL_PARALLEL_STYLES
 from transformers.testing_utils import TestCasePlus, is_expert_parallel_test
 
-from ..test_tensor_parallel_mixin import _init_distributed
+from ..distributed_testing_utils import run_distributed
 
 
 @is_expert_parallel_test
@@ -84,17 +84,17 @@ class TestExpertParallelLayer(TestCasePlus):
     def test_dispatch_hands_experts_the_received_rows(self):
         """The all-to-all's pending result (`AsyncCollectiveTensor`) holds a null pointer until a torch op waits on
         it, and experts that launch kernels on raw pointers would read it: the dispatch waits before any experts run."""
-        _init_distributed(tp=2, backend="gloo")(_dispatch_hands_experts_the_received_rows)()
+        run_distributed(world_size=2, backend="gloo")(_dispatch_hands_experts_the_received_rows)()
 
     def test_ep_implementations_match_one_process(self):
         """Every built-in implementation of `ep_dispatch_experts` gives the single-process output and input gradients,
         and `"auto"` runs the all-reduce on a shared batch at inference and the all-to-all in training."""
-        _init_distributed(tp=2, backend="gloo")(_ep_implementations_match_one_process)()
+        run_distributed(world_size=2, backend="gloo")(_ep_implementations_match_one_process)()
 
     @parameterized.expand([(False,), (True,)])
     def test_ep_auto_implementation_with_gradient_checkpointing(self, use_reentrant):
         """Gradient checkpointing keeps the `"auto"` choice and the gradients correct in both checkpoint modes."""
-        _init_distributed(tp=2, backend="gloo")(_ep_gradient_checkpointing_matches_reference)(use_reentrant)
+        run_distributed(world_size=2, backend="gloo")(_ep_gradient_checkpointing_matches_reference)(use_reentrant)
 
     def test_ep_implementation_names_a_registered_implementation(self):
         """`install_forward` runs the implementation registered under `ep_implementation` and refuses an unknown name."""
@@ -112,9 +112,9 @@ class TestExpertParallelLayer(TestCasePlus):
             experts = EpDispatchExpertsParallel().install_forward(_DummyExperts(), None, ep_implementation="custom")
         torch.testing.assert_close(experts(torch.zeros(2, 4), None, torch.ones(2, 1)), torch.ones(2, 4))
 
-    def test_passthrough_hands_experts_the_shared_batch(self):
-        """`"passthrough"` hands experts the shared batch, global expert ids, unmasked weights and the EP group."""
-        _init_distributed(tp=2, backend="gloo")(_passthrough_hands_experts_the_shared_batch)()
+    def test_megamoe_hands_experts_a_slice_of_the_shared_batch(self):
+        """`"deepgemm_megamoe"` hands each rank a padded slice with global ids, the EP group and the shared buffers."""
+        run_distributed(world_size=2, backend="gloo")(_megamoe_hands_experts_a_slice_of_the_shared_batch)()
 
 
 class _DummyExperts(torch.nn.Module):
@@ -127,7 +127,7 @@ class _DummyExperts(torch.nn.Module):
         return tokens
 
 
-# Worker functions for the expert-parallel layer tests, spawned through `_init_distributed`.
+# Worker functions for the expert-parallel layer tests, spawned through `run_distributed`.
 def _dispatch_hands_experts_the_received_rows(rank):
     hidden_states = torch.arange(32.0).view(4, 8) + 100 * rank
     experts = EpDispatchExpertsParallel().install_forward(_DummyExperts(), init_device_mesh("cpu", (2,)))
@@ -246,25 +246,37 @@ def _ep_gradient_checkpointing_matches_reference(rank, use_reentrant):
     torch.testing.assert_close(w.grad, w_ref.grad)
 
 
-class _ExchangingExperts(torch.nn.Module):
+class _MegaMoEExperts(torch.nn.Module):
     """Experts that exchange tokens themselves: record what they get and return a per-rank output."""
 
     num_experts = 2
 
-    def forward(self, hidden_states, top_k_index, top_k_weights, process_group):
-        self.received = (hidden_states, top_k_index, top_k_weights, process_group)
+    def forward(self, hidden_states, top_k_index, top_k_weights, process_group, symm_buffers):
+        self.received = (hidden_states, top_k_index, top_k_weights, process_group, symm_buffers)
         return hidden_states * (torch.distributed.get_rank() + 1)
 
 
-def _passthrough_hands_experts_the_shared_batch(rank):
+def _megamoe_hands_experts_a_slice_of_the_shared_batch(rank):
     mesh = init_device_mesh("cpu", (2,))
-    experts = EpDispatchExpertsParallel().install_forward(
-        _ExchangingExperts(), mesh, tp_mesh=mesh, ep_implementation="passthrough"
-    )
-    output = experts(_HIDDEN_STATES, _TOP_K_INDEX, _TOP_K_WEIGHTS)
-    received_hidden, received_index, received_weights, process_group = experts.received
-    torch.testing.assert_close(received_hidden, _HIDDEN_STATES)
-    torch.testing.assert_close(received_index, _TOP_K_INDEX)
-    torch.testing.assert_close(received_weights, _TOP_K_WEIGHTS)
+    layers = [
+        EpDispatchExpertsParallel().install_forward(
+            _MegaMoEExperts(), mesh, tp_mesh=mesh, ep_implementation="deepgemm_megamoe"
+        )
+        for _ in range(2)
+    ]
+    # 3 tokens on 2 ranks: rank 1 gets the last token and one skipped slot
+    hidden_states, top_k_index, top_k_weights = _HIDDEN_STATES[:3], _TOP_K_INDEX[:3], _TOP_K_WEIGHTS[:3]
+    outputs = [layer(hidden_states, top_k_index, top_k_weights) for layer in layers]
+
+    received_hidden, received_index, received_weights, process_group, symm_buffers = layers[0].received
+    rows = slice(2 * rank, 2 * rank + 2)
+    padded_index = torch.cat([top_k_index, top_k_index.new_full((1, 2), -1)])
+    padded_weights = torch.cat([top_k_weights, top_k_weights.new_zeros(1, 2)])
+    torch.testing.assert_close(received_index, padded_index[rows])
+    torch.testing.assert_close(received_weights, padded_weights[rows])
+    torch.testing.assert_close(received_hidden[: 3 - 2 * rank], hidden_states[rows])
     assert torch.distributed.get_process_group_ranks(process_group) == [0, 1]
-    torch.testing.assert_close(output, _HIDDEN_STATES * (rank + 1))
+    # every layer of the EP group shares the same buffers
+    assert layers[1].received[4] is symm_buffers
+    for output in outputs:
+        torch.testing.assert_close(output, hidden_states * torch.tensor([[1.0], [1.0], [2.0]]))

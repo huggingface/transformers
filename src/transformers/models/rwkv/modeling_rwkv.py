@@ -485,7 +485,7 @@ class RwkvCausalLMOutput(ModelOutput):
 
 @auto_docstring
 class RwkvModel(RwkvPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RwkvConfig):
         super().__init__(config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
@@ -667,7 +667,7 @@ class RwkvModel(RwkvPreTrainedModel):
 class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"head.weight": "rwkv.embeddings.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: RwkvConfig):
         super().__init__(config)
         self.rwkv = RwkvModel(config)
         self.head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)

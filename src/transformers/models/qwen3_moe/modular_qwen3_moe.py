@@ -96,7 +96,7 @@ class Qwen3MoeModel(MixtralModel):
 
 
 class Qwen3MoeForCausalLM(MixtralForCausalLM):
-    def __init__(self, config):
+    def __init__(self, config: Qwen3MoeConfig):
         super().__init__(config)
         self.model = Qwen3MoeModel(config)
         self.num_experts = config.num_experts

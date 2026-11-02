@@ -19,8 +19,7 @@ rendered properly in your Markdown viewer.
 
 ## DistributedConfig
 
-Enable expert parallelism with the [`DistributedConfig`] class and the `ep_size` argument. MoE models shard their experts with `"ep_dispatch_experts"`, whose implementations pick how tokens reach them: [token dispatch](#token-dispatch) lets `ep_size` be set independently of `tp_size`, and masking and all-reduce requires `ep_size=tp_size` so every rank in an expert group receives the same tokens.
-
+Enable expert parallelism with the [`DistributedConfig`] class and the `ep_size` argument. MoE models shard their experts with `"ep_dispatch_experts"`. Its implementations pick how tokens reach the experts. [Token dispatch](#token-dispatch) lets `ep_size` differ from `tp_size`. Masking and all-reduce requires `ep_size=tp_size`, so every rank of an expert group holds the same tokens.
 ```py
 import os
 
@@ -51,10 +50,10 @@ Each MoE model defines two plans in its config: `base_model_tp_plan` for the den
 
 | `ep_implementation` | advantages | disadvantages |
 | :--- | :--- | :--- |
-| `"all_to_all"` ([token dispatch](#token-dispatch)) | works for any layout, including `ep_size > tp_size`; only the routed tokens move | two all-to-all collectives and one host sync per layer, so it does not capture in a CUDA graph |
-| `"all_reduce"` | no tokens move and no host sync, so decode captures in a CUDA graph | requires `ep_size=tp_size`; every rank runs its experts over all of the batch's routes, so its cost grows with the batch |
-| `"deepgemm_megamoe"` | DeepGEMM Mega MoE fuses the dispatch, the experts and the combine in one kernel; its symmetric-memory buffers are shared by every layer of an EP group. Loading with `experts_implementation="deepgemm_megamoe"` selects it | requires `ep_size=tp_size` and FP8 activations with FP4 experts on SM100+; inference only |
-| `"auto"` (default) | `"all_reduce"` at inference when the ranks of an expert group share one batch, `"all_to_all"` in training and wherever the ranks hold different batches | |
+| `"all_to_all"`, see [token dispatch](#token-dispatch) | Works for any layout, including `ep_size > tp_size`. Only the routed tokens move. | Two all-to-all collectives and one host sync per layer, so it does not capture in a CUDA graph. |
+| `"all_reduce"` | No tokens move and no host sync, so decode captures in a CUDA graph. | Requires `ep_size=tp_size`. Every rank runs its experts over the whole batch, so its cost grows with the batch. |
+| `"deepgemm_megamoe"` | DeepGEMM Mega MoE fuses the dispatch, the experts and the combine in one kernel. Every layer of an EP group shares its symmetric-memory buffers. Loading with `experts_implementation="deepgemm_megamoe"` selects it. | Requires `ep_size=tp_size`, and FP8 activations with FP4 experts on SM100+. Inference only. |
+| `"auto"`, the default | Runs `"all_reduce"` at inference when the ranks of an expert group share one batch, and `"all_to_all"` otherwise. | |
 
 `ep_implementation` only chooses within the parallel sizes set in [`DistributedConfig`]. When the ranks of an expert group hold different batches, for example `tp_size=1` with `fsdp_size=ep_size`, `"all_to_all"` is the only implementation that applies.
 

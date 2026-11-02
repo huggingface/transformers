@@ -439,7 +439,7 @@ class Deimv2PreTrainedModel(DFinePreTrainedModel):
 
 # This follows DFineConvEncoder, with optional projections added after the backbone features.
 class Deimv2ConvEncoder(Deimv2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Deimv2Config):
         super().__init__(config)
 
         backbone = load_backbone(config)
