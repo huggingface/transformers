@@ -1,0 +1,64 @@
+name: Docs check
+
+# Shows a `docs-check` status on each PR: green if it doesn't need docs, red if it
+# does, and pending until a maintainer approves it. The code that does this lives
+# in transformers-ci (this file only calls it), and the rules are in `.ai/docs-check-rules.md`.
+#
+# There are two jobs:
+# - `approval` runs after a maintainer approves a PR. It asks whether the PR
+#   needs docs, leaves a comment if it does, and sets the status.
+# - `push` runs when a PR is opened or updated. It doesn't ask again and
+#   reuses the last answer, so editing `docs/source/en` turns the status green.
+#
+# For now the status is only a signal. It doesn't block merging. Neither job runs
+# any code from the PR.
+
+on:
+  workflow_run:
+    workflows: ["Docs check trigger"]
+    types: [completed]
+  pull_request_target:
+    branches: [main]
+    types: [opened, reopened, synchronize]
+
+permissions: {}
+
+jobs:
+  approval:
+    if: |
+      github.repository == 'huggingface/transformers' &&
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.event == 'pull_request_review' &&
+      github.event.workflow_run.conclusion == 'success'
+    concurrency:
+      group: docs-check-${{ github.event.workflow_run.head_sha }}
+      cancel-in-progress: false
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+      statuses: write
+    uses: huggingface/transformers-ci/.github/workflows/docs-check.yml@main # main
+    with:
+      mode: approval
+      llm_model: ${{ vars.DOCS_CHECK_LLM_MODEL }}
+      llm_bill_to: huggingface
+    secrets:
+      llm_api_key: ${{ secrets.DOCS_CHECK_LLM_API_KEY }}
+
+  push:
+    if: |
+      github.repository == 'huggingface/transformers' &&
+      github.event_name == 'pull_request_target'
+    concurrency:
+      group: docs-check-pr-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+      statuses: write
+    uses: huggingface/transformers-ci/.github/workflows/docs-check.yml@main # main
+    with:
+      mode: push
+      pr_number: ${{ github.event.pull_request.number }}
