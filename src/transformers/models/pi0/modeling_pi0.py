@@ -50,7 +50,7 @@ class PI0TimestepEmbeddings(nn.Module):
         return sinusoid_freq
 
     def forward(self, time):
-        device_type = time.device.type if isinstance(time.device.type, str) and time.device.type != "mps" else "cpu"
+        device_type = time.device.type if isinstance(time.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             sinusoid_freq = self.sinusoid_freq[None, :]
             emb = sinusoid_freq * time[:, None]
@@ -258,7 +258,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
         pixel_attention_mask (`torch.Tensor`, *optional*):
             The mask indicating padded positions in the input image.
         actions (`torch.Tensor`, *optional*):
-            Input actions that need to be predicted. Used only when training to compiute loss.
+            Input actions that need to be predicted. Used only when training to compute loss.
         """
         batch_size = state.shape[0]
 
@@ -383,7 +383,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             )
 
             # We need to keep only the "vlm-prefix", no attention to past denoising steps!
-            past_key_values.crop(prefix_length)
+            past_key_values.crop(prefix_length - past_key_values.get_seq_length())
             noise = noise + dt * output.logits
         return noise
 

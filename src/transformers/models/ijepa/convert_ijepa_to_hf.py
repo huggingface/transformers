@@ -22,8 +22,8 @@ import re
 from io import BytesIO
 from pathlib import Path
 
-import httpx
 import torch
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import (

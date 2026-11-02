@@ -1,0 +1,436 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Testing suite for the PyTorch Glm5Next model."""
+
+import copy
+import tempfile
+import unittest
+
+from safetensors.torch import load_file
+
+from transformers import (
+    Glm5NextConfig,
+    Glm5NextForConditionalGeneration,
+    Glm5NextModel,
+    Glm5NextTextModel,
+    Glm5NextVisionConfig,
+    is_torch_available,
+)
+from transformers.models.glm5_next.configuration_glm5_next import Glm5NextTextConfig
+from transformers.models.glm5_next.modeling_glm5_next import Glm5NextTextLinearAttention
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
+from transformers.utils.import_utils import is_causal_conv1d_available, is_flash_linear_attention_available
+
+from ...test_modeling_common import floats_tensor
+from ...vlm_tester import VLMModelTest, VLMModelTester
+
+
+if is_torch_available():
+    import torch
+
+
+class Glm5NextVisionText2TextModelTester(VLMModelTester):
+    base_model_class = Glm5NextModel
+    config_class = Glm5NextConfig
+    text_config_class = Glm5NextTextConfig
+    vision_config_class = Glm5NextVisionConfig
+    conditional_generation_class = Glm5NextForConditionalGeneration
+
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("video_start_token_id", 3)
+        kwargs.setdefault("video_end_token_id", 4)
+        kwargs.setdefault("image_start_token_id", 5)
+        kwargs.setdefault("image_end_token_id", 6)
+        kwargs.setdefault("image_token_id", 7)
+        kwargs.setdefault("video_token_id", 8)
+        kwargs.setdefault("image_size", 112)
+        kwargs.setdefault("patch_size", 14)
+        kwargs.setdefault("projection_intermediate_size", 48 * 3)
+        kwargs.setdefault("num_image_tokens", 64)
+        kwargs.setdefault("seq_length", 64 + 7)
+        kwargs.setdefault("hidden_act", "silu")
+        kwargs.setdefault("num_attention_heads", 2)
+        kwargs.setdefault("num_key_value_heads", 2)
+        kwargs.setdefault("head_dim", 16)
+        kwargs.setdefault("moe_intermediate_size", 16)
+        kwargs.setdefault("num_experts_per_tok", 4)
+        kwargs.setdefault("n_routed_experts", 8)
+        kwargs.setdefault("num_local_experts", 8)
+        kwargs.setdefault("linear_num_heads", 2)
+        kwargs.setdefault("linear_head_dim", 16)
+        kwargs.setdefault("linear_conv_kernel_dim", 2)
+        kwargs.setdefault("v_head_dim", 16)
+        kwargs.setdefault("qk_rope_head_dim", 0)
+        kwargs.setdefault("qk_nope_head_dim", 64)
+        kwargs.setdefault("q_lora_rank", 32)
+        kwargs.setdefault("kv_lora_rank", 16)
+        kwargs.setdefault("index_head_dim", 16)
+        kwargs.setdefault("index_n_heads", 2)
+        kwargs.setdefault("index_topk", 48)
+        kwargs.setdefault("index_kpool", 3)
+        kwargs.setdefault("depth", 2)
+        kwargs.setdefault("spatial_merge_size", 1)
+        kwargs.setdefault("temporal_patch_size", 2)
+        kwargs.setdefault("hidden_size", 48)
+        kwargs.setdefault("intermediate_size", 16)
+        kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
+        kwargs.setdefault("layer_types", ["linear_attention", "indexed_attention"])
+        super().__init__(parent, **kwargs)
+
+    def create_pixel_values(self, batch_size: int | None = None):
+        # Override to 5D for patch-based models
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        return floats_tensor(
+            [
+                batch_size * (self.image_size**2) // (self.patch_size**2),
+                self.num_channels * (self.patch_size**2) * self.temporal_patch_size,
+            ]
+        )
+
+    def place_image_tokens(self, input_ids, config):
+        input_ids = input_ids.clone()
+        # Clear any accidental special tokens first
+        input_ids[input_ids == self.video_token_id] = self.pad_token_id
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
+        input_ids[input_ids == self.video_start_token_id] = self.pad_token_id
+        input_ids[input_ids == self.image_start_token_id] = self.pad_token_id
+        input_ids[input_ids == self.video_end_token_id] = self.pad_token_id
+        input_ids[input_ids == self.image_end_token_id] = self.pad_token_id
+        # Place image tokens with image start/end prefix/suffix
+        input_ids[:, 0] = self.image_start_token_id
+        input_ids[:, 1 : 1 + self.num_image_tokens] = self.image_token_id
+        input_ids[:, 1 + self.num_image_tokens] = self.image_end_token_id
+        return input_ids
+
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[:, 1 : 1 + self.num_image_tokens] = 1
+        patches_per_side = self.image_size // self.patch_size
+        return {
+            "image_grid_thw": torch.tensor(
+                [[1, patches_per_side, patches_per_side]] * batch_size, device=torch_device
+            ),
+            "mm_token_type_ids": mm_token_type_ids,
+        }
+
+    def get_vision_config(self):
+        return self.vision_config_class(
+            depth=self.depth,
+            hidden_act=self.hidden_act,
+            hidden_size=self.hidden_size,
+            num_heads=self.num_attention_heads,
+            out_hidden_size=self.hidden_size,
+            intermediate_size=self.intermediate_size,
+            projection_intermediate_size=self.projection_intermediate_size,
+            patch_size=self.patch_size,
+            spatial_merge_size=self.spatial_merge_size,
+            temporal_patch_size=self.temporal_patch_size,
+        )
+
+    def get_config(self):
+        return self.config_class(
+            text_config=self.get_text_config(),
+            vision_config=self.get_vision_config(),
+            image_token_id=self.image_token_id,
+            video_token_id=self.video_token_id,
+            video_start_token_id=self.video_start_token_id,
+            video_end_token_id=self.video_end_token_id,
+            image_start_token_id=self.image_start_token_id,
+            image_end_token_id=self.image_end_token_id,
+        )
+
+
+@require_torch
+class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
+    model_tester_class = Glm5NextVisionText2TextModelTester
+    test_all_params_have_gradient = False  # MoE
+    model_split_percents = [0.5, 0.8, 0.9]
+    # FIXME: export is very sensitive to any shape changes
+    test_torch_exportable = False
+
+    def test_text_model_save_uses_original_weight_names(self):
+        """Keep text-only saves in the released layout expected by SGLang (sgl-project/sglang#38618)."""
+        config = self.model_tester.get_text_config()
+        model = Glm5NextTextModel(config)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            saved_keys = set(load_file(f"{tmpdirname}/model.safetensors"))
+
+        expected_keys = {
+            "layers.0.hc_attn_fn",
+            "layers.0.hc_ffn_fn",
+            "layers.0.self_attn.f_a_proj.weight",
+            "layers.0.self_attn.q_conv1d.weight",
+            "layers.1.mlp.experts.0.gate_proj.weight",
+            "layers.1.mlp.experts.0.up_proj.weight",
+            "layers.1.mlp.experts.0.down_proj.weight",
+        }
+        self.assertTrue(expected_keys.issubset(saved_keys))
+
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        config = copy.deepcopy(config)
+        config.text_config.head_dim = config.text_config.qk_head_dim
+        return VLMModelTest._prepare_config_headdim(config, requested_dim)
+
+    def _get_conv_state_shape(self, batch_size: int, config):
+        return (batch_size, 3 * config.linear_num_heads * config.linear_head_dim, config.linear_conv_kernel_dim)
+
+    def _get_recurrent_state_shape(self, batch_size: int, config):
+        return (batch_size, config.linear_num_heads, config.linear_head_dim, config.linear_head_dim)
+
+    def _check_hidden_states_for_generate(
+        self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
+    ):
+        """Override to account for the difference in MHC and the final state shapes"""
+        self.assertIsInstance(hidden_states, tuple)
+        self.assertListEqual(
+            [isinstance(iter_hidden_states, tuple) for iter_hidden_states in hidden_states],
+            [True] * len(hidden_states),
+        )
+        self.assertEqual(len(hidden_states), (output_length - prompt_length))
+
+        # When `output_hidden_states=True`, each iteration of generate appends the hidden states corresponding to the
+        # new token(s)
+        # NOTE: `StaticCache` may have different lengths on different layers, if this test starts failing add more
+        # elaborate checks
+        for generated_length, iter_hidden_states in enumerate(hidden_states):
+            # regardless of using cache, the first forward pass will have the full prompt as input
+            if use_cache and generated_length > 0:
+                model_input_length = 1
+            else:
+                model_input_length = prompt_length + generated_length
+
+            # We have raw MHC shapes until the final one which is collapsed
+            mhc_shape = (batch_size, model_input_length, config.hc_mult, config.hidden_size)
+            final_shape = (batch_size, model_input_length, config.hidden_size)
+            expected_shapes = [mhc_shape] * (len(iter_hidden_states) - 1)
+            expected_shapes.append(final_shape)
+
+            # check hidden size
+            self.assertListEqual(
+                [state.shape for state in iter_hidden_states],
+                expected_shapes,
+            )
+
+    def test_image_and_video_placeholder_masks_are_disjoint(self):
+        config = self.model_tester.get_config()
+        model = Glm5NextModel(config).to(torch_device).eval()
+        input_ids = torch.tensor(
+            [
+                [
+                    config.image_token_id,
+                    config.video_start_token_id,
+                    config.image_token_id,
+                    config.image_token_id,
+                    config.video_end_token_id,
+                    config.text_config.pad_token_id,
+                ]
+            ],
+            device=torch_device,
+        )
+        inputs_embeds = model.get_input_embeddings()(input_ids)
+        hidden_size = inputs_embeds.shape[-1]
+        image_features = torch.zeros(1, hidden_size, device=torch_device)
+        video_features = torch.zeros(2, hidden_size, device=torch_device)
+
+        in_video_span = (input_ids == config.video_start_token_id).cumsum(-1) > (
+            input_ids == config.video_end_token_id
+        ).cumsum(-1)
+        expected_image_mask = (input_ids == config.image_token_id) & ~in_video_span
+        expected_video_mask = (input_ids == config.image_token_id) & in_video_span
+        for ids in (input_ids, None):
+            image_mask, video_mask = model.get_placeholder_mask(
+                ids,
+                inputs_embeds,
+                image_features=image_features,
+                video_features=video_features,
+            )
+            self.assertTrue(torch.equal(image_mask.squeeze(-1), expected_image_mask))
+            self.assertTrue(torch.equal(video_mask.squeeze(-1), expected_video_mask))
+            self.assertFalse(torch.logical_and(image_mask, video_mask).any())
+
+    def test_attention_outputs(self):
+        """Needs to be overwritten as GLM5 Next VL alternates between attention layers and KDA layers."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        config.return_dict = True
+        text_config = config.get_text_config()
+
+        # Force eager attention to support output attentions.
+        text_config._attn_implementation = "eager"
+        seq_len = getattr(self.model_tester, "seq_length", None)
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
+            text_config = config.get_text_config()
+
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            attentions = outputs.attentions
+            self.assertEqual(
+                len(attentions),
+                sum(layer == "indexed_attention" for layer in text_config.layer_types),
+            )
+
+            # Check that output_attentions also works through config.
+            del inputs_dict["output_attentions"]
+            text_config.output_attentions = True
+
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            attentions = outputs.attentions
+            self.assertEqual(
+                len(attentions),
+                sum(layer == "indexed_attention" for layer in text_config.layer_types),
+            )
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [text_config.num_attention_heads, seq_len, seq_len],
+            )
+            out_len = len(outputs)
+
+            # Check attention is always last and order is fine.
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                self_attentions = outputs.attentions
+
+            self.assertEqual(out_len + 1, len(outputs))
+            self.assertEqual(
+                len(self_attentions),
+                sum(layer == "indexed_attention" for layer in text_config.layer_types),
+            )
+            self.assertListEqual(
+                list(self_attentions[0].shape[-3:]),
+                [text_config.num_attention_heads, seq_len, seq_len],
+            )
+
+    def test_hidden_states_output(self):
+        """Override to account for the difference in MHC and the final state shapes"""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.text_config.output_hidden_states = True
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            text_config = model.config.get_text_config()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.hidden_states
+            self.assertIsNotNone(hidden_states)
+            self.assertEqual(len(hidden_states), text_config.num_hidden_layers + 1)
+
+            batch_size, seq_len = inputs_dict["input_ids"].shape
+
+            # Raw MHC shapes
+            for layer_hidden_states in hidden_states[:-1]:
+                self.assertEqual(
+                    layer_hidden_states.shape,
+                    (
+                        batch_size,
+                        seq_len,
+                        text_config.hc_mult,
+                        text_config.hidden_size,
+                    ),
+                )
+
+            # Final output is standard again
+            self.assertEqual(
+                hidden_states[-1].shape,
+                (
+                    batch_size,
+                    seq_len,
+                    text_config.hidden_size,
+                ),
+            )
+
+    def test_linear_attention_backward_with_saturated_forget_gate(self):
+        """
+        Ensures that a linear attention layer has finite gradients when its forget gate sits at its lower bound. The
+        pairwise decay `g_i - g_j` is positive for non-causal pairs and overflows fp32 `exp`, which leaves the output
+        finite because those entries are masked out afterwards, but not the backward pass.
+        """
+        # The optional backends are resolved at import time, so cpu alone does not rule them out
+        if is_flash_linear_attention_available() or is_causal_conv1d_available():
+            self.skipTest(reason="Please uninstall `flash-linear-attention` / `causal-conv1d` to run this test")
+
+        # On cpu to exercise the reference pytorch path and not the hub kernel one
+        config = self.model_tester.get_config().get_text_config()
+        layer = Glm5NextTextLinearAttention(config, layer_idx=0).to("cpu").train()
+
+        # `A_log` and `dt_bias` are allocated empty, so pin the gate to `linear_lower_bound * sigmoid(8)`
+        with torch.no_grad():
+            layer.forget_gate.A_log.zero_()
+            layer.forget_gate.dt_bias.fill_(8.0)
+            layer.forget_gate.f_b_proj.weight.zero_()
+
+        hidden_states = floats_tensor([self.model_tester.batch_size, self.model_tester.seq_length, config.hidden_size])
+        hidden_states = hidden_states.to("cpu").requires_grad_(True)
+
+        output = layer(hidden_states)
+        self.assertTrue(torch.isfinite(output).all())
+
+        output.square().mean().backward()
+        self.assertTrue(torch.isfinite(hidden_states.grad).all(), "non-finite gradient on the inputs")
+        for name, parameter in layer.named_parameters():
+            self.assertIsNotNone(parameter.grad, f"missing gradient for `{name}`")
+            self.assertTrue(torch.isfinite(parameter.grad).all(), f"non-finite gradient for `{name}`")
+
+    @unittest.skip("Fundamentally incompatible with indexer - indexer has no boundary offset telling sequences apart")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Fundamentally incompatible with indexer - indexer has no boundary offset telling sequences apart")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("MLA creates different head dims which avoids invoking the FA backend")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+
+@require_torch_accelerator
+@slow
+@unittest.skip(reason="No model weights yet, add after release")
+class Glm5NextIntegrationTest(unittest.TestCase):
+    pass

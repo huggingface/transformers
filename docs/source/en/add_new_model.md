@@ -156,7 +156,7 @@ Notebooks are great for executing code cell-by-cell which can help split logical
 The downside is that if you aren't used to them, it may take some time to get used to.
 
 > [!TIP]
-> If the model architecture is identical to an existing model, skip ahead to add a [conversion script](#conversion-script), because you can reuse the architecture of the existing model.
+> If the model architecture is identical to an existing model, skip ahead to [convert the checkpoint](#convert-checkpoints-to-transformers), because you can reuse the architecture of the existing model.
 
 Run the command below to start and complete the questionnaire with some basic information about the new model. This command jumpstarts the process by automatically generating some model code that you'll need to adapt.
 
@@ -329,6 +329,9 @@ def _init_weights(self, module):
 ```
 
 Always initialize weights through the `transformers.initialization` helpers. In-place operations such as `module.bias.zero_()` or anything that touches `module.weight.data` bypass `_is_hf_initialized` that flags which parameters are already loaded. [`~PreTrainedModel.from_pretrained`] runs `_init_weights` after loading the checkpoint, so in-place operations silently overwrite the loaded weights with random values. This is enforced for Transformers models by the [TRF012](./modeling_rules#trf012) rule.
+
+> [!WARNING]
+> During [`~PreTrainedModel.from_pretrained`], models are usually initialized on the `meta` device. The loader recreates non-persistent buffers as empty tensors, so values assigned in `__init__` aren't preserved. Initialize these buffers in `_init_weights` so they have the correct values after loading. For an example, see how BERT initializes its position IDs and token type IDs.
 
 The initialization scheme can look different if you need to adapt it to your model. A submodule with its own `reset_parameters` method can call it directly. For example, [`Wav2Vec2ForPreTraining`] initializes [nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) in its last two linear layers. The call is safe because [`~PreTrainedModel.from_pretrained`] patches the underlying `torch.nn.init` functions to respect the `_is_hf_initialized` flag while it runs `_init_weights`, so loaded weights aren't overwritten.
 

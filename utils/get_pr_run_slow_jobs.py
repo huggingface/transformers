@@ -2,9 +2,48 @@ import argparse
 import json
 import re
 import string
+from functools import cache
+
+from transformers.models.auto.configuration_auto import CONFIG_MAPPING, model_type_to_module_name
 
 
 MAX_NUM_JOBS_TO_SUGGEST = 16
+
+
+def _iter_descendants(config, seen: set[str]):
+    """Yield the model_type of every sub-config under `config`, at any depth, each once."""
+    specs = getattr(config, "sub_configs_defaults", None) or {}
+    for spec in specs.values():
+        model_type = getattr(spec, "model_type", None)
+        if not model_type or model_type in seen:
+            continue
+        seen.add(model_type)
+        yield model_type
+        yield from _iter_descendants(spec, seen)
+
+
+@cache
+def _reverse_backbone_map() -> dict[str, list[str]]:
+    """
+    {backbone_model: [composite_models, ...]}, e.g. `clip` -> [`llava`], so that a change to `clip`
+    triggers the tests of `llava`. Nesting is followed at any depth: if `a` contains `b` which
+    contains `c`, then `c` maps to both `b` and `a`. Built once per process: the config imports
+    are the expensive part.
+    """
+    reverse_map: dict[str, set[str]] = {}
+    for model_type in CONFIG_MAPPING:
+        parent = model_type_to_module_name(model_type)
+        for descendant in _iter_descendants(CONFIG_MAPPING[model_type], {model_type}):
+            child = model_type_to_module_name(descendant)
+            if child != parent:
+                reverse_map.setdefault(child, set()).add(parent)
+
+    return {child: sorted(parents) for child, parents in reverse_map.items()}
+
+
+def get_composite_files(backbone_name: str) -> list[str, ...]:
+    """Composite-model files that depend on `backbone_file` (empty if none)."""
+    return _reverse_backbone_map().get(backbone_name, [])
 
 
 def get_jobs_to_run():
@@ -12,7 +51,7 @@ def get_jobs_to_run():
     # the caller (using GitHub api).
     # We can also use the following api to get the information if we don't have them before calling this script.
     # url = f"https://api.github.com/repos/huggingface/transformers/pulls/PULL_NUMBER/files?ref={pr_sha}"
-    with open("pr_files.txt") as fp:
+    with open("pr_files.txt", encoding="utf-8") as fp:
         pr_files = json.load(fp)
         pr_files = [{k: v for k, v in item.items() if k in ["filename", "status"]} for item in pr_files]
     pr_files = [item["filename"] for item in pr_files if item["status"] in ["added", "modified"]]
@@ -40,6 +79,8 @@ def get_jobs_to_run():
                 # TODO: for files in `quantizers`, the processed item above may not exist. Try using a fuzzy matching
                 if item in repo_content:
                     jobs_to_run.append(item)
+                if multimodal_parents := get_composite_files(item):
+                    jobs_to_run.extend(multimodal_parents)
                 break
     jobs_to_run = sorted(set(jobs_to_run))
 
@@ -95,7 +136,7 @@ if __name__ == "__main__":
     # (we avoid to checkout the repository using `actions/checkout` to reduce the run time, but mostly to avoid the potential security issue as much as possible)
     repo_content = []
     for filename in ["tests_dir.txt", "tests_models_dir.txt", "tests_quantization_dir.txt"]:
-        with open(filename) as fp:
+        with open(filename, encoding="utf-8") as fp:
             data = json.load(fp)
             data = [item["path"][len("tests/") :] for item in data if item["type"] == "dir"]
             repo_content.extend(data)

@@ -166,7 +166,8 @@ Train or save the new empty tokenizer.
 tokenizer = NewTokenizer()
 
 # train on new corpus
-tokenizer.train_new_from_iterator()
+corpus = ["The stock market rallied today.", "Bond yields fell sharply."]
+trained_tokenizer = tokenizer.train_new_from_iterator(corpus, vocab_size=32000)
 # save tokenizer
-tokenizer.save_pretrained("./new-tokenizer")
+trained_tokenizer.save_pretrained("./new-tokenizer")
 ```

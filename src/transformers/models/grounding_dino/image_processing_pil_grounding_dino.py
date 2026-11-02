@@ -54,7 +54,7 @@ from ...image_utils import (
     validate_annotations,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, is_vision_available, requires_backends
+from ...utils import TensorType, auto_docstring, is_torch_available, is_vision_available
 from ...utils.import_utils import requires
 
 
@@ -736,7 +736,6 @@ class GroundingDinoImageProcessorPil(PilBackend):
             - "labels": Indexes of the classes predicted by the model on the image.
             - "boxes": Image bounding boxes in (top_left_x, top_left_y, bottom_right_x, bottom_right_y) format.
         """
-        requires_backends(self, ["torch"])
         batch_logits, batch_boxes = outputs.logits, outputs.pred_boxes
         batch_size = len(batch_logits)
 

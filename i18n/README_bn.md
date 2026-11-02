@@ -36,24 +36,26 @@ limitations under the License.
 
 <h4 align="center">
     <p>
-        <a href="https://github.com/huggingface/transformers/blob/main/README.md">English</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_zh-hans.md">简体中文</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_zh-hant.md">繁體中文</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ko.md">한국어</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_es.md">Español</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ja.md">日本語</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_hd.md">हिन्दी</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ru.md">Русский</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_pt-br.md">Português</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_te.md">తెలుగు</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_fr.md">Français</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_de.md">Deutsch</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_it.md">Italiano</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_vi.md">Tiếng Việt</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ar.md">العربية</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ur.md">اردو</a> |
+        <a href="../README.md">English</a> |
+        <a href="README_zh-hans.md">简体中文</a> |
+        <a href="README_zh-hant.md">繁體中文</a> |
+        <a href="README_ko.md">한국어</a> |
+        <a href="README_es.md">Español</a> |
+        <a href="README_ja.md">日本語</a> |
+        <a href="README_hd.md">हिन्दी</a> |
+        <a href="README_ru.md">Русский</a> |
+        <a href="README_pt-br.md">Português</a> |
+        <a href="README_te.md">తెలుగు</a> |
+        <a href="README_fr.md">Français</a> |
+        <a href="README_de.md">Deutsch</a> |
+        <a href="README_it.md">Italiano</a> |
+        <a href="README_vi.md">Tiếng Việt</a> |
+        <a href="README_ar.md">العربية</a> |
+        <a href="README_ur.md">اردو</a> |
         <b>বাংলা</b> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_tr.md">Türkçe</a> |
+        <a href="README_fa.md">فارسی</a> |
+        <a href="README_ro.md">Română</a> |
+        <a href="README_tr.md">Türkçe</a>
     </p>
 </h4>
 
@@ -242,7 +244,6 @@ pipeline(
 
 * এই লাইব্রেরি নিউরাল নেটওয়ার্কের জন্য ব্লক-মডিউল টুলবক্স নয়। মডেল ফাইলের কোডে অতিরিক্ত অ্যাবস্ট্র্যাকশন intentionally করা হয়নি, যাতে গবেষকরা দ্রুত প্রতিটি মডেলের উপর কাজ করতে পারে কোনো অতিরিক্ত ফাইল বা স্তরে না গিয়ে।
 * ট্রেইনিং API মূলত Transformers-এর PyTorch মডেলের সাথে কাজ করার জন্য অপটিমাইজ করা হয়েছে। সাধারণ মেশিন লার্নিং লুপের জন্য, [Accelerate](https://huggingface.co/docs/accelerate) এর মতো অন্য লাইব্রেরি ব্যবহার করা উচিত।
-* [উদাহরণ স্ক্রিপ্টগুলো](https://github.com/huggingface/transformers/tree/main/examples) শুধু *উদাহরণ*। এগুলো সরাসরি আপনার ব্যবহারের ক্ষেত্রে কাজ নাও করতে পারে, তাই কোড সামঞ্জস্য করতে হতে পারে।
 
 ## Transformers দিয়ে ১০০টি প্রজেক্ট
 

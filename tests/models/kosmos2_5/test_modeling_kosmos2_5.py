@@ -20,7 +20,6 @@ import unittest
 
 import numpy as np
 import pytest
-import requests
 from parameterized import parameterized
 
 from transformers import AutoProcessor, Kosmos2_5Config
@@ -42,6 +41,7 @@ from transformers.utils import is_torch_available, is_vision_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
@@ -58,7 +58,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class Kosmos2_5VisionModelTester:
@@ -214,6 +214,8 @@ class Kosmos2_5ModelTester:
         self.text_model_tester = Kosmos2_5TextModelTester(parent, **text_kwargs)
         self.vision_model_tester = Kosmos2_5VisionModelTester(parent, **vision_kwargs)
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.num_hidden_layers = self.text_model_tester.num_hidden_layers
+        self.hidden_size = self.text_model_tester.hidden_size
         self.seq_length = self.text_model_tester.seq_length
         self.latent_query_num = latent_query_num
         self.is_training = is_training
@@ -346,6 +348,23 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         self.model_tester = Kosmos2_5ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Kosmos2_5Config, hidden_size=32)
 
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        # override - old testers that is composed of separate classes for vision/text
+        try:
+            original_batch_size = self.model_tester.batch_size
+            self.model_tester.text_model_tester.batch_size = batch_size
+            self.model_tester.vision_model_tester.batch_size = batch_size
+            config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
+        finally:
+            self.model_tester.text_model_tester.batch_size = original_batch_size
+            self.model_tester.vision_model_tester.batch_size = original_batch_size
+        return config, inputs_dict
+
+    def test_inputs_embeds_matches_input_ids(self):
+        position_ids = torch.arange(self.model_tester.seq_length).to(torch_device)
+        position_ids = position_ids[None, :].repeat(self.model_tester.batch_size, 1)
+        return super().test_inputs_embeds_matches_input_ids(position_ids=position_ids)
+
     @unittest.skip("KOSMOS-2.5 doesn't support padding")
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass
@@ -415,44 +434,6 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                     )
                 # Checking there was no complain of missing weights
                 self.assertEqual(infos["missing_keys"], set())
-
-    # overwrite from common in order to use `self.model_tester.text_model_tester.num_hidden_layers`
-    def test_hidden_states_output(self):
-        def check_hidden_states_output(inputs_dict, config, model_class):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            hidden_states = outputs.hidden_states
-
-            expected_num_layers = getattr(
-                self.model_tester,
-                "expected_num_hidden_layers",
-                self.model_tester.text_model_tester.num_hidden_layers + 1,
-            )
-            self.assertEqual(len(hidden_states), expected_num_layers)
-
-            seq_length = self.model_tester.text_model_tester.seq_length
-
-            self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.text_model_tester.hidden_size],
-            )
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            check_hidden_states_output(inputs_dict, config, model_class)
-
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            self._set_subconfig_attributes(config, "output_hidden_states", True)
-
-            check_hidden_states_output(inputs_dict, config, model_class)
 
     @slow
     def test_model_from_pretrained(self):
@@ -535,6 +516,11 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             unpadded_custom_inputs=unpadded_custom_inputs, padded_custom_inputs=padded_custom_inputs
         )
 
+    @pytest.mark.generate
+    @is_flaky
+    def test_cached_decode_matches_cacheless(self):
+        super().test_cached_decode_matches_cacheless()
+
 
 @require_vision
 @require_torch
@@ -555,8 +541,8 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         return generated_ids, generated_text
 
     def test_eager(self):
-        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
-        image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/receipt_00008.png"
+        image = load_test_image(url)
 
         dtype = torch.bfloat16
         repo = "microsoft/kosmos-2.5"
@@ -596,8 +582,8 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(generated_text, EXPECTED_TEXT)
 
     def test_sdpa(self):
-        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
-        image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/receipt_00008.png"
+        image = load_test_image(url)
 
         dtype = torch.bfloat16
         repo = "microsoft/kosmos-2.5"
@@ -647,8 +633,8 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
     @pytest.mark.flash_attn_test
     @slow
     def test_FA2(self):
-        url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
-        image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/receipt_00008.png"
+        image = load_test_image(url)
 
         dtype = torch.bfloat16
         repo = "microsoft/kosmos-2.5"

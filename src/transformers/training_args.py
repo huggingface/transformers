@@ -304,7 +304,11 @@ class TrainingArguments:
             clearing activations during forward pass and recomputing them during backward pass.
             Enables training larger models or batch sizes at the cost of ~20% slower training.
         gradient_checkpointing_kwargs (`dict`, *optional*, defaults to `None`):
-            Keyword arguments passed to `gradient_checkpointing_enable()`.
+            Keyword arguments passed to `gradient_checkpointing_enable()`. `every_n_layers` checkpoints only every
+            n-th decoder layer instead of all of them; `1` is the usual all-or-nothing behavior, and larger values
+            give some memory back to speed. `offload` holds the saved activations in pinned host memory, which
+            frees `layers x sequence x hidden` bytes of device memory and makes the step slower. Any other key is
+            forwarded to `torch.utils.checkpoint.checkpoint`.
 
         > Compilation
 
@@ -345,8 +349,8 @@ class TrainingArguments:
             Number of steps to wait before calling `torch.<device>.empty_cache()`. If left unset or set to None, cache will not be emptied.
             This can help avoid CUDA out-of-memory errors by lowering peak VRAM usage at a cost of about [10% slower performance](https://github.com/huggingface/transformers/issues/31372).
         auto_find_batch_size (`bool`, *optional*, defaults to `False`)
-            Whether to find a batch size that will fit into memory automatically through exponential decay, avoiding
-            CUDA Out-of-Memory errors.
+            Whether to find a training batch size that will fit into memory automatically through exponential decay,
+            avoiding CUDA Out-of-Memory errors. The evaluation batch size is not adjusted.
 
         > Logging & Monitoring Training
 
@@ -633,12 +637,16 @@ class TrainingArguments:
                 - `"sequential"`: Uses `SequentialSampler`.
                 - `"group_by_length"`: Uses `LengthGroupedSampler` to group samples of roughly the same length
                   together (to minimize padding and be more efficient).
+                - `"batch_rebalance"`: Uses `BatchRebalanceSampler` to balance padded-token cost across devices
+                  and gradient-accumulation steps within each effective batch, reducing padding waste and peak
+                  memory vs `"group_by_length"`. Currently only supported for data-parallel training
+                  (tensor parallelism is not yet supported).
 
             Note: When using an `IterableDataset`, this argument is ignored.
         length_column_name (`str`, *optional*, defaults to `"length"`):
             Column name for precomputed lengths. If the column exists, grouping by length will use these values rather
-            than computing them on train startup. Ignored unless `train_sampling_strategy` is `"group_by_length"` and the dataset
-            is an instance of `Dataset`.
+            than computing them on train startup. Ignored unless `train_sampling_strategy` is `"group_by_length"`or
+            `"batch_rebalance"` and the dataset is an instance of `Dataset`.
 
         > DDP (DistributedDataParallel)
 
@@ -730,21 +738,17 @@ class TrainingArguments:
 
         do_train (`bool`, *optional*, defaults to `False`):
             Whether to run training or not. This argument is not directly used by [`Trainer`], it's intended to be used
-            by your training/evaluation scripts instead. See the [example
-            scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
+            by your training/evaluation scripts instead.
         do_eval (`bool`, *optional*):
             Whether to run evaluation on the validation set or not. Will be set to `True` if `eval_strategy` is
             different from `"no"`. This argument is not directly used by [`Trainer`], it's intended to be used by your
-            training/evaluation scripts instead. See the [example
-            scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
+            training/evaluation scripts instead.
         do_predict (`bool`, *optional*, defaults to `False`):
             Whether to run predictions on the test set or not. This argument is not directly used by [`Trainer`], it's
-            intended to be used by your training/evaluation scripts instead. See the [example
-            scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
+            intended to be used by your training/evaluation scripts instead.
         resume_from_checkpoint (`str`, *optional*):
             The path to a folder with a valid checkpoint for your model. This argument is not directly used by
-            [`Trainer`], it's intended to be used by your training/evaluation scripts instead. See the [example
-            scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
+            [`Trainer`], it's intended to be used by your training/evaluation scripts instead.
     """
 
     # Fields that accept dict values via CLI as JSON strings (e.g., '{"key": "value"}').
@@ -901,7 +905,13 @@ class TrainingArguments:
     )
     gradient_checkpointing_kwargs: dict[str, Any] | str | None = field(
         default=None,
-        metadata={"help": "Keyword arguments passed to `gradient_checkpointing_enable()`."},
+        metadata={
+            "help": "Keyword arguments passed to `gradient_checkpointing_enable()`. `every_n_layers` checkpoints "
+            "only every n-th decoder layer instead of all of them; `1` is the usual all-or-nothing behavior, and "
+            "larger values give some memory back to speed. `offload` holds the saved activations in pinned host "
+            "memory, which frees device memory and makes the step slower. Any other key is forwarded to "
+            "`torch.utils.checkpoint.checkpoint`."
+        },
     )
 
     # --- Compilation ---
@@ -957,7 +967,7 @@ class TrainingArguments:
     auto_find_batch_size: bool = field(
         default=False,
         metadata={
-            "help": "Whether to find a batch size that will fit into memory automatically through exponential decay, avoiding CUDA Out-of-Memory errors."
+            "help": "Whether to find a training batch size that will fit into memory automatically through exponential decay, avoiding CUDA Out-of-Memory errors. The evaluation batch size is not adjusted."
         },
     )
 
@@ -1348,14 +1358,14 @@ class TrainingArguments:
     train_sampling_strategy: str = field(
         default="random",
         metadata={
-            "help": "Sampler for training: 'random' (default), 'sequential', or 'group_by_length'.",
-            "choices": ["random", "sequential", "group_by_length"],
+            "help": "Sampler for training: 'random' (default), 'sequential', 'group_by_length', or 'batch_rebalance'.",
+            "choices": ["random", "sequential", "group_by_length", "batch_rebalance"],
         },
     )
     length_column_name: str = field(
         default="length",
         metadata={
-            "help": "Column name for precomputed lengths. Ignored unless `train_sampling_strategy` is 'group_by_length'."
+            "help": "Column name for precomputed lengths. Ignored unless `train_sampling_strategy` is 'group_by_length' or 'batch_rebalance'."
         },
     )
 
@@ -1893,7 +1903,7 @@ class TrainingArguments:
                 torch.neuron.set_device(device)
             elif is_torch_tpu_available():
                 device = torch.device("tpu:0")
-                torch.tpu.set_device(device)
+                torch.accelerator.set_device_index(device)
             else:
                 # Default to cuda:0 (respects CUDA_VISIBLE_DEVICES); nn.DataParallel handles n_gpu > 1
                 device = torch.device(
@@ -2204,7 +2214,7 @@ class TrainingArguments:
             weight_decay (`float`, *optional*, defaults to 0):
                 The weight decay to apply (if not zero) to all layers except all bias and LayerNorm weights in the
                 optimizer.
-            num_train_epochs(`float`, *optional*, defaults to 3.0):
+            num_epochs (`float`, *optional*, defaults to 3.0):
                 Total number of training epochs to perform (if not an integer, will perform the decimal part percents
                 of the last epoch before stopping training).
             max_steps (`int`, *optional*, defaults to -1):

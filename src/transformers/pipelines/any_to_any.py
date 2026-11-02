@@ -96,7 +96,7 @@ class AnyToAnyPipeline(Pipeline):
     >>>         "content": [
     >>>             {
     >>>                 "type": "image",
-    >>>                 "url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg",
+    >>>                 "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen_vl_demo.jpeg",
     >>>             },
     >>>             {"type": "text", "text": "Describe this image."},
     >>>         ],
@@ -111,7 +111,7 @@ class AnyToAnyPipeline(Pipeline):
     >>> pipe(text=messages, max_new_tokens=20, return_full_text=False)
     [{'input_text': [{'role': 'user',
         'content': [{'type': 'image',
-        'url': 'https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg'},
+        'url': 'https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen_vl_demo.jpeg'},
         {'type': 'text', 'text': 'Describe this image.'}]},
     {'role': 'assistant',
         'content': [{'type': 'text', 'text': 'There is a dog and'}]}],
@@ -308,8 +308,9 @@ class AnyToAnyPipeline(Pipeline):
             return_full_text (`bool`, *optional*, defaults to `True`):
                 If set to `False` only added text is returned, otherwise the full text is returned. Cannot be
                 specified at the same time as `return_text`.
-            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
-                Whether or not to clean up the potential extra spaces in the text output.
+            clean_up_tokenization_spaces (`bool`, *optional*):
+                Whether or not to clean up the potential extra spaces in the text output. Defaults to the tokenizer's
+                `clean_up_tokenization_spaces` setting.
             continue_final_message( `bool`, *optional*): This indicates that you want the model to continue the
                 last message in the input chat rather than starting a new one, allowing you to "prefill" its response.
                 By default this is `True` when the final message in the input chat has the `assistant` role and
@@ -404,7 +405,9 @@ class AnyToAnyPipeline(Pipeline):
                 inputs["audio"] = self.processor.feature_extractor.fetch_audio(inputs["audio"])
 
         # If batched text inputs, we set padding to True unless specified otherwise
-        processor_kwargs = processing_kwargs.pop("processor_kwargs", None) or processing_kwargs
+        processor_kwargs = processing_kwargs.pop("processor_kwargs", None)
+        if processor_kwargs is None:
+            processor_kwargs = processing_kwargs
         if isinstance(text, (list, tuple)) and len(text) > 1:
             processor_kwargs.setdefault("padding", True)
         model_inputs = self.processor(text=text, **inputs, return_tensors="pt", **processor_kwargs).to(
@@ -418,9 +421,7 @@ class AnyToAnyPipeline(Pipeline):
         prompt_text = model_inputs.pop("text")
         input_ids = model_inputs.get("input_ids", model_inputs.get("decoder_input_ids"))
 
-        # User-defined `generation_config` passed to the pipeline call take precedence
-        if "generation_config" not in generate_kwargs:
-            generate_kwargs["generation_config"] = self.generation_config
+        generate_kwargs = self._prepare_generate_kwargs(generate_kwargs)
 
         generated_sequence = self.model.generate(**model_inputs, **generate_kwargs)
         return {"generated_sequence": generated_sequence, "prompt_text": prompt_text, "input_ids": input_ids}

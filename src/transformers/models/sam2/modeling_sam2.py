@@ -568,7 +568,7 @@ class Sam2HieraDetModelOutput(ModelOutput):
 
 @auto_docstring
 class Sam2PreTrainedModel(PreTrainedModel):
-    config_class = Sam2Config
+    config: Sam2Config
     base_model_prefix = "sam2"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
@@ -601,7 +601,7 @@ class Sam2PreTrainedModel(PreTrainedModel):
 
 
 class Sam2HieraDetModel(Sam2PreTrainedModel):
-    config_class = Sam2HieraDetConfig
+    config: Sam2HieraDetConfig
     main_input_name = "pixel_values"
     _can_record_outputs = {
         "hidden_states": Sam2MultiScaleBlock,
@@ -675,7 +675,7 @@ class Sam2HieraDetModel(Sam2PreTrainedModel):
     """
 )
 class Sam2VisionModel(Sam2PreTrainedModel):
-    config_class = Sam2VisionConfig
+    config: Sam2VisionConfig
     main_input_name = "pixel_values"
     _can_record_outputs = {
         "hidden_states": Sam2MultiScaleBlock,
@@ -952,7 +952,7 @@ class Sam2TwoWayAttentionBlock(GradientCheckpointingLayer):
         Arguments:
             config (`Sam2MaskDecoderConfig`):
                 The configuration file used to instantiate the block
-            attention_downsample_rate (*optionalk*, int, defaults to 2):
+            attention_downsample_rate (*optional*, int, defaults to 2):
                 The downsample ratio of the block used to reduce the inner dim of the attention.
             skip_first_layer_pe (*optional*, bool, defaults to `False`):
                 Whether or not to skip the addition of the query_point_embedding on the first layer.
@@ -1484,7 +1484,7 @@ class Sam2Model(Sam2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 

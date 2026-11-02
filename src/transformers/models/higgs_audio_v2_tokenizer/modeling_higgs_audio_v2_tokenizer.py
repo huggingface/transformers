@@ -46,7 +46,7 @@ class HiggsAudioV2TokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
     models.
     """
 
-    config_class = HiggsAudioV2TokenizerConfig
+    config: HiggsAudioV2TokenizerConfig
     base_model_prefix = "higgs_audio_v2_tokenizer"
     main_input_name = "input_values"
     input_modalities = "audio"
@@ -428,7 +428,7 @@ class HiggsAudioV2TokenizerResidualVectorQuantization(nn.Module):
     def encode(self, embeddings: torch.Tensor, bandwidth=None) -> torch.Tensor:
         """
         Encode the input tensor into discrete indices using RVQ, with the number of quantizers selected based on the given bandwidth.
-        Each quantizer /codebook residually quantizes the input and returns the nearest indices in terms of Euclidian distance.
+        Each quantizer /codebook residually quantizes the input and returns the nearest indices in terms of Euclidean distance.
         """
         num_quantizers = self.get_num_quantizers_for_bandwidth(bandwidth)
         residual = embeddings
@@ -454,7 +454,7 @@ class HiggsAudioV2TokenizerResidualVectorQuantization(nn.Module):
 @requires(backends=("torchaudio",))
 @auto_docstring(custom_intro="""The HiggsAudioV2Tokenizer neural audio codec model.""")
 class HiggsAudioV2TokenizerModel(HiggsAudioV2TokenizerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: HiggsAudioV2TokenizerConfig):
         super().__init__(config)
         self.config = config
         self.pad = config.hop_length // 2

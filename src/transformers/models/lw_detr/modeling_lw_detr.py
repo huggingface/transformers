@@ -340,7 +340,7 @@ class LwDetrViTEncoder(LwDetrViTPreTrainedModel):
 
 @auto_docstring()
 class LwDetrViTBackbone(BackboneMixin, LwDetrViTPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LwDetrViTConfig):
         super().__init__(config)
 
         self.embeddings = LwDetrViTEmbeddings(config)
@@ -987,12 +987,16 @@ class LwDetrPreTrainedModel(PreTrainedModel):
         if hasattr(module, "refpoint_embed") and module.refpoint_embed is not None:
             init.constant_(module.refpoint_embed.weight, 0)
         if hasattr(module, "class_embed") and module.class_embed is not None:
-            prior_prob = 0.01
-            bias_value = -math.log((1 - prior_prob) / prior_prob)
-            init.constant_(module.class_embed.bias, bias_value)
+            init.constant_(module.class_embed.bias, -math.log(99))
         if hasattr(module, "bbox_embed") and module.bbox_embed is not None:
             init.constant_(module.bbox_embed.layers[-1].weight, 0)
             init.constant_(module.bbox_embed.layers[-1].bias, 0)
+        # The original deep-copies the initialized `class_embed` / `bbox_embed` into the encoder heads
+        if isinstance(module, LwDetrModel):
+            for class_head, bbox_head in zip(module.enc_out_class_embed, module.enc_out_bbox_embed):
+                init.constant_(class_head.bias, -math.log(99))
+                init.zeros_(bbox_head.layers[-1].weight)
+                init.zeros_(bbox_head.layers[-1].bias)
 
 
 @auto_docstring(
@@ -1317,7 +1321,7 @@ class LwDetrModel(LwDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, DeformableDetrModel
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1557,18 +1561,12 @@ class LwDetrForObjectDetection(LwDetrPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> LwDetrObjectDetectionOutput:
         r"""
-        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
-
         Examples:
 
         ```python
         >>> from transformers import AutoImageProcessor, LwDetrForObjectDetection
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

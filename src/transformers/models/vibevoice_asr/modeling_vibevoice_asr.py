@@ -28,10 +28,9 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from .configuration_vibevoice_asr import VibeVoiceAsrConfig
 
@@ -317,14 +316,12 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    @deprecate_kwarg("acoustic_tokenizer_chunk_size", version="v5.20")
     @can_return_tuple
     @auto_docstring(custom_intro="Encode audio into embeddings that can be used by the language model.")
     def get_audio_features(
         self,
         input_values: torch.FloatTensor,
         padding_mask: torch.BoolTensor | None = None,
-        acoustic_tokenizer_chunk_size: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
@@ -332,26 +329,12 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
             Input audio tensor sampled at 24kHz.
         padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing operations on padding feature indices.
-        acoustic_tokenizer_chunk_size (`int`, *optional*):
-            Size of audio chunks to process at once through the tokenizers.
         """
-        if acoustic_tokenizer_chunk_size is None:
-            acoustic_tokenizer_chunk_size = self.config.acoustic_tokenizer_chunk_size
-        else:
-            if acoustic_tokenizer_chunk_size % self.config.acoustic_tokenizer_encoder_config.hop_length != 0:
-                acoustic_tokenizer_chunk_size = int(
-                    (acoustic_tokenizer_chunk_size // self.config.acoustic_tokenizer_encoder_config.hop_length)
-                    * self.config.acoustic_tokenizer_encoder_config.hop_length
-                )
-                raise ValueError(
-                    f"`acoustic_tokenizer_chunk_size` must be a multiple of hop length ({self.config.acoustic_tokenizer_encoder_config.hop_length}), {acoustic_tokenizer_chunk_size} is a valid option."
-                )
-
         with torch.no_grad():
             acoustic_encoder_cache, semantic_encoder_cache = None, None
             acoustic_latents, semantic_latents = [], []
 
-            for chunk in torch.split(input_values, acoustic_tokenizer_chunk_size, dim=-1):
+            for chunk in torch.split(input_values, self.config.acoustic_tokenizer_chunk_size, dim=-1):
                 acoustic_encoder_output = self.acoustic_tokenizer_encoder(
                     chunk,
                     padding_cache=acoustic_encoder_cache,
@@ -379,9 +362,8 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
 
         combined_features = self.multi_modal_projector(acoustic_latents, semantic_latents)
         if padding_mask is not None:
-            num_audio_tokens = torch.ceil(
-                padding_mask.sum(dim=-1) / self.config.acoustic_tokenizer_encoder_config.hop_length
-            ).to(torch.int64)
+            hop_length = self.config.acoustic_tokenizer_encoder_config.hop_length
+            num_audio_tokens = (padding_mask.sum(dim=-1) + hop_length - 1) // hop_length
             padding_mask = torch.arange(num_audio_tokens.max(), device=combined_features.device) < num_audio_tokens[
                 :, None
             ].to(combined_features.device)
@@ -389,7 +371,6 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
 
         return BaseModelOutputWithPooling(last_hidden_state=acoustic_latents, pooler_output=combined_features)
 
-    @deprecate_kwarg("acoustic_tokenizer_chunk_size", version="v5.20")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -400,25 +381,18 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         input_values: torch.FloatTensor | None = None,
         padding_mask: torch.BoolTensor | None = None,
-        acoustic_tokenizer_chunk_size: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VibeVoiceAsrModelOutputWithPast:
         r"""
         padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing operations on padding feature indices.
-        acoustic_tokenizer_chunk_size (`int`, *optional*):
-            Size of audio chunks processed by the acoustic and semantic tokenizers.
         """
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         audio_embeds = None
         if input_values is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(
-                input_values=input_values,
-                padding_mask=padding_mask,
-                acoustic_tokenizer_chunk_size=acoustic_tokenizer_chunk_size,
-            ).pooler_output
+            audio_embeds = self.get_audio_features(input_values=input_values, padding_mask=padding_mask).pooler_output
 
             audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)
             inputs_embeds = inputs_embeds.masked_scatter(
@@ -456,7 +430,6 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
     def get_audio_features(self, *args, **kwargs):
         return self.model.get_audio_features(*args, **kwargs)
 
-    @deprecate_kwarg("acoustic_tokenizer_chunk_size", version="v5.20")
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -467,7 +440,6 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
         inputs_embeds: torch.FloatTensor | None = None,
         input_values: torch.FloatTensor | None = None,
         padding_mask: torch.BoolTensor | None = None,
-        acoustic_tokenizer_chunk_size: int | None = None,
         labels: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
@@ -475,8 +447,6 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
         r"""
         padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing operations on padding feature indices.
-        acoustic_tokenizer_chunk_size (`int`, *optional*):
-            Size of audio chunks processed by the acoustic and semantic tokenizers.
 
         Example:
 
@@ -494,13 +464,12 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
             inputs_embeds=inputs_embeds,
             input_values=input_values,
             padding_mask=padding_mask,
-            acoustic_tokenizer_chunk_size=acoustic_tokenizer_chunk_size,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -520,17 +489,14 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
     def prepare_inputs_for_generation(self, *args, is_first_iteration=False, **kwargs):
         input_values = kwargs.pop("input_values", None)
         padding_mask = kwargs.pop("padding_mask", None)
-        acoustic_tokenizer_chunk_size = kwargs.pop("acoustic_tokenizer_chunk_size", None)
 
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
-        if is_first_iteration:
+        if is_first_iteration or not kwargs.get("use_cache", True):
             if input_values is not None:
                 model_inputs["input_values"] = input_values
             if padding_mask is not None:
                 model_inputs["padding_mask"] = padding_mask
-            if acoustic_tokenizer_chunk_size is not None:
-                model_inputs["acoustic_tokenizer_chunk_size"] = acoustic_tokenizer_chunk_size
 
         return model_inputs
 

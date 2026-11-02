@@ -239,21 +239,32 @@ class Gemma4UnifiedAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, 
         self.skip_mm_output_format()
 
     def skip_mm_output_format(self):
+        # This test doesn't have any images/videos in input
         skippable_tests = [
             "test_get_image_features_hidden_states",
             "test_get_image_features_attentions",
+            "test_get_image_features_output",
+            "test_get_image_features_pooler_output",
             "test_get_video_features_hidden_states",
             "test_get_video_features_attentions",
+            "test_get_video_features_output",
             "test_get_audio_features_hidden_states",
             "test_get_audio_features_attentions",
-            "test_get_image_features_output",
-            "test_get_video_features_output",
+            # no last-hidden-states returned, only pooler output
             "test_get_audio_features_output",
         ]
 
         for test in skippable_tests:
             if self._testMethodName.startswith(test):
                 self.skipTest(reason="Gemma4 unified does not collect any hidden states or attentions (no mm tower)")
+
+    @unittest.skip("The tester has no image in input dict and mm-encoder-output don't yet support audio")
+    def test_generate_from_multimodal_encoder_outputs_and_raw_data(self):
+        pass
+
+    @unittest.skip("The tester has no image in input dict and mm-encoder-output don't yet support audio")
+    def test_generate_from_multimodal_encoder_outputs(self):
+        pass
 
     @unittest.skip("We need 4 layers to correctly test cache sharing.")
     def test_num_layers_is_small(self):
@@ -396,15 +407,15 @@ class Gemma4UnifiedVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin,
         self.skip_mm_output_format()
 
     def skip_mm_output_format(self):
+        # This test doesn't have any audio/videos in input
         skippable_tests = [
             "test_get_image_features_hidden_states",
             "test_get_image_features_attentions",
             "test_get_video_features_hidden_states",
             "test_get_video_features_attentions",
+            "test_get_video_features_output",
             "test_get_audio_features_hidden_states",
             "test_get_audio_features_attentions",
-            "test_get_image_features_output",
-            "test_get_video_features_output",
             "test_get_audio_features_output",
         ]
 
@@ -415,6 +426,39 @@ class Gemma4UnifiedVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin,
     @unittest.skip("We need 4 layers to correctly test cache sharing.")
     def test_num_layers_is_small(self):
         pass
+
+    def test_forward_with_videos(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Gemma4UnifiedForConditionalGeneration(config).to(torch_device).eval()
+
+        # Two videos with 2 and 3 frames
+        num_frames_per_video = torch.tensor([2, 3], device=torch_device)
+        num_tokens = 2  # per frame, one token per patch
+        patch_dim = config.vision_config.model_patch_size**2 * config.vision_config.num_channels
+        pixel_values_videos = floats_tensor([5, num_tokens, patch_dim]).to(torch_device)
+        video_position_ids = torch.ones(5, num_tokens, 2, dtype=torch.long, device=torch_device)
+        input_ids = torch.ones((2, 3 * num_tokens + 2), dtype=torch.long, device=torch_device)
+        input_ids[0, 1 : 1 + 2 * num_tokens] = config.video_token_id
+        input_ids[1, 1 : 1 + 3 * num_tokens] = config.video_token_id
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == config.video_token_id] = 2
+
+        with torch.no_grad():
+            video_features = model.model.get_video_features(
+                pixel_values_videos, video_position_ids, num_frames_per_video=num_frames_per_video
+            )
+            # `generate` encodes the videos first, so check that raw pixels give the same output
+            expected = model(
+                input_ids, mm_token_type_ids=mm_token_type_ids, mm_encoder_outputs={"video": video_features}
+            )
+            output = model(
+                input_ids,
+                mm_token_type_ids=mm_token_type_ids,
+                pixel_values_videos=pixel_values_videos,
+                video_position_ids=video_position_ids,
+                num_frames_per_video=num_frames_per_video,
+            )
+        torch.testing.assert_close(output.logits, expected.logits)
 
     @unittest.skip("We use vision based masks that use `block_sequence_ids` which force mask materialization")
     def test_sdpa_can_dispatch_on_flash(self):
@@ -596,7 +640,7 @@ class Gemma4UnifiedIntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         )
         self.url2 = url_to_local_path(
-            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
         )
         self.messages = [
             {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},

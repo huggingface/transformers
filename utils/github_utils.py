@@ -222,6 +222,11 @@ def _request(url, headers, method="GET", data=None):
             return response.status, response.headers, response.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as error:
         return error.code, error.headers, error.read().decode("utf-8", errors="replace")
+    except ConnectionError as error:
+        # http.client.RemoteDisconnected (and siblings like ConnectionResetError) are OSError
+        # subclasses that urllib does not always wrap in URLError — re-raise so callers see a
+        # consistent urllib.error.URLError and can decide whether to retry.
+        raise urllib.error.URLError(reason=error) from error
 
 
 def github_request(url, token=None, method="GET", payload=None, max_retries=8):
@@ -231,17 +236,23 @@ def github_request(url, token=None, method="GET", payload=None, max_retries=8):
     the response with e.g. ``result["jobs"]`` and raised a bare ``KeyError`` when GitHub returned an
     error payload instead of data).
 
-    **Rate limiting is the only thing that is ever retried.** Both the primary limit
-    (``X-RateLimit-Remaining: 0`` + ``X-RateLimit-Reset``) and the secondary limit are waited out
-    (``Retry-After`` / reset epoch when present, otherwise ~1 min, growing per attempt) up to
-    ``max_retries`` times, and the token is always kept -- retrying without it would only lower the
-    limit. Everything else fails hard immediately with ``RuntimeError`` (no retry):
+    Two categories of failures are retried up to ``max_retries`` times:
+
+      * **Rate limiting** — both the primary limit (``X-RateLimit-Remaining: 0`` +
+        ``X-RateLimit-Reset``) and the secondary limit are waited out (``Retry-After`` / reset epoch
+        when present, otherwise ~1 min, growing per attempt). The token is always kept — retrying
+        without it would only lower the limit.
+      * **Transient network errors** (``urllib.error.URLError``, including
+        ``http.client.RemoteDisconnected`` and other ``ConnectionError`` subclasses) — retried with
+        exponential backoff (1 s, 2 s, 4 s … capped at 60 s).
+
+    Everything else fails hard immediately with ``RuntimeError`` (no retry):
 
       * a 401 with a token: the token is bad/revoked/expired. It is *never* retried and *never* falls
         back to an unauthenticated request, because the anonymous 60-request/hour limit is exhausted
         almost at once while crawling a large run and every subsequent call comes back 403 -- an
         expired credential masquerading as a rate limit.
-      * 5xx server errors, network failures, 404s, permission 403s, and any other non-2xx status:
+      * 5xx server errors, 404s, permission 403s, and any other non-2xx HTTP status:
         raised at once so callers fail loudly instead of indexing into an error payload or masking a
         real outage behind silent retries.
     """
@@ -261,8 +272,17 @@ def github_request(url, token=None, method="GET", payload=None, max_retries=8):
         try:
             status, response_headers, body = _request(url, headers, method=method, data=data)
         except urllib.error.URLError as error:
-            # Network-level failure (DNS, connection reset, timeout): not a rate limit, so fail hard.
-            raise RuntimeError(f"GitHub API request to {method} {url} failed: {error}") from error
+            # Transient network-level failure (DNS, connection reset, RemoteDisconnected, timeout).
+            # Retry with exponential backoff rather than failing immediately, because these are
+            # almost always transient (the runner saw RemoteDisconnected mid-TLS handshake).
+            if attempt < max_retries - 1:
+                wait = min(2**attempt, 60)
+                logger.warning("[%s] Network error on %s %s (%s) — retrying in %ss", label, method, url, error, wait)
+                time.sleep(wait)
+                continue
+            raise RuntimeError(
+                f"GitHub API request to {method} {url} failed after {max_retries} attempts: {error}"
+            ) from error
 
         logger.info("[%s] %s %s → HTTP %s", label, method, url, status)
         # Rate-limit headers are absent on 401 (auth rejected before rate-limit machinery runs).

@@ -125,7 +125,7 @@ class HyperCLOVAXIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
 
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False, tokenizer=tokenizer)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)

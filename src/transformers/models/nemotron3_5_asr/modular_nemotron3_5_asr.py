@@ -314,9 +314,16 @@ class Nemotron3_5AsrProcessor(NemotronAsrStreamingProcessor):
         return feature_extractor_input_names + ["labels", "decoder_input_ids", "prompt_ids"]
 
 
+@auto_docstring
 @dataclass
 class Nemotron3_5AsrRNNTOutput(BaseModelOutputWithPooling):
-    """
+    r"""
+    loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided):
+        RNN-T transducer loss.
+    logits (`torch.FloatTensor` of shape `(batch_size, encoder_length, decoder_length, vocab_size + 1)`):
+        Joint-network scores over the vocabulary plus the blank symbol, for every encoder/decoder frame pair.
+    decoder_cache (`Nemotron3_5AsrRNNTDecoderCache`, *optional*):
+        Updated decoder LSTM cache. Reused on blank predictions to skip the LSTM step.
     encoder_past_key_values (`Cache`, *optional*):
         Updated encoder attention K/V sliding-window cache, returned when encoding audio with `use_cache=True`
         (cache-aware streaming). Pass it to the next chunk's forward.
@@ -371,6 +378,7 @@ class Nemotron3_5AsrForRNNT(NemotronAsrStreamingForRNNT, Nemotron3_5AsrGeneratio
         self.post_init()
 
     @can_return_tuple
+    @auto_docstring
     def get_audio_features(
         self,
         input_features: torch.Tensor,
@@ -378,6 +386,11 @@ class Nemotron3_5AsrForRNNT(NemotronAsrStreamingForRNNT, Nemotron3_5AsrGeneratio
         prompt_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
+        r"""
+        prompt_ids (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Language-prompt indices for language-ID conditioning. Produced by the processor from
+            `language`. Turned into the broadcast one-hot consumed by `prompt_projector`.
+        """
         encoder_outputs = self.encoder(
             input_features=input_features,
             attention_mask=attention_mask,

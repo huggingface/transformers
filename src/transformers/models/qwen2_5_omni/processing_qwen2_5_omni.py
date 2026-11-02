@@ -22,10 +22,13 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import OmniModalProcessorMixin, ProcessingKwargs, Unpack, VideosKwargs
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
 from ...video_utils import VideoInput
+
+
+logger = logging.get_logger(__name__)
 
 
 # Redefine kwargs for videos because Qwen-Omni uses some kwargs for processing omni
@@ -53,9 +56,11 @@ class Qwen2_5_OmniVideosKwargs(VideosKwargs, total=False):
     max_frames (`int`, *optional*):
         Maximum number of frames to extract from the video. Longer videos will be truncated or sampled to fit
         within this limit.
-    use_audio_in_video (`bool`, *optional*, defaults to `False`):
+    load_audio_from_video (`bool`, *optional*, defaults to `False`):
         Whether to incorporate audio information when processing videos. When enabled, audio tokens are
         interleaved with video tokens based on temporal alignment, creating a unified multimodal representation.
+    use_audio_in_video (`bool`, *optional*, defaults to `False`):
+        Deprecated arg - use `load_audio_from_video` instead.
     seconds_per_chunk (`float`, *optional*, defaults to `2.0`):
         The duration (in seconds) of each video chunk when splitting long videos. This parameter controls how
         videos are divided into temporal segments for processing.
@@ -72,6 +77,7 @@ class Qwen2_5_OmniVideosKwargs(VideosKwargs, total=False):
     min_frames: int
     max_frames: int
     use_audio_in_video: bool
+    load_audio_from_video: bool
     seconds_per_chunk: float
     position_id_per_seconds: int | float
 
@@ -102,7 +108,7 @@ class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
 
 
 @auto_docstring
-class Qwen2_5OmniProcessor(ProcessorMixin):
+class Qwen2_5OmniProcessor(OmniModalProcessorMixin):
     valid_processor_kwargs = Qwen2_5OmniProcessorKwargs
 
     def __init__(
@@ -138,6 +144,19 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         seconds_per_chunk = output_kwargs["videos_kwargs"].pop("seconds_per_chunk")
         position_id_per_seconds = output_kwargs["videos_kwargs"].pop("position_id_per_seconds")
         use_audio_in_video = output_kwargs["videos_kwargs"].pop("use_audio_in_video")
+        load_audio_from_video = output_kwargs["videos_kwargs"].pop("load_audio_from_video", False)
+        if use_audio_in_video:
+            logger.warning(
+                "`use_audio_in_video` is depreacted and will be removed in v5.25, use `load_audio_from_video` instead"
+            )
+            load_audio_from_video = True
+
+        if load_audio_from_video:
+            audio, video_to_audio_indices = self._resolve_audio_from_video(
+                videos,
+                audio=audio,
+                audio_from_video_indices=None,
+            )
 
         if audio is not None:
             output_kwargs["audio_kwargs"]["padding"] = "max_length"  # Support "max_length" padding only here
@@ -164,7 +183,8 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         if videos is not None:
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
 
-            fps = output_kwargs["videos_kwargs"].get("fps", 2.0)
+            fps = output_kwargs["videos_kwargs"].get("fps")
+            fps = fps if fps is not None else 2.0  # default fps not saved in official ckpt, hardcode
             video_grid_thw = videos_inputs["video_grid_thw"]
             second_per_grid_ts = [self.video_processor.temporal_patch_size / fps] * len(video_grid_thw)
             videos_inputs["video_second_per_grid"] = second_per_grid_ts
@@ -186,7 +206,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
                 image_grid_thw,
                 video_grid_thw,
                 video_second_per_grid=video_second_per_grid,
-                use_audio_in_video=use_audio_in_video,
+                use_audio_in_video=load_audio_from_video,
                 position_id_per_seconds=position_id_per_seconds,
                 seconds_per_chunk=seconds_per_chunk,
             )
@@ -341,7 +361,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
                 Additional arguments to be passed to the tokenizer's `batch_decode method`.
 
         Returns:
-            `list[Inion[str, np.ndarray]]`: The decoded text or generated audio.
+            `list[Union[str, np.ndarray]]`: The decoded text or generated audio.
         """
         if generation_mode is None or generation_mode == "text":
             return self.post_process_image_text_to_text(

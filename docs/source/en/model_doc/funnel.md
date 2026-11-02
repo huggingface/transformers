@@ -74,10 +74,6 @@ This model was contributed by [sgugger](https://huggingface.co/sgugger). The ori
     - get_special_tokens_mask
     - save_vocabulary
 
-## FunnelTokenizerFast
-
-[[autodoc]] FunnelTokenizerFast
-
 ## Funnel specific outputs
 
 [[autodoc]] models.funnel.modeling_funnel.FunnelForPreTrainingOutput

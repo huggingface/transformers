@@ -54,7 +54,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
     ):
         r"""
         num_image_tokens (`int`, *optional*):
-            Number of image tokens for one imagethat will be returned by vision tower.
+            Number of image tokens for one image that will be returned by vision tower.
         vision_feature_select_strategy (`str`, *optional*):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Should be same as in model's config
@@ -203,6 +203,14 @@ class LlavaOnevisionProcessor(ProcessorMixin):
                     num_image_tokens -= 1
                 batch_num_image_tokens.append(num_image_tokens)
             vision_data.update({"num_image_tokens": batch_num_image_tokens, "num_image_patches": num_image_patches})
+
+        if video_sizes is not None:
+            patches_height_width = int(math.sqrt(self.num_image_tokens))
+            pooled_height_width = math.ceil(patches_height_width / 2)
+            num_video_tokens = [
+                (num_frames * pooled_height_width * pooled_height_width) + 1 for num_frames, _, _ in video_sizes
+            ]
+            vision_data.update({"num_video_tokens": num_video_tokens})
 
         return MultiModalData(**vision_data)
 

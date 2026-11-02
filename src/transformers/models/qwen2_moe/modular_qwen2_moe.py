@@ -116,7 +116,7 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
         self.shared_expert = Qwen2MoeMLP(config, intermediate_size=config.shared_expert_intermediate_size)
         self.shared_expert_gate = torch.nn.Linear(config.hidden_size, 1, bias=False)
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
         shared_expert_output = self.shared_expert(hidden_states_reshaped)
@@ -235,7 +235,7 @@ class Qwen2MoeForCausalLM(MixtralForCausalLM, GenerationMixin):
 
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen2MoeConfig):
         super().__init__(config)
         self.num_experts = config.num_experts
         self.model = Qwen2MoeModel(config)

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from copy import deepcopy
 from inspect import isfunction, ismethod
 from typing import Any
 
@@ -31,8 +32,9 @@ def _schema_types(schema: Any) -> tuple[str, ...]:
     types = [declared] if isinstance(declared, str) else []
     if isinstance(declared, list):
         types.extend(t for t in declared if isinstance(t, str))
-    for choice in schema.get("anyOf") or []:
-        types.extend(_schema_types(choice))
+    for union_name in ("anyOf", "oneOf"):
+        for choice in schema.get(union_name) or []:
+            types.extend(_schema_types(choice))
     if schema.get("nullable") and "null" not in types:  # `nullable` is how get_json_schema marks Optionals
         types.append("null")
     return tuple(types)
@@ -42,7 +44,14 @@ def _coerce(raw: str, types: tuple[str, ...]) -> Any:
     for type_name in types:
         try:
             if type_name == "integer":
-                return int(raw)
+                try:
+                    return int(raw)
+                except ValueError:
+                    # JSON Schema integers include whole numbers written as floats, e.g. "3.0"
+                    number = float(raw)
+                    if not number.is_integer():
+                        continue
+                    return int(number)
             if type_name == "number":
                 number = float(raw)
                 if number != number or number in (float("inf"), float("-inf")):
@@ -138,7 +147,7 @@ class ResponseParser:
                 self._tool_params[fn["name"]] = properties if isinstance(properties, dict) else {}
         self._buffer: str = ""
         self._pos: int = 0
-        self._output: dict[str, Any] = dict(self._spec.defaults)
+        self._output: dict[str, Any] = deepcopy(self._spec.defaults)
         self._implicit_name: str | None = self._spec.implicit
         # Unified current-region state: starts in the implicit region (or a
         # null sink if none was declared), and returns there after every close.
@@ -359,7 +368,15 @@ class ResponseParser:
         value = process_field(self._body, field, self._captures)
         if self._tool_params:
             value = self._coerce_tool_calls(value)
-        if field.repeats:
+        if field.join is not None:
+            if not isinstance(value, str):
+                raise ValueError(
+                    f"Field '{field.name}': 'join' requires each match to parse to a string, "
+                    f"got {type(value).__name__}."
+                )
+            previous = self._output.get(self._current)
+            self._output[self._current] = value if previous is None else previous + field.join + value
+        elif field.repeats:
             self._output.setdefault(self._current, []).append(value)
         else:
             self._output[self._current] = value
@@ -381,7 +398,8 @@ class ResponseParser:
                     continue
                 if isinstance(argument, str):
                     arguments[key] = _coerce(argument, types)
-                elif isinstance(argument, list):  # duplicate keys collected by `merge_duplicates`
+                elif isinstance(argument, list) and "array" not in types:
+                    # duplicate keys collected by `merge_duplicates`
                     arguments[key] = [_coerce(item, types) if isinstance(item, str) else item for item in argument]
         return value
 

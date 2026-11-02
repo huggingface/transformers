@@ -17,7 +17,7 @@ import collections
 import unittest
 
 from transformers import MaskFormerSwinConfig
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, torch_device
+from transformers.testing_utils import require_torch, torch_device
 from transformers.utils import is_torch_available
 
 from ...test_backbone_common import BackboneTesterMixin
@@ -186,16 +186,6 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             embed_dim=37,
             common_properties=["image_size", "patch_size", "num_channels"],
         )
-
-    @require_torch_multi_gpu
-    @unittest.skip(
-        reason=(
-            "`MaskFormerSwinModel` outputs `hidden_states_spatial_dimensions` which doesn't work well with"
-            " `nn.DataParallel`"
-        )
-    )
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
 
     def test_config(self):
         self.config_tester.run_common_tests()

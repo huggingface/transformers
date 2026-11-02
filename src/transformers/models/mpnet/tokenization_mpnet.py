@@ -156,10 +156,10 @@ class MPNetTokenizer(TokenizersBackend):
         sep_token_id = self.sep_token_id if self.sep_token_id is not None else 2
 
         self._tokenizer.post_processor = processors.RobertaProcessing(
-            sep=(sep_str, sep_token_id),
-            cls=(cls_str, cls_token_id),
-            trim_offsets=True,
-            add_prefix_space=False,
+            (sep_str, sep_token_id),
+            (cls_str, cls_token_id),
+            True,  # trim_offsets
+            False,  # add_prefix_space
         )
 
     @property

@@ -17,76 +17,21 @@ import unittest
 
 from transformers.testing_utils import require_pytesseract, require_torch
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
-class LayoutLMv3ImageProcessingTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        apply_ocr=True,
-    ):
-        size = size if size is not None else {"height": 18, "width": 18}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.apply_ocr = apply_ocr
+class LayoutLMv3ImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 18, "width": 18})
 
-    def prepare_image_processor_dict(self):
-        return {"do_resize": self.do_resize, "size": self.size, "apply_ocr": self.apply_ocr}
-
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.size["height"], self.size["width"]
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
+        super().__init__(**kwargs)
 
 
 @require_torch
 @require_pytesseract
 class LayoutLMv3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = LayoutLMv3ImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "size"))
-            self.assertTrue(hasattr(image_processing, "apply_ocr"))
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"height": 18, "width": 18})
-
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
-            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+    image_processor_tester_class = LayoutLMv3ImageProcessingTester
 
     def test_LayoutLMv3_integration_test(self):
         from datasets import load_dataset

@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING
 
 from transformers.utils import logging
 from transformers.utils.chat_parsing import ResponseParser
+from transformers.utils.chat_template_utils import _REASONING_FIELDS
 
 
 if TYPE_CHECKING:
@@ -54,6 +55,19 @@ logger = logging.get_logger(__name__)
 
 
 X_REQUEST_ID = "x-request-id"
+
+
+def split_model_id(model_id: str) -> tuple[str, str | None]:
+    """`<repo>[@revision][:<file>.gguf]` -> the id without the file, and the file if one was named.
+
+    `<repo>:<file>.gguf` is how GGUF clients name a file inside a repository: the repository says which
+    model, the file which weights, and both are answered for rather than one of them dropped. A colon
+    that is not a `.gguf` file is left alone -- it is part of the id.
+    """
+    head, _, named = model_id.partition(":")
+    if named and not named.endswith(".gguf"):
+        return model_id, None
+    return head, named or None
 
 
 class Modality(enum.Enum):
@@ -107,7 +121,7 @@ _RESPONSE_TEMPLATE_FALLBACKS = {
         "defaults": {"role": "assistant"},
         "start_anchor": "<|im_start|>assistant\n",
         "fields": {
-            "thinking": {
+            "reasoning_content": {
                 "open": "<think>",
                 "close": "</think>",
                 "content": "text",
@@ -135,11 +149,11 @@ _RESPONSE_TEMPLATE_FALLBACKS = {
     # <function=NAME><parameter=KEY>VALUE</parameter></function> markup that holds the call data.
     # The chat template prefills the assistant turn with either "<think>\n" (thinking on) or
     # "<think>\n\n</think>\n\n" (default), which prefix-aware parsing picks up via start_anchor.
-    ("qwen3_5", "qwen3_5_moe"): {
+    ("qwen3_5", "qwen3_5_text", "qwen3_5_moe", "qwen3_5_moe_text"): {
         "defaults": {"role": "assistant"},
         "start_anchor": "<|im_start|>assistant\n",
         "fields": {
-            "thinking": {
+            "reasoning_content": {
                 "open": "<think>",
                 "close": "</think>",
                 "content": "text",
@@ -169,7 +183,7 @@ _RESPONSE_TEMPLATE_FALLBACKS = {
         "defaults": {"role": "assistant"},
         "start_anchor": ["<|turn>model\n", "<tool_response|>"],
         "fields": {
-            "thinking": {
+            "reasoning_content": {
                 "open": "<|channel>thought\n",
                 "close": "<channel|>",
                 "content": "text",
@@ -298,7 +312,8 @@ def parse_assistant_message(
     # Absent ``content`` key means the model emitted only tool calls / thinking;
     # surface that as an empty string rather than swapping in the raw decode.
     content = parsed.get("content", "")
-    reasoning = parsed.get("thinking")
+    # Response templates should name the field `reasoning_content`, but some on the Hub still use `thinking`
+    reasoning = next((parsed[field] for field in _REASONING_FIELDS if parsed.get(field) is not None), None)
     raw = parsed.get("tool_calls") or []
     tool_calls = [_normalize_tool_call(v) for v in raw] or None
     return content, reasoning, tool_calls
@@ -328,7 +343,7 @@ def response_events_to_chunks(events: list[dict]) -> list:
             text = ev.get("text") or ""
             if not text:
                 continue
-            if field == "thinking":
+            if field in _REASONING_FIELDS:
                 out.append(ReasoningText(text))
             elif field == "content":
                 out.append(text)
@@ -656,6 +671,10 @@ class InferenceThread:
                     loop.call_soon_threadsafe(future.set_exception, e)
                 else:
                     future.set_exception(e)
+            finally:
+                # Release closure references (e.g. model captured in generate fn)
+                # before blocking on the next queue.get(), so GPU memory can be freed.
+                fn = args = kwargs = None
 
     def submit(self, fn, *args, **kwargs) -> Future:
         """Submit a callable to the inference thread. Returns a blocking Future."""
@@ -844,7 +863,7 @@ class CBGenerateManager(BaseGenerateManager):
 
     def is_alive(self) -> bool:
         """Whether the CB worker is healthy. ``True`` before ``init_cb()`` is called."""
-        return self._cb is None or self._cb.fatal_error is None
+        return self._cb is None or self._cb.background_thread_status.fatal_error is None
 
     def _check_alive(self, request_id: str) -> None:
         """Raise :class:`CBWorkerDeadError` if the CB worker has died.
@@ -852,10 +871,10 @@ class CBGenerateManager(BaseGenerateManager):
         Called at request entry to fail fast — submitting to a dead worker would otherwise
         enqueue the request into a void where it never gets processed.
         """
-        if self._cb is not None and self._cb.fatal_error is not None:
-            raise CBWorkerDeadError(
-                f"CB worker is dead and cannot accept request {request_id}: {self._cb.fatal_error}"
-            )
+        if self._cb is not None:
+            fatal_error = self._cb.background_thread_status.fatal_error
+            if fatal_error is not None:
+                raise CBWorkerDeadError(f"CB worker is dead and cannot accept request {request_id}: {fatal_error}")
 
     def generate_streaming(
         self,
@@ -955,7 +974,7 @@ class CBGenerateManager(BaseGenerateManager):
         # as requests submitted post-crash; otherwise it's a per-request failure (e.g. unsupported
         # logit-processor kwarg) and a plain RuntimeError -> 500 is appropriate.
         if result.error is not None:
-            if cb.fatal_error is not None:
+            if cb.background_thread_status.fatal_error is not None:
                 raise CBWorkerDeadError(f"CB worker died during request {request_id}: {result.error}")
             raise RuntimeError(f"CB generation failed for {request_id}: {result.error}")
         generated_ids = result.generated_tokens
@@ -1108,17 +1127,21 @@ class BaseHandler:
         """
         from fastapi import HTTPException
 
+        requested = body.get("model")
         if self.model_manager.force_model is not None:
-            requested = body.get("model")
             if requested is not None and requested != self.model_manager.force_model:
                 raise HTTPException(
                     status_code=400,
-                    detail=(f"Server is pinned to '{self.model_manager.force_model}'; requested '{requested}'."),
+                    detail=f"Server is pinned to '{self.model_manager.force_model}'; requested '{requested}'.",
                 )
-            body["model"] = self.model_manager.force_model
+            requested = self.model_manager.force_model
 
-        model_id = self.model_manager.process_model_name(body["model"])
-        model, processor = self.model_manager.load_model_and_processor(model_id)
+        # `<repo>:<file>.gguf` names both the repository and the weights to read out of it.
+        model, gguf_file = split_model_id(requested)
+        body["model"] = model
+
+        model_id = self.model_manager.process_model_name(model)
+        model, processor = self.model_manager.load_model_and_processor(model_id, gguf_file=gguf_file)
 
         return model_id, model, processor
 

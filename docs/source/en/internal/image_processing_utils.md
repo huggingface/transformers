@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Utilities for Image Processors
+# Utilities for image processors
 
 This page lists all the utility functions used by the image processors, mainly the functional
 transformations used to process the images.

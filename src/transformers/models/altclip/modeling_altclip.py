@@ -708,7 +708,7 @@ class AltCLIPVisionModel(AltCLIPPreTrainedModel):
         Examples:
 
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> from transformers import AutoProcessor, AltCLIPVisionModel
@@ -763,7 +763,7 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
         "attentions": AltRobertaSelfAttention,
     }
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: AltCLIPTextConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -838,7 +838,7 @@ class AltCLIPTextModel(AltCLIPPreTrainedModel):
     _input_embed_layer = "word_embeddings"
     base_model_prefix = "roberta"
 
-    def __init__(self, config):
+    def __init__(self, config: AltCLIPTextConfig):
         super().__init__(config)
         self.roberta = AltRobertaModel(config, add_pooling_layer=False)
         self.transformation = nn.Linear(config.hidden_size, config.project_dim)
@@ -1046,7 +1046,7 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         >>> model = AltCLIPModel.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
         >>> processor = AutoProcessor.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")
 
-        >>> url = "https://clip-cn-beijing.oss-cn-beijing.aliyuncs.com/pokemon.jpeg"
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/pokemon.jpeg"
         >>> image = load_image(url)
 
         >>> inputs = processor(text=["杰尼龟", "妙蛙种子", "小火龙", "皮卡丘"], images=image, return_tensors="pt", padding=True)

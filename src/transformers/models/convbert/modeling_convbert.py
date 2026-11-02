@@ -574,7 +574,7 @@ class ConvBertSequenceSummary(nn.Module):
 
 @auto_docstring
 class ConvBertModel(ConvBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__(config)
         self.embeddings = ConvBertEmbeddings(config)
 
@@ -671,7 +671,7 @@ class ConvBertGeneratorPredictions(nn.Module):
 class ConvBertForMaskedLM(ConvBertPreTrainedModel):
     _tied_weights_keys = {"generator_lm_head.weight": "convbert.embeddings.word_embeddings.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__(config)
 
         self.convbert = ConvBertModel(config)
@@ -699,12 +699,6 @@ class ConvBertForMaskedLM(ConvBertPreTrainedModel):
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MaskedLMOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        """
         generator_hidden_states: BaseModelOutputWithCrossAttentions = self.convbert(
             input_ids,
             attention_mask=attention_mask,
@@ -763,7 +757,7 @@ class ConvBertClassificationHead(nn.Module):
     """
 )
 class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -785,12 +779,6 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         outputs: BaseModelOutputWithCrossAttentions = self.convbert(
             input_ids,
             attention_mask=attention_mask,
@@ -836,7 +824,7 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
 
 @auto_docstring
 class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__(config)
 
         self.convbert = ConvBertModel(config)
@@ -884,10 +872,6 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
         """
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
@@ -931,7 +915,7 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
 
 @auto_docstring
 class ConvBertForTokenClassification(ConvBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -957,10 +941,6 @@ class ConvBertForTokenClassification(ConvBertPreTrainedModel):
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | TokenClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
         outputs: BaseModelOutputWithCrossAttentions = self.convbert(
             input_ids,
             attention_mask=attention_mask,
@@ -990,7 +970,7 @@ class ConvBertForTokenClassification(ConvBertPreTrainedModel):
 
 @auto_docstring
 class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels

@@ -45,7 +45,7 @@ from ..olmo.modeling_olmo import (
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="allenai/Olmo2-7B-1124-hf")
+@auto_docstring(checkpoint="allenai/OLMo-2-1124-7B")
 @strict
 class Olmo2Config(OlmoConfig):
     r"""

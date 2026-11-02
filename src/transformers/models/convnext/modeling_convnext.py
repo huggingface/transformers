@@ -211,7 +211,7 @@ class ConvNextEncoder(ConvNextPreTrainedModel):
     main_input_name = "hidden_states"
     _can_record_outputs = {"hidden_states": ConvNextStage}
 
-    def __init__(self, config):
+    def __init__(self, config: ConvNextConfig):
         super().__init__(config)
         self.stages = nn.ModuleList()
         drop_path_rates = [
@@ -249,7 +249,7 @@ class ConvNextEncoder(ConvNextPreTrainedModel):
 
 @auto_docstring
 class ConvNextModel(ConvNextPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ConvNextConfig):
         super().__init__(config)
         self.config = config
 
@@ -293,7 +293,7 @@ class ConvNextModel(ConvNextPreTrainedModel):
 class ConvNextForImageClassification(ConvNextPreTrainedModel):
     accepts_loss_kwargs = False
 
-    def __init__(self, config):
+    def __init__(self, config: ConvNextConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -313,12 +313,6 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
     def forward(
         self, pixel_values: torch.FloatTensor | None = None, labels: torch.LongTensor | None = None, **kwargs
     ) -> ImageClassifierOutputWithNoAttention:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         outputs: BaseModelOutputWithPoolingAndNoAttention = self.convnext(pixel_values, **kwargs)
         pooled_output = outputs.pooler_output
         logits = self.classifier(pooled_output)
@@ -342,7 +336,7 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
 class ConvNextBackbone(BackboneMixin, ConvNextPreTrainedModel):
     has_attentions = False
 
-    def __init__(self, config):
+    def __init__(self, config: ConvNextConfig):
         super().__init__(config)
 
         self.embeddings = ConvNextEmbeddings(config)
@@ -373,7 +367,7 @@ class ConvNextBackbone(BackboneMixin, ConvNextPreTrainedModel):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

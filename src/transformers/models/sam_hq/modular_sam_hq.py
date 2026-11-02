@@ -389,7 +389,7 @@ class SamHQVisionModel(SamVisionModel):
     """
 )
 class SamHQModel(SamModel):
-    def __init__(self, config):
+    def __init__(self, config: SamHQConfig):
         super().__init__(config)
         self.vision_encoder = SamHQVisionEncoder(config.vision_config)
 
@@ -493,7 +493,7 @@ class SamHQModel(SamModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 

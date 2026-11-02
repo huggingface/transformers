@@ -40,7 +40,7 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
     Seq2SeqSequenceClassifierOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -955,9 +955,6 @@ class PLBartForSequenceClassification(PLBartPreTrainedModel):
             obj:*torch.LongTensor* of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior:
             generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also be used by default.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         if labels is not None:
             use_cache = False
@@ -1037,7 +1034,7 @@ class PLBartDecoderWrapper(PLBartPreTrainedModel):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: PLBartConfig):
         super().__init__(config)
         self.decoder = PLBartDecoder(config)
         self.post_init()
@@ -1056,7 +1053,7 @@ class PLBartForCausalLM(PLBartPreTrainedModel, GenerationMixin):
         "lm_head.weight": "model.decoder.embed_tokens.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: PLBartConfig):
         config.is_decoder = True
         config.is_encoder_decoder = False
         super().__init__(config)
@@ -1089,11 +1086,6 @@ class PLBartForCausalLM(PLBartPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithCrossAttentions:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -1123,9 +1115,8 @@ class PLBartForCausalLM(PLBartPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

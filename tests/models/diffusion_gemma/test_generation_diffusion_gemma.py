@@ -205,7 +205,7 @@ class DiffusionGemmaGenerationClassesTester(unittest.TestCase):
             stability_threshold=0, confidence_threshold=9.22
         )
 
-        # this should NEVER trigger the stopping criteria, assuming the the theshold is < ln(1/vocab_size)
+        # this should NEVER trigger the stopping criteria, assuming the threshold is < ln(1/vocab_size)
         logits_max_entropy = torch.zeros((1, 10, 10000), device=torch_device)
         self.assertFalse(stopping_criteria_strict(argmax_canvas=None, logits=logits_max_entropy).all())
         self.assertFalse(stopping_criteria_lax(argmax_canvas=None, logits=logits_max_entropy).all())

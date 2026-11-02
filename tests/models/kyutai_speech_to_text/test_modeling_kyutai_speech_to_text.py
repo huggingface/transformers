@@ -261,7 +261,7 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
     def setUp(self):
         self.model_tester = KyutaiSpeechToTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=KyutaiSpeechToTextConfig, hidden_size=32)
+        self.config_tester = ConfigTester(self, config_class=KyutaiSpeechToTextConfig, hidden_size=64)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -277,19 +277,13 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         # monkey patch prepare_config_and_inputs_for_common
-
         prepare_config_and_inputs_for_common = self.model_tester.prepare_config_and_inputs_for_common
-        original_batch_size = self.model_tester.batch_size
-
         self.model_tester.prepare_config_and_inputs_for_common = (
             self.model_tester.prepare_config_and_inputs_for_common_generate
         )
-        self.model_tester.batch_size = batch_size
 
-        config, filtered_inputs_dict = super().prepare_config_and_inputs_for_generate()
+        config, filtered_inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
         self.model_tester.prepare_config_and_inputs_for_common = prepare_config_and_inputs_for_common
-
-        self.model_tester.batch_size = original_batch_size
         return config, filtered_inputs_dict
 
     @pytest.mark.skip(reason="Moshi ASR has custom embedding approach (text and audio embeddings).")

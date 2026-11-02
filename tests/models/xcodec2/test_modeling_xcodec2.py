@@ -144,6 +144,7 @@ class Xcodec2ModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Xcodec2Model,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_resize_embeddings = False
+    test_torch_exportable = False
     pipeline_model_mapping = {"feature-extraction": Xcodec2Model} if is_torch_available() else {}
     additional_model_inputs = ["input_features", "input_features_mask"]
 
@@ -202,6 +203,23 @@ class Xcodec2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         pass
 
+    @unittest.skip(
+        reason="The Wav2Vec2Bert semantic encoder uses relative position embeddings that produce a dense attention bias incompatible with Flash Attention"
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        """
+        Override to keep `quantization_dim` in sync with the encoder outputs. The quantizer consumes the
+        concatenation of the acoustic and semantic encoder outputs, i.e. `hidden_size +
+        semantic_model_config.hidden_size`, and both hidden sizes are scaled when adjusting the head dim.
+        """
+        config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
+        config.quantization_dim = config.hidden_size + config.semantic_model_config.hidden_size
+        return config
+
 
 @slow
 @require_torch
@@ -214,7 +232,7 @@ class Xcodec2IntegrationTest(unittest.TestCase):
         reproducer: https://gist.github.com/ebezzam/3b79481b5d48d8e35c4ecc582aee0cb3#file-reproducer_single-py
         """
         results_path = self.fixtures_path / "expected_results_single.json"
-        with open(results_path, "r") as f:
+        with open(results_path, "r", encoding="utf-8") as f:
             raw_data = json.load(f)
         exp_code = torch.tensor(raw_data["audio_codes"])
         exp_recon = torch.tensor(raw_data["recon_wav"])
@@ -256,7 +274,7 @@ class Xcodec2IntegrationTest(unittest.TestCase):
         NOTE (ebezzam): PyPI model does not support batch inference but we compare against its per-sample results
         """
         results_path = self.fixtures_path / "expected_results_batch.json"
-        with open(results_path, "r") as f:
+        with open(results_path, "r", encoding="utf-8") as f:
             raw_data = json.load(f)
         num_samples = len(raw_data["audio_codes"])
         exp_codes = [torch.tensor(c) for c in raw_data["audio_codes"]]

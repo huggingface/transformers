@@ -305,7 +305,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
             notes = notes[note_order.argsort()]
             return notes
 
-    def notes_to_midi(self, notes: np.ndarray, beatstep: np.ndarray, offset_sec: int = 0.0):
+    def notes_to_midi(self, notes: np.ndarray, beatstep: np.ndarray, offset_sec: float = 0.0):
         """
         Converts notes to Midi.
 
@@ -355,7 +355,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         out_vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab"]
         )
-        with open(out_vocab_file, "w") as file:
+        with open(out_vocab_file, "w", encoding="utf-8") as file:
             file.write(json.dumps(self.encoder))
 
         return (out_vocab_file,)
@@ -474,7 +474,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         self,
         notes: np.ndarray | list[pretty_midi.Note] | list[list[pretty_midi.Note]],
         padding: bool | str | PaddingStrategy = False,
-        truncation: bool | str | TruncationStrategy = None,
+        truncation: bool | str | TruncationStrategy | None = None,
         max_length: int | None = None,
         pad_to_multiple_of: int | None = None,
         return_attention_mask: bool | None = None,

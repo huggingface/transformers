@@ -227,6 +227,34 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             expected_without_special_tokens,
         )
 
+    @require_torch
+    def test_decode_with_timestamps_batch_tensor(self):
+        import torch
+
+        tokenizer = self.get_tokenizer()
+
+        t0 = tokenizer.convert_tokens_to_ids("<|0.00|>")
+        t1 = tokenizer.convert_tokens_to_ids("<|1.00|>")
+        eot = tokenizer.eos_token_id
+
+        token_ids = [
+            [t0, 2182, t1, eot],
+            [t0, 3092, t1, eot],
+        ]
+
+        expected = [
+            "<|0.00|> red<|1.00|><|endoftext|>",
+            "<|0.00|> green<|1.00|><|endoftext|>",
+        ]
+        self.assertEqual(
+            tokenizer.decode(token_ids, decode_with_timestamps=True),
+            expected,
+        )
+        self.assertEqual(
+            tokenizer.decode(torch.tensor(token_ids), decode_with_timestamps=True),
+            expected,
+        )
+
     def test_fast_tokenizer_get_prompt_ids(self):
         tokenizer = self.get_tokenizer()
 

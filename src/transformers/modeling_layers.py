@@ -13,8 +13,10 @@
 # limitations under the License.
 from __future__ import annotations
 
+import copy
 import os
 import re
+import sys
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -42,6 +44,7 @@ from .utils.loading_report import log_state_dict_report
 if TYPE_CHECKING:
     from .cache_utils import MtpCache
     from .configuration_utils import PreTrainedConfig
+    from .core_model_loading import WeightTransform
     from .generation.logits_process import LogitsProcessorList
 
 
@@ -89,12 +92,6 @@ class GradientCheckpointingLayer(nn.Module):
 
             if not self._can_checkpoint_with_cache:
                 # different names for the same thing in different layers
-                # TODO cyril: this one without `S` can be removed after deprecation cycle
-                if "past_key_value" in kwargs and kwargs["past_key_value"] is not None:
-                    kwargs["past_key_value"] = None
-                    message += " `past_key_value=None`,"
-                    do_warn = True
-
                 if "past_key_values" in kwargs and kwargs["past_key_values"] is not None:
                     kwargs["past_key_values"] = None
                     message += " `past_key_values=None`,"
@@ -402,12 +399,23 @@ class MtpModel(PreTrainedModel):
         # Embedding/head/rotary are shared with the main model
         self.tie_with_main_model(main_model)
 
+        # We need to pass the layer type to the rotary embedding if it has per-layer RoPE parameters.
+        self.has_per_layer_rope = (
+            self.rotary_emb is not None
+            and len(self.config.nested_rope_parameter_keys(self.config.rope_parameters)) > 0
+        )
+
         self.post_init()
 
     def tie_with_main_model(self, main_model: PreTrainedModel):
         """Tie the embedding/head/rotary layer with the main model."""
         # The embeddings and head are shared between main model and MTP layers
         self.embed_tokens = main_model.get_input_embeddings()
+        # Some models may subclass nn.Embedding directly, but here we do not want the added norm (note that we cannot simply set it to
+        # nn.Identity, as it would modify the main model inplace as well)
+        if hasattr(self.embed_tokens, "embed_norm"):
+            self.embed_tokens = copy.deepcopy(self.embed_tokens)
+            self.embed_tokens.embed_norm = nn.Identity()
         self.shared_head = main_model.lm_head
         # Use the same rotary class (it only has non-persistent buffers); models with learned
         # position biases (e.g. Inkling) have none
@@ -429,12 +437,13 @@ class MtpModel(PreTrainedModel):
         self, layer_idx: int, inputs_embeds: torch.Tensor, mtp_cache: MtpCache, position_ids: torch.Tensor
     ):
         """
-        Create the (potentially several) masks required for layer `layer_idx`. This relies on the `layer_type`
-        attribute of the mtp layer if any, otherwise simply create a causal mask for full attention.
+        Create the (potentially several) masks required for layer `layer_idx`. This relies on the `layer_types` from the MTP config
+        if defined, and otherwise uses full attention.
         """
         # Note that `_assisted_decoding` raises on batch_size > 1, so there is no padding mask to add
+        layer_config = self.config.per_layer_config[layer_idx] if self.config.is_heterogeneous else self.config
         mask_kwargs = {
-            "config": self.config,
+            "config": layer_config,
             "inputs_embeds": inputs_embeds,
             "attention_mask": None,
             "past_key_values": mtp_cache,
@@ -443,7 +452,8 @@ class MtpModel(PreTrainedModel):
             "layer_idx": layer_idx,
         }
 
-        mtp_layer_type = getattr(self.layers[layer_idx], "layer_type", None)
+        mtp_layer_types = getattr(self.config, "layer_types", None)
+        mtp_layer_type = mtp_layer_types[layer_idx] if mtp_layer_types is not None else None
         masks = {}
         if mtp_layer_type is not None and mtp_layer_type in LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING:
             mask_function = LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[mtp_layer_type]
@@ -499,27 +509,10 @@ class MtpModel(PreTrainedModel):
         drafted_logits = []
         drafted_tokens = []
         loss = None
-        for i, mtp_layer in enumerate(self.layers):
-            # We need to recompute those every layer since they change
-            inputs_embeds = self.embed_tokens(input_ids).to(last_hidden_states.device)
-            position_embeddings = (
-                self.rotary_emb(inputs_embeds, position_ids=position_ids) if self.rotary_emb is not None else None
+        for i in range(len(self.layers)):
+            last_hidden_states = self.forward_layer(
+                i, last_hidden_states, position_ids, mtp_cache, input_ids=input_ids, **kwargs
             )
-
-            # In full generality, we may need to recompute masks for every layer due to the position offset of each layer
-            masks = self.create_masks_for_mtp_layer(i, inputs_embeds, mtp_cache, position_ids)
-
-            last_hidden_states = mtp_layer(
-                inputs_embeds,
-                last_hidden_states,
-                position_embeddings=position_embeddings,
-                position_ids=position_ids,
-                past_key_values=mtp_cache,
-                **masks,
-                **kwargs,
-            )
-            if self.use_shared_post_norm:
-                last_hidden_states = self.shared_post_norm(last_hidden_states)
 
             # If we are not computing the loss, only compute logits for the next drafted token to save memory
             slice_indices = slice(-1, None) if labels is None else slice(None, None)
@@ -533,22 +526,23 @@ class MtpModel(PreTrainedModel):
                     logits, labels, vocab_size=self.config.vocab_size, shift_labels=shift_labels, **kwargs
                 )
 
-            # Append the drafted logits
-            drafted_logits.append(logits)
             # Decode one token
             next_token_logits = logits[:, -1, :].to(device=input_ids.device)
             if logits_processor is not None and full_input_ids is not None:
-                next_token_scores = logits_processor(full_input_ids, next_token_logits.to(torch.float32))
+                next_token_logits = logits_processor(full_input_ids, next_token_logits.to(dtype=torch.float32))
+            # Append the drafted logits AFTER logits processors if any
+            drafted_logits.append(next_token_logits[:, None, :])
             if do_sample:
-                probs = nn.functional.softmax(next_token_scores, dim=-1, dtype=torch.float32)
+                probs = nn.functional.softmax(next_token_logits, dim=-1, dtype=torch.float32)
                 next_mtp_token = torch.multinomial(probs, num_samples=1)
             else:
-                next_mtp_token = torch.argmax(next_token_scores, dim=-1, keepdim=True)
+                next_mtp_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
             drafted_tokens.append(next_mtp_token)
 
             # Roll by 1 and append for next layer
             input_ids = torch.cat([input_ids[:, 1:], next_mtp_token], dim=-1)
-            attention_mask = torch.cat([attention_mask[:, 1:], attention_mask.new_ones(batch_size, 1)], dim=-1)  # type: ignore
+            if attention_mask is not None:
+                attention_mask = torch.cat([attention_mask[:, 1:], attention_mask.new_ones(batch_size, 1)], dim=-1)  # type: ignore
             position_ids = torch.cat([position_ids[:, 1:], position_ids[:, -1:] + 1], dim=-1)
 
             # Need to cat ful_ids as well for the processors
@@ -559,13 +553,56 @@ class MtpModel(PreTrainedModel):
         candidate_logits = torch.cat(drafted_logits, dim=1)
         return new_candidate_ids, candidate_logits, loss
 
-    @classmethod
-    def from_pretrained(cls, main_model: PreTrainedModel, device_map=None, **kwargs) -> MtpModel:
-        pretrained_model_name_or_path = main_model.config.name_or_path
+    def forward_layer(
+        self,
+        layer_idx: int,
+        last_hidden_states: torch.Tensor,
+        position_ids: torch.Tensor | None,
+        mtp_cache: MtpCache | None,
+        input_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        **kwargs,
+    ) -> torch.Tensor:
+        """
+        Run the mtp layer `layer_idx` once, i.e. a single step of the drafting loop in `forward`. Exactly one of `input_ids`
+        or `inputs_embeds` should be passed. This lets frameworks which own the drafting loop (e.g. vLLM) reuse the per-layer
+        logic.
+        """
+        if (input_ids is None) == (inputs_embeds is None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+        # We need to recompute those every layer since they change
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids).to(last_hidden_states.device)
+
+        # In full generality, we may need to recompute masks for every layer due to the position offset of each layer
+        masks = self.create_masks_for_mtp_layer(layer_idx, inputs_embeds, mtp_cache, position_ids)
+
+        position_embeddings = None
+        if self.rotary_emb is not None:
+            rope_kwargs = {}
+            if self.has_per_layer_rope:
+                rope_kwargs["layer_type"] = self.config.layer_types[layer_idx]
+            position_embeddings = self.rotary_emb(inputs_embeds, position_ids=position_ids, **rope_kwargs)
+        last_hidden_states = self.layers[layer_idx](
+            inputs_embeds,
+            last_hidden_states,
+            position_embeddings=position_embeddings,
+            position_ids=position_ids,
+            past_key_values=mtp_cache,
+            **masks,
+            **kwargs,
+        )
+        if self.use_shared_post_norm:
+            last_hidden_states = self.shared_post_norm(last_hidden_states)
+        return last_hidden_states
+
+    @staticmethod
+    def get_mtp_weights_regex(main_model: PreTrainedModel) -> re.Pattern:
+        """Regex matching the checkpoint keys of the mtp weights of `main_model`."""
         num_hidden_layers = main_model.config.get_text_config().num_hidden_layers
         # Heuristic: the main model should have the mtp layer patterns under `_keys_to_ignore_on_load_unexpected` to avoid
         # loading them by default, so use it to later load the correct keys from the checkpoints
-        mtp_patterns = main_model._keys_to_ignore_on_load_unexpected.copy()  # type: ignore
+        mtp_patterns = main_model._keys_to_ignore_on_load_unexpected
         # Due to different released checkpoints, only keep the ones with layer number >= num_hidden_layers - otherwise
         # mtp layers in a smaller checkpoints could be wrongly added as a 2nd mtp layer of a bigger checkpoint
         final_mtp_patterns = []
@@ -576,7 +613,33 @@ class MtpModel(PreTrainedModel):
             final_mtp_patterns.append(pattern)
         if len(final_mtp_patterns) == 0:
             raise ValueError(f"{main_model.__class__.__name__} does not seem to register any known MTP layer patterns")
-        mtp_regex = re.compile("|".join(rf"({pattern})" for pattern in final_mtp_patterns))
+        return re.compile("|".join(rf"({pattern})" for pattern in final_mtp_patterns))
+
+    def get_weight_conversions(self, main_model: PreTrainedModel) -> list[WeightTransform]:
+        """The weight conversions which map the mtp weights of `main_model`'s checkpoint onto this model."""
+        num_hidden_layers = main_model.config.get_text_config().num_hidden_layers
+        # For the correct conversions, we need first the mtp-specific renamings, then the main_model conversions
+        # Note that since the layer numbers are dynamic, we cannot register those conversions - we also add the `mtp_block`
+        # part for all weights since we cannot distinguish easily those that are under the main model's block or not. It will
+        # be removed after for the few that should not have it
+        weight_conversions = [
+            WeightRenaming(
+                source_patterns=f"layers.{N}.", target_patterns=f"layers.{N - num_hidden_layers}.mtp_block."
+            )
+            for N in range(num_hidden_layers, num_hidden_layers + self.num_mtp_layers)
+        ]
+        weight_conversions.extend(get_model_conversion_mapping(self, add_legacy=False))
+        # `_weight_conversions` is only attached to models loaded with `from_pretrained`
+        main_conversions = getattr(main_model, "_weight_conversions", None)
+        if main_conversions is None:
+            main_conversions = get_model_conversion_mapping(main_model)
+        weight_conversions.extend(main_conversions)
+        return weight_conversions
+
+    @classmethod
+    def from_pretrained(cls, main_model: PreTrainedModel, device_map=None, **kwargs) -> MtpModel:
+        pretrained_model_name_or_path = main_model.config.name_or_path
+        mtp_regex = cls.get_mtp_weights_regex(main_model)
 
         # Get the number of layers in the checkpoint
         num_mtp_layers = main_model.config.get_text_config().num_mtp_layers
@@ -605,8 +668,12 @@ class MtpModel(PreTrainedModel):
         # Open the files, get the slices corresponding only to mtp weights, rename them, and load them
         mtp_state_dict = {}
         all_pointer = set()
+        is_mps = device_map is not None and any(
+            (d.type if isinstance(d, torch.device) else d) == "mps" for d in device_map.values()
+        )
+        backend = "pread" if is_mps or sys.platform == "win32" else "mmap"
         for file in mtp_files:
-            file_pointer = safe_open(file, framework="pt", device="cpu")
+            file_pointer = safe_open(file, framework="pt", device="cpu", backend=backend)
             all_pointer.add(file_pointer)
             for k in file_pointer.keys():
                 # It's one of the mtp weights
@@ -615,18 +682,7 @@ class MtpModel(PreTrainedModel):
                 ):
                     mtp_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
 
-        # For the correct conversions, we need first the mtp-specific renamings, then the main_model conversions
-        # Note that since the layer numbers are dynamic, we cannot register those conversions - we also add the `mtp_block`
-        # part for all weights since we cannot distinguish easily those that are under the main model's block or not. It will
-        # be removed after for the few that should not have it
-        weight_conversions = [
-            WeightRenaming(
-                source_patterns=f"layers.{N}.", target_patterns=f"layers.{N - num_hidden_layers}.mtp_block."
-            )
-            for N in range(num_hidden_layers, num_hidden_layers + num_mtp_layers)
-        ]
-        weight_conversions.extend(get_model_conversion_mapping(mtp_model, add_legacy=False))
-        weight_conversions.extend(main_model._weight_conversions)
+        weight_conversions = mtp_model.get_weight_conversions(main_model)
 
         # Load the weights
         loading_info, _ = convert_and_load_state_dict_in_model(
@@ -635,7 +691,6 @@ class MtpModel(PreTrainedModel):
             load_config=LoadStateDictConfig(
                 weight_mapping=weight_conversions, device_map=device_map, dtype=main_model.config.dtype
             ),
-            tp_plan=None,
         )
         # finally close all opened file pointers
         for k in all_pointer:

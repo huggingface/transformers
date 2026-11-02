@@ -280,7 +280,7 @@ class SamTwoWayAttentionBlock(nn.Module):
         Arguments:
             config (`SamMaskDecoderConfig`):
                 The configuration file used to instantiate the block
-            attention_downsample_rate (*optionalk*, int, defaults to 2):
+            attention_downsample_rate (*optional*, int, defaults to 2):
                 The downsample ratio of the block used to reduce the inner dim of the attention.
             skip_first_layer_pe (*optional*, bool, defaults to `False`):
                 Whether or not to skip the addition of the query_point_embedding on the first layer.
@@ -998,7 +998,7 @@ class SamPreTrainedModel(PreTrainedModel):
     base_model_prefix = "sam"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    _no_split_modules = ["SamVisionAttention"]
+    _no_split_modules = ["SamVisionLayer"]
     supports_gradient_checkpointing = True
     _supports_sdpa = True
 
@@ -1017,6 +1017,7 @@ class SamPreTrainedModel(PreTrainedModel):
 
 
 class SamVisionEncoder(SamPreTrainedModel):
+    config: SamVisionConfig
     _can_record_outputs = {"hidden_states": SamVisionLayer, "attentions": SamVisionAttention}
 
     def __init__(self, config: SamVisionConfig):
@@ -1261,7 +1262,7 @@ class SamModel(SamPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 

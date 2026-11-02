@@ -509,7 +509,7 @@ class ViltPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class ViltModel(ViltPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: ViltConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -560,7 +560,7 @@ class ViltModel(ViltPreTrainedModel):
         ```python
         >>> from transformers import ViltProcessor, ViltModel
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> # prepare image and text
@@ -673,7 +673,7 @@ class ViltForMaskedLM(ViltPreTrainedModel):
         "mlm_score.decoder.weight": "vilt.embeddings.text_embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: ViltConfig):
         super().__init__(config)
 
         self.vilt = ViltModel(config)
@@ -709,16 +709,12 @@ class ViltForMaskedLM(ViltPreTrainedModel):
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
             Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `pixel_values` into patch embeddings.
-        labels (*torch.LongTensor* of shape *(batch_size, sequence_length)*, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in *[-100, 0, ...,
-            config.vocab_size]* (see *input_ids* docstring) Tokens with indices set to *-100* are ignored (masked), the
-            loss is only computed for the tokens with labels in *[0, ..., config.vocab_size]*
 
         Examples:
 
         ```python
         >>> from transformers import ViltProcessor, ViltForMaskedLM
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> import re
@@ -842,7 +838,7 @@ class ViltMLMHead(nn.Module):
     """
 )
 class ViltForQuestionAnswering(ViltPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ViltConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -888,7 +884,7 @@ class ViltForQuestionAnswering(ViltPreTrainedModel):
 
         ```python
         >>> from transformers import ViltProcessor, ViltForQuestionAnswering
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
 
@@ -955,7 +951,7 @@ class ViltForQuestionAnswering(ViltPreTrainedModel):
     """
 )
 class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ViltConfig):
         super().__init__(config)
 
         self.vilt = ViltModel(config)
@@ -993,7 +989,7 @@ class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
 
         ```python
         >>> from transformers import ViltProcessor, ViltForImageAndTextRetrieval
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
 
@@ -1054,7 +1050,7 @@ class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
     """
 )
 class ViltForImagesAndTextClassification(ViltPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ViltConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -1099,7 +1095,7 @@ class ViltForImagesAndTextClassification(ViltPreTrainedModel):
 
         ```python
         >>> from transformers import ViltProcessor, ViltForImagesAndTextClassification
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
 
@@ -1196,7 +1192,7 @@ class ViltForImagesAndTextClassification(ViltPreTrainedModel):
 
 @auto_docstring
 class ViltForTokenClassification(ViltPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ViltConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels

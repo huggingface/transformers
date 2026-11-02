@@ -48,10 +48,6 @@ class Florence2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # override: Florence shouldn't have any image-token in input text
         pass
 
-    @unittest.skip("Florence2Processor adds prefix and suffix tokens to the text")
-    def test_tokenizer_defaults(self):
-        pass
-
     @staticmethod
     def prepare_processor_dict():
         return {

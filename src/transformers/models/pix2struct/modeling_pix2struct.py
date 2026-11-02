@@ -328,7 +328,7 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
                 else self.config.hidden_size
             )
             key_value_proj_dim = (
-                self.config.text_config.d_kv if isinstance(self.config, Pix2StructConfig) else self.config.hidden_size
+                self.config.text_config.d_kv if isinstance(self.config, Pix2StructConfig) else self.config.d_kv
             )
             n_heads = (
                 self.config.text_config.num_heads
@@ -431,7 +431,7 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
         Example:
 
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> from transformers import AutoProcessor, Pix2StructVisionModel
@@ -930,7 +930,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
     _tied_weights_keys = {"lm_head.weight": "embed_tokens.weight"}
     supports_gradient_checkpointing = True
 
-    def __init__(self, config):
+    def __init__(self, config: Pix2StructTextConfig):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
 
@@ -1220,7 +1220,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Pix2StructForConditionalGeneration
 
@@ -1253,7 +1253,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Pix2StructForConditionalGeneration
 

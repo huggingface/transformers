@@ -378,7 +378,7 @@ class DepthProImageEncoder(nn.Module):
         )
 
         if not return_dict:
-            return (encodings[0], features) + encodings[2:]  # ignore last_hidden_state and poooler output
+            return (encodings[0], features) + encodings[2:]  # ignore last_hidden_state and pooler output
 
         return DepthProOutput(
             last_hidden_state=encodings.last_hidden_state,
@@ -622,7 +622,7 @@ class DepthProPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class DepthProModel(DepthProPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DepthProConfig):
         super().__init__(config)
         self.config = config
         self.encoder = DepthProEncoder(config)
@@ -648,7 +648,7 @@ class DepthProModel(DepthProPreTrainedModel):
         ```python
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, DepthProModel
 
@@ -993,7 +993,7 @@ class DepthProDepthEstimationHead(nn.Module):
     """
 )
 class DepthProForDepthEstimation(DepthProPreTrainedModel):
-    def __init__(self, config, use_fov_model=None):
+    def __init__(self, config: DepthProConfig, use_fov_model=None):
         r"""
         use_fov_model (bool, *optional*):
             Whether to use the field of view model.
@@ -1028,16 +1028,13 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
         **kwargs,
     ) -> tuple[torch.Tensor] | DepthProDepthEstimatorOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth depth estimation maps for computing the loss.
-
         Examples:
 
         ```python
         >>> from transformers import AutoImageProcessor, DepthProForDepthEstimation
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

@@ -17,7 +17,6 @@ import copy
 import unittest
 
 import pytest
-import requests
 
 from transformers import (
     AutoProcessor,
@@ -40,6 +39,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
@@ -55,7 +55,7 @@ if is_torch_available():
     )
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class T5Gemma2ModelTester:
@@ -1096,8 +1096,8 @@ class T5Gemma2IntegrationTest(unittest.TestCase):
             "google/t5gemma-2-270m-270m", device_map="auto", dtype=torch.bfloat16
         )
         processor = AutoProcessor.from_pretrained("google/t5gemma-2-270m-270m")
-        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/bee.jpg"
+        image = load_test_image(url)
 
         prompt = "<start_of_image> in this image, there is"
         model_inputs = processor(text=prompt, images=image, return_tensors="pt").to(model.device)
@@ -1117,8 +1117,8 @@ class T5Gemma2IntegrationTest(unittest.TestCase):
             "google/t5gemma-2-270m-270m", device_map="auto", dtype=torch.bfloat16
         )
         processor = AutoProcessor.from_pretrained("google/t5gemma-2-270m-270m")
-        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/bee.jpg"
+        image = load_test_image(url)
 
         prompt = ["<start_of_image> in this image, there is", "<start_of_image> in this image"]
         model_inputs = processor(text=prompt, images=[[image], [image]], padding=True, return_tensors="pt").to(

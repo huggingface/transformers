@@ -299,6 +299,7 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
     config: Qwen2AudioEncoderConfig
     main_input_name = "input_features"
     input_modalities = "audio"
+    _input_embed_layer = "conv1"
     _no_split_modules = ["Qwen2AudioEncoderLayer"]
     _can_record_outputs = {"hidden_states": Qwen2AudioEncoderLayer, "attentions": Qwen2AudioAttention}
 
@@ -332,25 +333,19 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
             param.requires_grad = False
         self._requires_grad = False
 
-    def get_input_embeddings(self) -> nn.Module:
-        return self.conv1
-
-    def set_input_embeddings(self, value: nn.Module):
-        self.conv1 = value
-
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
-        input_features,
+        input_features: torch.FloatTensor,
         attention_mask=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
-        Args:
-            attention_mask (`torch.Tensor`)`, *optional*):
-                Qwen2Audio does not support masking of the `input_features`, this argument is preserved for compatibility,
-                but it is not used. By default the silence in the input log mel spectrogram are ignored.
+        attention_mask (`torch.Tensor`)`, *optional*):
+            Qwen2Audio does not support masking of the `input_features`, this argument is preserved for compatibility,
+            but it is not used. By default the silence in the input log mel spectrogram are ignored.
         """
 
         expected_seq_length = self.config.max_source_positions * self.conv1.stride[0] * self.conv2.stride[0]
@@ -504,9 +499,9 @@ class Qwen2AudioModel(Qwen2AudioPreTrainedModel):
             Edge cases:
                 * If tokens are same but audio token sizes are different, then cannot infer left or right padding
                 ```python
-                url1 = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"
+                url1 = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3"
                 audio1, _ = librosa.load(BytesIO(urlopen(url1).read()), sr=processor.feature_extractor.sampling_rate)
-                url2 = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav"
+                url2 = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/throat_clearing.wav"
                 audio2, _ = librosa.load(BytesIO(urlopen(url2).read()), sr=processor.feature_extractor.sampling_rate)
                 prompts = [
                     "[INST] <|AUDIO|>\nWhat is that in this audio? [/INST]",
@@ -801,10 +796,6 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
@@ -818,7 +809,7 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
         >>> processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B")
 
         >>> prompt = "<|audio_bos|><|AUDIO|><|audio_eos|>Generate the caption in English:"
-        >>> url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3"
         >>> audio, _ = librosa.load(BytesIO(urlopen(url).read()), sr=self.processor.feature_extractor.sampling_rate)
 
         >>> inputs = processor(text=prompt, audio=audio, return_tensors="pt")

@@ -15,8 +15,6 @@
     title: معالجة البيانات مسبقًا
   - local: training
     title: ضبط نموذج مسبق التدريب
-  - local: run_scripts
-    title: التدريب باستخدام نص برمجي
   - local: accelerate
     title: إعداد تدريب موزع باستخدام 🤗 Accelerate
   - local: peft
@@ -336,8 +334,6 @@
 #         title: DeBERTa
 #       - local: model_doc/deberta-v2
 #         title: DeBERTa-v2
-#       - local: model_doc/dialogpt
-#         title: DialoGPT
 #       - local: model_doc/distilbert
 #         title: DistilBERT
 #       - local: model_doc/dpr
@@ -430,8 +426,6 @@
 #         title: MEGA
 #       - local: model_doc/megatron-bert
 #         title: MegatronBERT
-#       - local: model_doc/megatron_gpt2
-#         title: MegatronGPT2
 #       - local: model_doc/mistral
 #         title: Mistral
 #       - local: model_doc/mixtral
@@ -577,8 +571,6 @@
 #         title: DiNAT
 #       - local: model_doc/dinov2
 #         title: DINOV2
-#       - local: model_doc/dit
-#         title: DiT
 #       - local: model_doc/dpt
 #         title: DPT
 #       - local: model_doc/efficientformer

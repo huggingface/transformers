@@ -69,7 +69,7 @@ def text_to_html_table(items):
 
 class NotebookProgressBar:
     """
-    A progress par for display in a notebook.
+    A progress bar for display in a notebook.
 
     Class attributes (overridden by derived classes)
 
@@ -160,7 +160,7 @@ class NotebookProgressBar:
                 self.first_calls -= 1
             current_time = time.time()
             self.elapsed_time = current_time - self.start_time
-            # We could have value = self.start_value if the update is called twixe with the same start value.
+            # We could have value = self.start_value if the update is called twice with the same start value.
             if value > self.start_value:
                 self.average_time_per_item = self.elapsed_time / (value - self.start_value)
             else:

@@ -439,7 +439,7 @@ class SamHQPreTrainedModel(PreTrainedModel):
     base_model_prefix = "sam_hq"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    _no_split_modules = ["SamHQVisionAttention"]
+    _no_split_modules = ["SamHQVisionLayer"]
     supports_gradient_checkpointing = True
     _supports_sdpa = True
 
@@ -513,6 +513,7 @@ class SamHQVisionNeck(nn.Module):
 
 
 class SamHQVisionEncoder(SamHQPreTrainedModel):
+    config: SamHQVisionConfig
     _can_record_outputs = {
         "hidden_states": SamHQVisionLayer,
         "attentions": SamHQVisionAttention,
@@ -717,7 +718,7 @@ class SamHQTwoWayAttentionBlock(nn.Module):
         Arguments:
             config (`SamHQMaskDecoderConfig`):
                 The configuration file used to instantiate the block
-            attention_downsample_rate (*optionalk*, int, defaults to 2):
+            attention_downsample_rate (*optional*, int, defaults to 2):
                 The downsample ratio of the block used to reduce the inner dim of the attention.
             skip_first_layer_pe (*optional*, bool, defaults to `False`):
                 Whether or not to skip the addition of the query_point_embedding on the first layer.
@@ -1237,7 +1238,7 @@ class SamHQModel(SamHQPreTrainedModel):
         "prompt_encoder.shared_embedding.positional_embedding": "shared_image_embedding.positional_embedding"
     }
 
-    def __init__(self, config):
+    def __init__(self, config: SamHQConfig):
         super().__init__(config)
         self.shared_image_embedding = SamHQPositionalEmbedding(config.vision_config)
         self.vision_encoder = SamHQVisionEncoder(config.vision_config)
@@ -1396,7 +1397,7 @@ class SamHQModel(SamHQPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 

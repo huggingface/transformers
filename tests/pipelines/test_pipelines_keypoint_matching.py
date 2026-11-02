@@ -63,7 +63,7 @@ class KeypointMatchingPipelineTests(unittest.TestCase):
         )
         examples = [
             Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
-            "http://images.cocodataset.org/val2017/000000039769.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
         ]
         return image_matcher, examples
 
@@ -72,7 +72,7 @@ class KeypointMatchingPipelineTests(unittest.TestCase):
         outputs = image_matcher(
             [
                 Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
-                "http://images.cocodataset.org/val2017/000000039769.jpg",
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
             ]
         )
 
@@ -93,7 +93,7 @@ class KeypointMatchingPipelineTests(unittest.TestCase):
             [
                 [
                     Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
-                    "http://images.cocodataset.org/val2017/000000039769.jpg",
+                    "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
                 ],
                 [self._dataset[0]["image"], self._dataset[1]["image"]],
                 [self._dataset[1]["image"], self._dataset[2]["image"]],

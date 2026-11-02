@@ -29,6 +29,8 @@ You can find all the original BERT checkpoints under the [BERT](https://huggingf
 
 > [!TIP]
 > Click on the BERT models in the right sidebar for more examples of how to apply BERT to different language tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
 
@@ -98,10 +100,6 @@ print(f"The predicted token is: {predicted_token}")
 ## BertTokenizerLegacy
 
 [[autodoc]] BertTokenizerLegacy
-
-## BertTokenizerFast
-
-[[autodoc]] BertTokenizerFast
 
 ## BertModel
 

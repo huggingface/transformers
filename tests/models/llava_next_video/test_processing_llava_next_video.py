@@ -35,6 +35,7 @@ class LlavaNextVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = LlavaNextVideoProcessor
     # Tiny processor created with make_tiny_processor.py from "llava-hf/LLaVA-NeXT-Video-7B-hf"
     tiny_model_id = "hf-internal-testing/tiny-processor-llava_next_video"
+    model_id = "llava-hf/LLaVA-NeXT-Video-7B-hf"
 
     @classmethod
     def prepare_processor_dict(cls):
@@ -45,7 +46,7 @@ class LlavaNextVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "vision_feature_select_strategy": "default",
         }
 
-    def prepare_video_inputs(self, batch_size=None):
+    def prepare_videos_inputs(self, batch_size=None):
         """Use tiny frames to keep test_processor_text_has_no_visual memory-efficient."""
         video_input = [np.random.randint(255, size=(3, 8, 8), dtype=np.uint8)] * 2
         video_input = np.array(video_input)

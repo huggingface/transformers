@@ -244,9 +244,11 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
             num_training_steps,
             "num_training_steps (calculated)",
         )
+        # `deepspeed>=0.19.6` rejects a non-positive `warmup_num_steps`, while older versions silently
+        # clamped it to 2. Keep the auto-filled value positive so that no-warmup runs still work.
         self.fill_match(
             "scheduler.params.warmup_num_steps",
-            args.get_warmup_steps(num_training_steps),
+            max(1, args.get_warmup_steps(num_training_steps)),
             "warmup_steps",
         )
 
@@ -313,6 +315,10 @@ def initialize_weights_zero3(model):
                 _apply_zero3(child, fn)
 
         params = list(model_or_module.parameters(recurse=False))
+        # `_init_weights` may also touch direct children's params (e.g. `module.q_proj.weight`)
+        for child in model_or_module.children():
+            if not isinstance(child, PreTrainedModel):
+                params.extend(child.parameters(recurse=False))
         if params:
             with deepspeed.zero.GatheredParameters(params, modifier_rank=0):
                 if deepspeed.comm.get_rank() == 0:

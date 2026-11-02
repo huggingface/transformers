@@ -267,7 +267,7 @@ def get_quantize_fp8_per_row():
 
 
 def replace_with_fbgemm_fp8_linear(
-    model, modules_to_not_convert: list[str] | None = None, quantization_config=None, pre_quantized=False, tp_plan=None
+    model, modules_to_not_convert: list[str] | None = None, quantization_config=None, pre_quantized=False
 ):
     """
     A helper function to replace all `torch.nn.Linear` modules by `FbgemmFp8Linear` modules.
@@ -280,9 +280,11 @@ def replace_with_fbgemm_fp8_linear(
             Names of the modules to not convert. In practice we keep the `lm_head` in full precision for numerical stability reasons.
         quantization_config (`FbgemmFp8Config`):
             The quantization config object that contains the quantization parameters.
-        pre_quantized (`book`, defaults to `False`):
+        pre_quantized (`bool`, defaults to `False`):
             Whether the model is pre-quantized or not
     """
+    from ..models.llama4.modeling_llama4 import Llama4TextExperts
+
     global quantize_fp8_per_row
     quantize_fp8_per_row = get_quantize_fp8_per_row()
 
@@ -295,11 +297,8 @@ def replace_with_fbgemm_fp8_linear(
 
         new_module = None
         with init_empty_weights(include_buffers=True):
-            if module.__class__.__name__ == "Llama4TextExperts":
+            if isinstance(module, Llama4TextExperts):
                 # TODO: make sure tp works later
-                # if tp_plan is not None:
-                #     tp_key = re.sub(r"\d+", "*", f"{module_name}.down_proj_scale")
-                #     tp_plan[tp_key] = None
                 text_config = getattr(model.config, "text_config", model.config)
                 new_module = FbgemmFp8Llama4TextExperts(text_config or model.config)
             elif isinstance(module, nn.Linear):

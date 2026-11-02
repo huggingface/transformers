@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Custom Layers and Utilities
+# Custom layers and utilities
 
 This page lists all the custom layers used by the library, as well as the utility functions and classes it provides for modeling.
 

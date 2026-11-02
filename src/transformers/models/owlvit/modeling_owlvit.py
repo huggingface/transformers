@@ -601,6 +601,8 @@ class OwlViTEncoder(nn.Module):
 
 
 class OwlViTTextTransformer(OwlViTPreTrainedModel):
+    config: OwlViTTextConfig
+
     def __init__(self, config: OwlViTTextConfig):
         super().__init__(config)
 
@@ -714,6 +716,8 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
 
 
 class OwlViTVisionTransformer(OwlViTPreTrainedModel):
+    config: OwlViTVisionConfig
+
     def __init__(self, config: OwlViTVisionConfig):
         super().__init__(config)
 
@@ -781,7 +785,7 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
         Examples:
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, OwlViTVisionModel
 
@@ -921,7 +925,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
         Examples:
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, OwlViTModel
 
@@ -1302,7 +1306,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         Examples:
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> import torch
@@ -1390,7 +1394,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         Examples:
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> import torch

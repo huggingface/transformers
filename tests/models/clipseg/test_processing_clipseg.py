@@ -66,7 +66,7 @@ class CLIPSegProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
 
         input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
 
         inputs = processor(text=input_str, images=image_input)
 
@@ -79,8 +79,8 @@ class CLIPSegProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_visual_prompt(self):
         processor = self.get_processor()
 
-        image_input = self.prepare_image_inputs()
-        visual_prompt_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
+        visual_prompt_input = self.prepare_images_inputs()
 
         inputs = processor(images=image_input, visual_prompt=visual_prompt_input)
 

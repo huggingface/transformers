@@ -209,27 +209,6 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
         self.assertIsNone(call["activation_scale"])
         self.assertEqual(out.dtype, torch.bfloat16)
 
-    def test_linear_forwards_activation_scale_and_ignores_deprecated_output_dtype(self):
-        input = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
-        weight = torch.randn(16, 8, device=torch_device).to(torch.float8_e4m3fn)
-        weight_scale_inv = torch.randn(1, 1, dtype=torch.float32, device=torch_device)
-        activation_scale = torch.tensor(2.0, device=torch_device)
-        with self._mocked_kernel() as calls:
-            with self.assertWarnsRegex(FutureWarning, "output_dtype"):
-                out = finegrained_fp8_linear(
-                    input,
-                    weight,
-                    weight_scale_inv,
-                    block_size=None,
-                    activation_scale=activation_scale,
-                    output_dtype=torch.float32,  # deprecated + ignored
-                )
-        call = calls["matmul"][0]
-        self.assertIs(call["activation_scale"], activation_scale)
-        # output_dtype is deprecated and ignored: the kernel receives input.dtype, not the requested float32.
-        self.assertEqual(call["output_dtype"], torch.bfloat16)
-        self.assertEqual(out.dtype, torch.bfloat16)
-
     def test_linear_adds_bias_in_place(self):
         input = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
         weight = torch.randn(16, 8, device=torch_device).to(torch.float8_e4m3fn)
@@ -285,7 +264,7 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
     def test_batched_mm_passes_sentinel_expert_ids_unclamped(self):
         # EP sentinels (expert_ids >= num_experts) reach the kernel unclamped; the post-mask zeroes the
         # matching output rows before the per-token reduction (the kernel leaves them uninitialized).
-        experts = make_fp8_experts(num_experts=4, hidden=8, inter=16)
+        experts = make_fp8_experts(num_experts=4, hidden=8, inter=16, is_expert_parallel=True)
         hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
         top_k_index = torch.tensor([[0, 4], [1, 4], [2, 4]], device=torch_device)  # 4 == num_experts -> sentinel
         top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device=torch_device)
@@ -347,7 +326,7 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
     def test_grouped_mm_sentinels_dropped_from_histogram(self):
         # Sentinels are left unclamped so the sort pushes them to the tail and histc(max=num_experts-1)
         # drops them from tokens_per_expert -> no wasted GEMM rows; the post-mask zeroes their output.
-        experts = make_fp8_experts(num_experts=4, hidden=8, inter=16)
+        experts = make_fp8_experts(num_experts=4, hidden=8, inter=16, is_expert_parallel=True)
         hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
         top_k_index = torch.tensor([[0, 4], [1, 4], [2, 4]], device=torch_device)  # three sentinels (== num_experts)
         top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device=torch_device)

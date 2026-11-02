@@ -68,7 +68,7 @@ class GPTNeoXJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         cls.emoji_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["emoji_file"])
         with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
-        with open(cls.emoji_file, "w") as emoji_writer:
+        with open(cls.emoji_file, "w", encoding="utf-8") as emoji_writer:
             emoji_writer.write(json.dumps(emoji_tokens))
 
     @classmethod

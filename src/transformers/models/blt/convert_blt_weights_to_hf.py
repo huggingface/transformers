@@ -22,10 +22,10 @@ transformers_logging.set_verbosity_info()
 def merge_configurations(config_path: str, entropy_params_path: str) -> dict[str, Any]:
     logger.info("Merging configurations")
 
-    with open(config_path, "r") as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         main_config = json.load(f)
 
-    with open(entropy_params_path, "r") as f:
+    with open(entropy_params_path, "r", encoding="utf-8") as f:
         entropy_data = json.load(f)
 
     entropy_model_params = entropy_data.get("entropy_model", {})
@@ -292,7 +292,7 @@ def create_tokenizer_config(output_dir: str, config: dict[str, Any]):
     }
 
     tokenizer_path = os.path.join(output_dir, "tokenizer_config.json")
-    with open(tokenizer_path, "w") as f:
+    with open(tokenizer_path, "w", encoding="utf-8") as f:
         json.dump(tokenizer_config, f, indent=2)
 
 
@@ -385,7 +385,7 @@ def convert_hf_blt_to_unified(
     os.makedirs(output_dir, exist_ok=True)
 
     config_path = os.path.join(output_dir, config_name)
-    with open(config_path, "w") as f:
+    with open(config_path, "w", encoding="utf-8") as f:
         json.dump(unified_config, f, indent=2)
 
     if weights_name.endswith(".bin"):

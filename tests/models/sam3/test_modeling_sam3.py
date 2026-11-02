@@ -970,13 +970,17 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
 def prepare_coco_cat_image():
     """Prepare COCO cat and laptop image (from batched inference notebook)."""
-    img_url = url_to_local_path("http://images.cocodataset.org/val2017/000000077595.jpg")
+    img_url = url_to_local_path(
+        "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000077595.jpg"
+    )
     return load_image(img_url).convert("RGB")
 
 
 def prepare_coco_kitchen_image():
     """Prepare COCO kitchen scene image (from batched inference notebook)."""
-    img_url = url_to_local_path("http://images.cocodataset.org/val2017/000000136466.jpg")
+    img_url = url_to_local_path(
+        "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000136466.jpg"
+    )
     return load_image(img_url).convert("RGB")
 
 

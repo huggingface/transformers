@@ -15,6 +15,7 @@
 Hub utilities: utilities related to download and cache models
 """
 
+import errno
 import json
 import os
 import re
@@ -25,13 +26,13 @@ from pathlib import Path
 from typing import TypedDict
 from uuid import uuid4
 
-import httpx
 from huggingface_hub import (
     _CACHED_NO_EXIST,
     CommitOperationAdd,
     HfApi,
     ModelCard,
     ModelCardData,
+    ResolvedRevision,
     constants,
     hf_hub_download,
     hf_hub_url,
@@ -51,6 +52,7 @@ from huggingface_hub.utils import (
     build_hf_headers,
     get_session,
     hf_raise_for_status,
+    httpx,
 )
 
 from . import __version__, logging
@@ -96,7 +98,6 @@ class DownloadKwargs(TypedDict, total=False):
     token: str | bool | None
     revision: str | None
     subfolder: str
-    commit_hash: str | None
     tqdm_class: type | None
 
 
@@ -235,6 +236,82 @@ def extract_commit_hash(resolved_file: str | None, commit_hash: str | None) -> s
     return commit_hash if REGEX_COMMIT_HASH.match(commit_hash) else None
 
 
+def resolve_revision(
+    path_or_repo_id: str | os.PathLike | None,
+    revision: str | None = None,
+    *,
+    repo_type: str | None = None,
+    token: bool | str | None = None,
+    local_files_only: bool = False,
+    cache_dir: str | os.PathLike | None = None,
+) -> str | None:
+    """
+    Best-effort resolution of a (possibly mutable) `revision` into the immutable commit it currently points to.
+
+    Every public loading entry point (`from_pretrained`, `pipeline`, ...) calls this once, then passes the returned
+    value as `revision` for the rest of that call. Two benefits:
+
+    - all the files of a single load come from the same repository state, even if the repo is updated in the meantime;
+    - all subsequent lookups are done against an immutable commit, so they can be served from the local cache
+      (including the "this file does not exist" cache) without any call to the Hub.
+
+    The returned [`~huggingface_hub.ResolvedRevision`] is a `str` equal to `revision`, so URLs and error messages keep
+    mentioning what the user asked for.
+
+    This is best effort: local folders are returned as-is, and any failure to resolve the revision (unknown or gated
+    repo, unreachable Hub, ...) returns `revision` unchanged so that the regular loading path applies, with its own
+    error messages and its own fallbacks to the cache.
+
+    Args:
+        path_or_repo_id (`str` or `os.PathLike`, *optional*):
+            A repo id on the Hub, or a path to a local directory or `None` (both returned as-is).
+        revision (`str`, *optional*):
+            The revision to resolve. `None` means the default branch of the repo.
+        repo_type (`str`, *optional*):
+            The type of the repo (`"model"` if not provided).
+        token (`str` or `bool`, *optional*):
+            The token to use as HTTP bearer authorization for remote files.
+        local_files_only (`bool`, *optional*, defaults to `False`):
+            If `True`, resolve the revision from the local cache only, without contacting the Hub.
+        cache_dir (`str` or `os.PathLike`, *optional*):
+            The cache the caller downloads to, where the `revision` -> commit hash mapping is recorded so that a later
+            offline load can still resolve `revision` locally.
+
+    Returns:
+        `Optional[str]`: The resolved revision, or `revision` if it could not be resolved.
+    """
+    if path_or_repo_id is None or os.path.exists(path_or_repo_id):
+        return revision
+
+    try:
+        return hf_api().resolve_revision(
+            str(path_or_repo_id),
+            repo_type=repo_type,
+            revision=revision,
+            cache_dir=cache_dir,
+            local_files_only=local_files_only or is_offline_mode(),
+            token=token,
+        )
+    except Exception:
+        # Fail open: any error (repo not found, gated repo, rate limit, no network, ...) is reported by the regular
+        # loading path, with a much more helpful error message - or recovered from, using the local cache. Only the
+        # revision the caller asked for is kept: a revision resolved for another repository does not apply here.
+        logger.debug(f"Could not resolve revision {revision} of {path_or_repo_id}.", exc_info=True)
+        return revision
+
+
+def _pinned_commit_hash(revision: str | None) -> str | None:
+    """
+    The immutable commit hash `revision` points to, if we know it without asking the Hub: either `revision` is a commit
+    hash already, or it is a revision that `resolve_revision` resolved.
+    """
+    if isinstance(revision, ResolvedRevision):
+        return revision.resolved
+    if revision is not None and REGEX_COMMIT_HASH.match(revision):
+        return revision
+    return None
+
+
 def cached_file(
     path_or_repo_id: str | os.PathLike,
     filename: str,
@@ -310,7 +387,6 @@ def cached_files(
     _raise_exceptions_for_gated_repo: bool = True,
     _raise_exceptions_for_missing_entries: bool = True,
     _raise_exceptions_for_connection_errors: bool = True,
-    _commit_hash: str | None = None,
     tqdm_class: type | None = None,
     **deprecated_kwargs,
 ) -> list[str] | None:
@@ -339,7 +415,9 @@ def cached_files(
         revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
-            identifier allowed by git.
+            identifier allowed by git. When it pins an immutable commit - a commit hash, or a revision resolved by
+            [`~utils.hub.resolve_revision`] - the local cache is trusted (including the "this file does not exist"
+            cache) and no call is made to the Hub for files that are already known.
         local_files_only (`bool`, *optional*, defaults to `False`):
             If `True`, will only try to load the tokenizer configuration from local files.
         subfolder (`str`, *optional*, defaults to `""`):
@@ -355,9 +433,6 @@ def cached_files(
             if False, do not raise an exception for missing entries but return None.
         _raise_exceptions_for_connection_errors (`bool`):
             if False, do not raise an exception for connection errors but return None.
-        _commit_hash (`str`, *optional*):
-            passed when we are chaining several calls to various files (e.g. when loading a tokenizer or
-            a pipeline). If files are cached for this commit hash, avoid calls to head and get from the cache.
 
     <Tip>
 
@@ -408,26 +483,51 @@ def cached_files(
     if isinstance(cache_dir, Path):
         cache_dir = str(cache_dir)
 
+    def finalize(resolved_files: list[str | None]) -> list[str] | None:
+        # If there are any missing file and the flag is active, raise
+        if any(file is None for file in resolved_files) and _raise_exceptions_for_missing_entries:
+            missing_entries = [
+                original for original, resolved in zip(full_filenames, resolved_files) if resolved is None
+            ]
+            # Last escape
+            if len(resolved_files) == 1 and missing_entries[0] == os.path.join(subfolder, "config.json"):
+                return None
+            # Now we raise for missing entries
+            revision_ = "main" if revision is None else revision
+            msg = (
+                f"a file named {missing_entries[0]}"
+                if len(missing_entries) == 1
+                else f"files named {(*missing_entries,)}"
+            )
+            raise OSError(
+                f"{path_or_repo_id} does not appear to have {msg}. Checkout 'https://huggingface.co/{path_or_repo_id}/tree/{revision_}'"
+                " for available files."
+            )
+
+        # Remove potential missing entries (we can silently remove them at this point based on the flags)
+        resolved_files = [file for file in resolved_files if file is not None]
+        # Return `None` if the list is empty, coherent with other Exception when the flag is not active
+        resolved_files = None if len(resolved_files) == 0 else resolved_files
+
+        return resolved_files
+
+    # When `revision` pins an immutable commit, the cache is authoritative for it: every file we already know about at
+    # that commit - either downloaded, or recorded as missing - can be served without a single call to the Hub.
+    commit_hash = _pinned_commit_hash(revision)
     existing_files = []
     file_counter = 0
-    if _commit_hash is not None and not force_download:
+    if commit_hash is not None and not force_download:
         for filename in full_filenames:
-            # If the file is cached under that commit hash, we return it directly.
             resolved_file = try_to_load_from_cache(
-                path_or_repo_id, filename, cache_dir=cache_dir, revision=_commit_hash, repo_type=repo_type
+                path_or_repo_id, filename, cache_dir=cache_dir, revision=commit_hash, repo_type=repo_type
             )
             if resolved_file is not None:
-                if resolved_file is not _CACHED_NO_EXIST:
-                    file_counter += 1
-                    existing_files.append(resolved_file)
-                elif not _raise_exceptions_for_missing_entries:
-                    file_counter += 1
-                else:
-                    raise OSError(f"Could not locate {filename} inside {path_or_repo_id}.")
+                file_counter += 1
+                existing_files.append(None if resolved_file is _CACHED_NO_EXIST else resolved_file)
 
-    # Either all the files were found, or some were _CACHED_NO_EXIST but we do not raise for missing entries
+    # Return cached files when all entries are known, including missing entries.
     if file_counter == len(full_filenames):
-        return existing_files if len(existing_files) > 0 else None
+        return finalize(existing_files)
 
     user_agent = http_user_agent(user_agent)
     # download the files if needed
@@ -484,12 +584,19 @@ def cached_files(
                 "Check cache directory permissions. Common causes: 1) another user is downloading the same model (please wait); "
                 "2) a previous download was canceled and the lock file needs manual removal."
             ) from e
+        elif isinstance(e, OSError) and e.errno == errno.EROFS:
+            # Unlike EACCES (errno 13), which Python maps to PermissionError,
+            # EROFS (errno 30) is a plain OSError that does NOT match `isinstance(e, PermissionError)`.
+            # Without this guard it would fall through to the stale-cache recovery block below,
+            # silently returning an old cached file even when a newer revision exists on the Hub.
+            # Re-raise so callers can detect the read-only condition and retry with a writable path.
+            raise
         elif isinstance(e, ValueError):
             raise OSError(f"{e}") from e
 
         # Now we try to recover if we can find all files correctly in the cache
         resolved_files = [
-            _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision, repo_type)
+            _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, commit_hash or revision, repo_type)
             for filename in full_filenames
         ]
         if all(file is not None for file in resolved_files):
@@ -527,30 +634,10 @@ def cached_files(
             raise e
 
     resolved_files = [
-        _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision) for filename in full_filenames
+        _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, commit_hash or revision)
+        for filename in full_filenames
     ]
-    # If there are any missing file and the flag is active, raise
-    if any(file is None for file in resolved_files) and _raise_exceptions_for_missing_entries:
-        missing_entries = [original for original, resolved in zip(full_filenames, resolved_files) if resolved is None]
-        # Last escape
-        if len(resolved_files) == 1 and missing_entries[0] == os.path.join(subfolder, "config.json"):
-            return None
-        # Now we raise for missing entries
-        revision_ = "main" if revision is None else revision
-        msg = (
-            f"a file named {missing_entries[0]}" if len(missing_entries) == 1 else f"files named {(*missing_entries,)}"
-        )
-        raise OSError(
-            f"{path_or_repo_id} does not appear to have {msg}. Checkout 'https://huggingface.co/{path_or_repo_id}/tree/{revision_}'"
-            " for available files."
-        )
-
-    # Remove potential missing entries (we can silently remove them at this point based on the flags)
-    resolved_files = [file for file in resolved_files if file is not None]
-    # Return `None` if the list is empty, coherent with other Exception when the flag is not active
-    resolved_files = None if len(resolved_files) == 0 else resolved_files
-
-    return resolved_files
+    return finalize(resolved_files)
 
 
 def has_file(
@@ -859,7 +946,6 @@ def get_checkpoint_shard_files(
     user_agent=None,
     revision=None,
     subfolder="",
-    _commit_hash=None,
     tqdm_class=None,
     **deprecated_kwargs,
 ):
@@ -876,7 +962,7 @@ def get_checkpoint_shard_files(
     if not os.path.isfile(index_filename):
         raise ValueError(f"Can't find a checkpoint index ({index_filename}) in {pretrained_model_name_or_path}.")
 
-    with open(index_filename) as f:
+    with open(index_filename, encoding="utf-8") as f:
         index = json.loads(f.read())
 
     shard_filenames = sorted(set(index["weight_map"].values()))
@@ -902,7 +988,6 @@ def get_checkpoint_shard_files(
         user_agent=user_agent,
         revision=revision,
         subfolder=subfolder,
-        _commit_hash=_commit_hash,
         tqdm_class=tqdm_class,
     )
 

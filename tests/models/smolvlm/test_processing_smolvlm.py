@@ -18,7 +18,7 @@ import numpy as np
 
 from transformers import SmolVLMProcessor
 from transformers.image_utils import load_image
-from transformers.testing_utils import require_av, require_torch, require_vision
+from transformers.testing_utils import require_torch, require_vision
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
@@ -82,15 +82,25 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "chat_template": "<|im_start|>{% for message in messages %}{{message['role'] | capitalize}}{% if message['content'][0]['type'] == 'image' %}{{':'}}{% else %}{{': '}}{% endif %}{% for line in message['content'] %}{% if line['type'] == 'text' %}{{line['text']}}{% elif line['type'] == 'image' %}{{ '<image>' }}{% endif %}{% endfor %}<end_of_utterance>\n{% endfor %}{% if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}",
         }
 
+    @property
+    def video_sampling_expectations(self):
+        return [
+            {"num_frames": 3, "fps": None, "expected_dim": 1, "output_length": 1},
+            {"num_frames": None, "fps": 18, "expected_dim": 1, "output_length": 7},
+            {"do_sample_frames": False, "fps": 2, "expected_dim": 1, "output_length": 11},
+            {"do_sample_frames": False, "expected_dim": 1, "output_length": 11},
+            {"expected_dim": 1, "output_length": 1},
+        ]
+
     # Override as SmolVLM needs images/video to be an explicitly nested batch
-    def prepare_image_inputs(self, batch_size: int | None = None):
+    def prepare_images_inputs(self, batch_size: int | None = None):
         """This function prepares a list of PIL images for testing"""
-        images = super().prepare_image_inputs(batch_size)
+        images = super().prepare_images_inputs(batch_size)
         if isinstance(images, (list, tuple)):
             images = [[image] for image in images]
         return images
 
-    def prepare_video_inputs(self, batch_size: int | None = None):
+    def prepare_videos_inputs(self, batch_size: int | None = None):
         """This function prepares a list of numpy videos."""
         # 2 frames instead of 8: with 8 frames the expanded video token sequence exceeds the max_length
         # used in truncation tests, truncation cuts through video tokens, and _check_special_mm_tokens
@@ -371,63 +381,6 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertEqual(rendered, expected_rendered)
 
-    @require_av
-    @require_torch
-    def test_apply_chat_template_video_frame_sampling(self):
-        # overridden because SmolVLM has special preprocessing for videos
-        processor = self.get_processor()
-        if processor.chat_template is None:
-            self.skipTest("Processor has no chat template")
-
-        messages = [
-            [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "video",
-                            "url": url_to_local_path(
-                                "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/tiny_video_320x240.mp4"
-                            ),
-                        },
-                        {"type": "text", "text": "What is shown in this video?"},
-                    ],
-                },
-            ]
-        ]
-
-        num_frames = 3
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            num_frames=num_frames,
-            return_tensors="pt",
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        # SmolVLM doesn't sample `num_frames` exactly, by uses other sampling method
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 1)
-
-        # Load with `fps` arg
-        fps = 10
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            fps=fps,
-            return_tensors="pt",
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        # SmolVLM doesn't sample 1 frame per second exactly, by uses other sampling method
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 4)
-
-        # NOTE: the last assert checks are removed
-        # Loading video as a list of frames (i.e. images) is not supported in SmolVLM
-
     @require_torch
     @require_vision
     def test_unstructured_kwargs_batched(self):
@@ -441,10 +394,9 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(
             tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor, **processor_kwargs
         )
-        self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
-        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = self.prepare_images_inputs(batch_size=2)
         inputs = processor(
             text=input_str,
             images=image_input,
@@ -467,10 +419,9 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_components = self.prepare_components()
         processor_kwargs = self.prepare_processor_dict()
         processor = self.processor_class(**processor_components, **processor_kwargs)
-        self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="video")
-        video_input = self.prepare_video_inputs(batch_size=2)
+        video_input = self.prepare_videos_inputs(batch_size=2)
         inputs = processor(
             text=input_str,
             videos=video_input,
@@ -565,7 +516,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
-        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = self.prepare_images_inputs(batch_size=2)
         _ = processor(
             text=input_str,
             images=image_input,

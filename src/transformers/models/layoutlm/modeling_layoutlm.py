@@ -393,6 +393,7 @@ class LayoutLMPreTrainedModel(PreTrainedModel):
     config: LayoutLMConfig
     base_model_prefix = "layoutlm"
     supports_gradient_checkpointing = True
+    _supports_sdpa = True
     _can_record_outputs = {
         "hidden_states": LayoutLMLayer,
         "attentions": LayoutLMSelfAttention,
@@ -410,7 +411,7 @@ class LayoutLMPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class LayoutLMModel(LayoutLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMConfig):
         super().__init__(config)
         self.config = config
 
@@ -531,7 +532,7 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
         "cls.predictions.decoder.weight": "layoutlm.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMConfig):
         super().__init__(config)
 
         self.layoutlm = LayoutLMModel(config)
@@ -569,10 +570,6 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
             config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
             format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
             y1) represents the position of the lower right corner. See [Overview](#Overview) for normalization.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
 
         Examples:
 
@@ -647,7 +644,7 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
     """
 )
 class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.layoutlm = LayoutLMModel(config)
@@ -679,10 +676,6 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
             config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
             format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
             y1) represents the position of the lower right corner. See [Overview](#Overview) for normalization.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Examples:
 
@@ -775,7 +768,7 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
     """
 )
 class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.layoutlm = LayoutLMModel(config)
@@ -807,8 +800,6 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
             config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
             format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
             y1) represents the position of the lower right corner. See [Overview](#Overview) for normalization.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
 
         Examples:
 
@@ -877,7 +868,7 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
 
 @auto_docstring
 class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
-    def __init__(self, config, has_visual_segment_embedding=True):
+    def __init__(self, config: LayoutLMConfig, has_visual_segment_embedding=True):
         r"""
         has_visual_segment_embedding (`bool`, *optional*, defaults to `True`):
             Whether or not to add visual segment embeddings.

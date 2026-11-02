@@ -673,7 +673,7 @@ class LxmertPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class LxmertModel(LxmertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LxmertConfig):
         super().__init__(config)
         self.embeddings = LxmertEmbeddings(config)
         self.encoder = LxmertEncoder(config)
@@ -829,7 +829,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         "cls.predictions.decoder.weight": "lxmert.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: LxmertConfig):
         super().__init__(config)
         # Configuration
         self.config = config
@@ -1026,7 +1026,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
             - 0 indicates that the sentence does not match the image,
             - 1 indicates that the sentence does match the image.
         ans (`Torch.Tensor` of shape `(batch_size)`, *optional*):
-            a one hot representation hof the correct answer *optional*
+            a one hot representation of the correct answer *optional*
         """
 
         return_dict = return_dict if return_dict is not None else self.config.return_dict
@@ -1121,7 +1121,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
     """
 )
 class LxmertForQuestionAnswering(LxmertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LxmertConfig):
         super().__init__(config)
         # Configuration
         self.config = config

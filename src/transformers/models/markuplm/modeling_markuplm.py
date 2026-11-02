@@ -496,7 +496,7 @@ class MarkupLMPreTrainedModel(PreTrainedModel):
 @auto_docstring
 class MarkupLMModel(MarkupLMPreTrainedModel):
     # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->MarkupLM
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: MarkupLMConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -602,7 +602,7 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
 @auto_docstring
 class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering.__init__ with bert->markuplm, Bert->MarkupLM
-    def __init__(self, config):
+    def __init__(self, config: MarkupLMConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -708,7 +708,7 @@ class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
 )
 class MarkupLMForTokenClassification(MarkupLMPreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForTokenClassification.__init__ with bert->markuplm, Bert->MarkupLM
-    def __init__(self, config):
+    def __init__(self, config: MarkupLMConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -741,8 +741,6 @@ class MarkupLMForTokenClassification(MarkupLMPreTrainedModel):
             Tag IDs for each token in the input sequence, padded up to config.max_depth.
         xpath_subs_seq (`torch.LongTensor` of shape `(batch_size, sequence_length, config.max_depth)`, *optional*):
             Subscript IDs for each token in the input sequence, padded up to config.max_depth.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
 
         Examples:
 
@@ -803,7 +801,7 @@ class MarkupLMForTokenClassification(MarkupLMPreTrainedModel):
 )
 class MarkupLMForSequenceClassification(MarkupLMPreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification.__init__ with bert->markuplm, Bert->MarkupLM
-    def __init__(self, config):
+    def __init__(self, config: MarkupLMConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -837,10 +835,6 @@ class MarkupLMForSequenceClassification(MarkupLMPreTrainedModel):
             Tag IDs for each token in the input sequence, padded up to config.max_depth.
         xpath_subs_seq (`torch.LongTensor` of shape `(batch_size, sequence_length, config.max_depth)`, *optional*):
             Subscript IDs for each token in the input sequence, padded up to config.max_depth.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Examples:
 

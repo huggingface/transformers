@@ -94,8 +94,8 @@ messages = [
     {"role": "system", "content": "You are a friendly chatbot who always responds in the style of a pirate",},
     {"role": "user", "content": "How many helicopters can a human eat in one sitting?"},
  ]
-tokenized_chat = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt")
-print(tokenizer.decode(tokenized_chat[0]))
+tokenized_chat = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)
+print(tokenizer.decode(tokenized_chat["input_ids"][0]))
 ```
 
 ```md
@@ -109,7 +109,7 @@ How many helicopters can a human eat in one sitting?</s>
 Pass the tokenized chat to [`~GenerationMixin.generate`] to generate a response.
 
 ```py
-outputs = model.generate(tokenized_chat, max_new_tokens=128) 
+outputs = model.generate(**tokenized_chat, max_new_tokens=128)
 print(tokenizer.decode(outputs[0]))
 ```
 
@@ -189,7 +189,7 @@ model.generate(**formatted_chat)
 > [!WARNING]
 > You shouldn't use [`~PreTrainedTokenizerBase.apply_chat_template#add_generation_prompt`] and [`~PreTrainedTokenizerBase.apply_chat_template#continue_final_message`] together. The former adds tokens that start a new message, while the latter removes end of sequence tokens. Using them together returns an error.
 
-Pass a field name as a string to prefill that field instead of `content`. Reasoning models often expose a separate field, like `reasoning_content` on Qwen or `thinking` on Gemma. Prefilling `content` closes the reasoning block before generation starts, so the model can't continue inside it. Prefilling the reasoning field directly leaves the block open.
+Pass a field name as a string to prefill that field instead of `content`. Reasoning models read their reasoning from a separate `reasoning_content` field. Prefilling `content` closes the reasoning block before generation starts, so the model can't continue inside it. Prefilling `reasoning_content` directly leaves the block open.
 
 ```py
 chat = [

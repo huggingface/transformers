@@ -39,7 +39,10 @@ recognition with limited amounts of labeled data.*
 
 This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten).
 
-Note: Meta (FAIR) released a new version of [Wav2Vec2-BERT 2.0](https://huggingface.co/docs/transformers/en/model_doc/wav2vec2-bert) - it's pretrained on 4.5M hours of audio. We especially recommend using it for fine-tuning tasks, e.g. as per [this guide](https://huggingface.co/blog/fine-tune-w2v2-bert).
+Note: Meta (FAIR) released a new version of [Wav2Vec2-BERT 2.0](./wav2vec2-bert) - it's pretrained on 4.5M hours of audio. We especially recommend using it for fine-tuning tasks, e.g. as per [this guide](https://huggingface.co/blog/fine-tune-w2v2-bert).
+
+> [!TIP]
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 ## Usage tips
 
@@ -88,7 +91,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 <PipelineTag pipeline="audio-classification"/>
 
 - A notebook on how to [leverage a pretrained Wav2Vec2 model for emotion classification](https://colab.research.google.com/github/m3hrdadfi/soxan/blob/main/notebooks/Emotion_recognition_in_Greek_speech_using_Wav2Vec2.ipynb). 🌎
-- [`Wav2Vec2ForCTC`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/audio-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/audio_classification.ipynb).
+- [`Wav2Vec2ForCTC`] is supported by this [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/audio_classification.ipynb).
 - [Audio classification task guide](../tasks/audio_classification)
 
 <PipelineTag pipeline="automatic-speech-recognition"/>

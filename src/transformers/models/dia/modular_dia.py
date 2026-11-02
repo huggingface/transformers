@@ -219,7 +219,7 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+    ) -> torch.Tensor:
         residual = hidden_states
         normed_states = self.pre_sa_norm(hidden_states)
         self_attn_output, _ = self.self_attention(
@@ -239,6 +239,7 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
 
 
 class DiaEncoder(DiaPreTrainedModel):
+    config: DiaEncoderConfig
     _can_record_outputs = {
         "hidden_states": DiaEncoderLayer,
         "attentions": DiaSelfAttention,
@@ -354,6 +355,7 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
 class DiaDecoder(DiaPreTrainedModel):
     """Transformer Decoder Stack using DenseGeneral."""
 
+    config: DiaDecoderConfig
     _can_record_outputs = {
         "hidden_states": DiaDecoderLayer,
         "attentions": DiaSelfAttention,

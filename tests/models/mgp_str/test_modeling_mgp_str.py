@@ -206,9 +206,9 @@ class MgpstrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
 
-# We will verify our results on an image from the IIIT-5k dataset
+# We will verify our results on a synthetic scene-text image
 def prepare_img():
-    url = "https://i.postimg.cc/ZKwLg2Gw/367-14.png"
+    url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/mgp_str_ticket.png"
     im = Image.open(requests.get(url, stream=True).raw).convert("RGB")
     return im
 
@@ -238,7 +238,7 @@ class MgpstrModelIntegrationTest(unittest.TestCase):
         self.assertEqual(out_strs["generated_text"][0], expected_text)
 
         expected_slice = torch.tensor(
-            [[[-39.5397, -44.4024, -36.1844], [-61.4709, -63.8639, -58.3454], [-74.0225, -68.5494, -71.2164]]],
+            [[[-61.4632, -59.8325, -59.796], [-55.6928, -56.5443, -56.4869], [-58.8731, -59.3695, -58.9453]]],
             device=torch_device,
         )
 

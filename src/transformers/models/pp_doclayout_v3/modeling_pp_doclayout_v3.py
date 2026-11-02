@@ -234,7 +234,7 @@ class PPDocLayoutV3MultiscaleDeformableAttention(nn.Module):
 @auto_docstring
 class PPDocLayoutV3PreTrainedModel(PreTrainedModel):
     config: PPDocLayoutV3Config
-    base_model_prefix = "pp_doclayout_v3"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = [r"PPDocLayoutV3HybridEncoder", r"PPDocLayoutV3DecoderLayer"]
@@ -805,11 +805,13 @@ def build_2d_sinusoidal_position_embedding(
         raise ValueError(f"`embed_dim` must be divisible by 4, got {embed_dim}")
 
     pos_dim = embed_dim // 4
-    omega = torch.arange(pos_dim, dtype=torch.float64, device=device) / pos_dim
+    # mps doesn't support float64
+    compute_dtype = torch.float64 if device is None or device.type != "mps" else torch.float32
+    omega = torch.arange(pos_dim, dtype=compute_dtype, device=device) / pos_dim
     omega = 1.0 / temperature**omega  # (D/4,)
 
-    grid_h = torch.arange(height, dtype=torch.float64, device=device)
-    grid_w = torch.arange(width, dtype=torch.float64, device=device)
+    grid_h = torch.arange(height, dtype=compute_dtype, device=device)
+    grid_w = torch.arange(width, dtype=compute_dtype, device=device)
     grid_h, grid_w = torch.meshgrid(grid_h, grid_w, indexing="ij")  # (H, W) each
 
     emb_h = grid_h.flatten().outer(omega)  # (H*W, D/4)
@@ -818,7 +820,7 @@ def build_2d_sinusoidal_position_embedding(
     pos_embed = torch.cat([emb_h.sin(), emb_h.cos(), emb_w.sin(), emb_w.cos()], dim=1)
 
     if cls_token:
-        pos_embed = torch.cat([torch.zeros(1, embed_dim, dtype=torch.float64, device=device), pos_embed], dim=0)
+        pos_embed = torch.cat([torch.zeros(1, embed_dim, dtype=compute_dtype, device=device), pos_embed], dim=0)
 
     return pos_embed.to(dtype)
 
@@ -1189,6 +1191,7 @@ class PPDocLayoutV3Decoder(PPDocLayoutV3PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
     def forward(
@@ -1208,23 +1211,35 @@ class PPDocLayoutV3Decoder(PPDocLayoutV3PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-                The query embeddings that are passed into the decoder.
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-                of the decoder.
-            encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing cross-attention on padding pixel_values of the encoder. Mask values selected
-                in `[0, 1]`:
-                - 1 for pixels that are real (i.e. **not masked**),
-                - 0 for pixels that are padding (i.e. **masked**).
-            reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
-                Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
-            spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
-                Spatial shapes of the feature maps.
-            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
-                Indexes for the start of each feature level. In range `[0, sequence_length]`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+            The query embeddings that are passed into the decoder.
+        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+            of the decoder.
+        encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing cross-attention on padding pixel_values of the encoder. Mask values selected
+            in `[0, 1]`:
+            - 1 for pixels that are real (i.e. **not masked**),
+            - 0 for pixels that are padding (i.e. **masked**).
+        reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)` is `as_two_stage` else `(batch_size, num_queries, 2)` or , *optional*):
+            Reference point in range `[0, 1]`, top-left (0,0), bottom-right (1, 1), including padding area.
+        spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
+            Spatial shapes of the feature maps.
+        spatial_shapes_list (`list[tuple[int, int]]`, *optional*):
+            Spatial shapes of the feature maps as a list, kept alongside `spatial_shapes` so that the deformable
+            attention can index them without a device synchronization.
+        level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`, *optional*):
+            Indexes for the start of each feature level. In range `[0, sequence_length]`.
+        order_head (`nn.ModuleList`, *optional*):
+            Per-layer projections feeding the relative order global pointer.
+        global_pointer (`PPDocLayoutV3GlobalPointer`, *optional*):
+            Antisymmetric pairwise scorer producing the relative reading order logits.
+        mask_query_head (`PPDocLayoutV3MLPPredictionHead`, *optional*):
+            Prediction head mapping the decoder hidden states to mask queries for the per-layer mask generation.
+        norm (`nn.LayerNorm`, *optional*):
+            Layer norm applied to the decoder hidden states before the mask, classification and order heads.
+        mask_feat (`torch.FloatTensor` of shape `(batch_size, num_prototypes, mask_height, mask_width)`, *optional*):
+            Mask feature map from the encoder, dot-producted with the mask queries to produce the per-layer masks.
         """
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
@@ -1533,23 +1548,14 @@ def mask_to_box_coordinate(mask, dtype):
     x_coords = x_coords.to(dtype)
     y_coords = y_coords.to(dtype)
 
+    finfo_max = torch.full((), torch.finfo(dtype).max, dtype=dtype, device=mask.device)
     x_coords_masked = x_coords * mask
     x_max = x_coords_masked.flatten(start_dim=-2).max(dim=-1).values + 1
-    x_min = (
-        torch.where(mask, x_coords_masked, torch.tensor(torch.finfo(dtype).max))
-        .flatten(start_dim=-2)
-        .min(dim=-1)
-        .values
-    )
+    x_min = torch.where(mask, x_coords_masked, finfo_max).flatten(start_dim=-2).min(dim=-1).values
 
     y_coords_masked = y_coords * mask
     y_max = y_coords_masked.flatten(start_dim=-2).max(dim=-1).values + 1
-    y_min = (
-        torch.where(mask, y_coords_masked, torch.tensor(torch.finfo(dtype).max))
-        .flatten(start_dim=-2)
-        .min(dim=-1)
-        .values
-    )
+    y_min = torch.where(mask, y_coords_masked, finfo_max).flatten(start_dim=-2).min(dim=-1).values
 
     unnormalized_bbox = torch.stack([x_min, y_min, x_max, y_max], dim=-1)
 
@@ -1733,7 +1739,7 @@ class PPDocLayoutV3Model(PPDocLayoutV3PreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, PPDocLayoutV2Model
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -2040,22 +2046,16 @@ class PPDocLayoutV3ForObjectDetection(PPDocLayoutV3PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | PPDocLayoutV3ForObjectDetectionOutput:
         r"""
-        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
-
         Examples:
 
         ```python
         >>> from transformers import AutoModelForObjectDetection, AutoImageProcessor
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
 
-        >>> url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg"
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_layout_demo.jpg"
         >>> with httpx.stream("GET", url) as response:
         ...     image = Image.open(BytesIO(response.read()))
 

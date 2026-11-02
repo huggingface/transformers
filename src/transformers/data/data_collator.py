@@ -132,13 +132,13 @@ def torch_default_data_collator(features: list[InputDataClass]) -> dict[str, Any
     # (it should be automatically the case, but let's make sure of it.)
     if "label" in first and first["label"] is not None:
         label = first["label"].item() if isinstance(first["label"], torch.Tensor) else first["label"]
-        dtype = torch.long if isinstance(label, int) else torch.float
+        dtype = torch.long if isinstance(label, (int, np.integer)) else torch.float
         batch["labels"] = torch.tensor([f["label"] for f in features], dtype=dtype)
     elif "label_ids" in first and first["label_ids"] is not None:
         if isinstance(first["label_ids"], torch.Tensor):
             batch["labels"] = torch.stack([f["label_ids"] for f in features])
         else:
-            dtype = torch.long if isinstance(first["label_ids"][0], int) else torch.float
+            dtype = torch.long if isinstance(first["label_ids"][0], (int, np.integer)) else torch.float
             batch["labels"] = torch.tensor([f["label_ids"] for f in features], dtype=dtype)
 
     # Handling of all other possible keys.
@@ -166,13 +166,13 @@ def numpy_default_data_collator(features: list[InputDataClass]) -> dict[str, Any
     # (it should be automatically the case, but let's make sure of it.)
     if "label" in first and first["label"] is not None:
         label = first["label"].item() if isinstance(first["label"], np.ndarray) else first["label"]
-        dtype = np.int64 if isinstance(label, int) else np.float32
+        dtype = np.int64 if isinstance(label, (int, np.integer)) else np.float32
         batch["labels"] = np.array([f["label"] for f in features], dtype=dtype)
     elif "label_ids" in first and first["label_ids"] is not None:
         if isinstance(first["label_ids"], np.ndarray):
             batch["labels"] = np.stack([f["label_ids"] for f in features])
         else:
-            dtype = np.int64 if isinstance(first["label_ids"][0], int) else np.float32
+            dtype = np.int64 if isinstance(first["label_ids"][0], (int, np.integer)) else np.float32
             batch["labels"] = np.array([f["label_ids"] for f in features], dtype=dtype)
 
     # Handling of all other possible keys.
@@ -319,14 +319,16 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
     def numpy_call(self, features):
         label_name = "label" if "label" in features[0] else "labels"
         labels = [feature[label_name] for feature in features] if label_name in features[0] else None
+
+        no_labels_features = [{k: v for k, v in feature.items() if k != label_name} for feature in features]
+
         batch = pad_without_fast_tokenizer_warning(
             self.tokenizer,
-            features,
+            no_labels_features,
             padding=self.padding,
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
-            # Conversion to tensors will fail if we have labels as they are not of the same length yet.
-            return_tensors="np" if labels is None else None,
+            return_tensors="np",
         )
 
         if labels is None:
@@ -335,15 +337,15 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
         sequence_length = np.array(batch["input_ids"]).shape[1]
         padding_side = self.tokenizer.padding_side
         if padding_side == "right":
-            batch["labels"] = [
+            batch[label_name] = [
                 list(label) + [self.label_pad_token_id] * (sequence_length - len(label)) for label in labels
             ]
         else:
-            batch["labels"] = [
+            batch[label_name] = [
                 [self.label_pad_token_id] * (sequence_length - len(label)) + list(label) for label in labels
             ]
 
-        batch = {k: np.array(v, dtype=np.int64) for k, v in batch.items()}
+        batch[label_name] = np.array(batch[label_name], dtype=np.int64)
         return batch
 
 
@@ -765,7 +767,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
     def torch_call(self, examples: list[list[int] | Any | dict[str, Any]]) -> dict[str, Any]:
         # Handle dict or lists with proper padding and conversion to tensor.
 
-        if self.seed and self.generator is None:
+        if self.seed is not None and self.generator is None:
             # If we have a seed, we need to create a generator object. Subsequent calls to this function will use the same generator.
             # If no seed supplied, we will use the global RNG
             self.create_rng()
@@ -859,7 +861,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
     def numpy_call(self, examples: list[list[int] | Any | dict[str, Any]]) -> dict[str, Any]:
         # Handle dict or lists with proper padding and conversion to tensor.
 
-        if self.seed and self.generator is None:
+        if self.seed is not None and self.generator is None:
             # If we have a seed, we need to create a generator object. Subsequent calls to this function will use the same generator.
             # If no seed supplied, we will use the global RNG
             self.create_rng()
@@ -1015,34 +1017,6 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         return np.any(same_word & mask[:, None, :], axis=2)
 
 
-@dataclass
-class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
-    """
-    Data collator used for language modeling that masks entire words.
-
-    - collates batches of tensors, honoring their tokenizer's pad_token
-    - preprocesses batches for masked language modeling
-    """
-
-    def __init__(self, *args, **kwargs):
-        warnings.warn(
-            "DataCollatorForWholeWordMask is deprecated and will be removed in a future version, you can now use "
-            "DataCollatorForLanguageModeling with whole_word_mask=True instead.",
-            FutureWarning,
-        )
-        super().__init__(*args, **kwargs)
-        self.mlm = True  # Force masked language modeling
-        self.whole_word_mask = True  # Force whole word masking
-
-
-def tolist(x) -> list[Any]:
-    if isinstance(x, list):
-        return x
-    elif hasattr(x, "numpy"):
-        x = x.numpy()
-    return x.tolist()
-
-
 def to_numpy(x) -> np.ndarray[Any]:
     if isinstance(x, np.ndarray):
         return x
@@ -1050,89 +1024,6 @@ def to_numpy(x) -> np.ndarray[Any]:
         return x.detach().cpu().numpy()
     else:
         return np.array(x)
-
-
-@dataclass
-class DataCollatorForSOP(DataCollatorForLanguageModeling):
-    """
-    Data collator used for sentence order prediction task.
-
-    - collates batches of tensors, honoring their tokenizer's pad_token
-    - preprocesses batches for both masked language modeling and sentence order prediction
-    """
-
-    def __init__(self, *args, **kwargs):
-        warnings.warn(
-            "DataCollatorForSOP is deprecated and will be removed in a future version, you can now use "
-            "DataCollatorForLanguageModeling instead.",
-            FutureWarning,
-        )
-
-    def __call__(self, examples: list[dict[str, Any]]) -> dict[str, Any]:
-        import torch
-        from torch.nn.utils.rnn import pad_sequence
-
-        input_ids = [example["input_ids"] for example in examples]
-        input_ids = _torch_collate_batch(input_ids, self.tokenizer)
-        input_ids, labels, attention_mask = self.mask_tokens(input_ids)
-
-        token_type_ids = [example["token_type_ids"] for example in examples]
-        # size of segment_ids varied because randomness, padding zero to the end as the original implementation
-        token_type_ids = pad_sequence(token_type_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id)
-
-        sop_label_list = [example["sentence_order_label"] for example in examples]
-        sentence_order_label = torch.stack(sop_label_list)
-
-        return {
-            "input_ids": input_ids,
-            "labels": labels,
-            "attention_mask": attention_mask,
-            "token_type_ids": token_type_ids,
-            "sentence_order_label": sentence_order_label,
-        }
-
-    def mask_tokens(self, inputs: Any) -> tuple[Any, Any, Any]:
-        """
-        Prepare masked tokens inputs/labels/attention_mask for masked language modeling: 80% MASK, 10% random, 10%
-        original. N-gram not applied yet.
-        """
-        import torch
-
-        if self.tokenizer.mask_token is None:
-            raise ValueError(
-                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the"
-                " --mlm flag if you want to use this tokenizer."
-            )
-
-        labels = inputs.clone()
-        # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
-        probability_matrix = torch.full(labels.shape, self.mlm_probability)
-        special_tokens_mask = [
-            self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
-        ]
-        probability_matrix.masked_fill_(torch.tensor(special_tokens_mask, dtype=torch.bool), value=0.0)
-        if self.tokenizer.pad_token is not None:
-            padding_mask = labels.eq(self.tokenizer.pad_token_id)
-            probability_matrix.masked_fill_(padding_mask, value=0.0)
-        masked_indices = torch.bernoulli(probability_matrix).bool()
-        # probability be `1` (masked), however in albert model attention mask `0` means masked, revert the value
-        attention_mask = (~masked_indices).float()
-        if self.tokenizer.pad_token is not None:
-            attention_padding_mask = labels.eq(self.tokenizer.pad_token_id)
-            attention_mask.masked_fill_(attention_padding_mask, value=1.0)
-        labels[~masked_indices] = -100  # We only compute loss on masked tokens, -100 is default for CE compute
-
-        # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-        indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
-        inputs[indices_replaced] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
-
-        # 10% of the time, we replace masked input tokens with random word
-        indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
-        random_words = torch.randint(len(self.tokenizer), labels.shape, dtype=torch.long)
-        inputs[indices_random] = random_words[indices_random]
-
-        # The rest of the time (10% of the time) we keep the masked input tokens unchanged
-        return inputs, labels, attention_mask
 
 
 @dataclass
