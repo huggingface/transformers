@@ -168,10 +168,8 @@ class Split(ConversionOps):
             raise ValueError("Undefined Operation encountered")
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
-        sizes = [
-            model.get_parameter(full_layer_name.replace(target_patterns[0], target)).shape[self.dim]
-            for target in target_patterns
-        ]
+        full_names = expand_target_names(dict.fromkeys(target_patterns), full_layer_name)
+        sizes = [model.get_parameter(name).shape[self.dim] for name in full_names]
         chunks = torch.split(tensor, sizes, dim=self.dim)
         return {target: chunk.contiguous() for target, chunk in zip(target_patterns, chunks)}
 
@@ -1742,12 +1740,8 @@ def convert_and_load_state_dict_in_model(
             mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
         elif source_pattern is not None:  # add all target keys as unexpected
             mapping = pattern_to_converter[source_pattern]
-            for k in mapping.target_patterns:
-                _add_unmatched_checkpoint_key(
-                    renamed_key.replace(mapping.target_patterns[0], k),
-                    model,
-                    loading_info,
-                )
+            for name in expand_target_names(dict.fromkeys(mapping.target_patterns), renamed_key):
+                _add_unmatched_checkpoint_key(name, model, loading_info)
         else:
             _add_unmatched_checkpoint_key(renamed_key, model, loading_info)
 
