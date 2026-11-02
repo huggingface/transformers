@@ -86,8 +86,8 @@ class HfQuantizer(ABC):
     """
 
     requires_calibration = False
-    # In a quantization plan, the regex of the module and param names this quantizer owns
-    scope: str | None = None
+    # In a quantization plan, the regex of the module names this quantizer converts
+    plan_pattern: str | None = None
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         self.quantization_config = quantization_config
@@ -262,9 +262,9 @@ class HfQuantizer(ABC):
             modules_to_not_convert.extend(keep_in_fp32_modules)
 
         modules_to_not_convert = list(set(modules_to_not_convert))
-        # In a quantization plan, the modules out of its scope belong to another quantizer, or to none
-        if self.scope is not None:
-            modules_to_not_convert.append(rf"(?!.*(?:{self.scope})).*")
+        # In a quantization plan, the modules its pattern doesn't match belong to another quantizer, or to none
+        if self.plan_pattern is not None:
+            modules_to_not_convert.append(rf"(?!{self.plan_pattern}).*")
 
         return modules_to_not_convert
 
@@ -295,7 +295,9 @@ class HfQuantizer(ABC):
                 serialize = quantizer.get_load_operations().get("serialize") if quantizer is not None else None
                 operations[quantizer] = serialize(quantizer) if serialize is not None else None
             tensors, operation = modules.pop(module_name, {}), operations[quantizer]
-            state_dict.update(tensors if operation is None else operation.convert(tensors, model=model, full_layer_name=module_name))
+            state_dict.update(
+                tensors if operation is None else operation.convert(tensors, model=model, full_layer_name=module_name)
+            )
         if not any(operations.values()):
             return None, {}
         # Names that aren't `module.tensor`, e.g. bnb's `q_proj.weight.absmax`

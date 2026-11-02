@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import re
 import warnings
 
 from ..models.auto.configuration_auto import AutoConfig
@@ -334,22 +333,28 @@ def is_quantization_plan(quantization_config) -> bool:
 
 class QuantizationPlanHfQuantizer(HfQuantizer):
     """
-    The quantizers of a plan: each one owns the modules and params matching its pattern, unless an earlier pattern
-    matches them. The others stay unquantized. Each quantizer's hooks are scoped to its names; the model-level ones
-    run for all of them.
+    The quantizers of a plan: like the dtype plan's, the glob pattern a module or param matches picks its quantizer,
+    the others stay unquantized. While loading, a param goes through the converters and ops of its quantizer.
     """
 
     def __init__(self, quantizers: dict[str, HfQuantizer]):
+        from ..core_model_loading import build_glob_alternation
+
         self.quantizers = quantizers
-        self.quantization_config = {pattern: quantizer.quantization_config for pattern, quantizer in quantizers.items()}
+        self.quantization_config = {
+            pattern: quantizer.quantization_config for pattern, quantizer in quantizers.items()
+        }
         self.pre_quantized = all(quantizer.pre_quantized for quantizer in quantizers.values())
+        self.alternation, self.group_to_pattern, _ = build_glob_alternation(list(quantizers))
+        # The names the alternation gives to each pattern: up to its first match, no earlier pattern matches there
         regexes = [pattern.replace("*", ".*") for pattern in quantizers]
         for i, quantizer in enumerate(quantizers.values()):
-            earlier = f"(?!.*(?:{'|'.join(regexes[:i])}))" if i else ""
-            quantizer.scope = f"^{earlier}.*(?:{regexes[i]})"
+            earlier = f"(?!{'|'.join(regexes[:i])})" if i else ""
+            quantizer.plan_pattern = f"^(?:(?!{self.alternation.pattern}).)*{earlier}(?:{regexes[i]})"
 
     def quantizer_for(self, name):
-        return next((q for q in self.quantizers.values() if re.search(q.scope, name)), None)
+        match = self.alternation.search(name)
+        return self.quantizers[self.group_to_pattern[match.lastgroup]] if match else None
 
     def param_needs_quantization(self, model, param_name, **kwargs):
         quantizer = self.quantizer_for(param_name)
@@ -387,21 +392,6 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         for quantizer in self.quantizers.values():
             quantizer.preprocess_model(model, **kwargs)
 
-    def _process_model_after_weight_loading(self, model, **kwargs):
-        for quantizer in self.quantizers.values():
-            quantizer._process_model_after_weight_loading(model, **kwargs)
-        return model
-
-    def update_weight_conversions(self, weight_conversions, model):
-        # The transforms a quantizer adds or updates only load its own params; the model's still load the others
-        scoped = []
-        for quantizer in self.quantizers.values():
-            for conversion in quantizer.update_weight_conversions(weight_conversions, model):
-                if conversion not in weight_conversions:
-                    conversion.scope = quantizer.scope
-                    scoped.append(conversion)
-        return scoped + weight_conversions
-
     def is_serializable(self):
         return all(quantizer.is_serializable() for quantizer in self.quantizers.values())
 
@@ -435,17 +425,25 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
     )
     pre_quantized = quantization_params_from_config is not None
     plan_from_config = is_quantization_plan(quantization_params_from_config)
-    if pre_quantized and not plan_from_config and not AutoHfQuantizer.supports_quant_method(quantization_params_from_config):
+    if (
+        pre_quantized
+        and not plan_from_config
+        and not AutoHfQuantizer.supports_quant_method(quantization_params_from_config)
+    ):
         pre_quantized = False
 
     if plan_from_config or is_quantization_plan(quantization_config):
         # One quantizer per pattern; the loading attributes passed for a pattern update its saved config
         plan = quantization_params_from_config if plan_from_config else quantization_config
-        loading_attributes = quantization_config if plan_from_config and is_quantization_plan(quantization_config) else {}
+        loading_attributes = (
+            quantization_config if plan_from_config and is_quantization_plan(quantization_config) else {}
+        )
         quantizers = {}
         for pattern, pattern_config in plan.items():
             if plan_from_config:
-                pattern_config = AutoHfQuantizer.merge_quantization_configs(pattern_config, loading_attributes.get(pattern))
+                pattern_config = AutoHfQuantizer.merge_quantization_configs(
+                    pattern_config, loading_attributes.get(pattern)
+                )
             quantizers[pattern] = AutoHfQuantizer.from_config(pattern_config, pre_quantized=plan_from_config)
         hf_quantizer = QuantizationPlanHfQuantizer(quantizers)
         config.quantization_config = hf_quantizer.quantization_config
