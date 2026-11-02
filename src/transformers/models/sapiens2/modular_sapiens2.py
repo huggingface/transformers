@@ -10,7 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Union
 
@@ -1363,7 +1363,23 @@ class Sapiens2Embeddings(DINOv3ViTEmbeddings):
 
 
 class Sapiens2RopePositionEmbedding(DINOv3ViTRopePositionEmbedding):
-    pass
+    def __init__(self, config: Sapiens2Config):
+        nn.Module.__init__(self)
+
+        self.config = config
+        self.base = config.rope_theta
+        self.head_dim = config.hidden_size // config.num_attention_heads
+        image_height, image_width = (
+            config.image_size if isinstance(config.image_size, Iterable) else (config.image_size, config.image_size)
+        )
+        patch_height, patch_width = (
+            config.patch_size if isinstance(config.patch_size, Iterable) else (config.patch_size, config.patch_size)
+        )
+        self.num_patches_h = image_height // patch_height
+        self.num_patches_w = image_width // patch_width
+
+        inv_freq = 1 / self.base ** torch.arange(0, 1, 4 / self.head_dim, dtype=torch.float32)  # (head_dim / 4,)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
 
 class Sapiens2RMSNorm(LlamaRMSNorm):

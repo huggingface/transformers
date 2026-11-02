@@ -1096,6 +1096,7 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "cellpose": [
+            WeightRenaming(r"^encoder\.", "model."),
             WeightRenaming(r"^out\.", "readout."),
             WeightRenaming(r"blocks\.(?!\d+\.norm)", "layers."),
             WeightRenaming(r"blocks\.(\d+)\.norm", r"layers.\1.layer_norm"),
@@ -1108,6 +1109,7 @@ def _build_checkpoint_conversion_mapping():
             WeightConverter("attn.rel_pos_w", "attn.rel_pos_w", operations=[ResizeRelativePositionEmbeddings()]),
         ],
         "cellpose_dino": [
+            WeightRenaming(r"^encoder\.", "model."),
             WeightRenaming(r"^out\.", "readout."),
             WeightRenaming(r"cls_token", "embeddings.cls_token"),
             WeightRenaming(r"storage_tokens", "embeddings.register_tokens"),

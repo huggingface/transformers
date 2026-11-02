@@ -83,6 +83,7 @@ def _mask_sizes(masks: torch.Tensor) -> torch.Tensor:
 def _normalize_percentile(image: torch.Tensor, lower: float = 1.0, upper: float = 99.0) -> torch.Tensor:
     """Vendored from `cellpose/transforms.py::normalize_img` (defaults, `normalize99`): per-channel 1st/99th
     percentile normalization, flat channels become 0."""
+    image = image.float()
     out = torch.zeros_like(image)
     for c, channel in enumerate(image):
         if channel.max() - channel.min() <= 0:
@@ -300,11 +301,11 @@ class CellposeImageProcessor(TorchvisionBackend):
         return list(images) if isinstance(images, (list, tuple)) or getattr(images, "ndim", 0) == 4 else [images]
 
     def process_image(self, image, input_data_format=None, **kwargs) -> torch.Tensor:
-        """Float (3, H, W) tensor: first 3 channels kept, missing channels zero-filled."""
+        """(3, H, W) tensor: first 3 channels kept, missing channels zero-filled."""
         # cellpose `convert_image` channel guess, which also handles 2-channel (cytoplasm + nuclei) images
         if input_data_format is None and getattr(image, "ndim", 0) == 3:
             input_data_format = ChannelDimension.LAST if image.shape[0] >= image.shape[-1] else ChannelDimension.FIRST
-        image = super().process_image(image, input_data_format=input_data_format, **kwargs).float()[:3]
+        image = super().process_image(image, input_data_format=input_data_format, **kwargs)[:3]
         return F.pad(image, (0, 0, 0, 0, 0, 3 - image.shape[0]))
 
     def _preprocess(
@@ -312,11 +313,9 @@ class CellposeImageProcessor(TorchvisionBackend):
         images: list[torch.Tensor],
         tile_size: int,
         tile_overlap: float,
-        return_tensors: str | TensorType | None = None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        # Vendored from `cellpose/models.py::CellposeModel._run_net` (normalize, pad, tile), see helpers above
-        # ponytail: no diameter rescaling (rescale=1) and no test-time flip augmentation; add a resize + `unaugment_tiles` here if needed
         tiles = []
         for image in images:
             top, bottom, left, right = _get_padding(*image.shape[-2:], tile_size)
@@ -349,8 +348,10 @@ class CellposeImageProcessor(TorchvisionBackend):
         tile_overlap = self.tile_overlap if tile_overlap is None else tile_overlap
         tile_size = logits.shape[-1]
         taper = _taper_mask(tile_size).to(logits.device, torch.float32)
+        if isinstance(target_sizes, torch.Tensor):
+            target_sizes = target_sizes.tolist()
         results, index = [], 0
-        for height, width in [(int(h), int(w)) for h, w in target_sizes]:
+        for height, width in target_sizes:
             top, bottom, left, right = _get_padding(height, width, tile_size)
             padded_h, padded_w = height + top + bottom, width + left + right
             summed = logits.new_zeros((logits.shape[1], padded_h, padded_w), dtype=torch.float32)
@@ -366,11 +367,14 @@ class CellposeImageProcessor(TorchvisionBackend):
         self,
         outputs,
         target_sizes: list[tuple[int, int]] | torch.Tensor,
-        cellprob_threshold: float = 0.0,
+        threshold: float = 0.0,
+        mask_threshold: float = 0.5,
         flow_threshold: float | None = 0.4,
         num_iterations: int = 200,
         min_size: int = 15,
         max_size_fraction: float = 0.4,
+        tile_overlap: float | None = None,
+        return_segmentation_scores: bool = False,
         **kwargs,
     ) -> list[dict]:
         """
@@ -382,8 +386,10 @@ class CellposeImageProcessor(TorchvisionBackend):
                 cell probability logit) per tile.
             target_sizes (`list[tuple[int, int]]` or `torch.Tensor`):
                 Original `(height, width)` of each image, in the order they were preprocessed.
-            cellprob_threshold (`float`, *optional*, defaults to 0.0):
-                Pixels with a cell probability logit above this threshold are considered part of a cell.
+            threshold (`float`, *optional*, defaults to 0.0):
+                Cells whose score (mean cell probability) is below this threshold are removed.
+            mask_threshold (`float`, *optional*, defaults to 0.5):
+                Pixels with a cell probability above this threshold are considered part of a cell.
             flow_threshold (`float`, *optional*, defaults to 0.4):
                 Masks whose flows, recomputed from the mask shape, differ from the predicted flows by a mean squared
                 error above this threshold are removed. Set to 0 or `None` to skip this (slower) quality check.
@@ -393,24 +399,27 @@ class CellposeImageProcessor(TorchvisionBackend):
                 Masks with fewer pixels are removed. Set to 0 to keep all masks.
             max_size_fraction (`float`, *optional*, defaults to 0.4):
                 Masks covering more than this fraction of the image are removed.
-
+            tile_overlap (`float`, *optional*, defaults to `self.tile_overlap`):
+                Tile overlap used at preprocessing time.
+            return_segmentation_scores (`bool`, *optional*, defaults to `False`):
+                Whether to also return the `(height, width)` cell probability map as `segmentation_scores`.
             kwargs:
                 Ignored, accepts the generic thresholds passed by the `image-segmentation` pipeline.
 
         Returns:
             `list[dict]`: One dict per image with `segmentation` (`(height, width)` long tensor, 0 = background,
             cells labelled 1..N), `segments_info` (one `{"id", "label_id", "score"}` per cell, the score being its
-            mean cell probability), `flows` (`(2, height, width)`) and `cell_probability` (`(height, width)` logits).
+            mean cell probability), `flows` (`(2, height, width)`) and, if `return_segmentation_scores=True`,
+            `segmentation_scores` (`(height, width)` cell probabilities).
         """
-        # Vendored from `cellpose/dynamics.py::compute_masks` (2D): follow flows, cluster, flow QC, fill holes, min size
-        # ponytail: 2D only, no 3D dynamics or z-stitching
         results = []
         logits = outputs.logits
         if logits.device.type == "mps" and not is_torch_greater_or_equal("2.13"):
             logits = logits.cpu()  # int64 `scatter_reduce` is only supported on MPS from torch 2.13
-        for stitched in self.stitch_tiles(logits, target_sizes):
-            flows, cell_probability = stitched[:2], stitched[2]
-            foreground = cell_probability > cellprob_threshold
+        for stitched in self.stitch_tiles(logits, target_sizes, tile_overlap=tile_overlap):
+            flows, probability = stitched[:2], stitched[2].sigmoid()
+            # thresholding the logit is exact, sigmoid rounds to 0.5 for tiny logits
+            foreground = stitched[2] > torch.logit(torch.tensor(mask_threshold, dtype=torch.float64)).item()
             masks = torch.zeros(foreground.shape, dtype=torch.long, device=foreground.device)
             if foreground.any():
                 inds = torch.nonzero(foreground).T
@@ -422,17 +431,17 @@ class CellposeImageProcessor(TorchvisionBackend):
                 masks = _fill_holes(_renumber(masks))
                 masks = torch.where(_mask_sizes(masks)[masks] < min_size, 0, masks)
                 masks = _renumber(masks)
-            counts = _mask_sizes(masks)
-            scores = torch.bincount(masks.flatten(), weights=cell_probability.sigmoid().flatten()) / counts
-            segments_info = [{"id": i, "label_id": 0, "score": scores[i].item()} for i in range(1, len(counts))]
-            results.append(
-                {
-                    "segmentation": masks,
-                    "segments_info": segments_info,
-                    "flows": flows,
-                    "cell_probability": cell_probability,
-                }
-            )
+            scores = torch.bincount(masks.flatten(), weights=probability.flatten()) / _mask_sizes(masks)
+            low_score = scores < threshold
+            low_score[0] = False
+            if low_score.any():
+                masks = _renumber(torch.where(low_score[masks], 0, masks))
+                scores = scores[~low_score]
+            segments_info = [{"id": i, "label_id": 0, "score": score} for i, score in enumerate(scores.tolist()) if i]
+            result = {"segmentation": masks, "segments_info": segments_info, "flows": flows}
+            if return_segmentation_scores:
+                result["segmentation_scores"] = probability
+            results.append(result)
         return results
 
 

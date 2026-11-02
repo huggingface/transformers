@@ -71,8 +71,5 @@ class CellposeConfig(PreTrainedConfig):
     mlp_dim: int = 4096
     num_outputs: int = 3
 
-    def __post_init__(self, **kwargs):
-        super().__post_init__(**kwargs)
-
 
 __all__ = ["CellposeConfig"]

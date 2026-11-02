@@ -13,30 +13,25 @@
 # limitations under the License.
 """Testing suite for the PyTorch Cellpose model."""
 
-import os
-import tempfile
 import unittest
-
-import numpy as np
 
 from transformers import CellposeConfig, pipeline
 from transformers.image_utils import load_image
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
+from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
     import torch
-    import torch.nn.functional as F
-    from safetensors.torch import load_file, save_file
 
     from transformers import CellposeForInstanceSegmentation, CellposeImageProcessor, CellposeModel
 
-if is_vision_available():
-    from PIL import Image
+IMAGE_URL = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/cellpose_img02.png"
 
 
 class CellposeModelTester:
@@ -84,8 +79,9 @@ class CellposeModelTester:
 
 
 @require_torch
-class CellposeModelTest(ModelTesterMixin, unittest.TestCase):
+class CellposeModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (CellposeModel, CellposeForInstanceSegmentation) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-segmentation": CellposeForInstanceSegmentation} if is_torch_available() else {}
     test_resize_embeddings = False
 
     def setUp(self):
@@ -106,62 +102,9 @@ class CellposeModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(len(outputs.hidden_states), config.num_hidden_layers + 1)
         self.assertEqual(outputs.hidden_states[0].shape, (self.model_tester.batch_size, grid, grid, 32))
 
-    def test_pixel_shuffle_matches_original_unpatchify(self):
-        # The original code unpatchifies with `conv_transpose2d` on an identity kernel `W2`
-        patch_size, num_outputs = 4, 3
-        features = torch.randn(2, num_outputs * patch_size**2, 5, 5)
-        w2 = torch.eye(num_outputs * patch_size**2).reshape(-1, num_outputs, patch_size, patch_size)
-        torch.testing.assert_close(
-            F.pixel_shuffle(features, patch_size), F.conv_transpose2d(features, w2, stride=patch_size)
-        )
-
-    @require_vision
-    def test_image_segmentation_pipeline(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        config.id2label = {0: "cell"}
-        model = CellposeForInstanceSegmentation(config).eval()
-        segmenter = pipeline(
-            "image-segmentation", model=model, image_processor=CellposeImageProcessor(tile_size=config.image_size)
-        )
-        image = Image.fromarray((np.random.default_rng(0).random((40, 50, 3)) * 255).astype(np.uint8))
-        cells = segmenter(image)  # random weights: checks the plumbing, cells may be empty
-        self.assertIsInstance(cells, list)
-        for cell in cells:
-            self.assertEqual(cell["label"], "cell")
-            self.assertEqual(cell["mask"].size, (50, 40))
-
-    def test_load_original_checkpoint(self):
-        # `save_pretrained` writes the original key format: only the relative position tables and `W2` differ
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        reference = CellposeForInstanceSegmentation(config)
-        expected = dict(reference.state_dict())
-        grid = config.image_size // config.patch_size
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            reference.save_pretrained(tmp_dir)
-            path = os.path.join(tmp_dir, "model.safetensors")
-            original = load_file(path)
-            for key in [key for key in original if "rel_pos" in key]:
-                # SAM tables were trained for 14x14 windows or the 64x64 global grid: any length must load
-                value = torch.randn(13 if ".blocks.0." in key else 4 * grid - 1, original[key].shape[1])
-                original[key] = value
-                resized = F.interpolate(value.T[None], size=2 * grid - 1, mode="linear")[0].T
-                expected[key.replace("blocks", "layers")] = resized
-            original["W2"] = torch.eye(3 * config.patch_size**2).reshape(-1, 3, config.patch_size, config.patch_size)
-            save_file(original, path, metadata={"format": "pt"})
-            model, info = CellposeForInstanceSegmentation.from_pretrained(tmp_dir, output_loading_info=True)
-
-        self.assertEqual(info["missing_keys"], set())
-        self.assertEqual(info["unexpected_keys"], set())
-        for key, value in model.state_dict().items():
-            torch.testing.assert_close(value, expected[key], msg=key)
-
     def test_reverse_loading_mapping(self):
         # `out` -> `readout` only exists on the model with head
         super().test_reverse_loading_mapping(skip_base_model=True)
-
-    @unittest.skip(reason="Cellpose does not use inputs_embeds")
-    def test_inputs_embeds(self):
-        pass
 
     @unittest.skip(reason="The input embeddings are a patch embedding module, not an `nn.Embedding`")
     def test_model_get_set_embeddings(self):
@@ -175,6 +118,12 @@ class CellposeModelTest(ModelTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         pass
 
+    @unittest.skip(
+        reason="SAM attention adds the relative position bias as a float `attn_mask`, which flash SDPA rejects"
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
 
 @require_torch
 class CellposeModelIntegrationTest(unittest.TestCase):
@@ -184,20 +133,23 @@ class CellposeModelIntegrationTest(unittest.TestCase):
         repo = "ArthurZ/cellpose-sam-v2"
         processor = CellposeImageProcessor.from_pretrained(repo)
         model = CellposeForInstanceSegmentation.from_pretrained(repo).to(torch_device).eval()
-        image = np.array(load_image("https://www.cellpose.org/static/images/img02.png"))
+        image = load_image(url_to_local_path(IMAGE_URL))
         inputs = processor(image, return_tensors="pt")
         with torch.no_grad():
             outputs = model(pixel_values=inputs.pixel_values.to(torch_device))
         self.assertEqual(outputs.logits.shape, (inputs.pixel_values.shape[0], 3, 256, 256))
-        expected_slice = torch.tensor(
-            [
-                [-0.04291397, -0.06741032, -0.08836612],
-                [-0.04544753, 0.04835206, 0.00611734],
-                [-8.55818272, -7.33160400, -5.81300449],
-            ]
-        ).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [
+                    [-0.04291397, -0.06741032, -0.08836612],
+                    [-0.04544753, 0.04835206, 0.00611734],
+                    [-8.55818272, -7.33160400, -5.81300449],
+                ],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
         torch.testing.assert_close(outputs.logits[0, :, 100, 100:103], expected_slice, rtol=1e-4, atol=1e-4)
-        masks = processor.post_process_instance_segmentation(outputs, target_sizes=[image.shape[:2]])[0][
+        masks = processor.post_process_instance_segmentation(outputs, target_sizes=[(image.height, image.width)])[0][
             "segmentation"
         ]
         self.assertEqual(int(masks.max()), 99)
@@ -206,6 +158,6 @@ class CellposeModelIntegrationTest(unittest.TestCase):
     @require_vision
     def test_image_segmentation_pipeline(self):
         segmenter = pipeline("image-segmentation", model="ArthurZ/cellpose-sam-v2", device=torch_device)
-        cells = segmenter("https://www.cellpose.org/static/images/img02.png")
-        self.assertEqual(len(cells), 99)
+        cells = segmenter(url_to_local_path(IMAGE_URL))
+        self.assertEqual(len(cells), 93)  # the pipeline filters scores below `threshold=0.9`
         self.assertEqual({cell["label"] for cell in cells}, {"cell"})

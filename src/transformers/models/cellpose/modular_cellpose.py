@@ -21,7 +21,6 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
-from ...configuration_utils import PreTrainedConfig
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring
@@ -75,7 +74,7 @@ class CellposeConfig(SamVisionConfig):
     mlp_ratio = AttributeError()
 
     def __post_init__(self, **kwargs):
-        PreTrainedConfig.__post_init__(self, **kwargs)
+        raise AttributeError()
 
 
 @auto_docstring(
@@ -108,7 +107,7 @@ class CellposeVisionNeck(SamVisionNeck):  # re-typed so the converter does not i
 @auto_docstring
 class CellposePreTrainedModel(SamPreTrainedModel):
     config: CellposeConfig
-    base_model_prefix = "encoder"
+    base_model_prefix = "model"
     _no_split_modules = ["CellposeVisionLayer"]
     _keys_to_ignore_on_load_unexpected = [r"W2"]
 
@@ -120,7 +119,7 @@ class CellposePreTrainedModel(SamPreTrainedModel):
                 init.zeros_(module.rel_pos_h)
                 init.zeros_(module.rel_pos_w)
         elif isinstance(module, CellposeModel):
-            if self.config.use_abs_pos:
+            if module.pos_embed is not None:
                 init.zeros_(module.pos_embed)
 
 
@@ -144,7 +143,7 @@ class CellposeModel(SamVisionEncoder):
 class CellposeForInstanceSegmentation(CellposePreTrainedModel):
     def __init__(self, config: CellposeConfig):
         super().__init__(config)
-        self.encoder = CellposeModel(config)
+        self.model = CellposeModel(config)
         self.readout = nn.Conv2d(config.output_channels, config.num_outputs * config.patch_size**2, kernel_size=1)
         self.post_init()
 
@@ -153,7 +152,7 @@ class CellposeForInstanceSegmentation(CellposePreTrainedModel):
     def forward(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> CellposeInstanceSegmentationOutput:
-        outputs = self.encoder(pixel_values, **kwargs)
+        outputs = self.model(pixel_values, **kwargs)
         # The original model unpatchifies with a `conv_transpose2d` on an identity kernel, i.e. a pixel shuffle
         logits = F.pixel_shuffle(self.readout(outputs.last_hidden_state), self.config.patch_size)
         return CellposeInstanceSegmentationOutput(

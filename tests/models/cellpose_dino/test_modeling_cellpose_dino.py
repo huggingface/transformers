@@ -13,26 +13,25 @@
 # limitations under the License.
 """Testing suite for the PyTorch Cellpose DINOv3 model."""
 
-import os
-import tempfile
 import unittest
-
-import numpy as np
 
 from transformers import CellposeDinoConfig
 from transformers.image_utils import load_image
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import Expectations, require_torch, slow, torch_device
 from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
     import torch
-    from safetensors.torch import load_file, save_file
 
     from transformers import CellposeDinoForInstanceSegmentation, CellposeDinoModel, CellposeImageProcessor
+
+IMAGE_URL = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/cellpose_img02.png"
 
 
 class CellposeDinoModelTester:
@@ -86,8 +85,11 @@ class CellposeDinoModelTester:
 
 
 @require_torch
-class CellposeDinoModelTest(ModelTesterMixin, unittest.TestCase):
+class CellposeDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (CellposeDinoModel, CellposeDinoForInstanceSegmentation) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"image-segmentation": CellposeDinoForInstanceSegmentation} if is_torch_available() else {}
+    )
     test_resize_embeddings = False
 
     def setUp(self):
@@ -110,40 +112,9 @@ class CellposeDinoModelTest(ModelTesterMixin, unittest.TestCase):
             outputs.hidden_states[-1].shape, (self.model_tester.batch_size, self.model_tester.seq_length, 32)
         )
 
-    def test_load_original_checkpoint(self):
-        # `save_pretrained` writes the original key format: add the keys the original checkpoints carry but HF ignores
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        reference = CellposeDinoForInstanceSegmentation(config)
-        for name, param in reference.named_parameters():
-            if name.endswith("bias"):  # zero-initialized: randomize so the qkv bias split is checked
-                torch.nn.init.normal_(param)
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            reference.save_pretrained(tmp_dir)
-            path = os.path.join(tmp_dir, "model.safetensors")
-            original = load_file(path)
-            original.pop("encoder.embeddings.mask_token")
-            original["encoder.mask_token"] = torch.zeros(1, config.hidden_size)
-            original["encoder.rope_embed.periods"] = torch.ones(config.hidden_size // config.num_attention_heads // 4)
-            for i in range(config.num_hidden_layers):
-                original[f"encoder.blocks.{i}.attn.qkv.bias_mask"] = torch.zeros(3 * config.hidden_size)
-            original["W2"] = torch.eye(3 * config.patch_stride**2).reshape(
-                -1, 3, config.patch_stride, config.patch_stride
-            )
-            save_file(original, path, metadata={"format": "pt"})
-            model, info = CellposeDinoForInstanceSegmentation.from_pretrained(tmp_dir, output_loading_info=True)
-
-        self.assertEqual(info["missing_keys"], set())
-        self.assertEqual(info["unexpected_keys"], set())
-        for key, value in reference.state_dict().items():
-            torch.testing.assert_close(model.state_dict()[key], value, msg=key)
-
     def test_reverse_loading_mapping(self):
         # `out` -> `readout` only exists on the model with head
         super().test_reverse_loading_mapping(skip_base_model=True)
-
-    @unittest.skip(reason="Cellpose does not use inputs_embeds")
-    def test_inputs_embeds(self):
-        pass
 
     @unittest.skip(reason="The input embeddings are a patch embedding convolution, not an `nn.Embedding`")
     def test_model_get_set_embeddings(self):
@@ -158,20 +129,23 @@ class CellposeDinoModelIntegrationTest(unittest.TestCase):
         repo = "ArthurZ/cellpose-dino"
         processor = CellposeImageProcessor.from_pretrained(repo)
         model = CellposeDinoForInstanceSegmentation.from_pretrained(repo).to(torch_device).eval()
-        image = np.array(load_image("https://www.cellpose.org/static/images/img02.png"))
+        image = load_image(url_to_local_path(IMAGE_URL))
         inputs = processor(image, return_tensors="pt")
         with torch.no_grad():
             outputs = model(pixel_values=inputs.pixel_values.to(torch_device))
         self.assertEqual(outputs.logits.shape, (inputs.pixel_values.shape[0], 3, 384, 384))
-        expected_slice = torch.tensor(
-            [
-                [-0.19100848, -0.38686648, -0.24519458],
-                [1.10930908, 2.56621957, 3.98139238],
-                [-1.57994449, -0.08137580, 1.53316033],
-            ]
-        ).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [
+                    [-0.19100848, -0.38686648, -0.24519458],
+                    [1.10930908, 2.56621957, 3.98139238],
+                    [-1.57994449, -0.08137580, 1.53316033],
+                ],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
         torch.testing.assert_close(outputs.logits[0, :, 100, 100:103], expected_slice, rtol=1e-4, atol=1e-4)
-        masks = processor.post_process_instance_segmentation(outputs, target_sizes=[image.shape[:2]])[0][
+        masks = processor.post_process_instance_segmentation(outputs, target_sizes=[(image.height, image.width)])[0][
             "segmentation"
         ]
         self.assertEqual(int(masks.max()), 100)

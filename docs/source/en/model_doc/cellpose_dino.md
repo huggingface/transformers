@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-10-15.*
+*This model was contributed to Hugging Face Transformers on 2026-11-02.*
 
 # Cellpose-DINO
 
@@ -39,9 +39,9 @@ and tuning. The checkpoints are [ArthurZ/cellpose-dino](https://huggingface.co/A
 ```python
 from transformers import pipeline
 
-segmenter = pipeline("image-segmentation", model="ArthurZ/cellpose-dino", device=0)
+segmenter = pipeline("image-segmentation", model="ArthurZ/cellpose-dino")
 cells = segmenter("https://www.cellpose.org/static/images/img02.png")
-print(len(cells))  # 100
+print(len(cells))  # 89 cells with a score above the default `threshold=0.9`
 ```
 
 </hfoption>

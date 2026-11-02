@@ -157,8 +157,8 @@ class CellposeDinoRopePositionEmbedding(DINOv3ViTRopePositionEmbedding):
 @auto_docstring
 class CellposeDinoPreTrainedModel(DINOv3ViTPreTrainedModel):
     config: CellposeDinoConfig
-    base_model_prefix = "encoder"
-    _keys_to_ignore_on_load_unexpected = [r"W2", r"^encoder\.mask_token", r"bias_mask", r"rope_embed\.periods"]
+    base_model_prefix = "model"
+    _keys_to_ignore_on_load_unexpected = [r"W2", r"^model\.mask_token", r"bias_mask", r"rope_embed\.periods"]
     _keys_to_ignore_on_load_missing = [r"mask_token"]  # unused at inference, zero-initialized like DINOv3
 
 
@@ -187,7 +187,7 @@ class CellposeDinoInstanceSegmentationOutput(CellposeInstanceSegmentationOutput)
 class CellposeDinoForInstanceSegmentation(CellposeDinoPreTrainedModel):
     def __init__(self, config: CellposeDinoConfig):
         super().__init__(config)
-        self.encoder = CellposeDinoModel(config)
+        self.model = CellposeDinoModel(config)
         self.readout = nn.Linear(config.hidden_size, config.num_outputs * config.patch_stride**2)
         self.post_init()
 
@@ -196,7 +196,7 @@ class CellposeDinoForInstanceSegmentation(CellposeDinoPreTrainedModel):
     def forward(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> CellposeDinoInstanceSegmentationOutput:
-        outputs = self.encoder(pixel_values, **kwargs)
+        outputs = self.model(pixel_values, **kwargs)
         batch_size, _, height, width = pixel_values.shape
         stride = self.config.patch_stride
         patch_tokens = outputs.last_hidden_state[:, 1 + self.config.num_register_tokens :]

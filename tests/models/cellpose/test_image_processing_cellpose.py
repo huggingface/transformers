@@ -20,6 +20,8 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_torchvision
 from transformers.utils import is_torch_available, is_torchvision_available
 
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
+
 
 if is_torch_available():
     import torch
@@ -49,10 +51,25 @@ def _disk_logits(height, width, centers, radius):
     return logits, disks
 
 
+class CellposeImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # images up to 240 pixels fit in a single 256 tile once padded, so there is one output per image
+        kwargs.setdefault("max_resolution", 240)
+        kwargs.setdefault("tile_size", 256)
+        kwargs.setdefault("tile_overlap", 0.1)
+        super().__init__(**kwargs)
+
+    def expected_output_image_shape(self, images):
+        return 3, self.tile_size, self.tile_size  # only the first 3 channels are kept
+
+
 @require_torch
 @require_torchvision
-class CellposeImageProcessingTest(unittest.TestCase):
+class CellposeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processor_tester_class = CellposeImageProcessingTester
+
     def setUp(self):
+        super().setUp()
         self.processor = CellposeImageProcessor()
 
     def _tile_like_preprocess(self, logits):
@@ -97,7 +114,7 @@ class CellposeImageProcessingTest(unittest.TestCase):
         self.assertEqual(masks.dtype, torch.long)
         self.assertEqual(tuple(masks.shape), (300, 530))
         self.assertEqual(tuple(results[0]["flows"].shape), (2, 300, 530))
-        self.assertEqual(tuple(results[0]["cell_probability"].shape), (300, 530))
+        self.assertNotIn("segmentation_scores", results[0])
         self.assertEqual(masks.max().item(), len(centers))
         self.assertEqual([info["id"] for info in results[0]["segments_info"]], [1, 2, 3])
         self.assertTrue(all(info["score"] > 0.5 for info in results[0]["segments_info"]))
@@ -137,6 +154,36 @@ class CellposeImageProcessingTest(unittest.TestCase):
         self.assertEqual(filtered.max().item(), 1)
         self.assertGreater(((filtered == 1) & disks[0]).sum() / disks[0].sum(), 0.9)
         self.assertEqual(filtered[disks[1]].max().item(), 0)
+
+    def test_post_process_threshold_and_scores(self):
+        logits, disks = _disk_logits(120, 150, [(40, 40), (80, 110)], radius=15)
+        logits[2, disks[0]] = 0.5  # first cell: probability ~0.62, second: ~0.99
+        tiles, size = self._tile_like_preprocess(logits)
+        outputs = SimpleNamespace(logits=tiles)
+        result = self.processor.post_process_instance_segmentation(
+            outputs, [size], threshold=0.9, return_segmentation_scores=True
+        )[0]
+        self.assertEqual(result["segmentation"].max().item(), 1)  # renumbered
+        self.assertGreater(((result["segmentation"] == 1) & disks[1]).sum() / disks[1].sum(), 0.9)
+        self.assertEqual([info["id"] for info in result["segments_info"]], [1])
+        self.assertGreater(result["segments_info"][0]["score"], 0.9)
+        torch.testing.assert_close(result["segmentation_scores"], logits[2].sigmoid(), atol=1e-5, rtol=1e-5)
+
+    def test_tile_overlap(self):
+        image = np.random.default_rng(0).random((300, 530)).astype(np.float32)
+        default = self.processor(image, return_tensors="pt").pixel_values
+        inputs = self.processor(image, tile_overlap=0.5, return_tensors="pt")
+        self.assertGreater(len(inputs.pixel_values), len(default))
+        # post-processing must stitch with the overlap used at preprocessing time
+        logits, _ = _disk_logits(300, 530, [(40, 50)], radius=15)
+        top, bottom, left, right = _get_padding(300, 530, 256)
+        padded = torch.nn.functional.pad(logits, (left, right, top, bottom))
+        tiles = [padded[:, y : y + 256, x : x + 256] for y, x in _tile_origins(*padded.shape[-2:], 256, 0.5)]
+        self.assertEqual(len(tiles), len(inputs.pixel_values))
+        result = self.processor.post_process_instance_segmentation(
+            SimpleNamespace(logits=torch.stack(tiles)), [(300, 530)], tile_overlap=0.5
+        )[0]
+        self.assertEqual(result["segmentation"].max().item(), 1)
 
     def test_post_process_empty(self):
         logits = torch.zeros(3, 64, 64)

@@ -53,6 +53,7 @@ URLS_FOR_TESTING_DATA = [
     "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/azure_slide_3.jpg",
     "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/azure_slide_4.jpg",
     "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/big_dipper.jpg",
+    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/cellpose_img02.png",
     "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/chmv2_example.tif",
     "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dog_sam.png",
     "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",

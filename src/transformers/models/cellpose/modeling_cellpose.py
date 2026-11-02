@@ -239,7 +239,7 @@ class CellposeVisionNeck(nn.Module):
 @auto_docstring
 class CellposePreTrainedModel(PreTrainedModel):
     config: CellposeConfig
-    base_model_prefix = "encoder"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = ["CellposeVisionLayer"]
@@ -255,7 +255,7 @@ class CellposePreTrainedModel(PreTrainedModel):
                 init.zeros_(module.rel_pos_h)
                 init.zeros_(module.rel_pos_w)
         elif isinstance(module, CellposeModel):
-            if self.config.use_abs_pos:
+            if module.pos_embed is not None:
                 init.zeros_(module.pos_embed)
 
 
@@ -539,7 +539,7 @@ class CellposeModel(CellposePreTrainedModel):
 class CellposeForInstanceSegmentation(CellposePreTrainedModel):
     def __init__(self, config: CellposeConfig):
         super().__init__(config)
-        self.encoder = CellposeModel(config)
+        self.model = CellposeModel(config)
         self.readout = nn.Conv2d(config.output_channels, config.num_outputs * config.patch_size**2, kernel_size=1)
         self.post_init()
 
@@ -548,7 +548,7 @@ class CellposeForInstanceSegmentation(CellposePreTrainedModel):
     def forward(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> CellposeInstanceSegmentationOutput:
-        outputs = self.encoder(pixel_values, **kwargs)
+        outputs = self.model(pixel_values, **kwargs)
         # The original model unpatchifies with a `conv_transpose2d` on an identity kernel, i.e. a pixel shuffle
         logits = F.pixel_shuffle(self.readout(outputs.last_hidden_state), self.config.patch_size)
         return CellposeInstanceSegmentationOutput(

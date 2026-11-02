@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-10-15.*
+*This model was contributed to Hugging Face Transformers on 2026-11-02.*
 
 # Cellpose
 
@@ -47,9 +47,9 @@ The example below shows how to segment cells with [`Pipeline`] or the [`AutoMode
 ```python
 from transformers import pipeline
 
-segmenter = pipeline("image-segmentation", model="ArthurZ/cellpose-sam-v2", device=0)
+segmenter = pipeline("image-segmentation", model="ArthurZ/cellpose-sam-v2")
 cells = segmenter("https://www.cellpose.org/static/images/img02.png")
-print(len(cells))  # 99, one {"score", "label", "mask"} dict per cell
+print(len(cells))  # 93 cells scoring above the default `threshold=0.9`, one {"score", "label", "mask"} dict each
 ```
 
 </hfoption>
@@ -69,7 +69,9 @@ inputs = processor(image, return_tensors="pt").to(model.device)  # (num_tiles, 3
 with torch.no_grad():
     outputs = model(**inputs)
 
-result = processor.post_process_instance_segmentation(outputs, target_sizes=[(image.height, image.width)])[0]
+result = processor.post_process_instance_segmentation(
+    outputs, target_sizes=[(image.height, image.width)], return_segmentation_scores=True
+)[0]
 masks = result["segmentation"]  # (height, width), 0 = background, cells labelled 1..N
 print(masks.max())  # 99
 ```
@@ -79,8 +81,9 @@ print(masks.max())  # 99
 
 ### Visualizing the masks
 
-`post_process_instance_segmentation` also returns the stitched `flows` (`(2, height, width)`) and the
-`cell_probability` logits, which are useful to inspect what the model sees.
+`post_process_instance_segmentation` also returns the stitched `flows` (`(2, height, width)`) and, with
+`return_segmentation_scores=True`, the per-pixel cell probabilities as `segmentation_scores`. They are useful to inspect
+what the model sees.
 
 ```python
 import matplotlib.pyplot as plt
@@ -91,12 +94,16 @@ fig, axes = plt.subplots(1, 4, figsize=(16, 4))
 axes[0].imshow(image)
 axes[1].imshow(np.ma.masked_equal(masks.cpu().numpy(), 0) % 20, cmap="tab20", interpolation="nearest")
 axes[2].imshow(flow_angle, cmap="hsv")
-axes[3].imshow(result["cell_probability"].sigmoid().cpu())
+axes[3].imshow(result["segmentation_scores"].cpu())
 for ax, title in zip(axes, ["image", "masks", "flow direction", "cell probability"]):
     ax.set_title(title)
     ax.axis("off")
 plt.show()
 ```
+
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/cellpose.png" alt="Cellpose-SAM masks, flows and cell probability"/>
+</div>
 
 ### Input images
 
@@ -120,7 +127,8 @@ results = processor.post_process_instance_segmentation(outputs, target_sizes=[(i
 
 | Argument of `post_process_instance_segmentation` | Default | Effect |
 |---|---|---|
-| `cellprob_threshold` | `0.0` | Lower it to find more (dimmer) cells, raise it to find fewer. |
+| `mask_threshold` | `0.5` | Cell probability above which a pixel is foreground. Lower it to find more (dimmer) cells. |
+| `threshold` | `0.0` | Cells with a lower score (mean cell probability) are removed. |
 | `flow_threshold` | `0.4` | Maximum flow error of a mask. Raise it to keep more (irregular) masks, `0` disables the check. |
 | `min_size` | `15` | Masks with fewer pixels are removed. |
 | `max_size_fraction` | `0.4` | Masks covering a larger fraction of the image are removed. |
