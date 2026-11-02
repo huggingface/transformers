@@ -418,7 +418,7 @@ class NanoChatForCausalLM(NanoChatPreTrainedModel, GenerationMixin):
 
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: NanoChatConfig):
         super().__init__(config)
         self.model = NanoChatModel(config)
         self.vocab_size = config.vocab_size

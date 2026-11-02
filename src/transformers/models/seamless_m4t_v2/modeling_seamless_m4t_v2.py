@@ -2339,7 +2339,7 @@ class SeamlessM4Tv2CodeHifiGan(SeamlessM4Tv2PreTrainedModel):
     input_modalities = "audio"
     _no_split_modules = []
 
-    def __init__(self, config):
+    def __init__(self, config: SeamlessM4Tv2Config):
         super().__init__(config)
 
         self.pad_token_id = config.t2u_pad_token_id
@@ -3327,7 +3327,7 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMix
     _tied_weights_keys = {"lm_head.weight": "shared.weight", "text_decoder.embed_tokens.weight": "shared.weight"}
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TForSpeechToSpeech.__init__ with SeamlessM4T->SeamlessM4Tv2
-    def __init__(self, config):
+    def __init__(self, config: SeamlessM4Tv2Config):
         super().__init__(config)
 
         self.shared = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
@@ -3671,7 +3671,7 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
     }
 
     # Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TModel.__init__ with SeamlessM4T->SeamlessM4Tv2
-    def __init__(self, config, current_modality="text"):
+    def __init__(self, config: SeamlessM4Tv2Config, current_modality="text"):
         r"""
         current_modality (`str`, *optional*, defaults to `"text"`):
             Default modality. Used to initialize the model.

@@ -94,7 +94,7 @@ from transformers.utils import (
     WEIGHTS_NAME,
 )
 from transformers.utils.import_utils import (
-    PACKAGE_DISTRIBUTION_MAPPING,
+    _package_distribution_mapping,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_flash_attn_4_available,
@@ -2747,18 +2747,24 @@ class ModelUtilsTest(TestCasePlus):
 class ModelOnTheFlyConversionTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.user = "huggingface-hub-ci"
-        cls.token = os.getenv("HUGGINGFACE_PRODUCTION_USER_TOKEN", None)
+        cls.org = "hf-ci-ephemeral-repos"
+        # Requires a fine-grained token with repo create/delete + discussion access on cls.org
+        cls.token = os.getenv("HF_CI_EPHEMERAL_REPO_MANIPULATION_TOKEN") or os.getenv("HF_TOKEN")
 
-        if cls.token is None:
-            raise ValueError("Cannot run tests as secret isn't setup.")
+        if not cls.token:
+            raise unittest.SkipTest("HF_CI_EPHEMERAL_REPO_MANIPULATION_TOKEN (or HF_TOKEN) not set, skipping.")
 
         cls.api = HfApi(token=cls.token)
 
     def setUp(self) -> None:
-        self.repo_name = f"{self.user}/test-model-on-the-fly-{uuid.uuid4()}"
+        self.repo_name = f"{self.org}/test-model-on-the-fly-{uuid.uuid4()}"
+        # conftest.py disables conversion globally to avoid Hub traffic in regular tests;
+        # this class specifically tests conversion, so we re-enable it.
+        self._prev_disable = os.environ.pop("DISABLE_SAFETENSORS_CONVERSION", None)
 
     def tearDown(self) -> None:
+        if self._prev_disable is not None:
+            os.environ["DISABLE_SAFETENSORS_CONVERSION"] = self._prev_disable
         self.api.delete_repo(self.repo_name)
 
     def test_safetensors_on_the_fly_conversion(self):
@@ -2802,9 +2808,10 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         with self.subTest("PR was open with the safetensors account"):
             discussions = self.api.get_repo_discussions(self.repo_name, token=self.token)
             discussion = next(discussions)
-            self.assertEqual(discussion.author, self.user)
+            self.assertEqual(discussion.author, "hf-transformers-bot")
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
+    @unittest.skip(reason="SFconvertbot cannot agree to gating on dynamically-created repos")
     def test_safetensors_on_the_fly_conversion_gated(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -2869,9 +2876,10 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         with self.subTest("PR was open with the safetensors account"):
             discussions = self.api.get_repo_discussions(self.repo_name)
             discussion = next(discussions)
-            self.assertEqual(discussion.author, self.user)
+            self.assertEqual(discussion.author, "hf-transformers-bot")
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
+    @unittest.skip(reason="SFconvertbot cannot agree to gating on dynamically-created repos")
     def test_safetensors_on_the_fly_sharded_conversion_gated(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -2915,7 +2923,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         with self.subTest("PR was open with the safetensors account"):
             discussions = self.api.get_repo_discussions(self.repo_name)
             discussion = next(discussions)
-            self.assertEqual(discussion.author, self.user)
+            self.assertEqual(discussion.author, "hf-transformers-bot")
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
         # We now switch the repo visibility to public
@@ -2976,8 +2984,10 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         BertModel.from_pretrained(self.repo_name, token=self.token)
 
         for thread in threading.enumerate():
-            if thread.name == "Thread-autoconversion":
-                thread.join(timeout=10)
+            if thread.name == "Thread-auto_conversion":
+                # The conversion is spawned as a background thread by from_pretrained. Wait up to 60s for
+                # it to finish (it makes an API call to the conversion Space, which can take several seconds).
+                thread.join(timeout=60)
 
         discussions = self.api.get_repo_discussions(self.repo_name)
 
@@ -3280,16 +3290,54 @@ class TestAttentionImplementation(unittest.TestCase):
             )
         self.assertEqual(attn_output.shape, (1, 16, 8, 64))
 
+    @parameterized.expand([("0", False), ("1", True)])
+    def test_transformers_sdpa_force_gqa_env_var_overrides_use_gqa_in_sdpa_attention_forward(
+        self, env_var_value, expected_enable_gqa
+    ):
+        from transformers.integrations.sdpa_attention import sdpa_attention_forward
+
+        module = torch.nn.Module()
+        module.num_key_value_groups = 2
+        query = torch.randn(1, 4, 16, 1, dtype=torch.float16)
+        key = torch.randn(1, 2, 16, 1, dtype=torch.float16)
+        value = torch.randn(1, 2, 16, 1, dtype=torch.float16)
+
+        # use an attention mask and set _is_torch_{xpu,mps}_available to False, so that use_gqa_in_sdpa
+        # falls back to returning False when the env var is not set to 1
+        attention_mask = torch.zeros(1, 1, 16, 16, dtype=torch.float16)
+
+        with (
+            patch("transformers.integrations.sdpa_attention._is_torch_xpu_available", False),
+            patch("transformers.integrations.sdpa_attention._is_torch_mps_available", False),
+            patch(
+                "torch.nn.functional.scaled_dot_product_attention",
+                wraps=torch.nn.functional.scaled_dot_product_attention,
+            ) as mock_sdpa,
+            patch.dict(os.environ, {"TRANSFORMERS_SDPA_FORCE_GQA": env_var_value}),
+        ):
+            sdpa_attention_forward(module, query, key, value, attention_mask=attention_mask)
+
+        mock_sdpa.assert_called_once()
+        self.assertEqual(mock_sdpa.call_args.kwargs.get("enable_gqa", False), expected_enable_gqa)
+        self.assertEqual(
+            mock_sdpa.call_args.args[1].shape[1], 2 if expected_enable_gqa else 4
+        )  # check if key was repeated
+        self.assertEqual(
+            mock_sdpa.call_args.args[2].shape[1], 2 if expected_enable_gqa else 4
+        )  # check if value was repeated
+
     def test_flash_attn_available_no_keyerror_when_missing_from_distribution_map(self):
         # Regression test for https://github.com/huggingface/transformers/issues/45520.
-        # When flash_attn is importable but not present in PACKAGE_DISTRIBUTION_MAPPING
+        # When flash_attn is importable but not present in the package distribution mapping
         # (e.g. installed via a non-standard wheel), the availability checks must not raise
         # a KeyError; they should simply return False.
         stripped_map = {
-            k: v for k, v in PACKAGE_DISTRIBUTION_MAPPING.items() if k not in ("flash_attn", "flash_attn_interface")
+            k: v for k, v in _package_distribution_mapping().items() if k not in ("flash_attn", "flash_attn_interface")
         }
-        with patch("transformers.utils.import_utils.PACKAGE_DISTRIBUTION_MAPPING", stripped_map):
-            with patch("transformers.modeling_flash_attention_utils.PACKAGE_DISTRIBUTION_MAPPING", stripped_map):
+        with patch("transformers.utils.import_utils._package_distribution_mapping", return_value=stripped_map):
+            with patch(
+                "transformers.modeling_flash_attention_utils._package_distribution_mapping", return_value=stripped_map
+            ):
                 self.assertFalse(is_flash_attn_2_available())
                 self.assertFalse(is_flash_attn_3_available())
                 self.assertFalse(is_flash_attn_4_available())

@@ -1392,7 +1392,7 @@ class xLSTMOutput(ModelOutput):
 
 @auto_docstring
 class xLSTMModel(xLSTMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: xLSTMConfig):
         super().__init__(config)
         # use embedding_dim and num_blocks once here to make use of them
         self.embeddings = nn.Embedding(config.vocab_size, config.embedding_dim)
@@ -1515,7 +1515,7 @@ class xLSTMCausalLMOutput(ModelOutput):
 
 @auto_docstring
 class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
-    def __init__(self, config):
+    def __init__(self, config: xLSTMConfig):
         super().__init__(config)
         self.backbone = xLSTMModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)

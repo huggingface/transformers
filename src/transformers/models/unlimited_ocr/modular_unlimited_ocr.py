@@ -603,6 +603,7 @@ class UnlimitedOcrVisionEmbeddings(CLIPVisionEmbeddings):
 )
 class UnlimitedOcrVisionEncoder(CLIPVisionModel):
     main_input_name = "patch_embeds"
+    config: UnlimitedOcrVisionEncoderConfig
     _input_embed_layer = AttributeError()
     _can_record_outputs = {
         "hidden_states": UnlimitedOcrEncoderLayer,
