@@ -124,6 +124,8 @@ SPECIAL_CASES_TO_ALLOW = {
         "lsd_time_logit_mean",
         "lsd_time_logit_std",
     ],
+    # Read by `generation_yue2.py`: the token ranges of the score and of the semantic tokens, and the flow time schedule
+    "YuE2Config": ["codec_token_offset", "codec_vocab_size", "text_vocab_size", "timestep_shift"],
     # Same as `PocketTTSConfig`: read by the inherited `generation_pocket_tts.py` and by `loss/loss_lsd.py`
     "GradiumPhononTTSConfig": [
         "frame_rate",

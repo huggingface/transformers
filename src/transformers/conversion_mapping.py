@@ -788,6 +788,13 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^decoder_transformer\.", target_patterns="decoder.decoder_transformer."),
             WeightRenaming(source_patterns=r"^decoder\.layers", target_patterns="decoder.decoder.layers"),
         ],
+        "yue2": [
+            WeightRenaming(r"^vae2llm\.", "model.latent_proj."),
+            WeightRenaming(r"^llm2vae\.", "velocity_head."),
+            WeightRenaming(r"^time_embedder\.mlp\.0\.", "model.timestep_embedding.fc1."),
+            WeightRenaming(r"^time_embedder\.mlp\.2\.", "model.timestep_embedding.fc2."),
+            WeightRenaming(r"^latent_pos_embed\.pe", "model.latent_position_embedding.embedding"),
+        ],
         "vibevoice_asr": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
