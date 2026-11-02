@@ -216,7 +216,18 @@ class ExportArtifacts(Mapping, PushToHubMixin):
         """
         from .auto import get_exporter_class
 
-        manifest_file = cached_file(pretrained_model_name_or_path, EXPORT_MANIFEST_FILE, **kwargs)
+        manifest_file = cached_file(
+            pretrained_model_name_or_path, EXPORT_MANIFEST_FILE, _raise_exceptions_for_missing_entries=False, **kwargs
+        )
+        if manifest_file is None:
+            from .optimum_intel import is_optimum_intel, load_optimum_intel
+
+            if is_optimum_intel(pretrained_model_name_or_path, **kwargs):
+                return load_optimum_intel(pretrained_model_name_or_path, **kwargs)
+            raise OSError(
+                f"{pretrained_model_name_or_path} has no {EXPORT_MANIFEST_FILE}: it isn't an export saved with "
+                "`ExportArtifacts.save_pretrained`."
+            )
         manifest = json.loads(Path(manifest_file).read_text(encoding="utf-8"))
         exporter = get_exporter_class(manifest["export_format"])
         program_files = [

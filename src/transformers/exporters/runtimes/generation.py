@@ -230,6 +230,12 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
             spec, mask = traced.get(mask_name, {}), kwargs.get(mask_name)
             if spec.get("rank") == 4 and (mask is None or mask.dim() == 2):
                 kwargs[mask_name] = self._causal_mask(kwargs, mask, spec["dtype"])
+            elif spec.get("rank") == 2 and mask is None:
+                # A padding mask over the cache and the step (an optimum-intel graph takes one): nothing is padded.
+                text = next(kwargs[name] for name in ("input_ids", "inputs_embeds") if kwargs.get(name) is not None)
+                cache = kwargs.get("past_key_values")
+                width = (cache.get_seq_length() if cache is not None else 0) + text.shape[1]
+                kwargs[mask_name] = torch.ones(text.shape[0], width, dtype=getattr(torch, spec["dtype"]))
             elif "leaves" in spec and isinstance(mask, dict):
                 # Per layer type (mixed full / sliding attention): only the slots `generate` left empty.
                 kwargs[mask_name] = {
