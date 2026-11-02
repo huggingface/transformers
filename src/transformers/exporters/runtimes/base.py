@@ -83,6 +83,8 @@ class ExportedModel:
     def __init__(self, runner: ModelRunner, config: PreTrainedConfig | None = None):
         self.runner = runner
         self.config = config
+        # What it runs, to save it back (set by [`~ExportArtifacts.runtime`]).
+        self.artifacts = None
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(runner={type(self.runner).__name__})"
@@ -94,6 +96,14 @@ class ExportedModel:
     @property
     def dtype(self) -> torch.dtype:
         return self.runner.dtype
+
+    def save_pretrained(self, save_directory: str | Path, **kwargs) -> None:
+        """Save the export this runs, as [`~ExportArtifacts.save_pretrained`] does."""
+        self.artifacts.save_pretrained(save_directory, **kwargs)
+
+    def push_to_hub(self, repo_id: str, **kwargs) -> Any:
+        """Upload the export this runs, as [`~ExportArtifacts.push_to_hub`] does."""
+        return self.artifacts.push_to_hub(repo_id, **kwargs)
 
     def __call__(self, **kwargs) -> Any:
         """Run the export, returning what the source model returns. Kwargs the export was not traced with are
