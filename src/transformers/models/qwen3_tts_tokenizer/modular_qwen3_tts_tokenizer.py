@@ -299,6 +299,8 @@ class Qwen3TTSTokenizerPreTrainedModel(MimiPreTrainedModel):
 
 
 class Qwen3TTSTokenizerDecoderBlock(Qwen3OmniMoeCode2WavDecoderBlock):
+    config: Qwen3TTSTokenizerDecoderConfig
+
     def __init__(self, config: Qwen3TTSTokenizerDecoderConfig, layer_idx):
         super().__init__(config, layer_idx)
 
@@ -350,12 +352,15 @@ class Qwen3TTSTokenizerCode2WavTransformerLayer(Qwen3OmniMoeCode2WavTransformerL
 
 
 class Qwen3TTSTokenizerDecoderTransformerModel(Qwen3OmniMoeCode2WavTransformerModel):
+    config: Qwen3TTSTokenizerDecoderConfig
+
     def __init__(self, config: Qwen3TTSTokenizerDecoderConfig):
         super().__init__(config)
 
 
 @auto_docstring
 class Qwen3TTSTokenizerDecoderModel(Qwen3OmniMoeCode2Wav):
+    config: Qwen3TTSTokenizerDecoderConfig
     config_class = Qwen3TTSTokenizerDecoderConfig
     base_model_prefix = "decoder"
     _no_split_modules = ["Qwen3TTSTokenizerCode2WavTransformerLayer", "Qwen3TTSTokenizerDecoderBlock"]

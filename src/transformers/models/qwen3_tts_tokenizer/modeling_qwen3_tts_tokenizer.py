@@ -596,6 +596,8 @@ class Qwen3TTSTokenizerCode2WavDecoderResidualUnit(nn.Module):
 
 
 class Qwen3TTSTokenizerDecoderBlock(Qwen3TTSTokenizerPreTrainedModel):
+    config: Qwen3TTSTokenizerDecoderConfig
+
     def __init__(self, config: Qwen3TTSTokenizerDecoderConfig, layer_idx):
         super().__init__(config)
         in_dim = config.decoder_dim // 2**layer_idx
@@ -1091,6 +1093,7 @@ class Qwen3TTSTokenizerRotaryEmbedding(nn.Module):
 
 @auto_docstring
 class Qwen3TTSTokenizerDecoderTransformerModel(Qwen3TTSTokenizerPreTrainedModel):
+    config: Qwen3TTSTokenizerDecoderConfig
     _can_record_outputs = {
         "hidden_states": Qwen3TTSTokenizerCode2WavTransformerLayer,
         "attentions": Qwen3TTSTokenizerCode2WavAttention,
@@ -1183,7 +1186,8 @@ class Qwen3TTSTokenizerDecoderTransformerModel(Qwen3TTSTokenizerPreTrainedModel)
 
 @auto_docstring
 class Qwen3TTSTokenizerDecoderModel(Qwen3TTSTokenizerPreTrainedModel):
-    input_modalities = "audio"
+    input_modalities = ("audio",)
+    config: Qwen3TTSTokenizerDecoderConfig
     config_class = Qwen3TTSTokenizerDecoderConfig
     base_model_prefix = "decoder"
     _no_split_modules = ["Qwen3TTSTokenizerCode2WavTransformerLayer", "Qwen3TTSTokenizerDecoderBlock"]
