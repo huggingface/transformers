@@ -15,6 +15,8 @@ import torch
 import torch.distributed as dist
 import torch.nn.functional as F
 
+from .loss_for_object_detection import dice_loss
+
 
 def _normalize_mask_count(num_masks: torch.Tensor) -> torch.Tensor:
     if dist.is_available() and dist.is_initialized():
@@ -29,7 +31,6 @@ def xiaomi_lens0_mask_loss(
     valid_targets_mask: list[torch.Tensor] | None,
     dice_weight: float,
     bce_weight: float,
-    chunk_size: int,
 ) -> torch.Tensor:
     r"""
     Compute the weighted Dice and sigmoid binary cross-entropy loss over valid masks.
@@ -50,9 +51,6 @@ def xiaomi_lens0_mask_loss(
             Weight of the Dice loss computed from sigmoid probabilities, with a smoothing constant of 1.
         bce_weight (`float`):
             Weight of the binary cross-entropy loss, averaged over valid pixels within each mask.
-        chunk_size (`int`):
-            Number of masks processed per chunk for each image. Logits and targets are converted to
-            float per chunk to limit memory usage.
 
     Returns:
         `torch.Tensor` of shape `()`: Scalar float32 loss. Weighted per-mask losses are summed locally and divided
@@ -65,29 +63,25 @@ def xiaomi_lens0_mask_loss(
         image_valid_mask = None if valid_targets_mask is None else valid_targets_mask[index]
         num_masks += image_logits.shape[0] if image_valid_mask is None else image_valid_mask.flatten(1).any(-1).sum()
 
-        for start in range(0, image_logits.shape[0], chunk_size):
-            chunk_logits = image_logits[start : start + chunk_size].float().flatten(1)
-            chunk_targets = image_targets[start : start + chunk_size].float().flatten(1)
-            probabilities = chunk_logits.sigmoid()
+        if image_logits.shape[0] == 0:
+            continue
+        image_logits = image_logits.float().flatten(1)
+        image_targets = image_targets.float().flatten(1)
 
-            if image_valid_mask is None:
-                bce_loss = (
-                    F.binary_cross_entropy_with_logits(chunk_logits, chunk_targets, reduction="mean")
-                    * chunk_logits.shape[0]
-                )
-            else:
-                chunk_valid_mask = image_valid_mask[start : start + chunk_size].float().flatten(1)
-                weights = chunk_valid_mask / chunk_valid_mask.sum(-1, keepdim=True).clamp_min(1.0)
-                bce_loss = F.binary_cross_entropy_with_logits(
-                    chunk_logits, chunk_targets, weight=weights, reduction="sum"
-                )
-                probabilities = probabilities * chunk_valid_mask
-                chunk_targets = chunk_targets * chunk_valid_mask
+        if image_valid_mask is None:
+            bce_loss = (
+                F.binary_cross_entropy_with_logits(image_logits, image_targets, reduction="mean")
+                * image_logits.shape[0]
+            )
+        else:
+            image_valid_mask = image_valid_mask.float().flatten(1)
+            weights = image_valid_mask / image_valid_mask.sum(-1, keepdim=True).clamp_min(1.0)
+            bce_loss = F.binary_cross_entropy_with_logits(image_logits, image_targets, weight=weights, reduction="sum")
+            image_logits = image_logits.masked_fill(image_valid_mask == 0, float("-inf"))
+            image_targets = image_targets * image_valid_mask
 
-            intersection = 2 * (probabilities * chunk_targets).sum(-1)
-            denominator = probabilities.sum(-1) + chunk_targets.sum(-1)
-            dice_loss = (1 - (intersection + 1) / (denominator + 1)).sum()
-            total_loss = total_loss + dice_weight * dice_loss + bce_weight * bce_loss
+        image_dice_loss = dice_loss(image_logits, image_targets, num_boxes=1)
+        total_loss = total_loss + dice_weight * image_dice_loss + bce_weight * bce_loss
 
     return total_loss / _normalize_mask_count(num_masks)
 
@@ -128,7 +122,7 @@ def XiaomiLens0ForConditionalGenerationLoss(
             Only used when `mask_labels` is provided.
         config ([`XiaomiLens0Config`]):
             Model configuration supplying `text_config.vocab_size`, `mask_loss_weight`,
-            `mask_dice_loss_weight`, `mask_bce_loss_weight`, and `mask_loss_chunk_size`.
+            `mask_dice_loss_weight`, and `mask_bce_loss_weight`.
         **kwargs:
             Additional arguments forwarded to `ForCausalLMLoss`, such as `num_items_in_batch`, `ignore_index`,
             and pre-shifted `shift_labels`.
@@ -159,7 +153,6 @@ def XiaomiLens0ForConditionalGenerationLoss(
             valid_targets_mask=mask_labels_valid_mask,
             dice_weight=config.mask_dice_loss_weight,
             bce_weight=config.mask_bce_loss_weight,
-            chunk_size=config.mask_loss_chunk_size,
         )
         loss = mask_loss if loss is None else loss + mask_loss
     elif labels is not None:

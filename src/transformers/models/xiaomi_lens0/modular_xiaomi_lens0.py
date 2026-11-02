@@ -128,8 +128,6 @@ class XiaomiLens0Config(Qwen3_5Config):
         Weight of the Dice term in the mask loss.
     mask_bce_loss_weight (`float`, *optional*, defaults to 2.0):
         Weight of the pixel-wise binary cross-entropy term in the mask loss.
-    mask_loss_chunk_size (`int`, *optional*, defaults to 8):
-        Number of masks processed per chunk for each image when computing the mask loss.
 
     Example:
 
@@ -160,7 +158,6 @@ class XiaomiLens0Config(Qwen3_5Config):
     mask_loss_weight: float = 1.0
     mask_dice_loss_weight: float = 1.0
     mask_bce_loss_weight: float = 2.0
-    mask_loss_chunk_size: int = 8
 
     def __post_init__(self, **kwargs):
         # For BC with the original hub checkpoint
