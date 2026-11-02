@@ -37,6 +37,8 @@ class EetqHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
+    # The checkpoint names are the params of `EetqLinear`
+    serialized_names = {"weight": ["weight", "weight_scales"]}
     quantization_config: "EetqConfig"
 
     def validate_environment(self, *args, **kwargs):
@@ -84,6 +86,9 @@ class EetqHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
+        if self.pre_quantized and self.quantization_config.dequantize:
+            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
+            return
         from ..integrations import replace_with_eetq_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
@@ -102,6 +107,6 @@ class EetqHfQuantizer(HfQuantizer):
         return True
 
     def get_load_operations(self):
-        from ..integrations.eetq import EetqQuantize
+        from ..integrations.eetq import EetqDequantize, EetqQuantize
 
-        return {"quantize": EetqQuantize}
+        return {"dequantize": EetqDequantize, "quantize": EetqQuantize}

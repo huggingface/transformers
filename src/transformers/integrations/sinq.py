@@ -171,3 +171,30 @@ class SinqDeserialize(ConversionOps):
         module._is_hf_initialized = True
 
         return {}
+
+
+class SinqDequantize(ConversionOps):
+    """
+    Dense weights from the `SINQLinear` state: `W_q`, its `meta` dict (scales, zeros, shape, packing...) and `bias`,
+    dequantized by sinq itself as the format has many variants (NF codebooks, tiling, dual scales).
+    """
+
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, list[torch.Tensor]]:
+        from sinq.quantizer import Quantizer
+
+        output = {}
+        for key, weights in input_dict.items():
+            if not key.endswith("W_q"):
+                continue  # `meta` and `bias`
+            prefix = key.removesuffix("W_q")  # `.W_q` -> `.weight`, `experts.*.W_q` -> `experts.*.weight`
+            weights = weights if isinstance(weights, list) else [weights]
+            metas = input_dict[f"{prefix}meta"]
+            metas = metas if isinstance(metas, list) else [metas]
+            output[f"{prefix}weight"] = [Quantizer.dequantize(w, dict(meta)) for w, meta in zip(weights, metas)]
+            bias = input_dict.get(f"{prefix}bias")
+            if bias is not None:
+                output[f"{prefix}bias"] = bias if isinstance(bias, list) else [bias]
+        return output

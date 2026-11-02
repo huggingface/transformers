@@ -13,6 +13,7 @@
 # limitations under the License.
 "HQQ (Half-Quadratic Quantization) integration file"
 
+from ..core_model_loading import ConversionOps
 from ..utils import is_hqq_available, is_torch_available, logging
 
 
@@ -127,3 +128,77 @@ def prepare_for_hqq_linear(model, quantization_config=None, modules_to_not_conve
         logger.warning("No linear modules were found in your model for quantization.")
 
     return model
+
+
+# What `HQQLinear.state_dict` saves for a weight, the encoded meta data included (bias aside)
+HQQ_SERIALIZED_NAMES = [
+    "W_q",
+    "nbits",
+    "group_size",
+    "shape",
+    "scale",
+    "zero",
+    "axis",
+    "packing",
+    "unpack_view_dtype",
+    "view_as_float",
+    "quant_scale",
+    "quant_zero",
+    "compute_dtype",
+    "offload_meta",
+    "encoded_state_dict",
+    "stores_quant_config",
+    "channel_wise",
+    "optimize",
+    "round_zero",
+]
+
+
+def _hqq_linears(input_dict, prefix=""):
+    "One `HQQLinear` per value of `{prefix}W_q` (one per expert when they are lists), loaded from its serialized state"
+    from hqq.core.quantize import HQQLinear
+
+    states = {}
+    for name in HQQ_SERIALIZED_NAMES:
+        value = input_dict.get(f"{prefix}{name}")
+        if value is not None:
+            states[name] = value if isinstance(value, list) else [value]
+    layers = []
+    for i, weight in enumerate(states["W_q"]):
+        layer = HQQLinear(None, None, del_orig=False, compute_dtype=states["scale"][i].dtype, device=weight.device)
+        layer.load_state_dict({name: values[i] for name, values in states.items()})
+        layers.append(layer)
+    return layers
+
+
+class HqqDeserialize(ConversionOps):
+    """The serialized state of a quantized `nn.Linear` (`W_q` and its meta data) is loaded in an `HQQLinear` replacing it."""
+
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(self, input_dict, model=None, full_layer_name=None, missing_keys=None, **kwargs):
+        module_name = full_layer_name.rpartition(".")[0]
+        module = model.get_submodule(module_name)
+        layer = _hqq_linears(input_dict)[0]
+        # loaded before or after the weight, the bias of the `nn.Linear` is the one of the `HQQLinear`
+        layer.bias = module.bias
+        model.set_submodule(module_name, layer)
+        if missing_keys is not None:
+            missing_keys.discard(full_layer_name)
+        return {}
+
+
+class HqqDequantize(ConversionOps):
+    """Dense weights from the serialized `HQQLinear` states, dequantized by hqq itself."""
+
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, list[torch.Tensor]]:
+        output = {}
+        for key in input_dict:
+            if key.endswith("W_q"):
+                prefix = key.removesuffix("W_q")  # `W_q` -> `weight`, `experts.*.W_q` -> `experts.*.weight`
+                output[f"{prefix}weight"] = [layer.dequantize() for layer in _hqq_linears(input_dict, prefix)]
+        return output

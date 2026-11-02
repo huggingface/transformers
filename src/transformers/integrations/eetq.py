@@ -44,6 +44,35 @@ class EetqQuantize(ConversionOps):
         return {full_layer_name: int8_weight, f"{full_layer_name}_scales": scales}
 
 
+class EetqDequantize(ConversionOps):
+    """Dense weights from the serialized int8 `weight` and its `weight_scales`. The int8 weight is stored in the
+    arch-specific layout of the CUTLASS mixed gemm, so the kernel dequantizes it: a gemm with the identity."""
+
+    def __init__(self, hf_quantizer):
+        from .hub_kernels import get_kernel
+
+        self.hf_quantizer = hf_quantizer
+        self.kernel = get_kernel("kernels-community/quantization-eetq", version=1)
+
+    def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, list[torch.Tensor]]:
+        output = {}
+        for key, weights in input_dict.items():
+            if not key.endswith("weight"):
+                continue  # `weight_scales`
+            weights = weights if isinstance(weights, list) else [weights]
+            scales = input_dict.get(f"{key}_scales")
+            if scales is not None:
+                scales = scales if isinstance(scales, list) else [scales]
+                weights = [self._dequantize(weight, scale) for weight, scale in zip(weights, scales)]
+            output[key] = weights
+        return output
+
+    def _dequantize(self, weight, scales):
+        # `weight` is (in_features, out_features): `identity @ weight` is the transposed dense weight
+        identity = torch.eye(weight.shape[0], dtype=scales.dtype, device="cuda")
+        return self.kernel.w8_a16_gemm(identity, weight.cuda(), scales.cuda()).t().to(weight.device)
+
+
 class EetqLinearMMFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, weight, scales, bias=None):

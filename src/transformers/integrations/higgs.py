@@ -15,6 +15,7 @@
 
 from math import sqrt
 
+from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import is_flute_available, is_hadamard_available, is_torch_available, logging
 
@@ -590,43 +591,55 @@ def replace_with_higgs_linear(model, modules_to_not_convert: list[str] | None = 
     return model
 
 
-def dequantize_higgs(model, current_key_name=None):
+class HiggsDequantize(ConversionOps):
     """
-    Dequantizes the HiggsLinear layers in the given model by replacing them with standard torch.nn.Linear layers.
-    Args:
-        model (torch.nn.Module): The model containing HiggsLinear layers to be dequantized.
-        current_key_name (list, optional): A list to keep track of the current module names during recursion. Defaults to None.
-    Returns:
-        torch.nn.Module: The model with HiggsLinear layers replaced by torch.nn.Linear layers.
+    Dense weights from the FLUTE-packed `weight`, its `scales` and lookup `tables` / `tables2`. The packing is specific
+    to the FLUTE kernels (tiles, number of SMs), so the HIGGS matmul runs on the identity, as in `HiggsLinear.forward`,
+    which also undoes the Hadamard rotation.
     """
 
-    with torch.no_grad():
-        for name, module in model.named_children():
-            if current_key_name is None:
-                current_key_name = []
-            current_key_name.append(name)
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
 
-            if isinstance(module, HiggsLinear):
-                in_features = module.in_features
-                out_features = module.out_features
+    def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, list[torch.Tensor]]:
+        config = self.hf_quantizer.quantization_config
+        output = {}
+        for key, weights in input_dict.items():
+            if not key.endswith("weight"):
+                continue  # `scales`, `tables` and `tables2`
+            prefix = key.removesuffix("weight")
+            weights = weights if isinstance(weights, list) else [weights]
+            if f"{prefix}scales" in input_dict:
+                tensors = [
+                    value if isinstance(value, list) else [value]
+                    for value in (input_dict[f"{prefix}{name}"] for name in ("scales", "tables", "tables2"))
+                ]
+                module_name = full_layer_name.removesuffix(f".{key}")
+                weights = [
+                    self.dequantize(weight, *companions, config, module_name)
+                    for weight, *companions in zip(weights, *tensors)
+                ]
+            output[key] = weights
+        return output
 
-                model._modules[name] = torch.nn.Linear(
-                    in_features,
-                    out_features,
-                    bias=module.bias is not None,
-                    device=module.scales.device,
-                    dtype=module.scales.dtype,
-                )
+    @staticmethod
+    def dequantize(weight, scales, tables, tables2, config, module_name):
+        from flute.tune import TuneMetaData, maybe_tune_and_repack
+        from flute.utils import make_workspace_streamk
 
-                model._modules[name].weight.data = module(
-                    torch.eye(in_features, device=module.scales.device, dtype=module.scales.dtype)
-                ).T.contiguous()
-
-            if len(list(module.children())) > 0:
-                _ = dequantize_higgs(
-                    module,
-                    current_key_name=current_key_name,
-                )
-            # Remove the last key for recursion
-            current_key_name.pop(-1)
-        return model
+        # The weights are packed for the number of SMs of the GPU they were saved on
+        weight, tune_metadata = maybe_tune_and_repack(
+            weight=weight, scales=scales, metadata=TuneMetaData.from_dict(config.tune_metadata[module_name])
+        )
+        identity = torch.eye(scales.shape[1] * config.group_size, dtype=scales.dtype, device=scales.device)
+        dense = qgemm_v2(
+            pad_to_block(identity, [-1], config.hadamard_size),
+            weight,
+            scales,
+            tables,
+            tables2.view(dtype=torch.float32),
+            make_workspace_streamk(device=weight.device),
+            tune_metadata,
+            hadamard_size=config.hadamard_size,
+        )
+        return dense.T.contiguous()

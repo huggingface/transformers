@@ -37,6 +37,8 @@ class QuantoHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
+    # The flattened quanto weight, as in the `state_dict` of a frozen `QLinear`: int4 / int2 values are packed
+    serialized_names = {"weight": ["weight._data", "weight._data._data", "weight._scale", "weight._shift"]}
     quantization_config: "QuantoConfig"
 
     @property
@@ -82,6 +84,9 @@ class QuantoHfQuantizer(HfQuantizer):
         return max_memory
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        if self.pre_quantized and self.quantization_config.dequantize:
+            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
+            return
         from ..integrations import replace_with_quanto_layers
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
@@ -100,6 +105,6 @@ class QuantoHfQuantizer(HfQuantizer):
         return False
 
     def get_load_operations(self):
-        from ..integrations.quanto import QuantoQuantize
+        from ..integrations.quanto import QuantoDequantize, QuantoQuantize
 
-        return {"quantize": QuantoQuantize}
+        return {"dequantize": QuantoDequantize, "quantize": QuantoQuantize}

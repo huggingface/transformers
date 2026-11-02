@@ -64,7 +64,6 @@ _import_structure = {
     ],
     "higgs": [
         "HiggsLinear",
-        "dequantize_higgs",
         "quantize_with_higgs",
         "replace_with_higgs_linear",
     ],
@@ -218,7 +217,7 @@ if TYPE_CHECKING:
         GGUF_CONFIG_MAPPING,
         _gguf_parse_value,
     )
-    from .higgs import HiggsLinear, dequantize_higgs, quantize_with_higgs, replace_with_higgs_linear
+    from .higgs import HiggsLinear, quantize_with_higgs, replace_with_higgs_linear
     from .hqq import prepare_for_hqq_linear
     from .hub_kernels import (
         LayerRepository,
