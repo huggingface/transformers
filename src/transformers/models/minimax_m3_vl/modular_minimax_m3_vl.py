@@ -34,7 +34,7 @@ from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilab
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import is_torchdynamo_compiling
-from ...utils.output_capturing import _scope_router_output_collection, capture_outputs
+from ...utils.output_capturing import _fresh_output_collection, capture_outputs
 from ...vision_utils import get_vision_position_ids
 from ..clip.modeling_clip import CLIPMLP, CLIPAttention, CLIPEncoderLayer
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts
@@ -692,7 +692,7 @@ class MiniMaxM3VLTextModel(MiniMaxM2Model):
         # `position_ids` is threaded to every layer so the sparse layers' lightning indexer can anchor
         # block selection to each query's content position (see `MiniMaxM3VLIndexer`).
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            with _scope_router_output_collection():
+            with _fresh_output_collection():
                 hidden_states = decoder_layer(
                     hidden_states,
                     attention_mask=causal_mask,

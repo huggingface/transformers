@@ -37,7 +37,7 @@ from ...models.zamba2.modeling_zamba2 import Zamba2MambaMixer, Zamba2RMSNormGate
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection, capture_outputs
+from ...utils.output_capturing import OutputRecorder, _fresh_output_collection, capture_outputs
 from .configuration_nemotron_h import NemotronHConfig
 
 
@@ -442,7 +442,7 @@ class NemotronHModel(NemotronHPreTrainedModel):
             }
 
         for layer_idx, mixer_block in enumerate(self.layers):
-            with _scope_router_output_collection():
+            with _fresh_output_collection():
                 hidden_states = mixer_block(
                     hidden_states,
                     attention_mask=causal_mask_mapping.get(mixer_block.block_type),

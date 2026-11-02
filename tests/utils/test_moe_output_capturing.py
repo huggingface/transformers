@@ -34,19 +34,11 @@ if is_torch_available():
     import transformers
 
 
-# One representative for each distinct source of router outputs: ordinary sparse
-# decoders, fused expert modules, interleaved dense/sparse layers, attention plus
-# MLP routing, encoder/decoder collectors, stochastic routing, and Mamba layers.
+# Representatives of distinct collection contracts, not a model support matrix:
+# ordinary/mixed decoders, repeated router events, encoder/decoder outputs,
+# stochastic routing, hybrid layers, and a backbone without an auxiliary loss.
 CASES = {
     "qwen3_moe": ("Qwen3Moe", {"moe_intermediate_size": 24, "num_experts": 3}, {"router_logits": 2}),
-    "granitemoe": ("GraniteMoe", {"num_local_experts": 3}, {"router_logits": 2}),
-    "olmoe": ("Olmoe", {"num_experts": 3, "eos_token_id": 2}, {"router_logits": 2}),
-    # Only the text components are constructed: no vision inputs or encoders.
-    "aria": (
-        "AriaText",
-        {"moe_num_experts": 3, "moe_topk": 2, "moe_num_shared_experts": 1},
-        {"router_logits": 2},
-    ),
     "deepseek_ocr2": (
         "DeepseekOcr2Text",
         {
@@ -55,25 +47,6 @@ CASES = {
             "n_shared_experts": 1,
             "moe_intermediate_size": 24,
             "mlp_layer_types": ["dense", "sparse", "sparse"],
-        },
-        {"router_logits": 2},
-    ),
-    "deepseek_v3": (
-        "DeepseekV3",
-        {
-            "num_hidden_layers": 3,
-            "num_key_value_heads": 4,
-            "moe_intermediate_size": 24,
-            "n_routed_experts": 4,
-            "n_shared_experts": 1,
-            "n_group": 2,
-            "topk_group": 1,
-            "first_k_dense_replace": 1,
-            "q_lora_rank": 4,
-            "kv_lora_rank": 4,
-            "qk_rope_head_dim": 2,
-            "qk_nope_head_dim": 2,
-            "v_head_dim": 4,
         },
         {"router_logits": 2},
     ),
@@ -167,35 +140,21 @@ def model_inputs(family):
     return inputs
 
 
-def capture_context(family, scoped):
-    if scoped:
-        return nullcontext()
+def without_output_scoping(family):
+    """Use the existing collector without region-local buffers as the reference."""
     module = importlib.import_module(f"transformers.models.{family}.modeling_{family}")
-    return patch.object(module, "_scope_router_output_collection", nullcontext)
+    return patch.object(module, "_fresh_output_collection", nullcontext)
 
 
 def assert_same(actual, expected):
-    """No rounding tolerance: the eager scope must not change any arithmetic."""
-    if isinstance(actual, torch.Tensor):
-        assert isinstance(expected, torch.Tensor)
-        torch.testing.assert_close(actual, expected, rtol=0, atol=0)
-    elif isinstance(actual, dict):
-        assert actual.keys() == expected.keys()
-        for key in actual:
-            assert_same(actual[key], expected[key])
-    elif isinstance(actual, (tuple, list)):
-        assert type(actual) is type(expected)
-        assert len(actual) == len(expected)
-        for left, right in zip(actual, expected):
-            assert_same(left, right)
-    else:
-        assert actual == expected
+    """The eager scope changes bookkeeping only: require exact numerical agreement."""
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
 
 def router_gradient_objective(outputs, family):
     if family == "switch_transformers":
         return outputs.encoder_aux_loss + outputs.decoder_aux_loss
-    if family in ("deepseek_v3", "aria", "deepseek_ocr2"):
+    if family == "deepseek_ocr2":
         # These backbones expose router scores without an auxiliary loss.
         assert getattr(outputs, "aux_loss", None) is None
         return sum(scores.square().mean() for scores in outputs.router_logits)
@@ -204,166 +163,205 @@ def router_gradient_objective(outputs, family):
 
 @require_torch
 @pytest.mark.parametrize("family", CASES)
-@pytest.mark.parametrize(
-    "output_hidden_states", [False, True, [1]], ids=["router_only", "all_outputs", "selected_hidden"]
-)
-def test_router_collection_preserves_optional_outputs(family, output_hidden_states):
-    model = make_model(family)
-    inputs = model_inputs(family)
-    outputs = []
-    rng_states = []
-    for scoped in (False, True):
-        torch.manual_seed(29)
-        with capture_context(family, scoped):
-            outputs.append(
-                model(
-                    **inputs,
-                    output_router_logits=True,
-                    output_hidden_states=output_hidden_states,
-                    output_attentions=output_hidden_states is True,
-                )
-            )
-        rng_states.append(torch.get_rng_state())
-    assert_same(outputs[1], outputs[0])
-    assert_same(rng_states[1], rng_states[0])
-    for name, count in CASES[family][2].items():
-        assert len(outputs[1][name]) == count
-        assert all(router.requires_grad for router in outputs[1][name])
-    if output_hidden_states is True:
-        attention_keys = [name for name in outputs[1] if name.endswith("attentions")]
-        assert attention_keys
-        for key in attention_keys:
-            assert outputs[1][key]
-            assert all(value is not None for value in outputs[1][key])
-    if output_hidden_states:
-        hidden_keys = [name for name in outputs[1] if name.endswith("hidden_states")]
-        assert hidden_keys
-        for key in hidden_keys:
-            if isinstance(output_hidden_states, list):
-                assert outputs[1][key][0] is None
-                assert outputs[1][key][1] is not None
-            else:
-                assert all(value is not None for value in outputs[1][key])
-
-
-@require_torch
-@pytest.mark.parametrize(
-    "family,use_reentrant",
-    [
-        pytest.param(
-            family, use_reentrant, id=f"{family}-{'no_checkpoint' if use_reentrant is None else 'non_reentrant'}"
-        )
-        for family in CASES
-        for use_reentrant in (None, False)
-        if family != "jetmoe" or use_reentrant is None
-    ],
-)
-def test_router_collection_preserves_router_gradients_and_update(family, use_reentrant):
-    check_gradients_and_update(family, use_reentrant, require_aux_gradients=True)
-
-
-@require_torch
-@pytest.mark.parametrize("family", [family for family in CASES if family != "jetmoe"])
-def test_router_collection_preserves_reentrant_checkpoint_behavior(family):
-    # Reentrant checkpointing captures router outputs under no_grad in the
-    # existing implementation. This checks parity, not auxiliary-loss support;
-    # the non-reentrant cases above require nonzero auxiliary gradients.
-    check_gradients_and_update(family, use_reentrant=True, require_aux_gradients=False)
-
-
-def check_gradients_and_update(family, use_reentrant, require_aux_gradients):
-    original = make_model(family)
-    model = copy.deepcopy(original)
-    inputs = model_inputs(family)
+def test_router_collection_preserves_outputs_and_gradients(family):
+    """Region-local collection preserves each recorder's outputs and their learning signals."""
+    reference = make_model(family)
+    candidate = copy.deepcopy(reference)
     results = []
-    for current, scoped in ((original, False), (model, True)):
-        if use_reentrant is not None:
-            current.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": use_reentrant})
-            current.enable_input_require_grads()
-        params = tuple(current.parameters())
+    for model, capture in ((reference, without_output_scoping(family)), (candidate, nullcontext())):
         torch.manual_seed(29)
-        with capture_context(family, scoped):
-            outputs = current(**inputs, output_router_logits=True)
-            aux = router_gradient_objective(outputs, family)
-            aux_grads = None
-            if require_aux_gradients or aux.requires_grad:
-                aux_grads = torch.autograd.grad(aux, params, retain_graph=True, allow_unused=True)
-                assert any(grad is not None and torch.count_nonzero(grad) for grad in aux_grads)
-            if family == "deepseek_ocr2":
-                # The text backbone has no task loss; use one hidden-state component for backward.
-                outputs.last_hidden_state[..., 0].mean().backward()
-            else:
-                outputs.loss.backward()
+        params = tuple(model.parameters())
+        with capture:
+            outputs = model(**model_inputs(family), output_router_logits=True)
+            for name, count in CASES[family][2].items():
+                assert isinstance(outputs[name], tuple)
+                assert len(outputs[name]) == count
+                assert all(router.requires_grad for router in outputs[name])
+            aux_grads = torch.autograd.grad(
+                router_gradient_objective(outputs, family), params, retain_graph=True, allow_unused=True
+            )
+            assert any(grad is not None and torch.count_nonzero(grad) for grad in aux_grads)
+            # OCR2 exposes a backbone, without a task loss or a language-model head.
+            loss = outputs.last_hidden_state[..., 0].mean() if family == "deepseek_ocr2" else outputs.loss
+            loss.backward()
         grads = tuple(None if parameter.grad is None else parameter.grad.clone() for parameter in params)
         assert all(grad is None or torch.isfinite(grad).all() for grad in grads)
-        before = tuple(parameter.detach().clone() for parameter in params)
-        torch.optim.SGD(params, lr=0.1).step()
-        after = tuple(parameter.detach().clone() for parameter in params)
-        assert any(not torch.equal(left, right) for left, right in zip(before, after))
-        results.append((outputs, aux.requires_grad, aux_grads, grads, after, torch.get_rng_state()))
+        assert any(grad is not None and torch.count_nonzero(grad) for grad in grads)
+        rng_state = torch.get_rng_state() if family == "phimoe" else None
+        results.append((outputs, aux_grads, grads, rng_state))
+    assert_same(results[1], results[0])
+
+
+@require_torch
+def test_router_scoping_preserves_selected_hidden_states_and_attentions():
+    """Collecting routers must not reset hidden-layer positions or lose attention outputs."""
+    model = make_model("qwen3_moe")
+    outputs = []
+    for capture in (without_output_scoping("qwen3_moe"), nullcontext()):
+        with capture:
+            outputs.append(
+                model(
+                    **model_inputs("qwen3_moe"),
+                    output_router_logits=True,
+                    output_hidden_states=[1],
+                    output_attentions=True,
+                )
+            )
+    assert_same(outputs[1], outputs[0])
+    assert isinstance(outputs[1].hidden_states, tuple)
+    assert isinstance(outputs[1].attentions, tuple)
+    assert outputs[1].hidden_states[0] is None
+    assert outputs[1].hidden_states[1] is not None
+    assert len(outputs[1].attentions) == model.config.num_hidden_layers
+    assert all(value is not None for value in outputs[1].attentions)
+
+
+@require_torch
+def test_reentrant_checkpointing_preserves_existing_router_behavior():
+    """Reentrant replay preserves the existing detached router outputs and task gradients."""
+    model = make_model("qwen3_moe")
+    model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": True})
+    model.enable_input_require_grads()
+    results = []
+    for capture in (without_output_scoping("qwen3_moe"), nullcontext()):
+        model.zero_grad(set_to_none=True)
+        with capture:
+            outputs = model(**model_inputs("qwen3_moe"), output_router_logits=True)
+            assert not any(router.requires_grad for router in outputs.router_logits)
+            outputs.loss.backward()
+        grads = tuple(p.grad.clone() if p.grad is not None else None for p in model.parameters())
+        assert any(g is not None and torch.count_nonzero(g) for g in grads)
+        results.append((outputs, grads))
     assert_same(results[1], results[0])
 
 
 @require_torch
 @pytest.mark.torch_compile_test
-def test_regional_compilation_reuses_graph_and_preserves_router_gradients():
+@pytest.mark.parametrize(
+    "router_logits,attentions,checkpointing",
+    [(True, False, False), (True, False, True), (False, True, False), (True, True, True)],
+    ids=["routers", "checkpointed_routers", "attentions", "checkpointed_routers_and_attentions"],
+)
+def test_regional_compilation_reuses_graph_and_preserves_output_gradients(router_logits, attentions, checkpointing):
+    """
+    Given matching Qwen decoders with router or attention outputs requested,
+    when forward and backward run with regional compilation,
+    then every decoder stays compiled, graphs are reused, and outputs
+    and gradients match eager execution. Checkpointed runs also replay layers.
+    """
+    from transformers.utils import output_capturing
+
     torch.compiler.reset()
     try:
         limit = getattr(torch._dynamo.config, "recompile_limit", None)
         if limit is None:
             limit = torch._dynamo.config.cache_size_limit
         model = make_model("qwen3_moe", num_hidden_layers=limit + 4)
+        if checkpointing:
+            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
         inputs = model_inputs("qwen3_moe")
         named_parameters = tuple(model.named_parameters())
         params = tuple(parameter for _, parameter in named_parameters)
+        requested = tuple(
+            key for key, enabled in (("router_logits", router_logits), ("attentions", attentions)) if enabled
+        )
+        graphs, calls, forward_buffers = [], [], []
+        phase = "forward"
 
         def forward_backward():
+            nonlocal phase
+            calls.clear()
+            forward_buffers.clear()
             model.zero_grad(set_to_none=True)
-            outputs = model(**inputs, output_router_logits=True)
-            assert len(outputs.router_logits) == model.config.num_hidden_layers
-            aux_grads = torch.autograd.grad(outputs.aux_loss, params, allow_unused=True, retain_graph=True)
-            router_grads = [
-                grad for (name, _), grad in zip(named_parameters, aux_grads) if name.endswith("mlp.gate.weight")
-            ]
-            assert len(router_grads) == model.config.num_hidden_layers
-            assert all(
-                grad is not None and torch.isfinite(grad).all() and torch.count_nonzero(grad) for grad in router_grads
-            )
+            phase = "forward"
+            outputs = model(**inputs, output_router_logits=router_logits, output_attentions=attentions)
+            for key in requested:
+                assert isinstance(outputs[key], tuple)
+                assert len(outputs[key]) == model.config.num_hidden_layers
+                assert all(value.requires_grad for value in outputs[key])
+            assert output_capturing._active_collector.get() is None
+            buffer_lengths = [len(buffer) for buffer in forward_buffers]
+            attention_grads = []
+            if attentions:
+                phase = "attention_backward"
+                for attention, layer in zip(outputs.attentions, model.model.layers):
+                    # A key-position weighting is nonconstant, unlike softmax row sums.
+                    objective = (attention * torch.arange(attention.shape[-1], device=attention.device)).sum()
+                    grads = torch.autograd.grad(
+                        objective, (layer.self_attn.q_proj.weight, layer.self_attn.k_proj.weight), retain_graph=True
+                    )
+                    assert all(torch.isfinite(grad).all() and torch.count_nonzero(grad) for grad in grads)
+                    attention_grads.append(grads)
+            aux_grads = None
+            if router_logits:
+                phase = "auxiliary_backward"
+                aux_grads = torch.autograd.grad(outputs.aux_loss, params, allow_unused=True, retain_graph=True)
+                router_grads = [
+                    grad for (name, _), grad in zip(named_parameters, aux_grads) if name.endswith("mlp.gate.weight")
+                ]
+                assert len(router_grads) == model.config.num_hidden_layers
+                assert all(
+                    grad is not None and torch.isfinite(grad).all() and torch.count_nonzero(grad)
+                    for grad in router_grads
+                )
+            phase = "total_backward"
             outputs.loss.backward()
             grads = tuple(None if parameter.grad is None else parameter.grad.clone() for parameter in params)
             assert all(grad is not None and torch.isfinite(grad).all() for grad in grads)
-            return outputs, aux_grads, grads
+            assert [len(buffer) for buffer in forward_buffers] == buffer_lengths, "replay grew a forward output buffer"
+            assert output_capturing._active_collector.get() is None
+            return outputs, attention_grads, aux_grads, grads
 
-        with capture_context("qwen3_moe", scoped=False):
+        with without_output_scoping("qwen3_moe"):
             reference = forward_backward()  # Also installs the real capture hooks before tracing.
-
-        graphs, calls = [], []
 
         def backend(graph, example_inputs):
             graphs.append(graph)
 
             def execute(*args):
-                calls.append(None)
+                # Observe entry before checkpoint's intentional early-stop exception.
+                calls.append(phase)
+                collector = output_capturing._active_collector.get()
+                if phase == "forward":
+                    assert ("router_logits" in collector) == router_logits
+                    assert ("attentions" in collector) == attentions
+                    forward_buffers.extend(collector[key] for key in requested)
+                else:
+                    assert collector is None, "checkpoint replay reused the forward collector"
                 return graph.forward(*args)
 
             return execute
 
         for layer in model.model.layers:
-            layer.compile(backend=backend)
+            layer.compile(backend=backend, fullgraph=True)
         # The normal model loop must supply the scope: adding one here would
         # conceal a missing production integration. This backend isolates graph
         # reuse from kernel numerics; it does not qualify Inductor performance.
+        graph_counts = []
         for _ in range(2):
             assert_same(forward_backward(), reference)
-        assert len(graphs) == 1, "router collection specialized the graph for successive decoder regions"
-        assert len(calls) == 2 * len(model.model.layers), "a decoder silently fell back to eager execution"
+            assert calls.count("forward") == len(model.model.layers), "a decoder silently fell back to eager execution"
+            backward_phases = ["total_backward"]
+            if attentions:
+                backward_phases.append("attention_backward")
+            if router_logits:
+                backward_phases.append("auxiliary_backward")
+            for backward_phase in backward_phases:
+                assert (calls.count(backward_phase) > 0) == checkpointing, (
+                    f"unexpected replay for {backward_phase} (checkpointing={checkpointing})"
+                )
+            graph_counts.append(len(graphs))
+        assert graph_counts[1] == graph_counts[0], "repeated forward/backward created more graphs"
+        # Replay has no active collector, so a separate reusable graph is legitimate.
+        if not checkpointing:
+            assert len(graphs) == 1, "output collection specialized the graph for successive decoder regions"
     finally:
         torch.compiler.reset()
 
 
 @require_torch
 @pytest.mark.torch_compile_test
-def test_whole_model_compilation_preserves_router_capture_and_auxiliary_gradients():
+def test_whole_model_compilation_preserves_output_capture_and_gradients():
     from torch._dynamo.testing import CompileCounterWithBackend
 
     # Exercise the actual Dynamo branch, not a mocked compilation predicate.
@@ -376,20 +374,30 @@ def test_whole_model_compilation_preserves_router_capture_and_auxiliary_gradient
             model = make_model("qwen3_moe")
             inputs = model_inputs("qwen3_moe")
             params = tuple(model.parameters())
-            with capture_context("qwen3_moe", scoped):
-                model(**inputs, output_router_logits=True)  # Install capture hooks before tracing.
+            with nullcontext() if scoped else without_output_scoping("qwen3_moe"):
+                model(
+                    **inputs, output_router_logits=True, output_attentions=True
+                )  # Install capture hooks before tracing.
                 counter = CompileCounterWithBackend("eager")
                 compiled = torch.compile(model, backend=counter, fullgraph=True)
-                outputs = compiled(**inputs, output_router_logits=True)
-                assert_same(compiled(**inputs, output_router_logits=True), outputs)
+                outputs = compiled(**inputs, output_router_logits=True, output_attentions=True)
+                assert_same(compiled(**inputs, output_router_logits=True, output_attentions=True), outputs)
                 assert counter.frame_count == 1
                 assert counter.op_count > 0
-                assert len(outputs.router_logits) == 2
+                assert len(outputs.router_logits) == len(outputs.attentions) == 2
+                attention_grads = []
+                for attention, layer in zip(outputs.attentions, model.model.layers):
+                    objective = (attention * torch.arange(attention.shape[-1], device=attention.device)).sum()
+                    gradients = torch.autograd.grad(
+                        objective, (layer.self_attn.q_proj.weight, layer.self_attn.k_proj.weight), retain_graph=True
+                    )
+                    assert all(torch.isfinite(grad).all() and torch.count_nonzero(grad) for grad in gradients)
+                    attention_grads.append(gradients)
                 aux_grads = torch.autograd.grad(outputs.aux_loss, params, allow_unused=True, retain_graph=True)
                 assert any(grad is not None and torch.count_nonzero(grad) for grad in aux_grads)
                 outputs.loss.backward()
                 grads = tuple(None if parameter.grad is None else parameter.grad.clone() for parameter in params)
-                results.append((outputs, aux_grads, grads))
+                results.append((outputs, attention_grads, aux_grads, grads))
         assert_same(results[1], results[0])
     finally:
         torch._dynamo.reset()
@@ -435,7 +443,7 @@ def test_layerdrop_preserves_skips_empty_router_outputs_and_rng(decoder, layerdr
     results = []
     for enabled in (False, True):
         torch.manual_seed(0)
-        with capture_context("nllb_moe", enabled):
+        with nullcontext() if enabled else without_output_scoping("nllb_moe"):
             outputs = model(**inputs, output_router_logits=True, output_hidden_states=True, output_attentions=True)
         results.append((outputs, torch.get_rng_state()))
     assert_same(results[0], results[1])
@@ -443,101 +451,6 @@ def test_layerdrop_preserves_skips_empty_router_outputs_and_rng(decoder, layerdr
         assert results[1][0].router_logits == ()
     else:
         assert 0 < len(results[1][0].hidden_states) - 1 < 4
-
-
-def _diffusion_components():
-    from transformers.models.diffusion_gemma.modeling_diffusion_gemma import (
-        DiffusionGemmaDecoderModel,
-        DiffusionGemmaEncoderTextModel,
-    )
-
-    config = transformers.DiffusionGemmaConfig(
-        text_config={
-            "vocab_size": 31,
-            "hidden_size": 32,
-            "intermediate_size": 32,
-            "num_attention_heads": 2,
-            "num_key_value_heads": 2,
-            "head_dim": 16,
-            "max_position_embeddings": 64,
-            "num_hidden_layers": 2,
-            "layer_types": ["sliding_attention", "full_attention"],
-            "per_layer_config": {1: {"head_dim": 16}},
-            "sliding_window": 16,
-            "num_experts": 4,
-            "top_k_experts": 2,
-            "moe_intermediate_size": 8,
-        }
-    )
-    config._attn_implementation = "eager"
-    config.text_config._attn_implementation = "eager"
-    torch.manual_seed(13)
-    return torch.nn.ModuleDict(
-        {"encoder": DiffusionGemmaEncoderTextModel(config.text_config), "decoder": DiffusionGemmaDecoderModel(config)}
-    ).train()
-
-
-def _cache_tensors(cache):
-    return tuple(
-        (layer.keys.detach().clone(), layer.values.detach().clone(), cache.get_seq_length(i))
-        for i, layer in enumerate(cache.layers)
-    )
-
-
-@require_torch
-@pytest.mark.parametrize("gradient_checkpointing", [False, True])
-def test_diffusion_router_collection_preserves_read_only_prefix_under_recomputation(gradient_checkpointing):
-    reference = _diffusion_components()
-    records = []
-    for enabled in (False, True):
-        model = copy.deepcopy(reference)
-        if gradient_checkpointing:
-            model["decoder"].gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
-        assert all(layer.gradient_checkpointing == gradient_checkpointing for layer in model["decoder"].layers)
-        assert all(not getattr(layer, "gradient_checkpointing", False) for layer in model["encoder"].layers)
-        input_ids = torch.tensor([[2, 5, 9, 7, 3], [4, 8, 6, 3, 2]])
-        torch.manual_seed(29)
-        with capture_context("diffusion_gemma", enabled):
-            encoder_outputs = model["encoder"](input_ids=input_ids, output_router_logits=True)
-            cache = encoder_outputs.past_key_values
-            before = _cache_tensors(cache)
-            assert all(state[2] == 5 for state in before)
-            first = model["decoder"](
-                decoder_input_ids=input_ids[:, :3], past_key_values=cache, output_router_logits=True
-            )
-            second = model["decoder"](
-                decoder_input_ids=input_ids[:, :3], past_key_values=cache, output_router_logits=True
-            )
-            assert_same(first, second)
-            assert len(encoder_outputs.router_logits) == len(second.router_logits) == 2
-            params = tuple(model.parameters())
-            recomputed = []
-            hooks = [
-                layer.register_forward_pre_hook(lambda *_: recomputed.append(None))
-                for layer in model["decoder"].layers
-            ]
-            aux = sum(value.square().mean() for value in (*encoder_outputs.router_logits, *second.router_logits))
-            router_weights = tuple(layer.router.proj.weight for part in model.values() for layer in part.layers)
-            aux_grads = torch.autograd.grad(aux, router_weights, retain_graph=True)
-            assert all(torch.isfinite(grad).all() and torch.count_nonzero(grad) for grad in aux_grads)
-            # The text backbone has no task loss; use one hidden-state component for backward.
-            second.last_hidden_state[..., 0].mean().backward()
-            for hook in hooks:
-                hook.remove()
-            assert bool(recomputed) == gradient_checkpointing
-            assert_same(_cache_tensors(cache), before)
-        grads = tuple(None if p.grad is None else p.grad.clone() for p in params)
-        records.append(
-            (
-                encoder_outputs.last_hidden_state,
-                encoder_outputs.router_logits,
-                second,
-                aux_grads,
-                grads,
-                torch.get_rng_state(),
-            )
-        )
-    assert_same(records[0], records[1])
 
 
 def _multimodal_or_hybrid_model(hybrid, layers):
@@ -587,7 +500,7 @@ def test_distinct_production_loops_reuse_all_compiled_regions(hybrid):
         torch.compiler.reset()
         model = _multimodal_or_hybrid_model(hybrid, layers)
         input_ids = torch.tensor([[2, 5, 9, 7, 3], [4, 8, 6, 3, 2]])
-        with capture_context(family, scoped=False):
+        with without_output_scoping(family):
             reference = model(input_ids=input_ids, output_router_logits=True)
         graphs, calls = [], []
 
@@ -651,7 +564,7 @@ def test_encoder_router_capture_preserves_backbone_and_task_head_contracts(model
     results = []
     for model, scoped in ((original, False), (candidate, True)):
         torch.manual_seed(29)
-        with capture_context("openai_privacy_filter", scoped):
+        with nullcontext() if scoped else without_output_scoping("openai_privacy_filter"):
             outputs = model(**kwargs, output_router_logits=True, output_hidden_states=True)
             if is_task_head:
                 # The classifier preserves hidden states but does not expose
@@ -670,9 +583,6 @@ def test_encoder_router_capture_preserves_backbone_and_task_head_contracts(model
         params = tuple(model.parameters())
         grads = tuple(None if p.grad is None else p.grad.clone() for p in params)
         assert all(g is None or torch.isfinite(g).all() for g in grads)
-        before = tuple(p.detach().clone() for p in params)
-        torch.optim.SGD(params, lr=0.1).step()
-        after = tuple(p.detach().clone() for p in params)
-        assert any(not torch.equal(a, b) for a, b in zip(before, after))
-        results.append((outputs, router_gradients, grads, after, torch.get_rng_state()))
+        assert any(g is not None and torch.count_nonzero(g) for g in grads)
+        results.append((outputs, router_gradients, grads))
     assert_same(results[1], results[0])

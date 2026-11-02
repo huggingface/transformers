@@ -24,7 +24,7 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection
+from ...utils.output_capturing import OutputRecorder, _fresh_output_collection
 from ..gemma.modeling_gemma import GemmaMLP
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -224,7 +224,7 @@ class OlmoeModel(MixtralModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            with _scope_router_output_collection():
+            with _fresh_output_collection():
                 hidden_states = decoder_layer(
                     hidden_states,
                     position_embeddings=position_embeddings,

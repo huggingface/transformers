@@ -42,7 +42,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection, capture_outputs
+from ...utils.output_capturing import OutputRecorder, _fresh_output_collection, capture_outputs
 from .configuration_mistral4 import Mistral4Config
 
 
@@ -637,7 +637,7 @@ class Mistral4Model(Mistral4PreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            with _scope_router_output_collection():
+            with _fresh_output_collection():
                 hidden_states = decoder_layer(
                     hidden_states,
                     position_embeddings=position_embeddings,

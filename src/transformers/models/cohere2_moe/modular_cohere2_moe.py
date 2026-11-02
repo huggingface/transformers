@@ -27,7 +27,7 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
-from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection
+from ...utils.output_capturing import OutputRecorder, _fresh_output_collection
 from ..cohere2.modeling_cohere2 import (
     Cohere2Attention,
     Cohere2DecoderLayer,
@@ -261,7 +261,7 @@ class Cohere2MoeModel(Cohere2Model):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for i, decoder_layer in enumerate(self.layers):
-            with _scope_router_output_collection():
+            with _fresh_output_collection():
                 hidden_states = decoder_layer(
                     hidden_states,
                     attention_mask=causal_mask_mapping[self.config.layer_types[i]],

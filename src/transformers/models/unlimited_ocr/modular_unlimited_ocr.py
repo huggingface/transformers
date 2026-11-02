@@ -54,7 +54,7 @@ from ...utils import (
     torch_int,
 )
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import _scope_router_output_collection, capture_outputs
+from ...utils.output_capturing import _fresh_output_collection, capture_outputs
 from ..clip.configuration_clip import CLIPVisionConfig
 from ..clip.modeling_clip import CLIPAttention, CLIPEncoderLayer, CLIPVisionEmbeddings, CLIPVisionModel
 from ..deepseek_ocr2.configuration_deepseek_ocr2 import (
@@ -1109,7 +1109,7 @@ class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            with _scope_router_output_collection():
+            with _fresh_output_collection():
                 hidden_states = decoder_layer(
                     hidden_states,
                     attention_mask=causal_mask_mapping[self.config.layer_types[layer_idx]],

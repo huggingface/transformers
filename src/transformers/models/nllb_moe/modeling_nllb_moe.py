@@ -39,7 +39,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection, capture_outputs
+from ...utils.output_capturing import OutputRecorder, _fresh_output_collection, capture_outputs
 from .configuration_nllb_moe import NllbMoeConfig
 
 
@@ -735,7 +735,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 continue
             else:
-                with _scope_router_output_collection():
+                with _fresh_output_collection():
                     hidden_states = encoder_layer(hidden_states, attention_mask, **kwargs)
 
         last_hidden_state = self.layer_norm(hidden_states)
@@ -840,7 +840,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
             dropout_probability = torch.rand([])
             skip_the_layer = self.training and dropout_probability < self.layerdrop
             if not skip_the_layer or synced_gpus:
-                with _scope_router_output_collection():
+                with _fresh_output_collection():
                     hidden_states = decoder_layer(
                         hidden_states,
                         attention_mask,

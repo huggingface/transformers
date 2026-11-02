@@ -32,7 +32,7 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection
+from ...utils.output_capturing import OutputRecorder, _fresh_output_collection
 from ..mistral.modeling_mistral import (
     MistralAttention,
     MistralForCausalLM,
@@ -302,7 +302,7 @@ class MixtralModel(MistralModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            with _scope_router_output_collection():
+            with _fresh_output_collection():
                 hidden_states = decoder_layer(
                     hidden_states,
                     attention_mask=causal_mask,

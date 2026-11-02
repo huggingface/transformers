@@ -32,7 +32,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection, capture_outputs
+from ...utils.output_capturing import OutputRecorder, _fresh_output_collection, capture_outputs
 from ..falcon_mamba.modeling_falcon_mamba import FalconMambaMixer
 from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm, eager_attention_forward
 from ..mamba.modeling_mamba import (
@@ -506,7 +506,7 @@ class JambaModel(JambaPreTrainedModel):
             }
         hidden_states = inputs_embeds
         for i, decoder_layer in enumerate(self.layers):
-            with _scope_router_output_collection():
+            with _fresh_output_collection():
                 hidden_states = decoder_layer(
                     hidden_states,
                     attention_mask=causal_mask_mapping[self.config.layer_types[i]],

@@ -32,7 +32,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ...utils.generic import TransformersKwargs, no_inherit_decorator
-from ...utils.output_capturing import _scope_router_output_collection
+from ...utils.output_capturing import _fresh_output_collection
 from ..afmoe.modeling_afmoe import AfmoeAttention
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
@@ -421,7 +421,7 @@ class LagunaModel(LlamaModel):
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            with _scope_router_output_collection():
+            with _fresh_output_collection():
                 hidden_states = decoder_layer(
                     hidden_states,
                     attention_mask=causal_mask_mapping[self.config.layer_types[i]],

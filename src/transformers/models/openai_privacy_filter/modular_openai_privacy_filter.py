@@ -29,7 +29,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection, capture_outputs
+from ...utils.output_capturing import OutputRecorder, _fresh_output_collection, capture_outputs
 from ..gpt_oss.configuration_gpt_oss import GptOssConfig
 from ..gpt_oss.modeling_gpt_oss import (
     GptOssAttention,
@@ -387,7 +387,7 @@ class OpenAIPrivacyFilterModel(GptOssModel):
         )
 
         for encoder_layer in self.layers:
-            with _scope_router_output_collection():
+            with _fresh_output_collection():
                 hidden_states = encoder_layer(
                     hidden_states,
                     position_embeddings=position_embeddings,

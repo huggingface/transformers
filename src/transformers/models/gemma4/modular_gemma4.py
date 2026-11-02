@@ -49,7 +49,7 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
-from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection, capture_outputs
+from ...utils.output_capturing import OutputRecorder, _fresh_output_collection, capture_outputs
 from ..auto.modeling_auto import AutoModel
 from ..gemma3.modeling_gemma3 import (
     Gemma3Attention,
@@ -1509,7 +1509,7 @@ class Gemma4TextModel(Gemma3TextModel):
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             per_layer_input = per_layer_inputs[:, :, i, :] if per_layer_inputs is not None else None
 
-            with _scope_router_output_collection():
+            with _fresh_output_collection():
                 hidden_states = decoder_layer(
                     hidden_states,
                     per_layer_input,

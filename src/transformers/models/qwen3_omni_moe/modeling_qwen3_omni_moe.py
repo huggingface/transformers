@@ -55,7 +55,7 @@ from ...utils.generic import (
     is_flash_attention_requested,
     merge_with_config_defaults,
 )
-from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection, capture_outputs
+from ...utils.output_capturing import OutputRecorder, _fresh_output_collection, capture_outputs
 from ...vision_utils import (
     get_vision_attention_seqlens,
     get_vision_interpolation_indices_and_weights,
@@ -1703,7 +1703,7 @@ class Qwen3OmniMoeThinkerTextModel(Qwen3OmniMoePreTrainedModel):
 
         # decoder layers
         for layer_idx, decoder_layer in enumerate(self.layers):
-            with _scope_router_output_collection():
+            with _fresh_output_collection():
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
@@ -3049,7 +3049,7 @@ class Qwen3OmniMoeTalkerModel(Qwen3OmniMoePreTrainedModel):
 
         # decoder layers
         for layer_idx, decoder_layer in enumerate(self.layers):
-            with _scope_router_output_collection():
+            with _fresh_output_collection():
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,

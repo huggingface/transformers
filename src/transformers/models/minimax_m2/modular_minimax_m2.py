@@ -28,7 +28,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
-from ...utils.output_capturing import _scope_router_output_collection, capture_outputs
+from ...utils.output_capturing import _fresh_output_collection, capture_outputs
 from ..flex_olmo.modeling_flex_olmo import FlexOlmoAttention
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeRotaryEmbedding,
@@ -230,7 +230,7 @@ class MiniMaxM2Model(MixtralModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            with _scope_router_output_collection():
+            with _fresh_output_collection():
                 hidden_states = decoder_layer(
                     hidden_states,
                     attention_mask=causal_mask,

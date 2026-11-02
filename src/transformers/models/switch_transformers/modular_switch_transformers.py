@@ -42,7 +42,7 @@ from ...utils.generic import (
     can_return_tuple,
     merge_with_config_defaults,
 )
-from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection, capture_outputs
+from ...utils.output_capturing import OutputRecorder, _fresh_output_collection, capture_outputs
 from ..t5.modeling_t5 import T5Attention, T5DenseActDense, T5LayerCrossAttention, T5LayerNorm, T5LayerSelfAttention
 from .configuration_switch_transformers import SwitchTransformersConfig
 
@@ -521,7 +521,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         hidden_states = self.dropout(inputs_embeds)
 
         for layer_module in self.block:
-            with _scope_router_output_collection():
+            with _fresh_output_collection():
                 hidden_states, self_attention_position_bias, cross_attention_position_bias = layer_module(
                     hidden_states,
                     causal_mask,

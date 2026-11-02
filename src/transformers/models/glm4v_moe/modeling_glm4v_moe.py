@@ -52,7 +52,7 @@ from ...utils.generic import (
     is_flash_attention_requested,
     merge_with_config_defaults,
 )
-from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection, capture_outputs
+from ...utils.output_capturing import OutputRecorder, _fresh_output_collection, capture_outputs
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from .configuration_glm4v_moe import Glm4vMoeConfig, Glm4vMoeTextConfig, Glm4vMoeVisionConfig
 
@@ -1016,7 +1016,7 @@ class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            with _scope_router_output_collection():
+            with _fresh_output_collection():
                 layer_outputs = decoder_layer(
                     hidden_states,
                     position_embeddings=position_embeddings,

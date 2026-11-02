@@ -49,7 +49,7 @@ from ...models.qwen3_next.modeling_qwen3_next import (
 )
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection
+from ...utils.output_capturing import OutputRecorder, _fresh_output_collection
 
 
 @auto_docstring(checkpoint="moonshotai/Kimi-Linear-48B-A3B-Instruct")
@@ -379,7 +379,7 @@ class KimiLinearModel(Qwen3NextModel):
         hidden_states = inputs_embeds
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            with _scope_router_output_collection():
+            with _fresh_output_collection():
                 hidden_states = decoder_layer(
                     hidden_states,
                     attention_mask=causal_mask_mapping[self.config.layer_types[i]],

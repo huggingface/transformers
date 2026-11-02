@@ -37,7 +37,7 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.output_capturing import _scope_router_output_collection
+from ...utils.output_capturing import _fresh_output_collection
 from ..axk1.modeling_axk1 import AXK1Attention
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
@@ -411,7 +411,7 @@ class DeepseekV32Model(DeepseekV3Model):
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            with _scope_router_output_collection():
+            with _fresh_output_collection():
                 hidden_states = decoder_layer(
                     hidden_states,
                     attention_mask=causal_mask_mapping["indexed_attention"],

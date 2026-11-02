@@ -60,10 +60,10 @@ class OutputRecorder:
 
 class CompileableContextVar:
     """
-    Convenience wrapper around a ContextVar for usage with `torch.compile`.
-    This behaves exactly as a `ContextVar`, except when compilation is triggered in which case it behaves as a simple
-    global variable. This is useful as `torch.compile` cannot trace the `get` method of `ContextVar`. This however means
-    that the access to the underlying variable is not thread-safe when compilation is triggered.
+    Compatibility wrapper around a ContextVar for use with `torch.compile`.
+
+    Uses context-local state outside tracing and a shared value when set during tracing. The shared fallback avoids
+    ContextVar mutation during tracing, but does not provide thread/context isolation.
     """
 
     def __init__(self, name):
@@ -94,11 +94,11 @@ class CompileableContextVar:
             self.context_var.reset(token)
 
     @contextmanager
-    def eager_scope(self, value):
-        """
-        Temporarily bind a value in the current Python context without changing compilation state.
+    def temporary_value(self, value):
+        """Temporarily use `value` in this Python context, restoring the previous binding on exit.
 
-        Call only outside tracing, while this wrapper is using its ContextVar.
+        Enter outside tracing, while `get()` reads `context_var`.
+        This leaves `global_var` and `compiling` unchanged.
         """
         token = self.context_var.set(value)
         try:
@@ -107,37 +107,43 @@ class CompileableContextVar:
             self.context_var.reset(token)
 
 
-# Thread/context-safe global variable
+# Context-local outside tracing; the compilation fallback uses shared state.
 _active_collector = CompileableContextVar("output_collector")
 
 
 @contextmanager
-def _scope_router_output_collection():
+def _fresh_output_collection():
     """
-    Collect router outputs in a fresh list for each region.
+    Collect requested router and attention outputs in fresh lists for each region.
 
-    Enter from eager code around the call to a compiled region. A fresh list prevents Dynamo from specializing on
-    the number of router outputs collected by earlier regions. Merge the outputs into the enclosing collector on
-    exit, including when the region raises. Other buffers remain shared to preserve hidden-state layer indices.
-    During whole-model compilation, use the existing collector unchanged.
+    Enter from eager code around the call to a compiled region. Fresh lists prevent Dynamo from specializing on
+    the number of outputs collected by earlier regions. Merge them into the enclosing collector on exit, including
+    when the region raises. Hidden-state buffers remain shared because their length encodes layer indices.
+    Native ContextVar support (#46370) does not remove guards on a growing list.
+    Whole-model tracing captures the enclosing loop and list growth together, so leave its collector unchanged.
     """
     if is_torchdynamo_compiling() or _active_collector.compiling:
         yield
         return
 
     collector = _active_collector.get()
-    if collector is None or "router_logits" not in collector:
+    if collector is None:
+        yield
+        return
+    keys = tuple(key for key in ("router_logits", "attentions") if key in collector)
+    if not keys:
         yield
         return
 
-    local_router_logits = []
     local_collector = dict(collector)
-    local_collector["router_logits"] = local_router_logits
+    for key in keys:
+        local_collector[key] = []
     try:
-        with _active_collector.eager_scope(local_collector):
+        with _active_collector.temporary_value(local_collector):
             yield
     finally:
-        collector["router_logits"].extend(local_router_logits)
+        for key in keys:
+            collector[key].extend(local_collector[key])
 
 
 def install_output_capuring_hook(

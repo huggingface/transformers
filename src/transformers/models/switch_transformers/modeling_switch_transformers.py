@@ -42,7 +42,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection, capture_outputs
+from ...utils.output_capturing import OutputRecorder, _fresh_output_collection, capture_outputs
 from .configuration_switch_transformers import SwitchTransformersConfig
 
 
@@ -773,7 +773,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         hidden_states = self.dropout(inputs_embeds)
 
         for layer_module in self.block:
-            with _scope_router_output_collection():
+            with _fresh_output_collection():
                 hidden_states, self_attention_position_bias, cross_attention_position_bias = layer_module(
                     hidden_states,
                     causal_mask,

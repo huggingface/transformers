@@ -36,7 +36,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import AttentionInterface, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torch_flex_attn_available, logging
-from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection
+from ...utils.output_capturing import OutputRecorder, _fresh_output_collection
 from ..llama.modeling_llama import (
     LlamaForSequenceClassification,
     LlamaMLP,
@@ -492,7 +492,7 @@ class DogeModel(MixtralModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            with _scope_router_output_collection():
+            with _fresh_output_collection():
                 hidden_states = decoder_layer(
                     hidden_states,
                     attention_mask=causal_mask,

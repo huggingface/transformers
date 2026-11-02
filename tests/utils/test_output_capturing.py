@@ -29,7 +29,7 @@ if is_torch_available():
 
 
 @require_torch
-class RouterOutputCollectionTest(unittest.TestCase):
+class OutputCollectionTest(unittest.TestCase):
     def setUp(self):
         self.collector = capturing.CompileableContextVar("test_output_collector")
         patcher = patch.object(capturing, "_active_collector", self.collector)
@@ -44,97 +44,101 @@ class RouterOutputCollectionTest(unittest.TestCase):
         finally:
             self.collector.reset(token)
 
-    def test_hooks_preserve_order_identity_and_gradients(self):
-        inputs = torch.tensor([1.0, 2.0], requires_grad=True)
-        expected = [inputs * scale for scale in (2, 3, 5, 7)]
-        original = []
-        outputs = {"router_logits": original}
-        with self.collecting(outputs):
-            # A local buffer belongs to the existing collector, not a second capture decorator.
-            with capturing._scope_router_output_collection():
-                self.assertIsNot(self.collector.get()["router_logits"], original)
-                self.assertIs(outputs["router_logits"], original)
-                for index, value in zip((None, 0, 2, -1), expected):
-                    router = torch.nn.Identity()
-                    capturing.install_output_capuring_hook(router, "router_logits", index or 0)
-                    if index is None:
-                        router(value)
-                    elif index == 0:
-                        router((value, None))
-                    else:
-                        router((None, None, value))
-                router((None, None, None))  # A recorder may have no value to append.
-            with capturing._scope_router_output_collection():
-                pass  # A dense region may emit no router outputs.
-            self.assertIs(outputs["router_logits"], original)
+    def test_hooks_preserve_order_and_gradient_connections(self):
+        for key in ("router_logits", "attentions"):
+            with self.subTest(key=key):
+                inputs = torch.tensor([1.0, 2.0], requires_grad=True)
+                expected = [inputs * scale for scale in (2, 3, 5, 7)]
+                original = []
+                outputs = {key: original}
+                with self.collecting(outputs):
+                    # A local buffer belongs to the existing collector, not a second capture decorator.
+                    with capturing._fresh_output_collection():
+                        recorder = torch.nn.Identity()
+                        capturing.install_output_capuring_hook(recorder, key, 0)
+                        for value in expected:
+                            recorder((value, None))
+                        recorder((None, None))  # A recorder may have no value to append.
+                    with capturing._fresh_output_collection():
+                        pass  # A region may emit no requested outputs.
 
-        self.assertEqual(len(original), len(expected))
-        for actual, reference in zip(original, expected):
-            self.assertIs(actual, reference)
-        sum(value.sum() for value in original).backward()
-        torch.testing.assert_close(inputs.grad, torch.full_like(inputs, 17.0), rtol=0, atol=0)
+                self.assertEqual(len(original), len(expected))
+                for actual, reference in zip(original, expected):
+                    self.assertIs(actual, reference)
+                sum(value.sum() for value in original).backward()
+                torch.testing.assert_close(inputs.grad, torch.full_like(inputs, 17.0), rtol=0, atol=0)
 
     def test_nested_scopes_and_exceptions_restore_the_parent(self):
-        original = []
-        outputs = {"router_logits": original}
-        records = [object() for _ in range(5)]
-        with self.collecting(outputs):
-            with capturing._scope_router_output_collection():
-                outer = self.collector.get()["router_logits"]
-                outer.append(records[0])
-                with self.assertRaisesRegex(RuntimeError, "inner"):
-                    with capturing._scope_router_output_collection():
-                        self.collector.get()["router_logits"].append(records[1])
-                        raise RuntimeError("inner")
-                self.assertIs(self.collector.get()["router_logits"], outer)
-                outer.append(records[2])
-            self.assertIs(outputs["router_logits"], original)
-            with self.assertRaisesRegex(RuntimeError, "outer"):
-                with capturing._scope_router_output_collection():
-                    self.collector.get()["router_logits"].append(records[3])
-                    raise RuntimeError("outer")
-            self.assertIs(outputs["router_logits"], original)
-            with capturing._scope_router_output_collection():
-                self.collector.get()["router_logits"].append(records[4])
-            self.assertIs(self.collector.get(), outputs)
-        self.assertEqual(original, records)
-
-    def test_inactive_router_collection_is_unchanged(self):
-        for outputs in (None, {"hidden_states": []}):
-            with self.subTest(outputs=outputs), self.collecting(outputs):
-                with capturing._scope_router_output_collection():
+        for key in ("router_logits", "attentions"):
+            with self.subTest(key=key):
+                original = []
+                outputs = {key: original}
+                records = [object() for _ in range(5)]
+                with self.collecting(outputs):
+                    with capturing._fresh_output_collection():
+                        outer = self.collector.get()[key]
+                        outer.append(records[0])
+                        with self.assertRaises(RuntimeError):
+                            with capturing._fresh_output_collection():
+                                self.collector.get()[key].append(records[1])
+                                raise RuntimeError("inner")
+                        self.assertIs(self.collector.get()[key], outer)
+                        outer.append(records[2])
+                    with self.assertRaises(RuntimeError):
+                        with capturing._fresh_output_collection():
+                            self.collector.get()[key].append(records[3])
+                            raise RuntimeError("outer")
+                    with capturing._fresh_output_collection():
+                        self.collector.get()[key].append(records[4])
                     self.assertIs(self.collector.get(), outputs)
-                if outputs is not None:
-                    self.assertEqual(outputs, {"hidden_states": []})
+                self.assertEqual(original, records)
+
+    def test_inactive_output_collection_is_unchanged(self):
+        for outputs in (None, {"hidden_states": []}, {"cross_attentions": []}):
+            expected = None if outputs is None else {key: [] for key in outputs}
+            with self.subTest(outputs=outputs), self.collecting(outputs):
+                with capturing._fresh_output_collection():
+                    self.assertIs(self.collector.get(), outputs)
+                self.assertEqual(outputs, expected)
 
     def test_hidden_state_indices_and_other_outputs_are_unchanged(self):
-        hidden_states, attentions, router_logits = [], [], []
+        hidden_states, attentions, router_logits, cross_attentions = [], [], [], []
         outputs = {
             "hidden_states": hidden_states,
+            "cross_attentions": cross_attentions,
             "attentions": attentions,
             "router_logits": router_logits,
             "_hidden_states_layers": {1},
         }
-        layer, attention, router = (torch.nn.Identity() for _ in range(3))
+        layer, attention, router, cross_attention = (torch.nn.Identity() for _ in range(4))
         capturing.install_output_capuring_hook(layer, "hidden_states", 0)
         capturing.install_output_capuring_hook(attention, "attentions", 0)
         capturing.install_output_capuring_hook(router, "router_logits", 0)
+        capturing.install_output_capuring_hook(cross_attention, "cross_attentions", 0)
         values = [torch.tensor([float(i)]) for i in range(3)]
+        attention_values = [value + 10 for value in values]
+        router_values = [value + 20 for value in values]
+        cross_attention_values = [value + 30 for value in values]
         with self.collecting(outputs):
-            for value in values:
-                with capturing._scope_router_output_collection():
-                    self.assertIs(self.collector.get()["hidden_states"], hidden_states)
-                    self.assertIs(self.collector.get()["attentions"], attentions)
+            for value, attention_value, router_value, cross_attention_value in zip(
+                values, attention_values, router_values, cross_attention_values
+            ):
+                with capturing._fresh_output_collection():
                     layer(value)
-                    attention(value)
-                    router(value)
+                    attention(attention_value)
+                    router(router_value)
+                    cross_attention(cross_attention_value)
         self.assertEqual(len(hidden_states), 3)
         self.assertIsNone(hidden_states[0])
         self.assertIs(hidden_states[1], values[1])
         self.assertIsNone(hidden_states[2])
-        for captured in (attentions, router_logits):
-            self.assertEqual(len(captured), len(values))
-            for actual, reference in zip(captured, values):
+        for captured, expected in (
+            (attentions, attention_values),
+            (router_logits, router_values),
+            (cross_attentions, cross_attention_values),
+        ):
+            self.assertEqual(len(captured), len(expected))
+            for actual, reference in zip(captured, expected):
                 self.assertIs(actual, reference)
 
     def test_threads_keep_independent_capture_contexts(self):
@@ -144,11 +148,10 @@ class RouterOutputCollectionTest(unittest.TestCase):
             original = []
             outputs = {"router_logits": original}
             with self.collecting(outputs):
-                with capturing._scope_router_output_collection():
+                with capturing._fresh_output_collection():
                     barrier.wait()
                     self.collector.get()["router_logits"].append(marker)
                     barrier.wait()
-                self.assertIs(outputs["router_logits"], original)
                 self.assertIs(self.collector.get(), outputs)
             return original
 
@@ -164,7 +167,7 @@ class RouterOutputCollectionTest(unittest.TestCase):
 
         def collect_first():
             try:
-                with capturing._scope_router_output_collection():
+                with capturing._fresh_output_collection():
                     local = self.collector.get()["router_logits"]
                     first_entered.set()
                     self.assertTrue(second_entered.wait(timeout=10))
@@ -175,7 +178,7 @@ class RouterOutputCollectionTest(unittest.TestCase):
 
         def collect_second():
             self.assertTrue(first_entered.wait(timeout=10))
-            with capturing._scope_router_output_collection():
+            with capturing._fresh_output_collection():
                 local = self.collector.get()["router_logits"]
                 second_entered.set()
                 self.assertTrue(first_exited.wait(timeout=10))

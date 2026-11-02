@@ -45,7 +45,7 @@ from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_comp
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import is_torchdynamo_compiling
-from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection, capture_outputs
+from ...utils.output_capturing import OutputRecorder, _fresh_output_collection, capture_outputs
 from ...vision_utils import get_vision_position_ids
 from .configuration_minimax_m3_vl import MiniMaxM3VLConfig, MiniMaxM3VLTextConfig, MiniMaxM3VLVisionConfig
 
@@ -763,7 +763,7 @@ class MiniMaxM3VLTextModel(MiniMaxM3VLPreTrainedModel):
         # `position_ids` is threaded to every layer so the sparse layers' lightning indexer can anchor
         # block selection to each query's content position (see `MiniMaxM3VLIndexer`).
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            with _scope_router_output_collection():
+            with _fresh_output_collection():
                 hidden_states = decoder_layer(
                     hidden_states,
                     attention_mask=causal_mask,

@@ -14,6 +14,8 @@
 """Testing suite for the PyTorch DiffusionGemma model."""
 
 import unittest
+from contextlib import nullcontext
+from unittest.mock import patch
 
 from parameterized import parameterized
 
@@ -350,6 +352,42 @@ class DiffusionGemmaVisionText2TextModelTest(
         self.assertTrue(any("encoder" in name for name in grads_checkpointed))
         for name in grads_ref:
             torch.testing.assert_close(grads_checkpointed[name], grads_ref[name], rtol=rtol, atol=atol)
+
+    def test_router_collection_preserves_encoder_and_checkpointed_decoder_gradients(self):
+        """The tied production model preserves router outputs and gradients through its cached prefix."""
+        from transformers.models.diffusion_gemma import modeling_diffusion_gemma
+
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        config.text_config.attention_dropout = 0.0
+        model = DiffusionGemmaForBlockDiffusion(config).to(torch_device).train()
+        model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+        encoder, decoder = model.model.encoder.language_model, model.model.decoder
+        router_weights = tuple(layer.router.proj.weight for layer in decoder.layers)
+        records = []
+        reference = patch.object(modeling_diffusion_gemma, "_fresh_output_collection", nullcontext)
+        for capture in (reference, nullcontext()):
+            model.zero_grad(set_to_none=True)
+            with capture:
+                encoded = encoder(input_ids=inputs["input_ids"], output_router_logits=True)
+                decoded = decoder(
+                    decoder_input_ids=inputs["decoder_input_ids"],
+                    past_key_values=encoded.past_key_values,
+                    output_router_logits=True,
+                )
+                for outputs in (encoded, decoded):
+                    self.assertIsInstance(outputs.router_logits, tuple)
+                    self.assertEqual(len(outputs.router_logits), config.text_config.num_hidden_layers)
+                routers = (*encoded.router_logits, *decoded.router_logits)
+                router_loss = sum(scores.square().mean() for scores in routers)
+                router_grads = torch.autograd.grad(router_loss, router_weights, retain_graph=True)
+                self.assertTrue(all(torch.isfinite(g).all() and torch.count_nonzero(g) for g in router_grads))
+                decoded.last_hidden_state[..., 0].mean().backward()
+            grads = {name: p.grad.clone() for name, p in model.named_parameters() if p.grad is not None}
+            self.assertTrue(grads)
+            self.assertTrue(all(torch.isfinite(g).all() for g in grads.values()))
+            self.assertTrue(any(torch.count_nonzero(g) for g in grads.values()))
+            records.append((encoded.last_hidden_state, decoded.last_hidden_state, routers, router_grads, grads))
+        torch.testing.assert_close(records[1], records[0], rtol=0, atol=0)
 
     @unittest.skip(reason="Hard to specify `self.model_split_percents` due to tied weights. Skip for now.")
     def test_model_parallelism(self):
