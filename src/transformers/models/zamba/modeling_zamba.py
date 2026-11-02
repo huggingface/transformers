@@ -553,22 +553,26 @@ class ZambaMambaMixer(nn.Module):
 
         # Key difference: per head scans
         # Recurrent form
-        if recurrent_state is not None and seq_len == 1:
+        if recurrent_state is not None:
             scan_outputs = []
 
             for head_idx in range(self.n_mamba_heads):
-                scan_output = mamba_selective_state_update(
-                    recurrent_state[:, head_idx],
-                    hidden_states_B_C[head_idx, ..., 0],
-                    time_step[head_idx, ..., 0],
-                    A[head_idx],
-                    B[head_idx, :, 0],
-                    C[head_idx, :, 0],
-                    self.D[head_idx],
-                    z=gate[head_idx, ..., 0],
-                    dt_bias=time_proj_bias[head_idx] if time_proj_bias is not None else None,
-                    dt_softplus=True,
-                ).unsqueeze(-1)
+                token_outputs = []
+                for t in range(seq_len):
+                    token_output = mamba_selective_state_update(
+                        recurrent_state[:, head_idx],
+                        hidden_states_B_C[head_idx, ..., t],
+                        time_step[head_idx, ..., t],
+                        A[head_idx],
+                        B[head_idx, :, t],
+                        C[head_idx, :, t],
+                        self.D[head_idx],
+                        z=gate[head_idx, ..., t],
+                        dt_bias=time_proj_bias[head_idx] if time_proj_bias is not None else None,
+                        dt_softplus=True,
+                    )
+                    token_outputs.append(token_output)
+                scan_output = torch.stack(token_outputs, dim=-1)
                 scan_outputs.append(scan_output)
 
             scan_output = torch.cat(scan_outputs, dim=1)
