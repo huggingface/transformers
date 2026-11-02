@@ -1147,7 +1147,7 @@ class WhisperDecoderWrapper(WhisperPreTrainedModel):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: WhisperConfig):
         super().__init__(config)
         config.is_encoder_decoder = False
         self.decoder = WhisperDecoder(config)
@@ -1172,7 +1172,7 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"proj_out.weight": "model.decoder.embed_tokens.weight"}
     main_input_name = "input_ids"
 
-    def __init__(self, config):
+    def __init__(self, config: WhisperConfig):
         super().__init__(config)
         config.is_encoder_decoder = False
         self.model = WhisperDecoderWrapper(config)
@@ -1277,7 +1277,7 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
     """
 )
 class WhisperForAudioClassification(WhisperPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: WhisperConfig):
         super().__init__(config)
 
         self.encoder = WhisperEncoder(config)

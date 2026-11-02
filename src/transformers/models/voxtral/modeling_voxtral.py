@@ -377,7 +377,7 @@ class VoxtralModelOutputWithPast(BaseModelOutputWithPast):
     """
 )
 class VoxtralModel(VoxtralPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: VoxtralConfig):
         super().__init__(config)
         self.audio_tower = AutoModel.from_config(config.audio_config)
         self.language_model = AutoModel.from_config(config.text_config)
@@ -485,7 +485,7 @@ class VoxtralModel(VoxtralPreTrainedModel):
 class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
     _keep_in_fp32_modules_strict = ["embed_positions"]
 
-    def __init__(self, config):
+    def __init__(self, config: VoxtralConfig):
         super().__init__(config)
         self.model = VoxtralModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)

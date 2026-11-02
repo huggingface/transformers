@@ -1929,7 +1929,7 @@ class ReformerModelWithLMHeadOutput(ModelOutput):
 
 @auto_docstring
 class ReformerModel(ReformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ReformerConfig):
         super().__init__(config)
         self.config = config
         assert self.config.num_hidden_layers > 0, (
@@ -2148,7 +2148,7 @@ class ReformerModel(ReformerPreTrainedModel):
     """
 )
 class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
-    def __init__(self, config):
+    def __init__(self, config: ReformerConfig):
         super().__init__(config)
         assert config.is_decoder, "If you want to use `ReformerModelWithLMHead` make sure that `is_decoder=True`."
         assert "local" not in self.config.attn_layers or config.local_num_chunks_after == 0, (
@@ -2285,7 +2285,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class ReformerForMaskedLM(ReformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ReformerConfig):
         super().__init__(config)
         assert not config.is_decoder, (
             "If you want to use `ReformerForMaskedLM` make sure `config.is_decoder=False` for bi-directional"
@@ -2423,7 +2423,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
     """
 )
 class ReformerForSequenceClassification(ReformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ReformerConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -2570,7 +2570,7 @@ class ReformerClassificationHead(nn.Module):
 
 @auto_docstring
 class ReformerForQuestionAnswering(ReformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ReformerConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

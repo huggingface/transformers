@@ -431,7 +431,7 @@ class GPTJPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class GPTJModel(GPTJPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTJConfig):
         super().__init__(config)
 
         self.embed_dim = config.n_embd
@@ -567,7 +567,7 @@ class GPTJModel(GPTJPreTrainedModel):
 class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: GPTJConfig):
         super().__init__(config)
         self.transformer = GPTJModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size)
@@ -653,7 +653,7 @@ class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
     """
 )
 class GPTJForSequenceClassification(GPTJPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTJConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = GPTJModel(config)
@@ -762,7 +762,7 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
 
 @auto_docstring
 class GPTJForQuestionAnswering(GPTJPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTJConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = GPTJModel(config)
