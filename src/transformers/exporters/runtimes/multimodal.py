@@ -87,26 +87,30 @@ class ExportedMultimodalModel(ExportedModel):
         return outputs
 
     def _deepstack_inputs(self, deepstack: list, inputs_embeds: torch.Tensor) -> dict[str, Any]:
-        """What a deepstack decoder adds at the visual positions inside its layers, under the names the language model
-        was traced with, from each modality's `(placeholder mask, per-layer features)`."""
-        if not deepstack:
-            return {}
-        if "deepstack_features" in self.runner.metadata.kwargs:
-            # Granite4-Vision: `{decoder layer: features}` over the image rows.
-            ((mask, layers),) = deepstack
-            return {
-                "vision_mask": mask.unsqueeze(-1),
-                "deepstack_features": {layer: torch.cat(images).to(inputs_embeds) for layer, images in layers.items()},
+        """What a deepstack decoder adds inside its layers, from each modality's `(placeholder mask, per-layer
+        features)`, in the dense form the language model was traced with (`dense_deepstack`): an all-True mask, and
+        each layer's features with zeros at the text rows. A step without images (a decode step) takes zeros."""
+        traced = self.runner.metadata.kwargs
+        rows, hidden_size = inputs_embeds.shape[0] * inputs_embeds.shape[1], inputs_embeds.shape[-1]
+        mask = torch.ones(inputs_embeds.shape[:2], dtype=torch.bool, device=inputs_embeds.device)
+        if "deepstack_visual_embeds" in traced:
+            # Qwen3-VL: one tensor per decoder layer from the first.
+            dense = [inputs_embeds.new_zeros(rows, hidden_size) for _ in traced["deepstack_visual_embeds"]["items"]]
+            for rows_mask, layers in deepstack:
+                for index, features in enumerate(layers):
+                    dense[index][rows_mask.reshape(-1)] = features.to(inputs_embeds)
+            return {"visual_pos_masks": mask, "deepstack_visual_embeds": dense}
+        if "deepstack_features" in traced:
+            # Granite4-Vision: `{decoder layer: features}`, one tensor per image.
+            dense = {
+                int(layer): inputs_embeds.new_zeros(rows, hidden_size)
+                for layer in traced["deepstack_features"]["leaves"]
             }
-        # Qwen3-VL: per decoder layer from the first, one tensor over all visual rows, each modality's in its own.
-        visual_pos_masks = torch.stack([mask for mask, _ in deepstack]).any(0)
-        deepstack_visual_embeds = []
-        for index in range(len(deepstack[0][1])):
-            joint = inputs_embeds.new_zeros(int(visual_pos_masks.sum()), inputs_embeds.shape[-1])
-            for mask, layers in deepstack:
-                joint[mask[visual_pos_masks]] = layers[index].to(joint)
-            deepstack_visual_embeds.append(joint)
-        return {"visual_pos_masks": visual_pos_masks, "deepstack_visual_embeds": deepstack_visual_embeds}
+            for rows_mask, layers in deepstack:
+                for layer, images in layers.items():
+                    dense[layer][rows_mask.reshape(-1)] = torch.cat(images).to(inputs_embeds)
+            return {"vision_mask": mask[..., None], "deepstack_features": dense}
+        return {}
 
     def _features(self, spec: ModalitySpec, runner: ModelRunner, kwargs: dict) -> tuple[torch.Tensor | None, Any]:
         """Run one modality's graph on its own inputs, as its getter was called: features for its placeholder rows,
