@@ -268,25 +268,6 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
-    def test_generate_quality_dequantize(self):
-        r"""
-        Test that loading the model and dequantizing it produce correct results
-        """
-        bnb_config = BitsAndBytesConfig(load_in_8bit=True)
-
-        model_8bit = AutoModelForCausalLM.from_pretrained(
-            self.model_name, quantization_config=bnb_config, device_map="auto"
-        )
-
-        model_8bit.dequantize()
-
-        encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
-        output_sequences = model_8bit.generate(
-            input_ids=encoded_input["input_ids"].to(model_8bit.device), max_new_tokens=10
-        )
-
-        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
-
     def test_device_and_dtype_assignment(self):
         r"""
         Test whether attempting to change the device or cast the dtype of a model

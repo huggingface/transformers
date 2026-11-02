@@ -274,50 +274,6 @@ class Bnb4BitTest(Base4bitTest):
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
-    def test_generate_quality_dequantize(self):
-        r"""
-        Test that loading the model and unquantize it produce correct results
-        """
-        bnb_config = BitsAndBytesConfig(load_in_4bit=True)
-        model_4bit = AutoModelForCausalLM.from_pretrained(
-            self.model_name, quantization_config=bnb_config, device_map="auto"
-        )
-
-        model_4bit.dequantize()
-
-        encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
-        output_sequences = model_4bit.generate(
-            input_ids=encoded_input["input_ids"].to(model_4bit.device), max_new_tokens=10
-        )
-
-        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
-
-    def test_clear_quantization_trace(self):
-        r"""
-        Test that dequantizing the model won't leave any attribute relative to quantization in the model's configuration
-        """
-        bnb_config = BitsAndBytesConfig(load_in_4bit=True)
-        model_4bit = AutoModelForCausalLM.from_pretrained(
-            self.model_name, quantization_config=bnb_config, device_map="auto"
-        )
-        model_4bit.dequantize()
-
-        self.assertFalse(hasattr(model_4bit, "hf_quantizer"))
-        self.assertFalse(hasattr(model_4bit.config, "quantization_config"))
-        self.assertFalse(hasattr(model_4bit, "quantization_method"))
-        self.assertFalse(model_4bit.is_quantized)
-
-    def test_to_device_dequantized(self):
-        r"""
-        Test that dequantizing the model won't prevent converting it to a different dtype
-        """
-        bnb_config = BitsAndBytesConfig(load_in_4bit=True)
-        model_4bit = AutoModelForCausalLM.from_pretrained(
-            self.model_name, quantization_config=bnb_config, device_map="auto"
-        )
-        model_4bit.dequantize()
-        model_4bit.to(dtype=torch.float16)
-
     def test_device_assignment(self):
         mem_before = self.model_4bit.get_memory_footprint()
 
