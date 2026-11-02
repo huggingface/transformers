@@ -127,6 +127,7 @@ class VibeVoiceAsrModelTester:
             "attention_mask": attention_mask,
             "input_values": input_values,
             "padding_mask": padding_mask,
+            "sample": False,
         }
 
         return config, inputs_dict
@@ -165,45 +166,6 @@ class VibeVoiceAsrForConditionalGenerationModelTest(ModelTesterMixin, Generation
     def test_get_audio_features_hidden_states(self):
         pass
 
-    @unittest.skip(
-        reason="The acoustic tokenizer samples VAE noise on every forward (`vae_std * randn`), so two "
-        "`generate` calls see different audio embeddings — measured, the prefill alone differs by up to 0.4."
-    )
-    def test_cached_decode_matches_cacheless(self):
-        pass
-
-    @unittest.skip(reason="VibeVoiceAsr has slight randomness due to VAE sampling.")
-    def test_determinism(self):
-        pass
-
-    @unittest.skip(reason="VibeVoiceAsr has slight randomness due to VAE sampling.")
-    def test_batching_equivalence(self):
-        pass
-
-    @unittest.skip(reason="VibeVoiceAsr has slight randomness due to VAE sampling.")
-    def test_save_load(self):
-        pass
-
-    @unittest.skip(reason="VibeVoiceAsr has slight randomness due to VAE sampling.")
-    def test_generate_continue_from_past_key_values(self):
-        pass
-
-    @unittest.skip(reason="VibeVoiceAsr has slight randomness due to VAE sampling.")
-    def test_model_outputs_equivalence(self):
-        pass
-
-    @unittest.skip(reason="VibeVoiceAsr has slight randomness due to VAE sampling.")
-    def test_left_padding_compatibility(self):
-        pass
-
-    @unittest.skip(reason="VibeVoiceAsr has slight randomness due to VAE sampling.")
-    def test_forward_with_logits_to_keep(self):
-        pass
-
-    @unittest.skip(reason="VibeVoiceAsr has slight randomness due to VAE sampling.")
-    def test_generate_methods_with_logits_to_keep(self):
-        pass
-
     def test_sdpa_can_dispatch_composite_models(self):
         # VibeVoiceAsr is audio+text composite; but audio components do not use attention
         for model_class in self.all_model_classes:
@@ -232,6 +194,15 @@ class VibeVoiceAsrForConditionalGenerationModelTest(ModelTesterMixin, Generation
                     class_name = submodule.__class__.__name__
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
+
+    def test_get_audio_features_sample(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = VibeVoiceAsrForConditionalGeneration(config).to(torch_device).eval()
+        inputs = {k: inputs_dict[k] for k in ("input_values", "padding_mask")}
+
+        mean = model.get_audio_features(**inputs, sample=False).pooler_output
+        torch.testing.assert_close(model.get_audio_features(**inputs, sample=False).pooler_output, mean)
+        self.assertFalse(torch.allclose(model.get_audio_features(**inputs).pooler_output, mean))
 
     @parameterized.expand([True, False, None])
     def test_get_audio_features_output(self, return_dict: bool | None):
