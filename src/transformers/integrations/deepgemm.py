@@ -864,10 +864,9 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
     `(num_tokens, hidden) → (num_tokens, hidden)` MoE forward including the
     weighted top-k reduction; the caller must NOT all-reduce the output.
 
-    `process_group` and `symm_buffers` are supplied by the `deepgemm_megamoe` expert-parallel strategy, which shares the
-    symmetric buffers between every layer of an EP group. The group is required for the symm-buffer rendezvous on
-    first forward. `top_k_index` is GLOBAL expert ids (`-1`
-    marks skipped slots).
+    The `deepgemm_megamoe` expert-parallel implementation passes `process_group` and `symm_buffers`. Every layer of an
+    EP group shares the symmetric buffers, and the group is needed for their rendezvous on the first forward.
+    `top_k_index` holds global expert ids, with `-1` for skipped slots.
 
     Caller-managed `self` attributes:
       - `gate_up_proj`, `gate_up_proj_scale_inv`: L1 weight + UE8M0 SF.
