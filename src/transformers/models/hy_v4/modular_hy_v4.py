@@ -321,20 +321,16 @@ class HYV4Attention(GlmMoeDsaAttention):
                 raise ValueError("Shared DSA layers require top-k indices from a previous full indexer layer.")
             topk_indices = prev_topk_indices
 
-        sparse_indices = None
+        sparse_indices = topk_indices
         if self.config._attn_implementation in ("eager", "sdpa"):
-            index_mask = (
-                topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
-                .scatter(-1, topk_indices.long(), False)
-                .unsqueeze(1)
-            )
-
+            # Eager / SDPA can't consume indices: mask every key the indexer did not select instead
+            unselected = topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
+            unselected = unselected.scatter(-1, topk_indices.long(), False).unsqueeze(1)
             if attention_mask.dtype == torch.bool:
-                attention_mask = attention_mask & ~index_mask
+                attention_mask = attention_mask & ~unselected
             else:
-                attention_mask = attention_mask.masked_fill(index_mask, torch.finfo(hidden_states.dtype).min)
-        else:
-            sparse_indices = topk_indices
+                attention_mask = attention_mask.masked_fill(unselected, torch.finfo(hidden_states.dtype).min)
+            sparse_indices = None
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward

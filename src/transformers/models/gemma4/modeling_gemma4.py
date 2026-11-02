@@ -33,7 +33,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...integrations import use_experts_implementation
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import (
     _preprocess_mask_arguments,
     blockwise_overlay,
@@ -44,7 +44,6 @@ from ...masking_utils import (
     maybe_pad_block_sequence_ids,
     sliding_window_overlay,
 )
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -776,28 +775,6 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, unsqueeze_dim: int = 1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        x (`torch.Tensor`): The tensor to embed.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    return (x * cos) + (rotate_half(x) * sin)
-
-
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -858,9 +835,8 @@ def apply_multidimensional_rope(
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
         position_ids (`torch.Tensor`, *optional*):
-            If position_ids.ndim + 2 == x.ndim, then this function passes through to `apply_rotary_pos_emb()`.
-            Otherwise, position_ids is used to split the inputs, x, into multiple pieces, where each piece is fed to
-            `apply_rotary_pos_emb()`, and then concatenated back together.
+            Used to split the inputs, x, into one piece per position dimension; each piece is rotated with its own
+            slice of `cos`/`sin`, and the pieces are then concatenated back together.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -889,12 +865,8 @@ def apply_multidimensional_rope(
     cos_parts = torch.split(cos, split_sizes, dim=-1)
     sin_parts = torch.split(sin, split_sizes, dim=-1)
     y_parts = [
-        apply_rotary_pos_emb(
-            x=x_parts[k],
-            cos=cos_parts[k],
-            sin=sin_parts[k],
-            unsqueeze_dim=unsqueeze_dim,
-        )
+        (x_parts[k] * cos_parts[k].unsqueeze(unsqueeze_dim))
+        + (rotate_half(x_parts[k]) * sin_parts[k].unsqueeze(unsqueeze_dim))
         for k in range(ndim)
     ]
     return torch.cat(y_parts, dim=-1)
@@ -1060,8 +1032,7 @@ class Gemma4VisionEncoder(nn.Module):
 class Gemma4TextMLP(nn.Module):
     def __init__(self, config: Gemma4TextConfig, layer_idx: int):
         super().__init__()
-        first_kv_shared_layer_idx = config.num_hidden_layers - config.num_kv_shared_layers
-        is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx > 0
+        is_kv_shared_layer = config.attention_layer_types[layer_idx] == "kv_shared"
         use_double_wide_mlp = config.use_double_wide_mlp and is_kv_shared_layer
         self.config = config
         self.hidden_size = config.hidden_size
@@ -1148,100 +1119,239 @@ class Gemma4TextRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
+@use_kernel_forward_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
+@use_kernelized_func(apply_rotary_pos_emb)
 class Gemma4TextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: Gemma4TextConfig, layer_idx: int):
         super().__init__()
+        layer_config = config.per_layer_config[layer_idx]
         self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
-        self.is_sliding = self.layer_type == "sliding_attention"
-        self.sliding_window = config.sliding_window if self.is_sliding else None
-
-        layer_config = config.per_layer_config[layer_idx]
         self.head_dim = layer_config.head_dim
-        self.use_alternative_attention = config.attention_k_eq_v and not self.is_sliding
         self.num_key_value_groups = config.num_attention_heads // layer_config.num_key_value_heads
         self.scaling = 1.0
         self.attention_dropout = self.config.attention_dropout
         self.is_causal = config.use_bidirectional_attention != "all"
 
-        # Shared kv cache
-        first_kv_shared_layer_idx = self.config.num_hidden_layers - getattr(self.config, "num_kv_shared_layers", 0)
-        self.is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx >= 0
-        prev_layers = config.layer_types[:first_kv_shared_layer_idx]
-        self.store_full_length_kv = not self.is_kv_shared_layer and layer_idx == len(prev_layers) - 1 - prev_layers[
-            ::-1
-        ].index(config.layer_types[layer_idx])
-
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
-        self.q_norm = Gemma4RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-
-        # Layers sharing kv states don't need any weight matrices
-        if not self.is_kv_shared_layer:
-            self.k_norm = Gemma4RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-            self.v_norm = Gemma4RMSNorm(self.head_dim, eps=config.rms_norm_eps, with_scale=False)
-
-            self.k_proj = nn.Linear(
-                config.hidden_size, layer_config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-            )
-            self.v_proj = (
-                nn.Linear(
-                    config.hidden_size, layer_config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-                )
-                if not self.use_alternative_attention
-                else None
-            )
-
+        self.k_proj = nn.Linear(
+            config.hidden_size, layer_config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, layer_config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
+        self.is_sliding = self.layer_type == "sliding_attention"
+        self.q_norm = Gemma4RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = Gemma4RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
+        self.v_norm = Gemma4RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor,
         attention_mask: torch.Tensor | None,
-        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]],
         past_key_values: Cache | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        value_states = self.v_norm(self.v_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+
         cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape)
-        query_states = self.q_norm(query_states)
-        query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
-        query_states = query_states.transpose(1, 2)
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        # The last non-shared layer of each type writes last, and is the one the kv-shared layers of that type reuse
+        shared_kv_states[self.layer_type] = key_states, value_states
 
-        # For layers with shared KV (from kv sharing point onwards), we reuse the same keys/values states as the last non-sharing layer.
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=self.attention_dropout if self.training else 0.0,
+            scaling=self.scaling,
+            sliding_window=self.sliding_window,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+@use_kernelized_func(apply_rotary_pos_emb)
+class Gemma4TextKEqVAttention(nn.Module):
+    """Full attention layers with `config.attention_k_eq_v`: the key projection doubles as the value projection."""
+
+    def __init__(self, config: Gemma4TextConfig, layer_idx: int):
+        super().__init__()
+        layer_config = config.per_layer_config[layer_idx]
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.config = config
+        self.layer_idx = layer_idx
+        self.head_dim = layer_config.head_dim
+        self.num_key_value_groups = config.num_attention_heads // layer_config.num_key_value_heads
+        self.scaling = 1.0
+        self.attention_dropout = self.config.attention_dropout
+        self.is_causal = config.use_bidirectional_attention != "all"
+
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, layer_config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
+        self.is_sliding = self.layer_type == "sliding_attention"
+        self.q_norm = Gemma4RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = Gemma4RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
+        self.v_norm = Gemma4RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps, with_scale=False)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None = None,
+        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape)
+        # Keys double as values
+        value_states = self.v_norm(key_states).transpose(1, 2)
+        key_states = self.k_norm(key_states).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        # The last non-shared layer of each type writes last, and is the one the kv-shared layers of that type reuse
+        shared_kv_states[self.layer_type] = key_states, value_states
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=self.attention_dropout if self.training else 0.0,
+            scaling=self.scaling,
+            sliding_window=self.sliding_window,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+@use_kernelized_func(apply_rotary_pos_emb)
+class Gemma4TextKVSharedAttention(nn.Module):
+    """Same as `Gemma3nTextKVSharedAttention`, the only difference is the per-layer `head_dim` / `num_key_value_heads`."""
+
+    def __init__(self, config: Gemma4TextConfig, layer_idx: int):
+        super().__init__()
+        layer_config = config.per_layer_config[layer_idx]
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.config = config
+        self.layer_idx = layer_idx
+        self.head_dim = layer_config.head_dim
+        self.num_key_value_groups = config.num_attention_heads // layer_config.num_key_value_heads
+        self.scaling = 1.0
+        self.attention_dropout = self.config.attention_dropout
+        self.is_causal = config.use_bidirectional_attention != "all"
+
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
+        self.is_sliding = self.layer_type == "sliding_attention"
+        self.q_norm = Gemma4RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None = None,
+        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+
+        # Only the queries are rotated, the kv states come rotated from the last non-shared layer of this type
+        cos, sin = position_embeddings
+        query_states = (query_states * cos.unsqueeze(1)) + (rotate_half(query_states) * sin.unsqueeze(1))
+
         # We cannot simply reuse the cached state if we have a Cache, as sliding layers will not remember the full states in their Cache
         # once we are past the sliding window - so we always use `shared_kv_states` instead, even when past_key_values is not None
-        if self.is_kv_shared_layer:
-            key_states, value_states = shared_kv_states[self.layer_type]
-            # Device of past layer may be different from current one
-            key_states = key_states.to(query_states.device)
-            value_states = value_states.to(query_states.device)
-        else:
-            key_states = self.k_proj(hidden_states).view(hidden_shape)
-            value_states = self.v_proj(hidden_states).view(hidden_shape) if self.v_proj is not None else key_states
-
-            key_states = self.k_norm(key_states)
-            key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
-            key_states = key_states.transpose(1, 2)
-
-            value_states = self.v_norm(value_states)
-            value_states = value_states.transpose(1, 2)
-
-        if past_key_values is not None and not self.is_kv_shared_layer:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-        if self.store_full_length_kv:
-            shared_kv_states[self.layer_type] = key_states, value_states
+        key_states, value_states = shared_kv_states[self.layer_type]
+        # Device of past layer may be different from current one
+        key_states = key_states.to(query_states.device)
+        value_states = value_states.to(query_states.device)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -1341,13 +1451,20 @@ class Gemma4TextRouter(nn.Module):
         return router_probabilities, top_k_weights, top_k_index
 
 
+GEMMA4_TEXT_ATTENTION_CLASSES = {  # trf-ignore: TRF052
+    "attention": Gemma4TextAttention,
+    "k_eq_v_attention": Gemma4TextKEqVAttention,
+    "kv_shared": Gemma4TextKVSharedAttention,
+}
+
+
 class Gemma4TextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Gemma4TextConfig | Gemma4VisionConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
-        self.self_attn = Gemma4TextAttention(config=config, layer_idx=layer_idx)
+        self.self_attn = GEMMA4_TEXT_ATTENTION_CLASSES[config.attention_layer_types[layer_idx]](config, layer_idx)
         self.mlp = Gemma4TextMLP(config, layer_idx)
         self.input_layernorm = Gemma4RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Gemma4RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
@@ -1552,7 +1669,11 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
     _can_record_outputs = {
         "router_logits": OutputRecorder(Gemma4TextRouter, index=0),
         "hidden_states": Gemma4TextDecoderLayer,
-        "attentions": Gemma4TextAttention,
+        "attentions": [
+            Gemma4TextAttention,
+            Gemma4TextKEqVAttention,
+            Gemma4TextKVSharedAttention,
+        ],
     }
 
     def __init__(self, config: Gemma4TextConfig):
@@ -1594,8 +1715,8 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
 
         # Update `_keys_to_ignore_on_load_unexpected` to drop all k/v proj and norms for the shared layers
         self._keys_to_ignore_on_load_unexpected = []
-        for i, layer in enumerate(self.layers):
-            if layer.self_attn.is_kv_shared_layer:
+        for i, attention_type in enumerate(config.attention_layer_types):
+            if attention_type == "kv_shared":
                 self._keys_to_ignore_on_load_unexpected.extend(
                     [f"layers.{i}.self_attn.{name}" for name in ("k_proj", "v_proj", "k_norm", "v_norm")]
                 )

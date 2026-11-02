@@ -104,6 +104,11 @@ class Gemma4TextConfig(PreTrainedConfig):
     num_kv_shared_layers (`int`, defaults to 0):
         Number of consecutive decoder layers that share the same key-value projections.
         A value of 0 means no sharing (each layer has independent KV projections).
+    attention_layer_types (`list[str]`, *optional*):
+        Attention variant of each decoder layer: `"attention"`, `"k_eq_v_attention"` (full attention layers when
+        `attention_k_eq_v=True`) or `"kv_shared"` (the last `num_kv_shared_layers` layers, which reuse the kv states
+        of the last non-shared layer of the same type). Derived from `layer_types`, `num_kv_shared_layers` and
+        `attention_k_eq_v` if not set.
     enable_moe_block (`bool`, defaults to `False`):
         Whether to enable Mixture-of-Experts (MoE) blocks in the decoder layers. When
         `True`, eligible layers will use a sparse MoE feed-forward network.
@@ -176,6 +181,7 @@ class Gemma4TextConfig(PreTrainedConfig):
     hidden_size_per_layer_input: int = 256
     attention_k_eq_v: bool = False
     num_kv_shared_layers: int = 0
+    attention_layer_types: list[str] | None = None
     enable_moe_block: bool = False
     use_double_wide_mlp: bool = False
     num_experts: int | None = None
@@ -199,6 +205,28 @@ class Gemma4TextConfig(PreTrainedConfig):
                 f"Last layer must use `full_attention`, but got `{last_layer_type}`. Forcing last layer to `full_attention`."
             )
             self.layer_types[-1] = "full_attention"
+
+        attention_layer_types = []
+        first_kv_shared_layer_idx = self.num_hidden_layers - self.num_kv_shared_layers
+        for layer_idx, layer_type in enumerate(self.layer_types):
+            if layer_idx >= first_kv_shared_layer_idx > 0:
+                # kv-shared layers reuse the kv states of the last non-shared layer of the same type
+                if layer_type not in self.layer_types[:first_kv_shared_layer_idx]:
+                    raise ValueError(
+                        f"Layer {layer_idx} is kv-shared but no non-shared `{layer_type}` layer precedes it"
+                    )
+                attention_layer_types.append("kv_shared")
+            elif self.attention_k_eq_v and layer_type != "sliding_attention":
+                attention_layer_types.append("k_eq_v_attention")
+            else:
+                attention_layer_types.append("attention")
+        if self.attention_layer_types is None:
+            self.attention_layer_types = attention_layer_types
+        elif self.attention_layer_types != attention_layer_types:
+            raise ValueError(
+                f"`attention_layer_types` ({self.attention_layer_types}) must match `layer_types`, "
+                f"`num_kv_shared_layers` and `attention_k_eq_v`, which give {attention_layer_types}"
+            )
 
         default_rope_params: dict[Literal["full_attention", "sliding_attention"] : dict[str, Any]] = {
             "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0},

@@ -58,6 +58,10 @@ class Gemma3nTextConfig(PreTrainedConfig):
         The sparsity factor used to extract the top-k activations for a given layer. The provided Sequence must
         explicitly provide a sparsity value for each layer in the model. By default, the first 10 layers are
         sparse with a sparsity factor of 0.95 and the rest are dense.
+    attention_layer_types (`list[str]`, *optional*):
+        Attention type of each layer (`"attention"` or `"kv_shared"`). Derived from `num_kv_shared_layers` when
+        not provided: the last `num_kv_shared_layers` layers are `"kv_shared"` and reuse the kv states of the last
+        non-shared layer of the same type.
 
     ```python
     >>> from transformers import Gemma3nTextModel, Gemma3nTextConfig
@@ -125,6 +129,7 @@ class Gemma3nTextConfig(PreTrainedConfig):
     num_kv_shared_layers: int = 15
     laurel_rank: int = 64
     activation_sparsity_pattern: float | list[float] | None = None
+    attention_layer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
         if (
@@ -153,6 +158,26 @@ class Gemma3nTextConfig(PreTrainedConfig):
             raise ValueError(
                 "activation_sparsity_pattern must have an explicit activation sparsity value for every layer."
                 f"Expected {self.num_hidden_layers} values but got {len_asp}."
+            )
+
+        first_kv_shared_layer_idx = self.num_hidden_layers - self.num_kv_shared_layers
+        attention_layer_types = [
+            "kv_shared" if i >= first_kv_shared_layer_idx > 0 else "attention" for i in range(self.num_hidden_layers)
+        ]
+        if self.attention_layer_types is None:
+            self.attention_layer_types = attention_layer_types
+        elif list(self.attention_layer_types) != attention_layer_types:
+            raise ValueError(
+                f"attention_layer_types={self.attention_layer_types} does not match `num_kv_shared_layers` and "
+                f"`layer_types`, expected {attention_layer_types}."
+            )
+        if first_kv_shared_layer_idx > 0 and (
+            missing := set(self.layer_types[first_kv_shared_layer_idx:])
+            - set(self.layer_types[:first_kv_shared_layer_idx])
+        ):
+            raise ValueError(
+                f"kv-shared layers of type {sorted(missing)} have no preceding non-shared layer of the same type to "
+                "reuse the kv states from."
             )
 
         super().__post_init__(**kwargs)
