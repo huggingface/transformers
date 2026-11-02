@@ -3469,6 +3469,28 @@ class TestAttentionImplementation(unittest.TestCase):
             model.set_attn_implementation("flash_attention_2")
             self.assertEqual(model.config._attn_implementation, "kernels-community/aiter-flash-attn")
 
+    @require_kernels
+    @require_rocm
+    def test_flash_attention_2_falls_back_to_aiter_kernel_on_rocm(self):
+        # `kernels-community/flash-attn2` has no ROCm build, so FA2 must fall back to the AITER kernel instead
+        from transformers.modeling_flash_attention_utils import FLASH_ATTENTION_COMPATIBILITY_MATRIX
+
+        self.assertEqual(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"], "kernels-community/aiter-flash-attn")
+
+        # Hide the `flash-attn` package (installed in the AMD CI image) so that the kernel fallback is used
+        with patch.dict(FLASH_ATTENTION_COMPATIBILITY_MATRIX[2], {"general_availability_check": lambda: False}):
+            model = MistralForCausalLM.from_pretrained(
+                TINY_MISTRAL, attn_implementation="flash_attention_2", dtype=torch.bfloat16
+            ).to(torch_device)
+        self.assertEqual(model.config._attn_implementation, "kernels-community/aiter-flash-attn")
+
+        input_ids = torch.randint(0, model.config.vocab_size, (2, 16), device=torch_device)
+        with torch.no_grad():
+            logits = model(input_ids).logits
+            model.set_attn_implementation("sdpa")
+            expected_logits = model(input_ids).logits
+        torch.testing.assert_close(logits, expected_logits, atol=2e-2, rtol=2e-2)
+
 
 @require_torch
 class TestTensorSharing(TestCasePlus):
