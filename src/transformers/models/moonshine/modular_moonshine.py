@@ -158,9 +158,9 @@ class MoonshineEncoderModelOutput(BaseModelOutput):
 
 
 class MoonshineEncoderMLP(CLIPMLP):
-    def __init__(self, config, hidden_act):
+    def __init__(self, config):
         super().__init__(config)
-        self.act_fn = ACT2FN[hidden_act]
+        self.act_fn = ACT2FN[config.encoder_hidden_act]
 
 
 class MoonshineDecoderMLP(Phi3MLP):
@@ -292,7 +292,7 @@ class MoonshineEncoderLayer(LlamaDecoderLayer):
             num_key_value_heads=config.encoder_num_key_value_heads,
         )
 
-        self.mlp = MoonshineEncoderMLP(config, config.encoder_hidden_act)
+        self.mlp = MoonshineEncoderMLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
 

@@ -1356,9 +1356,8 @@ class RfDetrSegmentationBlock(ConvNextLayer):
 class RfDetrSegmentationMLP(CLIPMLP):
     def __init__(self, config: RfDetrConfig):
         super().__init__(config)
+        self.hidden_size = config.d_model
         self.act_fn = ACT2FN[config.segmentation_head_activation_function]
-        self.up_proj = nn.Linear(config.d_model, config.intermediate_size)
-        self.down_proj = nn.Linear(config.intermediate_size, config.d_model)
 
 
 class RfDetrSegmentationMLPBlock(nn.Module):

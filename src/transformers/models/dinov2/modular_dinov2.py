@@ -120,8 +120,7 @@ class Dinov2MLP(CLIPMLP):
     def __init__(self, config) -> None:
         super().__init__(config)
         # the hidden size comes from mlp_ratio; the config has no intermediate_size
-        self.up_proj = nn.Linear(config.hidden_size, int(config.hidden_size * config.mlp_ratio))
-        self.down_proj = nn.Linear(int(config.hidden_size * config.mlp_ratio), config.hidden_size)
+        self.intermediate_size = int(config.hidden_size * config.mlp_ratio)
 
 
 class Dinov2SwiGLUFFN(LlamaMLP):

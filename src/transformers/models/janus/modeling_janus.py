@@ -332,10 +332,12 @@ class JanusVisionMLP(nn.Module):
     def __init__(self, config: JanusVisionConfig) -> None:
         super().__init__()
         self.config = config
-        self.act_fn = ACT2FN[config.hidden_act]
+        self.hidden_size = config.hidden_size
         # the hidden size comes from mlp_ratio; the config has no intermediate_size
-        self.up_proj = nn.Linear(config.hidden_size, int(config.hidden_size * config.mlp_ratio))
-        self.down_proj = nn.Linear(int(config.hidden_size * config.mlp_ratio), config.hidden_size)
+        self.intermediate_size = int(config.hidden_size * config.mlp_ratio)
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size)
         self.dropout1 = nn.Dropout(config.hidden_dropout_rate)
         self.dropout2 = nn.Dropout(config.hidden_dropout_rate)
 

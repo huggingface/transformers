@@ -131,12 +131,14 @@ class MoonshineStreamingLayerNorm(nn.Module):
 
 
 class MoonshineStreamingEncoderMLP(nn.Module):
-    def __init__(self, config, hidden_act):
+    def __init__(self, config):
         super().__init__()
         self.config = config
-        self.act_fn = ACT2FN[hidden_act]
-        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
@@ -244,7 +246,7 @@ class MoonshineStreamingEncoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = MoonshineStreamingEncoderAttention(config, layer_idx)
-        self.mlp = MoonshineStreamingEncoderMLP(config, config.hidden_act)
+        self.mlp = MoonshineStreamingEncoderMLP(config)
         self.input_layernorm = MoonshineStreamingLayerNorm(config.hidden_size)
         self.post_attention_layernorm = MoonshineStreamingLayerNorm(config.hidden_size)
 

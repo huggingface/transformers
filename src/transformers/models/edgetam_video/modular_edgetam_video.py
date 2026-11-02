@@ -592,8 +592,8 @@ class EdgeTamVideoInferenceSession(Sam2VideoInferenceSession):
 class EdgeTamVideoMemoryAttentionMLP(CLIPMLP):
     def __init__(self, config: EdgeTamVideoConfig):
         super().__init__(config)
-        self.up_proj = nn.Linear(config.memory_attention_hidden_size, config.memory_attention_mlp_hidden_size)
-        self.down_proj = nn.Linear(config.memory_attention_mlp_hidden_size, config.memory_attention_hidden_size)
+        self.hidden_size = config.memory_attention_hidden_size
+        self.intermediate_size = config.memory_attention_mlp_hidden_size
         self.dropout = nn.Dropout(config.memory_attention_dropout)
         self.act_fn = ACT2FN[config.memory_attention_mlp_hidden_act]
 

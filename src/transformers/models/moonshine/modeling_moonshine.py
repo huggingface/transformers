@@ -66,12 +66,14 @@ class MoonshineEncoderModelOutput(BaseModelOutput):
 
 
 class MoonshineEncoderMLP(nn.Module):
-    def __init__(self, config, hidden_act):
+    def __init__(self, config):
         super().__init__()
         self.config = config
-        self.act_fn = ACT2FN[hidden_act]
-        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.act_fn = ACT2FN[config.encoder_hidden_act]
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
@@ -365,7 +367,7 @@ class MoonshineEncoderLayer(GradientCheckpointingLayer):
             num_key_value_heads=config.encoder_num_key_value_heads,
         )
 
-        self.mlp = MoonshineEncoderMLP(config, config.encoder_hidden_act)
+        self.mlp = MoonshineEncoderMLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
 

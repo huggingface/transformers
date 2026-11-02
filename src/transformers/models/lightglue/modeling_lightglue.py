@@ -245,9 +245,11 @@ class LightGlueMLP(nn.Module):
     def __init__(self, config: LightGlueConfig):
         super().__init__()
         self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
         self.act_fn = ACT2FN[config.hidden_act]
         self.up_proj = nn.Linear(config.intermediate_size, config.intermediate_size)
-        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size)
         self.layer_norm = nn.LayerNorm(config.intermediate_size, elementwise_affine=True)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:

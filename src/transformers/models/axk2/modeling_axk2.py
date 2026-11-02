@@ -72,9 +72,11 @@ class AXK2GateMLP(nn.Module):
     def __init__(self, config: AXK2Config):
         super().__init__()
         self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.gated_norm_rank
         self.act_fn = nn.SiLU()
-        self.up_proj = nn.Linear(config.hidden_size, config.gated_norm_rank, bias=False)
-        self.down_proj = nn.Linear(config.gated_norm_rank, config.hidden_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))

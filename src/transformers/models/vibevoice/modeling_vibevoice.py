@@ -107,6 +107,8 @@ class VibeVoiceDiffusionHeadMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
         self.act_fn = ACT2FN[config.hidden_act]
         self.up_proj = nn.Linear(config.frequency_embedding_size, config.hidden_size, bias=False)
         self.down_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
