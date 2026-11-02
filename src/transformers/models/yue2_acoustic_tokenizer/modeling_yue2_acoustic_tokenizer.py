@@ -241,7 +241,7 @@ class YuE2AcousticTokenizerEncoderModel(YuE2AcousticTokenizerPreTrainedModel):
     ) -> YuE2AcousticTokenizerEncoderOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, audio_channels, num_samples)`):
-            Audio waveform at `config.sampling_rate`.
+            Audio waveform at the `sampling_rate` of [`YuE2AcousticTokenizerConfig`].
         sample (`bool`, *optional*, defaults to `False`):
             Whether to sample the latents from the posterior instead of returning its mean.
         """
@@ -302,8 +302,8 @@ class YuE2AcousticTokenizerDecoderModel(YuE2AcousticTokenizerPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The YuE2 acoustic tokenizer: the Oobleck variational autoencoder of stable-audio-tools, which maps 48 kHz stereo
-    audio to continuous 64-dimensional latents at 25 Hz and back. YuE2 generates these latents with flow matching.
+    The YuE2 acoustic tokenizer: the Oobleck variational autoencoder, which maps stereo audio to continuous latents
+    and back.
     """
 )
 class YuE2AcousticTokenizerModel(YuE2AcousticTokenizerPreTrainedModel, PreTrainedAudioTokenizerBase):

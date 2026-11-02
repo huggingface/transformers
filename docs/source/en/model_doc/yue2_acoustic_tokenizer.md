@@ -19,7 +19,9 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The acoustic tokenizer of [YuE2](https://huggingface.co/m-a-p/YuE2-3B): the Oobleck variational autoencoder of [stable-audio-tools](https://github.com/Stability-AI/stable-audio-tools), with SnakeBeta activations, released as [m-a-p/YuE2-Vae](https://huggingface.co/m-a-p/YuE2-Vae). It turns 48 kHz stereo audio into continuous 64-dimensional latents at 25 Hz (one latent frame per 1920 samples) and back. YuE2 generates these latents with flow matching, and this model decodes them into the song.
+The acoustic tokenizer of [YuE2](https://huggingface.co/m-a-p/YuE2-3B) is a variational autoencoder (VAE): the Oobleck VAE of [stable-audio-tools](https://github.com/Stability-AI/stable-audio-tools), with SnakeBeta activations, released as [m-a-p/YuE2-Vae](https://huggingface.co/m-a-p/YuE2-Vae).
+
+It turns 48 kHz stereo audio into continuous 64-dimensional latents at 25 Hz (one latent frame per 1920 samples) and back. YuE2 generates these latents with flow matching, and this model decodes them into the song.
 
 The weights are released under the [CC-BY-NC-4.0](https://huggingface.co/m-a-p/YuE2-Vae/blob/main/LICENSE) license.
 
@@ -33,7 +35,7 @@ The encoder returns the mean of the latent posterior, or a sample of it with `sa
 import torch
 from transformers import AutoModel
 
-model = AutoModel.from_pretrained("bezzam/yue2-acoustic-tokenizer", device_map="auto")
+model = AutoModel.from_pretrained("m-a-p/YuE2-Vae", revision="9a63959a7e34304bd31ef7bf9940ba03ee978c51", device_map="auto")
 
 # 2 seconds of 48 kHz stereo audio: (batch_size, audio_channels, num_samples)
 audio = 0.1 * torch.randn(1, 2, 2 * 48000, device=model.device)
@@ -52,7 +54,7 @@ On an A100, we observed a speed-up of ~2.1 for a batch size of 4 with 10 seconds
 import torch
 from transformers import AutoModel
 
-model = AutoModel.from_pretrained("bezzam/yue2-acoustic-tokenizer", device_map="auto")
+model = AutoModel.from_pretrained("m-a-p/YuE2-Vae", revision="9a63959a7e34304bd31ef7bf9940ba03ee978c51", device_map="auto")
 
 # 4 excerpts of 10 seconds of 48 kHz stereo audio
 audio = 0.1 * torch.randn(4, 2, 10 * 48000, device=model.device)

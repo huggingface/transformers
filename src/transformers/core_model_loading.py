@@ -458,6 +458,56 @@ class LinearToConv3d(ConversionOps):
         return Conv3dToLinear(in_channels=self.in_channels, kernel_size=self.kernel_size)
 
 
+class MergeWeightNorm(ConversionOps):
+    """
+    Folds a weight-normalized weight, saved as its magnitude `weight_g` and direction `weight_v` (the two source patterns,
+    in this order), into a plain weight: `weight_g * weight_v / norm(weight_v)`, the norm being taken over every
+    dimension but `dim`, as `torch.nn.utils.parametrizations.weight_norm` computes it at every forward.
+    """
+
+    def __init__(self, dim: int = 0):
+        self.dim = dim
+
+    @torch.no_grad
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        if len(source_patterns) != 2 or len(target_patterns) != 1:
+            raise ValueError("Undefined Operation encountered!")
+        weight_g, weight_v = (input_dict.pop(source_pattern) for source_pattern in source_patterns)
+        weight_g = weight_g[0] if isinstance(weight_g, list) else weight_g
+        weight_v = weight_v[0] if isinstance(weight_v, list) else weight_v
+        return {target_patterns[0]: torch._weight_norm(weight_v, weight_g, self.dim)}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return SplitWeightNorm(self.dim)
+
+
+class SplitWeightNorm(ConversionOps):
+    """
+    Splits a plain weight into the magnitude `weight_g` and direction `weight_v` of weight normalization (the two target
+    patterns, in this order): `weight_g = norm(weight)` and `weight_v = weight`, which [`MergeWeightNorm`] folds back.
+    """
+
+    def __init__(self, dim: int = 0):
+        self.dim = dim
+
+    @torch.no_grad
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        if len(input_dict) != 1 or len(target_patterns) != 2:
+            raise ValueError("Undefined Operation encountered!")
+        tensors = next(iter(input_dict.values()))
+        weight = tensors[0] if isinstance(tensors, list) else tensors
+        return {target_patterns[0]: torch.norm_except_dim(weight, 2, self.dim), target_patterns[1]: weight}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return MergeWeightNorm(self.dim)
+
+
 class PermuteForRope(ConversionOps):
     """
     Applies the permutation required to convert complex RoPE weights to the split sin/cos format.

@@ -16,158 +16,20 @@ import math
 from dataclasses import dataclass
 
 import torch
-from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
-from ...configuration_utils import PreTrainedConfig
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedAudioTokenizerBase, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.type_validators import positive_int_field
+from ..auto import AutoModel
 from ..dac.modeling_dac import DacDecoderBlock, DacDecoderOutput, DacEncoderBlock, DacResidualUnit
-from ..pocket_tts_audio_tokenizer.configuration_pocket_tts_audio_tokenizer import (
-    PocketTTSAudioTokenizerDecoderConfig,
-    PocketTTSAudioTokenizerEncoderConfig,
-)
-from ..pocket_tts_audio_tokenizer.modeling_pocket_tts_audio_tokenizer import PocketTTSAudioTokenizerModel
 from ..qwen2_5_omni.modeling_qwen2_5_omni import Qwen2_5OmniSnakeBeta
-
-
-@auto_docstring(checkpoint="bezzam/yue2-acoustic-tokenizer")
-@strict
-class YuE2AcousticTokenizerConfig(PreTrainedConfig):
-    r"""
-    encoder_config (`None`, *optional*):
-        Set to `None` to drop the encoder, e.g. to only decode latents. Otherwise it is derived from the other fields,
-        which the encoder and the decoder share.
-    decoder_config (`None`, *optional*):
-        Set to `None` to drop the decoder, e.g. to only encode audio. Otherwise it is derived from the other fields.
-    audio_channels (`int`, *optional*, defaults to 2):
-        Number of channels of the audio the encoder takes and the decoder returns; the released checkpoint is stereo.
-    hidden_sizes (`list[int]`, *optional*, defaults to `[64, 64, 128, 256, 512, 1024, 2048]`):
-        Number of channels between the encoder's layers: the output of its input convolution, then the output of each
-        block. The decoder goes through them in reverse order.
-    downsampling_ratios (`list[int]`, *optional*, defaults to `[2, 2, 4, 4, 5, 6]`):
-        Strides of the encoder blocks; the decoder blocks upsample by them in reverse order. Their product is the number
-        of audio samples per latent frame (`hop_length`).
-    latent_dim (`int`, *optional*, defaults to 64):
-        Dimension of the continuous latents. The encoder outputs twice as many channels, the mean and the scale of the
-        posterior.
-
-    Example:
-
-    ```python
-    >>> from transformers import YuE2AcousticTokenizerConfig, YuE2AcousticTokenizerModel
-
-    >>> # Initializing a configuration
-    >>> configuration = YuE2AcousticTokenizerConfig()
-
-    >>> # Initializing a model (with random weights) from the configuration
-    >>> model = YuE2AcousticTokenizerModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-
-    >>> # Its decoder alone
-    >>> decoder_only = YuE2AcousticTokenizerModel(YuE2AcousticTokenizerConfig(encoder_config=None))
-    ```
-    """
-
-    model_type = "yue2_acoustic_tokenizer"
-
-    sampling_rate: int = positive_int_field(default=48000)
-    audio_channels: int = positive_int_field(default=2)
-    hidden_sizes: list[int] | tuple[int, ...] = (64, 64, 128, 256, 512, 1024, 2048)
-    downsampling_ratios: list[int] | tuple[int, ...] = (2, 2, 4, 4, 5, 6)
-    latent_dim: int = positive_int_field(default=64)
-
-    def __post_init__(self, **kwargs):
-        self.hidden_sizes = list(self.hidden_sizes)
-        self.downsampling_ratios = list(self.downsampling_ratios)
-        # set to `False` by `encoder_config=None` / `decoder_config=None`, see `encoder_config`
-        self._has_encoder = self._has_decoder = True
-        super().__post_init__(**kwargs)
-
-    def validate_architecture(self):
-        if len(self.hidden_sizes) != len(self.downsampling_ratios) + 1:
-            raise ValueError(
-                f"`hidden_sizes` ({self.hidden_sizes}) must have one more entry than `downsampling_ratios` "
-                f"({self.downsampling_ratios}): the input convolution's width, then each block's."
-            )
-
-    @property
-    def hop_length(self) -> int:
-        """Number of audio samples per latent frame."""
-        return math.prod(self.downsampling_ratios)
-
-    @property
-    def frame_rate(self) -> float:
-        """Number of latent frames per second."""
-        return self.sampling_rate / self.hop_length
-
-    # derived, not `sub_configs`: the halves share every field, and YuE2AcousticTokenizer checkpoints are flat
-    @property
-    def encoder_config(self) -> "YuE2AcousticTokenizerEncoderConfig | None":
-        if not self._has_encoder:
-            return None
-        return YuE2AcousticTokenizerEncoderConfig(**self.to_dict())
-
-    @encoder_config.setter
-    def encoder_config(self, value: None):
-        if value is not None:
-            raise ValueError(
-                "`encoder_config` is derived from the fields of `YuE2AcousticTokenizerConfig`: it can only be set to `None`."
-            )
-        if not self._has_decoder:
-            raise ValueError(
-                "YuE2AcousticTokenizer needs an encoder, a decoder, or both: the decoder is already dropped."
-            )
-        self._has_encoder = False
-
-    @property
-    def decoder_config(self) -> "YuE2AcousticTokenizerDecoderConfig | None":
-        if not self._has_decoder:
-            return None
-        return YuE2AcousticTokenizerDecoderConfig(**self.to_dict())
-
-    @decoder_config.setter
-    def decoder_config(self, value: None):
-        if value is not None:
-            raise ValueError(
-                "`decoder_config` is derived from the fields of `YuE2AcousticTokenizerConfig`: it can only be set to `None`."
-            )
-        if not self._has_encoder:
-            raise ValueError(
-                "YuE2AcousticTokenizer needs an encoder, a decoder, or both: the encoder is already dropped."
-            )
-        self._has_decoder = False
-
-    def to_dict(self):
-        output = super().to_dict()
-        # a dropped half is saved as `"encoder_config": null`, loaded back through its setter
-        for half in ("encoder", "decoder"):
-            if not output.pop(f"_has_{half}", True):
-                output[f"{half}_config"] = None
-        return output
-
-
-# trf-ignore: TRF057
-class YuE2AcousticTokenizerEncoderConfig(PocketTTSAudioTokenizerEncoderConfig):
-    """
-    Configuration of the encoder half of YuE2AcousticTokenizer, from audio to continuous latents. It shares every field
-    with [`YuE2AcousticTokenizerConfig`] (see its documentation for the arguments), so it can be loaded directly from a
-    full YuE2AcousticTokenizer checkpoint.
-    """
-
-
-# trf-ignore: TRF057
-class YuE2AcousticTokenizerDecoderConfig(PocketTTSAudioTokenizerDecoderConfig):
-    """
-    Configuration of the decoder half of YuE2AcousticTokenizer, from continuous latents to audio. It shares every field
-    with [`YuE2AcousticTokenizerConfig`] (see its documentation for the arguments), so it can be loaded directly from a
-    full YuE2AcousticTokenizer checkpoint.
-    """
+from .configuration_yue2_acoustic_tokenizer import (
+    YuE2AcousticTokenizerConfig,
+    YuE2AcousticTokenizerDecoderConfig,
+    YuE2AcousticTokenizerEncoderConfig,
+)
 
 
 @auto_docstring
@@ -288,7 +150,7 @@ class YuE2AcousticTokenizerEncoderModel(YuE2AcousticTokenizerPreTrainedModel):
     ) -> YuE2AcousticTokenizerEncoderOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, audio_channels, num_samples)`):
-            Audio waveform at `config.sampling_rate`.
+            Audio waveform at the `sampling_rate` of [`YuE2AcousticTokenizerConfig`].
         sample (`bool`, *optional*, defaults to `False`):
             Whether to sample the latents from the posterior instead of returning its mean.
         """
@@ -349,14 +211,18 @@ class YuE2AcousticTokenizerDecoderModel(YuE2AcousticTokenizerPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The YuE2 acoustic tokenizer: the Oobleck variational autoencoder of stable-audio-tools, which maps 48 kHz stereo
-    audio to continuous 64-dimensional latents at 25 Hz and back. YuE2 generates these latents with flow matching.
+    The YuE2 acoustic tokenizer: the Oobleck variational autoencoder, which maps stereo audio to continuous latents
+    and back.
     """
 )
-class YuE2AcousticTokenizerModel(PocketTTSAudioTokenizerModel):
+class YuE2AcousticTokenizerModel(YuE2AcousticTokenizerPreTrainedModel, PreTrainedAudioTokenizerBase):
+    _keys_to_ignore_on_load_unexpected = [r"^encoder\.", r"^decoder\."]
+
     def __init__(self, config: YuE2AcousticTokenizerConfig):
         super().__init__(config)
-        del self.latent_proj
+        self.encoder = AutoModel.from_config(config.encoder_config) if config.encoder_config is not None else None
+        self.decoder = AutoModel.from_config(config.decoder_config) if config.decoder_config is not None else None
+        self.post_init()
 
     @can_return_tuple
     def encode(self, input_values: torch.FloatTensor, sample: bool = False) -> YuE2AcousticTokenizerEncoderOutput:
@@ -407,9 +273,6 @@ class YuE2AcousticTokenizerModel(PocketTTSAudioTokenizerModel):
 
 
 __all__ = [
-    "YuE2AcousticTokenizerConfig",
-    "YuE2AcousticTokenizerEncoderConfig",
-    "YuE2AcousticTokenizerDecoderConfig",
     "YuE2AcousticTokenizerPreTrainedModel",
     "YuE2AcousticTokenizerEncoderModel",
     "YuE2AcousticTokenizerDecoderModel",

@@ -65,6 +65,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME.update(
         "vibevoice_acoustic_tokenizer_decoder": "vibevoice_acoustic_tokenizer",
         "yue2_acoustic_tokenizer_encoder": "yue2_acoustic_tokenizer",
         "yue2_acoustic_tokenizer_decoder": "yue2_acoustic_tokenizer",
+        "yue2_vae": "yue2_acoustic_tokenizer",
     }
 )
 

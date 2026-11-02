@@ -25,6 +25,7 @@ from .core_model_loading import (
     GroupWeightRename,
     Interleave,
     MergeModulelist,
+    MergeWeightNorm,
     PermuteForRope,
     PrefixChange,
     Split,
@@ -148,6 +149,9 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "VivitModel": "ViTModel",
     "Dinov2Backbone": "Dinov2Model",
     "Dinov2WithRegistersBackbone": "Dinov2WithRegistersModel",
+    # each half of the YuE2 acoustic tokenizer also loads alone from the full original checkpoint
+    "yue2_acoustic_tokenizer_encoder": "yue2_vae",
+    "yue2_acoustic_tokenizer_decoder": "yue2_vae",
 }
 
 
@@ -2042,6 +2046,36 @@ def _build_checkpoint_conversion_mapping():
     # The pp_doclayout_v4-specific reading order renames are defined in the mapping literal above; it also
     # inherits the shared RT-DETR renames, like its PP-DocLayoutV2/V3 siblings.
     mapping["pp_doclayout_v4"] += mapping["rt_detr"].copy()
+
+    mapping["yue2_vae"] = [
+        WeightRenaming(r"^(encoder|decoder)\.layers\.0\.", r"^\1.conv1."),
+        WeightRenaming(r"^(encoder|decoder)\.layers\.7\.", r"^\1.snake1."),
+        WeightRenaming(r"^(encoder|decoder)\.layers\.8\.", r"^\1.conv2."),
+    ]
+    yue2_acoustic_tokenizer_block_modules = {
+        "encoder": ["res_unit1", "res_unit2", "res_unit3", "snake1", "conv1"],
+        "decoder": ["snake1", "conv_t1", "res_unit1", "res_unit2", "res_unit3"],
+    }
+    yue2_acoustic_tokenizer_res_unit_modules = ["snake1", "conv1", "snake2", "conv2"]
+    for part, modules in yue2_acoustic_tokenizer_block_modules.items():
+        for block in range(6):
+            for index, module in enumerate(modules):
+                source = rf"^{part}\.layers\.{block + 1}\.layers\.{index}\."
+                target = rf"^{part}.block.{block}.{module}."
+                if not module.startswith("res_unit"):
+                    mapping["yue2_vae"].append(WeightRenaming(source, target))
+                    continue
+                mapping["yue2_vae"] += [
+                    WeightRenaming(rf"{source}layers\.{res_index}\.", rf"{target}{res_module}.")
+                    for res_index, res_module in enumerate(yue2_acoustic_tokenizer_res_unit_modules)
+                ]
+    mapping["yue2_vae"].append(
+        WeightConverter(
+            ["parametrizations.weight.original0", "parametrizations.weight.original1"],
+            "weight",
+            operations=[MergeWeightNorm(dim=0)],
+        )
+    )
 
     mapping["bailing_hybrid"] = mapping["qwen2_moe"].copy()
     mapping["bailing_hybrid"] += [

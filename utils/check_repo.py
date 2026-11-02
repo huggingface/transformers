@@ -603,6 +603,7 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
         ("inkling_audio", "inkling"),
         ("inkling_vision", "inkling"),
         ("inkling_mm_model", "inkling"),
+        ("yue2_vae", "yue2_acoustic_tokenizer"),
     ]
 )
 

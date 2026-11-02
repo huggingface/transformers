@@ -17,12 +17,12 @@ import tempfile
 import unittest
 
 from huggingface_hub import download_bucket_files
+from huggingface_hub.errors import StrictDataclassClassValidationError
 
 from transformers import (
     AutoFeatureExtractor,
     YuE2AcousticTokenizerConfig,
     YuE2AcousticTokenizerDecoderConfig,
-    YuE2AcousticTokenizerEncoderConfig,
 )
 from transformers.testing_utils import is_torch_available, require_torch, slow, torch_device
 
@@ -50,8 +50,8 @@ class YuE2AcousticTokenizerModelTester:
         batch_size=2,
         num_frames=5,
         audio_channels=2,
-        hidden_sizes=[4, 4, 8],
-        downsampling_ratios=[2, 3],
+        hidden_sizes=[2, 2, 2, 2, 2, 2, 2],
+        downsampling_ratios=[2, 2, 2, 2, 2, 2],
         latent_dim=6,
         is_training=False,
     ):
@@ -65,12 +65,13 @@ class YuE2AcousticTokenizerModelTester:
         self.is_training = is_training
 
     def get_config(self):
-        return YuE2AcousticTokenizerConfig(
-            audio_channels=self.audio_channels,
-            hidden_sizes=self.hidden_sizes,
-            downsampling_ratios=self.downsampling_ratios,
-            latent_dim=self.latent_dim,
-        )
+        half_config = {
+            "audio_channels": self.audio_channels,
+            "hidden_sizes": self.hidden_sizes,
+            "downsampling_ratios": self.downsampling_ratios,
+            "latent_dim": self.latent_dim,
+        }
+        return YuE2AcousticTokenizerConfig(encoder_config=half_config, decoder_config=half_config)
 
     def prepare_config_and_inputs(self):
         config = self.get_config()
@@ -117,20 +118,15 @@ class YuE2AcousticTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertFalse(torch.allclose(sampled, mean))
 
     def test_config_without_encoder_or_decoder(self):
-        config = self.model_tester.get_config()
-        self.assertNotIn("encoder_config", config.to_diff_dict())
-
-        config.encoder_config = None
+        config = YuE2AcousticTokenizerConfig(encoder_config=None)
         with tempfile.TemporaryDirectory() as tmp_dir:
             config.save_pretrained(tmp_dir)
             config = YuE2AcousticTokenizerConfig.from_pretrained(tmp_dir)
         self.assertIsNone(config.encoder_config)
         self.assertIsInstance(config.decoder_config, YuE2AcousticTokenizerDecoderConfig)
 
-        with self.assertRaises(ValueError):
-            config.decoder_config = None
-        with self.assertRaises(ValueError):
-            config.encoder_config = YuE2AcousticTokenizerEncoderConfig()
+        with self.assertRaises(StrictDataclassClassValidationError):
+            YuE2AcousticTokenizerConfig(encoder_config=None, decoder_config=None)
 
     def test_model_without_encoder_or_decoder(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -201,7 +197,9 @@ class YuE2AcousticTokenizerIntegrationTest(MemoryCleanupMixin, unittest.TestCase
     RTOL = 0
     ATOL = 1e-5
 
-    checkpoint = "bezzam/yue2-acoustic-tokenizer"
+    checkpoint = "m-a-p/YuE2-Vae"
+    # adds `preprocessor_config.json`: https://huggingface.co/m-a-p/YuE2-Vae/discussions/1
+    revision = "9a63959a7e34304bd31ef7bf9940ba03ee978c51"
     bucket = "hf-internal-testing/yue2-acoustic-tokenizer-integration-tests"
 
     def _load_expected(self, case):
@@ -219,8 +217,8 @@ class YuE2AcousticTokenizerIntegrationTest(MemoryCleanupMixin, unittest.TestCase
         reproducer: https://gist.github.com/ebezzam/d03a9cc1d2bfc31c39c8e3704f73e5bc#file-reproducer_codec-py
         """
         expected = self._load_expected("codec")
-        model = AutoModel.from_pretrained(self.checkpoint, device_map=torch_device)
-        feature_extractor = AutoFeatureExtractor.from_pretrained(self.checkpoint)
+        model = AutoModel.from_pretrained(self.checkpoint, revision=self.revision, device_map=torch_device)
+        feature_extractor = AutoFeatureExtractor.from_pretrained(self.checkpoint, revision=self.revision)
         inputs = feature_extractor(
             expected["input_audio"].numpy(), sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
         )
@@ -240,8 +238,8 @@ class YuE2AcousticTokenizerIntegrationTest(MemoryCleanupMixin, unittest.TestCase
         reproducer: https://gist.github.com/ebezzam/d03a9cc1d2bfc31c39c8e3704f73e5bc#file-reproducer_codec_batch-py
         """
         expected = self._load_expected("codec_batch")
-        model = AutoModel.from_pretrained(self.checkpoint, device_map=torch_device)
-        feature_extractor = AutoFeatureExtractor.from_pretrained(self.checkpoint)
+        model = AutoModel.from_pretrained(self.checkpoint, revision=self.revision, device_map=torch_device)
+        feature_extractor = AutoFeatureExtractor.from_pretrained(self.checkpoint, revision=self.revision)
         audio = [expected["input_audio_0"].numpy(), expected["input_audio_1"].numpy()]
         inputs = feature_extractor(audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
         with torch.no_grad(), torch.backends.cudnn.flags(enabled=True, allow_tf32=False):
