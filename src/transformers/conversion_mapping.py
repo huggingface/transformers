@@ -308,6 +308,12 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"decoder\.pre_transformer\.output_proj\.", target_patterns="decoder.output_proj."
             ),
         ],
+        # The original encoder stores its SEANet stack as `encoder.layers`; `MimiEncoderModel` names it `encoder_seanet`.
+        # Unanchored: loaded alone from the full checkpoint, the encoder sees these keys before its `encoder.` prefix
+        # is stripped (`encoder.encoder.layers.`).
+        "qwen3_tts_tokenizer_encoder": [
+            WeightRenaming(source_patterns=r"encoder\.layers\.", target_patterns="encoder_seanet.layers."),
+        ],
         "gemma4_unified": [
             WeightRenaming(source_patterns=r"vision_embedder\.patch_ln1", target_patterns="embed_vision.patch_ln1"),
             WeightRenaming(

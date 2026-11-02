@@ -98,6 +98,9 @@ class Qwen3TTSTokenizerEncoderConfig(PreTrainedConfig):
     use_conv_shortcut (`bool`, *optional*, defaults to `False`):
         Whether to use a convolutional layer as the 'skip' connection in the `Qwen3TTSTokenizerResnetBlock` block. If
         False, an identity function will be used, giving a generic residual connection.
+    use_streaming (`bool`, *optional*, defaults to `False`):
+        Whether the encoder streams by default: it then returns the padding cache and key-value cache to pass to the
+        next call.
     """
 
     model_type = "qwen3_tts_tokenizer_encoder"
@@ -126,6 +129,7 @@ class Qwen3TTSTokenizerEncoderConfig(PreTrainedConfig):
     max_position_embeddings: int = 8000
     initializer_range: float = 0.02
     norm_eps: float = 1e-5
+    use_streaming: bool = False
     rope_parameters: RopeParameters | dict | None = None
     sliding_window: int = 250
     attention_dropout: float | int = 0.0
@@ -142,6 +146,14 @@ class Qwen3TTSTokenizerEncoderConfig(PreTrainedConfig):
     def encodec_frame_rate(self) -> int:
         hop_length = np.prod(self.upsampling_ratios)
         return math.ceil(self.sampling_rate / hop_length)
+
+    @property
+    def latent_stride(self) -> int:
+        return int(self.encodec_frame_rate / self.frame_rate)
+
+    @property
+    def latent_dim(self) -> int:
+        return self.hidden_size
 
     @property
     def frame_size(self) -> int:

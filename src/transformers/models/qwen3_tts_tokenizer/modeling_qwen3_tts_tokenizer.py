@@ -34,7 +34,7 @@ from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedAudioTokenizerBase, PreTrainedModel
 from ...processing_utils import Unpack
@@ -176,6 +176,146 @@ class Qwen3TTSTokenizerOutput(ModelOutput):
     audio_values: torch.FloatTensor | None = None
     audio_codes: torch.LongTensor | None = None
     audio_codes_mask: torch.Tensor | None = None
+
+
+class Qwen3TTSTokenizerConv1d(nn.Module):
+    """Conv1d with asymmetric or causal padding and normalization."""
+
+    def __init__(
+        self,
+        config,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        stride: int = 1,
+        dilation: int = 1,
+        groups: int = 1,
+        pad_mode: str | None = None,
+        bias: bool = True,
+        layer_idx: int | None = None,
+    ):
+        super().__init__()
+        self.causal = config.use_causal_conv
+        self.pad_mode = config.pad_mode if pad_mode is None else pad_mode
+        self.layer_idx = layer_idx
+        self.in_channels = in_channels
+
+        # warn user on unusual setup between dilation and stride
+        if stride > 1 and dilation > 1:
+            logger.warning(
+                "Qwen3TTSTokenizerConv1d has been initialized with stride > 1 and dilation > 1"
+                f" (kernel_size={kernel_size} stride={stride}, dilation={dilation})."
+            )
+
+        self.conv = nn.Conv1d(
+            in_channels, out_channels, kernel_size, stride, dilation=dilation, groups=groups, bias=bias
+        )
+
+        kernel_size = self.conv.kernel_size[0]
+        stride = torch.tensor(self.conv.stride[0], dtype=torch.int64)
+        dilation = self.conv.dilation[0]
+
+        # Effective kernel size with dilations.
+        kernel_size = torch.tensor((kernel_size - 1) * dilation + 1, dtype=torch.int64)
+
+        self.stride = nn.Buffer(stride, persistent=False)
+        self.kernel_size = nn.Buffer(kernel_size, persistent=False)
+        self.padding_total = nn.Buffer(kernel_size - stride, persistent=False)
+
+        # Asymmetric padding required for odd strides
+        self.padding_right = self.padding_total // 2
+        self.padding_left = self.padding_total - self.padding_right
+
+    def apply_weight_norm(self):
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        weight_norm(self.conv)
+
+    def remove_weight_norm(self):
+        nn.utils.remove_weight_norm(self.conv)
+
+    def _get_extra_padding_for_conv1d(
+        self,
+        hidden_states: torch.Tensor,
+    ) -> torch.Tensor:
+        """See `pad_for_conv1d`."""
+        length = hidden_states.shape[-1]
+        n_frames = (length - self.kernel_size + self.padding_total) / self.stride + 1
+        n_frames = torch.ceil(n_frames).to(torch.int64) - 1
+        ideal_length = n_frames * self.stride + self.kernel_size - self.padding_total
+
+        return ideal_length - length
+
+    @staticmethod
+    def _pad1d(hidden_states: torch.Tensor, paddings: tuple[int, int], mode: str = "zero", value: float = 0.0):
+        """Tiny wrapper around torch.nn.functional.pad, just to allow for reflect padding on small input.
+        If this is the case, we insert extra 0 padding to the right before the reflection happens.
+        """
+        length = hidden_states.shape[-1]
+        padding_left, padding_right = paddings
+        if mode != "reflect":
+            return nn.functional.pad(hidden_states, paddings, mode, value)
+
+        max_pad = max(padding_left, padding_right)
+        extra_pad = 0
+        if length <= max_pad:
+            extra_pad = max_pad - length + 1
+            hidden_states = nn.functional.pad(hidden_states, (0, extra_pad))
+        padded = nn.functional.pad(hidden_states, paddings, mode, value)
+        end = padded.shape[-1] - extra_pad
+        return padded[..., :end]
+
+    def _get_output_length(self, input_length: torch.LongTensor) -> torch.LongTensor:
+        """
+        Return the length of the output of the Qwen3TTSTokenizerConv1d.
+        """
+        # on the device of this layer's buffers, which may differ from the input's when the model is split
+        input_length = torch.as_tensor(input_length, device=self.stride.device)
+        # padding size
+        n_frames = (input_length - self.kernel_size + self.padding_total) / self.stride + 1
+        n_frames = torch.ceil(n_frames).to(torch.int64) - 1
+        ideal_length = n_frames * self.stride + self.kernel_size - self.padding_total
+        extra_padding = ideal_length - input_length
+
+        if self.causal:
+            padding_left = self.padding_total
+            padding_right = extra_padding
+        else:
+            padding_left = self.padding_left
+            padding_right = self.padding_right + extra_padding
+
+        # padding
+        input_length = input_length + padding_left + padding_right
+
+        # conv
+        output_length = (
+            input_length + 2 * self.conv.padding[0] - self.conv.dilation[0] * (self.conv.kernel_size[0] - 1) - 1
+        ) // self.conv.stride[0] + 1
+        return output_length
+
+    def forward(self, hidden_states, padding_cache=None):
+        extra_padding = self._get_extra_padding_for_conv1d(hidden_states)
+
+        if not self.causal and padding_cache is not None:
+            raise ValueError("`padding_cache` is not supported for non-causal convolutions.")
+
+        if self.causal and padding_cache is not None:
+            layer_padding_cache = padding_cache.update(hidden_states, self.layer_idx)
+            hidden_states = torch.cat([layer_padding_cache, hidden_states], dim=2)
+
+        elif self.causal:
+            # Left padding for causal
+            hidden_states = self._pad1d(hidden_states, (self.padding_total, extra_padding), mode=self.pad_mode)
+
+        else:
+            hidden_states = self._pad1d(
+                hidden_states, (self.padding_left, self.padding_right + extra_padding), mode=self.pad_mode
+            )
+
+        hidden_states = self.conv(hidden_states)
+        return hidden_states
 
 
 class Qwen3TTSTokenizerLayerScale(nn.Module):
@@ -1112,6 +1252,124 @@ class Qwen3TTSTokenizerDecoderModel(Qwen3TTSTokenizerPreTrainedModel):
         return torch.cat(wavs, dim=-1)
 
 
+class Qwen3TTSTokenizerConv1dPaddingCache:
+    """
+    Padding cache for Qwen3TTSTokenizerConv1d causal convolutions in order to support streaming via cache padding.
+    See: https://huggingface.co/papers/2005.06720 & https://huggingface.co/papers/2204.07064
+
+    A padding cache is a list of cached partial hidden states for each convolution layer.
+    Hidden states are cached from the previous call to the Qwen3TTSTokenizerConv1d forward pass, given the padding size.
+    """
+
+    def __init__(
+        self,
+        num_layers: int,
+        per_layer_padding: list[int],
+        per_layer_padding_mode: list[str],
+        per_layer_in_channels: list[int],
+    ):
+        # ensure correct number of layers for each arg
+        from_args_num_layers = {len(per_layer_padding), len(per_layer_padding_mode), len(per_layer_in_channels)}
+
+        if len(from_args_num_layers) != 1 or from_args_num_layers.pop() != num_layers:
+            raise ValueError(
+                f"Expected `num_layers` ({num_layers}) values in `per_layer_padding`, `per_layer_padding_mode` and `per_layer_in_channels`"
+            )
+
+        self.per_layer_padding = per_layer_padding
+        self.per_layer_padding_mode = per_layer_padding_mode
+        self.per_layer_in_channels = per_layer_in_channels
+
+        self.padding_cache = [None] * num_layers
+
+    def _cache_init(self, hidden_states: torch.Tensor, layer_idx: int):
+        """
+        Initialize the cache for a specific layer.
+
+        Parameters:
+            hidden_states (`torch.Tensor`):
+                The hidden states to initialize the cache with.
+            layer_idx (`int`):
+                The index of the layer to initialize the cache for.
+        Returns:
+            `torch.Tensor`, the initialized cache.
+        """
+        batch_size, dtype, device = hidden_states.shape[0], hidden_states.dtype, hidden_states.device
+        padding, padding_mode, in_channels = (
+            self.per_layer_padding[layer_idx],
+            self.per_layer_padding_mode[layer_idx],
+            self.per_layer_in_channels[layer_idx],
+        )
+
+        if padding_mode == "constant":
+            current_cache = torch.zeros(batch_size, in_channels, padding, device=device, dtype=dtype)
+        elif padding_mode == "replicate":
+            current_cache = (
+                torch.ones(batch_size, in_channels, padding, device=device, dtype=dtype) * hidden_states[..., :1]
+            )
+        else:
+            raise NotImplementedError(f"Padding mode {padding_mode} not supported")
+
+        return current_cache
+
+    def update(self, hidden_states: torch.Tensor, layer_idx: int):
+        """
+        Updates the padding cache with the new padding states for the layer `layer_idx` and returns the current cache.
+
+        Parameters:
+            hidden_states (`torch.Tensor`):
+                The hidden states to be partially cached.
+            layer_idx (`int`):
+                The index of the layer to cache the states for.
+        Returns:
+            `torch.Tensor` or `None`, the current padding cache.
+        """
+        batch_size, dtype, device = hidden_states.shape[0], hidden_states.dtype, hidden_states.device
+        padding, in_channels = self.per_layer_padding[layer_idx], self.per_layer_in_channels[layer_idx]
+
+        if self.padding_cache[layer_idx] is None:
+            current_cache = self._cache_init(hidden_states, layer_idx)
+        else:
+            current_cache = self.padding_cache[layer_idx]
+
+        # update the cache
+        if padding > 0:
+            shortfall = max(0, padding - hidden_states.shape[-1])
+            if shortfall > 0:
+                padding_states = torch.cat([current_cache[:, :, -shortfall:], hidden_states], dim=-1)
+            else:
+                padding_states = hidden_states[:, :, -padding:]
+        else:
+            padding_states = torch.empty(batch_size, in_channels, 0, dtype=dtype, device=device)
+
+        self.padding_cache[layer_idx] = padding_states
+        return current_cache
+
+
+@auto_docstring
+@dataclass
+class Qwen3TTSTokenizerEncoderModelOutput(ModelOutput):
+    r"""
+    latents (`torch.FloatTensor` of shape `(batch_size, latent_dim, frames)`):
+        Continuous latents of the audio, one frame per `config.frame_size` audio samples.
+    past_key_values (`Cache`, *optional*):
+        Pre-computed hidden-states (key and values in the self-attention blocks) of the encoder transformer, returned
+        when streaming.
+    padding_cache (`Qwen3TTSTokenizerConv1dPaddingCache`, *optional*):
+        Padding cache for Qwen3TTSTokenizerConv1d causal convolutions in order to support streaming via cache padding.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
+        Hidden states of the encoder transformer at the output of each layer plus its input.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
+        Attention weights of each encoder transformer layer.
+    """
+
+    latents: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    padding_cache: Qwen3TTSTokenizerConv1dPaddingCache | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+
+
 class Qwen3TTSTokenizerResnetBlock(nn.Module):
     """
     Residual block from SEANet model as used by Qwen3TTSTokenizer.
@@ -1291,181 +1549,136 @@ class Qwen3TTSTokenizerTransformerModel(nn.Module):
         return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
 
 
-class Qwen3TTSTokenizerConv1d(nn.Module):
-    """Conv1d with asymmetric or causal padding and normalization."""
-
-    def __init__(
-        self,
-        config,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int,
-        stride: int = 1,
-        dilation: int = 1,
-        groups: int = 1,
-        pad_mode: str | None = None,
-        bias: bool = True,
-        layer_idx: int | None = None,
-    ):
-        super().__init__()
-        self.causal = config.use_causal_conv
-        self.pad_mode = config.pad_mode if pad_mode is None else pad_mode
-        self.layer_idx = layer_idx
-        self.in_channels = in_channels
-
-        # warn user on unusual setup between dilation and stride
-        if stride > 1 and dilation > 1:
-            logger.warning(
-                "Qwen3TTSTokenizerConv1d has been initialized with stride > 1 and dilation > 1"
-                f" (kernel_size={kernel_size} stride={stride}, dilation={dilation})."
-            )
-
-        self.conv = nn.Conv1d(
-            in_channels, out_channels, kernel_size, stride, dilation=dilation, groups=groups, bias=bias
-        )
-
-        kernel_size = self.conv.kernel_size[0]
-        stride = torch.tensor(self.conv.stride[0], dtype=torch.int64)
-        dilation = self.conv.dilation[0]
-
-        # Effective kernel size with dilations.
-        kernel_size = torch.tensor((kernel_size - 1) * dilation + 1, dtype=torch.int64)
-
-        self.stride = nn.Buffer(stride, persistent=False)
-        self.kernel_size = nn.Buffer(kernel_size, persistent=False)
-        self.padding_total = nn.Buffer(kernel_size - stride, persistent=False)
-
-        # Asymmetric padding required for odd strides
-        self.padding_right = self.padding_total // 2
-        self.padding_left = self.padding_total - self.padding_right
-
-    def apply_weight_norm(self):
-        weight_norm = nn.utils.weight_norm
-        if hasattr(nn.utils.parametrizations, "weight_norm"):
-            weight_norm = nn.utils.parametrizations.weight_norm
-
-        weight_norm(self.conv)
-
-    def remove_weight_norm(self):
-        nn.utils.remove_weight_norm(self.conv)
-
-    def _get_extra_padding_for_conv1d(
-        self,
-        hidden_states: torch.Tensor,
-    ) -> torch.Tensor:
-        """See `pad_for_conv1d`."""
-        length = hidden_states.shape[-1]
-        n_frames = (length - self.kernel_size + self.padding_total) / self.stride + 1
-        n_frames = torch.ceil(n_frames).to(torch.int64) - 1
-        ideal_length = n_frames * self.stride + self.kernel_size - self.padding_total
-
-        return ideal_length - length
-
-    @staticmethod
-    def _pad1d(hidden_states: torch.Tensor, paddings: tuple[int, int], mode: str = "zero", value: float = 0.0):
-        """Tiny wrapper around torch.nn.functional.pad, just to allow for reflect padding on small input.
-        If this is the case, we insert extra 0 padding to the right before the reflection happens.
-        """
-        length = hidden_states.shape[-1]
-        padding_left, padding_right = paddings
-        if mode != "reflect":
-            return nn.functional.pad(hidden_states, paddings, mode, value)
-
-        max_pad = max(padding_left, padding_right)
-        extra_pad = 0
-        if length <= max_pad:
-            extra_pad = max_pad - length + 1
-            hidden_states = nn.functional.pad(hidden_states, (0, extra_pad))
-        padded = nn.functional.pad(hidden_states, paddings, mode, value)
-        end = padded.shape[-1] - extra_pad
-        return padded[..., :end]
-
-    def _get_output_length(self, input_length: torch.LongTensor) -> torch.LongTensor:
-        """
-        Return the length of the output of the Qwen3TTSTokenizerConv1d.
-        """
-        # on the device of this layer's buffers, which may differ from the input's when the model is split
-        input_length = torch.as_tensor(input_length, device=self.stride.device)
-        # padding size
-        n_frames = (input_length - self.kernel_size + self.padding_total) / self.stride + 1
-        n_frames = torch.ceil(n_frames).to(torch.int64) - 1
-        ideal_length = n_frames * self.stride + self.kernel_size - self.padding_total
-        extra_padding = ideal_length - input_length
-
-        if self.causal:
-            padding_left = self.padding_total
-            padding_right = extra_padding
-        else:
-            padding_left = self.padding_left
-            padding_right = self.padding_right + extra_padding
-
-        # padding
-        input_length = input_length + padding_left + padding_right
-
-        # conv
-        output_length = (
-            input_length + 2 * self.conv.padding[0] - self.conv.dilation[0] * (self.conv.kernel_size[0] - 1) - 1
-        ) // self.conv.stride[0] + 1
-        return output_length
-
-    def forward(self, hidden_states, padding_cache=None):
-        extra_padding = self._get_extra_padding_for_conv1d(hidden_states)
-
-        if not self.causal and padding_cache is not None:
-            raise ValueError("`padding_cache` is not supported for non-causal convolutions.")
-
-        if self.causal and padding_cache is not None:
-            layer_padding_cache = padding_cache.update(hidden_states, self.layer_idx)
-            hidden_states = torch.cat([layer_padding_cache, hidden_states], dim=2)
-
-        elif self.causal:
-            # Left padding for causal
-            hidden_states = self._pad1d(hidden_states, (self.padding_total, extra_padding), mode=self.pad_mode)
-
-        else:
-            hidden_states = self._pad1d(
-                hidden_states, (self.padding_left, self.padding_right + extra_padding), mode=self.pad_mode
-            )
-
-        hidden_states = self.conv(hidden_states)
-        return hidden_states
-
-
 @auto_docstring(
     custom_intro="""
     The Qwen3TTSTokenizer encoder: Mimi's convolutional encoder, encoder transformer, and downsampling layer.
     """
 )
 class Qwen3TTSTokenizerEncoderModel(Qwen3TTSTokenizerPreTrainedModel):
-    config_class = Qwen3TTSTokenizerEncoderConfig
+    config: Qwen3TTSTokenizerEncoderConfig
     base_model_prefix = "encoder"
+    _keys_to_ignore_on_load_unexpected = [r"^decoder\.", r"^encoder\.quantizer\."]
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen3TTSTokenizerEncoderConfig):
         super().__init__(config)
-        self.encoder = Qwen3TTSTokenizerEncoder(config)
+        self.encoder_seanet = Qwen3TTSTokenizerEncoder(config)
         self.encoder_transformer = Qwen3TTSTokenizerTransformerModel(config)
-        self.downsample = Qwen3TTSTokenizerConv1d(
-            config,
-            config.hidden_size,
-            config.hidden_size,
-            kernel_size=2 * int(config.encodec_frame_rate / config.frame_rate),
-            stride=2,
-            bias=False,
-            pad_mode="replicate",
+
+        self.downsample = (
+            Qwen3TTSTokenizerConv1d(
+                config,
+                config.hidden_size,
+                config.latent_dim,
+                kernel_size=2 * config.latent_stride,
+                stride=config.latent_stride,
+                bias=False,
+                pad_mode="replicate",
+                layer_idx=len(self.encoder_seanet._conv1d_layer_names),
+            )
+            if config.frame_rate != config.encodec_frame_rate
+            else None
         )
+
         self.post_init()
 
-    @can_return_tuple
-    @auto_docstring
-    def forward(self, input_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
-        r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
-            Input audio waveform.
+    def get_encoded_length(self, input_length: torch.LongTensor) -> torch.LongTensor:
         """
-        embeddings = self.encoder(input_values)
-        embeddings = self.encoder_transformer(embeddings.transpose(1, 2), use_cache=False)[0].transpose(1, 2)
-        embeddings = self.downsample(embeddings)
-        return BaseModelOutput(last_hidden_state=embeddings)
+        Return the number of frames of the encoded audio waveform.
+        """
+        output_length = input_length
+
+        # encoder
+        for layer_name in self.encoder_seanet._conv1d_layer_names:
+            output_length = self.encoder_seanet.get_submodule(layer_name)._get_output_length(output_length)
+
+        # downsample
+        output_length = self.downsample._get_output_length(output_length)
+
+        if isinstance(input_length, torch.Tensor):
+            output_length = output_length.to(input_length.device)
+        return output_length
+
+    def get_audio_codes_mask(self, padding_mask: torch.Tensor, padding_side: str = "right"):
+        """
+        Get the mask for the audio codes from the original padding mask.
+        """
+        encoded_lengths = self.get_encoded_length(padding_mask.sum(dim=-1))
+
+        audio_codes_mask = torch.arange(encoded_lengths.max(), device=encoded_lengths.device).expand(
+            len(encoded_lengths), -1
+        )
+        audio_codes_mask = audio_codes_mask < encoded_lengths.unsqueeze(1)
+        audio_codes_mask = audio_codes_mask.to(padding_mask.device)
+
+        if padding_side == "right":
+            return audio_codes_mask
+        else:
+            return audio_codes_mask.flip(dims=[-1])
+
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self,
+        input_values: torch.Tensor,
+        padding_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        padding_cache: Qwen3TTSTokenizerConv1dPaddingCache | None = None,
+        use_streaming: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> Qwen3TTSTokenizerEncoderModelOutput:
+        r"""
+        input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
+            Float values of the input audio waveform.
+        padding_mask (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
+            Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
+            for *masked*.
+        past_key_values (`Cache`, *optional*):
+            Pre-computed hidden-states (key and values in the self-attention blocks) of the encoder transformer, used to
+            speed up streaming encoding.
+        padding_cache (`Qwen3TTSTokenizerConv1dPaddingCache`, *optional*):
+            Padding cache of the causal convolutions, used for streaming encoding.
+        use_streaming (`bool`, *optional*):
+            Whether to encode in streaming mode, returning the caches to pass to the next call.
+
+        Encodes the input audio waveform into continuous latents of shape `(batch_size, latent_dim, frames)`.
+        """
+        use_streaming = use_streaming if use_streaming is not None else self.config.use_streaming
+
+        _, channels, input_length = input_values.shape
+
+        if channels < 1 or channels > 2:
+            raise ValueError(f"Number of audio channels must be 1 or 2, but got {channels}")
+
+        if use_streaming and padding_cache is None:
+            per_layer_padding, per_layer_padding_mode, per_layer_in_channels = [], [], []
+            for layer_name in self.encoder_seanet._conv1d_layer_names:
+                per_layer_padding.append(self.encoder_seanet.get_submodule(layer_name).padding_total)
+                per_layer_padding_mode.append(self.encoder_seanet.get_submodule(layer_name).pad_mode)
+                per_layer_in_channels.append(self.encoder_seanet.get_submodule(layer_name).in_channels)
+
+            # downsample layer
+            per_layer_padding.append(self.downsample.padding_total)
+            per_layer_padding_mode.append(self.downsample.pad_mode)
+            per_layer_in_channels.append(self.downsample.in_channels)
+
+            padding_cache = Qwen3TTSTokenizerConv1dPaddingCache(
+                num_layers=len(self.encoder_seanet._conv1d_layer_names) + 1,
+                per_layer_padding=per_layer_padding,
+                per_layer_padding_mode=per_layer_padding_mode,
+                per_layer_in_channels=per_layer_in_channels,
+            )
+
+        # TODO: @eustlb, let's make the encoder support padding_mask so that batched inputs are supported.
+        hidden_states = self.encoder_seanet(input_values, padding_cache=padding_cache)
+        # TODO: @eustlb, convert the padding mask to attention mask.
+        encoder_outputs = self.encoder_transformer(
+            hidden_states.transpose(1, 2), past_key_values=past_key_values, use_cache=use_streaming, **kwargs
+        )
+        latents = self.downsample(encoder_outputs.last_hidden_state.transpose(1, 2), padding_cache=padding_cache)
+
+        return Qwen3TTSTokenizerEncoderModelOutput(
+            latents=latents, past_key_values=encoder_outputs.past_key_values, padding_cache=padding_cache
+        )
 
 
 @auto_docstring
@@ -1497,7 +1710,7 @@ class Qwen3TTSTokenizerModel(Qwen3TTSTokenizerPreTrainedModel, PreTrainedAudioTo
         padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Padding mask used to pad `input_values`.
         """
-        embeddings = self.encoder(input_values).last_hidden_state
+        embeddings = self.encoder(input_values).latents
         audio_codes = self.quantizer.encode(embeddings).permute(1, 2, 0)
 
         audio_codes_mask = None

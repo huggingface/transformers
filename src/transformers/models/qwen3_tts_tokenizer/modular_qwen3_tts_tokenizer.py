@@ -21,7 +21,6 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedAudioTokenizerBase
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -29,13 +28,11 @@ from ...utils.type_validators import interval, positive_int_field
 from ..dac.modeling_dac import DacDecoderOutput
 from ..mimi.configuration_mimi import MimiConfig
 from ..mimi.modeling_mimi import (
-    MimiConv1d,
-    MimiEncoder,
+    MimiEncoderModel,
     MimiEuclideanCodebook,
     MimiPreTrainedModel,
     MimiResidualVectorQuantizer,
     MimiSplitResidualVectorQuantizer,
-    MimiTransformerModel,
     MimiVectorQuantization,
 )
 from ..qwen2_5_omni.modeling_qwen2_5_omni import Qwen2_5OmniSnakeBeta
@@ -124,6 +121,9 @@ class Qwen3TTSTokenizerEncoderConfig(MimiConfig):
     use_conv_shortcut (`bool`, *optional*, defaults to `False`):
         Whether to use a convolutional layer as the 'skip' connection in the `Qwen3TTSTokenizerResnetBlock` block. If
         False, an identity function will be used, giving a generic residual connection.
+    use_streaming (`bool`, *optional*, defaults to `False`):
+        Whether the encoder streams by default: it then returns the padding cache and key-value cache to pass to the
+        next call.
     """
 
     model_type = "qwen3_tts_tokenizer_encoder"
@@ -139,12 +139,9 @@ class Qwen3TTSTokenizerEncoderConfig(MimiConfig):
     trim_right_ratio = AttributeError()
     upsample_groups = AttributeError()
     use_cache = AttributeError()
-    use_streaming = AttributeError()
     tie_word_embeddings = AttributeError()
     encoder_config = AttributeError()
     decoder_config = AttributeError()
-    latent_stride = AttributeError()
-    latent_dim = AttributeError()
 
     def __post_init__(self, **kwargs):
         self.upsampling_ratios = self.upsampling_ratios if self.upsampling_ratios else [8, 6, 5, 4]
@@ -415,53 +412,13 @@ class Qwen3TTSTokenizerDecoderModel(Qwen3OmniMoeCode2Wav):
         return wav.clamp(min=-1, max=1)
 
 
-class Qwen3TTSTokenizerEncoder(MimiEncoder):
-    pass
-
-
-class Qwen3TTSTokenizerTransformerModel(MimiTransformerModel):
-    pass
-
-
-class Qwen3TTSTokenizerConv1d(MimiConv1d):
-    pass
-
-
 @auto_docstring(
     custom_intro="""
     The Qwen3TTSTokenizer encoder: Mimi's convolutional encoder, encoder transformer, and downsampling layer.
     """
 )
-class Qwen3TTSTokenizerEncoderModel(Qwen3TTSTokenizerPreTrainedModel):
-    config_class = Qwen3TTSTokenizerEncoderConfig
-    base_model_prefix = "encoder"
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.encoder = Qwen3TTSTokenizerEncoder(config)
-        self.encoder_transformer = Qwen3TTSTokenizerTransformerModel(config)
-        self.downsample = Qwen3TTSTokenizerConv1d(
-            config,
-            config.hidden_size,
-            config.hidden_size,
-            kernel_size=2 * int(config.encodec_frame_rate / config.frame_rate),
-            stride=2,
-            bias=False,
-            pad_mode="replicate",
-        )
-        self.post_init()
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(self, input_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
-        r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
-            Input audio waveform.
-        """
-        embeddings = self.encoder(input_values)
-        embeddings = self.encoder_transformer(embeddings.transpose(1, 2), use_cache=False)[0].transpose(1, 2)
-        embeddings = self.downsample(embeddings)
-        return BaseModelOutput(last_hidden_state=embeddings)
+class Qwen3TTSTokenizerEncoderModel(MimiEncoderModel):
+    _keys_to_ignore_on_load_unexpected = [r"^decoder\.", r"^encoder\.quantizer\."]
 
 
 @auto_docstring
@@ -492,7 +449,7 @@ class Qwen3TTSTokenizerModel(VibeVoiceAcousticTokenizerModel, PreTrainedAudioTok
         padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Padding mask used to pad `input_values`.
         """
-        embeddings = self.encoder(input_values).last_hidden_state
+        embeddings = self.encoder(input_values).latents
         audio_codes = self.quantizer.encode(embeddings).permute(1, 2, 0)
 
         audio_codes_mask = None

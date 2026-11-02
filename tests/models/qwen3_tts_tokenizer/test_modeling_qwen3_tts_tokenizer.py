@@ -193,7 +193,7 @@ class Qwen3TTSTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
                 if hasattr(module, "embed_sum"):
                     module.embed_sum.normal_()
             expected_outputs = model(**inputs)
-            embeddings = model.encoder(inputs["input_values"]).last_hidden_state
+            embeddings = model.encoder(inputs["input_values"]).latents
             codes = model.quantizer.encode(embeddings)
             quantized = model.quantizer.decode(codes.transpose(0, 1))
         components = ((model.encoder, inputs["input_values"]), (model.decoder, quantized))
@@ -227,9 +227,9 @@ class Qwen3TTSTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
                     actual = restored(component_input)
                     projected_output = projected(component_input)
                 if component is model.encoder:
-                    expected = expected.last_hidden_state
-                    actual = actual.last_hidden_state
-                    projected_output = projected_output.last_hidden_state
+                    expected = expected.latents
+                    actual = actual.latents
+                    projected_output = projected_output.latents
                 torch.testing.assert_close(actual, expected)
                 torch.testing.assert_close(projected_output, expected)
 
