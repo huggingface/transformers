@@ -51,7 +51,6 @@ logger = logging.get_logger(__name__)
 # Use separate functions for each case because conditionals prevent kernel fusion.
 # TODO: Could have better fused kernels depending on scaling and dropout.
 #  Is it doable without writing 32 functions?
-@torch.jit.script
 def upcast_masked_softmax(
     x: torch.Tensor, mask: torch.Tensor, mask_value: torch.Tensor, scale: float, softmax_dtype: torch.dtype
 ):
@@ -62,7 +61,6 @@ def upcast_masked_softmax(
     return x
 
 
-@torch.jit.script
 def upcast_softmax(x: torch.Tensor, scale: float, softmax_dtype: torch.dtype):
     input_dtype = x.dtype
     x = x.to(softmax_dtype) * scale
@@ -70,7 +68,6 @@ def upcast_softmax(x: torch.Tensor, scale: float, softmax_dtype: torch.dtype):
     return x
 
 
-@torch.jit.script
 def masked_softmax(x: torch.Tensor, mask: torch.Tensor, mask_value: torch.Tensor):
     x = torch.where(mask, x, mask_value)
     x = torch.nn.functional.softmax(x, dim=-1)
@@ -369,7 +366,7 @@ class GPTBigCodePreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class GPTBigCodeModel(GPTBigCodePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTBigCodeConfig):
         super().__init__(config)
         self.multi_query = config.multi_query
         self.embed_dim = config.hidden_size
@@ -511,7 +508,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
 class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: GPTBigCodeConfig):
         super().__init__(config)
         self.transformer = GPTBigCodeModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
@@ -600,7 +597,7 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel, GenerationMixin):
     """
 )
 class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTBigCodeConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = GPTBigCodeModel(config)
@@ -709,7 +706,7 @@ class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
 
 @auto_docstring
 class GPTBigCodeForTokenClassification(GPTBigCodePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTBigCodeConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

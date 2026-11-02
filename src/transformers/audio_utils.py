@@ -223,7 +223,7 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None, backe
     if not isinstance(audio, str):
         raise TypeError(
             "Incorrect format used for `audio`. Should be a numpy array or a `str`: an `http(s)://` URL, "
-            "a local file path, or a base64-encoded string (optionally wrapped as a `data:...` URI)."
+            f"a local file path, or a base64-encoded string (optionally wrapped as a `data:...` URI) but got {type(audio)}."
         )
 
     # torchcodec handles audio/video; librosa only plain audio. `backend` lets callers pin one.

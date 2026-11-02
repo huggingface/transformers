@@ -182,6 +182,7 @@ class GotOcr2PreTrainedModel(SamPreTrainedModel):
 
 class GotOcr2VisionEncoder(SamVisionEncoder, GotOcr2PreTrainedModel):
     input_modalities = ("image",)
+    config: GotOcr2VisionConfig
 
 
 class GotOcr2MultiModalProjector(nn.Module):

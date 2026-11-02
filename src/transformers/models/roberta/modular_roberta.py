@@ -175,7 +175,7 @@ class RobertaPreTrainedModel(PreTrainedModel):
 
 
 class RobertaModel(BertModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: RobertaConfig, add_pooling_layer=True):
         super().__init__(self, config)
 
 
@@ -190,7 +190,7 @@ class RobertaForCausalLM(RobertaPreTrainedModel, GenerationMixin):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -298,7 +298,7 @@ class RobertaForMaskedLM(RobertaPreTrainedModel):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -402,7 +402,7 @@ class RobertaLMHead(nn.Module):
     """
 )
 class RobertaForSequenceClassification(RobertaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -483,7 +483,7 @@ class RobertaForSequenceClassification(RobertaPreTrainedModel):
 
 @auto_docstring
 class RobertaForMultipleChoice(RobertaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__(config)
 
         self.roberta = RobertaModel(config)
@@ -576,7 +576,7 @@ class RobertaForMultipleChoice(RobertaPreTrainedModel):
 
 @auto_docstring
 class RobertaForTokenClassification(RobertaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -667,7 +667,7 @@ class RobertaClassificationHead(nn.Module):
 
 @auto_docstring
 class RobertaForQuestionAnswering(RobertaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RobertaConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

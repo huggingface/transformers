@@ -542,6 +542,8 @@ class Owlv2Encoder(nn.Module):
 
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTTextTransformer with OWLVIT->OWLV2,OwlViT->Owlv2
 class Owlv2TextTransformer(Owlv2PreTrainedModel):
+    config: Owlv2TextConfig
+
     def __init__(self, config: Owlv2TextConfig):
         super().__init__(config)
 
@@ -657,6 +659,8 @@ class Owlv2TextModel(Owlv2PreTrainedModel):
 
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTVisionTransformer with OWLVIT->OWLV2,OwlViT->Owlv2
 class Owlv2VisionTransformer(Owlv2PreTrainedModel):
+    config: Owlv2VisionConfig
+
     def __init__(self, config: Owlv2VisionConfig):
         super().__init__(config)
 

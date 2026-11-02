@@ -807,7 +807,7 @@ class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
     _supports_attention_backend = False
     _supports_flex_attn = False
 
-    def __init__(self, config):
+    def __init__(self, config: PPDocLayoutV2Config):
         super().__init__(config)
         self.embeddings = PPDocLayoutV2TextEmbeddings(config)
         self.label_embeddings = nn.Embedding(config.num_classes, config.hidden_size)

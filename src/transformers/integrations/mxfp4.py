@@ -22,6 +22,7 @@ if is_torch_available():
 from ..core_model_loading import ConversionOps, _IdentityOp
 from ..distributed.utils import _is_torch_distributed_initialized
 from ..quantizers.quantizers_utils import get_module_from_name, on_device, should_convert_module
+from .hub_kernels import use_kernel_forward_from_hub
 
 
 logger = logging.get_logger(__name__)
@@ -416,6 +417,7 @@ def routing_from_top_k(top_k_index, top_k_weights, num_experts):
     return RoutingData(gate_scal, hist, num_experts, num_top_k, expt_data), gather_indx, scatter_indx
 
 
+@use_kernel_forward_from_hub("MegaBlocksMoeMLP")
 class Mxfp4GptOssMLP(nn.Module):
     def __init__(self, router, experts):
         super().__init__()

@@ -388,32 +388,33 @@ class AutoEP(EPImplementation):
         return self.all_to_all(hidden_states, top_k_index, top_k_weights)
 
 
-class PassthroughEP(EPImplementation):
-    """Pass through a batch to an expert kernel that performs its own dispatch and combine."""
-
-    needs_shared_batch = True
-
-    def __call__(self, hidden_states, top_k_index, top_k_weights):
-        with _use_local_dtensor_params(self.experts):
-            output = self.experts_forward(hidden_states, top_k_index, top_k_weights, self.ep_mesh.get_group())
-        return output.to(hidden_states.dtype)
-
-
 class MegaMoEEP(EPImplementation):
     """
-    DeepGEMM Mega MoE, whose kernel fuses the token dispatch, the experts and the combine. The kernel treats each
-    rank's rows as that rank's own tokens, while every rank of the EP group holds the same batch here: each rank hands
-    it an equal slice of that batch, with global expert ids and unmasked weights, and the combined slices are gathered
-    back, so every token goes through the experts once. The kernel exchanges tokens through symmetric-memory buffers,
-    which this implementation keeps per EP group and shares between every layer, since the layers run one after another.
-    The kernel has no backward, so this runs at inference only.
+    DeepGEMM Mega MoE, whose kernel fuses the token dispatch, the experts and the combine. It treats each rank's rows as
+    that rank's own tokens. Here every rank of the EP group holds the same batch, so each rank hands the kernel an equal
+    slice of it, with global expert ids and unmasked weights, and the slices' outputs are gathered back. Every token goes
+    through the experts once. The kernel has no backward, so this runs at inference only.
+
+    Example: 4 tokens on 2 ranks.
+
+    GPU                    0                      1
+                           |                      |
+    batch           [t0, t1, t2, t3]       [t0, t1, t2, t3]     the same tokens on both ranks
+    kernel input        [t0, t1]               [t2, t3]          each rank's slice
+    kernel output    [y0, y1]               [y2, y3]            the kernel exchanges tokens between ranks
+    after all-gather         [y0, y1, y2, y3] on both ranks
     """
 
     # TODO: Mega MoE is built for ranks holding different batches (data-parallel attention + EP), where neither the
-    # slicing nor the gather is needed; until inference supports data parallelism, it runs on the shared batch.
+    # slicing nor the gather is needed. Until inference supports data parallelism, it runs on the shared batch.
     needs_shared_batch = True
-    # EP group name -> the kernel's symmetric buffers, by shape; `symm_buffers.clear()` frees them
+    # The kernel's symmetric-memory buffers, by EP group. They are slow to allocate, so every layer of a group shares
+    # them, as the layers run one after another. `MegaMoEEP.symm_buffers.clear()` frees them.
     symm_buffers: dict[str, dict] = {}
+
+    def __init__(self, experts, ep_mesh, tp_mesh=None):
+        super().__init__(experts, ep_mesh, tp_mesh)
+        self.group_symm_buffers = self.symm_buffers.setdefault(ep_mesh.get_group().group_name, {})
 
     def __call__(self, hidden_states, top_k_index, top_k_weights):
         ep_group, ep_size, ep_rank = self.ep_mesh.get_group(), self.ep_mesh.size(), self.ep_mesh.get_local_rank()
@@ -427,10 +428,9 @@ class MegaMoEEP(EPImplementation):
             top_k_weights = torch.nn.functional.pad(top_k_weights, (0, 0, 0, padding))
         rows = slice(ep_rank * rows_per_rank, (ep_rank + 1) * rows_per_rank)
 
-        symm_buffers = self.symm_buffers.setdefault(ep_group.group_name, {})
         with _use_local_dtensor_params(self.experts):
             local_output = self.experts_forward(
-                hidden_states[rows], top_k_index[rows], top_k_weights[rows], ep_group, symm_buffers
+                hidden_states[rows], top_k_index[rows], top_k_weights[rows], ep_group, self.group_symm_buffers
             )
         output = local_output.new_empty(rows_per_rank * ep_size, local_output.size(-1))
         all_gather_into_tensor(output, local_output.contiguous(), group=ep_group)
@@ -444,7 +444,6 @@ class EPImplementationInterface(GeneralInterface):
         "auto": AutoEP,
         "all_to_all": AllToAllEP,
         "all_reduce": AllReduceEP,
-        "passthrough": PassthroughEP,
         "deepgemm_megamoe": MegaMoEEP,
     }
 

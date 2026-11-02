@@ -43,7 +43,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import ProcessorMixin, Unpack
+from ...processing_utils import OmniModalProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.generic import (
@@ -1080,7 +1080,7 @@ class Qwen3OmniMoeVisionRotaryEmbedding(Qwen3VLMoeVisionRotaryEmbedding):
 class Qwen3OmniMoeVisionEncoder(Qwen3VLMoeVisionModel):
     config: Qwen3OmniMoeVisionEncoderConfig
 
-    def __init__(self, config, *inputs, **kwargs):
+    def __init__(self, config: Qwen3OmniMoeVisionEncoderConfig, *inputs, **kwargs):
         self.merger_list = nn.ModuleList(
             [
                 Qwen3OmniMoeVisionPatchMerger(
@@ -1377,7 +1377,7 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
 
 
 class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForConditionalGeneration):
-    def __init__(self, config):
+    def __init__(self, config: Qwen3OmniMoeThinkerConfig):
         super().__init__(config)
         self.num_experts = config.text_config.num_experts
         self.num_experts_per_tok = config.text_config.num_experts_per_tok
@@ -2225,6 +2225,7 @@ class Qwen3OmniMoeCode2WavTransformerLayer(GradientCheckpointingLayer):
 
 
 class Qwen3OmniMoeCode2WavTransformerModel(Qwen3Model):
+    config: Qwen3OmniMoeCode2WavConfig
     _can_record_outputs = {
         "hidden_states": Qwen3OmniMoeCode2WavTransformerLayer,
         "attentions": Qwen3OmniMoeCode2WavAttention,
@@ -2296,6 +2297,8 @@ class Qwen3OmniMoeCode2WavDecoderResidualUnit(nn.Module):
 
 
 class Qwen3OmniMoeCode2WavDecoderBlock(Qwen3OmniMoePreTrainedModel):
+    config: Qwen3OmniMoeCode2WavConfig
+
     def __init__(self, config: Qwen3OmniMoeCode2WavConfig, layer_idx):
         super().__init__(config)
         in_dim = config.decoder_dim // 2**layer_idx
@@ -2321,7 +2324,8 @@ class Qwen3OmniMoeCode2WavDecoderBlock(Qwen3OmniMoePreTrainedModel):
 
 
 class Qwen3OmniMoeCode2Wav(Qwen3OmniMoePreTrainedModel):
-    input_modalities = "audio"
+    input_modalities = ("audio",)
+    config: Qwen3OmniMoeCode2WavConfig
 
     def __init__(self, config: Qwen3OmniMoeCode2WavConfig):
         super().__init__(config)
@@ -2772,7 +2776,7 @@ class Qwen3OmniMoeProcessorKwargs(Qwen2_5OmniProcessorKwargs):
     }
 
 
-class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
+class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor):
     def replace_multimodal_special_tokens(
         self,
         text,
@@ -2874,6 +2878,19 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
         fps = output_kwargs["videos_kwargs"].get("fps", 1.0)
         fps = fps if fps is not None else 1.0
         n_window = output_kwargs["audio_kwargs"].pop("n_window", 50)
+        load_audio_from_video = output_kwargs["videos_kwargs"].pop("load_audio_from_video", False)
+        if use_audio_in_video:
+            logger.warning(
+                "`use_audio_in_video` is depreacted and will be removed in v5.25, use `load_audio_from_video` instead"
+            )
+            load_audio_from_video = True
+
+        if load_audio_from_video:
+            audio, video_to_audio_indices = self._resolve_audio_from_video(
+                videos,
+                audio=audio,
+                audio_from_video_indices=None,
+            )
 
         if audio is not None:
             audio_inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
@@ -2919,7 +2936,7 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
             image_grid_thw,
             video_grid_thw,
             video_second_per_grid=video_second_per_grid,
-            use_audio_in_video=use_audio_in_video,
+            use_audio_in_video=load_audio_from_video,
             position_id_per_seconds=position_id_per_seconds,
             seconds_per_chunk=seconds_per_chunk,
         )
@@ -2932,7 +2949,7 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
         )
 
     def apply_chat_template(self, conversations, chat_template=None, **kwargs):
-        return ProcessorMixin.apply_chat_template(self, conversations, chat_template, **kwargs)
+        return OmniModalProcessorMixin.apply_chat_template(self, conversations, chat_template, **kwargs)
 
 
 __all__ = [
