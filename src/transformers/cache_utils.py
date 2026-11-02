@@ -209,43 +209,6 @@ class DynamicLayer(CacheLayerMixin):
             self.values = self.values[indices, ...]
 
 
-class DummyLayer:
-    """
-    A dummy cache layer that does not store any cache. Used for layers that consume cache producer by other layers.
-    """
-
-    supports_early_init = False  # added so that DummyLayer are properly skipped during `early_initialization`
-
-    def __init__(self, **kwargs):
-        self.is_initialized = True
-        # Setting keeps and values to None saves issues with exporters and multi-GPU gather
-        self.keys = None
-        self.values = None
-
-    def update(
-        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        # Tolerate updates with None, None so that reconstruction of DynamicCache works well in DDP
-        if key_states is None and value_states is None:
-            return None, None
-        raise NotImplementedError("Dummy layer don't store cache: they cannot be updated.")
-
-    # Dummy methods, fine to call on DummyLayer
-    def offload(self): ...
-    def reset(self): ...
-    def reorder_cache(self, beam_idx: torch.LongTensor): ...
-    def crop(self, tokens_to_remove: int): ...
-    def batch_repeat_interleave(self, repeats: int): ...
-    def batch_select_indices(self, indices: torch.Tensor): ...
-
-    # These methods should never be called by construction, but they are here to make ty happy and errors readable
-    def prefetch(self):
-        raise NotImplementedError("Dummy layer don't store cache: they cannot be prefetched.")
-
-    def get_max_length(self):
-        raise NotImplementedError("Dummy layer don't store cache: they cannot have a maximum length.")
-
-
 class DynamicSlidingWindowLayer(DynamicLayer):
     """
     A cache layer that grows dynamically as more tokens are generated, up until the sliding window size.
@@ -1427,6 +1390,45 @@ class LinearAttentionAndStaticSlidingWindowAttentionLayer(LinearAttentionLayer, 
         StaticSlidingWindowLayer.reorder_cache(self, beam_idx)
 
 
+class DummyLayer:
+    """
+    A dummy cache layer that does not store any cache. It is used either for layers that do not need any cache (e.g. layers without any
+    attention mechanism but only MoE/mlp), or for shared-cache layers that consume cache producer by other layers.
+    """
+
+    supports_early_init = False  # added so that DummyLayer are properly skipped during `early_initialization`
+    # DunnyLayer does not hold any data, so it's both compileable and croppable
+    is_compileable = True
+    is_croppable = True
+
+    def __init__(self, **kwargs):
+        self.is_initialized = True
+        # Setting keeps and values to None saves issues with exporters and multi-GPU gather
+        self.keys = None
+        self.values = None
+
+    def update(
+        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        # Tolerate updates with None, None so that reconstruction of DynamicCache works well in DDP
+        if key_states is None and value_states is None:
+            return None, None
+        raise NotImplementedError("Dummy layer don't store cache: they cannot be updated.")
+
+    # Dummy methods - just do nothing when called as the layer does not hold any data
+    def offload(self): ...
+    def prefetch(self): ...
+    def reset(self): ...
+    def crop(self, tokens_to_remove: int): ...
+    def reorder_cache(self, beam_idx: torch.LongTensor): ...
+    def batch_repeat_interleave(self, repeats: int): ...
+    def batch_select_indices(self, indices: torch.Tensor): ...
+
+    def get_max_length(self):
+        # DummyLayer does not have a max length, so return -1
+        return -1
+
+
 # Mappings from layer_type to layer cache class
 DYNAMIC_LAYER_TYPE_MAPPING = {
     "full_attention": DynamicLayer,
@@ -1763,7 +1765,7 @@ class Cache:
             return -1
 
         if layer_idx is None:
-            return max(layer.get_max_length() for layer in self.layers if not isinstance(layer, DummyLayer))
+            return max(layer.get_max_length() for layer in self.layers)
         else:
             return self.layers[layer_idx].get_max_length()
 
@@ -1897,18 +1899,18 @@ class Cache:
         # For DynamicCache dispatching the layers lazily (otherwise, all([]) is True)
         if len(self.layers) == 0:
             return False
-        return all(layer.is_compileable for layer in self.layers if not isinstance(layer, DummyLayer))
+        return all(layer.is_compileable for layer in self.layers)
 
     @property
     def is_initialized(self) -> bool:
         """Return whether the cache data is initialized"""
-        layers = [layer for layer in self.layers if layer.supports_early_init]  # excludes dummy layers
+        layers = [layer for layer in self.layers if layer.supports_early_init]
         return len(layers) > 0 and all(layer.is_initialized for layer in layers)
 
     @property
     def is_croppable(self) -> bool:
         """Whether `crop` can put the whole cache back as it was, so a rollback leaves no trace."""
-        return all(layer.is_croppable for layer in self.layers if not isinstance(layer, DummyLayer))
+        return all(layer.is_croppable for layer in self.layers)
 
     @property
     def is_sliding(self) -> list[bool]:
