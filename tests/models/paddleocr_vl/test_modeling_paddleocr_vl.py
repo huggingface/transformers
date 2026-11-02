@@ -26,6 +26,7 @@ from transformers import (
     PaddleOCRVLForConditionalGeneration,
     is_torch_available,
 )
+from transformers.models.paddleocr_vl.configuration_paddleocr_vl import PaddleOCRVisionConfig
 from transformers.testing_utils import (
     backend_empty_cache,
     require_flash_attn,
@@ -48,6 +49,8 @@ from ...test_processing_common import url_to_local_path
 
 if is_torch_available():
     import torch
+
+    from transformers.models.paddleocr_vl.modeling_paddleocr_vl import PaddleOCRVisionEmbeddings
 
 
 class PaddleOCRVLVisionText2TextModelTester:
@@ -301,6 +304,31 @@ class PaddleOCRVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     @unittest.skip("PaddleOCRVL does not support this test.")
     def test_model_is_small(self):
         pass
+
+
+@require_torch
+class PaddleOCRVisionEmbeddingsTest(unittest.TestCase):
+    def test_position_embedding_interpolation_matches_align_corners_false(self):
+        # The original model resamples the learned position grid with
+        # `F.interpolate(mode="bilinear", align_corners=False)`.
+        config = PaddleOCRVisionConfig(image_size=4, patch_size=2, hidden_size=8, num_attention_heads=2)
+        embeddings = PaddleOCRVisionEmbeddings(config).eval()
+
+        with torch.no_grad():
+            embeddings.patch_embedding.weight.zero_()
+            if embeddings.patch_embedding.bias is not None:
+                embeddings.patch_embedding.bias.zero_()
+            embeddings.position_embedding.weight.copy_(torch.arange(4, dtype=torch.float32)[:, None].expand(4, 8))
+
+            actual = embeddings(torch.zeros(1, 16, 3, 2, 2), grid_thw=torch.tensor([[1, 4, 4]]))
+
+            position_grid = embeddings.position_embedding.weight.T.reshape(1, 8, 2, 2)
+            expected = torch.nn.functional.interpolate(
+                position_grid, size=(4, 4), mode="bilinear", align_corners=False
+            )
+            expected = expected.flatten(2).transpose(1, 2).squeeze(0)
+
+        torch.testing.assert_close(actual, expected, rtol=1e-5, atol=1e-5)
 
 
 @require_torch
