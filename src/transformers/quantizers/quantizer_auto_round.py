@@ -18,6 +18,7 @@ from .base import HfQuantizer
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import AutoRoundConfig
 
 from ..utils import is_auto_round_available, logging
 
@@ -29,6 +30,8 @@ class AutoRoundQuantizer(HfQuantizer):
     """
     Quantizer of the AutoRound method. (https://huggingface.co/papers/2309.05516)
     """
+
+    quantization_config: "AutoRoundConfig"
 
     # AutoRound requires data calibration - we support only inference
     requires_calibration = True

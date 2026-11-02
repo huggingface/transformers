@@ -108,7 +108,8 @@ class GptqHfQuantizer(HfQuantizer):
             # What optimum's `post_init_model` does that is not per layer, the rest ran in `GptqDeserialize`
             from ..integrations.gptq import gptqmodel_post_init
 
-            model.quantize_config = SimpleNamespace(desc_act=self.quantization_config.desc_act)
+            # gptqmodel reads `model.quantize_config.desc_act`
+            setattr(model, "quantize_config", SimpleNamespace(desc_act=self.quantization_config.desc_act))
             gptqmodel_post_init(model, use_act_order=self.quantization_config.desc_act)
         else:
             if self.quantization_config.tokenizer is None:
