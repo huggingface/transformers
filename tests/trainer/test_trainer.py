@@ -20,6 +20,7 @@ mixed precision, logging, NEFTune, memory metrics, and end-to-end training.
 import math
 import tempfile
 from functools import partial
+from unittest.mock import patch
 
 import datasets
 import numpy as np
@@ -471,6 +472,20 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
             ]
             num_items = trainer._get_num_items_in_batch(batch_samples, torch.device("cpu"))
             self.assertEqual(int(num_items), 13)
+
+    @require_torch_non_multi_accelerator
+    def test_num_items_in_batch_keeps_fraction_under_model_parallelism(self):
+        from transformers import LlamaForTokenClassification
+
+        config = LlamaConfig(
+            vocab_size=64, hidden_size=16, intermediate_size=32, num_hidden_layers=2, num_attention_heads=2
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = Trainer(model=LlamaForTokenClassification(config), args=TrainingArguments(output_dir=tmp_dir))
+            batch_samples = [{"labels": torch.tensor([[1, 2, 3, -100]])}]
+            with patch.object(trainer, "get_cp_size", return_value=2):
+                num_items = trainer._get_num_items_in_batch(batch_samples, torch.device("cpu"))
+            self.assertEqual(num_items.item(), 1.5)
 
     @require_torch_multi_accelerator
     def test_num_batches_in_training_with_gradient_accumulation(self):
