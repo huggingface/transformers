@@ -170,6 +170,7 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @slow
     @require_torch_gpu
     def test_sample_actions_cuda_graph_matches_eager(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
