@@ -66,27 +66,12 @@ class Mxfp4Quantize(ConversionOps):
 
         with torch.device(value.device):
             if isinstance(module, Mxfp4GptOssExperts):
-                triton_weight_tensor, weight_scale = quantize_to_mxfp4(value.transpose(-1, -2), triton_kernels_hub)
-                PrecisionConfig, FlexCtx, InFlexData = (
-                    triton_kernels_hub.matmul_ogs.PrecisionConfig,
-                    triton_kernels_hub.matmul_ogs.FlexCtx,
-                    triton_kernels_hub.matmul_ogs.InFlexData,
-                )
-                triton_weight_tensor, weight_scale = swizzle_mxfp4(
-                    triton_weight_tensor, weight_scale, triton_kernels_hub
-                )
-
+                # The weight is (experts, in, out) and is quantized in blocks along `in`. Transposed, the blocks and
+                # scales have the layout of a pre-quantized checkpoint, so they load the same way
+                blocks, scales = quantize_to_mxfp4(value, triton_kernels_hub)
                 proj = "gate_up_proj" if "gate_up_proj" in full_layer_name else "down_proj"
-
-                if proj in module._parameters:
-                    # Remove the nn.Parameter registration so we can attach the Triton tensor
-                    del module._parameters[proj]
-
-                setattr(module, proj, triton_weight_tensor)
-                setattr(
-                    module,
-                    f"{proj}_precision_config",
-                    PrecisionConfig(weight_scale=weight_scale, flex_ctx=FlexCtx(rhs_data=InFlexData())),
+                swizzle_mxfp4_convertops(
+                    blocks.transpose(-2, -1), scales.transpose(-2, -1), module, proj, value.device, triton_kernels_hub
                 )
 
                 missing_keys.discard(f"{full_layer_name}")

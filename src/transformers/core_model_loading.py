@@ -1737,7 +1737,9 @@ def convert_and_load_state_dict_in_model(
                 matched_dtype_pattern = dtype_policy_alt.search(renamed_key)
                 if matched_dtype_pattern is not None:
                     _dtype = dtype_plan[dtype_policy_by_group_name[matched_dtype_pattern.lastgroup]]
-            elif empty_param is not None and empty_param.dtype != _dtype:
+            # A param quantized on load holds its quantized dtype (uint8 for MXFP4, float8 for FP8): the checkpoint tensor
+            # is quantized from `dtype`
+            elif empty_param is not None and empty_param.dtype != _dtype and not needs_quantization:
                 _dtype = empty_param.dtype  # usually correct when initializing
             if hf_quantizer and hf_quantizer.pre_quantized:
                 _dtype = hf_quantizer.get_new_dtype(mapping, tensor, _dtype)

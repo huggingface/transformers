@@ -367,6 +367,47 @@ class Mxfp4IntegrationTest(unittest.TestCase):
     @REQUIRE_TRITON_MXFP4
     @require_kernels
     @require_torch
+    def test_quantize_on_load(self):
+        """Test that loading a bfloat16 checkpoint with `Mxfp4Config()` quantizes its experts and saves them as such"""
+        from safetensors.torch import load_file
+
+        from transformers import GptOssConfig
+        from transformers.integrations.hub_kernels import get_kernel
+        from transformers.integrations.mxfp4 import quantize_to_mxfp4
+
+        config = GptOssConfig(
+            vocab_size=16,
+            hidden_size=128,
+            intermediate_size=128,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            num_local_experts=4,
+        )
+        model = GptOssForCausalLM(config).to(torch.bfloat16)
+        with tempfile.TemporaryDirectory() as bf16_dir, tempfile.TemporaryDirectory() as mxfp4_dir:
+            model.save_pretrained(bf16_dir)
+            quantized = GptOssForCausalLM.from_pretrained(
+                bf16_dir, quantization_config=Mxfp4Config(), dtype=torch.bfloat16, device_map=torch_device
+            )
+            quantized.save_pretrained(mxfp4_dir)
+            state_dict = load_file(f"{mxfp4_dir}/model.safetensors")
+
+        triton_kernels_hub = get_kernel("kernels-community/gpt-oss-triton-kernels", version=1)
+        for proj in ("gate_up_proj", "down_proj"):
+            # The weight is (experts, in, out), quantized in blocks of 32 along `in`, and stored as (experts, out, ...)
+            weight = getattr(model.model.layers[0].mlp.experts, proj).to(torch_device)
+            blocks, scales = quantize_to_mxfp4(weight, triton_kernels_hub)
+            num_experts, in_features, out_features = weight.shape
+            blocks = blocks.transpose(1, 2).reshape(num_experts, out_features, in_features // 32, 16)
+            torch.testing.assert_close(state_dict[f"model.layers.0.mlp.experts.{proj}_blocks"], blocks.cpu())
+            torch.testing.assert_close(
+                state_dict[f"model.layers.0.mlp.experts.{proj}_scales"], scales.transpose(1, 2).cpu()
+            )
+
+    @REQUIRE_TRITON_MXFP4
+    @require_kernels
+    @require_torch
     def test_quantize_to_mxfp4(self):
         """Test quantization function"""
         from transformers.integrations.hub_kernels import get_kernel
