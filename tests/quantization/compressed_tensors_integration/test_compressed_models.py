@@ -156,20 +156,35 @@ class DequantizeTest(unittest.TestCase):
         self.assertEqual(compressed_count, 0)
 
     def test_dequantize_outputs_match_default(self):
-        """An explicit `dequantize=True` must produce the same outputs as the default load
+        """For weight-only schemes, an explicit `dequantize=True` produces the same outputs as the default load
         (both are dequantized)."""
         from transformers import AutoTokenizer
 
-        for stub in self.stubs:
-            tokenizer = AutoTokenizer.from_pretrained(stub)
-            input_ids = tokenizer(self.prompt, return_tensors="pt").input_ids
+        tokenizer = AutoTokenizer.from_pretrained(self.tinyllama_w4a16)
+        input_ids = tokenizer(self.prompt, return_tensors="pt").input_ids
 
-            model_default = AutoModelForCausalLM.from_pretrained(stub)
-            output_default = model_default.generate(input_ids, max_new_tokens=100)
+        model_default = AutoModelForCausalLM.from_pretrained(self.tinyllama_w4a16)
+        output_default = model_default.generate(input_ids, max_new_tokens=100)
 
-            model_dequantized = AutoModelForCausalLM.from_pretrained(
-                stub, quantization_config=CompressedTensorsConfig(dequantize=True)
-            )
-            output_dequantized = model_dequantized.generate(input_ids, max_new_tokens=100)
+        model_dequantized = AutoModelForCausalLM.from_pretrained(
+            self.tinyllama_w4a16, quantization_config=CompressedTensorsConfig(dequantize=True)
+        )
+        output_dequantized = model_dequantized.generate(input_ids, max_new_tokens=100)
 
-            self.assertEqual(tokenizer.decode(output_default[0]), tokenizer.decode(output_dequantized[0]))
+        self.assertEqual(tokenizer.decode(output_default[0]), tokenizer.decode(output_dequantized[0]))
+
+    def test_dequantize_drops_activation_quantization(self):
+        """`dequantize=True` loads a dense model: w8a8 also stops quantizing its activations, so its outputs differ
+        from the default (quantized activations) load."""
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained(self.tinyllama_w8a8)
+        input_ids = tokenizer(self.prompt, return_tensors="pt").input_ids
+        model = AutoModelForCausalLM.from_pretrained(
+            self.tinyllama_w8a8, quantization_config=CompressedTensorsConfig(dequantize=True)
+        )
+        output = model.generate(input_ids, max_new_tokens=20, do_sample=False)
+        self.assertEqual(
+            tokenizer.decode(output[0]),
+            "<s> Paris is the capital of which country?\n\n  * a) France\n  * b) Germany\n  * c) Italy\n",
+        )
