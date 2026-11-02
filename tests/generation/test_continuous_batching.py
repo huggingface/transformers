@@ -94,6 +94,11 @@ from transformers.utils.generic import is_flash_attention_requested
 
 from ..distributed_testing_utils import run_distributed
 
+from transformers.generation.continuous_batching.cb_logits_processors import (
+    ContinuousBatchingTopKLogitsWarper,
+)
+from transformers.generation.logits_process import TopKLogitsWarper
+
 
 # Constants for tests
 _DEFAULT_USER_MESSAGES = [
@@ -306,6 +311,31 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         q = k = v = torch.zeros(1, 1, 4, 8)
         with self.assertRaisesRegex(ValueError, attn_implementation.replace("|", r"\|")):
             attention_forward(module, q, k, v, None, scaling=1.0)
+
+    def test_top_k_larger_than_vocab_size(self):
+        """Test that top_k larger than vocabulary size does not raise an error."""
+        vocab_size = 8
+        scores = torch.arange(24, dtype=torch.float32).reshape(3, vocab_size)
+
+        processor = TopKLogitsWarper(top_k=3)
+        cb_processor = ContinuousBatchingTopKLogitsWarper(processor)
+
+        tensor_arg = torch.tensor([20, 3, 8], dtype=torch.int32)
+
+        processed_scores = cb_processor(scores, tensor_arg)
+
+        expected_scores = torch.stack(
+            [
+                TopKLogitsWarper(top_k=k)(None, scores[i : i + 1]).squeeze(0)
+                for i, k in enumerate([8, 3, 8])
+            ]
+        )
+
+        torch.testing.assert_close(processed_scores, expected_scores)
+
+        finite_tokens = processed_scores.isfinite().sum(dim=-1)
+
+        self.assertEqual(finite_tokens.tolist(), [8, 3, 8])
 
     def test_generation_outputs_are_snapshots(self):
         state = RequestState(

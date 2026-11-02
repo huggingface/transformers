@@ -267,7 +267,7 @@ class ContinuousBatchingTopKLogitsWarper(ContinuousBatchingLogitsProcessor):
 
     def __call__(self, scores: torch.FloatTensor, tensor_arg: torch.Tensor) -> torch.FloatTensor:
         """Applies top-k selection to the scores tensor (shape [B, V])."""
-        top_k = tensor_arg[: scores.size(0)]  # shape [B]
+        top_k = tensor_arg[: scores.size(0)].clamp(max=scores.size(-1))  # shape [B]
         # Sort descending, get threshold at position (top_k - 1) which is the k-th largest
         sorted_scores = torch.sort(scores, dim=-1, descending=True)[0]  # [B, V]
         top_k_indices = (top_k - 1).unsqueeze(-1).to(dtype=torch.int64)  # [B, 1]
