@@ -12,10 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import tempfile
 import unittest
 
+from huggingface_hub import download_bucket_files
+
 from transformers import (
+    AutoFeatureExtractor,
     YuE2AcousticTokenizerConfig,
     YuE2AcousticTokenizerDecoderConfig,
     YuE2AcousticTokenizerEncoderConfig,
@@ -29,8 +33,10 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
 if is_torch_available():
     import torch
+    from safetensors.torch import load_file
 
     from transformers import (
+        AutoModel,
         YuE2AcousticTokenizerDecoderModel,
         YuE2AcousticTokenizerEncoderModel,
         YuE2AcousticTokenizerModel,
@@ -184,61 +190,62 @@ class YuE2AcousticTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class YuE2AcousticTokenizerIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     """
-    Expected values from the original implementation (`yue2.modeling_vae.YuE2VAE` of the `yue2_infer` 0.1.5 wheel
-    shipped with https://huggingface.co/m-a-p/YuE2-3B), on a CUDA device with TF32 disabled, as the original pipeline runs:
-
-    ```python
-    import torch
-    from yue2.modeling_vae import YuE2VAE
-
-    torch.backends.cudnn.allow_tf32 = False
-    generator = torch.Generator().manual_seed(0)
-    audio = 0.1 * torch.randn(1, 2, 1920 * 25, generator=generator)
-    latents = torch.randn(1, 64, 25, generator=generator)
-    model = YuE2VAE.from_pretrained("m-a-p/YuE2-Vae", device="cuda")
-    with torch.inference_mode():
-        print(model.encode(audio.cuda())[0, :3, :5].T)  # EXPECTED_LATENTS
-        print(model.decode(latents.cuda())[0, :, 1000:1006])  # EXPECTED_AUDIO
-    ```
+    reproducer (uploads the golden to
+    ``hf://buckets/hf-internal-testing/yue2-acoustic-tokenizer-integration-tests/<case>/expected.safetensors``,
+    holding the input waveforms and the original's latents and decoded waveforms, computed with the `yue2_infer` 0.1.5
+    wheel of https://huggingface.co/m-a-p/YuE2-3B on a CUDA device with TF32 disabled, as the original pipeline runs):
+        https://gist.github.com/ebezzam/d03a9cc1d2bfc31c39c8e3704f73e5bc
     """
 
+    # Tolerance against the original's latents and waveforms from the bucket
+    RTOL = 0
+    ATOL = 1e-5
+
     checkpoint = "bezzam/yue2-acoustic-tokenizer"
+    bucket = "hf-internal-testing/yue2-acoustic-tokenizer-integration-tests"
 
-    def setUp(self):
-        super().setUp()
-        generator = torch.Generator().manual_seed(0)
-        self.audio = 0.1 * torch.randn(1, 2, 1920 * 25, generator=generator)
-        self.latents = torch.randn(1, 64, 25, generator=generator).transpose(1, 2)
-
-    @slow
-    def test_encode(self):
-        model = YuE2AcousticTokenizerModel.from_pretrained(self.checkpoint, device_map=torch_device)
-        # TF32 convolutions, PyTorch's default on recent GPUs, move the latents by up to 6e-4
-        with torch.no_grad(), torch.backends.cudnn.flags(enabled=True, allow_tf32=False):
-            latents = model.encode(self.audio.to(torch_device)).latents
-        # fmt: off
-        EXPECTED_LATENTS = torch.tensor([
-            [0.798269, 0.673941, -0.226476],
-            [1.905051, -0.001175, 0.167258],
-            [1.279705, 0.309271, 0.173560],
-            [1.841689, -0.261596, 0.271040],
-            [1.466523, 0.176592, 0.295676],
-        ])
-        # fmt: on
-        self.assertEqual(latents.shape, (1, 25, 64))
-        torch.testing.assert_close(latents[0, :5, :3].cpu(), EXPECTED_LATENTS, rtol=0, atol=1e-5)
+    def _load_expected(self, case):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            local_path = os.path.join(tmp_dir, "expected.safetensors")
+            download_bucket_files(self.bucket, files=[(f"{case}/expected.safetensors", local_path)])
+            return load_file(local_path)
 
     @slow
-    def test_decode(self):
-        model = YuE2AcousticTokenizerModel.from_pretrained(self.checkpoint, device_map=torch_device)
+    def test_encode_decode(self):
+        """
+        10 seconds of an example song of m-a-p/YuE2-3B, 48 kHz stereo. The decoder is fed the original's latents, so
+        that each half is checked on its own.
+
+        reproducer: https://gist.github.com/ebezzam/d03a9cc1d2bfc31c39c8e3704f73e5bc#file-reproducer_codec-py
+        """
+        expected = self._load_expected("codec")
+        model = AutoModel.from_pretrained(self.checkpoint, device_map=torch_device)
+        feature_extractor = AutoFeatureExtractor.from_pretrained(self.checkpoint)
+        inputs = feature_extractor(
+            expected["input_audio"].numpy(), sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
+        )
+        # TF32 convolutions, PyTorch's default on recent GPUs, move the latents well beyond the tolerance
         with torch.no_grad(), torch.backends.cudnn.flags(enabled=True, allow_tf32=False):
-            audio = model.decode(self.latents.to(torch_device)).audio_values
-        # fmt: off
-        EXPECTED_AUDIO = torch.tensor([
-            [-0.044364, -0.046931, -0.042471, -0.033022, -0.035489, -0.044477],
-            [-0.045536, -0.048896, -0.041945, -0.032035, -0.044850, -0.054282],
-        ])
-        # fmt: on
-        # the decoder's transposed convolutions crop 64 samples overall
-        self.assertEqual(audio.shape, (1, 2, 1920 * 25 - 64))
-        torch.testing.assert_close(audio[0, :, 1000:1006].cpu(), EXPECTED_AUDIO, rtol=0, atol=1e-5)
+            latents = model.encode(inputs["input_values"].to(torch_device)).latents
+            audio = model.decode(expected["latents"][None].to(torch_device)).audio_values
+        torch.testing.assert_close(latents[0].cpu(), expected["latents"], rtol=self.RTOL, atol=self.ATOL)
+        torch.testing.assert_close(audio[0].cpu(), expected["audio"], rtol=self.RTOL, atol=self.ATOL)
+
+    @slow
+    def test_encode_decode_batch(self):
+        """
+        Two excerpts of example songs of m-a-p/YuE2-3B, of different lengths, go through the feature extractor as one
+        right-padded batch.
+
+        reproducer: https://gist.github.com/ebezzam/d03a9cc1d2bfc31c39c8e3704f73e5bc#file-reproducer_codec_batch-py
+        """
+        expected = self._load_expected("codec_batch")
+        model = AutoModel.from_pretrained(self.checkpoint, device_map=torch_device)
+        feature_extractor = AutoFeatureExtractor.from_pretrained(self.checkpoint)
+        audio = [expected["input_audio_0"].numpy(), expected["input_audio_1"].numpy()]
+        inputs = feature_extractor(audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
+        with torch.no_grad(), torch.backends.cudnn.flags(enabled=True, allow_tf32=False):
+            latents = model.encode(inputs["input_values"].to(torch_device)).latents
+            audio = model.decode(expected["latents"].to(torch_device)).audio_values
+        torch.testing.assert_close(latents.cpu(), expected["latents"], rtol=self.RTOL, atol=self.ATOL)
+        torch.testing.assert_close(audio.cpu(), expected["audio"], rtol=self.RTOL, atol=self.ATOL)
