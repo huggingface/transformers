@@ -14,8 +14,6 @@
 
 from typing import TYPE_CHECKING
 
-from ..integrations import prepare_for_hqq_linear
-from ..integrations.hqq import HQQ_SERIALIZED_NAMES
 from ..utils import is_hqq_available, is_torch_available, logging
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
@@ -30,6 +28,29 @@ if is_torch_available():
     import torch
 
 logger = logging.get_logger(__name__)
+
+
+HQQ_SERIALIZED_NAMES = [
+    "W_q",
+    "nbits",
+    "group_size",
+    "shape",
+    "scale",
+    "zero",
+    "axis",
+    "packing",
+    "unpack_view_dtype",
+    "view_as_float",
+    "quant_scale",
+    "quant_zero",
+    "compute_dtype",
+    "offload_meta",
+    "encoded_state_dict",
+    "stores_quant_config",
+    "channel_wise",
+    "optimize",
+    "round_zero",
+]
 
 
 class HqqHfQuantizer(HfQuantizer):
@@ -76,6 +97,8 @@ class HqqHfQuantizer(HfQuantizer):
             return
         # Add the corresponding quant_config to each valid module. The `quantize` load operation then swaps each one for an `HQQLinear`.
         # prepare_for_hqq_linear() also sets the right quantization config inside the model (model.config.quantization_config) and the layers (hqq_layer.quant_config)
+        from ..integrations import prepare_for_hqq_linear
+
         model = prepare_for_hqq_linear(model, quantization_config=self.quantization_config)
 
     def is_serializable(self):

@@ -76,7 +76,9 @@ class FourOverSixDequantize(ConversionOps):
             if not key.endswith("quantized_weight_values"):
                 continue  # the scales and metadata, read along with their values
             prefix = key.removesuffix("quantized_weight_values")
-            tensors = [input_dict[f"{prefix}quantized_weight_{name}"] for name in ("scale_factors", "amax", "metadata")]
+            tensors = [
+                input_dict[f"{prefix}quantized_weight_{name}"] for name in ("scale_factors", "amax", "metadata")
+            ]
             weights = []
             for values, scale_factors, amax, metadata in zip(
                 *[tensor if isinstance(tensor, list) else [tensor] for tensor in [values, *tensors]]
