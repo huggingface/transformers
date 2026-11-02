@@ -13,6 +13,7 @@
 # limitations under the License.
 """Tests for the native MiniMax-VL-01 PyTorch model."""
 
+import tempfile
 import unittest
 
 from parameterized import parameterized
@@ -29,8 +30,9 @@ from transformers import (
     MiniMaxVL01TextModel,
     is_torch_available,
 )
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import floats_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -499,6 +501,56 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
         self.assertIsInstance(AutoModel.from_config(config), MiniMaxVL01Model)
         self.assertIsInstance(AutoModelForCausalLM.from_config(config), MiniMaxVL01ForConditionalGeneration)
         self.assertIsInstance(AutoModelForImageTextToText.from_config(config), MiniMaxVL01ForConditionalGeneration)
+
+
+@slow
+@require_torch
+class MiniMaxVL01IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    def _dummy_model(self):
+        config = MiniMaxVL01VisionText2TextModelTester(
+            self,
+            num_hidden_layers=8,
+            num_experts=4,
+            layer_types=["linear_attention"] * 7 + ["full_attention"],
+        ).get_config()
+        torch.manual_seed(0)
+        model = MiniMaxVL01ForConditionalGeneration(config)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model.save_pretrained(tmpdir)
+            return MiniMaxVL01ForConditionalGeneration.from_pretrained(
+                tmpdir, dtype=torch.float32, attn_implementation="eager"
+            ).to(torch_device)
+
+    @staticmethod
+    def _image_inputs():
+        pixel_values = torch.arange(4 * 3 * 8 * 8, dtype=torch.float32, device=torch_device).reshape(4, 3, 8, 8)
+        return {
+            "input_ids": torch.tensor([[3] * 10 + [5, 6, 7], [3] * 10 + [8, 9, 10]], device=torch_device),
+            "attention_mask": torch.ones(2, 13, dtype=torch.long, device=torch_device),
+            "pixel_values": pixel_values / pixel_values.numel(),
+            "image_sizes": torch.tensor([[8, 8], [8, 8]], device=torch_device),
+        }
+
+    def test_small_model_logits_batched(self):
+        model = self._dummy_model()
+        logits = model(**self._image_inputs(), logits_to_keep=3).logits
+        expected_slice = torch.tensor(
+            [
+                [[-0.101953, 0.019430, 0.007517], [0.181610, 0.051723, -0.147496], [0.308670, -0.122409, -0.094961]],
+                [[0.153198, 0.031881, 0.072750], [0.045287, -0.029863, -0.156537], [-0.031201, -0.085948, 0.008906]],
+            ],
+            device=torch_device,
+        )
+        torch.testing.assert_close(logits[:, -3:, -3:], expected_slice, atol=1e-4, rtol=1e-4)
+
+    def test_small_model_generation(self):
+        model = self._dummy_model()
+        inputs = self._image_inputs()
+        generated_ids = model.generate(**inputs, max_new_tokens=5, do_sample=False)
+        self.assertEqual(
+            generated_ids[:, inputs["input_ids"].shape[1] :].tolist(),
+            [[94, 93, 63, 89, 8], [23, 85, 93, 63, 38]],
+        )
 
 
 if __name__ == "__main__":
