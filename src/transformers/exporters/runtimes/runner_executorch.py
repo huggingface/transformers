@@ -52,5 +52,9 @@ class ExecutorchModelRunner(ModelRunner):
 
     def __call__(self, **kwargs) -> Any:
         leaves = fx_pytree.tree_flatten_spec(((), kwargs), self.in_spec)
-        feed = [leaf.contiguous() if isinstance(leaf, torch.Tensor) else leaf for leaf in leaves]
+        # A string is a constant of the program, whose slot takes `None`: the runtime has no string value.
+        feed = [
+            leaf.contiguous() if isinstance(leaf, torch.Tensor) else None if isinstance(leaf, str) else leaf
+            for leaf in leaves
+        ]
         return self.unflatten(list(self.method.execute(feed)))
