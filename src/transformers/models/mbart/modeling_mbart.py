@@ -1163,7 +1163,7 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
 
 @auto_docstring
 class MBartForQuestionAnswering(MBartPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MBartConfig):
         super().__init__(config)
 
         config.num_labels = 2
@@ -1275,7 +1275,7 @@ class MBartDecoderWrapper(MBartPreTrainedModel):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: MBartConfig):
         super().__init__(config)
         self.decoder = MBartDecoder(config)
         self.post_init()
@@ -1290,7 +1290,7 @@ class MBartForCausalLM(MBartPreTrainedModel, GenerationMixin):
         "lm_head.weight": "model.decoder.embed_tokens.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: MBartConfig):
         config.is_decoder = True
         config.is_encoder_decoder = False
         super().__init__(config)

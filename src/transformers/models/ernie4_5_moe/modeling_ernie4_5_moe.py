@@ -467,6 +467,8 @@ class Ernie4_5_MoePreTrainedModel(PreTrainedModel):
         elif isinstance(module, Ernie4_5_MoeExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, Ernie4_5_MoeTopKRouter):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring
@@ -622,7 +624,7 @@ class Ernie4_5_MoeForCausalLM(Ernie4_5_MoePreTrainedModel, GenerationMixin):
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: Ernie4_5_MoeConfig):
         super().__init__(config)
         self.model = Ernie4_5_MoeModel(config)
         self.vocab_size = config.vocab_size

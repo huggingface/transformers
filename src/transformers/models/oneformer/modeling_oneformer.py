@@ -3191,7 +3191,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
                 class_labels=class_labels,
                 text_queries=text_queries,
                 auxiliary_predictions=auxiliary_predictions,
-                calculate_contrastive_loss=self.config.contrastive_temperature is not None,
+                calculate_contrastive_loss=self.config.is_training and self.config.contrastive_temperature is not None,
             )
             loss = self.get_loss(loss_dict)
 

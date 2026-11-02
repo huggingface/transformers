@@ -1,0 +1,32 @@
+name: Docs check trigger
+
+# Runs whenever someone submits a review on a PR and continues if the PR is approved by a maintainer and targets the main branch. It writes the PR number to a small file, saves it, and passes it to the next step.
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions: {}
+
+jobs:
+  record-pr:
+    permissions: {}
+    if: |
+      github.event.review.state == 'approved' &&
+      github.event.pull_request.base.ref == 'main' &&
+      contains(fromJSON('["MEMBER", "OWNER", "COLLABORATOR"]'), github.event.review.author_association)
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Record PR number
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          mkdir -p docs-check-pr
+          echo "${PR_NUMBER}" > docs-check-pr/number
+
+      - name: Upload PR number
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: docs-check-pr
+          path: docs-check-pr/
+          retention-days: 1

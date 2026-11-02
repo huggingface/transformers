@@ -373,7 +373,7 @@ class VibeVoiceAcousticTokenizerPreTrainedModel(PreTrainedModel):
 class VibeVoiceAcousticTokenizerEncoderModel(VibeVoiceAcousticTokenizerPreTrainedModel):
     config: VibeVoiceAcousticTokenizerEncoderConfig
 
-    def __init__(self, config):
+    def __init__(self, config: VibeVoiceAcousticTokenizerEncoderConfig):
         super().__init__(config)
 
         self.stem = VibeVoiceAcousticTokenizerEncoderStem(config)
@@ -466,7 +466,7 @@ class VibeVoiceAcousticTokenizerDecoderLayer(nn.Module):
 class VibeVoiceAcousticTokenizerDecoderModel(VibeVoiceAcousticTokenizerPreTrainedModel):
     config: VibeVoiceAcousticTokenizerDecoderConfig
 
-    def __init__(self, config):
+    def __init__(self, config: VibeVoiceAcousticTokenizerDecoderConfig):
         super().__init__(config)
 
         self.stem = VibeVoiceAcousticTokenizerDecoderStem(config)
@@ -501,7 +501,7 @@ class VibeVoiceAcousticTokenizerDecoderModel(VibeVoiceAcousticTokenizerPreTraine
     """
 )
 class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: VibeVoiceAcousticTokenizerConfig):
         super().__init__(config)
         self.encoder = AutoModel.from_config(config.encoder_config)
         self.decoder = AutoModel.from_config(config.decoder_config)

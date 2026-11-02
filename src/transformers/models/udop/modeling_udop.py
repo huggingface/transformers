@@ -1065,7 +1065,7 @@ class UdopStack(UdopPreTrainedModel):
     embeddings.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: UdopConfig):
         super().__init__(config)
         # text and image embeddings
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
@@ -1256,7 +1256,7 @@ class UdopModel(UdopPreTrainedModel):
         "encoder.embed_patches.proj.bias": "patch_embed.proj.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: UdopConfig):
         super().__init__(config)
 
         # text and image embeddings
@@ -1413,7 +1413,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         "lm_head.weight": "shared.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: UdopConfig):
         super().__init__(config)
 
         # text and image embeddings

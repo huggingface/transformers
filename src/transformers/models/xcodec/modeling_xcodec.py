@@ -443,7 +443,7 @@ class XcodecPreTrainedModel(PreTrainedAudioTokenizerBase):
 
 @auto_docstring(custom_intro="""The Xcodec neural audio codec model.""")
 class XcodecModel(XcodecPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XcodecConfig):
         super().__init__(config)
         self.config = config
         self.pad = config.hop_length // 2
