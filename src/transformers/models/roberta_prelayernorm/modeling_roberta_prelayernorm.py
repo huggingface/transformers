@@ -36,7 +36,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -518,7 +518,7 @@ class RobertaPreLayerNormPooler(nn.Module):
 
 @auto_docstring
 class RobertaPreLayerNormPreTrainedModel(PreTrainedModel):
-    config_class = RobertaPreLayerNormConfig
+    config: RobertaPreLayerNormConfig
     base_model_prefix = "roberta_prelayernorm"
     supports_gradient_checkpointing = True
     _no_split_modules = [
@@ -563,7 +563,7 @@ class RobertaPreLayerNormPreTrainedModel(PreTrainedModel):
     """
 )
 class RobertaPreLayerNormModel(RobertaPreLayerNormPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: RobertaPreLayerNormConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -713,7 +713,7 @@ class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel, Generat
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: RobertaPreLayerNormConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -799,9 +799,8 @@ class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel, Generat
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -829,7 +828,7 @@ class RobertaPreLayerNormForMaskedLM(RobertaPreLayerNormPreTrainedModel):
     }
 
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForMaskedLM.__init__ with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm
-    def __init__(self, config):
+    def __init__(self, config: RobertaPreLayerNormConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -935,7 +934,7 @@ class RobertaPreLayerNormLMHead(nn.Module):
     """
 )
 class RobertaPreLayerNormForSequenceClassification(RobertaPreLayerNormPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RobertaPreLayerNormConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1018,7 +1017,7 @@ class RobertaPreLayerNormForSequenceClassification(RobertaPreLayerNormPreTrained
 @auto_docstring
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForMultipleChoice with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm,roberta->roberta_prelayernorm
 class RobertaPreLayerNormForMultipleChoice(RobertaPreLayerNormPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RobertaPreLayerNormConfig):
         super().__init__(config)
 
         self.roberta_prelayernorm = RobertaPreLayerNormModel(config)
@@ -1111,7 +1110,7 @@ class RobertaPreLayerNormForMultipleChoice(RobertaPreLayerNormPreTrainedModel):
 
 @auto_docstring
 class RobertaPreLayerNormForTokenClassification(RobertaPreLayerNormPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RobertaPreLayerNormConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1204,7 +1203,7 @@ class RobertaPreLayerNormClassificationHead(nn.Module):
 
 @auto_docstring
 class RobertaPreLayerNormForQuestionAnswering(RobertaPreLayerNormPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RobertaPreLayerNormConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

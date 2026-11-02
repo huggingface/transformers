@@ -27,6 +27,11 @@ from ...utils import auto_docstring
 @strict
 class MimiConfig(PreTrainedConfig):
     r"""
+    encoder_config (`None`, *optional*):
+        Set to `None` to drop the encoder, e.g. to only decode. Otherwise it is derived from the other fields, which the
+        encoder and the decoder share.
+    decoder_config (`None`, *optional*):
+        Set to `None` to drop the decoder, e.g. to only encode. Otherwise it is derived from the other fields.
     audio_channels (`int`, *optional*, defaults to 1):
         Number of channels in the audio data. Either 1 for mono or 2 for stereo.
     num_filters (`int`, *optional*, defaults to 64):
@@ -130,6 +135,8 @@ class MimiConfig(PreTrainedConfig):
         # If frame_rate is explicitly provided, use it (backward compatibility)
         # Otherwise, compute it from other parameters (correctly)
         self._frame_rate = kwargs.pop("frame_rate", None)
+        # set to `False` by `encoder_config=None` / `decoder_config=None`, see `encoder_config`
+        self._has_encoder = self._has_decoder = True
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
@@ -138,6 +145,8 @@ class MimiConfig(PreTrainedConfig):
             raise ValueError(
                 f"The number of semantic quantizers should be lower than the total number of quantizers {self.num_quantizers}, but is currently {self.num_semantic_quantizers}."
             )
+        if self.codebook_size & (self.codebook_size - 1):
+            raise ValueError(f"`codebook_size` must be a power of 2, but is {self.codebook_size}.")
 
     @property
     def encodec_frame_rate(self) -> int:
@@ -148,6 +157,14 @@ class MimiConfig(PreTrainedConfig):
     def num_codebooks(self) -> int:
         # alias to num_quantizers
         return self.num_quantizers
+
+    @property
+    def latent_stride(self) -> int:
+        return int(self.encodec_frame_rate / self.frame_rate)
+
+    @property
+    def latent_dim(self) -> int:
+        return self.hidden_size
 
     @property
     def frame_size(self) -> int:
@@ -180,5 +197,108 @@ class MimiConfig(PreTrainedConfig):
             return self._frame_rate
         return self.sampling_rate / self.frame_size
 
+    # derived, not `sub_configs`: the halves share every field, and Mimi checkpoints are flat
+    @property
+    def encoder_config(self) -> "MimiEncoderConfig | None":
+        if not self._has_encoder:
+            return None
+        encoder_config = MimiEncoderConfig(**self.to_dict())
+        # `to_dict` drops the attention backend, which the encoder half must share with the full model
+        encoder_config._attn_implementation = self._attn_implementation
+        return encoder_config
 
-__all__ = ["MimiConfig"]
+    @encoder_config.setter
+    def encoder_config(self, value: None):
+        if value is not None:
+            raise ValueError(
+                "`encoder_config` is derived from the fields of `MimiConfig`: it can only be set to `None`."
+            )
+        if not self._has_decoder:
+            raise ValueError("Mimi needs an encoder, a decoder, or both: the decoder is already dropped.")
+        self._has_encoder = False
+
+    @property
+    def decoder_config(self) -> "MimiDecoderConfig | None":
+        if not self._has_decoder:
+            return None
+        decoder_config = MimiDecoderConfig(**self.to_dict())
+        # `to_dict` drops the attention backend, which the decoder half must share with the full model
+        decoder_config._attn_implementation = self._attn_implementation
+        return decoder_config
+
+    @decoder_config.setter
+    def decoder_config(self, value: None):
+        if value is not None:
+            raise ValueError(
+                "`decoder_config` is derived from the fields of `MimiConfig`: it can only be set to `None`."
+            )
+        if not self._has_encoder:
+            raise ValueError("Mimi needs an encoder, a decoder, or both: the encoder is already dropped.")
+        self._has_decoder = False
+
+    def to_dict(self):
+        output = super().to_dict()
+        # a dropped half is saved as `"encoder_config": null`, loaded back through its setter
+        for half in ("encoder", "decoder"):
+            if not output.pop(f"_has_{half}", True):
+                output[f"{half}_config"] = None
+        return output
+
+
+@strict
+class MimiEncoderConfig(MimiConfig):
+    """
+    Configuration of the encoder half of Mimi (SEANet encoder, encoder transformer and downsampling). It shares every
+    field with [`MimiConfig`] (see its documentation for the arguments), so it can be loaded directly from a full Mimi
+    checkpoint.
+    """
+
+    model_type = "mimi_encoder"
+
+    # a half has no halves: the `null` saved for a codec's dropped half is ignored when loading the other one
+    @property
+    def encoder_config(self):
+        return None
+
+    @encoder_config.setter
+    def encoder_config(self, value):
+        pass
+
+    @property
+    def decoder_config(self):
+        return None
+
+    @decoder_config.setter
+    def decoder_config(self, value):
+        pass
+
+
+@strict
+class MimiDecoderConfig(MimiConfig):
+    """
+    Configuration of the decoder half of Mimi (upsampling, decoder transformer and SEANet decoder). It shares every
+    field with [`MimiConfig`] (see its documentation for the arguments), so it can be loaded directly from a full Mimi
+    checkpoint.
+    """
+
+    model_type = "mimi_decoder"
+
+    # a half has no halves: the `null` saved for a codec's dropped half is ignored when loading the other one
+    @property
+    def encoder_config(self):
+        return None
+
+    @encoder_config.setter
+    def encoder_config(self, value):
+        pass
+
+    @property
+    def decoder_config(self):
+        return None
+
+    @decoder_config.setter
+    def decoder_config(self, value):
+        pass
+
+
+__all__ = ["MimiConfig", "MimiEncoderConfig", "MimiDecoderConfig"]

@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import math
 
 import torch
@@ -76,6 +77,10 @@ class MMGroundingDinoConfig(PreTrainedConfig):
         The dimension of the query vector.
     positional_embedding_temperature (`float`, *optional*, defaults to 20):
         The temperature for Sine Positional Embedding that is used together with vision backbone.
+    decoder_bbox_embed_share (`bool`, *optional*, defaults to `True`):
+        Whether to share the bbox regression head for all decoder layers.
+    decoder_cls_embed_share (`bool`, *optional*, defaults to `True`):
+        Whether to share the class embedding head for all decoder layers.
 
     Examples:
 
@@ -139,6 +144,8 @@ class MMGroundingDinoConfig(PreTrainedConfig):
     embedding_init_target: bool = True
     query_dim: int = 4
     positional_embedding_temperature: int = 20
+    decoder_bbox_embed_share: bool = True
+    decoder_cls_embed_share: bool = True
     init_std: float = 0.02
     layer_norm_eps: float = 1e-5
     tie_word_embeddings: bool = True
@@ -259,6 +266,12 @@ class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection, MMGroun
         MMGroundingDinoPreTrainedModel.__init__(self, config)
 
         self.model = MMGroundingDinoModel(config)
+        if not config.decoder_bbox_embed_share:
+            self._tied_weights_keys = self._tied_weights_keys.copy()
+            del self._tied_weights_keys[r"bbox_embed.(?![0])\d+"]
+        if not config.decoder_cls_embed_share:
+            self._tied_weights_keys = self._tied_weights_keys.copy()
+            del self._tied_weights_keys[r"class_embed.(?![0])\d+"]
 
         self.class_embed = nn.ModuleList(
             [MMGroundingDinoContrastiveEmbedding(config) for _ in range(config.decoder_layers)]
@@ -273,8 +286,8 @@ class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection, MMGroun
             ]
         )
         # Initialize weights and apply final processing
-        self.model.decoder.class_embed = self.class_embed  # class embed has no weights so nothing to tie
-        self.model.decoder.bbox_embed = self.bbox_embed
+        self.model.decoder.class_embed = copy.deepcopy(self.class_embed)
+        self.model.decoder.bbox_embed = copy.deepcopy(self.bbox_embed)
         self.post_init()
 
 

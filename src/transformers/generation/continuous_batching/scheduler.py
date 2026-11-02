@@ -16,7 +16,8 @@ from abc import ABC, abstractmethod
 from collections import deque
 
 from .cache import PagedAttentionCache
-from .requests import FutureRequestState, RequestState, RequestStatus, logger
+from .requests import FutureRequestState, RequestState, RequestStatus
+from .utils import logger
 
 
 class Scheduler(ABC):

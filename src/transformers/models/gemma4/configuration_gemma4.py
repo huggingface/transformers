@@ -256,15 +256,15 @@ class Gemma4VisionConfig(PreTrainedConfig):
 
     model_type = "gemma4_vision"
     base_model_tp_plan = {
-        "encoder.layers.*.self_attn.q_proj": "colwise",
-        "encoder.layers.*.self_attn.k_proj": "colwise",
-        "encoder.layers.*.self_attn.v_proj": "colwise",
+        "encoder.layers.*.self_attn.q_proj.linear": "colwise",
+        "encoder.layers.*.self_attn.k_proj.linear": "colwise",
+        "encoder.layers.*.self_attn.v_proj.linear": "colwise",
         "encoder.layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
         "encoder.layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
-        "encoder.layers.*.self_attn.o_proj": "rowwise",
-        "encoder.layers.*.mlp.gate_proj": "colwise",
-        "encoder.layers.*.mlp.up_proj": "colwise",
-        "encoder.layers.*.mlp.down_proj": "rowwise",
+        "encoder.layers.*.self_attn.o_proj.linear": "rowwise",
+        "encoder.layers.*.mlp.gate_proj.linear": "colwise",
+        "encoder.layers.*.mlp.up_proj.linear": "colwise",
+        "encoder.layers.*.mlp.down_proj.linear": "rowwise",
     }
 
     default_theta = 100.0
@@ -335,7 +335,7 @@ class Gemma4Config(PreTrainedConfig):
 
     model_type = "gemma4"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Gemma4TextConfig),
+        "text_config": Gemma4TextConfig,
         "vision_config": SubConfigSpec(config_class=Gemma4VisionConfig, optional=True),
         "audio_config": SubConfigSpec(config_class=Gemma4AudioConfig, optional=True),
     }

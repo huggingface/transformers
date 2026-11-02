@@ -181,8 +181,8 @@ class Sam2VideoConfig(PreTrainedConfig):
     model_type = "sam2_video"
     default_rope_type = "axial"
     sub_configs_defaults = {
-        "prompt_encoder_config": SubConfigSpec(config_class=Sam2VideoPromptEncoderConfig),
-        "mask_decoder_config": SubConfigSpec(config_class=Sam2VideoMaskDecoderConfig),
+        "prompt_encoder_config": Sam2VideoPromptEncoderConfig,
+        "mask_decoder_config": Sam2VideoMaskDecoderConfig,
         "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="sam2_vision_model"),
     }
 
@@ -910,7 +910,7 @@ class Sam2VideoSegmentationOutput(ModelOutput):
 
 @auto_docstring
 class Sam2VideoPreTrainedModel(PreTrainedModel):
-    config_class = Sam2VideoConfig
+    config: Sam2VideoConfig
     base_model_prefix = "sam2_video"
     main_input_name = "pixel_values"
     input_modalities = "video"
