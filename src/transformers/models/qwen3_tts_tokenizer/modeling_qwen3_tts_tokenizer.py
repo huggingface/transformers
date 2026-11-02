@@ -436,12 +436,6 @@ class Qwen3TTSTokenizerPreTrainedModel(PreTrainedModel):
             init.zeros_(module.embed_sum)
 
 
-@auto_docstring
-class Qwen3TTSTokenizerCode2WavPreTrainedModel(Qwen3TTSTokenizerPreTrainedModel):
-    config_class = Qwen3TTSTokenizerDecoderConfig
-    _no_split_modules = ["Qwen3TTSTokenizerCode2WavTransformerLayer", "Qwen3TTSTokenizerDecoderBlock"]
-
-
 class Qwen3TTSTokenizerCode2WavDecoderResidualUnit(nn.Module):
     def __init__(self, dim: int = 16, dilation: int = 1):
         super().__init__()
@@ -1048,9 +1042,11 @@ class Qwen3TTSTokenizerDecoderTransformerModel(Qwen3TTSTokenizerPreTrainedModel)
 
 
 @auto_docstring
-class Qwen3TTSTokenizerDecoderModel(Qwen3TTSTokenizerCode2WavPreTrainedModel):
+class Qwen3TTSTokenizerDecoderModel(Qwen3TTSTokenizerPreTrainedModel):
+    input_modalities = "audio"
     config_class = Qwen3TTSTokenizerDecoderConfig
     base_model_prefix = "decoder"
+    _no_split_modules = ["Qwen3TTSTokenizerCode2WavTransformerLayer", "Qwen3TTSTokenizerDecoderBlock"]
 
     def __init__(self, config: Qwen3TTSTokenizerDecoderConfig):
         super().__init__(config)

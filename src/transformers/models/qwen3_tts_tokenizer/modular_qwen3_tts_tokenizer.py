@@ -42,6 +42,7 @@ from ..qwen2_5_omni.modeling_qwen2_5_omni import Qwen2_5OmniSnakeBeta
 from ..qwen3_omni_moe.configuration_qwen3_omni_moe import Qwen3OmniMoeCode2WavConfig
 from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeCausalConvNet,
+    Qwen3OmniMoeCode2Wav,
     Qwen3OmniMoeCode2WavAttention,
     Qwen3OmniMoeCode2WavDecoderBlock,
     Qwen3OmniMoeCode2WavTransformerLayer,
@@ -300,12 +301,6 @@ class Qwen3TTSTokenizerPreTrainedModel(MimiPreTrainedModel):
     _can_compile_fullgraph = False
 
 
-@auto_docstring
-class Qwen3TTSTokenizerCode2WavPreTrainedModel(Qwen3TTSTokenizerPreTrainedModel):
-    config_class = Qwen3TTSTokenizerDecoderConfig
-    _no_split_modules = ["Qwen3TTSTokenizerCode2WavTransformerLayer", "Qwen3TTSTokenizerDecoderBlock"]
-
-
 class Qwen3TTSTokenizerDecoderBlock(Qwen3OmniMoeCode2WavDecoderBlock):
     def __init__(self, config: Qwen3TTSTokenizerDecoderConfig, layer_idx):
         super().__init__(config, layer_idx)
@@ -363,12 +358,13 @@ class Qwen3TTSTokenizerDecoderTransformerModel(Qwen3OmniMoeCode2WavTransformerMo
 
 
 @auto_docstring
-class Qwen3TTSTokenizerDecoderModel(Qwen3TTSTokenizerCode2WavPreTrainedModel):
+class Qwen3TTSTokenizerDecoderModel(Qwen3OmniMoeCode2Wav):
     config_class = Qwen3TTSTokenizerDecoderConfig
     base_model_prefix = "decoder"
+    _no_split_modules = ["Qwen3TTSTokenizerCode2WavTransformerLayer", "Qwen3TTSTokenizerDecoderBlock"]
 
     def __init__(self, config: Qwen3TTSTokenizerDecoderConfig):
-        super().__init__(config)
+        Qwen3TTSTokenizerPreTrainedModel.__init__(self, config)
         self.total_upsample = math.prod(config.upsample_rates) * math.prod(config.upsampling_ratios)
         self.pre_transformer = Qwen3TTSTokenizerDecoderTransformerModel(config)
         self.input_proj = nn.Linear(config.latent_dim, config.hidden_size)
@@ -417,18 +413,6 @@ class Qwen3TTSTokenizerDecoderModel(Qwen3TTSTokenizerCode2WavPreTrainedModel):
         for block in self.decoder:
             wav = block(wav)
         return wav.clamp(min=-1, max=1)
-
-    def chunked_decode(self, codes, chunk_size=300, left_context_size=25):
-        wavs = []
-        start_index = 0
-        while start_index < codes.shape[-1]:
-            end_index = min(start_index + chunk_size, codes.shape[-1])
-            context_size = left_context_size if start_index - left_context_size > 0 else start_index
-            codes_chunk = codes[..., start_index - context_size : end_index]
-            wav_chunk = self(codes_chunk)
-            wavs.append(wav_chunk[..., context_size * self.total_upsample :])
-            start_index = end_index
-        return torch.cat(wavs, dim=-1)
 
 
 class Qwen3TTSTokenizerEncoder(MimiEncoder):

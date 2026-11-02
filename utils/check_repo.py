@@ -148,7 +148,6 @@ PRIVATE_MODELS = [
     "VoxtralRealtimeTextModel",
     "VoxtralRealtimeTextForCausalLM",
     "VoxtralRealtimeTextPreTrainedModel",
-    "Qwen3TTSTokenizerCode2WavPreTrainedModel",
     "Qwen3TTSTokenizerDecoderBlock",
     "Qwen3TTSTokenizerDecoderTransformerModel",
 ]
