@@ -88,7 +88,6 @@ class YuE2AcousticTokenizerEncoderConfig(PreTrainedConfig):
 
     @property
     def hop_length(self) -> int:
-        """Number of audio samples per latent frame."""
         return math.prod(self.downsampling_ratios)
 
 
@@ -201,12 +200,10 @@ class YuE2AcousticTokenizerConfig(PreTrainedConfig):
 
     @property
     def hop_length(self) -> int:
-        """Number of audio samples per latent frame."""
         return (self.encoder_config or self.decoder_config).hop_length
 
     @property
     def frame_rate(self) -> float:
-        """Number of latent frames per second."""
         return self.sampling_rate / self.hop_length
 
 
