@@ -49,7 +49,7 @@ class GptqHfQuantizer(HfQuantizer):
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)
-        if self.pre_quantized and self.quantization_config.dequantize:
+        if self.dequantizing:
             return  # dequantizing is pure torch
 
         if not is_optimum_available():
@@ -59,7 +59,7 @@ class GptqHfQuantizer(HfQuantizer):
         self.optimum_quantizer = GPTQQuantizer.from_dict(self.quantization_config.to_dict_optimum())
 
     def validate_environment(self, *args, **kwargs):
-        if self.pre_quantized and self.quantization_config.dequantize:
+        if self.dequantizing:
             return  # dequantizing is pure torch
         if not is_optimum_available():
             raise ImportError("Loading a GPTQ quantized model requires optimum (`pip install optimum`)")
@@ -88,7 +88,7 @@ class GptqHfQuantizer(HfQuantizer):
         return device_map
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        if self.pre_quantized and self.quantization_config.dequantize:
+        if self.dequantizing:
             # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
             return
         if model.__class__.main_input_name != "input_ids":
@@ -102,7 +102,7 @@ class GptqHfQuantizer(HfQuantizer):
                 model = self.optimum_quantizer.convert_model(model, **kwargs)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        if self.pre_quantized and self.quantization_config.dequantize:
+        if self.dequantizing:
             return
         if self.pre_quantized:
             # What optimum's `post_init_model` does that is not per layer, the rest ran in `GptqDeserialize`
@@ -127,9 +127,9 @@ class GptqHfQuantizer(HfQuantizer):
     serialized_names = {"weight": ["qweight", "qzeros", "scales", "g_idx"]}
 
     def get_load_operations(self):
-        from ..integrations.gptq import GptqDequantize, GptqDeserialize
+        from ..integrations.gptq import GptqDequantize
 
-        return {"deserialize": GptqDeserialize, "dequantize": GptqDequantize}
+        return {"dequantize": GptqDequantize}
 
     def get_weight_conversions(self):
         if self.pre_quantized and not self.quantization_config.dequantize:

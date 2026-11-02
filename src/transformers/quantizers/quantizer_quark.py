@@ -59,7 +59,7 @@ class QuarkHfQuantizer(HfQuantizer):
             )
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        if self.pre_quantized and self.quantization_config.dequantize:
+        if self.dequantizing:
             # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
             return
         from quark.torch.export.api import _map_to_quark
@@ -90,7 +90,7 @@ class QuarkHfQuantizer(HfQuantizer):
     def get_weight_conversions(self):
         from ..core_model_loading import WeightRenaming
 
-        if self.pre_quantized and self.quantization_config.dequantize:
+        if self.dequantizing:
             return super().get_weight_conversions()
 
         # The checkpoint stores `weight_scale`, ... while `QParamsLinear` holds them in its quantizers (`weight_quantizer.scale`)

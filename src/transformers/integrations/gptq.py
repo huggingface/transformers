@@ -22,11 +22,13 @@ if is_torch_available():
     import torch.nn as nn
 
 
-def unpack_int32(packed: "torch.Tensor", bits: int, dim: int) -> "torch.Tensor":
-    """The `32 // bits` codes of each int32 of `packed`, lowest bits first, laid out along `dim`."""
+def unpack_int32(packed: "torch.Tensor", bits: int, dim: int, order=None) -> "torch.Tensor":
+    """The `32 // bits` codes of each int32 of `packed`, lowest bits first (or in `order`), laid out along `dim`."""
     if bits not in (2, 4, 8):
         raise NotImplementedError(f"Dequantizing {bits}-bit packed weights is not supported.")
     shifts = torch.arange(0, 32, bits, dtype=torch.int32, device=packed.device)
+    if order is not None:
+        shifts = shifts[order]
     codes = packed.unsqueeze(dim + 1) >> shifts.view(-1, *[1] * (packed.dim() - 1 - dim))
     return (codes & (2**bits - 1)).flatten(dim, dim + 1)
 
@@ -85,16 +87,14 @@ def gptqmodel_post_init(model, use_act_order: bool):
     layers slice one scratch space per device, sized for the largest of them, so it can only be allocated once all of
     them are loaded. The library allocates it for the layers it is given and `post_init`s them.
     """
+    pending = nn.ModuleList([module for module in model.modules() if getattr(module, "_hf_needs_post_init", False)])
+    if not pending:
+        return
     from gptqmodel.utils.model import hf_gptqmodel_post_init
 
-    pending = nn.ModuleList([module for module in model.modules() if getattr(module, "_hf_needs_post_init", False)])
-    if len(pending) == 0:
-        return
     hf_gptqmodel_post_init(pending, use_act_order=use_act_order)
     if hasattr(pending, "device_tensors"):
         model.device_tensors = pending.device_tensors  # the scratch spaces must outlive the call
-    for module in pending:
-        del module._hf_needs_post_init
 
 
 class GptqDequantize(ConversionOps):
@@ -108,7 +108,7 @@ class GptqDequantize(ConversionOps):
         if checkpoint_format not in ("gptq", "gptq_v2") and not checkpoint_format.startswith("auto_round"):
             raise NotImplementedError(f"Dequantizing the `{checkpoint_format}` GPTQ format is not supported.")
         # gptq v1 checkpoints store the zero points minus one
-        self.zero_offset = int(checkpoint_format == "gptq" or checkpoint_format.endswith(("auto_gptq", ":gptq")))
+        self.zero_offset = int(checkpoint_format.endswith("gptq"))
 
     def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, list[torch.Tensor]]:
         config = self.hf_quantizer.quantization_config

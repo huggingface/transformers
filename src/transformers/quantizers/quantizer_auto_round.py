@@ -35,7 +35,7 @@ class AutoRoundQuantizer(HfQuantizer):
 
     def validate_environment(self, *args, **kwargs):
         self.device_map = kwargs.get("device_map")
-        if self.pre_quantized and self.quantization_config.dequantize:
+        if self.dequantizing:
             return  # dequantizing is pure torch
         if not is_auto_round_available():
             raise ImportError(
@@ -43,7 +43,7 @@ class AutoRoundQuantizer(HfQuantizer):
             )
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        if self.pre_quantized and self.quantization_config.dequantize:
+        if self.dequantizing:
             if getattr(self.quantization_config, "data_type", "int") != "int":
                 raise NotImplementedError("Only the int AutoRound formats can be dequantized.")
             # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
@@ -58,7 +58,7 @@ class AutoRoundQuantizer(HfQuantizer):
             self.used_backends = used_backends
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        if self.pre_quantized and self.quantization_config.dequantize:
+        if self.dequantizing:
             return
         if self.pre_quantized:
             from auto_round.inference.convert_model import post_init

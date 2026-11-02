@@ -43,7 +43,7 @@ class AwqQuantizer(HfQuantizer):
     quantization_config: "AwqConfig"
 
     def validate_environment(self, **kwargs):
-        if self.pre_quantized and self.quantization_config.dequantize:
+        if self.dequantizing:
             return  # dequantizing is pure torch
         if not is_gptqmodel_available():
             raise ImportError(
@@ -64,7 +64,7 @@ class AwqQuantizer(HfQuantizer):
         return dtype
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        if self.pre_quantized and self.quantization_config.dequantize:
+        if self.dequantizing:
             # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
             return
         from ..integrations import replace_quantization_scales, replace_with_awq_linear
@@ -83,7 +83,7 @@ class AwqQuantizer(HfQuantizer):
         model = replace_quantization_scales(model, model.config.model_type)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
-        if self.pre_quantized and self.quantization_config.dequantize:
+        if self.dequantizing:
             return
         # The per-layer part of `hf_gptqmodel_post_init` ran in `GptqDeserialize`
         from ..integrations.gptq import gptqmodel_post_init
@@ -105,9 +105,8 @@ class AwqQuantizer(HfQuantizer):
 
     def get_load_operations(self):
         from ..integrations.awq import AwqDequantize
-        from ..integrations.gptq import GptqDeserialize
 
-        return {"deserialize": GptqDeserialize, "dequantize": AwqDequantize}
+        return {"dequantize": AwqDequantize}
 
     def get_weight_conversions(self):
         if self.pre_quantized and not self.quantization_config.dequantize:

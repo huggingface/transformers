@@ -63,12 +63,8 @@ class AwqDequantize(ConversionOps):
             others = [other if isinstance(other, list) else [other] * len(qweights) for other in others]
             weights = []
             for qweight, qzeros, scales in zip(qweights, *others):
-                weight, zeros = unpack_int32(qweight, config.bits, dim=1), unpack_int32(qzeros, config.bits, dim=1)
-                if config.bits == 4:
-                    order = (
-                        torch.arange(weight.shape[1], device=weight.device).view(-1, 8)[:, AWQ_REVERSE_ORDER].flatten()
-                    )
-                    weight, zeros = weight[:, order], zeros[:, order]
+                order = AWQ_REVERSE_ORDER if config.bits == 4 else None
+                weight, zeros = (unpack_int32(packed, config.bits, dim=1, order=order) for packed in (qweight, qzeros))
                 weights.append(dequantize_groups(weight, zeros, scales, config.group_size))
             output[prefix + "weight"] = weights
         return output
