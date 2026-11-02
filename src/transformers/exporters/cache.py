@@ -82,6 +82,19 @@ def mask_width(cache, query_length: int) -> int:
         return _cache_length(cache) + query_length
 
 
+def advance_cache_length(past_key_values, num_new_tokens: int) -> None:
+    """Advance each self-attention layer's length counter by `num_new_tokens`, as the eager `update` does: for a cache
+    a backend keeps as its own state, so `generate`, which reads the loop's cache, sees how far the sequence got."""
+    for layer in _self_attention_layers(past_key_values):
+        counter = getattr(layer, "cumulative_length", None)
+        if hasattr(layer, "cumulative_length_int"):
+            layer.cumulative_length_int += num_new_tokens
+        if isinstance(counter, int):
+            layer.cumulative_length += num_new_tokens
+        elif isinstance(counter, torch.Tensor):
+            counter.add_(num_new_tokens)
+
+
 def _mark_existing_states(past_key_values) -> None:
     """Mark each layer's recurrent states as existing, exactly where they do.
 

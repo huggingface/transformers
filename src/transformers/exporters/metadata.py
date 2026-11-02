@@ -77,6 +77,9 @@ class ExportMetadata:
     # `torch.export`'s input and output pytree specs, as `treespec_dumps` writes them.
     in_spec: str | None = None
     out_spec: str | None = None
+    # The traced cache's per-layer key/value shapes, sparse-indexer slots and linear-attention state shapes, which
+    # a runtime materializes the cache it feeds with.
+    cache_geometry: dict[str, dict] = field(default_factory=dict)
     export_config: dict[str, Any] = field(default_factory=dict)
 
 
@@ -97,6 +100,18 @@ def build_export_metadata(
     input_specs = exported_program.graph_signature.input_specs
     metadata["input_names"] = [spec.arg.name for spec in input_specs if spec.kind.name == "USER_INPUT"]
     metadata["output_names"] = traced_output_names(exported_program)
+    cache = next((inputs[name] for name in ("past_key_values", "cache_params") if inputs.get(name) is not None), None)
+    if cache is not None:
+        from .cache import indexer_layers_of, kv_geometry_of, linear_states_of
+
+        cache = getattr(cache, "self_attention_cache", cache)
+        geometry = {
+            "kv": kv_geometry_of(cache),
+            "indexers": indexer_layers_of(cache),
+            "linear_states": linear_states_of(cache),
+        }
+        # As it saves: JSON keys are strings and its sequences lists.
+        metadata["cache_geometry"] = json.loads(json.dumps(geometry))
     metadata["in_spec"] = torch.utils._pytree.treespec_dumps(exported_program.call_spec.in_spec)
     metadata["out_spec"] = torch.utils._pytree.treespec_dumps(exported_program.call_spec.out_spec)
     return metadata

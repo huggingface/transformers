@@ -55,6 +55,8 @@ class ExecutorchModelRunner(ModelRunner):
         traced = self.in_spec.children_specs[1].context
         leaves = torch.utils._pytree.tree_leaves({name: kwargs[name] for name in traced})
         if len(leaves) != self.in_spec.num_leaves:
-            raise ValueError(f"The program takes {self.in_spec.num_leaves} inputs, but got {len(leaves)} from {traced}.")
+            raise ValueError(
+                f"The program takes {self.in_spec.num_leaves} inputs, but got {len(leaves)} from {traced}."
+            )
         feed = [leaf.contiguous() if isinstance(leaf, torch.Tensor) else leaf for leaf in leaves]
         return self.unflatten(list(self.method.execute(feed)))

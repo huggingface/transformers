@@ -59,6 +59,10 @@ class OpenVINOModelRunner(ModelRunner):
     def from_program(cls, program: openvino.Model, metadata: ExportMetadata, device=None) -> OpenVINOModelRunner:
         return cls(openvino.Core().compile_model(program, _openvino_device(device)), metadata)
 
+    def reset_state(self) -> None:
+        """Start the state a stateful model keeps (its cache) over, for a new sequence."""
+        self.request.reset_state()
+
     def __call__(self, **kwargs) -> Any:
         outputs = self.request.infer(openvino_feed(self.compiled_model, kwargs))
         # Copied: the request writes its next outputs into the same buffers.

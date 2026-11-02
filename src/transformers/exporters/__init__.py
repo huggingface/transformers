@@ -55,7 +55,14 @@ _import_structure = {
         "OnnxRuntimeStaticConfig",
         "PT2EQuantizer",
     ],
-    "runtimes": ["ExportedModel", "ExportedMultimodalModel", "ModelRunner"],
+    "runtimes": [
+        "ExportedModel",
+        "ExportedModelForCausalLM",
+        "ExportedModelForSeq2SeqLM",
+        "ExportedMultimodalModelForCausalLM",
+        "ExportedMultimodalModel",
+        "ModelRunner",
+    ],
 }
 
 if TYPE_CHECKING:
@@ -89,7 +96,14 @@ if TYPE_CHECKING:
         OnnxRuntimeStaticConfig,
         PT2EQuantizer,
     )
-    from .runtimes import ExportedModel, ExportedMultimodalModel, ModelRunner
+    from .runtimes import (
+        ExportedModel,
+        ExportedModelForCausalLM,
+        ExportedModelForSeq2SeqLM,
+        ExportedMultimodalModel,
+        ExportedMultimodalModelForCausalLM,
+        ModelRunner,
+    )
 else:
     import sys
 

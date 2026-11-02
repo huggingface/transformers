@@ -42,8 +42,35 @@ from pathlib import Path
 import pytest
 
 from tests.exporters.test_export import _run_onnx_program
-from transformers import GenerationConfig, LlamaConfig, LlamaForCausalLM
-from transformers.exporters import ExportArtifacts
+from tests.exporters.test_utils import _tiny_llava
+from transformers import (
+    BertConfig,
+    BertModel,
+    DynamicCache,
+    GenerationConfig,
+    LlamaConfig,
+    LlamaForCausalLM,
+    LlamaModel,
+    T5Config,
+    T5ForConditionalGeneration,
+)
+from transformers.exporters import (
+    AutoExportedModel,
+    DynamoConfig,
+    DynamoExporter,
+    ExecutorchConfig,
+    ExecutorchExporter,
+    ExportArtifacts,
+    ExportedComponent,
+    ExportedModel,
+    ExportedModelForCausalLM,
+    ExportedMultimodalModel,
+    ExportMetadata,
+    OnnxConfig,
+    OnnxExporter,
+    OpenVINOConfig,
+    OpenVINOExporter,
+)
 from transformers.exporters.decompose import decompose_for_generation
 from transformers.testing_utils import (
     require_executorch,
@@ -102,7 +129,6 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
     def test_decode_accepts_variable_query_length(self):
         """The multi-token decode's query axis stays dynamic: the exported graph runs at query lengths
         other than the one it was captured with, returning logits for every query position."""
-        from transformers.exporters import DynamoConfig, DynamoExporter
 
         torch.manual_seed(0)
         model = self._tiny_model()
@@ -133,7 +159,6 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         """The exported decode mutates the passed `StaticCache` in place (a `USER_INPUT_MUTATION`): the
         same cache reused across calls advances its per-layer position counter, so state carries from
         step to step without threading a cache in and out."""
-        from transformers.exporters import DynamoConfig, DynamoExporter
 
         torch.manual_seed(0)
         model = self._tiny_model()
@@ -180,8 +205,6 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
 
     @pytest.mark.torch_export_test
     def test_saved_dynamo_program_loads_back(self):
-        from transformers.exporters import DynamoConfig, DynamoExporter
-
         with tempfile.TemporaryDirectory() as directory:
             entry, loaded = self._save_and_load_decode(DynamoExporter(), DynamoConfig(dynamic=True), directory)
         self.assertEqual(entry["file"], "model.pt2")
@@ -191,8 +214,6 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
     @pytest.mark.executorch_export_test
     def test_saved_executorch_program_loads_back(self):
         from executorch.runtime import Program
-
-        from transformers.exporters import ExecutorchConfig, ExecutorchExporter
 
         with tempfile.TemporaryDirectory() as directory:
             entry, loaded = self._save_and_load_decode(ExecutorchExporter(), ExecutorchConfig(), directory)
@@ -210,8 +231,6 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         """The saved metadata names the inputs and outputs of the saved `.onnx` file, cache pairs included."""
         import onnxruntime as ort
 
-        from transformers.exporters import OnnxConfig, OnnxExporter
-
         with tempfile.TemporaryDirectory() as directory:
             entry, _ = self._save_and_load_decode(OnnxExporter(), OnnxConfig(dynamic=True), directory)
             session = ort.InferenceSession(str(Path(directory) / entry["file"]), providers=["CPUExecutionProvider"])
@@ -225,7 +244,6 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
     def test_saved_onnx_program_runs(self):
         """A loaded `.onnx` runs like the exported program, ONNX Runtime reading its weights from
         `model.onnx.data`."""
-        from transformers.exporters import OnnxConfig, OnnxExporter
 
         inputs = {"input_ids": torch.randint(0, 64, (1, 4)), "attention_mask": torch.ones(1, 4, dtype=torch.long)}
         exported = OnnxExporter().export(self._tiny_model(), copy.deepcopy(inputs), OnnxConfig())
@@ -240,7 +258,6 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
     @pytest.mark.onnx_export_test
     def test_onnx_program_loaded_through_symlinks_runs(self):
         """Loaded through symlinks, as from the Hub cache, an ONNX program runs: ONNX Runtime reads the saved file."""
-        from transformers.exporters import OnnxConfig, OnnxExporter
 
         inputs = {"input_ids": torch.randint(0, 64, (1, 4)), "attention_mask": torch.ones(1, 4, dtype=torch.long)}
         exported = OnnxExporter().export(self._tiny_model(), copy.deepcopy(inputs), OnnxConfig())
@@ -260,7 +277,6 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
     def test_onnx_model_past_2gb_saves_and_loads(self):
         """A model past protobuf's 2GB limit saves with its weights in `model.onnx.data`, loads, and runs like the
         exported program. A one-layer Llama with a 150k vocabulary holds 2.3GB of untied embeddings."""
-        from transformers.exporters import OnnxConfig, OnnxExporter
 
         config = LlamaConfig(
             hidden_size=2048,
@@ -290,8 +306,6 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         `beam_idx` input."""
         import openvino
 
-        from transformers.exporters import OpenVINOConfig, OpenVINOExporter
-
         with tempfile.TemporaryDirectory() as directory:
             entry, _ = self._save_and_load_decode(OpenVINOExporter(), OpenVINOConfig(dynamic=True), directory)
             self.assertEqual(entry["file"], "openvino_model.xml")
@@ -306,8 +320,6 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         """An encoder-decoder's OpenVINO decode graph writes its cross-attention cache into state from the
         variable's initializer, which runs only while the variable is empty: every later step reads it back
         instead of projecting the encoder output again."""
-        from transformers import T5Config, T5ForConditionalGeneration
-        from transformers.exporters import OpenVINOConfig, OpenVINOExporter
 
         config = T5Config(
             vocab_size=99, d_model=32, d_kv=8, d_ff=37, num_layers=2, num_heads=4, decoder_start_token_id=0
@@ -346,8 +358,6 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         buffers are device resident and a provider that copies instead of aliasing them would show up."""
         import onnxruntime as ort
         from onnxruntime.transformers.io_binding_helper import CudaSession
-
-        from transformers.exporters import OnnxConfig, OnnxExporter
 
         if torch_device == "cuda" and "CUDAExecutionProvider" in ort.get_available_providers():
             provider, buffer_device = "CUDAExecutionProvider", "cuda"
@@ -440,8 +450,6 @@ class ExportedModelTest(unittest.TestCase):
     loaded from disk (`ExportedModel.from_pretrained`)."""
 
     def _model_and_inputs(self):
-        from transformers import BertConfig, BertModel
-
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=2, num_attention_heads=4, intermediate_size=37
         )
@@ -449,8 +457,6 @@ class ExportedModelTest(unittest.TestCase):
         return BertModel(config).eval(), inputs
 
     def _check_runs_like_eager(self, exporter, config, atol, device=None):
-        from transformers.exporters import ExportedModel
-
         model, inputs = self._model_and_inputs()
         with torch.no_grad():
             expected = model(**inputs)
@@ -471,37 +477,27 @@ class ExportedModelTest(unittest.TestCase):
 
     @pytest.mark.torch_export_test
     def test_dynamo(self):
-        from transformers.exporters import DynamoConfig, DynamoExporter
-
         self._check_runs_like_eager(DynamoExporter(), DynamoConfig(dynamic=True), atol=1e-4)
 
     @require_onnxscript
     @require_onnxruntime
     @pytest.mark.onnx_export_test
     def test_onnx(self):
-        from transformers.exporters import OnnxConfig, OnnxExporter
-
         self._check_runs_like_eager(OnnxExporter(), OnnxConfig(dynamic=True), atol=1e-3, device="cpu")
 
     @require_openvino
     @pytest.mark.openvino_export_test
     def test_openvino(self):
-        from transformers.exporters import OpenVINOConfig, OpenVINOExporter
-
         self._check_runs_like_eager(OpenVINOExporter(), OpenVINOConfig(dynamic=True), atol=1e-3, device="cpu")
 
     @require_executorch
     @pytest.mark.executorch_export_test
     def test_executorch(self):
-        from transformers.exporters import ExecutorchConfig, ExecutorchExporter
-
         self._check_runs_like_eager(ExecutorchExporter(), ExecutorchConfig(), atol=1e-3)
 
     def _check_loads_cache_output(self, exporter, config):
         """An export whose output holds a cache loads in a process that never exported, where the cache isn't a
         pytree node yet."""
-        from transformers import DynamicCache, LlamaConfig, LlamaModel
-        from transformers.exporters import ExportedModel
 
         llama_config = LlamaConfig(
             vocab_size=99,
@@ -522,34 +518,18 @@ class ExportedModelTest(unittest.TestCase):
 
     @pytest.mark.torch_export_test
     def test_dynamo_loads_cache_output(self):
-        from transformers.exporters import DynamoConfig, DynamoExporter
-
         self._check_loads_cache_output(DynamoExporter(), DynamoConfig())
 
     @require_onnxscript
     @require_onnxruntime
     @pytest.mark.onnx_export_test
     def test_onnx_loads_cache_output(self):
-        from transformers.exporters import OnnxConfig, OnnxExporter
-
         self._check_loads_cache_output(OnnxExporter(), OnnxConfig())
 
     def test_runtime_refuses_several_components(self):
-        from transformers.exporters import ExportArtifacts, ExportedComponent, ExportMetadata
-
         component = ExportedComponent("program", ExportMetadata())
         artifacts = ExportArtifacts({"prefill": component, "decode": component}, "dynamo")
         with self.assertRaisesRegex(ValueError, "runtime isn.t available yet"):
-            artifacts.runtime()
-
-    def test_runtime_refuses_a_generation_export(self):
-        """A causal LM's generation export is one `model` graph, but takes a cache: `runtime()` can't run it as a
-        forward."""
-        from transformers.exporters import ExportArtifacts, ExportedComponent, ExportMetadata
-
-        component = ExportedComponent("program", ExportMetadata())
-        artifacts = ExportArtifacts({"model": component}, "dynamo", generation=True)
-        with self.assertRaisesRegex(ValueError, "generation export"):
             artifacts.runtime()
 
 
@@ -560,9 +540,6 @@ class ExportedMultimodalModelTest(unittest.TestCase):
     features scattered in, and the language model on top."""
 
     def _check_runs_like_eager(self, exporter, config, atol, device=None):
-        from tests.exporters.test_utils import _tiny_llava
-        from transformers.exporters import AutoExportedModel, ExportedModel, ExportedMultimodalModel
-
         model, inputs = _tiny_llava()
         with torch.no_grad():
             expected = model(**inputs)
@@ -584,28 +561,108 @@ class ExportedMultimodalModelTest(unittest.TestCase):
 
     @pytest.mark.torch_export_test
     def test_dynamo(self):
-        from transformers.exporters import DynamoConfig, DynamoExporter
-
         self._check_runs_like_eager(DynamoExporter(), DynamoConfig(), atol=1e-4)
 
     @require_onnxscript
     @require_onnxruntime
     @pytest.mark.onnx_export_test
     def test_onnx(self):
-        from transformers.exporters import OnnxConfig, OnnxExporter
-
         self._check_runs_like_eager(OnnxExporter(), OnnxConfig(), atol=1e-3, device="cpu")
 
     @require_openvino
     @pytest.mark.openvino_export_test
     def test_openvino(self):
-        from transformers.exporters import OpenVINOConfig, OpenVINOExporter
-
         self._check_runs_like_eager(OpenVINOExporter(), OpenVINOConfig(), atol=1e-3, device="cpu")
 
     @require_executorch
     @pytest.mark.executorch_export_test
     def test_executorch(self):
-        from transformers.exporters import ExecutorchConfig, ExecutorchExporter
-
         self._check_runs_like_eager(ExecutorchExporter(), ExecutorchConfig(), atol=1e-3)
+
+
+@slow
+@require_torch
+class ExportedModelForCausalLMTest(unittest.TestCase):
+    """A generation export (`export_for_generation`) generates the same tokens as the model through `generate`, on
+    every backend: fresh, and loaded with `AutoExportedModel`."""
+
+    def _check_generates_like_eager(self, exporter, config, model, inputs, generation_config):
+        with torch.no_grad():
+            expected = model.generate(**copy.deepcopy(inputs), generation_config=generation_config)
+        exported = exporter.export_for_generation(
+            model, copy.deepcopy(inputs), config, generation_config=generation_config
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            exported.save_pretrained(directory)
+            for name, runtime in (
+                ("runtime", exported.runtime(device="cpu")),
+                ("auto", AutoExportedModel.from_pretrained(directory, device="cpu")),
+            ):
+                with self.subTest(name):
+                    self.assertIsInstance(runtime, ExportedModelForCausalLM)
+                    generated = runtime.generate(**copy.deepcopy(inputs), generation_config=generation_config)
+                    self.assertEqual(generated.tolist(), expected.tolist())
+
+    def _llama(self):
+        config = LlamaConfig(
+            vocab_size=99,
+            hidden_size=32,
+            intermediate_size=37,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            pad_token_id=0,
+        )
+        inputs = {"input_ids": torch.randint(1, 98, (1, 7)), "attention_mask": torch.ones(1, 7, dtype=torch.long)}
+        return LlamaForCausalLM(config).eval(), inputs
+
+    def _t5(self):
+        config = T5Config(
+            vocab_size=99, d_model=32, d_kv=8, d_ff=37, num_layers=2, num_heads=4, decoder_start_token_id=0
+        )
+        inputs = {"input_ids": torch.randint(1, 98, (1, 7)), "attention_mask": torch.ones(1, 7, dtype=torch.long)}
+        return T5ForConditionalGeneration(config).eval(), inputs
+
+    def _cases(self):
+        dynamic = GenerationConfig(max_new_tokens=6, do_sample=False, eos_token_id=None)
+        static = GenerationConfig(
+            max_new_tokens=6, do_sample=False, eos_token_id=None, cache_implementation="static", max_cache_len=48
+        )
+        # A static export's decode graph takes one token, so the prompt goes through it a token at a time; it bakes
+        # the cache's length too, so it needs a static cache.
+        return [
+            ("llama", self._llama, dynamic, True),
+            ("llama static cache", self._llama, static, True),
+            ("llama static cache and export", self._llama, static, False),
+            ("llava", _tiny_llava, dynamic, True),
+            ("t5", self._t5, dynamic, True),
+        ]
+
+    def _check_backend(self, exporter, config_class, **config_kwargs):
+        for name, make, generation_config, dynamic in self._cases():
+            with self.subTest(name):
+                torch.manual_seed(0)
+                model, inputs = make()
+                self._check_generates_like_eager(
+                    exporter, config_class(dynamic=dynamic, **config_kwargs), model, inputs, generation_config
+                )
+
+    @pytest.mark.torch_export_test
+    def test_dynamo(self):
+        self._check_backend(DynamoExporter(), DynamoConfig)
+
+    @require_onnxscript
+    @require_onnxruntime
+    @pytest.mark.onnx_export_test
+    def test_onnx(self):
+        self._check_backend(OnnxExporter(), OnnxConfig)
+
+    @require_openvino
+    @pytest.mark.openvino_export_test
+    def test_openvino(self):
+        self._check_backend(OpenVINOExporter(), OpenVINOConfig)
+
+    @require_executorch
+    @pytest.mark.executorch_export_test
+    def test_executorch(self):
+        self._check_backend(ExecutorchExporter(), ExecutorchConfig)
