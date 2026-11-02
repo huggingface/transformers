@@ -81,8 +81,13 @@ jobs:
     runs-on:
       group: aws-m8i-8xl-cache
     container:
-      image: huggingface/transformers-torch-light
-      options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
+      # v0.5.19-xeon supplies the Intel CPU build environment and runtime dependencies.
+      image: lmsysorg/sglang@sha256:dec15decb555242b67471b984e51bd44e3faa44fc5c2b5258d46e5fa926e7cde
+      options: --shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}/sglang
     strategy:
       fail-fast: false
       matrix:
@@ -112,6 +117,12 @@ jobs:
               test/registered/openai_server/basic/test_serving_transcription.py::TestServingTranscription::test_transcription_content_quality
     env:
       SGLANG_IS_IN_CI: "true"
+      SGLANG_USE_CPU_ENGINE: "1"
+      VIRTUAL_ENV: /opt/.venv
+      CMAKE_BUILD_PARALLEL_LEVEL: "8"
+      PYTHONPATH: ${{ github.workspace }}/sglang/python
+      REPORT_DIR: ${{ github.workspace }}/reports
+      TRANSFORMERS_SOURCE: ${{ github.workspace }}/transformers
       TEST_TARGETS: ${{ matrix.tests }}
 
     steps:
@@ -129,27 +140,19 @@ jobs:
           persist-credentials: false
           path: sglang
 
-      - name: Set up Python 3.12 environment
-        run: |
-          uv venv /opt/venv312 --python 3.12
-          echo "VIRTUAL_ENV=/opt/venv312" >> $GITHUB_ENV
-          echo "/opt/venv312/bin" >> $GITHUB_PATH
-          echo "UV_PYTHON=" >> $GITHUB_ENV
-
       - name: Install dependencies
-        # TODO: Better to build a dedicated Docker image for SGLang CI.
-        # But the workflow only runs once a day, so installing at runtime is fine for now.
         run: |
           apt-get update && apt-get install -y --no-install-recommends ffmpeg
-          uv pip install 'torch<=2.13.0' torchaudio torchvision 'torchcodec<=0.15.0' --index-url https://download.pytorch.org/whl/cpu
           uv pip install setuptools setuptools-scm wheel scikit-build-core ninja cmake
           uv pip install pytest pytest-asyncio accelerate expecttest parameterized sentence-transformers
-          uv pip install -e 'transformers/[sentencepiece,vision,testing]'
-          # Install SGLang from source at the pinned revision.
-          # Use pyproject_cpu.toml to avoid CUDA dependencies; keep --no-build-isolation
-          # to skip Rust/C extensions (SGLANG_BUILD_RUST_EXTS=none), but allow Python deps.
-          cp sglang/python/pyproject_cpu.toml sglang/python/pyproject.toml
-          SGLANG_BUILD_RUST_EXTS=none uv pip install --no-build-isolation -e ./sglang/python
+          # Keep the image's PyTorch; compile this revision's CPU kernels against it.
+          cp python/pyproject_cpu.toml python/pyproject.toml
+          SGLANG_BUILD_RUST_EXTS=none uv pip install --no-deps --no-build-isolation -e ./python
+          cp python/sglang/kernels/aot/pyproject_cpu.toml python/sglang/kernels/aot/pyproject.toml
+          uv pip install --no-deps --no-build-isolation ./python/sglang/kernels/aot
+          uv pip install --no-deps torchcodec==0.12.0
+          # Install the candidate last so the SGLang release pin cannot replace it.
+          uv pip install -e "${TRANSFORMERS_SOURCE}"
 
       - name: Pip freeze
         run: pip freeze
@@ -161,11 +164,6 @@ jobs:
           echo "=== Disk ===" && df -h
 
       - name: Run canonical SGLang integration tests
-        shell: bash
-        env:
-          PYTHONPATH: ${{ github.workspace }}/sglang/python
-          REPORT_DIR: ${{ github.workspace }}/reports
-        working-directory: sglang
         run: |
           mkdir -p "${REPORT_DIR}"
           read -r -a targets <<< "${TEST_TARGETS}"
