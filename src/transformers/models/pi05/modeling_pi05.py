@@ -436,11 +436,11 @@ class PI05Model(PI05PreTrainedModel):
 
         special_image_mask = input_ids == self.config.vlm_config.image_token_id
         image_token_rank = special_image_mask.cumsum(-1) - 1
-        unpadded_cameras = torch.argsort((~pixel_attention_mask).int(), dim=1, stable=True)
-        camera_rank = (image_token_rank // tokens_per_image).clamp(0, max_num_cameras - 1)
-        feature_index = (
-            unpadded_cameras.gather(1, camera_rank) * tokens_per_image + image_token_rank % tokens_per_image
-        )
+        camera_rank = image_token_rank // tokens_per_image
+        token_offset = image_token_rank - camera_rank * tokens_per_image
+        camera_slot = pixel_attention_mask.cumsum(-1) - 1
+        camera_match = (camera_slot[:, None, :] == camera_rank[..., None]) & pixel_attention_mask[:, None, :]
+        feature_index = camera_match.int().argmax(-1) * tokens_per_image + token_offset
         image_embeds = image_features.gather(1, feature_index[..., None].expand(-1, -1, hidden_size))
 
         inputs_embeds = self.vlm.get_input_embeddings()(input_ids.masked_fill(special_image_mask, 0))
