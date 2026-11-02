@@ -68,25 +68,21 @@ class CompressedTensorsDequantize(ConversionOps):
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         from compressed_tensors.compressors import BaseCompressor
-        from compressed_tensors.compressors.format import infer_module_format
 
         ct_quantization_config = self.hf_quantizer.compressor.quantization_config
         dtype = kwargs["model"].get_parameter(full_layer_name).dtype
 
         quantization_scheme = self.scheme or get_experts_scheme(ct_quantization_config)
 
-        format = quantization_scheme.format or infer_module_format(nn.Linear, quantization_scheme)
+        format = quantization_scheme.format or ct_quantization_config.format
         compressor = BaseCompressor.get_value_from_registry(format)
 
-        if all("*" not in key for key in input_dict):
-            # One module, matched by the quantizer's general converter: decompress its local state dict
-            local_state_dict = {
-                key.rpartition(".")[2]: value[0] if isinstance(value, list) else value
-                for key, value in input_dict.items()
-            }
-            if "weight_scale" in local_state_dict:
-                local_state_dict = compressor.decompress(local_state_dict, quantization_scheme)
-            return {full_layer_name: local_state_dict["weight"].to(dtype)}
+        if "weight" in input_dict or "weight_scale" in input_dict:
+            # The quantizer's general converter: the keys are the serialized names of one module
+            state_dict = {name: value[0] if isinstance(value, list) else value for name, value in input_dict.items()}
+            if "weight_scale" in state_dict:
+                state_dict = compressor.decompress(state_dict, quantization_scheme)
+            return {full_layer_name: state_dict["weight"].to(dtype)}
 
         weights_args = quantization_scheme.weights
         if weights_args.type == "float" and weights_args.num_bits == 8:

@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from copy import deepcopy
-from functools import partial
 
 from ..utils import is_compressed_tensors_available, is_torch_available, is_torch_greater_or_equal, logging
 from ..utils.quantization_config import CompressedTensorsConfig
@@ -24,7 +23,7 @@ if is_torch_available():
     import torch
 
     from ..core_model_loading import WeightConverter
-    from ..integrations.compressed_tensors import CompressedTensorsDequantize, get_experts_scheme
+    from ..integrations.compressed_tensors import CompressedTensorsDequantize
 
 
 logger = logging.get_logger(__name__)
@@ -161,20 +160,17 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             )
         ]
 
-    @property
-    def serialized_names(self):
-        ct_config = self.quantization_config.quantization_config
-        if ct_config is None or not ct_config.config_groups:  # e.g. sparsity only, kv cache only
-            return {}
-        from compressed_tensors.compressors import BaseCompressor
-
-        scheme = get_experts_scheme(ct_config)
-        compressor = BaseCompressor.get_value_from_registry(scheme.format or ct_config.format)
-        return {"weight": list(compressor.compression_param_names(scheme))}
+    # Every name a compressed-tensors format stores for a weight; a checkpoint only has its own format's
+    serialized_names = {
+        "weight": [
+            "weight",
+            "weight_scale",
+            "weight_zero_point",
+            "weight_global_scale",
+            "weight_packed",
+            "weight_shape",
+        ]
+    }
 
     def get_load_operations(self):
-        ct_config = self.quantization_config.quantization_config
-        if ct_config is None or not ct_config.config_groups:  # e.g. sparsity only, kv cache only
-            return {}
-        scheme = get_experts_scheme(ct_config)
-        return {"dequantize": partial(CompressedTensorsDequantize, scheme=scheme)}
+        return {"dequantize": CompressedTensorsDequantize}
