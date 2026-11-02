@@ -106,6 +106,13 @@ class GgufTokenizerTesterMixin:
                     reference(text, add_special_tokens=False).input_ids,
                 )
 
+    def test_tokenizer_matches_transformers_with_special_tokens(self):
+        """BOS and EOS come from the file's `add_bos_token` / `add_eos_token`, so they are added like the reference."""
+        from_gguf, reference = self.tokenizer, self.reference_tokenizer
+        for text in self.tokenizer_texts:
+            with self.subTest(text=text):
+                self.assertEqual(from_gguf(text).input_ids, reference(text).input_ids)
+
     def test_decodes_like_transformers(self):
         """The decoder comes from the tokenizer class, and nothing else here exercises it."""
         from_gguf, reference = self.tokenizer, self.reference_tokenizer
