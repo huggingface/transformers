@@ -27,7 +27,6 @@ from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return
 from ..auto import AutoConfig, AutoModel
 
 
-# The independent state and candidate texts of `clm.schema.build_pairs`.
 CLM_TEMPLATE = r"""
 {%- macro text(value, indent=0) -%}
     {%- if value is none -%}
@@ -171,9 +170,13 @@ class ClmPreTrainedModel(PreTrainedModel):
 class ClmForDecision(DecisionMixin, ClmPreTrainedModel):
     accepts_loss_kwargs = False
 
-    def __init__(self, config: ClmConfig):
+    def __init__(self, config: ClmConfig, model: PreTrainedModel | None = None):
+        r"""
+        model (`PreTrainedModel`, *optional*):
+            An already loaded text encoder. Otherwise, initialize it from `config.text_config`.
+        """
         super().__init__(config)
-        self.model = AutoModel.from_config(config.text_config)
+        self.model = model if model is not None else AutoModel.from_config(config.text_config)
         self.state_head = ClmProjectionHead(config)
         self.action_head = ClmProjectionHead(config)
         self.logit_scale = nn.Parameter(torch.tensor(config.logit_scale_init_value))
@@ -196,6 +199,7 @@ class ClmForDecision(DecisionMixin, ClmPreTrainedModel):
         input_ids: torch.LongTensor,
         marks: torch.LongTensor,
         num_options: torch.LongTensor,
+        attention_mask: torch.Tensor | None = None,
         question_type_ids: torch.LongTensor | None = None,
         labels: torch.Tensor | None = None,
         group_ids: torch.LongTensor | None = None,
@@ -210,15 +214,21 @@ class ClmForDecision(DecisionMixin, ClmPreTrainedModel):
             Group IDs for paired training batches with one matching candidate per state in the same order.
             Off-diagonal pairs from the same group are excluded as false negatives in both directions.
         """
+        if input_ids.shape[0] != 1:
+            raise ValueError("CLM expects one packed prompt; pack multiple state-candidate pairs into that prompt.")
         marks, num_options = marks[0], num_options[0]  # a batch of one prompt
         lengths = marks.diff(prepend=marks.new_zeros(1))
         # Independent encoder passes preserve the publisher's reusable candidate representations.
         positions = torch.arange(lengths.max(), device=input_ids.device)[None]
-        attention_mask = positions < lengths[:, None]
-        indices = (marks - lengths)[:, None] + positions
-        input_ids = input_ids[0, indices.clamp(max=input_ids.shape[1] - 1)]
-        input_ids = input_ids.masked_fill(~attention_mask, self.config.text_config.pad_token_id or 0)
-        outputs = self.model(input_ids=input_ids, attention_mask=attention_mask, use_cache=False, **kwargs)
+        encoder_attention_mask = positions < lengths[:, None]
+        indices = ((marks - lengths)[:, None] + positions).clamp(max=input_ids.shape[1] - 1)
+        if attention_mask is not None:
+            encoder_attention_mask &= attention_mask[0, indices].bool()
+        input_ids = input_ids[0, indices]
+        input_ids = input_ids.masked_fill(~encoder_attention_mask, self.config.text_config.pad_token_id or 0)
+        outputs = self.model(
+            input_ids=input_ids, attention_mask=encoder_attention_mask, use_cache=False, return_dict=True, **kwargs
+        )
         hidden_states = outputs.last_hidden_state[torch.arange(len(lengths), device=input_ids.device), lengths - 1]
         hidden_states = hidden_states.float()
         hidden_states = hidden_states / (hidden_states.norm(dim=-1, keepdim=True) + 1e-12)

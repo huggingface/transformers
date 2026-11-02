@@ -15,9 +15,10 @@
 import copy
 import tempfile
 import unittest
+from pathlib import Path
 
 from transformers import AutoConfig, AutoTokenizer, ClmConfig, is_torch_available, pipeline
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...test_decision_head_common import DecisionHeadTesterMixin, render, tiny_qwen2
 
@@ -154,6 +155,58 @@ class ClmForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         actual = model(**{**self.inputs, "input_ids": permuted}).logits
         torch.testing.assert_close(actual, expected[:, [1, 2, 0]])
 
+    def test_tokenizer_attention_mask(self):
+        model = ClmForDecision(self.config).eval()
+        expected = model(**self.inputs).logits
+        output = model(**self.inputs, attention_mask=torch.ones_like(self.inputs["input_ids"]))
+        torch.testing.assert_close(output.logits, expected)
+        padded = {
+            **self.inputs,
+            "input_ids": F.pad(self.inputs["input_ids"], (3, 2)),
+            "attention_mask": F.pad(torch.ones_like(self.inputs["input_ids"]), (3, 2)),
+            "marks": self.inputs["marks"] + 3,
+        }
+        torch.testing.assert_close(model(**padded).logits, expected)
+
+    def test_reject_multiple_prompts(self):
+        model = ClmForDecision(self.config)
+        with self.assertRaisesRegex(ValueError, "one packed prompt"):
+            model(**{key: value.repeat(2, 1) for key, value in self.inputs.items()})
+
+    def test_checkpoint_conversion(self):
+        from transformers.models.clm.convert_clm_weights_to_hf import convert_checkpoint
+
+        model = ClmForDecision(self.config).eval()
+        expected = model(**self.inputs, labels=torch.arange(3))
+        names = {"input_projection": "inp", "layers": "hidden", "layer_norms": "norms", "output_projection": "out"}
+        weights = {"logit_scale": model.logit_scale.detach()}
+        for head_name in ("state_head", "action_head"):
+            state = {}
+            for key, value in model.get_submodule(head_name).state_dict().items():
+                module, parameter = key.split(".", 1)
+                state[f"{names[module]}.{parameter}"] = value
+            weights[head_name] = state
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)
+            model.base_model.save_pretrained(path / "encoder")
+            self.tokenizer.save_pretrained(path / "encoder")
+            weights["cfg"] = {
+                "model": str(path / "encoder"),
+                "width": self.config.hidden_size,
+                "depth": self.config.num_hidden_layers,
+                "projection_dim": self.config.projection_dim,
+                "activation": self.config.hidden_act,
+                "layernorm": self.config.layer_norm,
+                "residual": self.config.residual,
+            }
+            torch.save(weights, path / "CLM_v0.1-8B.pt")
+            convert_checkpoint(str(path), str(path / "converted"))
+            loaded = AutoModelForDecision.from_pretrained(path / "converted").eval()
+        output = loaded(**self.inputs, labels=torch.arange(3))
+        torch.testing.assert_close(output.logits, expected.logits)
+        torch.testing.assert_close(output.loss, expected.loss)
+        torch.testing.assert_close(loaded.logit_scale, model.logit_scale)
+
     def test_trainer(self):
         model = ClmForDecision(self.config)
         model.base_model.requires_grad_(False)
@@ -220,3 +273,43 @@ class ClmForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         for name in answers:
             field = "noul" if name == "urgent" else "probabilities"
             torch.testing.assert_close(reloaded[name][field], answers[name][field], rtol=1e-5, atol=1e-6)
+
+
+@slow
+@require_torch_accelerator
+class ClmIntegrationTest(unittest.TestCase):
+    def test_clm_8b(self):
+        from transformers.models.clm.convert_clm_weights_to_hf import convert_checkpoint
+
+        with tempfile.TemporaryDirectory() as directory:
+            convert_checkpoint(
+                "Contrastive-LM/CLM-v0.1-8B",
+                directory,
+                revision="e939398d4556fcd9400c76fa8c5a513202f42b0a",
+                encoder_revision="b968826d9c46dd6066d109eabc6255188de91218",
+            )
+            decide = pipeline("decision", model=directory, dtype="float32", model_kwargs={"device_map": torch_device})
+            answers = decide(
+                {
+                    "state": "Customer: my invoice was charged twice and nobody answers the phone!",
+                    "questions": {
+                        "urgency": {"type": "noul", "instructions": "Is this urgent?"},
+                        "department": {
+                            "type": "choice",
+                            "instructions": "Which team should handle this?",
+                            "criteria": {"billing": "Charges, invoices, refunds", "technical": "Bugs and outages"},
+                        },
+                        "frustration": {
+                            "type": "score",
+                            "instructions": "How frustrated is the customer?",
+                            "criteria": ["Calm", "Frustrated", "Very angry"],
+                        },
+                    },
+                }
+            )
+        torch.testing.assert_close(answers["urgency"]["noul"], 0.841952, rtol=0, atol=1e-4)
+        torch.testing.assert_close(
+            answers["department"]["probabilities"], {"billing": 0.987977, "technical": 0.012023}, rtol=0, atol=1e-4
+        )
+        self.assertEqual(answers["department"]["choice"], "billing")
+        torch.testing.assert_close(answers["frustration"]["score"], 1.999977, rtol=0, atol=1e-4)

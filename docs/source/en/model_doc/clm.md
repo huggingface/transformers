@@ -24,13 +24,30 @@ The publisher checkpoint contains projection heads only; its encoder is loaded s
 
 CLM uses the shared [decision API](jev): `model.decide` and `pipeline("decision")` answer Choice, Noul and Score
 questions. Structured inputs use the publisher's prose formatting. A candidate's description is encoded when supplied;
-otherwise its key is used. Candidates do not see the current state or other candidates. Null decisions are unsupported.
+otherwise its key is used. Candidates do not see the current state or other candidates. Null decisions are unsupported. Answer confidence follows the shared decision API.
 
 For training, `labels` supplies matching candidate indices or target distributions over the in-batch candidate pool.
 The model returns a standard output with `loss` and `logits`. The loss averages forward and reverse InfoNCE; reverse
 supervision includes only candidates with positive target mass. Paired examples may supply `group_ids` to exclude
-off-diagonal examples from the same group as false negatives, matching the official CLM trainer.
+off-diagonal examples from the same group as false negatives, during contrastive training.
 For the released heads' training setup, freeze `model.base_model` before constructing the Trainer.
+
+## Convert a checkpoint
+
+The published heads use a separate Qwen3-8B encoder. Convert both into a standard Transformers checkpoint:
+
+```bash
+python src/transformers/models/clm/convert_clm_weights_to_hf.py --output_dir clm-8b
+```
+
+```python
+from transformers import pipeline
+
+decide = pipeline("decision", model="clm-8b", dtype="bfloat16", device="cuda")
+answers = decide({"state": "My invoice was charged twice.", "questions": {
+    "refund": {"type": "noul", "instructions": "Is a refund requested?"}
+}})
+```
 
 ## ClmConfig
 
