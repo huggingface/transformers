@@ -75,6 +75,19 @@ class CompressedTensorsDequantize(ConversionOps):
 
         quantization_scheme = self.scheme or get_experts_scheme(ct_quantization_config)
 
+        format = quantization_scheme.format or infer_module_format(nn.Linear, quantization_scheme)
+        compressor = BaseCompressor.get_value_from_registry(format)
+
+        if all("*" not in key for key in input_dict):
+            # One module, matched by the quantizer's general converter: decompress its local state dict
+            local_state_dict = {
+                key.rpartition(".")[2]: value[0] if isinstance(value, list) else value
+                for key, value in input_dict.items()
+            }
+            if "weight_scale" in local_state_dict:
+                local_state_dict = compressor.decompress(local_state_dict, quantization_scheme)
+            return {full_layer_name: local_state_dict["weight"].to(dtype)}
+
         weights_args = quantization_scheme.weights
         if weights_args.type == "float" and weights_args.num_bits == 8:
             # FP8 experts are plain (fp8 weight, scale) pairs — nothing is packed. Fold the
@@ -102,9 +115,6 @@ class CompressedTensorsDequantize(ConversionOps):
                 if output is not None:
                     processed_out[key] = output
             return processed_out
-
-        format = quantization_scheme.format or infer_module_format(nn.Linear, quantization_scheme)
-        compressor = BaseCompressor.get_value_from_registry(format)
 
         class DummyModule(nn.Module):
             def __init__(self, weight, scale, shape):
