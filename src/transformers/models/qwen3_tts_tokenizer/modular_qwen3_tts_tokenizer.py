@@ -405,19 +405,6 @@ class Qwen3TTSTokenizerDecoderModel(Qwen3TTSTokenizerCode2WavPreTrainedModel):
         quantized_representation (`torch.FloatTensor` of shape `(batch_size, codebook_dim, sequence_length)`):
             Quantized continuous representation to decode into waveform values.
         """
-        chunk_size = self.config.decoder_chunk_size
-        left_context_size = self.config.decoder_left_context_size
-        wavs = []
-        start_index = 0
-        while start_index < quantized_representation.shape[-1]:
-            end_index = min(start_index + chunk_size, quantized_representation.shape[-1])
-            context_size = left_context_size if start_index - left_context_size > 0 else start_index
-            wav_chunk = self._decode_chunk(quantized_representation[..., start_index - context_size : end_index])
-            wavs.append(wav_chunk[..., context_size * self.total_upsample :])
-            start_index = end_index
-        return torch.cat(wavs, dim=-1)
-
-    def _decode_chunk(self, quantized_representation):
         hidden = self.pre_conv(quantized_representation).transpose(1, 2)
         hidden = self.input_proj(hidden)
         hidden = self.pre_transformer(inputs_embeds=hidden).last_hidden_state
@@ -430,6 +417,18 @@ class Qwen3TTSTokenizerDecoderModel(Qwen3TTSTokenizerCode2WavPreTrainedModel):
         for block in self.decoder:
             wav = block(wav)
         return wav.clamp(min=-1, max=1)
+
+    def chunked_decode(self, codes, chunk_size=300, left_context_size=25):
+        wavs = []
+        start_index = 0
+        while start_index < codes.shape[-1]:
+            end_index = min(start_index + chunk_size, codes.shape[-1])
+            context_size = left_context_size if start_index - left_context_size > 0 else start_index
+            codes_chunk = codes[..., start_index - context_size : end_index]
+            wav_chunk = self(codes_chunk)
+            wavs.append(wav_chunk[..., context_size * self.total_upsample :])
+            start_index = end_index
+        return torch.cat(wavs, dim=-1)
 
 
 class Qwen3TTSTokenizerEncoder(MimiEncoder):
@@ -541,7 +540,11 @@ class Qwen3TTSTokenizerModel(VibeVoiceAcousticTokenizerModel, PreTrainedAudioTok
 
         if audio_codes is not None:
             latents = self.quantizer.decode(audio_codes.transpose(1, 2))
-        audio_values = self.decoder(latents, **kwargs).squeeze(1)
+        audio_values = self.decoder.chunked_decode(
+            latents,
+            chunk_size=self.decoder.config.decoder_chunk_size,
+            left_context_size=self.decoder.config.decoder_left_context_size,
+        ).squeeze(1)
 
         return Qwen3TTSTokenizerDecoderOutput(audio_values=audio_values)
 
