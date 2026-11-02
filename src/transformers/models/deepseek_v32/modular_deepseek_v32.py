@@ -46,10 +46,10 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3PreTrainedModel,
     DeepseekV3RMSNorm,
     DeepseekV3RotaryEmbedding,
+    apply_rotary_pos_emb,
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
 )
-from ..glm4_moe.modeling_glm4_moe import apply_rotary_pos_emb
 from ..glm4_moe_lite.configuration_glm4_moe_lite import Glm4MoeLiteConfig
 from ..glm4_moe_lite.modeling_glm4_moe_lite import (
     Glm4MoeLiteDecoderLayer,
@@ -244,12 +244,15 @@ class DeepseekV32Indexer(nn.Module):
         cos, sin = position_embeddings
         q = self.wq_b(q_resid)  # [B, S, H*D]
         q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
-        k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
+        q_rot, q_pass = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
 
-        # The indexer uses NON-interleaved (half-split) RoPE on the first `qk_rope_head_dim` dims — unlike the main MLA
-        # attention
-        q, k = apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=2)
-        k = k.squeeze(2)  # [B, S, D]
+        k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
+        k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
+
+        # The indexer uses NON-interleaved (half-split) RoPE — unlike the main MLA attention
+        q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
+        q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
+        k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
 
         if past_key_values is not None:
             k = past_key_values.update_indexer(k, self.layer_idx)

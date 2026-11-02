@@ -318,9 +318,13 @@ class MistralLarge4TextIndexer(GlmMoeDsaIndexer):
         # Same for the keys
         k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
 
-        # Apply interleaved RoPE on the first `qk_rope_head_dim` dims
+        # Apply interleaved RoPE
         cos, sin = position_embeddings
-        q, k = apply_rotary_pos_emb_interleave(q, k, cos, sin, unsqueeze_dim=2)
+        q_rot, q_pass = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
+        k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
+        q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
+        q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
+        k = torch.cat([k_rot, k_pass], dim=-1)  # [B, S, 1, D]
         k = k.squeeze(2)
 
         if past_key_values is not None:
