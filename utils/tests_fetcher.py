@@ -738,8 +738,6 @@ def get_module_dependencies(module_fname: str, cache: dict[str, list[str]] | Non
                         # Import Structure returns _module keys as import paths rather than local paths
                         _module = _module.replace(".", "/")
                         _module = module.replace("__init__.py", f"{_module}.py")
-                        if not (PATH_TO_REPO / _module).is_file():
-                            continue
                         if _module not in new_imported_modules:
                             new_imported_modules[_module] = list(_imports)
                         else:
@@ -759,10 +757,7 @@ def get_module_dependencies(module_fname: str, cache: dict[str, list[str]] | Non
                     path_to_module = PATH_TO_REPO / module.replace("__init__.py", "")
                     dependencies.extend(
                         [
-                            # Use resolve().name to get the actual on-disk filename with correct
-                            # casing (on case-insensitive Windows filesystems, "SLIDING_ATTENTION.py"
-                            # would match "sliding_attention.py" via is_file() but we want the real name).
-                            f"{module.replace('__init__.py', '')}{(path_to_module / f'{i}.py').resolve().name}"
+                            f"{module.replace('__init__.py', '')}{i}.py"
                             for i in imports
                             if (path_to_module / f"{i}.py").is_file()
                         ]
@@ -1062,7 +1057,11 @@ def infer_tests_to_run(output_file: str, diff_with_last_commit: bool = False, te
     if not test_all:
         modified_files = get_modified_python_files(diff_with_last_commit=diff_with_last_commit)
     else:
-        modified_files = [str(k) for k in PATH_TO_TESTS.glob("*/*") if str(k).endswith(".py") and "test_" in str(k)]
+        modified_files = [
+            k.relative_to(PATH_TO_REPO).as_posix()
+            for k in PATH_TO_TESTS.glob("*/*")
+            if k.suffix == ".py" and "test_" in k.name
+        ]
         print("\n### test_all is TRUE, FETCHING ALL FILES###\n")
     print(f"\n### MODIFIED FILES ###\n{_print_list(modified_files)}")
 

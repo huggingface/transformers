@@ -892,7 +892,12 @@ src/transformers/configuration_utils.py
 
         self.assertNotIn("os.path.sep", content, "Use '/' directly instead of os.path.sep")
         self.assertNotIn("os.path.join(", content, "Use f-strings or pathlib / operator instead of os.path.join")
+        bad_lines = [
+            line
+            for line in content.splitlines()
+            if re.search(r"str\(.*relative_to\(", line) and ".as_posix()" not in line
+        ]
         self.assertFalse(
-            re.search(r"str\(.*relative_to\(", content),
-            "Use path.relative_to(...).as_posix() instead of str(path.relative_to(...))",
+            bad_lines,
+            "Use path.relative_to(...).as_posix() instead of str(path.relative_to(...)):\n" + "\n".join(bad_lines),
         )
