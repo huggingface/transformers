@@ -39,9 +39,6 @@ RUN git clone https://github.com/huggingface/transformers && cd transformers && 
 # Install transformers
 RUN python3 -m pip install --no-cache-dir -e ./transformers[dev,testing,video,audio]
 
-# `pyctcdecode` downgrades numpy to 1.x, which breaks pyarrow / datasets.
-RUN python3 -m pip install --no-cache-dir --upgrade "numpy>=2.3"
-
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
 RUN cd transformers && python3 setup.py develop
@@ -62,14 +59,6 @@ RUN python3 -m pip install --no-cache-dir "torchcodec==0.13.0"
 RUN python3 -m pip install --no-cache-dir \
     https://rocm.frameworks.amd.com/whl-multi-arch/vllm/flash-attn/flash_attn-2.8.3-cp314-cp314-linux_x86_64.whl
 
-# The published `kenlm` (wav2vec2 LM tests) does not build on Python 3.14, so build it from source.
-RUN python3 -m pip install --no-cache-dir cython cmake && \
-    git clone --depth 1 https://github.com/kpu/kenlm /tmp/kenlm && \
-    cd /tmp/kenlm && \
-    cython --cplus python/kenlm.pyx -o python/kenlm.cpp && \
-    python3 -m pip install --no-cache-dir --no-build-isolation . && \
-    cd / && rm -rf /tmp/kenlm
-
 RUN python3 -m pip install --no-cache-dir einops blobfile num2words
 
 # timm is required for many vision models tests
@@ -82,4 +71,4 @@ ENV MIOPEN_DEBUG_CONV_IMPLICIT_GEMM=0
 ENV MIOPEN_FIND_MODE=2
 
 # Fail the build if the installs above broke the ROCm stack.
-RUN python3 -c "import torch, torchvision, torchcodec, flash_attn, kenlm, bitsandbytes, onnxscript, peft, numpy, pyarrow, datasets, transformers; assert torch.version.hip is not None; print(torch.__version__, torch.version.hip, torchvision.__version__, flash_attn.__version__)"
+RUN python3 -c "import torch, torchvision, torchcodec, flash_attn, bitsandbytes, onnxscript, peft, numpy, pyarrow, datasets, transformers; assert torch.version.hip is not None; print(torch.__version__, torch.version.hip, torchvision.__version__, flash_attn.__version__)"

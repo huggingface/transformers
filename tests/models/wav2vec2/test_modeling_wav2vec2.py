@@ -14,10 +14,8 @@
 """Testing suite for the PyTorch Wav2Vec2 model."""
 
 import math
-import multiprocessing
 import os
 import tempfile
-import traceback
 import unittest
 
 import numpy as np
@@ -26,18 +24,14 @@ from pytest import mark
 
 from transformers import Wav2Vec2Config, is_torch_available
 from transformers.testing_utils import (
-    CaptureLogger,
     cleanup,
     is_flaky,
-    is_pyctcdecode_available,
     is_torchaudio_available,
     require_flash_attn,
-    require_pyctcdecode,
     require_torch,
     require_torch_accelerator,
     require_torchaudio,
     require_torchcodec,
-    run_test_in_subprocess,
     slow,
     torch_device,
 )
@@ -77,58 +71,6 @@ if is_torch_available():
 
 if is_torchaudio_available():
     import torchaudio
-
-
-if is_pyctcdecode_available():
-    import pyctcdecode.decoder
-
-    from transformers import Wav2Vec2ProcessorWithLM
-    from transformers.models.wav2vec2_with_lm import processing_wav2vec2_with_lm
-
-
-def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
-    error = None
-    try:
-        _ = in_queue.get(timeout=timeout)
-
-        ds = load_dataset("fixie-ai/common_voice_17_0", "es", split="test", streaming=True)
-        sample = next(iter(ds))
-
-        resampled_audio = torchaudio.functional.resample(
-            torch.tensor(sample["audio"]["array"]), 48_000, 16_000
-        ).numpy()
-
-        model = Wav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm").to(
-            torch_device
-        )
-        processor = Wav2Vec2ProcessorWithLM.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
-
-        input_values = processor(resampled_audio, return_tensors="pt").input_values
-
-        with torch.no_grad():
-            logits = model(input_values.to(torch_device)).logits
-
-        # use a spawn pool, which should trigger a warning if different than fork
-        with CaptureLogger(pyctcdecode.decoder.logger) as cl, multiprocessing.get_context("spawn").Pool(1) as pool:
-            transcription = processor.batch_decode(logits.cpu().numpy(), pool).text
-
-        expected_transcription = "el resto de los equipos se mantienen en su sede"
-        unittest.TestCase().assertIn("Falling back to sequential decoding.", cl.out)
-        unittest.TestCase().assertEqual(transcription[0], expected_transcription)
-
-        # force batch_decode to internally create a spawn pool, which should trigger a warning if different than fork
-        multiprocessing.set_start_method("spawn", force=True)
-        with CaptureLogger(processing_wav2vec2_with_lm.logger) as cl:
-            transcription = processor.batch_decode(logits.cpu().numpy()).text
-
-        unittest.TestCase().assertIn("Falling back to sequential decoding.", cl.out)
-        unittest.TestCase().assertEqual(transcription[0], expected_transcription)
-    except Exception:
-        error = f"{traceback.format_exc()}"
-
-    results = {"error": error}
-    out_queue.put(results, timeout=timeout)
-    out_queue.join()
 
 
 class Wav2Vec2ModelTester:
@@ -1643,75 +1585,6 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         # "his instant panic was followed by a small sharp blow high on his chest",
         # ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
-
-    @require_pyctcdecode
-    @require_torchaudio
-    def test_wav2vec2_with_lm(self):
-        ds = load_dataset("fixie-ai/common_voice_17_0", "es", split="test", streaming=True)
-        sample = next(iter(ds))
-
-        resampled_audio = torchaudio.functional.resample(
-            torch.tensor(sample["audio"]["array"]), 48_000, 16_000
-        ).numpy()
-
-        model = Wav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm").to(
-            torch_device
-        )
-        processor = Wav2Vec2ProcessorWithLM.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
-
-        input_values = processor(resampled_audio, return_tensors="pt").input_values
-
-        with torch.no_grad():
-            logits = model(input_values.to(torch_device)).logits
-
-        transcription = processor.batch_decode(logits.cpu().numpy()).text
-
-        expected_transcription = "el resto de los equipos se mantienen en su sede"
-        self.assertEqual(transcription[0], expected_transcription)
-
-    @require_pyctcdecode
-    @require_torchaudio
-    def test_wav2vec2_with_lm_pool(self):
-        ds = load_dataset("fixie-ai/common_voice_17_0", "es", split="test", streaming=True)
-        sample = next(iter(ds))
-
-        resampled_audio = torchaudio.functional.resample(
-            torch.tensor(sample["audio"]["array"]), 48_000, 16_000
-        ).numpy()
-
-        model = Wav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm").to(
-            torch_device
-        )
-        processor = Wav2Vec2ProcessorWithLM.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
-
-        input_values = processor(resampled_audio, return_tensors="pt").input_values
-
-        with torch.no_grad():
-            logits = model(input_values.to(torch_device)).logits
-
-        # test user-managed pool
-        with multiprocessing.get_context("fork").Pool(2) as pool:
-            transcription = processor.batch_decode(logits.cpu().numpy(), pool).text
-
-        expected_transcription = "el resto de los equipos se mantienen en su sede"
-        self.assertEqual(transcription[0], expected_transcription)
-
-        # user-managed pool + num_processes should trigger a warning
-        with (
-            CaptureLogger(processing_wav2vec2_with_lm.logger) as cl,
-            multiprocessing.get_context("fork").Pool(2) as pool,
-        ):
-            transcription = processor.batch_decode(logits.cpu().numpy(), pool, num_processes=2).text
-
-        self.assertIn("num_process", cl.out)
-        self.assertIn("it will be ignored", cl.out)
-
-        self.assertEqual(transcription[0], expected_transcription)
-
-    @require_pyctcdecode
-    @require_torchaudio
-    def test_wav2vec2_with_lm_invalid_pool(self):
-        run_test_in_subprocess(test_case=self, target_func=_test_wav2vec2_with_lm_invalid_pool, inputs=None)
 
     def test_inference_diarization(self):
         model = Wav2Vec2ForAudioFrameClassification.from_pretrained("anton-l/wav2vec2-base-superb-sd").to(torch_device)

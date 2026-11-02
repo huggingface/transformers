@@ -2266,6 +2266,13 @@ PYCTCDECODE_IMPORT_ERROR = """
 """
 
 # docstyle-ignore
+KENLM_IMPORT_ERROR = """
+{0} requires the kenlm library but it was not found in your environment. You can install it with pip:
+`pip install kenlm`. kenlm only ships source distributions, so this needs a C++ toolchain and CMake. Please note that
+you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
 ACCELERATE_IMPORT_ERROR = """
 {0} requires the accelerate library >= {ACCELERATE_MIN_VERSION} it was not found in your environment.
 You can install or update it with pip: `pip install --upgrade accelerate`. Please note that you may need to restart your
@@ -2354,6 +2361,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("phonemizer", (is_phonemizer_available, PHONEMIZER_IMPORT_ERROR)),
         ("uroman", (is_uroman_available, UROMAN_IMPORT_ERROR)),
         ("pretty_midi", (is_pretty_midi_available, PRETTY_MIDI_IMPORT_ERROR)),
+        ("kenlm", (is_kenlm_available, KENLM_IMPORT_ERROR)),
         ("levenshtein", (is_levenshtein_available, LEVENSHTEIN_IMPORT_ERROR)),
         ("librosa", (is_librosa_available, LIBROSA_IMPORT_ERROR)),
         ("soundfile", (is_soundfile_available, SOUNDFILE_IMPORT_ERROR)),
