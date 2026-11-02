@@ -155,7 +155,7 @@ jobs:
           uv pip install -e "${TRANSFORMERS_SOURCE}"
 
       - name: Pip freeze
-        run: pip freeze
+        run: uv pip freeze
 
       - name: System info
         run: |
