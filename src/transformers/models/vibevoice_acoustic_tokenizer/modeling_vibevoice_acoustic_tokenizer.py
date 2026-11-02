@@ -518,7 +518,8 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
         use_cache (`bool`, *optional*):
             Whether to use caching for convolution states.
         sample (`bool`, *optional*):
-            Whether to sample from the VAE. If False, no noise is added.
+            Whether to add Gaussian noise to the latents (σ-VAE: the noise scale is drawn per batch item from
+            N(0, `config.vae_std`)). If False, the encoder output is returned as is.
         """
         encoder_output = self.encoder(input_values, padding_cache=padding_cache, use_cache=use_cache)
 
@@ -558,7 +559,8 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
         use_cache (`bool`, *optional*):
             Whether to use caching for convolution states.
         sample (`bool`, *optional*):
-            Whether to sample from the VAE latent distribution. If False, no noise is added to the latents.
+            Whether to add Gaussian noise to the latents (σ-VAE: the noise scale is drawn per batch item from
+            N(0, `config.vae_std`)). If False, the encoder output is returned as is.
         """
         encoder_output = self.encode(input_values, use_cache=use_cache, sample=sample)
         decoder_output = self.decode(encoder_output.latents, padding_cache=padding_cache, use_cache=use_cache)
