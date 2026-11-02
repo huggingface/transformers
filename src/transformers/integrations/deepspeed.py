@@ -19,6 +19,7 @@ import contextlib
 import copy
 import importlib.metadata
 import importlib.util
+import os
 import weakref
 from collections.abc import Callable
 from functools import partialmethod
@@ -768,9 +769,16 @@ def prevent_arange_dtype_change():
         if fn is pp._orig_torch_arange:
             # Only wrap the device, not the dtype!
             def wrapped_fn(*inner_args, **inner_kwargs):
-                # target_device was added on recent deespeed versions, so check it through kwargs here to avoid BC issues
-                if inner_kwargs.get("device") is None and kwargs.get("target_device") is not None:
-                    inner_kwargs["device"] = kwargs.get("target_device")
+                # If no explicit device is passed, deepspeed overrides it (but differently between versions)
+                if inner_kwargs.get("device") is None:
+                    # On recent versions, it's always passed explicitly as a kwarg to the wrapper
+                    if "target_device" in kwargs:
+                        inner_kwargs["device"] = kwargs["target_device"]
+                    # If it's not present in kwargs, it means older versions, and it was always computed as such
+                    else:
+                        inner_kwargs["device"] = torch.device(
+                            pp.get_accelerator().device_name(os.environ["LOCAL_RANK"])
+                        )
                 return fn(*inner_args, **inner_kwargs)
 
             return wrapped_fn
