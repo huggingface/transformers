@@ -89,13 +89,9 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             )
             self.use_fp8_kernel = False
 
-    @property
-    def dequantize_while_loading(self) -> bool:
-        return self.quantization_config.dequantize and self.quantization_config.is_quantization_compressed
-
     def _process_model_before_weight_loading(self, model, **kwargs):
-        if self.dequantize_while_loading:
-            # The model stays dense: `get_weight_conversions` dequantizes every checkpoint weight as it loads
+        if self.quantization_config.dequantize:
+            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
             return
         ct_config = self.compressor.quantization_config
         remaining_groups = dict(ct_config.config_groups)
@@ -152,10 +148,8 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         """On the FP8 kernel path, a generic converter reshapes the checkpoint ``weight_scale``
         tensors into the row-wise kernel layout once at load time — see
         :class:`ConvertFP8LinearScale`."""
-        if self.dequantize_while_loading:
-            return super().get_weight_conversions()
         if not self.use_fp8_kernel:
-            return []
+            return super().get_weight_conversions()
 
         from ..integrations.compressed_tensors import ConvertFP8LinearScale
 
