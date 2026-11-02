@@ -24,7 +24,6 @@ python utils/check_gitattributes.py --fix_and_overwrite  # regenerate (used in `
 """
 
 import argparse
-from collections import defaultdict
 from pathlib import Path
 
 
@@ -39,6 +38,7 @@ CHECKER_CONFIG = {
 GITATTRIBUTES = Path(".gitattributes")
 MODELS_DIR = Path("src/transformers/models")
 GENERATED_HEADER = "This file was automatically generated from"
+GENERATED_KINDS = ("configuration", "feature", "image", "modeling", "processing", "tokenization", "video")
 MARKER = "# Generated files, collapsed in GitHub PR diffs. Run `make fix-repo` to update this block."
 
 
@@ -48,23 +48,15 @@ def is_generated(path: Path) -> bool:
 
 
 def generated_patterns() -> list[str]:
-    # One glob for the `__init__.py`, then one per file kind (`modeling_*.py`, `configuration_*.py`, ...) in each model
-    # folder, used only when every file of that kind is generated, so hand-written sources like `modular_*.py` never match.
-    patterns = [f"{MODELS_DIR.as_posix()}/**/__init__.py linguist-generated=true"]
-    for folder in sorted({path.parent for path in MODELS_DIR.rglob("*.py")}):
-        kinds = defaultdict(list)
-        for path in sorted(folder.glob("*.py")):
-            if path.name != "__init__.py":
-                kinds[path.name.split("_")[0]].append(path)
-        for kind, files in kinds.items():
-            generated = [path for path in files if is_generated(path)]
-            if len(generated) == len(files):
-                patterns.append(f"{folder.as_posix()}/{kind}_*.py linguist-generated=true")
-            else:
-                patterns += [f"{path.as_posix()} linguist-generated=true" for path in generated]
-        init = folder / "__init__.py"
-        if init.exists() and not is_generated(init):
-            patterns.append(f"{init.as_posix()} linguist-generated=false")
+    # Repo-wide globs for the file kinds modular generates, so a new modular model is covered without editing this
+    # file (the CI security gate blocks PRs touching `.gitattributes`). Hand-written files get a `false` override (the
+    # last matching line wins), other generated files a per-file `true`.
+    patterns = [f"{MODELS_DIR.as_posix()}/**/{kind}_*.py linguist-generated=true" for kind in GENERATED_KINDS]
+    patterns.append(f"{MODELS_DIR.as_posix()}/**/__init__.py linguist-generated=true")
+    for path in sorted(MODELS_DIR.rglob("*.py")):
+        covered = path.name == "__init__.py" or path.name.split("_")[0] in GENERATED_KINDS
+        if is_generated(path) != covered:
+            patterns.append(f"{path.as_posix()} linguist-generated={str(not covered).lower()}")
     return patterns
 
 
