@@ -120,6 +120,18 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
         """The graphs are already compiled."""
         return self.__call__
 
+    def generate(self, *args, **kwargs):
+        """[`~GenerationMixin.generate`]. A stateful OpenVINO decode graph hands out its own output buffers instead of
+        copies meanwhile: it only returns the logits (the cache is its state), and `generate` copies the row it reads
+        before the next step overwrites them."""
+        if not ("beam_idx" in self.runner.metadata.input_names and hasattr(self.runner, "share_outputs")):
+            return super().generate(*args, **kwargs)
+        self.runner.share_outputs = True
+        try:
+            return super().generate(*args, **kwargs)
+        finally:
+            self.runner.share_outputs = False
+
     def _prepare_cache_for_generation(
         self, generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
     ):

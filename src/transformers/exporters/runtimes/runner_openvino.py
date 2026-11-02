@@ -49,6 +49,9 @@ class OpenVINOModelRunner(ModelRunner):
         super().__init__(metadata)
         self.compiled_model = compiled_model
         self.request = compiled_model.create_infer_request()
+        # Outputs as views of the request's buffers rather than copies, for a caller that reads each call's outputs
+        # before the next call overwrites them (`generate`).
+        self.share_outputs = False
 
     @property
     def device(self) -> torch.device:
@@ -64,6 +67,6 @@ class OpenVINOModelRunner(ModelRunner):
         self.request.reset_state()
 
     def __call__(self, **kwargs) -> Any:
-        # Outputs come back copied out of the request's buffers, which its next call overwrites.
-        outputs = self.request.infer(openvino_feed(self.compiled_model, kwargs), share_inputs=True)
+        feed = openvino_feed(self.compiled_model, kwargs)
+        outputs = self.request.infer(feed, share_inputs=True, share_outputs=self.share_outputs)
         return self.unflatten([torch.from_numpy(outputs[port]) for port in self.compiled_model.outputs])
