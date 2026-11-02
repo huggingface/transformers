@@ -467,6 +467,43 @@ class ExportedModelTest(unittest.TestCase):
 
         self._check_runs_like_eager(ExecutorchExporter(), ExecutorchConfig(), atol=1e-3)
 
+    def _check_loads_cache_output(self, exporter, config):
+        """An export whose output holds a cache loads in a process that never exported, where the cache isn't a
+        pytree node yet."""
+        from transformers import DynamicCache, LlamaConfig, LlamaModel
+        from transformers.exporters import ExportedModel
+
+        llama_config = LlamaConfig(
+            vocab_size=99,
+            hidden_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            intermediate_size=37,
+        )
+        model = LlamaModel(llama_config).eval()
+        inputs = {"input_ids": torch.randint(0, 99, (1, 7))}
+        exported = exporter.export(model, inputs, config)
+        with tempfile.TemporaryDirectory() as directory:
+            exported.save_pretrained(directory)
+            torch.utils._pytree._deregister_pytree_node(DynamicCache)
+            outputs = ExportedModel.from_pretrained(directory, device="cpu")(**inputs)
+        self.assertIsInstance(outputs.past_key_values, DynamicCache)
+
+    @pytest.mark.torch_export_test
+    def test_dynamo_loads_cache_output(self):
+        from transformers.exporters import DynamoConfig, DynamoExporter
+
+        self._check_loads_cache_output(DynamoExporter(), DynamoConfig())
+
+    @require_onnxscript
+    @require_onnxruntime
+    @pytest.mark.onnx_export_test
+    def test_onnx_loads_cache_output(self):
+        from transformers.exporters import OnnxConfig, OnnxExporter
+
+        self._check_loads_cache_output(OnnxExporter(), OnnxConfig())
+
     def test_runtime_refuses_several_components(self):
         from transformers.exporters import ExportArtifacts, ExportedComponent, ExportMetadata
 

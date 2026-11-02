@@ -29,7 +29,7 @@ from ..models.auto.configuration_auto import AutoConfig
 from ..utils import CONFIG_NAME, GENERATION_CONFIG_NAME, PushToHubMixin, logging
 from ..utils.hub import DownloadKwargs, cached_file, cached_files, hf_api
 from .configs import ExportConfigMixin, ExportFormat
-from .metadata import ExportMetadata, export_config_metadata
+from .metadata import ExportMetadata, export_config_metadata, register_treespec_types
 from .quantizers.utils import capture_calibration_inputs
 from .runtimes.base import ExportedModel
 from .utils import check_packages, decompose_for_generation
@@ -184,12 +184,14 @@ class ExportArtifacts(Mapping, PushToHubMixin):
             **kwargs,
         )
         directory = Path(manifest_file).parent
-        components = {
-            name: ExportedComponent(
-                exporter.load_program(directory / entry["file"]), ExportMetadata(**entry["metadata"])
-            )
-            for name, entry in manifest["components"].items()
-        }
+        components = {}
+        for name, entry in manifest["components"].items():
+            metadata = ExportMetadata(**entry["metadata"])
+            # A program whose inputs or outputs hold a cache can't be read back until the cache is a pytree node.
+            for spec in (metadata.in_spec, metadata.out_spec):
+                if spec is not None:
+                    register_treespec_types(spec)
+            components[name] = ExportedComponent(exporter.load_program(directory / entry["file"]), metadata)
         config = AutoConfig.from_pretrained(directory) if (directory / CONFIG_NAME).exists() else None
         generation_config = (
             GenerationConfig.from_pretrained(directory) if (directory / GENERATION_CONFIG_NAME).exists() else None

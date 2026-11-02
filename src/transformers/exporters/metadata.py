@@ -102,11 +102,20 @@ def build_export_metadata(
     return metadata
 
 
+def register_treespec_types(dumped: str) -> None:
+    """Register the transformers classes a spec written by `treespec_dumps` names as pytree nodes, so it can be read
+    back: a `ModelOutput` registers itself when its module is imported, but a cache only once an export registers it."""
+    from .exporter_dynamo import register_pytree_node
+
+    for module, name in re.findall(r'"type": "(transformers(?:\.\w+)*)[.:](\w+)"', dumped):
+        cls = getattr(importlib.import_module(module), name)
+        if cls not in torch.utils._pytree.SUPPORTED_NODES:
+            register_pytree_node(cls)
+
+
 def load_treespec(dumped: str):
-    """A spec written by `treespec_dumps`. The transformers modules it names are imported first, since a
-    `ModelOutput` registers its pytree node when its module is."""
-    for module in re.findall(r'"type": "(transformers(?:\.\w+)+)[.:]\w+"', dumped):
-        importlib.import_module(module)
+    """A spec written by `treespec_dumps`."""
+    register_treespec_types(dumped)
     return torch.utils._pytree.treespec_loads(dumped)
 
 
