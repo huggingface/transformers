@@ -403,9 +403,7 @@ class TextGenerationPipeline(Pipeline):
                     other_outputs[key] = value.reshape(in_b, out_b // in_b, *value.shape[1:])
                 if isinstance(value, tuple) and len(value[0]) == out_b:
                     value = torch.stack(value).swapaxes(0, 1)
-                    if out_b != in_b:
-                        value = value.reshape(in_b, out_b // in_b, *value.shape[1:])
-                    other_outputs[key] = value
+                    other_outputs[key] = value.reshape(in_b, out_b // in_b, *value.shape[1:])
         else:
             generated_sequence = output
             other_outputs = {}
@@ -441,10 +439,8 @@ class TextGenerationPipeline(Pipeline):
         split_keys = {}
         if other_outputs:
             for k, v in other_outputs.items():
-                if len(generated_sequence) > 1 and isinstance(v, torch.Tensor) and v.shape[0] == 1:
-                    v = v[0]
-                if isinstance(v, torch.Tensor) and v.shape[0] == len(generated_sequence):
-                    split_keys[k] = v.numpy().tolist()
+                if isinstance(v, torch.Tensor):
+                    split_keys[k] = v[0].numpy().tolist()
 
         skip_special_tokens = skip_special_tokens if skip_special_tokens is not None else True
         if getattr(self.tokenizer, "response_template", None):

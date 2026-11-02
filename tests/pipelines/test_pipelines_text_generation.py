@@ -686,6 +686,10 @@ class TextGenerationPipelineTests(unittest.TestCase):
                     candidate["sequences_scores"], direct.sequences_scores[i * 2 + j].item(), places=4
                 )
 
+        single = generator(texts, batch_size=2, **dict(args, num_beams=3, num_return_sequences=1))
+        self.assertTrue(all(isinstance(group[0]["sequences_scores"], float) for group in single))
+        self.assertTrue(all(isinstance(group[0]["beam_indices"], list) for group in single))
+
         sampled = generator(
             texts,
             batch_size=2,
