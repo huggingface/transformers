@@ -374,6 +374,9 @@ def _patch_split(original):
             # Dynamic split size: `range(0, total, sym_int)` needs a concrete step, so
             # the narrow-based loop above doesn't apply. Defer to the original torch.split.
             return original(input, split_size_or_sections, dim)
+        elif _has_unbacked_sizes(split_size_or_sections):
+            # Handled by `_patch_unbacked_split`, which this patch is layered over.
+            return original(input, split_size_or_sections, dim)
         else:
             splits = []
             start = 0

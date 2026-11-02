@@ -223,12 +223,16 @@ def patch_model_outputs(model):
 
     @functools.wraps(original_forward)
     def patched_forward(*args, **kwargs):
+        # Before the forward: it mutates its kwargs in place, and cache states it creates would shift names.
+        inputs = get_leaf_tensors(kwargs)
+        inputs_names[:] = inputs.keys()
         original_outputs = original_forward(*args, **kwargs)
         concrete = torch.utils._pytree.tree_map_only(torch.SymInt, lambda value: value.node.hint, original_outputs)
         out_specs.append(torch.utils._pytree.tree_structure(concrete))
-        outputs = get_leaf_tensors(duplicate_leaf_tensors(original_outputs))
-        inputs_names.extend(get_leaf_tensors(kwargs).keys())
-        outputs_names.extend(outputs.keys())
+        outputs = get_leaf_tensors(
+            duplicate_leaf_tensors(original_outputs, seen={id(tensor) for tensor in inputs.values()})
+        )
+        outputs_names[:] = outputs.keys()
         return outputs
 
     try:
@@ -239,11 +243,16 @@ def patch_model_outputs(model):
 
 
 def disambiguate_io_names(inputs_names: list[str], outputs_names: list[str]) -> tuple[list[str], list[str]]:
-    """Prefix any name that appears in both lists with `input.` / `output.`."""
-    for name in set(inputs_names).intersection(set(outputs_names)):
-        inputs_names[inputs_names.index(name)] = f"input.{name}"
-        outputs_names[outputs_names.index(name)] = f"output.{name}"
-    return inputs_names, outputs_names
+    """Prefix any name that appears in both lists with `input.` / `output.`.
+
+    An output named exactly `output` is prefixed too: it collides with FX's terminal node name (ORT:
+    "Duplicate definition of name (output)").
+    """
+    collisions = set(inputs_names).intersection(outputs_names)
+    return (
+        [f"input.{name}" if name in collisions else name for name in inputs_names],
+        [f"output.{name}" if name in collisions or name == "output" else name for name in outputs_names],
+    )
 
 
 # ── Stage 1: Torch patches ─────────────────────────────────────────────────────
