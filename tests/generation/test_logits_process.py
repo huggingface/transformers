@@ -214,18 +214,16 @@ class LogitsProcessorTest(unittest.TestCase):
     def test_repetition_penalty_masked_padding(self, real_eos, padding):
         valid = [0, 1, 2] if real_eos else [1, 2]
         ids = torch.tensor([[0] * padding + valid], device=torch_device)
-        mask = torch.tensor([[0] * padding + [1] * len(valid)], device=torch_device)
         scores = torch.tensor([[3.0, -2.0, -2.0, 2.5]], device=torch_device)
-        proc = RepetitionPenaltyLogitsProcessor(2.0, attention_mask=mask)
+        proc = RepetitionPenaltyLogitsProcessor(2.0, prompt_ignore_length=[padding])
         expected = RepetitionPenaltyLogitsProcessor(2.0)(torch.tensor([valid], device=torch_device), scores.clone())
         torch.testing.assert_close(proc(ids, scores.clone()), expected)
         assert proc(torch.cat((ids, ids.new_zeros((1, 1))), dim=1), scores.clone())[0, 0] == 1.5
 
     def test_repetition_penalty_masked_padding_expanded_batch(self):
         ids = torch.tensor([[0, 1]] * 3 + [[0, 2]] * 3, device=torch_device)
-        mask = torch.tensor([[0, 1], [1, 1]], device=torch_device)
         scores = torch.ones((6, 4), device=torch_device)
-        result = RepetitionPenaltyLogitsProcessor(2.0, attention_mask=mask)(ids, scores)
+        result = RepetitionPenaltyLogitsProcessor(2.0, prompt_ignore_length=[1, 0])(ids, scores)
         torch.testing.assert_close(result[:3, 0], scores[:3, 0])
         torch.testing.assert_close(result[3:, 0], scores[3:, 0] / 2)
 

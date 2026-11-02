@@ -318,10 +318,8 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         penalty (`float`):
             The parameter for repetition penalty. 1.0 means no penalty. Above 1.0 penalizes previously generated
             tokens. Between 0.0 and 1.0 rewards previously generated tokens.
-        prompt_ignore_length (`int`, *optional*):
-            The original input ids sequence length, which if provided, will not be used in the penalty calculation.
-        attention_mask (`torch.LongTensor`, *optional*):
-            Original prompt mask (0 = padding). Generated tokens are always included.
+        prompt_ignore_length (`int`, `list[int]` or `torch.LongTensor`, *optional*):
+            Number of leading tokens to ignore, optionally specified per batch element.
 
     Examples:
 
@@ -357,26 +355,40 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
     supports_continuous_batching = False
 
-    def __init__(
-        self, penalty: float, prompt_ignore_length: int | None = None, attention_mask: torch.Tensor | None = None
-    ):
+    def __init__(self, penalty: float, prompt_ignore_length: int | list[int] | torch.Tensor | None = None):
         if not isinstance(penalty, float) or not (penalty > 0):
             raise ValueError(f"`penalty` has to be a strictly positive float, but is {penalty}")
 
-        if prompt_ignore_length is not None and (
+        if isinstance(prompt_ignore_length, (list, tuple)):
+            prompt_ignore_length = torch.as_tensor(prompt_ignore_length)
+        if isinstance(prompt_ignore_length, torch.Tensor):
+            if (
+                prompt_ignore_length.ndim != 1
+                or prompt_ignore_length.numel() == 0
+                or prompt_ignore_length.dtype not in (torch.int8, torch.int16, torch.int32, torch.int64)
+                or (prompt_ignore_length < 0).any()
+            ):
+                raise ValueError("`prompt_ignore_length` must contain non-negative integers")
+        elif prompt_ignore_length is not None and (
             not isinstance(prompt_ignore_length, int) or prompt_ignore_length < 0
         ):
-            raise ValueError(f"`prompt_ignore_length` has to be a positive integer, but is {prompt_ignore_length}")
+            raise ValueError(f"Invalid `prompt_ignore_length`: {prompt_ignore_length}")
 
         self.penalty = penalty
         self.prompt_ignore_length = prompt_ignore_length
-        self.attention_mask = attention_mask
         self.logits_indices = None
         self.cu_seq_lens_q = None
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        if self.prompt_ignore_length:
+        if isinstance(self.prompt_ignore_length, torch.Tensor):
+            lengths = self.prompt_ignore_length.to(input_ids.device)
+            if input_ids.ndim != 2 or input_ids.shape[0] % lengths.numel():
+                raise ValueError("Incompatible `prompt_ignore_length` batch size")
+            lengths = lengths.repeat_interleave(input_ids.shape[0] // lengths.numel())
+            positions = torch.arange(input_ids.shape[1], device=input_ids.device)
+            input_ids = input_ids.masked_fill(positions[None, :] < lengths[:, None], scores.shape[-1])
+        elif self.prompt_ignore_length:
             input_ids = input_ids[:, self.prompt_ignore_length :]
 
         if scores.dim() == 3:
@@ -385,7 +397,11 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
                 last_scores = scores[0, last_positions, :]
 
                 # Prepare token mask
-                token_mask = torch.zeros_like(last_scores, dtype=torch.bool)
+                token_mask = torch.zeros(
+                    (*last_scores.shape[:-1], last_scores.shape[-1] + 1),
+                    dtype=torch.bool,
+                    device=last_scores.device,
+                )
                 cu_seq_lens = self.cu_seq_lens_q
                 lengths = cu_seq_lens[1:] - cu_seq_lens[:-1]
                 seq_indices = torch.repeat_interleave(torch.arange(len(lengths), device=input_ids.device), lengths)
@@ -393,11 +409,15 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
                 # Apply penalty
                 penalty_scores = torch.where(last_scores < 0, last_scores * self.penalty, last_scores / self.penalty)
-                scores[0, last_positions, :] = torch.where(token_mask, penalty_scores, last_scores)
+                scores[0, last_positions, :] = torch.where(token_mask[..., :-1], penalty_scores, last_scores)
             else:
                 batch_size, seq_len, vocab_size = scores.shape
                 last_scores = scores[:, -1, :]
-                token_mask = torch.zeros_like(last_scores, dtype=torch.bool)
+                token_mask = torch.zeros(
+                    (*last_scores.shape[:-1], last_scores.shape[-1] + 1),
+                    dtype=torch.bool,
+                    device=last_scores.device,
+                )
                 if input_ids.dim() == 1:
                     unique_tokens = torch.unique(input_ids)
                     token_mask.scatter_(1, unique_tokens.unsqueeze(0), True)
@@ -405,7 +425,7 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
                     token_mask.scatter_(1, input_ids, True)
                 # if last_scores < 0 then repetition penalty has to be multiplied to reduce the token probabilities
                 penalty_scores = torch.where(last_scores < 0, last_scores * self.penalty, last_scores / self.penalty)
-                scores[:, -1, :] = torch.where(token_mask, penalty_scores, last_scores)
+                scores[:, -1, :] = torch.where(token_mask[..., :-1], penalty_scores, last_scores)
             return scores
 
         if input_ids.dim() == 1:
@@ -415,16 +435,6 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         # ids > output vocab_size to a fix index that we drop afterwards (the tokens with id > output_vocab cannot be
         # generated by the model, so there's no need to apply a penalty to them)
         vocab_size = scores.shape[-1]
-        if self.attention_mask is not None:
-            prompt_mask = self.attention_mask[:, self.prompt_ignore_length or 0 :]
-            if prompt_mask.shape[0] != input_ids.shape[0]:
-                if input_ids.shape[0] % prompt_mask.shape[0]:
-                    raise ValueError("Attention mask batch size is incompatible with input_ids")
-                prompt_mask = prompt_mask.repeat_interleave(input_ids.shape[0] // prompt_mask.shape[0], dim=0)
-            valid = torch.ones_like(input_ids, dtype=torch.bool)
-            n = min(input_ids.shape[1], prompt_mask.shape[1])
-            valid[:, :n] = prompt_mask[:, :n].to(device=input_ids.device, dtype=torch.bool)
-            input_ids = input_ids.masked_fill(~valid, vocab_size)
         input_ids = input_ids.clamp(max=vocab_size)
         # Pad by 1 to absorb all the indices larger than output vocab that were clamped to the vocab
         scores = torch.nn.functional.pad(scores, (0, 1))

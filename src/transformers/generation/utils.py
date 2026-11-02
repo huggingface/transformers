@@ -1467,10 +1467,13 @@ class GenerationMixin(ContinuousMixin):
             mask = (model_kwargs or {}).get(
                 "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
             )
-            if mask is not None and mask.shape[1] != input_ids_seq_length:
-                mask = None
+            lengths = (
+                (mask == 0).long().cumprod(dim=-1).sum(dim=-1)
+                if mask is not None and mask.ndim == 2 and mask.shape[1] == input_ids_seq_length
+                else None
+            )
             processors.append(
-                RepetitionPenaltyLogitsProcessor(generation_config.repetition_penalty, attention_mask=mask)
+                RepetitionPenaltyLogitsProcessor(generation_config.repetition_penalty, prompt_ignore_length=lengths)
             )
             if not self.config.is_encoder_decoder and (input_ids_seq_length is None or input_ids_seq_length == 0):
                 warnings.warn(
