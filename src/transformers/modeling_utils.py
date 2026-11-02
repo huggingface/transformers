@@ -72,7 +72,7 @@ from .integrations.accelerate import (
     get_device,
     load_offloaded_parameter,
 )
-from .integrations.deepspeed import _load_state_dict_into_zero3_model
+from .integrations.deepspeed import _load_state_dict_into_zero3_model, restore_fp32_rope_buffers
 from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS
 from .integrations.flash_attention import flash_attention_forward
@@ -1458,6 +1458,7 @@ class PreTrainedModel(
         if needs_zero3_init:
             from .integrations.deepspeed import initialize_weights_zero3
 
+            restore_fp32_rope_buffers(model)
             initialize_weights_zero3(model)
             model.tie_weights()
 
@@ -2354,9 +2355,6 @@ class PreTrainedModel(
             }
             rope_fn = rope_init_fn_with_self[module.rope_type]
             buffer_value, _ = rope_fn(module.config)
-            # DeepSpeed's `zero.Init` casts float buffers to the model dtype on creation: restore fp32 before copying
-            module.inv_freq.data = module.inv_freq.data.to(buffer_value.dtype)
-            module.original_inv_freq.data = module.original_inv_freq.data.to(buffer_value.dtype)
             init.copy_(module.inv_freq, buffer_value)
             init.copy_(module.original_inv_freq, buffer_value)
 
@@ -4827,6 +4825,7 @@ class PreTrainedModel(
             not_initialized_parameters = list(
                 {v for v in self.state_dict(keep_vars=True).values() if not getattr(v, "_is_hf_initialized", False)}
             )
+            restore_fp32_rope_buffers(self)
             with deepspeed.zero.GatheredParameters(not_initialized_parameters, modifier_rank=0):
                 self.initialize_weights()
         else:

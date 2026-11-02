@@ -292,6 +292,17 @@ def deepspeed_config():
         return None
 
 
+def restore_fp32_rope_buffers(model):
+    """
+    `zero.Init` casts every float tensor created in `__init__` to the model dtype, the RoPE frequencies (`*inv_freq`
+    buffers) included. Give them back their fp32 dtype before they are re-initialized outside of it, so they keep
+    the full precision they have without DeepSpeed.
+    """
+    for name, buffer in model.named_buffers():
+        if name.endswith("inv_freq") and buffer.is_floating_point():
+            buffer.data = buffer.data.float()
+
+
 def initialize_weights_zero3(model):
     """
     DeepSpeed ZeRO-3 variant of `PreTrainedModel.initialize_weights`. Mirrors the `smart_apply`
