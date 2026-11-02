@@ -34,9 +34,6 @@ MIN_TORCH_VERSION = "2.6.0"
 if is_torch_available():
     import torch
 
-if is_torchao_available():
-    pass
-
 
 logger = logging.get_logger(__name__)
 

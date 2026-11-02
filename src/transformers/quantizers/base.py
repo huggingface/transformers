@@ -202,6 +202,11 @@ class HfQuantizer(ABC):
         self.update_parallel_plan(model, model.tp_plan)
         self.update_parallel_plan(model, model.ep_plan)
 
+    @property
+    def dequantizing(self) -> bool:
+        "Whether a pre-quantized checkpoint loads dense, through the `dequantize` load operations"
+        return self.pre_quantized and self.quantization_config.dequantize
+
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         return model
 
@@ -218,7 +223,7 @@ class HfQuantizer(ABC):
         """
         model.config.quantization_config = self.quantization_config
 
-        if self.pre_quantized and getattr(self.quantization_config, "dequantize", False):
+        if self.dequantizing:
             self.remove_quantization_config(model)
         else:
             _assign_is_quantized(model)
@@ -330,7 +335,7 @@ class HfQuantizer(ABC):
         "Return the loading to perform on any parameter that is not matched by the model's converters"
         from ..core_model_loading import WeightConverter
 
-        mode = "dequantize" if getattr(self.quantization_config, "dequantize", False) else "deserialize"
+        mode = "dequantize" if self.quantization_config.dequantize else "deserialize"
         operation = self.get_load_operations().get(mode) if self.pre_quantized else None
         if operation is None:
             return []
@@ -359,8 +364,7 @@ class HfQuantizer(ABC):
             serialized = self.serialized_names.get(param)
             if not serialized or not all(source.endswith(f".{param}") for source in sources):
                 continue
-            # `weight_scale_inv` -> `_scale_inv`
-            suffixes = [name.removeprefix(param) for name in serialized if name.startswith(param) and name != param]
+            suffixes = self._suffixes(param)
             target = targets[0]
             companions = [
                 re.sub(rf"{param}$", name, target) if target.endswith(param) else target + name.removeprefix(param)
@@ -383,37 +387,41 @@ class HfQuantizer(ABC):
                     all_sources, targets, operations=[dequantize(self)] + converter.operations
                 )
         if dequantize is not None:
-            updated += self._dequantize_own_name_params(model, param_names, dequantize)
+            updated += self._dequantize_own_name_params(model, dequantize)
         return updated + self.get_weight_conversions()
 
-    def _dequantize_own_name_params(self, model, param_names, dequantize):
+    def _suffixes(self, param: str) -> list[str]:
+        "The companions of `param` that are suffixes of its name, e.g. `weight_scale_inv` -> `_scale_inv`"
+        return [
+            name.removeprefix(param)
+            for name in self.serialized_names.get(param, [])
+            if name.startswith(param) and name != param
+        ]
+
+    def _dequantize_own_name_params(self, model, dequantize):
         """
         Dense params stored under their own name, e.g. fused experts `gate_up_proj` with `gate_up_proj_scale_inv`:
         their companions are the suffixes of the `weight` ones, and the dequantize op gets them together.
         """
         from ..core_model_loading import WeightConverter
 
-        serialized = self.serialized_names.get("weight", [])
-        suffixes = [
-            name.removeprefix("weight") for name in serialized if name.startswith("weight") and name != "weight"
-        ]
+        suffixes = self._suffixes("weight")
+        if not suffixes:
+            return []
+        keys = set(model.state_dict())
         # With their module, e.g. `experts.down_proj`: not `shared_experts.down_proj.weight`
         names = {
             ".".join(name.split(".")[-2:])
             for name, param in model.named_parameters()
             if param.ndim > 1
+            and name.rpartition(".")[2] not in self.serialized_names
             and not name.endswith(tuple(suffixes))  # a companion itself
-            and not any(f"{name}{suffix}\n" in f"{param_names}\n" for suffix in suffixes)  # the module keeps them
+            and not any(name + suffix in keys for suffix in suffixes)  # the module keeps them
         }
-        names = {name for name in names if name.rpartition(".")[2] not in self.serialized_names}
-        return (
-            [
-                WeightConverter([name] + [name + suffix for suffix in suffixes], name, [dequantize(self)])
-                for name in sorted(names)
-            ]
-            if suffixes
-            else []
-        )
+        return [
+            WeightConverter([name] + [name + suffix for suffix in suffixes], name, [dequantize(self)])
+            for name in sorted(names)
+        ]
 
 
 class SequentialLlama4TextExperts(ModuleList):

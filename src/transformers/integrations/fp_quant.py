@@ -28,6 +28,7 @@ from transformers.utils.quantization_config import FPQuantConfig
 
 from ..core_model_loading import ConversionOps, expand_target_names
 from ..quantizers.quantizers_utils import get_module_from_name
+from .mxfp4 import FP4_VALUES
 
 
 class FpQuantQuantize(ConversionOps):
@@ -99,14 +100,11 @@ class FpQuantDequantize(ConversionOps):
     input dim, so the dense weight is rotated back by its transpose.
     """
 
-    # E2M1 values, a byte packs two of them, the low nibble first
-    FP4_VALUES = (0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0)
-
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
     def dequantize_fp4(self, qweight, scales, global_scale):
-        lut = torch.tensor(self.FP4_VALUES, device=qweight.device)
+        lut = torch.tensor(FP4_VALUES, device=qweight.device)
         qweight = qweight.view(torch.uint8)
         values = torch.stack([lut[(qweight & 0xF).long()], lut[(qweight >> 4).long()]], dim=-1).flatten(-2)
         if self.hf_quantizer.quantization_config.forward_dtype == "mxfp4":

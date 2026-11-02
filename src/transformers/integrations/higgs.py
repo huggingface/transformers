@@ -13,6 +13,7 @@
 # limitations under the License.
 "HIGGS through FLUTE (Flexible Lookup Table Engine for LUT-quantized LLMs) integration file"
 
+import functools
 from math import sqrt
 
 from ..core_model_loading import ConversionOps
@@ -601,13 +602,13 @@ class HiggsDeserialize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
-    def workspace(self, device):
+    @staticmethod
+    @functools.cache
+    def workspace(device):
+        "One FLUTE workspace per device, shared by all the layers"
         from flute.utils import make_workspace_streamk
 
-        workspaces = self.hf_quantizer.__dict__.setdefault("flute_workspaces", {})
-        if device not in workspaces:
-            workspaces[device] = make_workspace_streamk(device=device)
-        return workspaces[device]
+        return make_workspace_streamk(device=device)
 
     def repack(self, weight, scales, module_name):
         from flute.tune import TuneMetaData, maybe_tune_and_repack
