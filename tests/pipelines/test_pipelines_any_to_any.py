@@ -14,6 +14,7 @@
 
 import sys
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
@@ -56,6 +57,33 @@ if is_torch_available():
 @require_torch
 class AnyToAnyPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_MULTIMODAL_LM_MAPPING
+
+    def test_multiple_candidates_tiny_model(self):
+        pipe = pipeline(
+            "any-to-any",
+            model="hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration",
+        )
+        kwargs = {
+            "generation_mode": "text",
+            "thinker_do_sample": False,
+            "thinker_num_beams": 2,
+            "thinker_num_return_sequences": 2,
+            "thinker_max_new_tokens": 2,
+        }
+
+        single = pipe(text="Hello", return_full_text=False, generate_kwargs=kwargs)
+        batched = pipe(text=["Hello", "World"], return_full_text=False, generate_kwargs=kwargs)
+
+        self.assertEqual(len(single), 2)
+        self.assertEqual(len(batched), 4)
+
+        # Audio generation may return a tuple instead of a tensor.
+        with patch.object(pipe.model, "generate", return_value=(None, None)):
+            result = pipe._forward(
+                pipe.preprocess("Hello"),
+                generate_kwargs={"generation_mode": "audio"},
+            )
+        self.assertIsInstance(result["generated_sequence"], tuple)
 
     # We only need `processor` but the Mixin will pass all possible preprocessing classes for a model.
     # So we add them all in signature

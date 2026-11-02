@@ -409,10 +409,8 @@ class ImageTextToTextPipeline(Pipeline):
         input_texts = [input_texts] if isinstance(input_texts, (str, Chat)) else input_texts
         generated_sequence = model_outputs["generated_sequence"]
         input_ids = model_outputs["input_ids"]
-        if getattr(generated_sequence, "ndim", 0) == 3:
+        if generated_sequence.ndim == 3:
             generated_sequence = generated_sequence.flatten(0, 1)
-        if not input_texts or len(generated_sequence) % len(input_texts):
-            raise ValueError("Cannot align generated sequences with input texts")
         candidates_per_input = len(generated_sequence) // len(input_texts)
         input_texts = [text for text in input_texts for _ in range(candidates_per_input)]
         if return_type == ReturnType.TENSORS:
