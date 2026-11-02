@@ -78,11 +78,13 @@ class OnnxModelRunner(ModelRunner):
         inputs = {name: kwargs[name] for name in self.metadata.kwargs if name in kwargs}
         device = self.device
         on_gpu = device.type == "cuda"
-        # Flattened as `ONNXProgram` flattens them: pytree leaves, `None`s dropped.
-        leaves = [leaf for leaf in torch.utils._pytree.tree_leaves(inputs) if leaf is not None]
+        # The tensor leaves: `torch.export` bakes Python scalars (`output_router_logits=False`) into the graph.
+        leaves = [leaf for leaf in torch.utils._pytree.tree_leaves(inputs) if isinstance(leaf, torch.Tensor)]
+        specs = self.session.get_inputs()
+        if len(leaves) != len(specs):
+            raise ValueError(f"The graph takes {len(specs)} inputs, but got {len(leaves)} tensors from {list(inputs)}.")
         binding, kept = self.session.io_binding(), []
-        for spec, leaf in zip(self.session.get_inputs(), leaves):
-            leaf = leaf if isinstance(leaf, torch.Tensor) else torch.tensor(leaf)
+        for spec, leaf in zip(specs, leaves):
             # Integers bind on host: ORT reads them on its CPU, where a GPU pointer is an illegal access.
             on_host = not (on_gpu and leaf.is_floating_point())
             tensor = (leaf.cpu() if on_host else leaf.to(device)).contiguous()
