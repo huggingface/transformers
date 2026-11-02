@@ -25,12 +25,12 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations.accelerate import force_accelerate_hooks
+from ...integrations.moe import use_experts_implementation
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ...models.deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
-    DeepseekV3Experts,
     DeepseekV3ForCausalLM,
     DeepseekV3MLP,
     DeepseekV3MoE,
@@ -53,6 +53,7 @@ from ...models.qwen3_next.modeling_qwen3_next import (
     Qwen3NextPreTrainedModel,
     apply_mask_to_padding_states,
 )
+from ...models.step3p7.modeling_step3p7 import Step3p7Experts
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.output_capturing import OutputRecorder
@@ -84,6 +85,10 @@ class BailingHybridConfig(DeepseekV3Config):
         Lower bound of the KDA forget gate in log space.
     mlp_layer_types (`list[str]`, *optional*):
         Per-layer MLP types. Derived from `first_k_dense_replace` when omitted.
+    expert_swiglu_limit_list (`list[float]`, *optional*):
+        Per-layer SwiGLU clipping limits for routed experts. Zero disables clipping.
+    share_expert_swiglu_limit_list (`list[float]`, *optional*):
+        Per-layer SwiGLU clipping limits for shared experts. Zero disables clipping.
     mtp_loss_scaling_factor (`float`, *optional*, defaults to 0.0):
         Scaling factor used for the auxiliary multi-token-prediction loss during pretraining.
     """
@@ -163,6 +168,8 @@ class BailingHybridConfig(DeepseekV3Config):
     kda_lower_bound: float = -5.0
     layer_types: list[str] | None = None
     mlp_layer_types: list[str] | None = None
+    expert_swiglu_limit_list: list[float | int] | None = None
+    share_expert_swiglu_limit_list: list[float | int] | None = None
 
     mtp_loss_scaling_factor: float | int = 0.0
 
@@ -171,6 +178,10 @@ class BailingHybridConfig(DeepseekV3Config):
     rope_interleave = AttributeError()
 
     def __post_init__(self, **kwargs):
+        for name in ("expert_swiglu_limit_list", "share_expert_swiglu_limit_list"):
+            limits = getattr(self, name)
+            if limits is not None and len(limits) != self.num_hidden_layers:
+                raise ValueError(f"`{name}` must contain one limit per decoder layer.")
         self.linear_head_dim = self.head_dim
         self.linear_num_heads = self.num_attention_heads
         self.linear_conv_kernel_dim = self.short_conv_kernel_size
@@ -203,12 +214,20 @@ class BailingHybridRotaryEmbedding(DeepseekV3RotaryEmbedding):
     pass
 
 
-class BailingHybridExperts(DeepseekV3Experts):
+@use_experts_implementation
+class BailingHybridExperts(Step3p7Experts):
     pass
 
 
 class BailingHybridMLP(DeepseekV3MLP):
-    pass
+    def __init__(self, config, intermediate_size=None):
+        super().__init__(config, intermediate_size)
+        self.limit = float("inf")
+
+    def forward(self, x):
+        gate = self.act_fn(self.gate_proj(x)).clamp(max=self.limit)
+        up = self.up_proj(x).clamp(min=-self.limit, max=self.limit)
+        return self.down_proj(gate * up)
 
 
 class BailingHybridAttention(DeepseekV3Attention):
@@ -397,11 +416,22 @@ class BailingHybridTopkRouter(DeepseekV3TopkRouter):
 
 
 class BailingHybridMoE(DeepseekV3MoE):
-    pass
+    def __init__(self, config: BailingHybridConfig, layer_idx: int):
+        super().__init__(config)
+        if config.expert_swiglu_limit_list is not None:
+            self.experts.limit = config.expert_swiglu_limit_list[layer_idx] or float("inf")
+        if config.share_expert_swiglu_limit_list is not None:
+            self.shared_experts.limit = config.share_expert_swiglu_limit_list[layer_idx] or float("inf")
 
 
 class BailingHybridDecoderLayer(KimiLinearDecoderLayer):
-    pass
+    def __init__(self, config: BailingHybridConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.mlp = (
+            BailingHybridMoE(config, layer_idx)
+            if config.mlp_layer_types[layer_idx] == "sparse"
+            else BailingHybridMLP(config)
+        )
 
 
 @auto_docstring
@@ -419,6 +449,11 @@ class BailingHybridPreTrainedModel(Qwen3NextPreTrainedModel):
         "hidden_states": BailingHybridDecoderLayer,
         "attentions": BailingHybridAttention,
     }
+
+    def get_correct_experts_implementation(self, requested_experts: str | None) -> str:
+        if requested_experts == "sonicmoe" and any(self.config.expert_swiglu_limit_list or []):
+            raise ValueError("SonicMoE does not support Ling's post-activation SwiGLU clipping.")
+        return PreTrainedModel.get_correct_experts_implementation(self, requested_experts)
 
     @torch.no_grad()
     def _init_weights(self, module):

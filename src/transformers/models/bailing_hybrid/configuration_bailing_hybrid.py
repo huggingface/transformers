@@ -52,6 +52,10 @@ class BailingHybridConfig(PreTrainedConfig):
         Lower bound of the KDA forget gate in log space.
     mlp_layer_types (`list[str]`, *optional*):
         Per-layer MLP types. Derived from `first_k_dense_replace` when omitted.
+    expert_swiglu_limit_list (`list[float]`, *optional*):
+        Per-layer SwiGLU clipping limits for routed experts. Zero disables clipping.
+    share_expert_swiglu_limit_list (`list[float]`, *optional*):
+        Per-layer SwiGLU clipping limits for shared experts. Zero disables clipping.
     mtp_loss_scaling_factor (`float`, *optional*, defaults to 0.0):
         Scaling factor used for the auxiliary multi-token-prediction loss during pretraining.
     """
@@ -134,10 +138,16 @@ class BailingHybridConfig(PreTrainedConfig):
     kda_lower_bound: float = -5.0
     layer_types: list[str] | None = None
     mlp_layer_types: list[str] | None = None
+    expert_swiglu_limit_list: list[float | int] | None = None
+    share_expert_swiglu_limit_list: list[float | int] | None = None
 
     mtp_loss_scaling_factor: float | int = 0.0
 
     def __post_init__(self, **kwargs):
+        for name in ("expert_swiglu_limit_list", "share_expert_swiglu_limit_list"):
+            limits = getattr(self, name)
+            if limits is not None and len(limits) != self.num_hidden_layers:
+                raise ValueError(f"`{name}` must contain one limit per decoder layer.")
         self.linear_head_dim = self.head_dim
         self.linear_num_heads = self.num_attention_heads
         self.linear_conv_kernel_dim = self.short_conv_kernel_size
