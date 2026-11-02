@@ -2354,6 +2354,9 @@ class PreTrainedModel(
             }
             rope_fn = rope_init_fn_with_self[module.rope_type]
             buffer_value, _ = rope_fn(module.config)
+            # DeepSpeed's `zero.Init` casts float buffers to the model dtype on creation: restore fp32 before copying
+            module.inv_freq.data = module.inv_freq.data.to(buffer_value.dtype)
+            module.original_inv_freq.data = module.original_inv_freq.data.to(buffer_value.dtype)
             init.copy_(module.inv_freq, buffer_value)
             init.copy_(module.original_inv_freq, buffer_value)
 
