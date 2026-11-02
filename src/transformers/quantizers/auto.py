@@ -346,11 +346,8 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         }
         self.pre_quantized = all(quantizer.pre_quantized for quantizer in quantizers.values())
         self.alternation, self.group_to_pattern, _ = build_glob_alternation(list(quantizers))
-        # The names the alternation gives to each pattern: up to its first match, no earlier pattern matches there
-        regexes = [pattern.replace("*", ".*") for pattern in quantizers]
-        for i, quantizer in enumerate(quantizers.values()):
-            earlier = f"(?!{'|'.join(regexes[:i])})" if i else ""
-            quantizer.plan_pattern = f"^(?:(?!{self.alternation.pattern}).)*{earlier}(?:{regexes[i]})"
+        for quantizer in quantizers.values():
+            quantizer.plan = self
 
     def quantizer_for(self, name):
         match = self.alternation.search(name)

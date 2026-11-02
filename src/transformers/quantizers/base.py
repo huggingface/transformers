@@ -86,8 +86,8 @@ class HfQuantizer(ABC):
     """
 
     requires_calibration = False
-    # In a quantization plan, the regex of the module names this quantizer converts
-    plan_pattern: str | None = None
+    # In a quantization plan, the plan: it gives each param its quantizer
+    plan: "HfQuantizer | None" = None
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         self.quantization_config = quantization_config
@@ -262,9 +262,14 @@ class HfQuantizer(ABC):
             modules_to_not_convert.extend(keep_in_fp32_modules)
 
         modules_to_not_convert = list(set(modules_to_not_convert))
-        # In a quantization plan, the modules its pattern doesn't match belong to another quantizer, or to none
-        if self.plan_pattern is not None:
-            modules_to_not_convert.append(rf"(?!{self.plan_pattern}).*")
+        # In a quantization plan, the modules whose params belong to another quantizer, or to none
+        if self.plan is not None:
+            modules_to_not_convert += [
+                rf"{re.escape(name)}$"
+                for name, module in model.named_modules()
+                if module._parameters
+                and not any(self.plan.quantizer_for(f"{name}.{param}") is self for param in module._parameters)
+            ]
 
         return modules_to_not_convert
 
