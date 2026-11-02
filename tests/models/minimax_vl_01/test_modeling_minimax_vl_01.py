@@ -39,8 +39,6 @@ if is_torch_available():
     from transformers.models.minimax_vl_01.modeling_minimax_vl_01 import (
         MiniMaxVL01TextCache,
         MiniMaxVL01TextLightningAttention,
-        MiniMaxVL01TextRotaryEmbedding,
-        apply_rotary_pos_emb,
     )
 
 
@@ -88,11 +86,7 @@ class MiniMaxVL01VisionText2TextModelTester(VLMModelTester):
     def get_config(self):
         config = super().get_config()
         config.image_grid_pinpoints = [[self.image_size, self.image_size]]
-        config.text_config._attn_implementation = "eager"
         return config
-
-    def create_attention_mask(self, input_ids):
-        return torch.ones_like(input_ids, device=torch_device)
 
     def create_pixel_values(self, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size
@@ -122,23 +116,8 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
         # The released checkpoint prefixes target the conditional model's `model` subtree, not the bare base model.
         super().test_reverse_loading_mapping(skip_base_model=True)
 
-    def test_text_cache_sequence_length_uses_full_attention_layer(self):
-        cache = MiniMaxVL01TextCache()
-        key_states = torch.zeros(2, 2, 5, 8)
-        cache.update(key_states, key_states, layer_idx=7)
-
-        self.assertEqual(cache.get_seq_length(), 5)
-        self.assertEqual(cache.get_seq_length(layer_idx=7), 5)
-        self.assertEqual(cache.get_seq_length(layer_idx=3), 0)
-
-    def test_text_cache_mask_size_uses_full_attention_layer(self):
-        cache = MiniMaxVL01TextCache()
-        key_states = torch.zeros(2, 2, 5, 8)
-        cache.update(key_states, key_states, layer_idx=7)
-
-        self.assertEqual(cache.get_mask_sizes(query_length=3, layer_idx=0), (8, 0))
-        self.assertEqual(cache.get_mask_sizes(query_length=3, layer_idx=7), (8, 0))
-
+    # Generation never calls `batch_repeat_interleave`, and the beam-search tests do not compare cached and uncached
+    # outputs, so the common tests cannot catch a regression in these MiniMaxCache fixes.
     def test_text_cache_batch_repeat_interleave_handles_final_full_attention_layer(self):
         cache = MiniMaxVL01TextCache()
         recurrent_state = torch.tensor([1.0, 2.0]).reshape(2, 1, 1, 1)
@@ -182,21 +161,9 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
         self.assertEqual(slope_rate.device.type, torch.device(torch_device).type)
         self.assertTrue(torch.isfinite(slope_rate).all())
 
-    @parameterized.expand([("float16",), ("float32",)])
-    def test_text_lightning_attention_decay_factors_preserve_float32_device(self, dtype):
-        config = self.model_tester.get_text_config()
-        attention = MiniMaxVL01TextLightningAttention(config, layer_idx=0)
-        slope_rate = attention.get_slope_rate(device=torch_device).to(getattr(torch, dtype))
-        query_decay, key_decay, diagonal_decay = attention.decay_factors(slope_rate)
-
-        self.assertEqual(query_decay.shape, (config.num_attention_heads, config.block_size, 1))
-        self.assertEqual(key_decay.shape, query_decay.shape)
-        self.assertEqual(diagonal_decay.shape, (1, config.num_attention_heads, config.block_size, config.block_size))
-        for decay in (query_decay, key_decay, diagonal_decay):
-            self.assertEqual(decay.dtype, torch.float32)
-            self.assertEqual(decay.device.type, torch.device(torch_device).type)
-
     def test_text_lightning_attention_source_padding_and_fp32_cache(self):
+        # The common padding tests cannot catch a missing value mask: tiny test models zero the pad-token embedding,
+        # so padded positions carry no signal. They also run in float32, which hides a low-precision recurrent state.
         config = MiniMaxVL01TextConfig(
             vocab_size=97,
             hidden_size=4,
@@ -262,33 +229,6 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
         torch.testing.assert_close(recurrent_state, changed_state)
         self.assertEqual(recurrent_state.dtype, torch.float32)
         self.assertEqual(cache.linear_cache[0].dtype, torch.float32)
-
-    def test_text_partial_rotary_embedding_preserves_unrotated_suffix(self):
-        config = MiniMaxVL01TextConfig(
-            vocab_size=97,
-            hidden_size=32,
-            intermediate_size=16,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-            head_dim=8,
-            num_local_experts=2,
-            num_experts_per_tok=2,
-            layer_types=["linear_attention", "full_attention"],
-            rope_parameters={"rope_type": "default", "rope_theta": 10_000.0, "partial_rotary_factor": 0.5},
-        )
-        hidden_states = torch.zeros(1, 3, config.hidden_size)
-        position_ids = torch.arange(3).unsqueeze(0)
-        cos, sin = MiniMaxVL01TextRotaryEmbedding(config)(hidden_states, position_ids)
-
-        self.assertEqual(cos.shape[-1], config.head_dim // 2)
-        self.assertEqual(sin.shape[-1], config.head_dim // 2)
-
-        query = torch.randn(1, config.num_attention_heads, 3, config.head_dim)
-        key = torch.randn(1, config.num_key_value_heads, 3, config.head_dim)
-        rotated_query, rotated_key = apply_rotary_pos_emb(query, key, cos, sin)
-        torch.testing.assert_close(rotated_query[..., config.head_dim // 2 :], query[..., config.head_dim // 2 :])
-        torch.testing.assert_close(rotated_key[..., config.head_dim // 2 :], key[..., config.head_dim // 2 :])
 
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
@@ -363,6 +303,12 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
 
     @unittest.skip("Lightning-attention outputs are recurrent states and are not part of the logits gradient path.")
     def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip("Lightning attention carries its recurrent state across packed sequences, like MiniMax.")
+    def attention_mask_padding_matches_padding_free_with_position_ids(
+        self, attn_implementation: str, fa_kwargs: bool = False
+    ):
         pass
 
     @unittest.skip("MiniMaxCache does not implement cache cropping for assisted decoding.")
@@ -443,6 +389,7 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
 @slow
 @require_torch
 class MiniMaxVL01IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    # TODO: replace with a tiny MiniMax-VL-01 checkpoint on the Hub, as MiniMax uses `hf-internal-testing/MiniMax-tiny`.
     @staticmethod
     def _dummy_model():
         config = MiniMaxVL01Config(

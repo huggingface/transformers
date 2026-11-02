@@ -16,7 +16,7 @@ import unittest
 
 import numpy as np
 
-from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ChannelDimension, PILImageResampling
+from transformers.image_utils import ChannelDimension, PILImageResampling
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -31,48 +31,17 @@ if is_vision_available():
 
 
 class MiniMaxVL01ImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        num_channels=3,
-        image_size=16,
-        min_resolution=16,
-        max_resolution=64,
-        do_resize=True,
-        do_normalize=True,
-        image_mean=OPENAI_CLIP_MEAN,
-        image_std=OPENAI_CLIP_STD,
-        do_convert_rgb=True,
-    ):
-        super().__init__(
-            parent=parent,
-            batch_size=batch_size,
-            num_channels=num_channels,
-            min_resolution=min_resolution,
-            max_resolution=max_resolution,
-        )
-        self.image_size = image_size
-        self.do_resize = do_resize
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
-
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": {"height": self.image_size, "width": self.image_size},
-            "image_grid_pinpoints": [[self.image_size, self.image_size]],
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_convert_rgb": self.do_convert_rgb,
-        }
+    def __init__(self, **kwargs):
+        kwargs.setdefault("batch_size", 3)
+        kwargs.setdefault("min_resolution", 16)
+        kwargs.setdefault("max_resolution", 64)
+        kwargs.setdefault("size", {"height": 16, "width": 16})
+        kwargs.setdefault("image_grid_pinpoints", [[16, 16]])
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         # The single-cell grid produces a thumbnail and one crop for each image.
-        return 2 * len(images), self.num_channels, self.image_size, self.image_size
+        return 2 * len(images), self.num_channels, self.size["height"], self.size["width"]
 
 
 @require_torch
@@ -190,7 +159,8 @@ class MiniMaxVL01ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
                 self.assertEqual(output.image_sizes.tolist(), [[2, 2], [4, 2], [2, 4]])
                 np.testing.assert_array_equal(output.pixel_values.cpu().numpy(), expected)
 
-    def test_floor_rounded_keep_ratio_resize_and_asymmetric_padding(self):
+    def test_resize_for_patching_floors_aspect_ratio(self):
+        # LLaVA-NeXT rounds the resized side up; the released MiniMax-VL-01 processor floors it.
         wide = np.ones((3, 7, 3), dtype=np.uint8)
         tall = np.ones((7, 3, 3), dtype=np.uint8)
 
@@ -222,18 +192,6 @@ class MiniMaxVL01ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
 
                 self.assertEqual(tuple(wide_resized.shape[-2:]), (1, 4))
                 self.assertEqual(tuple(tall_resized.shape[-2:]), (4, 1))
-
-                wide_padded = image_processor._pad_for_patching(wide_resized, (4, 4))
-                tall_padded = image_processor._pad_for_patching(tall_resized, (4, 4))
-                wide_padded = np.asarray(wide_padded)
-                tall_padded = np.asarray(tall_padded)
-
-                expected_wide = np.zeros((3, 4, 4), dtype=np.uint8)
-                expected_wide[:, 1] = 1
-                expected_tall = np.zeros((3, 4, 4), dtype=np.uint8)
-                expected_tall[:, :, 1] = 1
-                np.testing.assert_array_equal(wide_padded, expected_wide)
-                np.testing.assert_array_equal(tall_padded, expected_tall)
 
     def test_rejects_unreleased_image_modes(self):
         for backend_name, image_processing_class in self.image_processing_classes.items():

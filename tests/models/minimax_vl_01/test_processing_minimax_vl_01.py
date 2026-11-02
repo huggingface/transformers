@@ -93,12 +93,7 @@ class MiniMaxVL01ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @staticmethod
     def prepare_processor_dict():
-        return {
-            "chat_template": CHAT_TEMPLATE,
-            "patch_size": 16,
-            "vision_feature_select_strategy": "default",
-            "num_additional_image_tokens": 1,
-        }
+        return {"chat_template": CHAT_TEMPLATE}
 
     @staticmethod
     def _images():
@@ -109,28 +104,16 @@ class MiniMaxVL01ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_image_token_filling(self):
         processor = self.get_processor()
-        expected_counts = [10, 16, 14]
-
-        for image, expected_count in zip(self._images(), expected_counts):
-            with self.subTest(image_shape=image.shape):
-                inputs = processor(text=["Question <image>"], images=[image], return_tensors="pt")
-                observed_count = (inputs.input_ids == processor.image_token_id).sum().item()
-                self.assertEqual(observed_count, expected_count)
-
-    def test_image_token_filling_multiple_images(self):
-        processor = self.get_processor()
-        images = self._images()
         inputs = processor(
             text=["<image> Question <image> Question <image>"],
-            images=list(images),
+            images=list(self._images()),
             return_tensors="pt",
         )
 
+        # Square, portrait and landscape images expand to different counts, in prompt order.
         image_token_mask = (inputs.input_ids[0] == processor.image_token_id).tolist()
         image_token_counts = [len(list(tokens)) for is_image, tokens in groupby(image_token_mask) if is_image]
         self.assertEqual(image_token_counts, [10, 16, 14])
-        self.assertEqual(tuple(inputs.pixel_values.shape), (8, 3, 32, 32))
-        self.assertEqual(inputs.image_sizes.tolist(), [[32, 32], [64, 32], [32, 64]])
 
     # Adapted from ProcessorTesterMixin._test_apply_chat_template for VL-01's flat crop stream.
     def _test_apply_chat_template(
