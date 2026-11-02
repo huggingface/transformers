@@ -797,6 +797,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("yolos", "YolosConfig"),
         ("yoso", "YosoConfig"),
         ("youtu", "YoutuConfig"),
+        ("yue2_acoustic_tokenizer", "YuE2AcousticTokenizerConfig"),
         ("zamba", "ZambaConfig"),
         ("zamba2", "Zamba2Config"),
         ("zaya", "ZayaConfig"),
