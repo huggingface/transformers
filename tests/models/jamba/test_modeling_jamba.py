@@ -547,15 +547,6 @@ class JambaModelTest(
                 # with attention mask
                 _ = model(dummy_input, attention_mask=dummy_attention_mask)
 
-    @unittest.skip(
-        "Jamba's Mamba1 conv path has no chunked-continuation support: on a cached multi-token forward it "
-        "rebuilds conv_state from the zero-padded current chunk instead of bridging the previous window, so "
-        "the split-vs-single comparison diverges regardless of padding masking — the scenario is out of "
-        "Mamba1's contract."
-    )
-    def test_recurrent_layers_mask_padding_on_continued_forward(self):
-        pass
-
 
 @require_torch
 @slow
