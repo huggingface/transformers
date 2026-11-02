@@ -218,7 +218,7 @@ class FbgemmFp8Test(unittest.TestCase):
                 tmpdirname, device_map=self.device_map, quantization_config=quantization_config
             )
 
-            self.assertEqual(model.model.layers[1].mlp.down_proj.input_scale_ub.item(), 1000.0)
+            self.assertEqual(model.model.layers[1].mlp.down_proj.input_scale_ub, 1000.0)
 
             input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
 

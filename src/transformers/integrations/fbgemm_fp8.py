@@ -123,14 +123,15 @@ class FbgemmFp8Dequantize(ConversionOps):
 
 
 class FbgemmFp8Linear(torch.nn.Linear):
-    def __init__(self, in_features, out_features, bias, dtype=torch.float8_e4m3fn):
+    def __init__(self, in_features, out_features, bias, dtype=torch.float8_e4m3fn, activation_scale_ub=1200.0):
         super().__init__(in_features, out_features, bias)
         self.in_features = in_features
         self.out_features = out_features
 
         self.weight = torch.nn.Parameter(torch.zeros((out_features, in_features), dtype=dtype))
         self.weight_scale = torch.nn.Parameter(torch.zeros((out_features, 1), dtype=torch.float32))
-        self.input_scale_ub = nn.Buffer(torch.zeros([1], dtype=torch.float), persistent=False)
+        # A plain attribute: loading re-creates every non-persistent buffer, so a buffer would lose its value
+        self.input_scale_ub = activation_scale_ub
 
         if bias:
             self.bias = torch.nn.Parameter(torch.zeros((self.out_features), dtype=torch.float32))
@@ -145,7 +146,8 @@ class FbgemmFp8Linear(torch.nn.Linear):
         # Add guard here to keep the current device aligned with the input tensor device while launching the quantization kernel.
         with on_device(x):
             x_quantized, x_scale = quantize_fp8_per_row(
-                x.view(-1, x.shape[-1]).contiguous(), scale_ub=self.input_scale_ub
+                x.view(-1, x.shape[-1]).contiguous(),
+                scale_ub=torch.full([1], self.input_scale_ub, dtype=torch.float, device=x.device),
             )
 
         weight_scale_float32 = self.weight_scale.to(torch.float32)
@@ -169,7 +171,7 @@ class FbgemmFp8Linear(torch.nn.Linear):
 
 
 class FbgemmFp8Llama4TextExperts(nn.Module):
-    def __init__(self, config, dtype=torch.float32):
+    def __init__(self, config, dtype=torch.float32, activation_scale_ub=1200.0):
         super().__init__()
         self.num_experts = config.num_local_experts
         self.intermediate_size = config.intermediate_size
@@ -190,8 +192,8 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
         self.down_proj_scale = torch.nn.Parameter(
             torch.zeros((self.num_experts, self.hidden_size, 1), dtype=torch.float32)
         )
-        # Register input scale upper bound
-        self.input_scale_ub = nn.Buffer(torch.zeros([1], dtype=torch.float), persistent=False)
+        # A plain attribute: loading re-creates every non-persistent buffer, so a buffer would lose its value
+        self.input_scale_ub = activation_scale_ub
 
     def forward(self, hidden_states):
         """
@@ -203,6 +205,7 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
         # Reshape hidden states for expert computation
         hidden_states = hidden_states.view(self.num_experts, -1, self.hidden_size)
         num_tokens = None
+        scale_ub = torch.full([1], self.input_scale_ub, dtype=torch.float, device=hidden_states.device)
 
         # Pre-allocate tensor for all expert outputs with same shape as hidden_states
         next_states = torch.empty_like(hidden_states)
@@ -213,9 +216,7 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
             expert_hidden_reshaped = expert_hidden.reshape(-1, self.hidden_size)
             # Quantize for this expert
             with on_device(expert_hidden_reshaped):
-                expert_quantized, expert_scale = quantize_fp8_per_row(
-                    expert_hidden_reshaped, num_tokens, self.input_scale_ub
-                )
+                expert_quantized, expert_scale = quantize_fp8_per_row(expert_hidden_reshaped, num_tokens, scale_ub)
             sharded_expert_dim = self.gate_up_proj.shape[-1] // 2
             gate_up_proj_scale_float32 = self.gate_up_proj_scale.to(torch.float32)
             if _is_torch_xpu_available:
@@ -253,7 +254,7 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
             activated = up * self.act_fn(gate)
 
             with on_device(activated):
-                activated_quantized, activated_scale = quantize_fp8_per_row(activated, num_tokens, self.input_scale_ub)
+                activated_quantized, activated_scale = quantize_fp8_per_row(activated, num_tokens, scale_ub)
 
             down_proj_scale_float32 = self.down_proj_scale.to(torch.float32)
             if _is_torch_xpu_available:
@@ -311,6 +312,7 @@ def replace_with_fbgemm_fp8_linear(
 
     has_been_replaced = False
     module_kwargs = {} if pre_quantized else {"dtype": None}
+    activation_scale_ub = quantization_config.activation_scale_ub
 
     for module_name, module in model.named_modules():
         if not should_convert_module(module_name, modules_to_not_convert):
@@ -321,12 +323,15 @@ def replace_with_fbgemm_fp8_linear(
             if isinstance(module, Llama4TextExperts):
                 # TODO: make sure tp works later
                 text_config = getattr(model.config, "text_config", model.config)
-                new_module = FbgemmFp8Llama4TextExperts(text_config or model.config)
+                new_module = FbgemmFp8Llama4TextExperts(
+                    text_config or model.config, activation_scale_ub=activation_scale_ub
+                )
             elif isinstance(module, nn.Linear):
                 new_module = FbgemmFp8Linear(
                     module.in_features,
                     module.out_features,
                     module.bias is not None,
+                    activation_scale_ub=activation_scale_ub,
                     **module_kwargs,
                 )
                 new_module.requires_grad_(False)
