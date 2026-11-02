@@ -353,7 +353,7 @@ class HfQuantizer(ABC):
         "Return the loading to perform on any parameter that is not matched by the model's converters"
         from ..core_model_loading import WeightConverter
 
-        mode = "dequantize" if self.quantization_config.dequantize else "deserialize"
+        mode = "dequantize" if self.dequantizing else "deserialize"
         operation = self.get_load_operations().get(mode) if self.pre_quantized else None
         if operation is None:
             return []
