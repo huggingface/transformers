@@ -293,9 +293,6 @@ class classproperty(property):
         return self.fget(owner_cls)
 
 
-@dataclass_transform(kw_only_default=True)
-@strict(accept_kwargs=True)
-@dataclass(repr=False)
 def _quantization_config_to_dict(quantization_config):
     "A quantization config, or a plan mapping glob patterns to configs"
     if hasattr(quantization_config, "to_dict"):
@@ -305,6 +302,9 @@ def _quantization_config_to_dict(quantization_config):
     return quantization_config
 
 
+@dataclass_transform(kw_only_default=True)
+@strict(accept_kwargs=True)
+@dataclass(repr=False)
 class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, HeterogeneousConfigMixin):
     # no-format
     r"""
