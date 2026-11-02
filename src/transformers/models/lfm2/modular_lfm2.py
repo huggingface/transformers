@@ -238,7 +238,10 @@ class Lfm2DecoderLayer(GradientCheckpointingLayer):
 
 
 class Lfm2PreTrainedModel(LlamaPreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "hidden_states": Lfm2DecoderLayer,
+        "attentions": Lfm2Attention,
+    }
 
 
 class Lfm2Model(LlamaModel):
@@ -246,6 +249,9 @@ class Lfm2Model(LlamaModel):
         super().__init__(config)
         self.embedding_norm = Lfm2RMSNorm(config.hidden_size, eps=config.norm_eps)
         del self.norm
+        self.layers = nn.ModuleList(
+            [Lfm2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
     def forward(
         self,
@@ -307,7 +313,9 @@ class Lfm2Model(LlamaModel):
 
 
 class Lfm2ForCausalLM(LlamaForCausalLM):
-    pass
+    def __init__(self, config: Lfm2Config):
+        super().__init__(config)
+        self.model = Lfm2Model(config)
 
 
 __all__ = ["Lfm2ForCausalLM", "Lfm2Model", "Lfm2PreTrainedModel"]

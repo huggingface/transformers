@@ -145,7 +145,9 @@ class DeiTPreTrainedModel(ViTPreTrainedModel):
 
 
 class DeiTModel(ViTModel):
-    pass
+    def __init__(self, config: DeiTConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
+        super().__init__(config, add_pooling_layer, use_mask_token)
+        self.embeddings = DeiTEmbeddings(config, use_mask_token=use_mask_token)
 
 
 class DeiTForMaskedImageModeling(ViTForMaskedImageModeling):

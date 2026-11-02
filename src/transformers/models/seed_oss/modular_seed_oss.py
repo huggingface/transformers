@@ -138,11 +138,19 @@ class SeedOssAttention(nn.Module):
 
 
 class SeedOssDecoderLayer(LlamaDecoderLayer):
-    pass
+    def __init__(self, config: SeedOssConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+        self.self_attn = SeedOssAttention(config=config, layer_idx=layer_idx)
+
+        self.mlp = SeedOssMLP(config)
 
 
 class SeedOssPreTrainedModel(LlamaPreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "hidden_states": SeedOssDecoderLayer,
+        "attentions": SeedOssAttention,
+    }
 
 
 class SeedOssModel(LlamaModel):

@@ -20,6 +20,7 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 from torch.nn import functional as F
 
+from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_experts_implementation
 from ...masking_utils import create_bidirectional_sliding_window_mask
@@ -297,6 +298,7 @@ class OpenAIPrivacyFilterEncoderLayer(GptOssDecoderLayer):
     def __init__(self, config: OpenAIPrivacyFilterConfig):
         super().__init__(config)
         self.self_attn = OpenAIPrivacyFilterAttention(config)
+        self.mlp = OpenAIPrivacyFilterMLP(config)
 
     def forward(
         self,
@@ -349,6 +351,21 @@ class OpenAIPrivacyFilterPreTrainedModel(GptOssPreTrainedModel):
         """The model is very sensitive to accumulation orders, hence we default to `eager` instead"""
         requested_experts = "eager" if requested_experts is None else requested_experts
         return PreTrainedModel.get_correct_experts_implementation(self, requested_experts)
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        std = self.config.initializer_range
+        if isinstance(module, OpenAIPrivacyFilterExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.zeros_(module.gate_up_proj_bias)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+            init.zeros_(module.down_proj_bias)
+        elif isinstance(module, OpenAIPrivacyFilterAttention):
+            init.normal_(module.sinks, mean=0.0, std=std)
+        elif isinstance(module, OpenAIPrivacyFilterTopKRouter):
+            init.normal_(module.weight, mean=0.0, std=std)
+            init.normal_(module.bias, mean=0.0, std=std)
 
 
 @auto_docstring

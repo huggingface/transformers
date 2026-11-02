@@ -176,6 +176,10 @@ class Qwen3_5Config(Qwen3VLConfig):
     video_token_id: int = 248057
     vision_start_token_id: int = 248053
     vision_end_token_id: int = 248054
+    sub_configs_defaults = {
+        "vision_config": Qwen3_5VisionConfig,
+        "text_config": Qwen3_5TextConfig,
+    }
 
 
 class Qwen3_5VisionRotaryEmbedding(Qwen3VLVisionRotaryEmbedding):
@@ -340,7 +344,10 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
 
 
 class Qwen3_5Attention(Qwen3NextAttention):
-    pass
+    def __init__(self, config: Qwen3_5Config, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.q_norm = Qwen3_5RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
+        self.k_norm = Qwen3_5RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
 
 
 class Qwen3_5MLP(Qwen3NextMLP):
@@ -501,6 +508,10 @@ class Qwen3_5TextModel(Qwen3NextModel):
     def __init__(self, config: Qwen3_5TextConfig):
         super().__init__(config)
         self.rotary_emb = Qwen3_5TextRotaryEmbedding(config=config)
+        self.layers = nn.ModuleList(
+            [Qwen3_5DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = Qwen3_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -643,6 +654,10 @@ class Qwen3_5ForTokenClassification(GenericForTokenClassification, Qwen3_5PreTra
 
 class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration):
     input_modalities = ("image", "video", "text")
+
+    def __init__(self, config: Qwen3_5Config):
+        super().__init__(config)
+        self.model = Qwen3_5Model(config)
 
     def get_video_features(self, **super_kwargs) -> tuple | BaseModelOutputWithPooling:
         return super().get_video_features(**super_kwargs)

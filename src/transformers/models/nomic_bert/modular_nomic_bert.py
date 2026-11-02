@@ -18,6 +18,7 @@ import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import (
@@ -35,6 +36,7 @@ from ..bert.modeling_bert import (
     BertForMaskedLM,
     BertForSequenceClassification,
     BertForTokenClassification,
+    BertLMPredictionHead,
     BertOnlyMLMHead,
     BertPredictionHeadTransform,
     BertPreTrainedModel,
@@ -122,7 +124,16 @@ class NomicBertMLP(GemmaMLP):
 
 
 class NomicBertLayer(JinaEmbeddingsV3Layer):
-    pass
+    def __init__(self, config: NomicBertConfig):
+        super().__init__(config)
+        self.mlp = NomicBertMLP(config)
+        self.self_attn = NomicBertAttention(config=config)
+
+
+class NomicBertLMPredictionHead(BertLMPredictionHead):
+    def __init__(self, config):
+        super().__init__(config)
+        self.transform = NomicBertPredictionHeadTransform(config)
 
 
 class NomicBertPreTrainedModel(BertPreTrainedModel):
@@ -136,6 +147,16 @@ class NomicBertPreTrainedModel(BertPreTrainedModel):
         "hidden_states": NomicBertLayer,
         "attentions": NomicBertAttention,
     }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, NomicBertLMPredictionHead):
+            init.zeros_(module.bias)
+        elif isinstance(module, NomicBertEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
 
 
 @auto_docstring
@@ -280,7 +301,10 @@ class NomicBertForSequenceClassification(BertForSequenceClassification):
 
 
 class NomicBertForTokenClassification(BertForTokenClassification):
-    pass
+    def __init__(self, config: NomicBertConfig):
+        super().__init__(config)
+
+        self.nomic_bert = NomicBertModel(config, add_pooling_layer=False)
 
 
 __all__ = [

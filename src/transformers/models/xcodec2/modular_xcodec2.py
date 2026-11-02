@@ -235,7 +235,12 @@ class Xcodec2Attention(LlamaAttention):
 
 
 class Xcodec2DecoderLayer(LlamaDecoderLayer):
-    pass
+    def __init__(self, config: Xcodec2Config, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+        self.self_attn = Xcodec2Attention(config=config, layer_idx=layer_idx)
+
+        self.mlp = Xcodec2MLP(config)
 
 
 class Xcodec2SnakeBeta(Qwen2_5OmniSnakeBeta):
@@ -303,6 +308,9 @@ class Xcodec2EncoderBlock(DacEncoderBlock):
         super().__init__(config, stride, stride_index)
         dimension = config.encoder_hidden_size * 2**stride_index
         self.snake1 = Xcodec2AntiAliasedActivation1d(activation=Xcodec2SnakeBeta(dimension // 2))
+        self.res_unit1 = Xcodec2ResidualUnit(dimension // 2, dilation=1)
+        self.res_unit2 = Xcodec2ResidualUnit(dimension // 2, dilation=3)
+        self.res_unit3 = Xcodec2ResidualUnit(dimension // 2, dilation=9)
 
 
 class Xcodec2Encoder(DacEncoder):
@@ -310,6 +318,10 @@ class Xcodec2Encoder(DacEncoder):
         super().__init__(config)
         d_model = config.encoder_hidden_size * 2 ** len(config.downsampling_ratios)
         self.snake1 = Xcodec2AntiAliasedActivation1d(activation=Xcodec2SnakeBeta(d_model))
+        # Create EncoderBlocks that double channels as they downsample by `stride`
+        for stride_index, stride in enumerate(config.downsampling_ratios):
+            stride_index = stride_index + 1
+            self.block += [Xcodec2EncoderBlock(config, stride=stride, stride_index=stride_index)]
 
 
 class Xcodec2ResNetBlock(nn.Module):

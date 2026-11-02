@@ -450,6 +450,11 @@ class InternVLModelOutputWithPast(LlavaModelOutputWithPast):
 
 
 class InternVLModel(LlavaModel):
+    def __init__(self, config: InternVLConfig):
+        super().__init__(config)
+
+        self.multi_modal_projector = InternVLMultiModalProjector(config)
+
     def pixel_shuffle(self, vision_features: torch.Tensor, scale_factor: float = 0.5):
         """Perform pixel shuffle downsampling on vision features.
 
@@ -599,6 +604,10 @@ class InternVLCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
 
 
 class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
+    def __init__(self, config: InternVLConfig):
+        super().__init__(config)
+        self.model = InternVLModel(config)
+
     def forward(**super_kwargs):
         r"""
         Example:

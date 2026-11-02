@@ -470,6 +470,9 @@ class MuseSparkTextDecoderLayer(MuseGlimmerTextDecoderLayer):
         self.post_attention_residual_gate = MuseSparkResidualGate(config)
         self.post_feedforward_layernorm = MuseSparkTextInputScaledRMSNorm(config.hidden_size, eps=config.post_norm_eps)
         self.post_feedforward_residual_gate = MuseSparkResidualGate(config)
+        self.self_attn = MuseSparkTextAttention(config=config, layer_idx=layer_idx)
+        self.input_layernorm = MuseSparkTextCenteredRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.pre_feedforward_layernorm = MuseSparkTextCenteredRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -530,6 +533,12 @@ class MuseSparkTextModel(MuseGlimmerTextModel):
         "attentions": MuseSparkTextAttention,
         "router_logits": OutputRecorder(MuseSparkTopkRouter, index=0),
     }
+
+    def __init__(self, config: MuseSparkTextConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [MuseSparkTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
     @merge_with_config_defaults
     @capture_outputs
@@ -618,7 +627,9 @@ class MuseSparkVisionPatchEmbedder(MuseGlimmerVisionPatchEmbedder):
 
 
 class MuseSparkVisionModel(MuseGlimmerVisionModel):
-    pass
+    def __init__(self, config: MuseSparkVisionConfig):
+        super().__init__(config)
+        self.patch_embedder = MuseSparkVisionPatchEmbedder(config)
 
 
 class MuseSparkAudioConv1dPaddingCache(VoxtralRealtimeConv1dPaddingCache):
@@ -954,6 +965,10 @@ class MuseSparkForConditionalGeneration(MuseGlimmerForConditionalGeneration):
     # Tying lm_head.weight and model.language_model.embed_tokens.weight is currently not supported
     # as it requires a custom tp plan
     _tied_weights_keys = AttributeError()
+
+    def __init__(self, config: MuseSparkConfig):
+        super().__init__(config)
+        self.model = MuseSparkModel(config)
 
     def forward(
         self,

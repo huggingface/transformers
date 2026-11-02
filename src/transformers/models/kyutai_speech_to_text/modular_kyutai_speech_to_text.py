@@ -270,6 +270,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
         # yet the codec_model needs a generation config to initialize it's cache for streaming inference
         # we therefore initialize a generation config for the codec model
         self.codec_model.generation_config = GenerationConfig.from_model_config(config.codec_config)
+        self.model = KyutaiSpeechToTextModel(config)
 
     def forward(self, **super_kwargs):
         r"""

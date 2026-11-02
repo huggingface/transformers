@@ -227,7 +227,9 @@ class EomtLayerScale(Dinov2LayerScale):
 
 
 class EomtLayer(Dinov2Layer):
-    pass
+    def __init__(self, config: EomtConfig) -> None:
+        super().__init__(config)
+        self.attention = EomtAttention(config)
 
 
 class EomtLayerNorm2d(nn.LayerNorm):

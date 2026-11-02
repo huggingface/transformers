@@ -350,6 +350,10 @@ class SLANetBackbone(SLANetPreTrainedModel):
 class SLANetForTableRecognition(SLANeXtForTableRecognition):
     _keys_to_ignore_on_load_missing = ["num_batches_tracked"]
 
+    def __init__(self, config: SLANetConfig):
+        super().__init__(config)
+        self.backbone = SLANetBackbone(config=config)
+
     @can_return_tuple
     @auto_docstring
     def forward(

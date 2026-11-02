@@ -130,6 +130,10 @@ class CohereCompassConfig(Qwen3VLConfig):
     video_token_id: int = 255032
     vision_start_token_id: int = 255028
     vision_end_token_id: int = 255029
+    sub_configs_defaults = {
+        "vision_config": CohereCompassVisionConfig,
+        "text_config": CohereCompassTextConfig,
+    }
 
 
 # Overwritten to show type as cohere_compass for internal compatibility
@@ -300,6 +304,7 @@ class CohereCompassAttention(Cohere2Attention):
 class CohereCompassDecoderLayer(Cohere2DecoderLayer):
     def __init__(self, config: CohereCompassTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        self.self_attn = CohereCompassAttention(config=config, layer_idx=layer_idx)
 
 
 @auto_docstring

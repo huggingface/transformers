@@ -115,11 +115,15 @@ class HubertFeatureProjection(nn.Module):
 
 
 class HubertEncoder(Wav2Vec2Encoder):
-    pass
+    def __init__(self, config):
+        super().__init__(config)
+        self.pos_conv_embed = HubertPositionalConvEmbedding(config)
 
 
 class HubertEncoderStableLayerNorm(Wav2Vec2EncoderStableLayerNorm):
-    pass
+    def __init__(self, config):
+        super().__init__(config)
+        self.pos_conv_embed = HubertPositionalConvEmbedding(config)
 
 
 @auto_docstring
@@ -288,11 +292,16 @@ class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
 
 
 class HubertForCTC(Wav2Vec2ForCTC):
-    pass
+    def __init__(self, config: HubertConfig, target_lang: str | None = None):
+        super().__init__(config, target_lang)
+
+        self.hubert = HubertModel(config)
 
 
 class HubertForSequenceClassification(Wav2Vec2ForSequenceClassification):
-    pass
+    def __init__(self, config: HubertConfig):
+        super().__init__(config)
+        self.hubert = HubertModel(config)
 
 
 __all__ = ["HubertForCTC", "HubertForSequenceClassification", "HubertModel", "HubertPreTrainedModel"]

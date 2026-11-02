@@ -23,6 +23,7 @@ import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import gelu
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -138,6 +139,7 @@ class XLMRobertaXLAttention(BertAttention):
         del self.LayerNorm
 
         self.self_attn_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.output = XLMRobertaXLSelfOutput(config)
 
     def forward(
         self,
@@ -176,6 +178,17 @@ class XLMRobertaXLLayer(BertLayer):
     def __init__(self, config, layer_idx=None):
         super().__init__(config, layer_idx)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.attention = XLMRobertaXLAttention(config, is_causal=config.is_decoder, layer_idx=layer_idx)
+        if self.add_cross_attention:
+            if not self.is_decoder:
+                raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
+            self.crossattention = XLMRobertaXLAttention(
+                config,
+                is_causal=False,
+                layer_idx=layer_idx,
+                is_cross_attention=True,
+            )
+        self.output = XLMRobertaXLOutput(config)
 
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.LayerNorm(attention_output)
@@ -223,10 +236,29 @@ class XLMRobertaXLEncoder(nn.Module):
 @auto_docstring
 class XLMRobertaXLPreTrainedModel(RobertaPreTrainedModel):
     base_model_prefix = "roberta"
+    _can_record_outputs = {
+        "hidden_states": XLMRobertaXLLayer,
+        "attentions": XLMRobertaXLSelfAttention,
+        "cross_attentions": XLMRobertaXLCrossAttention,
+    }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        super()._init_weights(module)
+        if isinstance(module, XLMRobertaXLLMHead):
+            init.zeros_(module.bias)
+        elif isinstance(module, XLMRobertaXLEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
 
 
 class XLMRobertaXLModel(BertModel):
-    pass
+    def __init__(self, config: XLMRobertaXLConfig, add_pooling_layer=True):
+        super().__init__(config, add_pooling_layer)
+
+        self.embeddings = XLMRobertaXLEmbeddings(config)
+        self.encoder = XLMRobertaXLEncoder(config)
 
 
 class XLMRobertaXLLMHead(nn.Module):

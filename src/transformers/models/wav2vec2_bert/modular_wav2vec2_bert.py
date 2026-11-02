@@ -736,6 +736,8 @@ class Wav2Vec2BertForCTC(Wav2Vec2ConformerForCTC):
         """
         super().__init__(config)
 
+        self.wav2vec2_bert = Wav2Vec2BertModel(config)
+
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for Wav2Vec2Bert")
 
@@ -796,6 +798,7 @@ class Wav2Vec2BertForCTC(Wav2Vec2ConformerForCTC):
 class Wav2Vec2BertForSequenceClassification(Wav2Vec2ForSequenceClassification):
     def __init__(self, config: Wav2Vec2BertConfig):
         super().__init__(config)
+        self.wav2vec2_bert = Wav2Vec2BertModel(config)
 
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for Wav2Vec2Bert")
@@ -868,6 +871,7 @@ class Wav2Vec2BertForSequenceClassification(Wav2Vec2ForSequenceClassification):
 class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2ConformerForAudioFrameClassification):
     def __init__(self, config: Wav2Vec2BertConfig):
         super().__init__(config)
+        self.wav2vec2_bert = Wav2Vec2BertModel(config)
 
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for Wav2Vec2Bert")
@@ -923,6 +927,8 @@ class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2ConformerForAudioFrameClas
 class Wav2Vec2BertForXVector(Wav2Vec2ConformerForXVector):
     def __init__(self, config: Wav2Vec2BertConfig):
         super().__init__(config)
+
+        self.wav2vec2_bert = Wav2Vec2BertModel(config)
 
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for Wav2Vec2Bert")

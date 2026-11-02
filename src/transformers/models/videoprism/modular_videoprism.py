@@ -137,6 +137,10 @@ class VideoPrismConfig(SiglipConfig):
     """
 
     initializer_factor = AttributeError()
+    sub_configs_defaults = {
+        "vision_config": VideoPrismVisionConfig,
+        "text_config": VideoPrismTextConfig,
+    }
 
 
 class VideoPrismTokenizer(T5Tokenizer):
@@ -290,6 +294,7 @@ class VideoPrismSpatialEmbeddings(VivitEmbeddings):
         del self.cls_token
         del self.image_size
         self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches, config.hidden_size))  # noqa: F821
+        self.patch_embeddings = VideoPrismTubeletEmbeddings(config)
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
@@ -515,6 +520,10 @@ class VideoPrismPreTrainedModel(VivitPreTrainedModel):
     # sdpa is disabled because it does not support attention capping
     _supports_sdpa = False
     _input_embed_layer = AttributeError()
+    _can_record_outputs = {
+        "hidden_states": VideoPrismLayer,
+        "attentions": VideoPrismAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):

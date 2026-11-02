@@ -758,6 +758,10 @@ class DeformableDetrEncoder(DetrEncoder):
         "attentions": OutputRecorder(DeformableDetrMultiscaleDeformableAttention, layer_name="self_attn", index=1),
     }
 
+    def __init__(self, config: DeformableDetrConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList([DeformableDetrEncoderLayer(config) for _ in range(config.encoder_layers)])
+
     @merge_with_config_defaults
     @capture_outputs
     def forward(

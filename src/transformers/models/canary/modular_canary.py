@@ -282,6 +282,7 @@ class CanaryForConditionalGeneration(CohereAsrForConditionalGeneration):
     def __init__(self, config: CanaryConfig):
         super().__init__(config)
         self.proj_out = nn.Linear(config.decoder_config.hidden_size, config.decoder_config.vocab_size, bias=True)
+        self.model = CanaryModel(config)
 
 
 __all__ = [

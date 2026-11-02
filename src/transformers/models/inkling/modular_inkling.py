@@ -850,6 +850,10 @@ class InklingForCausalLM(Gemma3ForCausalLM):
     _tp_plan = {"lm_head": "rowwise_split_input"}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
+    def __init__(self, config: InklingTextConfig):
+        super().__init__(config)
+        self.model = InklingTextModel(config)
+
     @can_return_tuple
     @auto_docstring
     def forward(

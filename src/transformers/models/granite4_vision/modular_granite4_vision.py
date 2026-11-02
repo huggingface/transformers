@@ -360,8 +360,12 @@ class Granite4VisionPreTrainedModel(LlavaNextPreTrainedModel):
         "attentions": Granite4VisionTextAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
+        if isinstance(module, Granite4VisionModel):
+            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
+            init.normal_(module.image_newline, mean=0.0, std=embed_std)
         if isinstance(module, Granite4VisionWindowQFormerDownsampler):
             embed_std = 1 / math.sqrt(module.query.shape[-1])
             init.normal_(module.query, mean=0.0, std=embed_std)
@@ -696,6 +700,10 @@ class Granite4VisionModel(LlavaNextModel):
 
 
 class Granite4VisionForConditionalGeneration(LlavaNextForConditionalGeneration):
+    def __init__(self, config: Granite4VisionConfig):
+        super().__init__(config)
+        self.model = Granite4VisionModel(config)
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

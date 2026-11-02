@@ -128,7 +128,9 @@ class Data2VecAudioFeatureProjection(Wav2Vec2FeatureProjection):
 
 
 class Data2VecAudioEncoder(Wav2Vec2Encoder):
-    pass
+    def __init__(self, config):
+        super().__init__(config)
+        self.pos_conv_embed = Data2VecAudioPositionalConvEmbedding(config)
 
 
 class Data2VecAudioAdapter(Wav2Vec2Adapter):
@@ -251,15 +253,22 @@ class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel, Wav2Vec2ForCTC):
 
 
 class Data2VecAudioForSequenceClassification(Wav2Vec2ForSequenceClassification):
-    pass
+    def __init__(self, config: Data2VecAudioConfig):
+        super().__init__(config)
+        self.data2vec_audio = Data2VecAudioModel(config)
 
 
 class Data2VecAudioForAudioFrameClassification(Wav2Vec2ForAudioFrameClassification):
-    pass
+    def __init__(self, config: Data2VecAudioConfig):
+        super().__init__(config)
+        self.data2vec_audio = Data2VecAudioModel(config)
 
 
 class Data2VecAudioForXVector(Wav2Vec2ForXVector):
-    pass
+    def __init__(self, config: Data2VecAudioConfig):
+        super().__init__(config)
+
+        self.data2vec_audio = Data2VecAudioModel(config)
 
 
 __all__ = [

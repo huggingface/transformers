@@ -220,6 +220,7 @@ class MLCDEncoder(CLIPEncoder):
     def __init__(self, config: MLCDVisionConfig):
         """Overwrite dummy `MLCDConfig` to `MLCDVisionConfig`."""
         super().__init__(config)
+        self.layers = nn.ModuleList([MLCDEncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
     def forward(
         self,
@@ -308,6 +309,9 @@ class MLCDVisionModel(CLIPVisionModel):
         super().__init__(config)
         self.vision_rotary_embedding = MLCDRotaryEmbedding(config)
         self.class_pos_emb = nn.Parameter(torch.randn(1, config.hidden_size // config.num_attention_heads // 2))
+
+        self.embeddings = MLCDVisionEmbeddings(config)
+        self.encoder = MLCDEncoder(config)
 
     def forward(
         self,

@@ -63,8 +63,9 @@ class VaultGemmaAttention(Gemma2Attention):
 
 
 class VaultGemmaDecoderLayer(Gemma2DecoderLayer):
-    def __init__(self, **super_kwargs):
-        super().__init__(**super_kwargs)
+    def __init__(self, config: VaultGemmaConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.self_attn = VaultGemmaAttention(config=config, layer_idx=layer_idx)
         del self.post_attention_layernorm
         del self.post_feedforward_layernorm
 

@@ -25,7 +25,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..bamba.modeling_bamba import BambaMixer, BambaRMSNormGated
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..granitemoeshared.modeling_granitemoeshared import (
@@ -37,6 +37,7 @@ from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedModel,
     GraniteMoeSharedMoE,
     GraniteMoeSharedPreTrainedModel,
+    GraniteMoeSharedTopKRouter,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -107,6 +108,10 @@ class GraniteMoeHybridMLP(GraniteMoeSharedMLP):
 
 
 class GraniteMoeHybridRotaryEmbedding(Gemma2RotaryEmbedding):
+    pass
+
+
+class GraniteMoeHybridTopKRouter(GraniteMoeSharedTopKRouter):
     pass
 
 
@@ -181,6 +186,11 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
 class GraniteMoeHybridPreTrainedModel(GraniteMoeSharedPreTrainedModel):
     config: GraniteMoeHybridConfig
     _no_split_modules = ["GraniteMoeHybridDecoderLayer"]
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(GraniteMoeHybridTopKRouter, index=0),
+        "hidden_states": GraniteMoeHybridDecoderLayer,
+        "attentions": GraniteMoeHybridAttention,
+    }
     _is_stateful = True
 
     @torch.no_grad()

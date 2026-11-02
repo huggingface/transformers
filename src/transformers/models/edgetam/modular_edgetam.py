@@ -146,7 +146,15 @@ class EdgeTamConfig(Sam2Config):
      ```
     """
 
-    pass
+    model_type = "edgetam"
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="edgetam_vision_model",
+        ),
+        "prompt_encoder_config": EdgeTamPromptEncoderConfig,
+        "mask_decoder_config": EdgeTamMaskDecoderConfig,
+    }
 
 
 class EdgeTamLayerNorm(Sam2LayerNorm):

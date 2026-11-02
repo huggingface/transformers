@@ -17,13 +17,16 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...utils import auto_docstring, logging
+from ...utils.output_capturing import OutputRecorder
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeForCausalLM,
+    Glm4MoeMLP,
     Glm4MoeModel,
     Glm4MoeMoE,
     Glm4MoePreTrainedModel,
     Glm4MoeRMSNorm,
+    Glm4MoeTopkRouter,
 )
 from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer
 
@@ -74,7 +77,17 @@ class SolarOpenConfig(Glm4MoeConfig):
 class SolarOpenDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: SolarOpenConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+
+        self.self_attn = SolarOpenAttention(config=config, layer_idx=layer_idx)
         self.mlp = SolarOpenMoE(config)
+
+
+class SolarOpenMLP(Glm4MoeMLP):
+    pass
+
+
+class SolarOpenTopkRouter(Glm4MoeTopkRouter):
+    pass
 
 
 class SolarOpenMoE(Glm4MoeMoE):
@@ -92,11 +105,20 @@ class SolarOpenRMSNorm(Glm4MoeRMSNorm):
 
 
 class SolarOpenPreTrainedModel(Glm4MoePreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": SolarOpenDecoderLayer,
+        "attentions": SolarOpenAttention,
+        "router_logits": OutputRecorder(SolarOpenTopkRouter, index=0),
+    }
     _keys_to_ignore_on_load_unexpected = None
 
 
 class SolarOpenModel(Glm4MoeModel):
-    pass
+    def __init__(self, config: SolarOpenConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [SolarOpenDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
 
 class SolarOpenForCausalLM(Glm4MoeForCausalLM):

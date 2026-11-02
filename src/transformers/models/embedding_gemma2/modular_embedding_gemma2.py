@@ -372,6 +372,11 @@ class EmbeddingGemma2EncoderLayer(Gemma3DecoderLayer):
         super().__init__(config, layer_idx)
         self.layer_scalar = nn.Buffer(torch.ones(1))
         self.ple_block = EmbeddingGemma2TextPLEBlock(config)
+        self.self_attn = EmbeddingGemma2Attention(config=config, layer_idx=layer_idx)
+        self.input_layernorm = EmbeddingGemma2RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = EmbeddingGemma2RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.pre_feedforward_layernorm = EmbeddingGemma2RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = EmbeddingGemma2RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -466,6 +471,8 @@ class EmbeddingGemma2TextModel(Gemma3TextModel):
 
         # Projecting per token is equivalent to projecting after mean pooling
         self.embedding_projection = nn.Linear(config.hidden_size, config.embedding_dim, bias=False)
+        self.norm = EmbeddingGemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = EmbeddingGemma2RotaryEmbedding(config)
 
     def forward(
         self,
@@ -573,6 +580,16 @@ class EmbeddingGemma2Model(Gemma4Model):
         super().__init__(config)
         # Drop inherited `vocab_size_per_layer_input` (no token-identity PLE in EmbeddingGemma 2)
         del self.vocab_size_per_layer_input
+        self.embed_vision = (
+            EmbeddingGemma2MultimodalEmbedder(config.vision_config, config.text_config)
+            if config.vision_config is not None
+            else None
+        )
+        self.embed_audio = (
+            EmbeddingGemma2MultimodalEmbedder(config.audio_config, config.text_config)
+            if config.audio_config is not None
+            else None
+        )
         self.post_init()
 
     @can_return_tuple

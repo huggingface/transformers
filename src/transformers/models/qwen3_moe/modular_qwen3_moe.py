@@ -16,6 +16,7 @@
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import slice_logits_to_keep
@@ -80,7 +81,15 @@ class Qwen3MoeRMSNorm(LlamaRMSNorm):
 
 
 class Qwen3MoeDecoderLayer(Qwen2MoeDecoderLayer):
-    pass
+    def __init__(self, config: Qwen3MoeConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.self_attn = Qwen3MoeAttention(config, layer_idx)
+        if (layer_idx not in config.mlp_only_layers) and (
+            config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
+        ):
+            self.mlp = Qwen3MoeSparseMoeBlock(config)
+        else:
+            self.mlp = Qwen3MoeMLP(config, intermediate_size=config.intermediate_size)
 
 
 class Qwen3MoePreTrainedModel(MixtralPreTrainedModel):
@@ -90,9 +99,23 @@ class Qwen3MoePreTrainedModel(MixtralPreTrainedModel):
         "attentions": Qwen3MoeAttention,
     }
 
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        std = self.config.initializer_range
+        if isinstance(module, Qwen3MoeExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, Qwen3MoeTopKRouter):
+            init.normal_(module.weight, mean=0.0, std=std)
+
 
 class Qwen3MoeModel(MixtralModel):
-    pass
+    def __init__(self, config: Qwen3MoeConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [Qwen3MoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
 
 class Qwen3MoeForCausalLM(MixtralForCausalLM):

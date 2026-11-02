@@ -1199,6 +1199,10 @@ class Molmo2DecoderLayer(LlamaDecoderLayer):
         super().__init__(config, layer_idx)
         self.norm_after = config.norm_after
 
+        self.self_attn = Molmo2Attention(config=config, layer_idx=layer_idx)
+
+        self.mlp = Molmo2MLP(config)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1242,6 +1246,10 @@ class Molmo2DecoderLayer(LlamaDecoderLayer):
 class Molmo2PreTrainedModel(LlamaPreTrainedModel):
     config: Molmo2Config
     input_modalities = ("image", "video", "text")
+    _can_record_outputs = {
+        "hidden_states": Molmo2DecoderLayer,
+        "attentions": Molmo2Attention,
+    }
 
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)

@@ -204,7 +204,10 @@ class Olmo2DecoderLayer(OlmoDecoderLayer):
 
 
 class Olmo2PreTrainedModel(LlamaPreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "hidden_states": Olmo2DecoderLayer,
+        "attentions": Olmo2Attention,
+    }
 
 
 # The OLMo2 model is identical to the OLMo model, except RMSNorm is used instead of
@@ -220,7 +223,9 @@ class Olmo2Model(OlmoModel):
 
 # The heads now only need to redefine the model inside to the correct `RobertaModel`
 class Olmo2ForCausalLM(OlmoForCausalLM):
-    pass
+    def __init__(self, config: Olmo2Config):
+        super().__init__(config)
+        self.model = Olmo2Model(config)
 
 
 class Olmo2ForSequenceClassification(OlmoForSequenceClassification):

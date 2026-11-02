@@ -19,6 +19,7 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -211,6 +212,13 @@ class LlavaNextVideoPreTrainedModel(LlavaNextPreTrainedModel):
         "hidden_states": "LlamaDecoderLayer",
         "attentions": "LlamaAttention",
     }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, LlavaNextVideoModel):
+            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
+            init.normal_(module.image_newline, mean=0.0, std=embed_std)
 
 
 class LlavaNextVideoModel(LlavaNextModel):
@@ -471,6 +479,10 @@ class LlavaNextVideoModel(LlavaNextModel):
 
 
 class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
+    def __init__(self, config: LlavaNextVideoConfig):
+        super().__init__(config)
+        self.model = LlavaNextVideoModel(config)
+
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring

@@ -45,6 +45,7 @@ from ..glm4v.modeling_glm4v import (
     Glm4vModel,
     Glm4vModelOutputWithPast,
     Glm4vPreTrainedModel,
+    Glm4vTextDecoderLayer,
     Glm4vTextModel,
     Glm4vVisionAttention,
     Glm4vVisionBlock,
@@ -386,6 +387,7 @@ class GlmImageVQVAE(ChameleonVQVAE):
 
     def __init__(self, config: GlmImageVQVAEConfig):
         super().__init__(config)
+        self.quantize = GlmImageVQVAEVectorQuantizer(config)
         del self.encoder
 
     def encode(self, hidden_states):
@@ -403,9 +405,18 @@ class GlmImageVisionModel(Glm4vVisionModel):
     config: GlmImageVisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
+    _can_record_outputs = {
+        "hidden_states": GlmImageVisionBlock,
+        "attentions": GlmImageVisionAttention,
+    }
 
     def __init__(self, config: GlmImageVisionConfig):
         super().__init__(config)
+
+        self.embeddings = GlmImageVisionEmbeddings(config)
+        self.patch_embed = GlmImageVisionPatchEmbed(config)
+
+        self.blocks = nn.ModuleList([GlmImageVisionBlock(config) for _ in range(config.depth)])
 
         head_dim = config.hidden_size // config.num_heads
         self.head_dim = head_dim
@@ -455,8 +466,24 @@ class GlmImageVisionModel(Glm4vVisionModel):
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=hidden_states)
 
 
+class GlmImageTextDecoderLayer(Glm4vTextDecoderLayer):
+    def __init__(self, config: GlmImageTextConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.self_attn = GlmImageTextAttention(config, layer_idx)
+
+
 class GlmImageTextModel(Glm4vTextModel):
-    pass
+    _can_record_outputs = {
+        "hidden_states": GlmImageTextDecoderLayer,
+        "attentions": GlmImageTextAttention,
+    }
+
+    def __init__(self, config: GlmImageTextConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [GlmImageTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.rotary_emb = GlmImageTextRotaryEmbedding(config=config)
 
 
 class GlmImageModel(Glm4vModel):

@@ -110,6 +110,10 @@ class PPOCRV6TinyRecHead(nn.Module):
 
 @auto_docstring(custom_intro="PPOCR6TinyRec model for text recognition tasks.")
 class PPOCRV6TinyRecForTextRecognition(PPOCRV6SmallRecForTextRecognition):
+    def __init__(self, config: PPOCRV6TinyRecConfig):
+        super().__init__(config)
+        self.head = PPOCRV6TinyRecHead(config)
+
     @can_return_tuple
     @auto_docstring
     def forward(

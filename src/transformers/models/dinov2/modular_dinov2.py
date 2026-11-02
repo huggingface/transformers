@@ -63,6 +63,7 @@ class Dinov2Embeddings(BeitEmbeddings):
             torch.randn(1, self.patch_embeddings.num_patches + 1, config.hidden_size)
         )
         self.config = config
+        self.patch_embeddings = Dinov2PatchEmbeddings(config)
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
@@ -178,10 +179,21 @@ class Dinov2Layer(GradientCheckpointingLayer):
 @auto_docstring
 class Dinov2PreTrainedModel(ViTPreTrainedModel):
     config: Dinov2Config
+    _can_record_outputs = {
+        "hidden_states": Dinov2Layer,
+        "attentions": Dinov2Attention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module) -> None:
+        """Initialize the weights"""
         super()._init_weights(module)
+        if isinstance(module, Dinov2Embeddings):
+            if module.position_embeddings is not None:
+                init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
+            init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
+            if module.mask_token is not None:
+                init.zeros_(module.mask_token)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:

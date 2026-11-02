@@ -189,6 +189,10 @@ class ApertusDecoderLayer(LlamaDecoderLayer):
         del self.input_layernorm
         del self.post_attention_layernorm
 
+        self.self_attn = ApertusAttention(config=config, layer_idx=layer_idx)
+
+        self.mlp = ApertusMLP(config)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -221,11 +225,18 @@ class ApertusDecoderLayer(LlamaDecoderLayer):
 
 
 class ApertusPreTrainedModel(LlamaPreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "hidden_states": ApertusDecoderLayer,
+        "attentions": ApertusAttention,
+    }
 
 
 class ApertusModel(LlamaModel):
-    pass
+    def __init__(self, config: ApertusConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [ApertusDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
 
 class ApertusForCausalLM(LlamaForCausalLM):

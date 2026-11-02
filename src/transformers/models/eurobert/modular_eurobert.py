@@ -25,7 +25,7 @@ from ...processing_utils import Unpack
 from ...utils import auto_docstring
 from ...utils.generic import TransformersKwargs, can_return_tuple
 from ..llama.configuration_llama import LlamaConfig
-from ..llama.modeling_llama import LlamaAttention, LlamaModel, LlamaPreTrainedModel, LlamaRMSNorm
+from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaModel, LlamaPreTrainedModel, LlamaRMSNorm
 
 
 @auto_docstring(checkpoint="EuroBERT/EuroBERT-210m")
@@ -92,11 +92,30 @@ class EuroBertAttention(LlamaAttention):
         self.is_causal = False
 
 
+class EuroBertDecoderLayer(LlamaDecoderLayer):
+    def __init__(self, config: EuroBertConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+        self.self_attn = EuroBertAttention(config=config, layer_idx=layer_idx)
+        self.input_layernorm = EuroBertRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = EuroBertRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+
 class EuroBertPreTrainedModel(LlamaPreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "hidden_states": EuroBertDecoderLayer,
+        "attentions": EuroBertAttention,
+    }
 
 
 class EuroBertModel(LlamaModel):
+    def __init__(self, config: EuroBertConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [EuroBertDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = EuroBertRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
     def forward(
         self,
         input_ids: torch.LongTensor = None,

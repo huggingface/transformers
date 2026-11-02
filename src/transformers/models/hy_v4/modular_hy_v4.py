@@ -31,6 +31,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import maybe_autocast
+from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v4.modeling_deepseek_v4 import (
     DeepseekV4DecoderLayer,
     DeepseekV4HyperConnection,
@@ -265,6 +266,7 @@ class HYV4Attention(GlmMoeDsaAttention):
         self.gate_projection_size = self.v_head_dim
         self.gate_proj = nn.Linear(config.hidden_size, self.num_heads * self.gate_projection_size, bias=False)
         self.sinks = nn.Parameter(torch.full((self.num_heads,), config.learnable_sink_init))
+        self.indexer = None if self.skip_topk else HYV4Indexer(config, layer_idx)
 
     def forward(
         self,
@@ -368,7 +370,9 @@ class HYV4Experts(Glm5NextTextExperts):
 
 
 class HYV4MoE(Glm4MoeLiteMoE):
-    pass
+    def __init__(self, config: HYV4Config):
+        super().__init__(config)
+        self.experts = HYV4Experts(config)
 
 
 class HYV4HyperConnection(DeepseekV4HyperConnection):
@@ -384,6 +388,7 @@ class HYV4HyperConnection(DeepseekV4HyperConnection):
         concatenated_weights_size = 2 * self.hc_mult  # noqa: F841
         self.hc_post_magnitude = config.hc_magnitude
         self.scale = nn.Parameter(torch.empty(2))
+        self.input_norm = HYV4UnweightedRMSNorm(eps=config.rms_norm_eps)
 
     def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Independent HC implementation with forced fp32 application"""
@@ -408,6 +413,10 @@ class HYV4HyperConnection(DeepseekV4HyperConnection):
 
 
 class HYV4HyperHead(DeepseekV4HyperHead):
+    def __init__(self, config: HYV4Config):
+        super().__init__(config)
+        self.input_norm = HYV4UnweightedRMSNorm(eps=config.rms_norm_eps)
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Key difference is to force fp32 in any case
         device_type = x.device.type
@@ -426,6 +435,11 @@ class HYV4DecoderLayer(DeepseekV4DecoderLayer):
     def __init__(self, config: HYV4Config, layer_idx: int):
         super().__init__(self, config, layer_idx)
         self.mlp = HYV4MoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else HYV4MLP(config)
+        self.self_attn = HYV4Attention(config, layer_idx)
+        self.input_layernorm = HYV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = HYV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.attn_hc = HYV4HyperConnection(config)
+        self.ffn_hc = HYV4HyperConnection(config)
 
     def forward(
         self,
@@ -485,6 +499,11 @@ class HYV4PreTrainedModel(Glm4MoeLitePreTrainedModel):
         "k_norm",
         "sinks",
     ]
+    _can_record_outputs = {
+        "hidden_states": HYV4DecoderLayer,
+        "attentions": HYV4Attention,
+        "router_logits": OutputRecorder(HYV4TopkRouter, index=0),
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -517,6 +536,10 @@ class HYV4Model(Glm4MoeLiteModel):
     def __init__(self, config: HYV4Config):
         super().__init__(config)
         self.hc_head = HYV4HyperHead(config)
+        self.layers = nn.ModuleList(
+            [HYV4DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.rotary_emb = HYV4RotaryEmbedding(config=config)
 
     def forward(
         self,
@@ -596,6 +619,10 @@ class HYV4ForCausalLM(Glm4MoeLiteForCausalLM):
         "sinks",
         "lm_head",
     ]
+
+    def __init__(self, config: HYV4Config):
+        super().__init__(config)
+        self.model = HYV4Model(config)
 
     def forward(
         self,

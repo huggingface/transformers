@@ -21,11 +21,17 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...processing_utils import Unpack
 from ...utils import logging
+from ...utils.output_capturing import OutputRecorder
 from ..granitemoe.modeling_granitemoe import (
+    GraniteMoeAttention,
     GraniteMoeDecoderLayer,
+    GraniteMoeExperts,
     GraniteMoeForCausalLM,
     GraniteMoeModel,
+    GraniteMoeMoE,
     GraniteMoePreTrainedModel,
+    GraniteMoeRMSNorm,
+    GraniteMoeTopKRouter,
 )
 from .configuration_granitemoeshared import GraniteMoeSharedConfig
 
@@ -83,6 +89,26 @@ class GraniteMoeSharedMLP(nn.Module):
         return hidden_states
 
 
+class GraniteMoeSharedRMSNorm(GraniteMoeRMSNorm):
+    pass
+
+
+class GraniteMoeSharedTopKRouter(GraniteMoeTopKRouter):
+    pass
+
+
+class GraniteMoeSharedExperts(GraniteMoeExperts):
+    pass
+
+
+class GraniteMoeSharedMoE(GraniteMoeMoE):
+    pass
+
+
+class GraniteMoeSharedAttention(GraniteMoeAttention):
+    pass
+
+
 class GraniteMoeSharedDecoderLayer(GraniteMoeDecoderLayer):
     def __init__(self, config: GraniteMoeSharedConfig, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -131,6 +157,11 @@ class GraniteMoeSharedDecoderLayer(GraniteMoeDecoderLayer):
 class GraniteMoeSharedPreTrainedModel(GraniteMoePreTrainedModel):
     config: GraniteMoeSharedConfig
     _no_split_modules = ["GraniteMoeSharedDecoderLayer"]
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(GraniteMoeSharedTopKRouter, index=0),
+        "hidden_states": GraniteMoeSharedDecoderLayer,
+        "attentions": GraniteMoeSharedAttention,
+    }
 
 
 class GraniteMoeSharedModel(GraniteMoeModel):

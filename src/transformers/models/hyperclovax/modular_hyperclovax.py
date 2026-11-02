@@ -159,12 +159,19 @@ class HyperCLOVAXDecoderLayer(GraniteDecoderLayer):
 
 @auto_docstring
 class HyperCLOVAXPreTrainedModel(GranitePreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "hidden_states": HyperCLOVAXDecoderLayer,
+        "attentions": HyperCLOVAXAttention,
+    }
 
 
 @auto_docstring
 class HyperCLOVAXModel(GraniteModel):
-    pass
+    def __init__(self, config: HyperCLOVAXConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [HyperCLOVAXDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
 
 @auto_docstring

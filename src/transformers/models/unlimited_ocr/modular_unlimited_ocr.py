@@ -529,7 +529,9 @@ class UnlimitedOcrAttention(CLIPAttention):
 
 
 class UnlimitedOcrEncoderLayer(CLIPEncoderLayer):
-    pass
+    def __init__(self, config: UnlimitedOcrVisionConfig | UnlimitedOcrTextConfig):
+        super().__init__(config)
+        self.self_attn = UnlimitedOcrAttention(config)
 
 
 class UnlimitedOcrVisionEmbeddings(CLIPVisionEmbeddings):
@@ -613,6 +615,8 @@ class UnlimitedOcrVisionEncoder(CLIPVisionModel):
 
     def __init__(self, config: UnlimitedOcrVisionEncoderConfig):
         super().__init__(config)
+
+        self.embeddings = UnlimitedOcrVisionEmbeddings(config)
         del self.post_layernorm
 
     @merge_with_config_defaults
@@ -633,6 +637,7 @@ class UnlimitedOcrVisionEncoder(CLIPVisionModel):
 class UnlimitedOcrVisionModel(DeepseekOcr2VisionModel):
     def __init__(self, config: UnlimitedOcrVisionConfig):
         super().__init__(config)
+        self.vision_encoder = UnlimitedOcrVisionEncoder(config.encoder_config)
         del self.query_768_resolution
         del self.query_1024_resolution
 
@@ -1137,11 +1142,15 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
 
     def __init__(self, config: UnlimitedOcrConfig):
         super().__init__(config)
+
+        self.vision_tower = UnlimitedOcrVisionModel(config.vision_config)
         self.multi_modal_projector = nn.Linear(
             # trf-ignore: TRF030
             config.vision_config.sam_config.downsample_channels[-1] + config.vision_config.encoder_config.hidden_size,
             config.text_config.hidden_size,
         )
+
+        self.language_model = UnlimitedOcrTextModel(config.text_config)
         self.image_newline = nn.Parameter(torch.empty(config.text_config.hidden_size))
 
     def get_image_features(

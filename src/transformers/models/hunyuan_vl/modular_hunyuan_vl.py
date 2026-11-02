@@ -298,6 +298,10 @@ class HunYuanVLConfig(Qwen2VLConfig):
     vision_start_token_id = AttributeError()
     vision_end_token_id = AttributeError()
     video_token_id = AttributeError()
+    sub_configs_defaults = {
+        "vision_config": HunYuanVLVisionConfig,
+        "text_config": HunYuanVLTextConfig,
+    }
 
     def __post_init__(self, **kwargs):
         # When loading legacy "flat" Tencent checkpoints (where text fields live at the top level instead of inside a
@@ -1057,6 +1061,7 @@ class HunYuanVLModel(Qwen2VLModel):
         super().__init__(config)
         self.vision_tower = HunYuanVLVisionTransformer(config.vision_config)
         del self.visual
+        self.language_model = HunYuanVLTextModel._from_config(config.text_config)
 
     def get_vision_position_ids(
         self,

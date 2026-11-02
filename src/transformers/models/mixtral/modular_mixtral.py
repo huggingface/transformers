@@ -265,6 +265,12 @@ class MixtralPreTrainedModel(MistralPreTrainedModel):
 
 
 class MixtralModel(MistralModel):
+    def __init__(self, config: MixtralConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [MixtralDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

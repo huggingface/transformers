@@ -28,7 +28,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..jais2.modeling_jais2 import Jais2DecoderLayer
+from ..jais2.modeling_jais2 import Jais2Attention, Jais2DecoderLayer
 from ..llama.modeling_llama import (
     LlamaModel,
     LlamaPreTrainedModel,
@@ -58,7 +58,15 @@ class PocketTTSOutputWithPast(CausalLMOutputWithPast):
 class PocketTTSMLP(MimiMLP): ...
 
 
-class PocketTTSDecoderLayer(Jais2DecoderLayer): ...
+class PocketTTSAttention(Jais2Attention):
+    pass
+
+
+class PocketTTSDecoderLayer(Jais2DecoderLayer):
+    def __init__(self, config: PocketTTSConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+        self.mlp = PocketTTSMLP(config)
 
 
 class PocketTTSTimestepNorm(nn.Module):
@@ -214,6 +222,10 @@ class PocketTTSPreTrainedModel(LlamaPreTrainedModel):
     config: PocketTTSConfig
     # the flow head runs as one unit per step: split across devices, its blocks would mix devices mid-computation
     _no_split_modules = ["PocketTTSDecoderLayer", "PocketTTSFlowHead"]
+    _can_record_outputs = {
+        "hidden_states": PocketTTSDecoderLayer,
+        "attentions": PocketTTSAttention,
+    }
     input_modalities = ("text", "audio")
 
     @torch.no_grad()
@@ -244,6 +256,9 @@ class PocketTTSPreTrainedModel(LlamaPreTrainedModel):
 class PocketTTSModel(LlamaModel):
     def __init__(self, config: PocketTTSConfig):
         super().__init__(config)
+        self.layers = nn.ModuleList(
+            [PocketTTSDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.audio_prompt_proj = nn.Linear(config.latent_dim, config.hidden_size, bias=False)
         self.audio_latent_proj = nn.Linear(config.latent_dim, config.hidden_size, bias=False)

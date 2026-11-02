@@ -123,10 +123,20 @@ class YoutuAttention(DeepseekV3Attention):
 
 
 class YoutuDecoderLayer(LlamaDecoderLayer):
-    pass
+    def __init__(self, config: YoutuConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+        self.self_attn = YoutuAttention(config=config, layer_idx=layer_idx)
+
+        self.mlp = YoutuMLP(config)
 
 
 class YoutuPreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": YoutuDecoderLayer,
+        "attentions": YoutuAttention,
+    }
+
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)

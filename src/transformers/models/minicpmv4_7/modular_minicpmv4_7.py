@@ -19,6 +19,7 @@ import torch
 from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache
+from ...configuration_utils import SubConfigSpec
 from ...image_utils import ImageInput, make_flat_list_of_images
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import slice_logits_to_keep
@@ -26,6 +27,7 @@ from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...video_utils import VideoInput, make_batched_videos
+from ..auto import AutoConfig
 from ..minicpmv4_6.configuration_minicpmv4_6 import MiniCPMV4_6Config, MiniCPMV4_6VisionConfig
 from ..minicpmv4_6.modeling_minicpmv4_6 import (
     MiniCPMV4_6ForConditionalGeneration,
@@ -83,6 +85,10 @@ class MiniCPMV4_7Config(MiniCPMV4_6Config):
     slice_end_id: int | None = None
     newline_id: int | None = None
     drop_vision_last_layer = AttributeError()
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3_5_text"),
+        "vision_config": MiniCPMV4_7VisionConfig,
+    }
 
 
 class MiniCPMV4_7Model(MiniCPMV4_6Model):
@@ -599,6 +605,10 @@ class MiniCPMV4_7Model(MiniCPMV4_6Model):
 
 
 class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
+    def __init__(self, config: MiniCPMV4_7Config):
+        super().__init__(config)
+        self.model = MiniCPMV4_7Model(config)
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

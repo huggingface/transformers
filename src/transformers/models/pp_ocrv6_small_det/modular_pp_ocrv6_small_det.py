@@ -160,7 +160,9 @@ class PPOCRV6SmallDetNeck(PPOCRV5MobileDetNeck):
 
 @auto_docstring(custom_intro="PPOCR6SmallRec model for text recognition tasks.")
 class PPOCRV6SmallDetForObjectDetection(PPOCRV5ServerDetForObjectDetection):
-    pass
+    def __init__(self, config: PPOCRV6SmallDetConfig):
+        super().__init__(config)
+        self.head = PPOCRV6SmallDetHead(config)
 
 
 __all__ = [

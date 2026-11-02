@@ -26,6 +26,8 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
@@ -183,6 +185,34 @@ class GotOcr2PreTrainedModel(SamPreTrainedModel):
 class GotOcr2VisionEncoder(SamVisionEncoder, GotOcr2PreTrainedModel):
     input_modalities = ("image",)
     config: GotOcr2VisionConfig
+    _can_record_outputs = {"hidden_states": GotOcr2VisionLayer, "attentions": GotOcr2VisionAttention}
+
+    def __init__(self, config: GotOcr2VisionConfig):
+        super().__init__(config)
+        for i in range(config.num_hidden_layers):
+            layer = GotOcr2VisionLayer(
+                config,
+                window_size=config.window_size if i not in config.global_attn_indexes else 0,
+            )
+            self.layers.append(layer)
+
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    def forward(
+        self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | GotOcr2VisionEncoderOutput:
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
+        hidden_states = self.patch_embed(pixel_values)
+        if self.pos_embed is not None:
+            hidden_states = hidden_states + self.pos_embed
+        for layer_module in self.layers:
+            hidden_states = layer_module(hidden_states)
+        hidden_states = self.neck(hidden_states)
+        return GotOcr2VisionEncoderOutput(
+            last_hidden_state=hidden_states,
+        )
 
 
 class GotOcr2MultiModalProjector(nn.Module):
@@ -235,6 +265,8 @@ class GotOcr2Model(LlavaModel):
     def __init__(self, config: GotOcr2Config):
         super().__init__(config)
         self.vision_tower = GotOcr2VisionEncoder(config.vision_config)
+
+        self.multi_modal_projector = GotOcr2MultiModalProjector(config)
 
     @can_return_tuple
     @auto_docstring(
@@ -307,6 +339,10 @@ class GotOcr2Model(LlavaModel):
 
 
 class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
+    def __init__(self, config: GotOcr2Config):
+        super().__init__(config)
+        self.model = GotOcr2Model(config)
+
     @can_return_tuple
     @auto_docstring
     def forward(

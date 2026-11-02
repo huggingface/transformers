@@ -421,6 +421,10 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
 class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
     _tied_weights_keys = {}
 
+    def __init__(self, config: PPFormulaNetConfig):
+        super().__init__(config)
+        self.model = PPFormulaNetModel(config)
+
     @can_return_tuple
     @auto_docstring
     def forward(

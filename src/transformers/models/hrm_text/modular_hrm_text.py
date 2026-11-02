@@ -217,6 +217,8 @@ class HrmTextDecoderLayer(LlamaDecoderLayer):
         self.input_layernorm = HrmTextRMSNorm(eps=config.rms_norm_eps)
         self.post_attention_layernorm = HrmTextRMSNorm(eps=config.rms_norm_eps)
 
+        self.self_attn = HrmTextAttention(config=config, layer_idx=layer_idx)
+
 
 class HrmTextStack(nn.Module):
     """A single transformer stack — used twice inside, once as H module and once as L module"""
@@ -252,6 +254,10 @@ class HrmTextStack(nn.Module):
 @auto_docstring
 class HrmTextPreTrainedModel(LlamaPreTrainedModel):
     config: HrmTextConfig
+    _can_record_outputs = {
+        "hidden_states": HrmTextDecoderLayer,
+        "attentions": HrmTextAttention,
+    }
 
     def _check_and_adjust_attn_implementation(
         self, attn_implementation: str | None, is_init_check: bool = False, allow_all_kernels: bool = False
@@ -406,6 +412,10 @@ class HrmTextModel(LlamaModel):
 
 @auto_docstring
 class HrmTextForCausalLM(LlamaForCausalLM):
+    def __init__(self, config: HrmTextConfig):
+        super().__init__(config)
+        self.model = HrmTextModel(config)
+
     @staticmethod
     def create_masks_for_generate(
         config: PreTrainedConfig,

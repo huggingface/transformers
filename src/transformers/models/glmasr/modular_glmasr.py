@@ -347,6 +347,10 @@ class GlmAsrMultiModalProjector(AudioFlamingo3MultiModalProjector):
     """
 )
 class GlmAsrModel(AudioFlamingo3Model):
+    def __init__(self, config: GlmAsrConfig):
+        super().__init__(config)
+        self.multi_modal_projector = GlmAsrMultiModalProjector(config)
+
     @can_return_tuple
     @auto_docstring(
         custom_intro="Compute audio embeddings from log-mel input features using the audio encoder and multi-modal projector."

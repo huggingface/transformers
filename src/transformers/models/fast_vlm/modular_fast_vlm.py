@@ -132,6 +132,8 @@ class FastVlmModel(LlavaModel):
     def __init__(self, config: FastVlmConfig):
         super().__init__(config)
 
+        self.multi_modal_projector = FastVlmMultiModalProjector(config)
+
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring(
@@ -236,6 +238,10 @@ class FastVlmCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
     """
 )
 class FastVlmForConditionalGeneration(LlavaForConditionalGeneration):
+    def __init__(self, config: FastVlmConfig):
+        super().__init__(config)
+        self.model = FastVlmModel(config)
+
     @can_return_tuple
     @auto_docstring
     def forward(

@@ -170,8 +170,15 @@ class DiffLlamaDecoderLayer(LlamaDecoderLayer):
 
         self.self_attn = DiffLlamaAttention(config=config, layer_idx=layer_idx)
 
+        self.mlp = DiffLlamaMLP(config)
+
 
 class DiffLlamaPreTrainedModel(LlamaPreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": DiffLlamaDecoderLayer,
+        "attentions": DiffLlamaAttention,
+    }
+
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
@@ -187,7 +194,9 @@ class DiffLlamaModel(LlamaModel):
 
 
 class DiffLlamaForCausalLM(GemmaForCausalLM):
-    pass
+    def __init__(self, config: DiffLlamaConfig):
+        super().__init__(config)
+        self.model = DiffLlamaModel(config)
 
 
 class DiffLlamaForSequenceClassification(LlamaForSequenceClassification):

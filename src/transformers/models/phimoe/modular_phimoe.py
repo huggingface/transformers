@@ -19,6 +19,7 @@ from collections.abc import Callable
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...modeling_layers import (
     GenericForSequenceClassification,
 )
@@ -329,6 +330,10 @@ class PhimoeDecoderLayer(MixtralDecoderLayer):
             config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True
         )
 
+        self.self_attn = PhimoeAttention(config, layer_idx)
+
+        self.mlp = PhimoeSparseMoeBlock(config)
+
 
 class PhimoePreTrainedModel(MixtralPreTrainedModel):
     _can_record_outputs = {
@@ -337,17 +342,32 @@ class PhimoePreTrainedModel(MixtralPreTrainedModel):
         "attentions": PhimoeAttention,
     }
 
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        std = self.config.initializer_range
+        if isinstance(module, PhimoeExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, PhimoeTopKRouter):
+            init.normal_(module.weight, mean=0.0, std=std)
+
 
 class PhimoeModel(MixtralModel):
     def __init__(self, config: PhimoeConfig):
         super().__init__(config)
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True)
+        self.layers = nn.ModuleList(
+            [PhimoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.rotary_emb = PhimoeRotaryEmbedding(config=config)
 
 
 class PhimoeForCausalLM(MixtralForCausalLM):
     def __init__(self, config: PhimoeConfig):
         super().__init__(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=self.config.lm_head_bias)
+        self.model = PhimoeModel(config)
 
     # Copied from transformers.models.phi3.modeling_phi3.Phi3ForCausalLM.prepare_inputs_for_generation
     def prepare_inputs_for_generation(

@@ -178,6 +178,8 @@ class RobertaModel(BertModel):
     def __init__(self, config: RobertaConfig, add_pooling_layer=True):
         super().__init__(self, config)
 
+        self.embeddings = RobertaEmbeddings(config)
+
 
 @auto_docstring(
     custom_intro="""

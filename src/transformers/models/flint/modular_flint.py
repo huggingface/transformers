@@ -25,12 +25,14 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import maybe_autocast
+from ...utils.output_capturing import OutputRecorder
 from ..gpt_oss.modeling_gpt_oss import GptOssRMSNorm
 from ..qwen2_moe.configuration_qwen2_moe import Qwen2MoeConfig
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeModel
 from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeAttention,
     Qwen3MoeDecoderLayer,
+    Qwen3MoeExperts,
     Qwen3MoeForCausalLM,
     Qwen3MoeMLP,
     Qwen3MoePreTrainedModel,
@@ -130,9 +132,15 @@ class FlintTopKRouter(Qwen3MoeTopKRouter):
         return router_logits, routing_weights, selected_experts
 
 
+class FlintExperts(Qwen3MoeExperts):
+    pass
+
+
 class FlintSparseMoeBlock(Qwen3MoeSparseMoeBlock):
     def __init__(self, config: FlintConfig):
         super().__init__(config)
+        self.experts = FlintExperts(config)
+        self.gate = FlintTopKRouter(config)
         self.shared_expert = FlintMLP(config, intermediate_size=config.shared_expert_intermediate_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -176,6 +184,8 @@ def eager_attention_forward(
 class FlintAttention(Qwen3MoeAttention):
     def __init__(self, config: FlintConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        self.q_norm = FlintRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
+        self.k_norm = FlintRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
         self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
 
@@ -224,26 +234,53 @@ class FlintAttention(Qwen3MoeAttention):
 
 
 class FlintDecoderLayer(Qwen3MoeDecoderLayer):
-    pass
+    def __init__(self, config: FlintConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.self_attn = FlintAttention(config, layer_idx)
+        if (layer_idx not in config.mlp_only_layers) and (
+            config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
+        ):
+            self.mlp = FlintSparseMoeBlock(config)
+        else:
+            self.mlp = FlintMLP(config, intermediate_size=config.intermediate_size)
+        self.input_layernorm = FlintRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = FlintRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 class FlintPreTrainedModel(Qwen3MoePreTrainedModel):
     _supports_sdpa = False  # SDPA cannot apply the attention sinks
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(FlintTopKRouter, index=0),
+        "hidden_states": FlintDecoderLayer,
+        "attentions": FlintAttention,
+    }
     _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
     _keep_in_fp32_modules_strict = ["gate.weight", "sinks"]
 
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
+        std = self.config.initializer_range
+        if isinstance(module, FlintExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, FlintTopKRouter):
+            init.normal_(module.weight, mean=0.0, std=std)
         if isinstance(module, FlintAttention):
             init.normal_(module.sinks, mean=0.0, std=self.config.initializer_range)
 
 
 class FlintModel(Qwen2MoeModel):
-    pass
+    def __init__(self, config: FlintConfig):
+        super().__init__(config)
+        self.norm = FlintRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 class FlintForCausalLM(Qwen3MoeForCausalLM):
+    def __init__(self, config: FlintConfig):
+        super().__init__(config)
+        self.model = FlintModel(config)
+
     def forward(self, **super_kwargs):
         r"""
         Example:

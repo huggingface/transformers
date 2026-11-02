@@ -156,7 +156,11 @@ class Qwen3VLMoeConfig(Qwen3VLConfig):
     >>> configuration = model.config
     ```"""
 
-    pass
+    model_type = "qwen3_vl_moe"
+    sub_configs_defaults = {
+        "vision_config": Qwen3VLMoeVisionConfig,
+        "text_config": Qwen3VLMoeTextConfig,
+    }
 
 
 class Qwen3VLMoeTextRMSNorm(Qwen3MoeRMSNorm):
@@ -187,7 +191,10 @@ class Qwen3VLMoeTextTopKRouter(nn.Module):
 
 
 class Qwen3VLMoeTextSparseMoeBlock(Qwen3MoeSparseMoeBlock):
-    pass
+    def __init__(self, config: Qwen3VLMoeTextConfig):
+        super().__init__(config)
+        self.experts = Qwen3VLMoeTextExperts(config)
+        self.gate = Qwen3VLMoeTextTopKRouter(config)
 
 
 class Qwen3VLMoeTextAttention(Qwen3VLTextAttention):
@@ -195,13 +202,20 @@ class Qwen3VLMoeTextAttention(Qwen3VLTextAttention):
 
 
 class Qwen3VLMoeTextDecoderLayer(Qwen3MoeDecoderLayer):
-    pass
+    def __init__(self, config: Qwen3VLMoeTextConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.self_attn = Qwen3VLMoeTextAttention(config, layer_idx)
 
 
 class Qwen3VLMoePreTrainedModel(Qwen3MoePreTrainedModel):
     config: Qwen3VLMoeConfig
     input_modalities = ("text", "image", "video")
     _no_split_modules = ["Qwen3VLMoeTextDecoderLayer", "Qwen3VLMoeVisionBlock"]
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(Qwen3VLMoeTextTopKRouter, index=0),
+        "hidden_states": Qwen3VLMoeTextDecoderLayer,
+        "attentions": Qwen3VLMoeTextAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -239,6 +253,12 @@ class Qwen3VLMoeVisionModel(Qwen3VLVisionModel):
 
 
 class Qwen3VLMoeTextModel(Qwen3VLTextModel):
+    def __init__(self, config: Qwen3VLMoeTextConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [Qwen3VLMoeTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

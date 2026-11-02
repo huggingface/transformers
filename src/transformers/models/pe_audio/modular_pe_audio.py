@@ -43,6 +43,10 @@ class PeAudioDacEncoderBlock(DacEncoderBlock):
 class PeAudioDacEncoder(DacEncoder):
     def __init__(self, config: PreTrainedConfig):
         super().__init__(config)
+        # Create EncoderBlocks that double channels as they downsample by `stride`
+        for stride_index, stride in enumerate(config.downsampling_ratios):
+            stride_index = stride_index + 1
+            self.block += [PeAudioDacEncoderBlock(config, stride=stride, stride_index=stride_index)]
 
 
 class PeAudioEncoderEmbedder(nn.Module):
@@ -120,6 +124,10 @@ class PeAudioEncoderOutput(BaseModelOutputWithPooling):
 )
 class PeAudioEncoder(PeAudioVideoEncoder):
     base_model_prefix = "audio_model.audio_encoder"
+
+    def __init__(self, config: PeAudioEncoderConfig):
+        super().__init__(config)
+        self.embedder = PeAudioEncoderEmbedder(config)
 
     @merge_with_config_defaults
     @capture_outputs

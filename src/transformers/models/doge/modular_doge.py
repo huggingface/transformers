@@ -453,6 +453,12 @@ class DogePreTrainedModel(LlamaPreTrainedModel):
 
 
 class DogeModel(MixtralModel):
+    def __init__(self, config: DogeConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [DogeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

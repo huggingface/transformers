@@ -527,6 +527,7 @@ class JambaForCausalLM(MixtralForCausalLM):
     def __init__(self, config: JambaConfig):
         super().__init__(config)
         self.num_experts = config.num_experts
+        self.model = JambaModel(config)
 
     def forward(
         self,

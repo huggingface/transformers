@@ -28,13 +28,14 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..flex_olmo.modeling_flex_olmo import FlexOlmoAttention
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeRotaryEmbedding,
     apply_rotary_pos_emb,  # noqa: F401
 )
 from ..mixtral.modeling_mixtral import (
+    MixtralDecoderLayer,
     MixtralExperts,
     MixtralForCausalLM,
     MixtralModel,
@@ -144,6 +145,7 @@ class MiniMaxM2Experts(MixtralExperts):
 class MiniMaxM2SparseMoeBlock(MixtralSparseMoeBlock):
     def __init__(self, config):
         super().__init__()
+        self.gate = MiniMaxM2TopKRouter(config)
         self.e_score_correction_bias = nn.Buffer(torch.zeros(config.num_local_experts))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -173,9 +175,28 @@ class MiniMaxM2Attention(FlexOlmoAttention):
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+        self.q_norm = MiniMaxM2RMSNorm(config.num_attention_heads * self.head_dim, config.rms_norm_eps)
+        self.k_norm = MiniMaxM2RMSNorm(config.num_key_value_heads * self.head_dim, config.rms_norm_eps)
+
+
+class MiniMaxM2DecoderLayer(MixtralDecoderLayer):
+    def __init__(self, config: MiniMaxM2Config, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+        self.self_attn = MiniMaxM2Attention(config, layer_idx)
+
+        self.mlp = MiniMaxM2SparseMoeBlock(config)
+        self.input_layernorm = MiniMaxM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = MiniMaxM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 class MiniMaxM2PreTrainedModel(MixtralPreTrainedModel):
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(MiniMaxM2TopKRouter, index=0),
+        "hidden_states": MiniMaxM2DecoderLayer,
+        "attentions": MiniMaxM2Attention,
+    }
+
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
@@ -190,6 +211,14 @@ class MiniMaxM2PreTrainedModel(MixtralPreTrainedModel):
 
 
 class MiniMaxM2Model(MixtralModel):
+    def __init__(self, config: MiniMaxM2Config):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [MiniMaxM2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = MiniMaxM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = MiniMaxM2RotaryEmbedding(config=config)
+
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -249,7 +278,9 @@ class MiniMaxM2Model(MixtralModel):
 
 
 class MiniMaxM2ForCausalLM(MixtralForCausalLM):
-    pass
+    def __init__(self, config: MiniMaxM2Config):
+        super().__init__(config)
+        self.model = MiniMaxM2Model(config)
 
 
 __all__ = [

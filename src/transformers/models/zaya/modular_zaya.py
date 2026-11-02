@@ -368,6 +368,8 @@ class ZayaDecoderLayer(LlamaDecoderLayer):
         self.post_attention_residual_scale = ZayaResidualScaling(config.hidden_size)
         self.post_mlp_residual_scale = ZayaResidualScaling(config.hidden_size)
 
+        self.self_attn = ZayaAttention(config=config, layer_idx=layer_idx)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -573,6 +575,9 @@ class ZayaModel(LagunaModel):
         super().__init__(config)
         self.input_hidden_states_scale = nn.Parameter(torch.ones(config.hidden_size))
         self.input_hidden_states_bias = nn.Parameter(torch.zeros(config.hidden_size))
+        self.layers = nn.ModuleList(
+            [ZayaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
     def forward(
         self,
@@ -664,6 +669,7 @@ class ZayaForCausalLM(AfmoeForCausalLM, ZayaPreTrainedModel):
     def __init__(self, config: ZayaConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=self.config.lm_head_bias)
+        self.model = ZayaModel(config)
 
     @staticmethod
     def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, position_ids=None, **_):

@@ -101,7 +101,10 @@ class Qwen2_5_VLTextConfig(Qwen2VLTextConfig):
 
 
 class Qwen2_5_VLConfig(Qwen2VLConfig):
-    pass
+    sub_configs_defaults = {
+        "vision_config": Qwen2_5_VLVisionConfig,
+        "text_config": Qwen2_5_VLTextConfig,
+    }
 
 
 class Qwen2_5_VLRMSNorm(LlamaRMSNorm):
@@ -576,6 +579,10 @@ class Qwen2_5_VLCausalLMOutputWithPast(Qwen2VLCausalLMOutputWithPast):
 class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
+
+    def __init__(self, config: Qwen2_5_VLConfig):
+        super().__init__(config)
+        self.model = Qwen2_5_VLModel(config)
 
     def forward(
         self,

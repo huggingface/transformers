@@ -353,6 +353,7 @@ class BambaForCausalLM(LlamaForCausalLM):
     def __init__(self, config: BambaConfig):
         super().__init__(config)
         self.z_loss_coefficient = config.z_loss_coefficient
+        self.model = BambaModel(config)
 
         # Initialize weights and apply final processing
         self.post_init()

@@ -181,7 +181,9 @@ class Olmo3Attention(Olmo2Attention):
 
 
 class Olmo3DecoderLayer(Olmo2DecoderLayer):
-    pass
+    def __init__(self, config: Olmo3Config, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.self_attn = Olmo3Attention(config=config, layer_idx=layer_idx)
 
 
 class Olmo3RotaryEmbedding(Gemma3RotaryEmbedding):
@@ -207,6 +209,11 @@ class Olmo3RotaryEmbedding(Gemma3RotaryEmbedding):
 
 
 class Olmo3PreTrainedModel(Olmo2PreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": Olmo3DecoderLayer,
+        "attentions": Olmo3Attention,
+    }
+
     def _init_weights(self, module):
         PreTrainedModel._init_weights(module)
         if isinstance(module, Olmo3RotaryEmbedding):
@@ -294,7 +301,9 @@ class Olmo3Model(Olmo2Model):
 
 
 class Olmo3ForCausalLM(Olmo2ForCausalLM):
-    pass
+    def __init__(self, config: Olmo3Config):
+        super().__init__(config)
+        self.model = Olmo3Model(config)
 
 
 class Olmo3ForSequenceClassification(Olmo2ForSequenceClassification):

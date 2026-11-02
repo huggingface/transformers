@@ -1594,6 +1594,10 @@ class Sapiens2PreTrainedModel(DINOv3ViTPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"periods"]
     # mask_token is only used for masked image modeling pretraining and is absent in most checkpoints.
     _keys_to_ignore_on_load_missing = [r"mask_token"]
+    _can_record_outputs = {
+        "hidden_states": Sapiens2Layer,
+        "attentions": Sapiens2Attention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module) -> None:
@@ -1633,6 +1637,8 @@ class Sapiens2Model(DINOv3ViTModel):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
         self.norm = Sapiens2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.embeddings = Sapiens2Embeddings(config)
+        self.model = Sapiens2Encoder(config)
 
     def forward(
         self,
@@ -1672,6 +1678,8 @@ class Sapiens2Backbone(DINOv3ViTBackbone):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
         self.norm = Sapiens2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.embeddings = Sapiens2Embeddings(config)
+        self.model = Sapiens2Encoder(config)
 
     def forward(
         self,

@@ -18,8 +18,10 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..clip.configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
@@ -35,6 +37,7 @@ from ..clip.modeling_clip import (
     CLIPVisionEmbeddings,
     CLIPVisionModel,
     CLIPVisionModelWithProjection,
+    _init_child_weight,
 )
 
 
@@ -113,6 +116,85 @@ class MetaClip2Config(CLIPConfig):
     >>> config = MetaClip2Config(text_config=config_text, vision_config=config_vision)
     ```"""
 
+    model_type = "metaclip_2"
+    sub_configs_defaults = {
+        "vision_config": MetaClip2VisionConfig,
+        "text_config": MetaClip2TextConfig,
+    }
+
+    def __post_init__(self, **kwargs):
+        # For backward compatibility check keyword args
+        # Instead of simply assigning `[text|vision]_config_dict` to `[text|vision]_config`, we use the values in
+        # `[text|vision]_config_dict` to update the values in `[text|vision]_config`. The values should be same in most
+        # cases, but we don't want to break anything regarding `_config_dict` that existed before commit `8827e1b2`.
+        if (text_config_dict := kwargs.pop("text_config_dict", None)) is not None:
+            # This is the complete result when using `text_config_dict`.
+            _text_config_dict = MetaClip2TextConfig(**text_config_dict).to_dict()
+            text_config = (
+                self.text_config.to_dict() if isinstance(self.text_config, PreTrainedConfig) else self.text_config
+            )
+            text_config = text_config or {}
+
+            # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
+            for key, value in _text_config_dict.items():
+                if key in text_config and value != text_config[key] and key != "transformers_version":
+                    # If specified in `text_config_dict`
+                    if key in text_config_dict:
+                        message = (
+                            f"`{key}` is found in both `text_config_dict` and `text_config` but with different values. "
+                            f'The value `text_config_dict["{key}"]` will be used instead.'
+                        )
+                    # If inferred from default argument values (just to be super careful)
+                    else:
+                        message = (
+                            f"`text_config_dict` is provided which will be used to initialize `CLIPTextConfig`. The "
+                            f'value `text_config["{key}"]` will be overridden.'
+                        )
+                    logger.info(message)
+
+            # Update all values in `text_config` with the ones in `_text_config_dict`.
+            text_config.update(_text_config_dict)
+            self.text_config = text_config
+
+        if (vision_config_dict := kwargs.pop("vision_config_dict", None)) is not None:
+            # This is the complete result when using `vision_config_dict`.
+            _vision_config_dict = MetaClip2VisionConfig(**vision_config_dict).to_dict()
+            vision_config = (
+                self.vision_config.to_dict()
+                if isinstance(self.vision_config, PreTrainedConfig)
+                else self.vision_config
+            )
+            vision_config = vision_config or {}
+
+            # convert keys to string instead of integer
+            if "id2label" in _vision_config_dict:
+                _vision_config_dict["id2label"] = {
+                    str(key): value for key, value in _vision_config_dict["id2label"].items()
+                }
+
+            # Give a warning if the values exist in both `_vision_config_dict` and `vision_config` but being different.
+            for key, value in _vision_config_dict.items():
+                if key in vision_config and value != vision_config[key] and key != "transformers_version":
+                    # If specified in `vision_config_dict`
+                    if key in vision_config_dict:
+                        message = (
+                            f"`{key}` is found in both `vision_config_dict` and `vision_config` but with different "
+                            f'values. The value `vision_config_dict["{key}"]` will be used instead.'
+                        )
+                    # If inferred from default argument values (just to be super careful)
+                    else:
+                        message = (
+                            f"`vision_config_dict` is provided which will be used to initialize `CLIPVisionConfig`. "
+                            f'The value `vision_config["{key}"]` will be overridden.'
+                        )
+                    logger.info(message)
+
+            # Update all values in `vision_config` with the ones in `_vision_config_dict`.
+            vision_config.update(_vision_config_dict)
+            self.vision_config = vision_config
+
+        PreTrainedConfig.__post_init__(self, **kwargs)
+
 
 class MetaClip2TextEmbeddings(CLIPTextEmbeddings):
     pass
@@ -137,7 +219,38 @@ class MetaClip2PreTrainedModel(CLIPPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        super()._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
+        factor = self.config.initializer_factor
+        if isinstance(module, MetaClip2TextEmbeddings):
+            _init_child_weight(module.token_embedding, factor * 0.02)
+            _init_child_weight(module.position_embedding, factor * 0.02)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+        elif isinstance(module, MetaClip2VisionEmbeddings):
+            init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
+            _init_child_weight(module.patch_embedding, module.config.initializer_range * factor)
+            _init_child_weight(module.position_embedding, module.config.initializer_range * factor)
+            init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
+        elif isinstance(module, MetaClip2Attention):
+            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            out_proj_std = (module.embed_dim**-0.5) * factor
+            _init_child_weight(module.q_proj, in_proj_std)
+            _init_child_weight(module.k_proj, in_proj_std)
+            _init_child_weight(module.v_proj, in_proj_std)
+            _init_child_weight(module.out_proj, out_proj_std)
+        elif isinstance(module, MetaClip2MLP):
+            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
+            _init_child_weight(module.fc1, fc_std)
+            _init_child_weight(module.fc2, in_proj_std)
+        elif isinstance(module, MetaClip2Model):
+            _init_child_weight(module.text_projection, module.text_embed_dim**-0.5 * factor)
+            _init_child_weight(module.visual_projection, module.vision_embed_dim**-0.5 * factor)
+        elif isinstance(module, MetaClip2VisionModelWithProjection):
+            _init_child_weight(module.visual_projection, self.config.hidden_size**-0.5 * factor)
+        elif isinstance(module, MetaClip2TextModelWithProjection):
+            _init_child_weight(module.text_projection, self.config.hidden_size**-0.5 * factor)
+        elif isinstance(module, MetaClip2ForImageClassification):
+            _init_child_weight(module.classifier, self.config.vision_config.hidden_size**-0.5 * factor)
         if hasattr(module, "logit_scale"):
             init.constant_(module.logit_scale, self.config.logit_scale_init_value)
 
@@ -264,6 +377,11 @@ class MetaClip2TextModelWithProjection(CLIPTextModelWithProjection):
     >>> outputs = model(**inputs)
     >>> text_embeds = outputs.text_embeds
     ```"""
+
+    def __init__(self, config: MetaClip2TextConfig):
+        super().__init__(config)
+
+        self.text_model = MetaClip2TextModel._from_config(config)
 
     def forward(
         self,
@@ -577,6 +695,11 @@ class MetaClip2VisionModelWithProjection(CLIPVisionModelWithProjection):
     >>> image_embeds = outputs.image_embeds
     ```"""
 
+    def __init__(self, config: MetaClip2VisionConfig):
+        super().__init__(config)
+
+        self.vision_model = MetaClip2VisionModel._from_config(config)
+
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
@@ -612,7 +735,9 @@ class MetaClip2VisionModelWithProjection(CLIPVisionModelWithProjection):
 
 
 class MetaClip2ForImageClassification(CLIPForImageClassification):
-    pass
+    def __init__(self, config: MetaClip2Config) -> None:
+        super().__init__(config)
+        self.vision_model = MetaClip2VisionModel._from_config(config.vision_config)
 
 
 __all__ = [

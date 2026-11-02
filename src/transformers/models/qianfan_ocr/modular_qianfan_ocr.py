@@ -19,6 +19,7 @@ import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
+from ... import initialization as init
 from ...configuration_utils import SubConfigSpec
 from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutputWithPooling
@@ -182,6 +183,20 @@ class QianfanOCRVisionPreTrainedModel(InternVLVisionPreTrainedModel):
         "hidden_states": QianfanOCRVisionLayer,
         "attentions": QianfanOCRVisionAttention,
     }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        super()._init_weights(module)
+        if isinstance(module, QianfanOCRVisionEmbeddings):
+            init.zeros_(module.cls_token)
+            if module.mask_token is not None:
+                init.zeros_(module.mask_token)
+            if module.position_embeddings is not None:
+                init.zeros_(module.position_embeddings)
+        elif isinstance(module, QianfanOCRVisionLayer):
+            init.constant_(module.lambda_1, self.config.layer_scale_init_value)
+            init.constant_(module.lambda_2, self.config.layer_scale_init_value)
 
 
 @auto_docstring

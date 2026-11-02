@@ -389,6 +389,22 @@ class GemmaTokenizer(LlamaTokenizer):
         raise AttributeError("Not needed for Gemma")
 ```
 
+### Inheriting from a class in the same modular file
+
+A modeling block inheriting from a class defined earlier in the same modular file is unpacked like a cross-model parent, from the parent's generated code. `super()` calls, `del`, and `AttributeError` work the same, and chains work too. Below, `MyModelKVSharedAttention` is generated as a standalone `nn.Module` without `k_proj`.
+
+```py
+class MyModelAttention(LlamaAttention):
+    ...
+
+class MyModelKVSharedAttention(MyModelAttention):
+    def __init__(self, config, layer_idx):
+        super().__init__(config, layer_idx)
+        del self.k_proj
+```
+
+`PreTrainedModel` subclasses, configs, processors and thin `*args` wrappers (such as deprecated aliases) keep regular inheritance.
+
 ### Overriding decorated methods
 
 When you override a decorated parent method, the parent's decorator carries over automatically. If you add your own decorator, it replaces the parent's.

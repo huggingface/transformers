@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
 import pathlib
 from dataclasses import dataclass
 from typing import Any
@@ -44,6 +45,7 @@ from ...image_utils import (
     validate_annotations,
 )
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
@@ -62,20 +64,24 @@ from ..detr.image_processing_detr import (
 )
 from ..dinov2.configuration_dinov2 import Dinov2Config
 from ..dinov2.modeling_dinov2 import (
+    Dinov2Attention,
     Dinov2Backbone,
     Dinov2Embeddings,
     Dinov2Encoder,
     Dinov2Layer,
+    Dinov2LayerScale,
     Dinov2PreTrainedModel,
 )
 from ..lw_detr.configuration_lw_detr import LwDetrConfig
 from ..lw_detr.modeling_lw_detr import (
+    LwDetrAttention,
     LwDetrC2FLayer,
     LwDetrConvEncoder,
     LwDetrConvNormLayer,
     LwDetrForObjectDetection,
     LwDetrLayerNorm,
     LwDetrModel,
+    LwDetrMultiscaleDeformableAttention,
     LwDetrObjectDetectionOutput,
     LwDetrPreTrainedModel,
     refine_bboxes,
@@ -653,6 +659,14 @@ class RfDetrDinov2Embeddings(Dinov2Embeddings):
         return embeddings
 
 
+class RfDetrDinov2Attention(Dinov2Attention):
+    pass
+
+
+class RfDetrDinov2LayerScale(Dinov2LayerScale):
+    pass
+
+
 class RfDetrDinov2Layer(Dinov2Layer):
     def __init__(self, config: RfDetrDinov2Config, layer_idx: int):
         super().__init__(config)
@@ -721,7 +735,27 @@ class RfDetrDinov2Layer(Dinov2Layer):
 
 
 class RfDetrDinov2PreTrainedModel(Dinov2PreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "hidden_states": RfDetrDinov2Layer,
+        "attentions": RfDetrDinov2Attention,
+    }
+
+    @torch.no_grad()
+    def _init_weights(self, module) -> None:
+        """Initialize the weights"""
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, RfDetrDinov2Embeddings):
+            if module.position_embeddings is not None:
+                init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
+            init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
+            if module.mask_token is not None:
+                init.zeros_(module.mask_token)
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        if isinstance(module, RfDetrDinov2LayerScale):
+            init.constant_(module.lambda1, self.config.layerscale_value)
 
 
 class RfDetrDinov2Encoder(Dinov2Encoder):
@@ -731,6 +765,11 @@ class RfDetrDinov2Encoder(Dinov2Encoder):
 
 
 class RfDetrDinov2Backbone(Dinov2Backbone):
+    def __init__(self, config: RfDetrDinov2Config):
+        super().__init__(config)
+        self.embeddings = RfDetrDinov2Embeddings(config)
+        self.encoder = RfDetrDinov2Encoder(config)
+
     def window_unpartition(self, hidden_state: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
         Reassembles windowed patch tokens into their original 2D patch layout (image-level grid structure)
@@ -848,7 +887,18 @@ class RfDetrConvNormLayer(LwDetrConvNormLayer):
 
 
 class RfDetrC2FLayer(LwDetrC2FLayer):
-    pass
+    # Inspired by RTDetrCSPRepLayer
+    def __init__(self, config: RfDetrConfig, in_channels: int):
+        super().__init__(config, in_channels)
+        num_blocks = config.c2f_num_blocks
+        activation = config.activation_function
+        out_channels = config.d_model
+
+        conv1_out_channels = 2 * self.hidden_channels
+        self.conv1 = RfDetrConvNormLayer(config, in_channels, conv1_out_channels, 1, 1, activation=activation)
+
+        conv2_in_channels = (2 + num_blocks) * self.hidden_channels
+        self.conv2 = RfDetrConvNormLayer(config, conv2_in_channels, out_channels, 1, 1, activation=activation)
 
 
 class RfDetrScaleProjector(nn.Module):
@@ -879,13 +929,56 @@ class RfDetrConvEncoder(LwDetrConvEncoder):
         return features, mask
 
 
+class RfDetrAttention(LwDetrAttention):
+    pass
+
+
+class RfDetrMultiscaleDeformableAttention(LwDetrMultiscaleDeformableAttention):
+    pass
+
+
 class RfDetrPreTrainedModel(LwDetrPreTrainedModel):
     # Roboflow checkpoints use bare keys with no top-level prefix
     _checkpoint_conversion_prefix_free = True
 
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
+
+        if isinstance(module, RfDetrMultiscaleDeformableAttention):
+            init.constant_(module.sampling_offsets.weight, 0.0)
+            thetas = torch.arange(module.n_heads, dtype=torch.int64).float() * (2.0 * math.pi / module.n_heads)
+            grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
+            grid_init = (
+                (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
+                .view(module.n_heads, 1, 1, 2)
+                .repeat(1, module.n_levels, module.n_points, 1)
+            )
+            for i in range(module.n_points):
+                grid_init[:, :, i, :] *= i + 1
+
+            init.copy_(module.sampling_offsets.bias, grid_init.view(-1))
+            init.constant_(module.attention_weights.weight, 0.0)
+            init.constant_(module.attention_weights.bias, 0.0)
+            init.xavier_uniform_(module.value_proj.weight)
+            init.constant_(module.value_proj.bias, 0.0)
+            init.xavier_uniform_(module.output_proj.weight)
+            init.constant_(module.output_proj.bias, 0.0)
+        if hasattr(module, "level_embed"):
+            init.normal_(module.level_embed)
+        if hasattr(module, "refpoint_embed") and module.refpoint_embed is not None:
+            init.constant_(module.refpoint_embed.weight, 0)
+        if hasattr(module, "class_embed") and module.class_embed is not None:
+            init.constant_(module.class_embed.bias, -math.log(99))
+        if hasattr(module, "bbox_embed") and module.bbox_embed is not None:
+            init.constant_(module.bbox_embed.layers[-1].weight, 0)
+            init.constant_(module.bbox_embed.layers[-1].bias, 0)
+        # The original deep-copies the initialized `class_embed` / `bbox_embed` into the encoder heads
+        if isinstance(module, RfDetrModel):
+            for class_head, bbox_head in zip(module.enc_out_class_embed, module.enc_out_bbox_embed):
+                init.constant_(class_head.bias, -math.log(99))
+                init.zeros_(bbox_head.layers[-1].weight)
+                init.zeros_(bbox_head.layers[-1].bias)
         if hasattr(module, "segmentation_bias") and isinstance(module.segmentation_bias, nn.Parameter):
             init.constant_(module.segmentation_bias, 0.0)
 
@@ -930,6 +1023,9 @@ class RfDetrModel(LwDetrModel):
     def __init__(self, config: RfDetrConfig):
         super().__init__(config)
         self.d_model = config.d_model
+
+        # Create backbone + positional encoding
+        self.backbone = RfDetrConvEncoder(config)
 
     def generate_topk_proposals(
         self, group_id: int, object_query_embedding: Tensor, output_proposals: Tensor, invalid_mask: Tensor, topk: int
@@ -1146,6 +1242,10 @@ class RfDetrObjectDetectionOutput(LwDetrObjectDetectionOutput):
 
 
 class RfDetrForObjectDetection(LwDetrForObjectDetection):
+    def __init__(self, config: RfDetrConfig):
+        super().__init__(config)
+        self.model = RfDetrModel(config)
+
     def predict_encoder_class_logits(self, enc_outputs_class: torch.Tensor) -> Tensor:
         """
         Predicts classification logits from encoder hidden states for each query group.

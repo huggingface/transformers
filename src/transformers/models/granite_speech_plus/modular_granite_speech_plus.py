@@ -18,15 +18,19 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
-from ...configuration_utils import PreTrainedConfig
+from ... import initialization as init
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..auto import AutoConfig
 from ..granite_speech.configuration_granite_speech import GraniteSpeechConfig, GraniteSpeechEncoderConfig
 from ..granite_speech.modeling_granite_speech import (
     GraniteSpeechCTCEncoder,
+    GraniteSpeechEncoderProjector,
     GraniteSpeechForConditionalGeneration,
     GraniteSpeechModel,
     GraniteSpeechPreTrainedModel,
@@ -102,6 +106,14 @@ class GraniteSpeechPlusConfig(GraniteSpeechConfig):
     >>> configuration = model.config
     ```"""
 
+    model_type = "granite_speech_plus"
+    attribute_map = {"audio_token_id": "audio_token_index"}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="granite"),
+        "encoder_config": GraniteSpeechPlusEncoderConfig,
+        "projector_config": SubConfigSpec(config_class=AutoConfig, model_type="blip_2_qformer"),
+    }
+
     def __post_init__(self, **kwargs):
         PreTrainedConfig.__post_init__(**kwargs)
 
@@ -121,10 +133,29 @@ class GraniteSpeechPlusConfig(GraniteSpeechConfig):
                 )
 
 
-class GraniteSpeechPlusPreTrainedModel(GraniteSpeechPreTrainedModel): ...
+class GraniteSpeechPlusEncoderProjector(GraniteSpeechEncoderProjector):
+    pass
 
 
-class GraniteSpeechPlusModel(GraniteSpeechModel): ...
+class GraniteSpeechPlusPreTrainedModel(GraniteSpeechPreTrainedModel):
+    @torch.no_grad()
+    def _init_weights(self, module: nn.Module):
+        """Initialize the weights."""
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, GraniteSpeechPlusEncoderProjector):
+            init.normal_(module.query)
+        elif isinstance(module, GraniteSpeechPlusCTCEncoder):
+            context_size = module.config.context_size
+            seq = torch.arange(context_size)
+            relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
+            attention_dists = torch.clamp(relpos_dist, -context_size, context_size) + module.config.max_pos_emb
+            init.copy_(module.attention_dists, attention_dists)
+
+
+class GraniteSpeechPlusModel(GraniteSpeechModel):
+    def __init__(self, config: GraniteSpeechPlusConfig):
+        super().__init__(config)
+        self.encoder = GraniteSpeechPlusCTCEncoder(config.encoder_config)
 
 
 class GraniteSpeechPlusCTCEncoder(GraniteSpeechCTCEncoder):

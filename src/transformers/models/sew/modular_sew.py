@@ -389,11 +389,16 @@ class SEWModel(SEWPreTrainedModel):
 
 
 class SEWForCTC(Wav2Vec2ForCTC):
-    pass
+    def __init__(self, config: SEWConfig, target_lang: str | None = None):
+        super().__init__(config, target_lang)
+
+        self.sew = SEWModel(config)
 
 
 class SEWForSequenceClassification(Wav2Vec2ForSequenceClassification):
-    pass
+    def __init__(self, config: SEWConfig):
+        super().__init__(config)
+        self.sew = SEWModel(config)
 
 
 __all__ = ["SEWForCTC", "SEWForSequenceClassification", "SEWModel", "SEWPreTrainedModel"]

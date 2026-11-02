@@ -15,15 +15,19 @@
 
 import torch
 from huggingface_hub.dataclasses import strict
+from torch import nn
 
 from ... import initialization as init
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, no_inherit_decorator
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..qwen3_5.configuration_qwen3_5 import Qwen3_5VisionConfig
 from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5GatedDeltaNet,
@@ -157,6 +161,10 @@ class Qwen3_5MoeConfig(Qwen3VLConfig):
     video_token_id: int = 248057
     vision_start_token_id: int = 248053
     vision_end_token_id: int = 248054
+    sub_configs_defaults = {
+        "vision_config": Qwen3_5MoeVisionConfig,
+        "text_config": Qwen3_5MoeTextConfig,
+    }
 
 
 class Qwen3_5MoeVisionRotaryEmbedding(Qwen3_5VisionRotaryEmbedding):
@@ -177,7 +185,12 @@ class Qwen3_5MoeGatedDeltaNet(Qwen3_5GatedDeltaNet):
 
 @no_inherit_decorator
 class Qwen3_5MoeAttention(Qwen3NextAttention):
-    pass
+    def __init__(self, config: Qwen3_5MoeConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.q_norm = Qwen3_5MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
+        self.k_norm = Qwen3_5MoeRMSNorm(
+            self.head_dim, eps=config.rms_norm_eps
+        )  # thus post q_norm does not need reshape
 
 
 class Qwen3_5MoeMLP(Qwen3_5MLP):
@@ -194,7 +207,10 @@ class Qwen3_5MoeTopKRouter(Qwen3VLMoeTextTopKRouter):
 
 
 class Qwen3_5MoeSparseMoeBlock(Qwen3NextSparseMoeBlock):
-    pass
+    def __init__(self, config):
+        super().__init__(config)
+        self.gate = Qwen3_5MoeTopKRouter(config)
+        self.shared_expert = Qwen3_5MoeMLP(config, intermediate_size=config.shared_expert_intermediate_size)
 
 
 @use_kernel_forward_from_hub("RMSNormZeroCentered")
@@ -218,6 +234,11 @@ class Qwen3_5MoeDecoderLayer(Qwen3NextDecoderLayer):
 
 class Qwen3_5MoePreTrainedModel(Qwen3NextPreTrainedModel):
     _no_split_modules = ["Qwen3_5MoeDecoderLayer", "Qwen3_5MoeVisionBlock"]
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(Qwen3_5MoeTopKRouter, index=0),
+        "hidden_states": Qwen3_5MoeDecoderLayer,
+        "attentions": Qwen3_5MoeAttention,
+    }
 
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
@@ -251,7 +272,83 @@ class Qwen3_5MoeCausalLMOutputWithPast(Qwen3VLMoeCausalLMOutputWithPast):
 
 
 class Qwen3_5MoeTextModel(Qwen3_5TextModel):
-    pass
+    def __init__(self, config: Qwen3_5MoeTextConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [Qwen3_5MoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+
+        # the hard coded `4` is for text, temporal, height and width.
+        if position_ids is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.view(1, 1, -1).expand(4, inputs_embeds.shape[0], -1)
+        elif position_ids.ndim == 2:
+            position_ids = position_ids[None, ...].expand(4, position_ids.shape[0], -1)
+
+        if position_ids.ndim == 3 and position_ids.shape[0] == 4:
+            text_position_ids = position_ids[0]
+            position_ids = position_ids[1:]
+        else:
+            text_position_ids = None
+
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            # Prepare mask arguments
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": text_position_ids,
+            }
+            # Create the masks
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
+            }
+
+        hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            hidden_states = decoder_layer(
+                hidden_states,
+                position_embeddings=position_embeddings,
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                position_ids=text_position_ids,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                **kwargs,
+            )
+
+        hidden_states = self.norm(hidden_states)
+
+        return Qwen3_5MoeModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values,
+        )
 
 
 class Qwen3_5MoeModel(Qwen3_5Model):
@@ -353,6 +450,10 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3VLMoeForConditionalGeneration):
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
     _fsdp_plan = {"lm_head": "keep_full_weight"}
+
+    def __init__(self, config: Qwen3_5MoeConfig):
+        super().__init__(config)
+        self.model = Qwen3_5MoeModel(config)
 
     def forward(self, **super_kwargs):
         r"""

@@ -15,7 +15,9 @@
 
 import torch
 from huggingface_hub.dataclasses import strict
+from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
@@ -25,7 +27,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..mixtral.modeling_mixtral import MixtralModel, MixtralPreTrainedModel
+from ..mixtral.modeling_mixtral import MixtralExperts, MixtralModel, MixtralPreTrainedModel
 from ..olmo2.modeling_olmo2 import Olmo2Attention, Olmo2RMSNorm, Olmo2RotaryEmbedding
 from ..olmoe.modeling_olmoe import (
     OlmoeDecoderLayer,
@@ -134,6 +136,10 @@ class FlexOlmoTopKRouter(OlmoeTopKRouter):
     pass
 
 
+class FlexOlmoExperts(MixtralExperts):
+    pass
+
+
 class FlexOlmoSparseMoeBlock(OlmoeSparseMoeBlock):
     pass
 
@@ -188,12 +194,30 @@ class FlexOlmoPreTrainedModel(MixtralPreTrainedModel):
         "attentions": FlexOlmoAttention,
     }
 
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        std = self.config.initializer_range
+        if isinstance(module, FlexOlmoExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, FlexOlmoTopKRouter):
+            init.normal_(module.weight, mean=0.0, std=std)
+
 
 # FlexOlmo uses Mixtral model as its base instead of OlmoE model since Mixtral is more up-to-date with the rest
 # of the transformers library. For example, it uses the newer mechanisms of recording submodule outputs.
 # FlexOlmo model is identical to Mixtral model except:
 # - FlexOlmo does not use sliding window attention.
 class FlexOlmoModel(MixtralModel):
+    def __init__(self, config: FlexOlmoConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [FlexOlmoDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = FlexOlmoRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = FlexOlmoRotaryEmbedding(config=config)
+
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring

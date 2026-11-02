@@ -33,7 +33,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import is_torchdynamo_compiling
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_position_ids
 from ..clip.modeling_clip import CLIPMLP, CLIPAttention, CLIPEncoderLayer
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts
@@ -627,6 +627,11 @@ class MiniMaxM3VLPreTrainedModel(MiniMaxM2PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _compatible_flash_implementations = ["MiniMaxAI/msa"]
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(MiniMaxM3VLTopKRouter, index=0),
+        "hidden_states": MiniMaxM3VLDecoderLayer,
+        "attentions": MiniMaxM3VLAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1129,6 +1134,10 @@ class MiniMaxM3VLModel(LlavaModel):
 @auto_docstring(custom_intro="MiniMax M3 VL full model with LM head (text + vision).")
 class MiniMaxM3SparseForConditionalGeneration(LlavaForConditionalGeneration):
     config: MiniMaxM3VLConfig
+
+    def __init__(self, config: MiniMaxM3VLConfig):
+        super().__init__(config)
+        self.model = MiniMaxM3VLModel(config)
 
     def get_image_features(self, pixel_values, image_grid_thw, **kwargs):
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)

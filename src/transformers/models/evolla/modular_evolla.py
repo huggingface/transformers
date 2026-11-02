@@ -697,6 +697,10 @@ class EvollaPreTrainedModel(LlamaPreTrainedModel):
         "EvollaSequenceCompressorResampler",
         "EvollaSequenceAlignerCrossAttention",
     ]
+    _can_record_outputs = {
+        "hidden_states": EvollaDecoderLayer,
+        "attentions": EvollaAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):

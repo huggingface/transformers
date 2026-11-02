@@ -37,7 +37,7 @@ from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeTopkRouter,
     eager_attention_forward,
 )
-from ..glm4v.configuration_glm4v import Glm4vConfig
+from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vForConditionalGeneration,
     Glm4vTextModel,
@@ -103,6 +103,10 @@ class Glm4vMoeTextConfig(Glm4MoeConfig):
     num_mtp_layers = AttributeError()
 
 
+class Glm4vMoeVisionConfig(Glm4vVisionConfig):
+    pass
+
+
 @auto_docstring(checkpoint="zai-org/GLM-4.5V")
 @strict
 class Glm4vMoeConfig(Glm4vConfig):
@@ -131,6 +135,10 @@ class Glm4vMoeConfig(Glm4vConfig):
 
     image_token_id: int = 151363
     video_token_id: int = 151364
+    sub_configs_defaults = {
+        "vision_config": Glm4vMoeVisionConfig,
+        "text_config": Glm4vMoeTextConfig,
+    }
 
 
 class Glm4vMoeTextRotaryEmbedding(Glm4vTextRotaryEmbedding):
@@ -220,6 +228,8 @@ class Glm4vMoeTextDecoderLayer(Glm4MoeDecoderLayer):
     def __init__(self, config: Glm4vMoeTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
 
+        self.self_attn = Glm4vMoeTextAttention(config=config, layer_idx=layer_idx)
+
 
 class Glm4vMoePreTrainedModel(Glm4MoePreTrainedModel):
     config: Glm4vMoeConfig
@@ -250,6 +260,13 @@ class Glm4vMoeTextModel(Glm4vTextModel):
         "attentions": Glm4vMoeTextAttention,
         "router_logits": OutputRecorder(Glm4vMoeTextTopkRouter, index=0),
     }
+
+    def __init__(self, config: Glm4vMoeTextConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [Glm4vMoeTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.rotary_emb = Glm4vMoeTextRotaryEmbedding(config=config)
 
     def forward(
         self,

@@ -356,6 +356,8 @@ class JanusVisionModel(Blip2VisionModel):
         super().__init__(config)
         self.encoder = JanusVisionEncoder(config)
 
+        self.embeddings = JanusVisionEmbeddings(config)
+
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
@@ -629,6 +631,9 @@ class JanusVQVAE(ChameleonVQVAE):
         super().__init__(config)
         self.decoder = JanusVQVAEDecoder(config)
         self.gradient_checkpointing = False
+
+        self.encoder = JanusVQVAEEncoder(config)
+        self.quantize = JanusVQVAEVectorQuantizer(config)
 
         # Initialize the VQVAE model.
         self.post_init()

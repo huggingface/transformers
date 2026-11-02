@@ -113,9 +113,16 @@ class HunYuanDenseV1DecoderLayer(LlamaDecoderLayer):
         super().__init__(config, layer_idx)
         self.layer_idx = layer_idx
 
+        self.self_attn = HunYuanDenseV1Attention(config=config, layer_idx=layer_idx)
+
+        self.mlp = HunYuanDenseV1MLP(config)
+
 
 class HunYuanDenseV1PreTrainedModel(LlamaPreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "hidden_states": HunYuanDenseV1DecoderLayer,
+        "attentions": HunYuanDenseV1Attention,
+    }
 
 
 class HunYuanDenseV1RotaryEmbedding(LlamaRotaryEmbedding):
@@ -164,7 +171,12 @@ class HunYuanDenseV1RotaryEmbedding(LlamaRotaryEmbedding):
 
 
 class HunYuanDenseV1Model(LlamaModel):
-    pass
+    def __init__(self, config: HunYuanDenseV1Config):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [HunYuanDenseV1DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.rotary_emb = HunYuanDenseV1RotaryEmbedding(config=config)
 
 
 class HunYuanDenseV1ForCausalLM(LlamaForCausalLM):

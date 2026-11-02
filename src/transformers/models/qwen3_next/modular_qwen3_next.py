@@ -109,6 +109,10 @@ class Qwen3NextAttention(Qwen3MoeAttention):
             config.hidden_size, config.num_attention_heads * self.head_dim * 2, bias=config.attention_bias
         )
         del self.sliding_window
+        self.q_norm = Qwen3NextRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
+        self.k_norm = Qwen3NextRMSNorm(
+            self.head_dim, eps=config.rms_norm_eps
+        )  # thus post q_norm does not need reshape
 
     def forward(
         self,
@@ -807,6 +811,7 @@ class Qwen3NextForCausalLM(MixtralForCausalLM):
     def __init__(self, config: Qwen3NextConfig):
         super().__init__(config)
         self.num_experts = config.num_experts
+        self.model = Qwen3NextModel(config)
 
     def forward(
         self,

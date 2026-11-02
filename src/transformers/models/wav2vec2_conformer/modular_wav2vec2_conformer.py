@@ -677,6 +677,7 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel, Wav2Vec2Model):
 class Wav2Vec2ConformerForPreTraining(Wav2Vec2ForPreTraining):
     def __init__(self, config: Wav2Vec2ConformerConfig):
         super().__init__(config)
+        self.wav2vec2_conformer = Wav2Vec2ConformerModel(config)
 
 
 class Wav2Vec2ConformerForCTC(Wav2Vec2ForCTC):
@@ -689,6 +690,8 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ForCTC):
         """
         super().__init__(config)
 
+        self.wav2vec2_conformer = Wav2Vec2ConformerModel(config)
+
     def tie_weights(self):
         raise AttributeError("Not needed for Wav2Vec2Conformer")
 
@@ -699,16 +702,20 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ForCTC):
 class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ForSequenceClassification):
     def __init__(self, config: Wav2Vec2ConformerConfig):
         super().__init__(config)
+        self.wav2vec2_conformer = Wav2Vec2ConformerModel(config)
 
 
 class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ForAudioFrameClassification):
     def __init__(self, config: Wav2Vec2ConformerConfig):
         super().__init__(config)
+        self.wav2vec2_conformer = Wav2Vec2ConformerModel(config)
 
 
 class Wav2Vec2ConformerForXVector(Wav2Vec2ForXVector):
     def __init__(self, config: Wav2Vec2ConformerConfig):
         super().__init__(config)
+
+        self.wav2vec2_conformer = Wav2Vec2ConformerModel(config)
 
 
 __all__ = [

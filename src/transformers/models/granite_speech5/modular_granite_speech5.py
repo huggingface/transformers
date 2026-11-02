@@ -141,6 +141,9 @@ class GraniteSpeech5CTCConfig(ParakeetCTCConfig):
     pad_token_id: int | None = 0
     # controls the tying of `ctc_head` to the encoder's (self-conditioning) CTC head `out`
     tie_word_embeddings: bool = True
+    sub_configs_defaults = {
+        "encoder_config": GraniteSpeech5EncoderConfig,
+    }
 
     def validate_architecture(self):
         if self.encoder_config.vocab_size != self.vocab_size:
@@ -260,7 +263,13 @@ def downsample_attention_mask(attention_mask: torch.Tensor) -> torch.Tensor:
     return attention_mask[:, : 2 * half_length].reshape(attention_mask.shape[0], half_length, 2).all(dim=2)
 
 
-class GraniteSpeech5EncoderBlock(GradientCheckpointingLayer, ParakeetEncoderBlock): ...
+class GraniteSpeech5EncoderBlock(GradientCheckpointingLayer, ParakeetEncoderBlock):
+    ...
+
+    def __init__(self, config: GraniteSpeech5EncoderConfig, layer_idx: int | None = None):
+        super().__init__(config, layer_idx)
+        self.self_attn = GraniteSpeech5EncoderAttention(config, layer_idx)
+        self.conv = GraniteSpeech5EncoderConvolutionModule(config)
 
 
 class GraniteSpeech5EncoderSubsamplingBlock(GraniteSpeech5EncoderBlock):

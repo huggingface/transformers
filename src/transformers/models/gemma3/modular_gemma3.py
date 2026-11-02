@@ -421,6 +421,10 @@ class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
     input_modalities = ("image", "text")
     _no_split_modules = ["Gemma3DecoderLayer"]
     _supports_sdpa = True
+    _can_record_outputs = {
+        "hidden_states": Gemma3DecoderLayer,
+        "attentions": Gemma3Attention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -466,6 +470,10 @@ class Gemma3TextModel(Gemma2Model):
         self.embed_tokens = Gemma3TextScaledWordEmbedding(
             config.vocab_size, config.hidden_size, self.padding_idx, embed_scale=self.config.hidden_size**0.5
         )
+        self.layers = nn.ModuleList(
+            [Gemma3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.rotary_emb = Gemma3RotaryEmbedding(config)
 
     def forward(
         self,
@@ -659,6 +667,7 @@ class Gemma3Model(PaliGemmaModel):
     def __init__(self, config: Gemma3Config):
         super().__init__(config)
         del self.text_config_dtype
+        self.multi_modal_projector = Gemma3MultiModalProjector(config)
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
@@ -755,6 +764,10 @@ class Gemma3Model(PaliGemmaModel):
 
 
 class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
+    def __init__(self, config: Gemma3Config):
+        super().__init__(config)
+        self.model = Gemma3Model(config)
+
     @can_return_tuple
     @auto_docstring
     def forward(

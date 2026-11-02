@@ -23,10 +23,11 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..clip.configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
@@ -43,6 +44,9 @@ from ..clip.modeling_clip import (
     CLIPVisionEmbeddings,
     CLIPVisionModel,
 )
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="CIDAS/clipseg-rd64")
@@ -135,6 +139,83 @@ class CLIPSegConfig(CLIPConfig):
     decoder_intermediate_size: int = 2048
     conditional_layer: int = 0
     use_complex_transposed_convolution: bool = False
+    sub_configs_defaults = {
+        "vision_config": CLIPSegVisionConfig,
+        "text_config": CLIPSegTextConfig,
+    }
+
+    def __post_init__(self, **kwargs):
+        # For backward compatibility check keyword args
+        # Instead of simply assigning `[text|vision]_config_dict` to `[text|vision]_config`, we use the values in
+        # `[text|vision]_config_dict` to update the values in `[text|vision]_config`. The values should be same in most
+        # cases, but we don't want to break anything regarding `_config_dict` that existed before commit `8827e1b2`.
+        if (text_config_dict := kwargs.pop("text_config_dict", None)) is not None:
+            # This is the complete result when using `text_config_dict`.
+            _text_config_dict = CLIPSegTextConfig(**text_config_dict).to_dict()
+            text_config = (
+                self.text_config.to_dict() if isinstance(self.text_config, PreTrainedConfig) else self.text_config
+            )
+            text_config = text_config or {}
+
+            # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
+            for key, value in _text_config_dict.items():
+                if key in text_config and value != text_config[key] and key != "transformers_version":
+                    # If specified in `text_config_dict`
+                    if key in text_config_dict:
+                        message = (
+                            f"`{key}` is found in both `text_config_dict` and `text_config` but with different values. "
+                            f'The value `text_config_dict["{key}"]` will be used instead.'
+                        )
+                    # If inferred from default argument values (just to be super careful)
+                    else:
+                        message = (
+                            f"`text_config_dict` is provided which will be used to initialize `CLIPTextConfig`. The "
+                            f'value `text_config["{key}"]` will be overridden.'
+                        )
+                    logger.info(message)
+
+            # Update all values in `text_config` with the ones in `_text_config_dict`.
+            text_config.update(_text_config_dict)
+            self.text_config = text_config
+
+        if (vision_config_dict := kwargs.pop("vision_config_dict", None)) is not None:
+            # This is the complete result when using `vision_config_dict`.
+            _vision_config_dict = CLIPSegVisionConfig(**vision_config_dict).to_dict()
+            vision_config = (
+                self.vision_config.to_dict()
+                if isinstance(self.vision_config, PreTrainedConfig)
+                else self.vision_config
+            )
+            vision_config = vision_config or {}
+
+            # convert keys to string instead of integer
+            if "id2label" in _vision_config_dict:
+                _vision_config_dict["id2label"] = {
+                    str(key): value for key, value in _vision_config_dict["id2label"].items()
+                }
+
+            # Give a warning if the values exist in both `_vision_config_dict` and `vision_config` but being different.
+            for key, value in _vision_config_dict.items():
+                if key in vision_config and value != vision_config[key] and key != "transformers_version":
+                    # If specified in `vision_config_dict`
+                    if key in vision_config_dict:
+                        message = (
+                            f"`{key}` is found in both `vision_config_dict` and `vision_config` but with different "
+                            f'values. The value `vision_config_dict["{key}"]` will be used instead.'
+                        )
+                    # If inferred from default argument values (just to be super careful)
+                    else:
+                        message = (
+                            f"`vision_config_dict` is provided which will be used to initialize `CLIPVisionConfig`. "
+                            f'The value `vision_config["{key}"]` will be overridden.'
+                        )
+                    logger.info(message)
+
+            # Update all values in `vision_config` with the ones in `_vision_config_dict`.
+            vision_config.update(_vision_config_dict)
+            self.vision_config = vision_config
+
+        PreTrainedConfig.__post_init__(self, **kwargs)
 
 
 class CLIPSegOutput(CLIPOutput):
@@ -401,6 +482,11 @@ class CLIPSegTextModel(CLIPTextModel):
 
 
 class CLIPSegVisionModel(CLIPVisionModel):
+    def __init__(self, config: CLIPSegVisionConfig):
+        super().__init__(config)
+
+        self.embeddings = CLIPSegVisionEmbeddings(config)
+
     def forward(
         self,
         pixel_values: torch.FloatTensor | None,
@@ -433,6 +519,15 @@ class CLIPSegVisionModel(CLIPVisionModel):
 
 
 class CLIPSegModel(CLIPModel):
+    def __init__(self, config: CLIPSegConfig):
+        super().__init__(config)
+
+        text_config = config.text_config
+        vision_config = config.vision_config
+
+        self.text_model = CLIPSegTextModel._from_config(text_config)
+        self.vision_model = CLIPSegVisionModel._from_config(vision_config)
+
     def get_text_features(self, **super_kwargs):
         r"""
         Examples:

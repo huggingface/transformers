@@ -33,6 +33,7 @@ from ...modeling_layers import GenericForSequenceClassification, GenericForToken
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
+from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
@@ -242,11 +243,20 @@ class AXK1Attention(DeepseekV3Attention):
 
 
 class AXK1DecoderLayer(Glm4MoeLiteDecoderLayer):
-    pass
+    def __init__(self, config: AXK1Config, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.self_attn = AXK1Attention(config, layer_idx)
+
+        self.mlp = AXK1MoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else AXK1MLP(config)
 
 
 class AXK1PreTrainedModel(DeepseekV3PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["inv_freq"]
+    _can_record_outputs = {
+        "hidden_states": AXK1DecoderLayer,
+        "attentions": AXK1Attention,
+        "router_logits": OutputRecorder(AXK1TopkRouter, index=0),
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -260,7 +270,11 @@ class AXK1PreTrainedModel(DeepseekV3PreTrainedModel):
 
 
 class AXK1Model(DeepseekV3Model):
-    pass
+    def __init__(self, config: AXK1Config):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [AXK1DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
 
 class AXK1ForCausalLM(DeepseekV3ForCausalLM):

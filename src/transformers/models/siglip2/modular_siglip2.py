@@ -13,6 +13,7 @@
 # limitations under the License.
 
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -36,7 +37,9 @@ from transformers.models.siglip.modeling_siglip import (
     SiglipVisionModelOutput,
 )
 
+from ... import initialization as init
 from ...masking_utils import create_bidirectional_mask
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -45,6 +48,7 @@ from ...utils import (
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..siglip.modeling_siglip import SiglipAttention, SiglipMLP, SiglipTextEmbeddings
 
 
 class Siglip2Tokenizer(GemmaTokenizer):
@@ -121,7 +125,10 @@ class Siglip2VisionConfig(SiglipVisionConfig):
 @auto_docstring(checkpoint="google/siglip2-base-patch16-naflex")
 @strict
 class Siglip2Config(SiglipConfig):
-    pass
+    sub_configs_defaults = {
+        "vision_config": Siglip2VisionConfig,
+        "text_config": Siglip2TextConfig,
+    }
 
 
 class Siglip2VisionOutput(SiglipVisionModelOutput):
@@ -240,15 +247,79 @@ class Siglip2VisionEmbeddings(nn.Module):
         return embeddings
 
 
+class Siglip2TextEmbeddings(SiglipTextEmbeddings):
+    pass
+
+
+class Siglip2Attention(SiglipAttention):
+    pass
+
+
+class Siglip2MLP(SiglipMLP):
+    pass
+
+
 class Siglip2PreTrainedModel(SiglipPreTrainedModel):
     # nn.MultiHeadAttention mask doesn't allow for non 4d mask
     _supports_flex_attn = False
     _supports_flash_attn = False
 
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, Siglip2VisionEmbeddings):
+            width = (
+                self.config.vision_config.hidden_size
+                if isinstance(self.config, Siglip2Config)
+                else self.config.hidden_size
+            )
+            init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
+            if hasattr(module, "position_ids"):
+                init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+        elif isinstance(module, nn.Embedding):
+            init.default_flax_embed_init_(module.weight)
+        elif isinstance(module, Siglip2Attention):
+            init.xavier_uniform_(module.q_proj.weight)
+            init.xavier_uniform_(module.k_proj.weight)
+            init.xavier_uniform_(module.v_proj.weight)
+            init.xavier_uniform_(module.out_proj.weight)
+            init.zeros_(module.q_proj.bias)
+            init.zeros_(module.k_proj.bias)
+            init.zeros_(module.v_proj.bias)
+            init.zeros_(module.out_proj.bias)
+        elif isinstance(module, Siglip2MLP):
+            init.xavier_uniform_(module.fc1.weight)
+            init.xavier_uniform_(module.fc2.weight)
+            init.normal_(module.fc1.bias, std=1e-6)
+            init.normal_(module.fc2.bias, std=1e-6)
+        elif isinstance(module, Siglip2MultiheadAttentionPoolingHead):
+            init.xavier_uniform_(module.probe)
+            init.xavier_uniform_(module.attention.in_proj_weight)
+            init.zeros_(module.attention.in_proj_bias)
+        elif isinstance(module, Siglip2Model):
+            init.zeros_(module.logit_scale)
+            init.zeros_(module.logit_bias)
+        elif isinstance(module, Siglip2ForImageClassification):
+            init.normal_(
+                module.classifier.weight,
+                std=self.config.vision_config.hidden_size**-0.5 * self.config.initializer_factor,
+            )
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+            init.lecun_normal_(module.weight)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, Siglip2TextEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+
 
 class Siglip2VisionModel(SiglipVisionModel):
     def __init__(self, config: Siglip2VisionConfig):
         super().__init__(config)
+
+        self.embeddings = Siglip2VisionEmbeddings(config)
+        if self.use_head:
+            self.head = Siglip2MultiheadAttentionPoolingHead(config)
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
@@ -358,6 +429,11 @@ class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
 
 
 class Siglip2Model(SiglipModel):
+    def __init__(self, config: Siglip2Config):
+        super().__init__(config)
+        vision_config = config.vision_config
+        self.vision_model = Siglip2VisionModel._from_config(vision_config)
+
     # Update: add `spatial_shapes` and `pixel_attention_mask`
     @can_return_tuple
     @auto_docstring
@@ -501,6 +577,10 @@ class Siglip2Model(SiglipModel):
 
 
 class Siglip2ForImageClassification(SiglipForImageClassification):
+    def __init__(self, config: Siglip2Config) -> None:
+        super().__init__(config)
+        self.vision_model = Siglip2VisionModel._from_config(config.vision_config)
+
     # Update: add `spatial_shapes` and `pixel_attention_mask`
     @can_return_tuple
     @auto_docstring

@@ -251,7 +251,9 @@ class PPLCNetV4Block(nn.Module):
 
 
 class PPLCNetV4PreTrainedModel(PPLCNetPreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "hidden_states": PPLCNetV4Block,
+    }
 
 
 class PPLCNetV4Encoder(PPLCNetEncoder):
@@ -261,10 +263,15 @@ class PPLCNetV4Encoder(PPLCNetEncoder):
 
         # stem
         self.convolution = PPLCNetV4LargeStem(config) if config.stem_type == "large" else PPLCNetV4SmallStem(config)
+        for stage_index in range(len(config.block_configs)):
+            block = PPLCNetV4Block(config, stage_index)
+            self.blocks.append(block)
 
 
 class PPLCNetV4Backbone(PPLCNetBackbone):
-    pass
+    def __init__(self, config: PPLCNetV4Config):
+        super().__init__(config)
+        self.encoder = PPLCNetV4Encoder(config)
 
 
 __all__ = [

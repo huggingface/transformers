@@ -94,11 +94,17 @@ class MinistralRMSNorm(Qwen2RMSNorm):
 
 
 class MinistralDecoderLayer(Qwen2DecoderLayer):
-    pass
+    def __init__(self, config: MinistralConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+        self.self_attn = MinistralAttention(config=config, layer_idx=layer_idx)
 
 
 class MinistralPreTrainedModel(Qwen2PreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "hidden_states": MinistralDecoderLayer,
+        "attentions": MinistralAttention,
+    }
 
 
 class MinistralRotaryEmbedding(Qwen2RotaryEmbedding):
@@ -175,7 +181,9 @@ class MinistralModel(Qwen2Model):
 
 
 class MinistralForCausalLM(Qwen2ForCausalLM):
-    pass
+    def __init__(self, config: MinistralConfig):
+        super().__init__(config)
+        self.model = MinistralModel(config)
 
 
 class MinistralForSequenceClassification(Qwen2ForSequenceClassification):

@@ -1075,6 +1075,7 @@ class MuseGlimmerModel(Kimi_K25Model):
         self.vision_adapter = MuseGlimmerVisionAdapter(config)
         self.vision_projection = nn.Linear(config.projector_hidden_size, config.text_config.hidden_size, bias=False)
         self.perception_emb_norm = MuseGlimmerRMSNorm(eps=config.text_config.rms_norm_eps, with_scale=False)
+        self.vision_tower = MuseGlimmerVisionModel._from_config(config.vision_config)
 
     def get_image_features(
         self,
@@ -1098,6 +1099,10 @@ class MuseGlimmerModel(Kimi_K25Model):
 class MuseGlimmerForConditionalGeneration(Kimi_K25ForConditionalGeneration):
     input_modalities = ("image", "video", "text")
     _tp_plan = {"lm_head": "colwise_gather_output"}
+
+    def __init__(self, config: MuseGlimmerConfig):
+        super().__init__(config)
+        self.model = MuseGlimmerModel(config)
 
     def forward(
         self,

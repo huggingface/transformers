@@ -396,11 +396,16 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
 
 
 class UniSpeechForCTC(Wav2Vec2ForCTC):
-    pass
+    def __init__(self, config: UniSpeechConfig, target_lang: str | None = None):
+        super().__init__(config, target_lang)
+
+        self.unispeech = UniSpeechModel(config)
 
 
 class UniSpeechForSequenceClassification(Wav2Vec2ForSequenceClassification):
-    pass
+    def __init__(self, config: UniSpeechConfig):
+        super().__init__(config)
+        self.unispeech = UniSpeechModel(config)
 
 
 __all__ = [

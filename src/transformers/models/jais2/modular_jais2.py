@@ -19,6 +19,7 @@ from huggingface_hub.dataclasses import strict
 from ...utils import auto_docstring, can_return_tuple
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
+    LlamaAttention,
     LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaModel,
@@ -58,24 +59,42 @@ class Jais2MLP(NemotronMLP):
     pass
 
 
+class Jais2Attention(LlamaAttention):
+    pass
+
+
 class Jais2DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: Jais2Config, layer_idx: int):
         super().__init__(config, layer_idx)
+
+        self.self_attn = Jais2Attention(config=config, layer_idx=layer_idx)
+
+        self.mlp = Jais2MLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
 
 class Jais2PreTrainedModel(LlamaPreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "hidden_states": Jais2DecoderLayer,
+        "attentions": Jais2Attention,
+    }
 
 
 class Jais2Model(LlamaModel):
     def __init__(self, config: Jais2Config):
         super().__init__(config)
+        self.layers = nn.ModuleList(
+            [Jais2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
 
 class Jais2ForCausalLM(LlamaForCausalLM):
+    def __init__(self, config: Jais2Config):
+        super().__init__(config)
+        self.model = Jais2Model(config)
+
     @can_return_tuple
     @auto_docstring
     def forward(self, **super_kwargs):

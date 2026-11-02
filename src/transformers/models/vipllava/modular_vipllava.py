@@ -73,6 +73,11 @@ class VipLlavaPreTrainedModel(LlavaPreTrainedModel):
 
 
 class VipLlavaModel(LlavaModel):
+    def __init__(self, config: VipLlavaConfig):
+        super().__init__(config)
+
+        self.multi_modal_projector = VipLlavaMultiModalProjector(config)
+
     @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
@@ -179,6 +184,10 @@ class VipLlavaModel(LlavaModel):
 
 
 class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
+    def __init__(self, config: VipLlavaConfig):
+        super().__init__(config)
+        self.model = VipLlavaModel(config)
+
     @auto_docstring
     def get_image_features(
         self,

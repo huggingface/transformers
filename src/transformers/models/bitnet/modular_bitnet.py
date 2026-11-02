@@ -100,7 +100,12 @@ class BitNetAttention(LlamaAttention):
 
 
 class BitNetDecoderLayer(LlamaDecoderLayer):
-    pass
+    def __init__(self, config: BitNetConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+        self.self_attn = BitNetAttention(config=config, layer_idx=layer_idx)
+
+        self.mlp = BitNetMLP(config)
 
 
 class BitNetModel(LlamaModel):

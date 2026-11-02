@@ -198,6 +198,8 @@ class EsmcLayer(LlamaDecoderLayer):
         # ESM3 residual scaling to stabilise deep networks; every released checkpoint uses it.
         self.scaling_factor = math.sqrt(config.num_hidden_layers / 36)
 
+        self.self_attn = EsmcAttention(config=config, layer_idx=layer_idx)
+
     def forward(
         self,
         hidden_states: torch.Tensor,

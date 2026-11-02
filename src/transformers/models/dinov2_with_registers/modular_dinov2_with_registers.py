@@ -204,7 +204,9 @@ class Dinov2WithRegistersEncoder(Dinov2Encoder):
 
 
 class Dinov2WithRegistersModel(Dinov2Model):
-    pass
+    def __init__(self, config: Dinov2WithRegistersConfig):
+        super().__init__(config)
+        self.embeddings = Dinov2WithRegistersEmbeddings(config)
 
 
 class Dinov2WithRegistersForImageClassification(Dinov2ForImageClassification):
@@ -224,6 +226,7 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
     def __init__(self, config: Dinov2WithRegistersConfig):
         super().__init__(config)
         self.num_register_tokens = config.num_register_tokens
+        self.embeddings = Dinov2WithRegistersEmbeddings(config)
 
     def forward(
         self,

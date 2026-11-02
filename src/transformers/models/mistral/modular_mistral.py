@@ -164,7 +164,9 @@ class MistralModel(LlamaModel):
 
 
 class MistralForCausalLM(LlamaForCausalLM):
-    pass
+    def __init__(self, config: MistralConfig):
+        super().__init__(config)
+        self.model = MistralModel(config)
 
 
 class MistralForTokenClassification(LlamaForTokenClassification):

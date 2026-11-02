@@ -32,7 +32,14 @@ from ...utils import (
 from ...utils.output_capturing import capture_outputs
 from ..csm.modeling_csm import CsmBackboneModelEmbeddings
 from ..llama.configuration_llama import LlamaConfig
-from ..llama.modeling_llama import LlamaDecoderLayer, LlamaMLP, LlamaModel, LlamaPreTrainedModel, LlamaRMSNorm
+from ..llama.modeling_llama import (
+    LlamaAttention,
+    LlamaDecoderLayer,
+    LlamaMLP,
+    LlamaModel,
+    LlamaPreTrainedModel,
+    LlamaRMSNorm,
+)
 from .generation_higgs_audio_v2 import HiggsAudioV2GenerationMixin
 
 
@@ -103,6 +110,10 @@ class HiggsAudioV2MLP(LlamaMLP):
 
 
 class HiggsAudioV2RMSNorm(LlamaRMSNorm):
+    pass
+
+
+class HiggsAudioV2Attention(LlamaAttention):
     pass
 
 
@@ -177,6 +188,11 @@ class HiggsAudioV2Embeddings(CsmBackboneModelEmbeddings):
 
 
 class HiggsAudioV2PreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": HiggsAudioV2DecoderLayer,
+        "attentions": HiggsAudioV2Attention,
+    }
+
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(module)
@@ -190,6 +206,9 @@ class HiggsAudioV2PreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
 class HiggsAudioV2Model(LlamaModel):
     def __init__(self, config: HiggsAudioV2Config):
         super().__init__(config)
+        self.layers = nn.ModuleList(
+            [HiggsAudioV2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self.embed_audio_tokens = HiggsAudioV2Embeddings(config)
 
     def get_placeholder_mask(

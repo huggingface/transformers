@@ -1363,6 +1363,8 @@ class Florence2Model(LlavaModel):
         super().__init__(config)
         self.vision_tower = Florence2VisionBackbone(config=config.vision_config)
 
+        self.multi_modal_projector = Florence2MultiModalProjector(config)
+
     def get_encoder(self, modality=None):
         if modality is None:
             return self.language_model.get_encoder()
@@ -1460,6 +1462,10 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
     _tied_weights_keys = {
         "lm_head.weight": "model.language_model.shared.weight",
     }
+
+    def __init__(self, config: Florence2Config):
+        super().__init__(config)
+        self.model = Florence2Model(config)
 
     @auto_docstring
     def get_image_features(

@@ -123,6 +123,10 @@ class GlmOcrConfig(Glm4vConfig):
     image_end_token_id: int = 59257
     video_start_token_id: int = 59258
     video_end_token_id: int = 59259
+    sub_configs_defaults = {
+        "vision_config": GlmOcrVisionConfig,
+        "text_config": GlmOcrTextConfig,
+    }
 
 
 class GlmOcrTextAttention(Glm4vTextAttention, nn.Module):
@@ -135,7 +139,9 @@ class GlmOcrTextAttention(Glm4vTextAttention, nn.Module):
 
 
 class GlmOcrTextDecoderLayer(Glm4vTextDecoderLayer):
-    pass
+    def __init__(self, config: GlmOcrTextConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.self_attn = GlmOcrTextAttention(config, layer_idx)
 
 
 class GlmOcrPreTrainedModel(Glm4vPreTrainedModel):
@@ -230,6 +236,7 @@ class GlmOcrVisionBlock(Glm4vVisionBlock):
     def __init__(self, config) -> None:
         super().__init__()
         self.mlp = GlmOcrVisionMlp(config, bias=config.attention_bias)
+        self.attn = GlmOcrVisionAttention(config)
 
 
 class GlmOcrVisionPatchMerger(Glm4vVisionPatchMerger):
@@ -237,6 +244,11 @@ class GlmOcrVisionPatchMerger(Glm4vVisionPatchMerger):
 
 
 class GlmOcrVisionModel(Glm4vVisionModel):
+    _can_record_outputs = {
+        "hidden_states": GlmOcrVisionBlock,
+        "attentions": GlmOcrVisionAttention,
+    }
+
     def __init__(self, config: GlmOcrVisionConfig) -> None:
         super().__init__(config)
         del self.embeddings
@@ -246,6 +258,8 @@ class GlmOcrVisionModel(Glm4vVisionModel):
             context_dim=config.out_hidden_size * config.in_channels,
             hidden_act=config.hidden_act,
         )
+
+        self.blocks = nn.ModuleList([GlmOcrVisionBlock(config) for _ in range(config.depth)])
 
     def forward(
         self,
@@ -299,7 +313,9 @@ class GlmOcrTextModel(Glm4vTextModel):
 
 
 class GlmOcrModel(Glm4vModel):
-    pass
+    def __init__(self, config: GlmOcrConfig):
+        super().__init__(config)
+        self.visual = GlmOcrVisionModel._from_config(config.vision_config)
 
 
 class GlmOcrForConditionalGeneration(Glm4vForConditionalGeneration):

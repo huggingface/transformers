@@ -17,6 +17,7 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ... import initialization as init
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
@@ -163,6 +164,7 @@ class PixioLayer(ViTLayer):
     def __init__(self, config: PixioConfig):
         super().__init__(config)
         self.drop_path = PixioDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.mlp = PixioMLP(config)
 
     def forward(
         self,
@@ -186,7 +188,21 @@ class PixioLayer(ViTLayer):
 
 
 class PixioPreTrainedModel(ViTPreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "hidden_states": PixioLayer,
+        "attentions": PixioAttention,
+    }
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        super()._init_weights(module)
+        if isinstance(module, PixioEmbeddings):
+            if module.position_embeddings is not None:
+                init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
+            init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
+            if module.mask_token is not None:
+                init.zeros_(module.mask_token)
 
 
 @auto_docstring

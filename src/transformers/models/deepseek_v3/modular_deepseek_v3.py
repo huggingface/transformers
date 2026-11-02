@@ -132,6 +132,14 @@ class DeepseekV3MoE(DeepseekV2Moe):
     A mixed expert module containing shared experts.
     """
 
+    def __init__(self, config: DeepseekV3Config):
+        super().__init__(config)
+        self.experts = DeepseekV3Experts(config)
+        self.gate = DeepseekV3TopkRouter(config)
+        self.shared_experts = DeepseekV3MLP(
+            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
+        )
+
 
 class DeepseekV3Attention(DeepseekV2Attention):
     """Multi-headed Latent Attention (MLA) from Deepseek V2, with support for rope interleave."""
@@ -232,7 +240,12 @@ class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
 
 
 class DeepseekV3Model(DeepseekV2Model):
-    pass
+    def __init__(self, config: DeepseekV3Config):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [DeepseekV3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.rotary_emb = DeepseekV3RotaryEmbedding(config=config)
 
 
 class DeepseekV3ForCausalLM(DeepseekV2ForCausalLM):

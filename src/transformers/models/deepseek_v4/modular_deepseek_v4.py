@@ -1186,6 +1186,7 @@ class DeepseekV4Model(LlamaModel):
         )
         self.rotary_emb = DeepseekV4RotaryEmbedding(config)
         self.hc_head = DeepseekV4HyperHead(config)
+        self.norm = DeepseekV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_init()
 
     @merge_with_config_defaults
@@ -1246,7 +1247,9 @@ class DeepseekV4Model(LlamaModel):
 
 
 class DeepseekV4ForCausalLM(MixtralForCausalLM):
-    pass
+    def __init__(self, config: DeepseekV4Config):
+        super().__init__(config)
+        self.model = DeepseekV4Model(config)
 
 
 __all__ = [

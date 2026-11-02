@@ -17,6 +17,7 @@ from collections.abc import Callable
 
 import torch
 from huggingface_hub.dataclasses import strict
+from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
@@ -224,6 +225,8 @@ class MiniCPM3DecoderLayer(LlamaDecoderLayer):
         # (Llama adds the branch directly). Precompute the constant once instead of per forward.
         self.residual_scale = config.scale_depth / math.sqrt(config.num_hidden_layers)
 
+        self.self_attn = MiniCPM3Attention(config=config, layer_idx=layer_idx)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -255,6 +258,11 @@ class MiniCPM3DecoderLayer(LlamaDecoderLayer):
 
 
 class MiniCPM3PreTrainedModel(LlamaPreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": MiniCPM3DecoderLayer,
+        "attentions": MiniCPM3Attention,
+    }
+
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
@@ -270,10 +278,17 @@ class MiniCPM3Model(LlamaModel):
         self.embed_tokens = MiniCPM3ScaledWordEmbedding(
             config.vocab_size, config.hidden_size, self.padding_idx, embed_scale=config.scale_emb
         )
+        self.layers = nn.ModuleList(
+            [MiniCPM3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
 
 @auto_docstring
 class MiniCPM3ForCausalLM(LlamaForCausalLM):
+    def __init__(self, config: MiniCPM3Config):
+        super().__init__(config)
+        self.model = MiniCPM3Model(config)
+
     @can_return_tuple
     @auto_docstring
     def forward(
