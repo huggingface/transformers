@@ -41,7 +41,7 @@ from ...image_utils import (
     get_max_height_width,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, logging, requires_backends
+from ...utils import TensorType, auto_docstring, is_torch_available, logging
 from ...utils.import_utils import requires
 
 
@@ -613,7 +613,6 @@ class Mask2FormerImageProcessorPil(PilBackend):
             `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`). In both cases,
             `(height, width)` corresponds to the target size (if `target_sizes` is specified).
         """
-        requires_backends(self, ["torch"])
         class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
         masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
 
@@ -706,7 +705,6 @@ class Mask2FormerImageProcessorPil(PilBackend):
                 - **label_id** -- An integer representing the label / semantic class id corresponding to `segment_id`.
                 - **score** -- Prediction score of segment with `segment_id`.
         """
-        requires_backends(self, ["torch"])
         if return_coco_annotation and return_binary_maps:
             raise ValueError("return_coco_annotation and return_binary_maps can not be both set to True.")
 
@@ -785,6 +783,7 @@ class Mask2FormerImageProcessorPil(PilBackend):
         return results
 
     # Adapted from transformers.models.mask2former.image_processing_mask2former.Mask2FormerImageProcessor.post_process_panoptic_segmentation
+    @requires(backends=("torch",))
     def post_process_panoptic_segmentation(
         self,
         outputs,
@@ -829,7 +828,6 @@ class Mask2FormerImageProcessorPil(PilBackend):
                   Multiple instances of the same class / label were fused and assigned a single `segment_id`.
                 - **score** -- Prediction score of segment with `segment_id`.
         """
-        requires_backends(self, ["torch"])
         if label_ids_to_fuse is None:
             logger.warning("`label_ids_to_fuse` unset. No instance will be fused.")
             label_ids_to_fuse = set()

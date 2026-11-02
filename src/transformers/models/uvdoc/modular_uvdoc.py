@@ -37,7 +37,6 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import TensorType, merge_with_config_defaults
-from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
 from ..pp_lcnet.modeling_pp_lcnet import PPLCNetConvLayer
@@ -155,7 +154,6 @@ class UVDocConfig(PreTrainedConfig):
 
 
 @auto_docstring
-@requires(backends=("torch",))
 class UVDocImageProcessor(TorchvisionBackend):
     do_rescale = True
     do_resize = True
@@ -482,7 +480,7 @@ class UVDocPreTrainedModel(PPOCRV5ServerDetPreTrainedModel):
 
 
 class UVDocBridge(UVDocPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: UVDocConfig):
         super().__init__(config)
         self.bridge = nn.ModuleList([])
         for bridge_index in range(len(config.stage_configs)):

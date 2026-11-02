@@ -40,6 +40,7 @@ from ..roberta.modeling_roberta import (
     RobertaModel,
     RobertaPreTrainedModel,
 )
+from .configuration_camembert import CamembertConfig
 
 
 class CamembertPreTrainedModel(RobertaPreTrainedModel):
@@ -56,7 +57,7 @@ class CamembertForMaskedLM(RobertaForMaskedLM):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: CamembertConfig):
         super().__init__(config)
         del self.camembert
 
@@ -117,7 +118,7 @@ class CamembertForMaskedLM(RobertaForMaskedLM):
 
 
 class CamembertForSequenceClassification(RobertaForSequenceClassification):
-    def __init__(self, config):
+    def __init__(self, config: CamembertConfig):
         super().__init__(config)
         del self.camembert
 
@@ -192,7 +193,7 @@ class CamembertForSequenceClassification(RobertaForSequenceClassification):
 
 
 class CamembertForMultipleChoice(RobertaForMultipleChoice):
-    def __init__(self, config):
+    def __init__(self, config: CamembertConfig):
         super().__init__(config)
         del self.camembert
 
@@ -280,7 +281,7 @@ class CamembertForMultipleChoice(RobertaForMultipleChoice):
 
 
 class CamembertForTokenClassification(RobertaForTokenClassification):
-    def __init__(self, config):
+    def __init__(self, config: CamembertConfig):
         super().__init__(config)
         del self.camembert
 
@@ -340,7 +341,7 @@ class CamembertForTokenClassification(RobertaForTokenClassification):
 
 
 class CamembertForQuestionAnswering(RobertaForQuestionAnswering):
-    def __init__(self, config):
+    def __init__(self, config: CamembertConfig):
         super().__init__(config)
         del self.camembert
 
@@ -419,7 +420,7 @@ class CamembertForCausalLM(RobertaForCausalLM):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: CamembertConfig):
         super().__init__(config)
         del self.camembert
 

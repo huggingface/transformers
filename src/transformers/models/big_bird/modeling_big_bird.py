@@ -1477,7 +1477,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: BigBirdConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -1764,7 +1764,7 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
         "cls.predictions.decoder.weight": "bert.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: BigBirdConfig):
         super().__init__(config)
 
         self.bert = BigBirdModel(config, add_pooling_layer=True)
@@ -1859,7 +1859,7 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
         "cls.predictions.decoder.weight": "bert.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: BigBirdConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -1975,7 +1975,7 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
         "cls.predictions.decoder.weight": "bert.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: BigBirdConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -2079,7 +2079,7 @@ class BigBirdClassificationHead(nn.Module):
     """
 )
 class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BigBirdConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -2182,7 +2182,7 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
 
 @auto_docstring
 class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BigBirdConfig):
         super().__init__(config)
 
         self.bert = BigBirdModel(config)
@@ -2272,7 +2272,7 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
 
 @auto_docstring
 class BigBirdForTokenClassification(BigBirdPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BigBirdConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -2345,7 +2345,7 @@ class BigBirdForQuestionAnsweringHead(nn.Module):
 
 @auto_docstring
 class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=False):
+    def __init__(self, config: BigBirdConfig, add_pooling_layer=False):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer

@@ -1130,7 +1130,7 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
         "attentions": Qwen3OmniMoeVisionAttention,
     }
 
-    def __init__(self, config, *inputs, **kwargs) -> None:
+    def __init__(self, config: Qwen3OmniMoeVisionEncoderConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         self.merger_list = nn.ModuleList(
             [
@@ -2170,7 +2170,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _can_compile_fullgraph = True
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen3OmniMoeThinkerConfig):
         super().__init__(config)
         self.vocab_size = config.text_config.vocab_size
         self.model = Qwen3OmniMoeThinkerModel(config)
@@ -3704,6 +3704,7 @@ class Qwen3OmniMoeCode2WavTransformerLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class Qwen3OmniMoeCode2WavTransformerModel(Qwen3OmniMoePreTrainedModel):
+    config: Qwen3OmniMoeCode2WavConfig
     _can_record_outputs = {
         "hidden_states": Qwen3OmniMoeCode2WavTransformerLayer,
         "attentions": Qwen3OmniMoeCode2WavAttention,
@@ -3861,6 +3862,8 @@ class Qwen3OmniMoeCode2WavDecoderResidualUnit(nn.Module):
 
 
 class Qwen3OmniMoeCode2WavDecoderBlock(Qwen3OmniMoePreTrainedModel):
+    config: Qwen3OmniMoeCode2WavConfig
+
     def __init__(self, config: Qwen3OmniMoeCode2WavConfig, layer_idx):
         super().__init__(config)
         in_dim = config.decoder_dim // 2**layer_idx
@@ -3886,7 +3889,8 @@ class Qwen3OmniMoeCode2WavDecoderBlock(Qwen3OmniMoePreTrainedModel):
 
 
 class Qwen3OmniMoeCode2Wav(Qwen3OmniMoePreTrainedModel):
-    input_modalities = "audio"
+    input_modalities = ("audio",)
+    config: Qwen3OmniMoeCode2WavConfig
 
     def __init__(self, config: Qwen3OmniMoeCode2WavConfig):
         super().__init__(config)

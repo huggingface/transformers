@@ -37,13 +37,13 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
     logging,
-    requires_backends,
 )
 from ...utils.constants import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
 )
 from ...utils.generic import TensorType, merge_with_config_defaults
+from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
 from ..blip_2.modeling_blip_2 import Blip2Attention
@@ -209,6 +209,7 @@ class PPOCRV5ServerRecImageProcessor(TorchvisionBackend):
 
         return SizeDict(height=target_height, width=target_width)
 
+    @requires(backends=("torch",))
     def post_process_text_recognition(
         self,
         predictions,
@@ -225,7 +226,6 @@ class PPOCRV5ServerRecImageProcessor(TorchvisionBackend):
                 - "text" (str): The decoded text string.
                 - "score" (float): The average confidence score of the characters in the decoded text.
         """
-        requires_backends(self, ["torch"])
 
         logits = predictions.last_hidden_state
         batch_size = logits.shape[0]
@@ -341,7 +341,7 @@ class PPOCRV5ServerRecEncoderWithSVTR(PPOCRV5ServerRecPreTrainedModel):
 
     def __init__(
         self,
-        config,
+        config: PPOCRV5ServerRecConfig,
     ):
         super().__init__(config)
         in_channels = config.backbone_config.stage_out_channels[-1]

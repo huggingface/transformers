@@ -802,7 +802,7 @@ class MraPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class MraModel(MraPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MraConfig):
         super().__init__(config)
         self.config = config
 
@@ -892,7 +892,7 @@ class MraForMaskedLM(MraPreTrainedModel):
         "cls.predictions.decoder.weight": "mra.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: MraConfig):
         super().__init__(config)
 
         self.mra = MraModel(config)
@@ -982,7 +982,7 @@ class MraClassificationHead(nn.Module):
     """
 )
 class MraForSequenceClassification(MraPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MraConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.mra = MraModel(config)
@@ -1055,7 +1055,7 @@ class MraForSequenceClassification(MraPreTrainedModel):
 
 @auto_docstring
 class MraForMultipleChoice(MraPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MraConfig):
         super().__init__(config)
 
         self.mra = MraModel(config)
@@ -1154,7 +1154,7 @@ class MraForMultipleChoice(MraPreTrainedModel):
 
 @auto_docstring
 class MraForTokenClassification(MraPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MraConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1223,7 +1223,7 @@ class MraForTokenClassification(MraPreTrainedModel):
 
 @auto_docstring
 class MraForQuestionAnswering(MraPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MraConfig):
         super().__init__(config)
 
         config.num_labels = 2

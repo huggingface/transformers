@@ -737,7 +737,7 @@ class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, GenerationMixin)
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
 
-    def __init__(self, config):
+    def __init__(self, config: Kimi_K25Config):
         super().__init__(config)
         self.model = Kimi_K25Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)

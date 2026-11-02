@@ -602,6 +602,10 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
         elif isinstance(module, Wav2Vec2ConformerRelPositionalEmbedding):
             init.copy_(module.pe, module.extend_pe(torch.tensor(0.0).expand(1, module.max_len)))
+        elif isinstance(module, Wav2Vec2ConformerModel) and hasattr(module, "masked_spec_embed"):
+            init.uniform_(module.masked_spec_embed)
+        elif isinstance(module, AMSoftmaxLoss):  # noqa: F821
+            init.normal_(module.weight)
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor | int, add_adapter: bool | None = None):
         """
@@ -676,7 +680,7 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ForPreTraining):
 
 
 class Wav2Vec2ConformerForCTC(Wav2Vec2ForCTC):
-    def __init__(self, config, target_lang: str | None = None):
+    def __init__(self, config: Wav2Vec2ConformerConfig, target_lang: str | None = None):
         r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
@@ -693,17 +697,17 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ForCTC):
 
 
 class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ForSequenceClassification):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2ConformerConfig):
         super().__init__(config)
 
 
 class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ForAudioFrameClassification):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2ConformerConfig):
         super().__init__(config)
 
 
 class Wav2Vec2ConformerForXVector(Wav2Vec2ForXVector):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2ConformerConfig):
         super().__init__(config)
 
 

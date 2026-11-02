@@ -32,6 +32,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     require_torch,
+    require_torch_accelerator_memory,
     slow,
     torch_device,
 )
@@ -380,6 +381,7 @@ class MiniMaxM3VLModelTest(VLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch
+@require_torch_accelerator_memory(memory=480)  # 413 GiB of MXFP8 weights, plus activations
 class MiniMaxM3VLIntegrationTest(unittest.TestCase):
     model_id = "MiniMaxAI/MiniMax-M3-MXFP8"
 
