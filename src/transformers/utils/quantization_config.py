@@ -2129,14 +2129,11 @@ class NVFP4Config(QuantizationConfigMixin):
     Args:
         modules_to_not_convert (`list[str]`, *optional*):
             Module-name patterns that should remain in their original precision.
-        dequantize (`bool`, *optional*, defaults to `False`):
-            Whether to dequantize a pre-quantized checkpoint while loading it.
         kwargs (`dict[str, Any]`, *optional*):
             Additional values are ignored and reported through the Transformers logger.
     """
 
-    def __init__(self, modules_to_not_convert: list[str] | None = None, dequantize: bool = False, **kwargs):
-        self.dequantize = dequantize
+    def __init__(self, modules_to_not_convert: list[str] | None = None, **kwargs):
         self.quant_method = QuantizationMethod.NVFP4
         self.modules_to_not_convert = modules_to_not_convert
         if kwargs:

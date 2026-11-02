@@ -43,8 +43,6 @@ class NVFP4HfQuantizer(HfQuantizer):
     """Quantize eligible linear weights to NVFP4 while loading a full-precision checkpoint."""
 
     requires_calibration = False
-    # The buffers of `NVFP4Linear`
-    serialized_names = {"weight": ["weight", "weight_sf", "weight_sf_rowmajor", "weight_global_scale"]}
     quantization_config: NVFP4Config
 
     @property
@@ -52,8 +50,6 @@ class NVFP4HfQuantizer(HfQuantizer):
         return 0.5
 
     def validate_environment(self, device_map, **kwargs):
-        if self.dequantizing:
-            return  # the `dequantize` load operation is pure torch
         if self.pre_quantized:
             raise ValueError("Loading pre-quantized NVFP4 checkpoints is not supported yet.")
         if not is_kernels_available():
@@ -98,9 +94,6 @@ class NVFP4HfQuantizer(HfQuantizer):
         return isinstance(module, NVFP4Linear) and tensor_name == "weight"
 
     def _process_model_before_weight_loading(self, model: PreTrainedModel, **kwargs):
-        if self.dequantizing:
-            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
-            return
         from ..integrations.nvfp4 import replace_with_nvfp4_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
@@ -109,9 +102,9 @@ class NVFP4HfQuantizer(HfQuantizer):
         replace_with_nvfp4_linear(model, modules_to_not_convert=self.modules_to_not_convert)
 
     def get_load_operations(self):
-        from ..integrations.nvfp4 import NVFP4Dequantize, NVFP4Quantize
+        from ..integrations.nvfp4 import NVFP4Quantize
 
-        return {"dequantize": NVFP4Dequantize, "quantize": NVFP4Quantize}
+        return {"quantize": NVFP4Quantize}
 
     @property
     def is_serializable(self) -> bool:

@@ -898,11 +898,8 @@ class WeightTransform:
         for i, source_pattern in sorted(enumerate(self.source_patterns), key=lambda item: -len(item[1])):
             group_name = f"g{i}"
             pattern = source_pattern.replace("*.", r".*\.")
-            # A pattern starts and ends on a name boundary: `scales` matches `q_proj.scales`, not `q_proj.layer_scales`,
-            # and `weight` matches `q_proj.weight`, not `q_proj.weight_scale_inv`. One ending with `_` is the start of a
-            # name, e.g. `hc_` for `hc_fn`
-            if re.match(r"[a-zA-Z0-9]", pattern):
-                pattern = r"(?<!\w)" + pattern
+            # A pattern ends on a name boundary: `weight` matches `q_proj.weight`, not `q_proj.weight_scale_inv`.
+            # One ending with `_` is the start of a name, e.g. `hc_` for `hc_fn`
             if re.search(r"[a-zA-Z0-9]$", pattern):
                 pattern += r"(?!\w)"
             branches.append(f"(?P<{group_name}>{pattern})")

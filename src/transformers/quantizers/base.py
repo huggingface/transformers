@@ -347,12 +347,10 @@ class HfQuantizer(ABC):
         decide, e.g. for a merge of `experts.*.gate_proj.weight` into `experts.gate_up_proj`:
         - `experts.gate_up_proj_scale_inv` is a param: a copy merges `experts.*.gate_proj.weight_scale_inv` into it
         - otherwise the converter also collects `experts.*.gate_proj.weight_scale_inv`, the dequantize op runs first
-        A module keeping companions that aren't suffixes of the param (e.g. gptq's `qweight`) is left as is.
         """
         from ..core_model_loading import WeightConverter
 
-        # Buffers too: e.g. gptq modules keep their packed weights as buffers
-        param_names = "\n".join(model.state_dict())
+        param_names = "\n".join(name for name, _ in model.named_parameters())
         dequantize = self.get_load_operations().get("dequantize") if self.pre_quantized else None
         updated = []
         for converter in weight_conversions:
@@ -364,15 +362,9 @@ class HfQuantizer(ABC):
             serialized = self.serialized_names.get(param)
             if not serialized or not all(source.endswith(f".{param}") for source in sources):
                 continue
-            suffixes = self._suffixes(param)
-            target = targets[0]
-            companions = [
-                re.sub(rf"{param}$", name, target) if target.endswith(param) else target + name.removeprefix(param)
-                for name in serialized
-                if name != param and (target.endswith(param) or name.startswith(param))
-            ]
-            keeps_companions = any(re.search(f"{name}$", param_names, re.MULTILINE) for name in companions)
-            if suffixes and re.search(f"{target}{suffixes[0]}$", param_names, re.MULTILINE):
+            # `weight_scale_inv` -> `_scale_inv`
+            suffixes = [name.removeprefix(param) for name in serialized if name.startswith(param) and name != param]
+            if suffixes and re.search(f"{targets[0]}{suffixes[0]}$", param_names, re.MULTILINE):
                 # The module keeps the companions as params: each one gets its own copy of the converter
                 for suffix in suffixes:
                     suffixed_sources = [source + suffix for source in sources]
@@ -380,48 +372,13 @@ class HfQuantizer(ABC):
                     updated.append(
                         converter.copy(suffixed_sources, suffixed_targets, operations=list(converter.operations))
                     )
-            elif dequantize is not None and not keeps_companions:
+            elif dequantize is not None:
                 # The module only has `param`: the converter also collects the companions and dequantizes first
                 all_sources = [re.sub(rf"{param}$", name, source) for source in sources for name in serialized]
                 updated[-1] = converter.copy(
                     all_sources, targets, operations=[dequantize(self)] + converter.operations
                 )
-        if dequantize is not None:
-            updated += self._dequantize_own_name_params(model, dequantize)
         return updated + self.get_weight_conversions()
-
-    def _suffixes(self, param: str) -> list[str]:
-        "The companions of `param` that are suffixes of its name, e.g. `weight_scale_inv` -> `_scale_inv`"
-        return [
-            name.removeprefix(param)
-            for name in self.serialized_names.get(param, [])
-            if name.startswith(param) and name != param
-        ]
-
-    def _dequantize_own_name_params(self, model, dequantize):
-        """
-        Dense params stored under their own name, e.g. fused experts `gate_up_proj` with `gate_up_proj_scale_inv`:
-        their companions are the suffixes of the `weight` ones, and the dequantize op gets them together.
-        """
-        from ..core_model_loading import WeightConverter
-
-        suffixes = self._suffixes("weight")
-        if not suffixes:
-            return []
-        keys = set(model.state_dict())
-        # With their module, e.g. `experts.down_proj`: not `shared_experts.down_proj.weight`
-        names = {
-            ".".join(name.split(".")[-2:])
-            for name, param in model.named_parameters()
-            if param.ndim > 1
-            and name.rpartition(".")[2] not in self.serialized_names
-            and not name.endswith(tuple(suffixes))  # a companion itself
-            and not any(name + suffix in keys for suffix in suffixes)  # the module keeps them
-        }
-        return [
-            WeightConverter([name] + [name + suffix for suffix in suffixes], name, [dequantize(self)])
-            for name in sorted(names)
-        ]
 
 
 class SequentialLlama4TextExperts(ModuleList):
