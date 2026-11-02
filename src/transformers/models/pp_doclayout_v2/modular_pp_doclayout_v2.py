@@ -53,18 +53,8 @@ logger = logging.get_logger(__name__)
 @strict
 class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
     r"""
-    has_relative_attention_bias (`bool`, *optional*, defaults to `True`):
-        Whether or not to use a relative attention bias in the self-attention mechanism.
     has_spatial_attention_bias (`bool`, *optional*, defaults to `True`):
         Whether or not to use a spatial attention bias in the self-attention mechanism.
-    rel_pos_bins (`int`, *optional*, defaults to 32):
-        The number of relative position bins to be used in the self-attention mechanism.
-    max_rel_pos (`int`, *optional*, defaults to 128):
-        The maximum number of relative positions to be used in the self-attention mechanism.
-    rel_2d_pos_bins (`int`, *optional*, defaults to 64):
-        The number of 2D relative position bins in the self-attention mechanism.
-    max_rel_2d_pos (`int`, *optional*, defaults to 256):
-        The maximum number of relative 2D positions in the self-attention mechanism.
     max_2d_position_embeddings (`int`, *optional*, defaults to 1024):
         The maximum value that the 2D position embedding might ever be used with. Typically set this to something
         large just in case (e.g., 1024).
@@ -102,7 +92,6 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
     num_attention_heads: int = 8
     attention_dropout: float | int = 0.1
     qkv_bias: bool = True
-    has_relative_attention_bias: bool = False
     has_spatial_attention_bias: bool = True
     layer_norm_eps: float = 1e-5
     hidden_dropout_prob: float | int = 0.1
@@ -110,10 +99,6 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
     intermediate_size: int = 2048
     hidden_act: str = "gelu"
     num_hidden_layers: int = 6
-    rel_pos_bins: int = 32
-    max_rel_pos: int = 128
-    rel_2d_pos_bins: int = 64
-    max_rel_2d_pos: int = 256
     max_position_embeddings: int = 514
     max_2d_position_embeddings: int = 1024
     type_vocab_size: int = 1
