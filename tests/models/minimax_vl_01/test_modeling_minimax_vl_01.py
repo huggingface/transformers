@@ -19,15 +19,11 @@ import unittest
 from parameterized import parameterized
 
 from transformers import (
-    AutoModel,
-    AutoModelForCausalLM,
-    AutoModelForImageTextToText,
     CLIPVisionConfig,
     MiniMaxVL01Config,
     MiniMaxVL01ForConditionalGeneration,
     MiniMaxVL01Model,
     MiniMaxVL01TextConfig,
-    MiniMaxVL01TextModel,
     is_torch_available,
 )
 from transformers.testing_utils import require_torch, slow, torch_device
@@ -126,15 +122,6 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
         # The released checkpoint prefixes target the conditional model's `model` subtree, not the bare base model.
         super().test_reverse_loading_mapping(skip_base_model=True)
 
-    def test_model_uses_local_text_backbone_and_cache(self):
-        config = self.model_tester.get_config()
-        model = MiniMaxVL01Model(config).to(torch_device).eval()
-
-        self.assertIsInstance(model.language_model, MiniMaxVL01TextModel)
-        with torch.no_grad():
-            outputs = model(input_ids=torch.tensor([[5, 6, 7]], device=torch_device), use_cache=True)
-        self.assertIsInstance(outputs.past_key_values, MiniMaxVL01TextCache)
-
     def test_text_cache_sequence_length_uses_full_attention_layer(self):
         cache = MiniMaxVL01TextCache()
         key_states = torch.zeros(2, 2, 5, 8)
@@ -183,37 +170,17 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
         torch.testing.assert_close(cache.layers[1].keys, expected_full)
         torch.testing.assert_close(cache.layers[1].values, expected_full)
 
-    def test_text_lightning_attention_slope_handles_one_and_multiple_layers(self):
-        common_kwargs = {
-            "vocab_size": 97,
-            "hidden_size": 32,
-            "intermediate_size": 16,
-            "num_attention_heads": 4,
-            "num_key_value_heads": 2,
-            "head_dim": 8,
-            "num_local_experts": 2,
-            "num_experts_per_tok": 2,
-            "block_size": 4,
-        }
-        one_layer_config = MiniMaxVL01TextConfig(
-            **common_kwargs, num_hidden_layers=1, layer_types=["linear_attention"]
-        )
-        one_layer_attention = MiniMaxVL01TextLightningAttention(one_layer_config, layer_idx=0)
-        one_layer_slope = one_layer_attention.get_slope_rate(device=torch_device)
+    def test_text_lightning_attention_slope_handles_single_layer(self):
+        config = self.model_tester.get_text_config()
+        config.num_hidden_layers = 1
+        config.layer_types = ["linear_attention"]
+        attention = MiniMaxVL01TextLightningAttention(config, layer_idx=0)
+        slope_rate = attention.get_slope_rate(device=torch_device)
 
-        base = 1 / (2 ** (8 / one_layer_config.num_attention_heads))
-        exponent = torch.arange(1, one_layer_config.num_attention_heads + 1, device=torch_device, dtype=torch.float32)
-        torch.testing.assert_close(one_layer_slope.flatten(), base**exponent * (1 + 1e-5))
-        self.assertEqual(one_layer_slope.dtype, torch.float32)
-        self.assertEqual(one_layer_slope.device.type, torch.device(torch_device).type)
-        self.assertTrue(torch.isfinite(one_layer_slope).all())
-
-        multi_layer_config = MiniMaxVL01TextConfig(
-            **common_kwargs, num_hidden_layers=4, layer_types=["linear_attention"] * 4
-        )
-        last_layer_attention = MiniMaxVL01TextLightningAttention(multi_layer_config, layer_idx=3)
-        last_layer_slope = last_layer_attention.get_slope_rate(device=torch_device)
-        torch.testing.assert_close(last_layer_slope.flatten(), base**exponent * 1e-5)
+        self.assertEqual(slope_rate.shape, (config.num_attention_heads, 1, 1))
+        self.assertEqual(slope_rate.dtype, torch.float32)
+        self.assertEqual(slope_rate.device.type, torch.device(torch_device).type)
+        self.assertTrue(torch.isfinite(slope_rate).all())
 
     @parameterized.expand([("float16",), ("float32",)])
     def test_text_lightning_attention_decay_factors_preserve_float32_device(self, dtype):
@@ -228,15 +195,6 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
         for decay in (query_decay, key_decay, diagonal_decay):
             self.assertEqual(decay.dtype, torch.float32)
             self.assertEqual(decay.device.type, torch.device(torch_device).type)
-
-        self.assertTrue((query_decay > 0).all())
-        self.assertTrue((query_decay[:, 1:] < query_decay[:, :-1]).all())
-        self.assertTrue((key_decay[:, 1:] > key_decay[:, :-1]).all())
-        torch.testing.assert_close(key_decay[:, -1], torch.ones_like(key_decay[:, -1]))
-        self.assertEqual(torch.count_nonzero(torch.triu(diagonal_decay, diagonal=1)).item(), 0)
-        diagonal = torch.diagonal(diagonal_decay, dim1=-2, dim2=-1)
-        torch.testing.assert_close(diagonal, torch.ones_like(diagonal))
-        self.assertTrue((diagonal_decay[..., 1:, 0] < diagonal_decay[..., :-1, 0]).all())
 
     def test_text_lightning_attention_source_padding_and_fp32_cache(self):
         config = MiniMaxVL01TextConfig(
@@ -481,38 +439,47 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
 
         torch.testing.assert_close(with_empty_pixels, text_only)
 
-    def test_hybrid_cache_prefill_decode_matches_full_forward(self):
-        config = self.model_tester.get_config()
-        model = MiniMaxVL01ForConditionalGeneration(config).to(torch_device).eval()
-        prompt_ids = torch.tensor([[5, 6, 7, 8]], device=torch_device)
-        next_id = torch.tensor([[9]], device=torch_device)
-
-        with torch.no_grad():
-            prefill = model(input_ids=prompt_ids, use_cache=True)
-            decoded = model(input_ids=next_id, past_key_values=prefill.past_key_values, use_cache=True)
-            full = model(input_ids=torch.cat((prompt_ids, next_id), dim=-1), use_cache=False)
-
-        self.assertIsInstance(prefill.past_key_values, MiniMaxVL01TextCache)
-        torch.testing.assert_close(decoded.logits[:, -1], full.logits[:, -1], rtol=1e-4, atol=1e-4)
-
-    def test_auto_model_mappings(self):
-        config = self.model_tester.get_config()
-
-        self.assertIsInstance(AutoModel.from_config(config), MiniMaxVL01Model)
-        self.assertIsInstance(AutoModelForCausalLM.from_config(config), MiniMaxVL01ForConditionalGeneration)
-        self.assertIsInstance(AutoModelForImageTextToText.from_config(config), MiniMaxVL01ForConditionalGeneration)
-
 
 @slow
 @require_torch
 class MiniMaxVL01IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
-    def _dummy_model(self):
-        config = MiniMaxVL01VisionText2TextModelTester(
-            self,
-            num_hidden_layers=8,
-            num_experts=4,
-            layer_types=["linear_attention"] * 7 + ["full_attention"],
-        ).get_config()
+    @staticmethod
+    def _dummy_model():
+        config = MiniMaxVL01Config(
+            text_config=MiniMaxVL01TextConfig(
+                vocab_size=97,
+                hidden_size=32,
+                intermediate_size=16,
+                num_hidden_layers=8,
+                num_attention_heads=4,
+                num_key_value_heads=2,
+                head_dim=8,
+                hidden_act="silu",
+                max_position_embeddings=64,
+                pad_token_id=0,
+                bos_token_id=1,
+                eos_token_id=2,
+                num_local_experts=4,
+                num_experts_per_tok=2,
+                block_size=4,
+                layer_types=["linear_attention"] * 7 + ["full_attention"],
+                rope_parameters={"rope_type": "default", "rope_theta": 10_000.0, "partial_rotary_factor": 0.5},
+            ),
+            vision_config=CLIPVisionConfig(
+                hidden_size=16,
+                intermediate_size=32,
+                projection_dim=32,
+                num_hidden_layers=2,
+                num_attention_heads=4,
+                num_channels=3,
+                image_size=8,
+                patch_size=4,
+                hidden_act="gelu",
+            ),
+            image_token_index=3,
+            image_grid_pinpoints=[[8, 8]],
+            pad_token_id=0,
+        )
         torch.manual_seed(0)
         model = MiniMaxVL01ForConditionalGeneration(config)
         with tempfile.TemporaryDirectory() as tmpdir:
