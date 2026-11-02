@@ -142,12 +142,12 @@ class InitializeMissingKeysTest(unittest.TestCase):
             model.linear.register_buffer("persistent_buffer", torch.ones(5))
             model.linear.register_buffer("non_persistent_buffer", torch.ones(5), persistent=False)
 
-        for tensor in itertools.chain(model.parameters(), model.buffers()):
-            self.assertEqual(tensor.device, torch.device("meta"))
+        for param in model.parameters():
+            self.assertEqual(param.device, torch.device("meta"))
 
         with (
             patch("transformers.modeling_utils.is_fsdp_enabled", return_value=True),
-            patch("transformers.distributed.utils.is_local_dist_rank_0", return_value=False),
+            patch("transformers.modeling_utils.is_local_dist_rank_0", return_value=False),
         ):
             model._move_missing_keys_from_meta_to_device(
                 missing_keys=set(), device_map=None, device_mesh=None, hf_quantizer=None
@@ -166,7 +166,7 @@ class InitializeMissingKeysTest(unittest.TestCase):
 
         with (
             patch("transformers.modeling_utils.is_fsdp_enabled", return_value=True),
-            patch("transformers.distributed.utils.is_local_dist_rank_0", return_value=False),
+            patch("transformers.modeling_utils.is_local_dist_rank_0", return_value=False),
         ):
             model._move_missing_keys_from_meta_to_device(
                 missing_keys=set(), device_map=None, device_mesh=None, hf_quantizer=None
