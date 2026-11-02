@@ -240,7 +240,12 @@ class ModelManager:
             return AutoTokenizer.from_pretrained(
                 model_id, gguf_file=gguf_file, revision=revision, trust_remote_code=self.trust_remote_code
             )
-        return AutoProcessor.from_pretrained(model_id, revision=revision, trust_remote_code=self.trust_remote_code)
+        try:
+            return AutoProcessor.from_pretrained(model_id, revision=revision, trust_remote_code=self.trust_remote_code)
+        except ImportError as error:
+            # Like `pipeline()`: text requests only need the tokenizer (e.g. a Qwen-VL processor without torchvision)
+            logger.warning(f"Serving {model_id} with its tokenizer only, without images: {error}")
+            return AutoTokenizer.from_pretrained(model_id, revision=revision, trust_remote_code=self.trust_remote_code)
 
     def _load_model(
         self,
@@ -282,7 +287,15 @@ class ModelManager:
             progress_callback({"status": "loading", "model": model_id_and_revision, "stage": "config"})
         config = AutoConfig.from_pretrained(model_id, **model_kwargs)
 
-        from transformers.models.auto.modeling_auto import MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES
+        from transformers.decision.modeling_utils import checkpoint_decision_config
+        from transformers.models.auto.modeling_auto import (
+            MODEL_FOR_DECISION_MAPPING,
+            MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES,
+        )
+
+        # A checkpoint shipping a decision head next to its weights loads as its decision model, as in the pipeline
+        if (decision_config := checkpoint_decision_config(model_id, revision=revision)) is not None:
+            return MODEL_FOR_DECISION_MAPPING[type(decision_config)].from_pretrained(model_id, **model_kwargs)
 
         if config.model_type in MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES:
             from transformers import AutoModelForMultimodalLM
