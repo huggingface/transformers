@@ -190,12 +190,21 @@ class XiaomiLens0VisionText2TextModelTester:
 class XiaomiLens0ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (XiaomiLens0Model, XiaomiLens0ForConditionalGeneration) if is_torch_available() else ()
     model_split_percents = [0.5, 0.8, 0.9]
-    # Language-only training does not use the mask decoder.
-    test_all_params_have_gradient = False
 
     def setUp(self):
         self.model_tester = XiaomiLens0VisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=XiaomiLens0Config)
+        self.config_tester = ConfigTester(self, config_class=XiaomiLens0Config, has_text_modality=False)
+
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        if return_labels and model_class is XiaomiLens0ForConditionalGeneration:
+            # Add a mask token and mask labels so that training also covers the mask decoder
+            inputs_dict["input_ids"][:, -2] = self.model_tester.mask_token_id
+            image_size = self.model_tester.image_size
+            mask_labels = torch.zeros(self.model_tester.batch_size, 1, image_size, image_size, device=torch_device)
+            mask_labels[..., : image_size // 2, : image_size // 2] = 1
+            inputs_dict["mask_labels"] = list(mask_labels)
+        return inputs_dict
 
     def test_config(self):
         self.config_tester.run_common_tests()

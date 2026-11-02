@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-10-29.*
+*This model was contributed to Hugging Face Transformers on 2026-11-02.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -82,10 +82,12 @@ with torch.no_grad():
 results = processor.post_process_grounding(
     outputs.sequences, inputs.image_grid_thw, mask_logits, mask_token_indices, target_sizes=[(480, 640)]
 )
-print(results[0]["boxes"]) # bounding boxes in absolute (top_left_x, top_left_y, bottom_right_x, bottom_right_y) pixel coordinates
+# Bounding boxes in absolute (top_left_x, top_left_y, bottom_right_x, bottom_right_y) pixel coordinates
+print(results[0]["boxes"])
 # tensor([[344.9600,  24.9600, 640.0000, 372.0000],
 #         [  8.9600,  55.2000, 316.1600, 474.2400]])
-print(results[0]["masks"].shape) # binary segmentation masks
+# Binary segmentation masks
+print(results[0]["masks"].shape)
 # torch.Size([2, 480, 640])
 ```
 
@@ -100,7 +102,7 @@ alt="xiaomi lens0 grounding boxes and masks results" width="600"/>
 - Boxes are written as `<bbox>[x1, y1, x2, y2]</bbox>` with coordinates normalized to `[0, 1000]`, and masks as `<mask><|mask|></mask>`. A grounded instance is written as `<bbox>[x1, y1, x2, y2]</bbox><mask><|mask|></mask>`.
 - Ask for boxes and masks explicitly with "Report bbox coordinates and masks." at the end of the instruction.
 - To detect boxes or masks only ask with "Report bbox coordinates." or "Report masks."
-- The mask decoder sees the image at the resolution chosen by the image processor (up to `max_pixels`). Masks are predicted at that resolution and [`~XiaomiLens0Processor.post_process_grounding`] resizes them to `target_sizes`.
+- The mask decoder sees the image at the resolution chosen by the image processor (up to `size["longest_edge"]`). Masks are predicted at that resolution and [`~XiaomiLens0Processor.post_process_grounding`] resizes them to `target_sizes`.
 - Decoding and postprocessing exclude boxes and masks from thinking blocks by default. Set `ignore_thinking=False` in [`~XiaomiLens0ForConditionalGeneration.decode_masks`] to include masks and in [`~XiaomiLens0Processor.post_process_grounding`] to include boxes.
 
 ## XiaomiLens0Config

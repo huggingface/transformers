@@ -68,7 +68,7 @@ class XiaomiLens0ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         width = 4 * processor.image_processor.patch_size
         image_grid_thw = torch.tensor([[1, 2, 4]])
         text = (
-            "<think>The objects occupy <bbox>[0, 0, 1000, 1000]</bbox>.</think>\n\n"
+            f"{processor.image_token}<think>The objects occupy <bbox>[0, 0, 1000, 1000]</bbox>.</think>\n\n"
             "The cat is at <bbox>[0, 0, 500, 1000]</bbox><mask><|mask|></mask>. "
             "The dog is at <bbox>[500, 250, 1000, 750]</bbox>.<|im_end|>"
         )

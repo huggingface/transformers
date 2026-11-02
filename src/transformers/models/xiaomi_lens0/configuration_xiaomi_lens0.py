@@ -17,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -252,6 +253,13 @@ class XiaomiLens0Config(PreTrainedConfig):
         if self.mask_decoder_config is None and legacy_mask_decoder is not None:
             self.mask_decoder_config = legacy_mask_decoder
         super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        super().validate_architecture()
+        if self.mask_decoder_config.hidden_size != self.text_config.hidden_size:
+            raise ValueError("mask_decoder_config.hidden_size must match text_config.hidden_size")
+        if self.mask_decoder_config.vision_hidden_size != self.vision_config.hidden_size:
+            raise ValueError("mask_decoder_config.vision_hidden_size must match vision_config.hidden_size")
 
 
 __all__ = ["XiaomiLens0Config", "XiaomiLens0TextConfig", "XiaomiLens0VisionConfig", "XiaomiLens0MaskDecoderConfig"]

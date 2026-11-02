@@ -20,11 +20,15 @@
 import re
 
 import numpy as np
-import torch
-import torch.nn.functional as F
 
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, is_torch_available, logging
+from ...utils.import_utils import requires
+
+
+if is_torch_available():
+    import torch
+    import torch.nn.functional as F
 
 
 logger = logging.get_logger(__name__)
@@ -42,8 +46,8 @@ class XiaomiLens0ProcessorKwargs(ProcessingKwargs, total=False):
 
 
 def get_preceding_image_indices(
-    input_ids: torch.LongTensor, image_token_id: int
-) -> tuple[torch.LongTensor, torch.LongTensor]:
+    input_ids: "torch.LongTensor", image_token_id: int
+) -> tuple["torch.LongTensor", "torch.LongTensor"]:
     """Map each token to its preceding image.
 
     Returns:
@@ -62,8 +66,8 @@ def get_preceding_image_indices(
 
 
 def get_non_thinking_token_mask(
-    input_ids: torch.LongTensor, think_start_token_id: int, think_end_token_id: int
-) -> torch.BoolTensor:
+    input_ids: "torch.LongTensor", think_start_token_id: int, think_end_token_id: int
+) -> "torch.BoolTensor":
     """Returns boolean mask where all tokens outside thinking blocks are `True`."""
     token_positions = torch.arange(input_ids.shape[-1], device=input_ids.device) + 1
     latest_thinking_start_positions = ((input_ids == think_start_token_id) * token_positions).cummax(-1).values
@@ -227,16 +231,17 @@ class XiaomiLens0Processor(ProcessorMixin):
         ]
         return timestamps
 
+    @requires(backends=("torch",))
     def post_process_grounding(
         self,
-        input_ids: torch.LongTensor,
-        image_grid_thw: torch.LongTensor,
-        mask_logits: list[torch.FloatTensor] | None = None,
-        mask_token_indices: list[torch.LongTensor] | None = None,
+        input_ids: "torch.LongTensor",
+        image_grid_thw: "torch.LongTensor",
+        mask_logits: list["torch.FloatTensor"] | None = None,
+        mask_token_indices: list["torch.LongTensor"] | None = None,
         target_sizes: list[tuple[int, int]] | None = None,
         mask_threshold: float = 0.5,
         ignore_thinking: bool = True,
-    ) -> list[dict[str, torch.Tensor]]:
+    ) -> list[dict[str, "torch.Tensor"]]:
         r"""
         Extract boxes and segmentation masks from the model outputs.
 
@@ -277,15 +282,15 @@ class XiaomiLens0Processor(ProcessorMixin):
         image_grids = image_grid_thw.tolist()
         num_images = len(image_grids)
 
+        if (mask_logits is None) != (mask_token_indices is None):
+            raise ValueError("mask_logits and mask_token_indices must either both be set or both be None.")
         if mask_logits is None:
-            if mask_token_indices is not None:
-                raise ValueError("mask_token_indices cannot be set if mask_logits is None")
             mask_logits = [torch.empty(0, height * patch_size, width * patch_size) for _, height, width in image_grids]
             mask_token_indices = [torch.empty((0, 2), dtype=torch.long) for _ in image_grids]
-        if mask_token_indices is None or len(mask_logits) != num_images or len(mask_token_indices) != num_images:
+        if len(mask_logits) != num_images or len(mask_token_indices) != num_images:
             raise ValueError(
                 "Expected one mask tensor and one token-index tensor per image grid. "
-                f"But got {len(mask_logits)} masks, {num_images} images, and {len(mask_token_indices)} mask_token_images."
+                f"But got {len(mask_logits)} masks, {num_images} images, and {len(mask_token_indices)} mask_token_indices."
             )
         if target_sizes is not None and len(target_sizes) != num_images:
             raise ValueError(
@@ -301,13 +306,12 @@ class XiaomiLens0Processor(ProcessorMixin):
 
         image_indices, images_per_sequence = get_preceding_image_indices(input_ids, self.image_token_id)
         image_indices = image_indices.tolist()
-        image_counts = images_per_sequence.tolist()
-
-        # Text-only processor inputs can omit image placeholders when there is one image per sequence.
-        if sum(image_counts) == 0 and num_images == len(sequences):
-            image_indices = [[sequence_index] * len(tokens) for sequence_index, tokens in enumerate(sequences)]
-        elif sum(image_counts) != num_images:
-            raise ValueError("The number of image placeholders must match the image grids.")
+        num_image_placeholders = images_per_sequence.sum().item()
+        if num_image_placeholders != num_images:
+            raise ValueError(
+                "The number of image placeholders must match the image grids. "
+                f"But got {num_image_placeholders} image placeholders and {num_images} image grids."
+            )
 
         boxes_per_image = [[] for _ in image_grids]
         for sequence_index, sequence_ids in enumerate(sequences):
