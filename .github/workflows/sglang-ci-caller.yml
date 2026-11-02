@@ -163,6 +163,88 @@ jobs:
           echo "=== Memory ===" && free -h
           echo "=== Disk ===" && df -h
 
+      - name: Patch SGLang for memory debug logging
+        run: |
+          python3 - << 'PATCHEOF'
+          import re, pathlib, sys
+
+          def patch(path, old, new, label):
+              p = pathlib.Path(path)
+              src = p.read_text()
+              if old not in src:
+                  print(f"[PATCH] WARNING: marker not found in {label}", flush=True)
+                  sys.exit(1)
+              p.write_text(src.replace(old, new, 1))
+              print(f"[PATCH] OK: {label}", flush=True)
+
+          # ── 1. get_available_gpu_memory – CPU branch ─────────────────────
+          patch(
+              "python/sglang/srt/utils/common.py",
+              old=(
+                  '    elif device == "cpu":\n'
+                  '        # TODO: rename the variables in the current function to be not GPU specific\n'
+                  '        total_free_memory = psutil.virtual_memory().available\n'
+                  '        n_numa_node: int = len(get_cpu_ids_by_node())\n'
+                  '        free_gpu_memory = round(total_free_memory / n_numa_node, 3)\n'
+              ),
+              new=(
+                  '    elif device == "cpu":\n'
+                  '        # TODO: rename the variables in the current function to be not GPU specific\n'
+                  '        total_free_memory = psutil.virtual_memory().available\n'
+                  '        n_numa_node: int = len(get_cpu_ids_by_node())\n'
+                  '        free_gpu_memory = round(total_free_memory / n_numa_node, 3)\n'
+                  '        print(f"[SGLANG-DEBUG] get_available_gpu_memory(cpu): '
+                  'sys_avail={total_free_memory/(1024**3):.2f}GB '
+                  'n_numa={n_numa_node} per_numa={free_gpu_memory/(1024**3):.2f}GB", flush=True)\n'
+              ),
+              label="get_available_gpu_memory CPU branch",
+          )
+
+          # ── 2. handle_gpu_memory_settings – mem_fraction_static resolution ──
+          patch(
+              "python/sglang/srt/arg_groups/memory_hook.py",
+              old=(
+                  '        mem_fraction_static = (\n'
+                  '            round((gpu_mem - reserved_mem) / gpu_mem, 3)\n'
+                  '            if gpu_mem is not None\n'
+                  '            else 0.95\n'
+                  '        )\n'
+              ),
+              new=(
+                  '        mem_fraction_static = (\n'
+                  '            round((gpu_mem - reserved_mem) / gpu_mem, 3)\n'
+                  '            if gpu_mem is not None\n'
+                  '            else 0.95\n'
+                  '        )\n'
+                  '        print(f"[SGLANG-DEBUG] mem_fraction_static resolved: '
+                  'gpu_mem={gpu_mem} reserved_mem={reserved_mem} '
+                  'mem_fraction_static={mem_fraction_static}", flush=True)\n'
+              ),
+              label="mem_fraction_static resolution",
+          )
+
+          # ── 3. KVCacheConfigurator.configure – available_bytes + config ───
+          patch(
+              "python/sglang/srt/mem_cache/kv_cache_configurator.py",
+              old=(
+                  '        available_bytes = self._profile_available_bytes(pre_model_load_memory)\n'
+                  '        config = self.config_from_budget(available_bytes)\n'
+              ),
+              new=(
+                  '        available_bytes = self._profile_available_bytes(pre_model_load_memory)\n'
+                  '        print(f"[SGLANG-DEBUG] KV cache budget: '
+                  'available_bytes={available_bytes/(1024**3):.2f}GB '
+                  'pre_model_load_memory={pre_model_load_memory:.2f}GB", flush=True)\n'
+                  '        config = self.config_from_budget(available_bytes)\n'
+                  '        print(f"[SGLANG-DEBUG] KV cache config: '
+                  'max_total_num_tokens={config.max_total_num_tokens}", flush=True)\n'
+              ),
+              label="KVCacheConfigurator.configure available_bytes",
+          )
+
+          print("[PATCH] All patches applied.", flush=True)
+          PATCHEOF
+
       - name: Write memory-monitor conftest
         run: |
           cat > test/conftest.py << 'CONFTEST'
