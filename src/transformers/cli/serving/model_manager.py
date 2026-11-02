@@ -248,7 +248,7 @@ class ModelManager:
         tqdm_class: type | None = None,
         progress_callback: Callable | None = None,
         gguf_file: str | None = None,
-        model_class: type | None = None,
+        model_class: "type[PreTrainedModel] | None" = None,
     ) -> "PreTrainedModel":
         """Load a model.
 
@@ -300,7 +300,7 @@ class ModelManager:
         progress_callback: Callable | None = None,
         tqdm_class: type | None = None,
         gguf_file: str | None = None,
-        model_class: type | None = None,
+        model_class: "type[PreTrainedModel] | None" = None,
     ) -> "tuple[PreTrainedModel, ProcessorMixin | PreTrainedTokenizerFast]":
         """Load a model (or return it from cache), resetting its inactivity timer.
 
