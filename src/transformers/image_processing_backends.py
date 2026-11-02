@@ -357,8 +357,9 @@ class TorchvisionBackend(BaseImageProcessor):
             device=images.device,
         )
         if do_normalize:
-            inplace = images.dtype != torch.float32  # Convert copied tensors inplace for speed
-            images = self.normalize(images.to(torch.float32), image_mean, image_std, inplace=inplace)
+            # Always normalize out-of-place: in-place normalize after dtype conversion (#48897) changes
+            # glibc allocation patterns and causes extra page faults on multi-image CPU workloads (#50100).
+            images = self.normalize(images.to(torch.float32), image_mean, image_std)
         elif do_rescale:
             images = self.rescale(images, rescale_factor)
 
