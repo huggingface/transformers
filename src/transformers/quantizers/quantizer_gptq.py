@@ -83,9 +83,6 @@ class GptqHfQuantizer(HfQuantizer):
         return device_map
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        if self.pre_quantized and self.quantization_config.dequantize:
-            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
-            return
         if model.__class__.main_input_name != "input_ids":
             raise RuntimeError("We can only quantize pure text model.")
 
@@ -97,8 +94,6 @@ class GptqHfQuantizer(HfQuantizer):
                 model = self.optimum_quantizer.convert_model(model, **kwargs)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        if self.pre_quantized and self.quantization_config.dequantize:
-            return
         if self.pre_quantized:
             model = self.optimum_quantizer.post_init_model(model)
         else:
@@ -114,10 +109,3 @@ class GptqHfQuantizer(HfQuantizer):
 
     def is_serializable(self):
         return True
-
-    serialized_names = {"weight": ["qweight", "qzeros", "scales", "g_idx"]}
-
-    def get_load_operations(self):
-        from ..integrations.gptq import GptqDequantize
-
-        return {"dequantize": GptqDequantize}

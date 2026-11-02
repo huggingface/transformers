@@ -44,7 +44,8 @@ class VptqHfQuantizer(HfQuantizer):
         if not is_vptq_available():
             raise ImportError("Using `vptq` quantization requires VPTQ>=0.0.4: `pip install -U vptq`")
 
-        if not torch.cuda.is_available():
+        # Dequantizing runs vptq's torch implementation
+        if not torch.cuda.is_available() and not (self.pre_quantized and self.quantization_config.dequantize):
             raise RuntimeError("GPU is required to run VTPQ quantized model.")
 
     def _process_model_before_weight_loading(

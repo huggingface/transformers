@@ -13,8 +13,11 @@
 # limitations under the License.
 from __future__ import annotations
 
+import json
+import os
 from typing import TYPE_CHECKING
 
+from ..integrations.sinq import SINQ_META_TENSORS
 from ..utils import is_torch_available, logging
 from ..utils.quantization_config import SinqConfig
 from .base import HfQuantizer
@@ -51,6 +54,8 @@ class SinqHfQuantizer(HfQuantizer):
 
         self._normalized_device_str: str | None = None
         self._do_param_level_sinq: bool = False
+        # The non-tensor `meta` of each pre-quantized `SINQLinear`, from the checkpoint metadata
+        self.metadata: dict[str, dict] = {}
 
     def is_serializable(self) -> bool:
         return True
@@ -158,19 +163,44 @@ class SinqHfQuantizer(HfQuantizer):
         result = is_sinq and not is_ready
         return result
 
-    # A checkpoint produced by `SINQLinear.state_dict`, rebuilt into a `SINQLinear`
-    serialized_names = {".weight": [".W_q", ".meta", ".bias"]}
+    # A `SINQLinear` is saved as `W_q`, `bias` and the tensors of its `meta` (see `SinqSerialize`)
+    serialized_names = {".weight": [".W_q", ".bias"] + [f".meta.{path}" for path in SINQ_META_TENSORS]}
 
     def get_load_operations(self):
-        from ..integrations.sinq import SinqDequantize, SinqDeserialize, SinqQuantize
+        from ..integrations.sinq import SinqDequantize, SinqDeserialize, SinqQuantize, SinqSerialize
 
-        return {"deserialize": SinqDeserialize, "dequantize": SinqDequantize, "quantize": SinqQuantize}
+        return {
+            "deserialize": SinqDeserialize,
+            "dequantize": SinqDequantize,
+            "quantize": SinqQuantize,
+            "serialize": SinqSerialize,
+        }
+
+    def set_metadata(self, checkpoint_files: list[str]):
+        """
+        Reads the non-tensor `meta` of each module, saved by `SinqSerialize` in the safetensors metadata. Checkpoints
+        saved by sinq itself keep it in a `model.safetensors.index.json.meta.json` sidecar next to the shards instead.
+        """
+        from safetensors import safe_open
+
+        for checkpoint in checkpoint_files:
+            if checkpoint.endswith(".safetensors"):
+                with safe_open(checkpoint, framework="pt") as f:
+                    for key, value in (f.metadata() or {}).items():
+                        if key.endswith(".meta"):
+                            self.metadata[key.removesuffix(".meta")] = json.loads(value)
+        sidecar = os.path.join(os.path.dirname(checkpoint_files[0]), "model.safetensors.index.json.meta.json")
+        if os.path.isfile(sidecar):
+            with open(sidecar, encoding="utf-8") as f:
+                for module_name, entry in json.load(f).items():
+                    self.metadata.setdefault(module_name, entry.get("meta", {}))
 
     def _process_model_before_weight_loading(
         self,
         model: PreTrainedModel,
         device_map,
         keep_in_fp32_modules: list[str] | None = None,
+        checkpoint_files=None,
         **kwargs,
     ):
         """
@@ -179,6 +209,8 @@ class SinqHfQuantizer(HfQuantizer):
         For SINQ, we replace nn.Linear modules with empty SINQLinear modules here.
         The actual quantization happens later in SinqQuantize.convert() when weights are loaded.
         """
+        if self.pre_quantized and checkpoint_files:
+            self.set_metadata(checkpoint_files)
         if self.pre_quantized and self.quantization_config.dequantize:
             # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
             return
@@ -211,26 +243,3 @@ class SinqHfQuantizer(HfQuantizer):
             device=device_str,
             pre_quantized=self.pre_quantized,
         )
-
-    def _process_model_after_weight_loading(
-        self,
-        model: PreTrainedModel,
-        **kwargs,
-    ):
-        """
-        Called after *all* weights have been loaded.
-
-        For SINQ:
-        1. Move non-SINQLinear modules to GPU (embeddings, norms, lm_head, etc.)
-           - SINQLinear modules already have GemLite buffers on GPU
-           - We skip moving SINQLinear's W_q/meta to avoid memory duplication
-        2. Patch HF save/load methods for SINQ serialization
-        """
-        if self.pre_quantized and self.quantization_config.dequantize:
-            return model
-        from sinq.hf_io import patch_hf_pretrained_io
-
-        # Patch HF save/load methods for SINQ serialization
-        patch_hf_pretrained_io()
-
-        return model

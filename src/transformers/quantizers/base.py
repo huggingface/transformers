@@ -282,8 +282,14 @@ class HfQuantizer(ABC):
         for name, tensor in model.state_dict().items():
             modules[name.rpartition(".")[0]][name] = tensor
         state_dict = {}
-        for module_name, tensors in modules.items():
-            state_dict.update(operation.convert(tensors, model=model, full_layer_name=module_name))
+        # Every module: a quantized one may keep its tensors outside of its state dict (e.g. mxfp4's triton tensors)
+        for module_name, _ in model.named_modules():
+            state_dict.update(
+                operation.convert(modules.pop(module_name, {}), model=model, full_layer_name=module_name)
+            )
+        # Names that aren't `module.tensor`, e.g. bnb's `q_proj.weight.absmax`
+        for tensors in modules.values():
+            state_dict.update(tensors)
         return state_dict, getattr(operation, "metadata", {})
 
     @abstractmethod

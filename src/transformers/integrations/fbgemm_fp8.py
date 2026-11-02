@@ -130,8 +130,8 @@ class FbgemmFp8Linear(torch.nn.Linear):
 
         self.weight = torch.nn.Parameter(torch.zeros((out_features, in_features), dtype=dtype))
         self.weight_scale = torch.nn.Parameter(torch.zeros((out_features, 1), dtype=torch.float32))
-        # A plain attribute: loading re-creates every non-persistent buffer, so a buffer would lose its value
-        self.input_scale_ub = activation_scale_ub
+        # Off meta, so loading keeps its value
+        self.input_scale_ub = nn.Buffer(torch.full([1], activation_scale_ub, device="cpu"), persistent=False)
 
         if bias:
             self.bias = torch.nn.Parameter(torch.zeros((self.out_features), dtype=torch.float32))
@@ -146,8 +146,7 @@ class FbgemmFp8Linear(torch.nn.Linear):
         # Add guard here to keep the current device aligned with the input tensor device while launching the quantization kernel.
         with on_device(x):
             x_quantized, x_scale = quantize_fp8_per_row(
-                x.view(-1, x.shape[-1]).contiguous(),
-                scale_ub=torch.full([1], self.input_scale_ub, dtype=torch.float, device=x.device),
+                x.view(-1, x.shape[-1]).contiguous(), scale_ub=self.input_scale_ub
             )
 
         weight_scale_float32 = self.weight_scale.to(torch.float32)
@@ -192,8 +191,8 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
         self.down_proj_scale = torch.nn.Parameter(
             torch.zeros((self.num_experts, self.hidden_size, 1), dtype=torch.float32)
         )
-        # A plain attribute: loading re-creates every non-persistent buffer, so a buffer would lose its value
-        self.input_scale_ub = activation_scale_ub
+        # Off meta, so loading keeps its value
+        self.input_scale_ub = nn.Buffer(torch.full([1], activation_scale_ub, device="cpu"), persistent=False)
 
     def forward(self, hidden_states):
         """
@@ -205,7 +204,6 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
         # Reshape hidden states for expert computation
         hidden_states = hidden_states.view(self.num_experts, -1, self.hidden_size)
         num_tokens = None
-        scale_ub = torch.full([1], self.input_scale_ub, dtype=torch.float, device=hidden_states.device)
 
         # Pre-allocate tensor for all expert outputs with same shape as hidden_states
         next_states = torch.empty_like(hidden_states)
@@ -216,7 +214,9 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
             expert_hidden_reshaped = expert_hidden.reshape(-1, self.hidden_size)
             # Quantize for this expert
             with on_device(expert_hidden_reshaped):
-                expert_quantized, expert_scale = quantize_fp8_per_row(expert_hidden_reshaped, num_tokens, scale_ub)
+                expert_quantized, expert_scale = quantize_fp8_per_row(
+                    expert_hidden_reshaped, num_tokens, self.input_scale_ub
+                )
             sharded_expert_dim = self.gate_up_proj.shape[-1] // 2
             gate_up_proj_scale_float32 = self.gate_up_proj_scale.to(torch.float32)
             if _is_torch_xpu_available:
@@ -254,7 +254,7 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
             activated = up * self.act_fn(gate)
 
             with on_device(activated):
-                activated_quantized, activated_scale = quantize_fp8_per_row(activated, num_tokens, scale_ub)
+                activated_quantized, activated_scale = quantize_fp8_per_row(activated, num_tokens, self.input_scale_ub)
 
             down_proj_scale_float32 = self.down_proj_scale.to(torch.float32)
             if _is_torch_xpu_available:
