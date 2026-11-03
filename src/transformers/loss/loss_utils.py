@@ -57,10 +57,9 @@ def aux_loss_share(
     **kwargs,
 ) -> torch.Tensor:
     """
-    Weights a per-batch mean loss, like the MoE router aux loss, by this batch's share of the `num_items_in_batch`
-    label tokens. With `num_items_in_batch`, the causal LM loss is this batch's share of a sum over several batches
-    (gradient accumulation steps, data parallel ranks) that the caller adds up, so the aux loss must be a share too,
-    or it is counted once per batch. Without `num_items_in_batch`, the aux loss is returned as is.
+    Weights `aux_loss` by this batch's share of the `num_items_in_batch` label tokens, like the causal LM loss, so it
+    is counted once across gradient accumulation steps and devices. Returns `aux_loss` as is without
+    `num_items_in_batch`.
     """
     if num_items_in_batch is None:
         return aux_loss
