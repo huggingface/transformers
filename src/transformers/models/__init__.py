@@ -217,6 +217,7 @@ if TYPE_CHECKING:
     from .granitemoeshared import *
     from .grounding_dino import *
     from .groupvit import *
+    from .grt import *
     from .gte import *
     from .helium import *
     from .herbert import *
