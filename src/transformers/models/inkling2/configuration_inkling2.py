@@ -164,8 +164,6 @@ class Inkling2VisionConfig(PreTrainedConfig):
         Ratio of the MLP intermediate size to the hidden size.
     spatial_merge_size (`int`, *optional*, defaults to 2):
         Side, in native patches, of the square of patch features concatenated into one language model token.
-    temporal_patch_size (`int`, *optional*, defaults to 2):
-        Number of copies of each still image in the input patches. They are averaged before the patch embedding.
     posemb_grid_size (`int`, *optional*, defaults to 32):
         Side of the learned position embedding grid, interpolated to each image's native patch grid.
     projection_hidden_dim (`int`, *optional*, defaults to 4096):
@@ -194,7 +192,6 @@ class Inkling2VisionConfig(PreTrainedConfig):
     num_channels: int = 3
     patch_size: int = 20
     spatial_merge_size: int = 2
-    temporal_patch_size: int = 2
     posemb_grid_size: int = 32
     projection_hidden_dim: int = 4096
     projector_bias: bool = False

@@ -93,7 +93,7 @@ class Inkling2ImageProcessor(TorchvisionBackend):
             patches.append(image.flatten(0, 1))
             image_grid_thw.append([1, rows, columns])
         return BatchFeature(
-            data={"pixel_values": torch.cat(patches).unsqueeze(1), "image_grid_thw": torch.tensor(image_grid_thw)},
+            data={"pixel_values": torch.cat(patches), "image_grid_thw": torch.tensor(image_grid_thw)},
             tensor_type=return_tensors,
         )
 

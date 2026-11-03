@@ -647,29 +647,29 @@ class DequantizeInkling2Experts(ConversionOps):
       factor `amax / outer_scale_denominator`.
     - MXFP8: float8 values with one power-of-two scale `2 ** (scale - 127)` per 32 values.
 
-    A weight without scales is returned unchanged. Experts are processed in chunks to bound the memory spike.
+    A weight without scales is returned unchanged, so the op is its own reverse and saves dense experts. Experts are
+    processed in chunks to bound the memory spike.
     """
 
-    E2M1_VALUES = (0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0)
-
-    def __init__(self, experts_per_chunk: int = 8):
-        self.experts_per_chunk = experts_per_chunk
+    E2M1_VALUES = (0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0)
+    EXPERTS_PER_CHUNK = 8
 
     def convert(self, input_dict, source_patterns, target_patterns, **kwargs):
-        tensors = [input_dict.get(pattern) for pattern in source_patterns]
-        weight, scale, amax, denominator = [tensor[0] if isinstance(tensor, list) else tensor for tensor in tensors]
-        if scale is None:
-            return {target_patterns[0]: weight}
+        tensors = {key: value[0] if isinstance(value, list) else value for key, value in input_dict.items()}
+        # a single tensor is a dense weight: an unquantized checkpoint on load, or the model weight on save
+        if len(tensors) == 1:
+            return {target_patterns[0]: next(iter(tensors.values()))}
+        weight, scale, amax, denominator = (tensors.get(pattern) for pattern in source_patterns)
 
         output_dtype = weight.dtype
         num_experts, rows = weight.shape[:2]
         columns = weight.shape[2] * 2 if amax is not None else weight.shape[2]
         output = torch.empty(num_experts, rows, columns, dtype=output_dtype, device=weight.device)
-        grid = torch.tensor(self.E2M1_VALUES, device=weight.device)
+        e2m1_values = torch.tensor(self.E2M1_VALUES, device=weight.device)
         if amax is not None:
             expert_factor = amax.float() / denominator.float()
-        for start in range(0, num_experts, self.experts_per_chunk):
-            experts = slice(start, start + self.experts_per_chunk)
+        for start in range(0, num_experts, self.EXPERTS_PER_CHUNK):
+            experts = slice(start, start + self.EXPERTS_PER_CHUNK)
             block_scale = scale[experts].float()
             if amax is None:
                 values = (
@@ -677,12 +677,15 @@ class DequantizeInkling2Experts(ConversionOps):
                 )
             else:
                 codes = weight[experts].to(torch.uint8)
-                codes = torch.stack((codes & 0xF, codes >> 4), dim=-1).flatten(-2).long()
-                values = grid[codes & 7] * (1 - 2 * (codes >> 3)).float()
+                values = e2m1_values[torch.stack((codes & 0xF, codes >> 4), dim=-1).flatten(-2).long()]
                 values = values.view(*block_scale.shape, 16) * block_scale[..., None]
                 values = values * expert_factor[experts, None, None, None]
             output[experts] = values.reshape(-1, rows, columns).to(output_dtype)
         return {target_patterns[0]: output}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return self
 
 
 class ErnieFuseAndSplitTextVisionExperts(ConversionOps):

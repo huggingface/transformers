@@ -126,10 +126,9 @@ class Inkling2RMSNorm(nn.Module):
 class Inkling2L2Clip(nn.Module):
     """Scales each head vector down to `threshold` when its L2 norm is larger; shorter vectors are unchanged."""
 
-    def __init__(self, num_heads: int, head_dim: int, threshold: float, learnable_scale: bool, eps: float = 1e-6):
+    def __init__(self, num_heads: int, head_dim: int, threshold: float, learnable_scale: bool):
         super().__init__()
         self.threshold = threshold
-        self.eps = eps
         self.scale = nn.Parameter(torch.ones(num_heads, head_dim)) if learnable_scale else None
 
     def forward(self, hidden_states: torch.Tensor, tau: torch.Tensor | None = None) -> torch.Tensor:
@@ -138,7 +137,7 @@ class Inkling2L2Clip(nn.Module):
         if self.scale is not None:
             hidden_states = hidden_states * self.scale.float()
         norm = torch.linalg.vector_norm(hidden_states, dim=-1, keepdim=True)
-        hidden_states = (hidden_states * (self.threshold / (norm + self.eps)).clamp(max=1.0)).to(input_dtype)
+        hidden_states = (hidden_states * (self.threshold / (norm + 1e-6)).clamp(max=1.0)).to(input_dtype)
         if tau is not None:
             hidden_states = (hidden_states.float() * tau).to(input_dtype)
         return hidden_states
@@ -693,8 +692,8 @@ def block_attention_residual(
 class Inkling2DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Inkling2TextConfig, layer_idx: int):
         super().__init__()
-        self.hidden_size = config.hidden_size
         self.is_sliding = config.layer_types[layer_idx] == "hybrid_sliding"
+        self.attention_type = "sliding_attention" if self.is_sliding else "full_attention"
         self.is_block_boundary = layer_idx % config.n_layers_per_attnres_block == 0
         self.normalize_values = config.attn_res_normalize_values
         self.self_attn = Inkling2Attention(config, layer_idx)
@@ -763,15 +762,6 @@ class Inkling2DecoderLayer(GradientCheckpointingLayer):
         if self.is_block_boundary:
             return attention_output + mlp_output
         return hidden_states + attention_output + mlp_output
-
-
-class Inkling2NormedEmbedding(nn.Embedding):
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, norm_eps: float):
-        super().__init__(num_embeddings, embedding_dim, padding_idx)
-        self.embed_norm = Inkling2RMSNorm(embedding_dim, eps=norm_eps)
-
-    def forward(self, input_ids: torch.Tensor):
-        return self.embed_norm(super().forward(input_ids))
 
 
 class Inkling2VisionRotaryEmbedding(nn.Module):
@@ -1053,7 +1043,6 @@ class Inkling2PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = False
     _can_compile_fullgraph = False
     _supports_attention_backend = False
-    _keys_to_ignore_on_load_unexpected = [r"model\.mtp\..*"]
     _keep_in_fp32_modules_strict = ["attn_sconv", "mlp_sconv", "k_sconv", "v_sconv", "attn_res"]
     _can_record_outputs = {
         "hidden_states": Inkling2DecoderLayer,
@@ -1091,10 +1080,15 @@ class Inkling2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, Inkling2VisionEncoderLayer):
             init.constant_(module.lambda_1, module.config.layer_scale_init_value)
             init.constant_(module.lambda_2, module.config.layer_scale_init_value)
-        elif isinstance(module, Inkling2VisionRotaryEmbedding):
-            inv_freq, _ = module.compute_axial_rope_parameters(module.config)
-            init.copy_(module.inv_freq, inv_freq)
-            init.copy_(module.original_inv_freq, inv_freq)
+
+
+class Inkling2NormedEmbedding(nn.Embedding):
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, norm_eps: float):
+        super().__init__(num_embeddings, embedding_dim, padding_idx)
+        self.embed_norm = Inkling2RMSNorm(embedding_dim, eps=norm_eps)
+
+    def forward(self, input_ids: torch.Tensor):
+        return self.embed_norm(super().forward(input_ids))
 
 
 @auto_docstring
@@ -1105,15 +1099,18 @@ class Inkling2TextModel(Inkling2PreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
+
         self.embed_tokens = Inkling2NormedEmbedding(
             config.vocab_size, config.hidden_size, self.padding_idx, config.rms_norm_eps
         )
         self.layers = nn.ModuleList(
             [Inkling2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.attn_res = Inkling2AttnRes(config)
         self.norm = Inkling2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
+        self.attn_res = Inkling2AttnRes(config)
+
+        # Initialize weights and apply final processing
         self.post_init()
 
     @merge_with_config_defaults
@@ -1160,15 +1157,12 @@ class Inkling2TextModel(Inkling2PreTrainedModel):
         hidden_states = inputs_embeds
         block_states = []
         for layer_idx, decoder_layer in enumerate(self.layers):
-            attention_type = (
-                "full_attention" if self.config.layer_types[layer_idx] == "hybrid" else "sliding_attention"
-            )
             new_hidden_states = decoder_layer(
                 hidden_states,
                 block_states=block_states,
                 attn_res_query=self.attn_res.attn_queries[layer_idx - 1] if layer_idx > 0 else None,
                 mlp_res_query=self.attn_res.mlp_queries[layer_idx],
-                attention_mask=causal_mask_mapping[attention_type],
+                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 conv_mask=causal_mask_mapping["linear_attention"],
                 past_key_values=past_key_values,
                 **kwargs,
@@ -1248,10 +1242,8 @@ class Inkling2ForCausalLM(Inkling2PreTrainedModel, GenerationMixin):
 
         hidden_states = slice_logits_to_keep(outputs.last_hidden_state, logits_to_keep)
         logits = self.lm_head(hidden_states).float()
-        if self.config.final_logit_softcapping is not None:
-            logits = logits / self.config.final_logit_softcapping
-            logits = torch.tanh(logits)
-            logits = logits * self.config.final_logit_softcapping
+        if (softcap := self.config.final_logit_softcapping) is not None:
+            logits = torch.tanh(logits / softcap) * softcap
         unpadded_vocab_size = self.config.unpadded_vocab_size
         if unpadded_vocab_size is not None and unpadded_vocab_size < logits.shape[-1]:
             logits = logits[..., :unpadded_vocab_size]
@@ -1295,16 +1287,15 @@ class Inkling2VisionModel(Inkling2PreTrainedModel):
         self, pixel_values: torch.Tensor, image_grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.Tensor` of shape `(num_image_tokens, num_frames, patch_size * spatial_merge_size, patch_size * spatial_merge_size, num_channels)`):
-            Image patches in `[-1, 1]`, one per language model image token, in raster order within each image. Frames
-            of a still image are copies and are averaged.
+        pixel_values (`torch.Tensor` of shape `(num_image_tokens, patch_size * spatial_merge_size, patch_size * spatial_merge_size, num_channels)`):
+            Image patches in `[-1, 1]`, one per language model image token, in raster order within each image.
         image_grid_thw (`torch.Tensor` of shape `(num_images, 3)`):
             Temporal, height and width of each image, counted in language model image tokens.
         """
         merge = self.config.spatial_merge_size
         grid = image_grid_thw.tolist()
         pixel_values = pixel_values.to(self.embeddings.patch_embedding.weight.dtype)
-        hidden_states = self.embeddings(pixel_values.mean(dim=1), grid)
+        hidden_states = self.embeddings(pixel_values, grid)
         hidden_states = self.pre_layernorm(hidden_states)
 
         lengths = [height * width * merge * merge + 1 for _, height, width in grid]
@@ -1351,10 +1342,6 @@ class Inkling2Model(Inkling2PreTrainedModel):
     def get_image_features(
         self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
-            Temporal, height and width of each image, counted in language model image tokens.
-        """
         return self.vision_tower(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
 
     def get_placeholder_mask(
@@ -1417,22 +1404,8 @@ class Inkling2Model(Inkling2PreTrainedModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_embeds)
 
-        if not isinstance(causal_mask_mapping := attention_mask, dict):
-            mask_kwargs = {
-                "config": self.config.get_text_config(),
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
-                "position_ids": position_ids,
-            }
-            causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
-                "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
-                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
-            }
-
         outputs = self.language_model(
-            attention_mask=causal_mask_mapping,
+            attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
@@ -1475,10 +1448,6 @@ class Inkling2ForConditionalGeneration(Inkling2PreTrainedModel, GenerationMixin)
     def get_image_features(
         self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
     ):
-        r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
-            Temporal, height and width of each image, counted in language model image tokens.
-        """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
@@ -1500,10 +1469,6 @@ class Inkling2ForConditionalGeneration(Inkling2PreTrainedModel, GenerationMixin)
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             Temporal, height and width of each image, counted in language model image tokens.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the language modeling loss. Indices should either be in `[0, ...,
-            config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100`
-            are ignored (masked).
         """
         outputs = self.model(
             input_ids=input_ids,
@@ -1520,10 +1485,8 @@ class Inkling2ForConditionalGeneration(Inkling2PreTrainedModel, GenerationMixin)
         text_config = self.config.text_config
         hidden_states = slice_logits_to_keep(outputs.last_hidden_state, logits_to_keep)
         logits = self.lm_head(hidden_states).float()
-        if text_config.final_logit_softcapping is not None:
-            logits = logits / text_config.final_logit_softcapping
-            logits = torch.tanh(logits)
-            logits = logits * text_config.final_logit_softcapping
+        if (softcap := text_config.final_logit_softcapping) is not None:
+            logits = torch.tanh(logits / softcap) * softcap
         if text_config.unpadded_vocab_size is not None and text_config.unpadded_vocab_size < logits.shape[-1]:
             logits = logits[..., : text_config.unpadded_vocab_size]
 
@@ -1540,37 +1503,6 @@ class Inkling2ForConditionalGeneration(Inkling2PreTrainedModel, GenerationMixin)
             image_hidden_states=outputs.image_hidden_states,
             router_logits=outputs.router_logits,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        position_ids=None,
-        pixel_values=None,
-        image_grid_thw=None,
-        attention_mask=None,
-        use_cache=True,
-        logits_to_keep=0,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- images only go through the vision tower on the first step
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-        if is_first_iteration or not use_cache:
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["image_grid_thw"] = image_grid_thw
-        return model_inputs
 
 
 __all__ = [

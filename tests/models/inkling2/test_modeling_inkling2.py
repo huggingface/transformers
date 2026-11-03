@@ -107,7 +107,7 @@ class Inkling2VisionReferenceParityTest(unittest.TestCase):
         model = self.get_model(torch.float32)
         with torch.no_grad():
             expected = reference(self.clip_patches, self.grid)
-            actual = model(self.unit_patches.float(), self.grid).pooler_output
+            actual = model(self.unit_patches[:, 0].float(), self.grid).pooler_output
         self.assertEqual(actual.shape, expected.shape)
         torch.testing.assert_close(actual, expected, rtol=1e-5, atol=1e-5 * expected.abs().max().item())
 
@@ -115,6 +115,6 @@ class Inkling2VisionReferenceParityTest(unittest.TestCase):
         model = self.get_model(torch.bfloat16)
         with torch.no_grad():
             expected = self.reference(self.clip_patches, self.grid).float()
-            actual = model(self.unit_patches, self.grid).pooler_output.float()
+            actual = model(self.unit_patches[:, 0], self.grid).pooler_output.float()
         cosine = torch.nn.functional.cosine_similarity(actual.flatten(), expected.flatten(), dim=0)
         self.assertGreater(cosine.item(), 0.9999)
