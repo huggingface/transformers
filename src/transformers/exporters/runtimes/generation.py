@@ -138,6 +138,15 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
         state starts it over."""
         if hasattr(self.runner, "reset_state"):
             self.runner.reset_state()
+        # A fixed-size cache is the size the decode graph was traced on, whatever this call generates.
+        traced_length = self.runner.metadata.cache_geometry.get("max_cache_len")
+        if traced_length is not None:
+            if max_cache_length > traced_length:
+                raise ValueError(
+                    f"This export's static cache holds {traced_length} positions and this call needs "
+                    f"{max_cache_length}: export it again with a generation config asking for more tokens."
+                )
+            max_cache_length = traced_length
         super()._prepare_cache_for_generation(
             generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
         )
@@ -169,11 +178,10 @@ class ExportedModelForCausalLM(ExportedModel, GenerationMixin):
             if name in traced and kwargs.get(name) is not None
         )
         query_length = kwargs[text_name].shape[1]
-        export_config = self.runner.metadata.export_config
-        static = not (export_config.get("dynamic") or export_config.get("dynamic_shapes"))
-        if query_length == 1 or not static or traced[text_name].get("shape", [0, 0])[1] != 1:
+        # A multi-token decode graph is traced on two tokens; one traced on a single token (any static export, or a
+        # dynamic one whose model can't decode several at once) takes the prompt a token at a time.
+        if query_length == 1 or traced[text_name].get("shape", [0, 0])[1] != 1:
             return self._call(**kwargs)
-        # A static decode graph takes one token: the prompt goes through it a token at a time.
         outputs = None
         for index in range(query_length):
             outputs = self._call(**self._token(kwargs, index, query_length))
