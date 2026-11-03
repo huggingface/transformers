@@ -940,6 +940,14 @@ class CacheHardIntegrationTest(unittest.TestCase):
             [layer.keys.shape[-1] for layer in cache.layers if not isinstance(layer, DummyLayer)], expected_head_dims
         )
         self.assertGreater(len(set(expected_head_dims)), 1)
+        # Make sure the dummy layers are expected to be there
+        self.assertTrue(
+            all(
+                text_config.kv_sharing_modes[i] == "reuse"
+                for i, layer in enumerate(cache.layers)
+                if isinstance(layer, DummyLayer)
+            )
+        )
 
     @require_torch_accelerator
     @slow
