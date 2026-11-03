@@ -200,7 +200,7 @@ class Gemma4TextConfig(PreTrainedConfig):
             )
             self.layer_types[-1] = "full_attention"
 
-        default_rope_params: dict[Literal["full_attention", "sliding_attention"] : dict[str, Any]] = {
+        default_rope_params: dict[Literal["full_attention", "sliding_attention"], dict[str, Any]] = {
             "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0},
             "full_attention": {"rope_type": "proportional", "partial_rotary_factor": 0.25, "rope_theta": 1_000_000.0},
         }
@@ -223,6 +223,34 @@ class Gemma4TextConfig(PreTrainedConfig):
             }
 
         super().__post_init__(**kwargs)
+
+    @property
+    def kv_sharing_modes(self) -> list[str | None]:
+        # In this case there are no shared layers
+        if self.num_kv_shared_layers == 0:
+            return [None] * self.num_hidden_layers
+
+        # After this index, all layers are consumers
+        first_shared_layer = self.num_hidden_layers - self.num_kv_shared_layers
+        kv_sharing_modes = [None if i < first_shared_layer else "reuse" for i in range(self.num_hidden_layers)]
+
+        # Compute the last index of the layers that will not be shared, for each unique `layer_types`
+        reversed_unshared_layer_types = self.layer_types[0:first_shared_layer][::-1]
+        # Just a quick check to make sure any layer type that will be shared also has one layer of the same type producing the cache
+        if sorted(set(reversed_unshared_layer_types)) != sorted(set(self.layer_types)):
+            raise ValueError(
+                "The set of layer types producing a cache is different than the set of layer types using them"
+            )
+        last_non_consumer_indices = [
+            first_shared_layer - 1 - reversed_unshared_layer_types.index(k) for k in set(self.layer_types)
+        ]
+
+        # The last non-consumer layer of each type stores its KV states, even if no layer reuses them: assistant
+        # models (e.g. Gemma4Assistant) read them from the `shared_kv_states` returned by the target model
+        for producer_index in last_non_consumer_indices:
+            kv_sharing_modes[producer_index] = "store"
+
+        return kv_sharing_modes
 
     def to_dict(self) -> dict[str, Any]:
         output = super().to_dict()

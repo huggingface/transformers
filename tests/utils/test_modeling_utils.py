@@ -94,7 +94,7 @@ from transformers.utils import (
     WEIGHTS_NAME,
 )
 from transformers.utils.import_utils import (
-    PACKAGE_DISTRIBUTION_MAPPING,
+    _package_distribution_mapping,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_flash_attn_4_available,
@@ -3328,14 +3328,16 @@ class TestAttentionImplementation(unittest.TestCase):
 
     def test_flash_attn_available_no_keyerror_when_missing_from_distribution_map(self):
         # Regression test for https://github.com/huggingface/transformers/issues/45520.
-        # When flash_attn is importable but not present in PACKAGE_DISTRIBUTION_MAPPING
+        # When flash_attn is importable but not present in the package distribution mapping
         # (e.g. installed via a non-standard wheel), the availability checks must not raise
         # a KeyError; they should simply return False.
         stripped_map = {
-            k: v for k, v in PACKAGE_DISTRIBUTION_MAPPING.items() if k not in ("flash_attn", "flash_attn_interface")
+            k: v for k, v in _package_distribution_mapping().items() if k not in ("flash_attn", "flash_attn_interface")
         }
-        with patch("transformers.utils.import_utils.PACKAGE_DISTRIBUTION_MAPPING", stripped_map):
-            with patch("transformers.modeling_flash_attention_utils.PACKAGE_DISTRIBUTION_MAPPING", stripped_map):
+        with patch("transformers.utils.import_utils._package_distribution_mapping", return_value=stripped_map):
+            with patch(
+                "transformers.modeling_flash_attention_utils._package_distribution_mapping", return_value=stripped_map
+            ):
                 self.assertFalse(is_flash_attn_2_available())
                 self.assertFalse(is_flash_attn_3_available())
                 self.assertFalse(is_flash_attn_4_available())
@@ -4246,9 +4248,27 @@ class RemoteAndCustomCodeModelTests(unittest.TestCase):
         self.assertFalse(model.is_remote_code())
 
 
+class GradientCheckpointingDeprecatedAliasTest(unittest.TestCase):
+    """The `gradient_checkpointing*` methods are deprecated aliases of `activation_checkpointing*`."""
+
+    def test_aliases_warn_and_forward(self):
+        from transformers import LlamaModel
+
+        config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=64, num_attention_heads=4)
+        model = LlamaModel(config)
+        with self.assertWarns(FutureWarning):
+            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+        self.assertTrue(model.is_activation_checkpointing)
+        with self.assertWarns(FutureWarning):
+            self.assertTrue(model.is_gradient_checkpointing)
+        with self.assertWarns(FutureWarning):
+            model.gradient_checkpointing_disable()
+        self.assertFalse(model.is_activation_checkpointing)
+
+
 @require_torch_accelerator
 class GradientCheckpointingOffloadTest(unittest.TestCase):
-    """`gradient_checkpointing_enable(offload=True)` holds the saved activations in host memory."""
+    """`activation_checkpointing_enable(offload=True)` holds the saved activations in host memory."""
 
     def _model(self, num_hidden_layers=8, hidden_size=256):
         from transformers import LlamaModel, set_seed
@@ -4271,12 +4291,12 @@ class GradientCheckpointingOffloadTest(unittest.TestCase):
         model = self._model()
         input_ids = torch.randint(0, 128, (1, 64), device=torch_device)
 
-        model.gradient_checkpointing_enable()
+        model.activation_checkpointing_enable()
         self._backward(model, input_ids)
         expected = [p.grad.clone() for p in model.parameters()]
 
         model.zero_grad(set_to_none=True)
-        model.gradient_checkpointing_enable(offload=True)
+        model.activation_checkpointing_enable(offload=True)
         self._backward(model, input_ids)
 
         for expected_grad, param in zip(expected, model.parameters()):
@@ -4290,7 +4310,7 @@ class GradientCheckpointingOffloadTest(unittest.TestCase):
         resident = []
         for offload in (False, True):
             model = self._model(num_hidden_layers, hidden_size)
-            model.gradient_checkpointing_enable(offload=offload)
+            model.activation_checkpointing_enable(offload=offload)
             input_ids = torch.randint(0, 128, (1, seq_len), device=torch_device)
             self._backward(model, input_ids)  # warm the allocator
             model.zero_grad(set_to_none=True)

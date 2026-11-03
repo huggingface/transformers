@@ -564,7 +564,7 @@ def load_balancing_loss_func(
         _, position_indices = all_scores.topk(top_k, dim=-1)
         expert_indices = all_indices.gather(-1, position_indices)
 
-        routing_weights = F.softmax(all_scores, dim=-1)
+        routing_weights = torch.zeros_like(all_scores).scatter(-1, all_indices, F.softmax(all_scores, dim=-1))
 
         all_expert_indices.append(expert_indices)
         all_routing_weights.append(routing_weights)
