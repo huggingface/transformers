@@ -218,6 +218,22 @@ outputs = compiled(ov_inputs)
 </hfoption>
 </hfoptions>
 
+### ExecuTorch constant methods
+
+Use `ExecutorchConfig.constant_methods` to add zero-argument methods that return constants from the
+exported program. This works with `export()` and `export_for_generation()` across ExecuTorch backends.
+
+```python
+from transformers.exporters import ExecutorchConfig
+
+config = ExecutorchConfig(constant_methods={"get_model_version": 1})
+```
+
+Each dictionary key is a method name and its value is the returned constant. Values must use
+ExecuTorch-supported types, such as scalars or tensors, and be appropriate for the exported component.
+Names that conflict with automatically generated constants are rejected. The supplied dictionary is
+not modified.
+
 ## Dynamic shapes
 
 Passing `dynamic=True` marks every tensor
@@ -523,6 +539,41 @@ The query axis only stays symbolic under a dynamic-shape export (`dynamic=True`)
 freezes it at the captured length, giving a fixed multi-token graph. It composes with the static KV
 cache below — the merged decode writes each step's tokens into the fixed-size cache in place, and the
 cache handles where they land internally.
+
+### ExecuTorch off-graph KV cache
+
+With ExecuTorch's off-graph cache, the runtime owns historical K/V rather than passing it through
+the graph. This experimental mode currently requires the MLX backend and an ExecuTorch build with
+off-graph cache support.
+
+It supports a single unpadded, decoder-only text sequence with full or sliding-window attention.
+Custom masks, beam search, and speculative generation are not supported.
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
+from transformers.exporters import ExecutorchConfig, ExecutorchExporter
+
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
+inputs = tokenizer("Hello, world!", return_tensors="pt")
+
+components = ExecutorchExporter().export_for_generation(
+    model,
+    inputs,
+    config=ExecutorchConfig(backend="mlx", dynamic=True, cache_implementation="executorch_off_graph_cache"),
+    generation_config=GenerationConfig(cache_implementation="dynamic", do_sample=False),
+    multi_token_decode=True,
+)
+```
+
+`GenerationConfig.cache_implementation` selects the HF cache used during capture;
+`ExecutorchConfig.cache_implementation` selects the exported representation. Token positions remain
+explicit graph inputs.
+
+At runtime, create a cache with the desired capacity and growth policy, and bind its
+`llm_cache_registry_key` through load-time backend options for both prefill and decode artifacts.
+Reuse that cache between calls and clear it before starting a new sequence.
+`Runtime.load_program()` alone does not configure the cache.
 
 ### Static KV cache
 
