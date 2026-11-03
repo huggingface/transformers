@@ -823,30 +823,29 @@ for (int64_t position = prompt_len; position < max_cache_len; ++position) {
 
 ## ONNX Runtime fusions
 
-Set `ort_fusions` to fuse an ONNX export into ONNX Runtime's own transformer ops before it's saved, which ONNX Runtime
-runs much faster than the plain graph: RMS and layer norms (`SimplifiedLayerNormalization`, `SkipLayerNormalization`,
-...), attention (`MultiHeadAttention`, and `GroupQueryAttention` over a key-value cache, applying the rotary embedding
-itself), rotary embeddings (`RotaryEmbedding`), GELU, and the projections reading one input packed into one matmul.
-Every fusion computes exactly what it replaces.
+Set `ort_fusions` to rewrite an ONNX export into ONNX Runtime's fused transformer ops before it's saved. ONNX Runtime
+runs the fused graph much faster than the plain one. The fusions cover RMS and layer norms, attention
+(`MultiHeadAttention`, or `GroupQueryAttention` when there's a key-value cache), rotary embeddings, GELU, and
+projections that share an input. Each fusion gives the same result as the ops it replaces.
+
+Set `ort_fusions` to the execution provider the graph will run on.
 
 ```python
 config = OnnxConfig(ort_fusions="cpu")
-```
-
-Fuse for the provider the graph will run on. `"cuda"` leaves out the fusions the CUDA provider's kernels miscompute
-or run slower (float16 skip norms, `GroupQueryAttention` over a mask), rewrites the ops it would run on the CPU (so a
-static export runs under ONNX Runtime's CUDA graphs), and fuses into the ops only it has, which the graph then needs:
-today, a mixture-of-experts block (a softmax / top-k router and its experts) as one `MoE`.
-
-```python
 config = OnnxConfig(ort_fusions="cuda")
 ```
 
-Those ops are ONNX Runtime's, not standard ONNX, so by default (`ort_fusions=None`) the graph stays standard, for any
-ONNX consumer (TensorRT, OpenVINO, ...). To run one model on several, export it once per target.
+With `"cuda"`, the exporter skips the fusions that the CUDA kernels compute incorrectly or more slowly, and it
+replaces ops the CUDA provider would otherwise run on the CPU, so a static export can run with CUDA graphs. It also
+fuses mixture-of-experts blocks into ONNX Runtime's `MoE` op, which only exists for CUDA, so the graph may no longer
+run on CPU.
 
-The fusions run before a quantizer that quantizes the ONNX graph ([`~exporters.OnnxRuntimeQuantizer`]), as ONNX
-Runtime recommends, and not on a graph quantized before the conversion. They need `optimize=True`, the default.
+The fused ops aren't standard ONNX, so other ONNX consumers such as TensorRT or OpenVINO can't read them. The default
+is `ort_fusions=None`, which keeps the graph standard. If you need the model on several runtimes, export it once for
+each.
+
+The fusions run before [`~exporters.OnnxRuntimeQuantizer`] quantizes the graph, as ONNX Runtime recommends. They're
+skipped when the model is quantized before export, and they require `optimize=True` (the default).
 
 ## Quantization
 

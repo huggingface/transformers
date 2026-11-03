@@ -152,10 +152,10 @@ class OnnxConfig(DynamoConfig):
             Expose weight initializers as explicit graph inputs. Required by
             some older ONNX runtimes (opset < 9).
         ort_fusions (`str`, *optional*):
-            Fuse the graph into ONNX Runtime's own transformer ops (`SimplifiedLayerNormalization`, …) before it is
-            quantized and saved, which ONNX Runtime runs faster, for the provider it will run on: `"cpu"`, or
-            `"cuda"`, which also uses the ops only the CUDA provider has (`MoE`); the graph then runs on GPU only. Those ops are ONNX Runtime's, not standard ONNX, so the default, `None`,
-            leaves the graph standard. Runs with `optimize` only: the fusions optimize the graph themselves.
+            Fuse the graph into ONNX Runtime's transformer ops (fused norms, attention, rotary embeddings, ...) so it
+            runs faster on ONNX Runtime. Set it to the execution provider the graph will run on, `"cpu"` or `"cuda"`.
+            A `"cuda"` graph can also use CUDA-only ops such as `MoE`, so it may not run on CPU. The fused ops are
+            not standard ONNX, so the default, `None`, keeps the graph portable. Requires `optimize=True`.
     """
 
     export_format: ExportFormat = ExportFormat.ONNX
