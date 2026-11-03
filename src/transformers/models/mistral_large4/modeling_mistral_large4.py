@@ -415,8 +415,6 @@ class MistralLarge4TextAttention(nn.Module):
         # Either the layer computes it's own cache or it loads it from shared_kv_states
         if self.is_kv_shared_layer:
             k_pass, k_rot = shared_kv_states["rope" if self.use_rope else "nope"]
-            k_pass = k_pass.to(q_states.device)  # device of past layer may be different from current one
-            k_rot = k_rot.to(q_states.device)
         else:
             compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
             kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
@@ -670,7 +668,7 @@ class MistralLarge4PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MistralLarge4TextDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values", "shared_kv_states"]
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
     _supports_sdpa = True
     _supports_flex_attn = False

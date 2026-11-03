@@ -428,8 +428,6 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
         # Either the layer computes it's own cache or it loads it from shared_kv_states
         if self.is_kv_shared_layer:
             k_pass, k_rot = shared_kv_states["rope" if self.use_rope else "nope"]
-            k_pass = k_pass.to(q_states.device)  # device of past layer may be different from current one
-            k_rot = k_rot.to(q_states.device)
         else:
             compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
             kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
@@ -599,7 +597,7 @@ class MistralLarge4PreTrainedModel(GlmMoeDsaPreTrainedModel):
     config: MistralLarge4Config
     input_modalities = ("image", "text")
     _no_split_modules = ["MistralLarge4TextDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values", "shared_kv_states"]
+    _skip_keys_device_placement = ["past_key_values"]
     _keep_in_fp32_modules_strict = ["rotary_emb", "mlp.gate.weight"]
     # The checkpoint ships a multi-token-prediction draft head that this model does not implement yet # TODO
     _keys_to_ignore_on_load_unexpected = [r"mtp_dspark\..*"]
