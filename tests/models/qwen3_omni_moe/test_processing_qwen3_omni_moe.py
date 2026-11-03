@@ -238,3 +238,21 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths)
         self.assertListEqual(from_call, from_helper["num_audio_tokens"])
+
+    def test_load_audio_from_video_with_decoded_audio(self):
+        processor = self.get_processor()
+        video = np.random.randint(255, size=(4, 112, 112, 3), dtype=np.uint8)
+        audio = [np.zeros(48000, dtype=np.float32), np.zeros(32000, dtype=np.float32)]
+        text = (
+            f"{processor.audio_bos_token}{processor.audio_token}{processor.audio_eos_token}"
+            f"{processor.vision_bos_token}{processor.video_token}{processor.vision_eos_token}"
+        )
+        inputs = processor(
+            text=text, videos=[video], audio=audio, load_audio_from_video=True, audio_from_video_indices=[None, 0]
+        )
+        deprecated_inputs = processor(text=text, videos=[video], audio=audio, use_audio_in_video=True)
+        self.assertListEqual(inputs["input_ids"], deprecated_inputs["input_ids"])
+
+        audio_token_id = processor.tokenizer.convert_tokens_to_ids(processor.audio_token)
+        num_audio_tokens = processor._get_num_multimodal_tokens(audio_lengths=[48000, 32000])["num_audio_tokens"]
+        self.assertEqual(inputs["input_ids"][0].count(audio_token_id), sum(num_audio_tokens))

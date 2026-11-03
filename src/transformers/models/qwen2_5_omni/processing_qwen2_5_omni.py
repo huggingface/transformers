@@ -17,6 +17,7 @@ Processor class for Qwen2.5Omni.
 """
 
 import math
+import re
 
 import numpy as np
 
@@ -149,8 +150,17 @@ class Qwen2_5OmniProcessor(OmniModalProcessorMixin):
                 "`use_audio_in_video` is depreacted and will be removed in v5.25, use `load_audio_from_video` instead"
             )
             if not (kwargs.get("load_audio_from_video") or videos_kwargs.get("load_audio_from_video")):
-                # Keep the deprecated flag's behaviour of loading the audio track of every video
-                kwargs.update(load_audio_from_video=True, audio_from_video_indices=None)
+                kwargs["load_audio_from_video"] = True
+            # Keep the deprecated flag's behaviour of pairing each audio with its placeholder in the text
+            if text is not None and not any(idx is not None for idx in kwargs.get("audio_from_video_indices") or []):
+                placeholders = re.findall(
+                    f"{re.escape(self.audio_token)}|{re.escape(self.video_token)}",
+                    "".join(text if isinstance(text, list) else [text]),
+                )
+                video_indices = iter(range(len(placeholders)))
+                kwargs["audio_from_video_indices"] = [
+                    None if token == self.audio_token else next(video_indices) for token in placeholders
+                ]
         return super().__call__(images=images, text=text, videos=videos, audio=audio, **kwargs)
 
     def validate_inputs(
