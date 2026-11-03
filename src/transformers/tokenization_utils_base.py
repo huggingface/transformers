@@ -98,7 +98,7 @@ def flatten(arr: list):
 
 
 def _is_empty(arr: list) -> bool:
-    # same result as `len(flatten(arr)) == 0`, but returns at the first leaf instead of copying every element
+    True if arr contains no leaf elements (nested empty lists/tuples).
     if len(arr) == 0:
         return True
     if not isinstance(arr[0], (list, tuple)):
