@@ -124,15 +124,6 @@ if int(os.environ["RANK"]) == 0:
     print(processor.batch_decode(response_ids, skip_special_tokens=True)[0])
 ```
 
-## Notes
-
-- The released checkpoint uses `process_image_mode="anyres"` and `vision_feature_select_strategy="default"`.
-  The default feature selection removes CLIP's CLS token before projection.
-- Pass the original images to the processor. It handles resizing, cropping, normalization, and image-token expansion.
-  Avoid truncating expanded image tokens, which must match the number of image features.
-- For batched generation, set `processor.tokenizer.padding_side = "left"` and pass `padding=True` to the processor.
-  If the tokenizer has no padding token, set `processor.tokenizer.pad_token = processor.tokenizer.eos_token`.
-
 ## MiniMaxVL01Config
 
 [[autodoc]] MiniMaxVL01Config
