@@ -420,6 +420,7 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
 @auto_docstring
 class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
     _tied_weights_keys = {}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     @can_return_tuple
     @auto_docstring

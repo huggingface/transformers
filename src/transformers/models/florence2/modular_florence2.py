@@ -1444,6 +1444,9 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
     _tied_weights_keys = {
         "lm_head.weight": "model.language_model.shared.weight",
     }
+    # The Bart language model has no TP plan, so its shared embedding is never sharded: a head rule would gather
+    # full-vocab logits from every rank
+    _tp_plan = AttributeError()
 
     @auto_docstring
     def get_image_features(
