@@ -539,36 +539,13 @@ assert(correct_output_text == output_text)
 
 #### 4. MoE expert parameters
 
-MoE models can store expert weights as parameters such as `gate_up_proj` and `down_proj` rather than as
-`nn.Linear.weight`. Use `FqnToConfig` to select these parameters explicitly. For example, for a model whose
-expert parameters match the following names:
+With a torchao backend that supports automatic expert-parameter selection, a regular `TorchAoConfig`
+also quantizes supported MoE expert weights, such as `gate_up_proj` and `down_proj`, without manual targeting.
+Support depends on the torchao version, quantization configuration, and device; backends without this
+selection support retain the existing Linear and optional embedding selection.
 
-```py
-from torchao.quantization import FqnToConfig, Int4WeightOnlyConfig
-from transformers import TorchAoConfig
-
-expert_config = Int4WeightOnlyConfig(group_size=128, int4_packing_format="plain_int32")
-quantization_config = TorchAoConfig(
-    FqnToConfig({
-        r"re:.*\.experts\.(gate_up_proj|down_proj)": expert_config,
-    })
-)
-```
-
-This configuration selects only the matching expert parameters; add entries for other parameters or modules
-to quantize them as well. The torchao backend must support both the expert tensor shapes and the operations
-used by the model. In particular, `plain_int32` packing requires a supported accelerator, not CPU quantization.
-
-When torchao exposes `config_targets_parameter`, Transformers uses it to select additional parameters
-for non-`FqnToConfig` configurations. Existing `nn.Linear.weight` selection is preserved regardless of the
-helper's availability or result, with embeddings controlled by `include_input_output_embeddings`. Explicit
-`FqnToConfig` selection remains available in either case. Module exclusions still apply.
-
-When CPU offloading is enabled, custom parameters are moved individually to the accelerator for quantization
-and returned to CPU, without moving other parameters in the same module.
-
-Allow enough device memory for loading and quantizing the full-precision weights, not just for the final
-quantized model.
+Use `FqnToConfig` for per-layer overrides, as in the examples above, or `modules_to_not_convert` to exclude
+modules from quantization.
 
 ## Serialization
 
