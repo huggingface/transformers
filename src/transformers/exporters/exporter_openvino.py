@@ -125,6 +125,7 @@ class OpenVINOExporter(DynamoExporter):
             # Converted before the model gets its dtypes back: the program's constants are its own tensors.
             exported_program, graph_module = _fix_exported_program(exported_program)
             ov_model = _convert_to_openvino(graph_module)
+        _fold_scalar_converts(ov_model)
 
         inputs_names = [name for name in inputs_names if name in get_leaf_tensors(sample_inputs)]
         inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
@@ -189,6 +190,36 @@ def _configs(model):
             for name in getattr(config, "sub_configs", {})
             if getattr(config, name, None) is not None
         )
+
+
+def _fold_scalar_converts(ov_model: openvino.Model) -> None:
+    """Fold the frontend's marked scalar casts into plain constants, so the CPU plugin's fusions match them.
+
+    The PyTorch frontend translates `aten.neg` as a multiply by a `Convert`ed `-1`, marking the `Convert`
+    `DisableConstantFolding` and the multiply a dequantization node. While the marks stay, the `Convert` never folds
+    and the plugin's RoPE fusion, which matches `rotate_half`'s negation as a multiply by a constant, doesn't fire: the
+    model this exporter returns would run RoPE decomposed. Serializing drops the marks, so only an IR read back from
+    disk fused. Quantized weights' dequantization subgraphs are never scalar and are left alone.
+    """
+    for op in ov_model.get_ordered_ops():
+        if op.get_type_name() != "Convert" or not any(
+            key.startswith("DisableConstantFolding") for key in op.get_rt_info().keys()
+        ):
+            continue
+        source = op.input_value(0).get_node()
+        if (
+            source.get_type_name() != "Constant"
+            or source.get_output_shape(0)
+            and math.prod(source.get_output_shape(0)) != 1
+        ):
+            continue
+        value = source.get_data().astype(op.get_output_element_type(0).to_dtype())
+        folded = openvino.op.Constant(value.reshape(list(source.get_output_shape(0))), shared_memory=False)
+        for target in op.output(0).get_target_inputs():
+            rt_info = target.get_node().get_rt_info()
+            for key in [key for key in rt_info.keys() if key.startswith("dequantization_node")]:
+                del rt_info[key]
+        op.output(0).replace(folded.output(0))
 
 
 # ── Conversion helpers ──────────────────────────────────────────────────────
