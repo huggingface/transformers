@@ -31,6 +31,7 @@ sys.path.append(os.path.join(REPO_PATH, "utils"))
 
 import tests_fetcher  # noqa: E402
 from tests_fetcher import (  # noqa: E402
+    _file_exists_case_sensitive,
     checkout_commit,
     clean_code,
     create_reverse_dependency_map,
@@ -574,6 +575,44 @@ class TestFetcherTester(unittest.TestCase):
             # Both .utils symbols must resolve to their source files; the old dict() bug dropped the first one
             assert "src/transformers/utils/hub.py" in deps, "cached_file (first .utils import) was dropped"
             assert "src/transformers/utils/imports.py" in deps, "is_torch_available (second .utils import) was dropped"
+
+    def test_file_exists_case_sensitive(self):
+        """_file_exists_case_sensitive must reject wrong-cased names on all platforms."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            p = Path(tmp_dir) / "lower_name.py"
+            p.touch()
+            self.assertTrue(_file_exists_case_sensitive(p))
+            self.assertFalse(_file_exists_case_sensitive(p.parent / "LOWER_NAME.py"))
+            self.assertFalse(_file_exists_case_sensitive(p.parent / "nosuchfile.py"))
+
+    def test_get_module_dependencies_constant_not_mistaken_for_submodule(self):
+        """A constant named UPPER_CASE must not be treated as a submodule file lower_case.py.
+
+        On case-insensitive filesystems (Windows, macOS), bare ``is_file()`` would match
+        ``UPPER_CASE.py`` against ``lower_case.py``, wrongly recording an UPPER_CASE.py dep
+        and silently dropping the ``__init__.py`` dep.  This test pins the correct behaviour
+        (the __init__.py remains a dep) so a regression is caught on any platform.
+        """
+        with tempfile.TemporaryDirectory() as tmp_folder:
+            tmp_folder = Path(tmp_folder)
+            create_tmp_repo(tmp_folder)
+
+            # Add a real submodule file lower_name.py under utils/
+            (tmp_folder / "src/transformers/utils/lower_name.py").write_text("code", encoding="utf-8")
+            # Update utils/__init__.py to export a constant LOWER_NAME (not a submodule import)
+            with open(tmp_folder / "src/transformers/utils/__init__.py", "a", encoding="utf-8") as f:
+                f.write("LOWER_NAME = 'constant'\n")
+            # Import LOWER_NAME (all-caps constant) from ...utils in modeling_bert
+            with open(tmp_folder / BERT_MODELING_FILE, "a", encoding="utf-8") as f:
+                f.write("from ...utils import LOWER_NAME\n")
+
+            with patch_transformer_repo_path(tmp_folder):
+                deps = get_module_dependencies(BERT_MODELING_FILE)
+
+            # The wrong-cased path must never appear
+            self.assertNotIn("src/transformers/utils/LOWER_NAME.py", deps)
+            # utils/__init__.py must still be a dep (LOWER_NAME is defined there, not in a submodule)
+            self.assertIn("src/transformers/utils/__init__.py", deps)
 
     def test_create_reverse_dependency_tree(self):
         with tempfile.TemporaryDirectory() as tmp_folder:

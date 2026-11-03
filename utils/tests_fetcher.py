@@ -608,6 +608,23 @@ def create_backbone_edges() -> list[tuple[str, str]]:
     ]
 
 
+def _file_exists_case_sensitive(path: Path) -> bool:
+    """Return True only if *path* exists and the filename casing matches exactly.
+
+    ``Path.is_file()`` on case-insensitive filesystems (Windows, macOS) returns
+    ``True`` even when the requested name differs in case from the on-disk name.
+    This matters for the fetcher's heuristic that distinguishes submodule files
+    from plain symbols: ``from .pkg import UPPER_NAME`` should NOT be treated as
+    a reference to ``pkg/upper_name.py`` just because the file happens to exist.
+
+    ``os.listdir()`` always returns the actual on-disk filenames, so a membership
+    check against it enforces case-sensitivity on every platform.
+    """
+    if not path.is_file():
+        return False
+    return path.name in os.listdir(path.parent)
+
+
 def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None) -> list[str]:
     """
     Get the imports a given module makes.
@@ -676,10 +693,7 @@ def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None
     result = []
     # Double check we get proper modules (either a python file or a folder with an init).
     for module_file, imports in imported_modules:
-        candidate = PATH_TO_REPO / f"{module_file}.py"
-        if candidate.is_file() and candidate.resolve().name == candidate.name:
-            # Exact case-sensitive match (resolve() returns actual disk name; compare against
-            # the constructed name to avoid false positives on case-insensitive filesystems).
+        if _file_exists_case_sensitive(PATH_TO_REPO / f"{module_file}.py"):
             module_file = f"{module_file}.py"
         elif (PATH_TO_REPO / module_file).is_dir() and (PATH_TO_REPO / module_file / "__init__.py").is_file():
             module_file = f"{module_file}/__init__.py"
@@ -768,14 +782,10 @@ def get_module_dependencies(module_fname: str, cache: dict[str, list[str]] | Non
                         [
                             f"{module.replace('__init__.py', '')}{i}.py"
                             for i in imports
-                            # Exact case-sensitive match: resolve() returns the actual disk filename;
-                            # comparing against the constructed name avoids false positives on
-                            # case-insensitive filesystems (e.g. SLIDING_ATTENTION matching sliding_attention.py).
-                            if (path_to_module / f"{i}.py").is_file()
-                            and (path_to_module / f"{i}.py").resolve().name == f"{i}.py"
+                            if _file_exists_case_sensitive(path_to_module / f"{i}.py")
                         ]
                     )
-                    imports = [i for i in imports if not (path_to_module / f"{i}.py").is_file()]
+                    imports = [i for i in imports if not _file_exists_case_sensitive(path_to_module / f"{i}.py")]
                     if len(imports) > 0:
                         # Then if there are still objects left, they are fully defined in the init, so we keep it as a
                         # dependency.
