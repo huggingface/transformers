@@ -174,7 +174,6 @@ MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL = (
     "patches_grid",
     "image_token_pooling",
     "image_grids",
-    "image_num_crops",
     "video_token_pooling",
     "video_grids",
 )
