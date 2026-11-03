@@ -78,7 +78,6 @@ import os
 import torch
 
 from transformers import AutoModelForImageTextToText, DistributedConfig, MiniMaxVL01Config, MiniMaxVL01Processor
-from transformers.image_utils import load_image
 
 
 checkpoint = "MiniMaxAI/MiniMax-VL-01"
@@ -93,18 +92,25 @@ model = AutoModelForImageTextToText.from_pretrained(
     distributed_config=DistributedConfig(tp_size=world_size, ep_size=world_size),
 )
 
-image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg")
 messages = [
     {
         "role": "user",
         "content": [
-            {"type": "image"},
+            {
+                "type": "image",
+                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg",
+            },
             {"type": "text", "text": "Describe this image briefly."},
         ],
     }
 ]
-prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
-inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device)
+inputs = processor.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+).to(model.device)
 
 with torch.inference_mode():
     generated_ids = model.generate(
