@@ -41,6 +41,7 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
         cls.video_token = processor.video_token
+        cls.audio_token = processor.audio_token
 
     @classmethod
     def _setup_video_processor(cls):

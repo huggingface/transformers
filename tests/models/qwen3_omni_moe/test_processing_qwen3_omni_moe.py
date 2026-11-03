@@ -222,23 +222,6 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(out_dict[self.audio_input_name]), 1)  # 1 audio in the conversation
         self.assertEqual(len(out_dict[self.videos_input_name]), 10800)  # 1 video in the conversation
 
-    def test_get_num_multimodal_tokens_matches_processor_call_audio(self):
-        "Tests that `_get_num_multimodal_tokens` agrees with `__call__`"
-
-        processor = self.get_processor()
-        sampling_rate = processor.feature_extractor.sampling_rate
-        audio_lengths = [sampling_rate, 4 * sampling_rate, int(1.7 * sampling_rate)]
-
-        prompt = f"{processor.audio_bos_token}{processor.audio_token}{processor.audio_eos_token}"
-        audio_token_id = processor.tokenizer.convert_tokens_to_ids(processor.audio_token)
-        from_call = []
-        for length in audio_lengths:
-            inputs = processor(text=prompt, audio=[np.zeros(length, dtype=np.float32)], return_tensors="pt")
-            from_call.append(int((inputs["input_ids"][0] == audio_token_id).sum()))
-
-        from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths)
-        self.assertListEqual(from_call, from_helper["num_audio_tokens"])
-
     def test_load_audio_from_video_with_decoded_audio(self):
         processor = self.get_processor()
         video = np.random.randint(255, size=(4, 112, 112, 3), dtype=np.uint8)
