@@ -197,19 +197,18 @@ class WatermarkDetector:
         return_dict: bool = False,
     ) -> WatermarkDetectorOutput | np.ndarray:
         """
-                Args:
-                input_ids (`torch.LongTensor`):
-                    The watermark generated text. It is advised to remove the prompt, which can affect the detection.
-                z_threshold (`Dict`, *optional*, defaults to `3.0`):
-                    Changing this threshold will change the sensitivity of the detector. Higher z threshold gives less
-                    sensitivity and vice versa for lower z threshold.
-                return_dict (`bool`,  *optional*, defaults to `False`):
-                    Whether to return `~generation.WatermarkDetectorOutput` or not. If not it will return boolean predictions,
-        ma
-                Return:
-                    [`~generation.WatermarkDetectorOutput`] or `np.ndarray`: A [`~generation.WatermarkDetectorOutput`]
-                    if `return_dict=True` otherwise a `np.ndarray`.
+        Args:
+            input_ids (`torch.LongTensor`):
+                The watermark generated text. It is advised to remove the prompt, which can affect the detection.
+            z_threshold (`float`, *optional*, defaults to 3.0):
+                Changing this threshold will change the sensitivity of the detector. Higher z threshold gives less
+                sensitivity and vice versa for lower z threshold.
+            return_dict (`bool`, *optional*, defaults to `False`):
+                Whether to return `~generation.WatermarkDetectorOutput` or not. If not it will return boolean predictions.
 
+        Returns:
+            [`~generation.WatermarkDetectorOutput`] or `np.ndarray`: A [`~generation.WatermarkDetectorOutput`]
+            if `return_dict=True` otherwise a `np.ndarray`.
         """
         has_bos = input_ids[:, 0] == self.bos_token_id
 
