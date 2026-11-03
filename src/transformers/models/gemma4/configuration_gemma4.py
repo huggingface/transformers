@@ -200,7 +200,7 @@ class Gemma4TextConfig(PreTrainedConfig):
             )
             self.layer_types[-1] = "full_attention"
 
-        default_rope_params: dict[Literal["full_attention", "sliding_attention"] : dict[str, Any]] = {
+        default_rope_params: dict[Literal["full_attention", "sliding_attention"], dict[str, Any]] = {
             "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0},
             "full_attention": {"rope_type": "proportional", "partial_rotary_factor": 0.25, "rope_theta": 1_000_000.0},
         }
@@ -223,6 +223,34 @@ class Gemma4TextConfig(PreTrainedConfig):
             }
 
         super().__post_init__(**kwargs)
+
+    @property
+    def kv_sharing_modes(self) -> list[str | None]:
+        # In this case there are no shared layers
+        if self.num_kv_shared_layers == 0:
+            return [None] * self.num_hidden_layers
+
+        # After this index, all layers are consumers
+        first_shared_layer = self.num_hidden_layers - self.num_kv_shared_layers
+        kv_sharing_modes = [None if i < first_shared_layer else "reuse" for i in range(self.num_hidden_layers)]
+
+        # Compute the last index of the layers that will not be shared, for each unique `layer_types`
+        reversed_unshared_layer_types = self.layer_types[0:first_shared_layer][::-1]
+        # Just a quick check to make sure any layer type that will be shared also has one layer of the same type producing the cache
+        if sorted(set(reversed_unshared_layer_types)) != sorted(set(self.layer_types)):
+            raise ValueError(
+                "The set of layer types producing a cache is different than the set of layer types using them"
+            )
+        last_non_consumer_indices = [
+            first_shared_layer - 1 - reversed_unshared_layer_types.index(k) for k in set(self.layer_types)
+        ]
+
+        # The last non-consumer layer of each type stores its KV states, even if no layer reuses them: assistant
+        # models (e.g. Gemma4Assistant) read them from the `shared_kv_states` returned by the target model
+        for producer_index in last_non_consumer_indices:
+            kv_sharing_modes[producer_index] = "store"
+
+        return kv_sharing_modes
 
     def to_dict(self) -> dict[str, Any]:
         output = super().to_dict()
@@ -256,15 +284,15 @@ class Gemma4VisionConfig(PreTrainedConfig):
 
     model_type = "gemma4_vision"
     base_model_tp_plan = {
-        "encoder.layers.*.self_attn.q_proj": "colwise",
-        "encoder.layers.*.self_attn.k_proj": "colwise",
-        "encoder.layers.*.self_attn.v_proj": "colwise",
+        "encoder.layers.*.self_attn.q_proj.linear": "colwise",
+        "encoder.layers.*.self_attn.k_proj.linear": "colwise",
+        "encoder.layers.*.self_attn.v_proj.linear": "colwise",
         "encoder.layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
         "encoder.layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
-        "encoder.layers.*.self_attn.o_proj": "rowwise",
-        "encoder.layers.*.mlp.gate_proj": "colwise",
-        "encoder.layers.*.mlp.up_proj": "colwise",
-        "encoder.layers.*.mlp.down_proj": "rowwise",
+        "encoder.layers.*.self_attn.o_proj.linear": "rowwise",
+        "encoder.layers.*.mlp.gate_proj.linear": "colwise",
+        "encoder.layers.*.mlp.up_proj.linear": "colwise",
+        "encoder.layers.*.mlp.down_proj.linear": "rowwise",
     }
 
     default_theta = 100.0
@@ -335,7 +363,7 @@ class Gemma4Config(PreTrainedConfig):
 
     model_type = "gemma4"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Gemma4TextConfig),
+        "text_config": Gemma4TextConfig,
         "vision_config": SubConfigSpec(config_class=Gemma4VisionConfig, optional=True),
         "audio_config": SubConfigSpec(config_class=Gemma4AudioConfig, optional=True),
     }

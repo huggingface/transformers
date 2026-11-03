@@ -22,6 +22,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
+from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
@@ -185,7 +186,7 @@ class AudioFlamingo3Model(VoxtralModel):
     _pp_plan = None
     _keep_in_fp32_modules_strict = None
 
-    def __init__(self, config):
+    def __init__(self, config: AudioFlamingo3Config):
         super().__init__(config)
 
     @can_return_tuple
@@ -278,7 +279,7 @@ class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
     _keep_in_fp32_modules_strict = AttributeError()
     _tied_weights_keys = None
 
-    def __init__(self, config):
+    def __init__(self, config: AudioFlamingo3Config):
         super().__init__(config)
         self.model = AudioFlamingo3Model(config)
         self.post_init()
@@ -330,8 +331,8 @@ class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

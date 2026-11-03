@@ -374,7 +374,7 @@ class SegformerPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class SegformerModel(SegformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SegformerConfig):
         super().__init__(config)
         self.config = config
 
@@ -408,7 +408,7 @@ class SegformerModel(SegformerPreTrainedModel):
     """
 )
 class SegformerForImageClassification(SegformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SegformerConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -532,7 +532,7 @@ class SegformerDecodeHead(nn.Module):
     """
 )
 class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SegformerConfig):
         super().__init__(config)
         self.segformer = SegformerModel(config)
         self.decode_head = SegformerDecodeHead(config)

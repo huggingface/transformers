@@ -854,6 +854,8 @@ class GroupViTTextEncoder(nn.Module):
 
 
 class GroupViTTextTransformer(GroupViTPreTrainedModel):
+    config: GroupViTTextConfig
+
     def __init__(self, config: GroupViTTextConfig):
         super().__init__(config)
         embed_dim = config.hidden_size

@@ -31,6 +31,7 @@ from ...utils import (
     logging,
 )
 from ...utils.generic import maybe_autocast
+from .configuration_esm import EsmConfig, EsmFoldConfig
 from .modeling_esm import EsmModel, EsmPreTrainedModel
 from .openfold_utils import (
     OFProtein,
@@ -882,6 +883,8 @@ class EsmFoldPreTrainedModel(EsmPreTrainedModel):
     models.
     """
 
+    config: EsmFoldConfig
+
     # Subclass `EsMPreTrainedModel` to deal with special init
     @torch.no_grad()
     def _init_weights(self, module):
@@ -904,7 +907,7 @@ class EsmFoldPreTrainedModel(EsmPreTrainedModel):
                     init.xavier_uniform_(module.weight, gain=1)
                 elif module.init == "gating":
                     init.zeros_(module.weight)
-                    if module.bias:
+                    if getattr(module, "bias", None) is not None:
                         init.ones_(module.bias)
                 elif module.init == "normal":
                     init.kaiming_normal_(module.weight, nonlinearity="linear")
@@ -1973,7 +1976,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         if isinstance(module, EsmForProteinFolding):
             init.copy_(module.af2_to_esm, module._af2_to_esm_from_vocab_list(module.config.vocab_list))
 
-    def __init__(self, config):
+    def __init__(self, config: EsmConfig):
         super().__init__(config)
 
         self.config = config

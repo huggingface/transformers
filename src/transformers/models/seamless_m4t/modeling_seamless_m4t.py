@@ -2124,7 +2124,7 @@ class SeamlessM4TCodeHifiGan(SeamlessM4TPreTrainedModel):
     input_modalities = "audio"
     _no_split_modules = []
 
-    def __init__(self, config):
+    def __init__(self, config: SeamlessM4TConfig):
         super().__init__(config)
 
         self.pad_token_id = config.t2u_pad_token_id
@@ -3058,7 +3058,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
 
     _tied_weights_keys = {"lm_head.weight": "shared.weight", "text_decoder.embed_tokens.weight": "shared.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: SeamlessM4TConfig):
         super().__init__(config)
 
         self.shared = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
@@ -3366,7 +3366,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel, GenerationMixin):
         "text_decoder.embed_tokens.weight": "shared.weight",
     }
 
-    def __init__(self, config, current_modality="text"):
+    def __init__(self, config: SeamlessM4TConfig, current_modality="text"):
         r"""
         current_modality (`str`, *optional*, defaults to `"text"`):
             Default modality. Used to initialize the model.

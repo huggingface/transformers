@@ -24,7 +24,7 @@ Neste guia poderá encontrar informações para a instalação do 🤗 Transform
 Machine Learning com a qual esteja a trabalhar. Além disso, poderá encontrar informações sobre como gerar cachês e
 configurar o 🤗 Transformers para execução em modo offline (opcional).
 
-🤗 Transformers foi testado com Python 3.10+ e PyTorch 2.4+. Para instalar a biblioteca de
+🤗 Transformers foi testado com Python 3.11+ e PyTorch 2.4+. Para instalar a biblioteca de
 deep learning com que deseja trabalhar, siga as instruções correspondentes listadas a seguir:
 
 * [PyTorch](https://pytorch.org/get-started/locally/)
@@ -110,7 +110,7 @@ pip install -e .
 
 Estes comandos vão ligar o diretório para o qual foi clonado o repositório ao caminho de bibliotecas do Python.
 O Python agora buscará dentro dos arquivos que foram clonados além dos caminhos normais da biblioteca.
-Por exemplo, se os pacotes do Python se encontram instalados no caminho `~/anaconda3/envs/main/lib/python3.10/site-packages/`,
+Por exemplo, se os pacotes do Python se encontram instalados no caminho `~/anaconda3/envs/main/lib/python3.11/site-packages/`,
 o Python também buscará módulos no diretório onde clonamos o repositório `~/transformers/`.
 
 <Tip warning={true}>

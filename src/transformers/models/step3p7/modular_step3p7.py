@@ -20,7 +20,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import divide_to_patches, group_images_by_shape, reorder_images
@@ -319,8 +319,8 @@ class Step3p7TextConfig(MiniMaxM3VLTextConfig):
 class Step3p7Config(PreTrainedConfig):
     model_type = "step3p7"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Step3p7VisionConfig),
-        "text_config": SubConfigSpec(config_class=Step3p7TextConfig),
+        "vision_config": Step3p7VisionConfig,
+        "text_config": Step3p7TextConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -993,6 +993,7 @@ class Step3p7TextModel(Gemma3TextModel):
 
 
 class Step3p7Model(DeepseekOcr2Model):
+    input_modalities = ("image", "text")
     config: Step3p7Config
 
     def __init__(self, config: Step3p7Config):
@@ -1049,6 +1050,7 @@ class Step3p7Model(DeepseekOcr2Model):
 
 
 class Step3p7ForConditionalGeneration(DeepseekOcr2ForConditionalGeneration):
+    input_modalities = ("image", "text")
     config: Step3p7Config
 
 
