@@ -729,52 +729,52 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         else:
             # The scores are [batch, queries, blocks, heads] in fp32 and the blocks grow with the sequence,
             # so they are computed for a chunk of queries at a time (~256 MiB)
-            query_chunk = max(1, 2**26 // max(1, batch_size * (kv_length // self.compress_ratio) * self.index_n_heads))
-            # Keys that no query sees (padding, wherever it is) are set aside first. In the order of the others, a query
-            # usually sees one contiguous range (causal, padding, packed sequences, sliding windows), and its blocks are
-            # the consecutive groups of `compress_ratio` keys from the start of that range, shared with the other queries
-            seen_keys = torch.zeros((batch_size, kv_length), dtype=torch.bool, device=hidden_states.device)
-            for start in range(0, seq_length, query_chunk):
-                seen_keys |= token_mask[:, start : start + query_chunk].any(dim=1)
+            num_groups = kv_length // self.compress_ratio
+            query_chunk = max(1, 2**26 // max(1, batch_size * num_groups * self.index_n_heads))
+            # Keys that no query sees (padding, wherever it is) are set aside first. In the order of the others, a
+            # query usually sees one contiguous range (causal, padding, packed sequences, sliding windows), and its
+            # blocks are the consecutive groups of `compress_ratio` keys from the start of that range, shared with the
+            # other queries
+            seen_keys = token_mask.any(dim=1)
             # `seen_order[b, i]` is the i-th key seen in row b, `seen_rank[b, k]` the rank of key k among them
             seen_order = torch.argsort(~seen_keys, dim=-1, stable=True)
             seen_rank = seen_keys.cumsum(-1) - 1
-
-            visible_counts = torch.zeros((batch_size, seq_length), dtype=torch.long, device=hidden_states.device)
-            range_starts = torch.zeros_like(visible_counts)
-            has_gaps = torch.zeros_like(visible_counts, dtype=torch.bool)
+            visible_counts = torch.empty((batch_size, seq_length), dtype=torch.long, device=hidden_states.device)
+            range_starts = torch.empty_like(visible_counts)
+            range_ends = torch.empty_like(visible_counts)
             for start in range(0, seq_length, query_chunk):
                 rows = token_mask[:, start : start + query_chunk]
-                counts = rows.sum(-1)
-                firsts = seen_rank.gather(1, rows.to(torch.uint8).argmax(-1))
-                lasts = seen_rank.gather(1, kv_length - 1 - rows.flip(-1).to(torch.uint8).argmax(-1))
-                # A query that skips a key others see (e.g. custom tree masks) is handled on its own, below
-                has_gaps[:, start : start + query_chunk] = (lasts - firsts + 1 != counts) & (counts > 0)
-                visible_counts[:, start : start + query_chunk] = counts.masked_fill(
-                    has_gaps[:, start : start + query_chunk], 0
+                visible_counts[:, start : start + query_chunk] = rows.sum(-1)
+                rows = rows.to(torch.uint8)
+                range_starts[:, start : start + query_chunk] = seen_rank.gather(1, rows.argmax(-1))
+                range_ends[:, start : start + query_chunk] = seen_rank.gather(
+                    1, kv_length - 1 - rows.flip(-1).argmax(-1)
                 )
-                range_starts[:, start : start + query_chunk] = firsts
+            # A query that skips a key others see (e.g. custom tree masks) is handled on its own, below
+            has_gaps = (range_ends - range_starts + 1 != visible_counts) & (visible_counts > 0)
+            visible_counts = visible_counts.masked_fill(has_gaps, 0)
             num_blocks = visible_counts // self.compress_ratio
-            # Blocks starting at `start % compress_ratio` lie on the same grid: pool each grid used once, for all queries
+            # Blocks starting at `start % compress_ratio` lie on the same grid: pool each grid used once, for all
+            # queries. Every grid has `num_groups` blocks, the last ones past the seen keys are never selected
             block_offsets = range_starts % self.compress_ratio
-            # Only the keys some query sees: keys past them (e.g. a static cache's empty slots) have no positions yet
-            keys_end = int((range_starts + visible_counts).max()) if seq_length > 0 else 0
-            seen_raw_keys = raw_keys.gather(1, seen_order[:, :keys_end, None].expand(-1, -1, self.index_head_dim))
+            grid_used = torch.zeros(self.compress_ratio + 1, dtype=torch.bool, device=hidden_states.device)
+            grid_used = grid_used.scatter(
+                0, block_offsets.masked_fill(num_blocks == 0, self.compress_ratio).flatten(), True
+            )
+            seen_order = F.pad(seen_order, (0, self.compress_ratio))
+            seen_raw_keys = raw_keys.gather(1, seen_order.unsqueeze(-1).expand(-1, -1, self.index_head_dim))
             token_offsets = torch.arange(self.compress_ratio, device=hidden_states.device)
+            block_range = torch.arange(num_groups, device=hidden_states.device)
             grids = {}
             for offset in range(self.compress_ratio):
-                if not ((block_offsets == offset) & (num_blocks > 0)).any():
+                if not grid_used[offset]:
                     continue
-                grid_blocks = (keys_end - offset) // self.compress_ratio
-                key_groups = seen_raw_keys[:, offset : offset + grid_blocks * self.compress_ratio].view(
-                    batch_size, grid_blocks, self.compress_ratio, self.index_head_dim
-                )
+                grid = slice(offset, offset + num_groups * self.compress_ratio)
+                key_groups = seen_raw_keys[:, grid].unflatten(1, (num_groups, self.compress_ratio))
                 pooled_keys = self.k_layernorm(key_groups.float().mean(dim=2).to(raw_keys.dtype))
-                # Each block is rotated at the position of its first key
-                group_starts = seen_order[:, offset : offset + grid_blocks * self.compress_ratio : self.compress_ratio]
-                group_starts = (
-                    group_starts.clamp(max=full_cos.shape[1] - 1).unsqueeze(-1).expand(-1, -1, full_cos.shape[-1])
-                )
+                # Each block is rotated at the position of its first key (empty static cache slots have none yet)
+                group_starts = seen_order[:, grid][:, :: self.compress_ratio].clamp(max=full_cos.shape[1] - 1)
+                group_starts = group_starts.unsqueeze(-1).expand(-1, -1, full_cos.shape[-1])
                 grids[offset] = apply_rotary_pos_emb(
                     pooled_keys.unsqueeze(2),
                     cos=full_cos.expand(batch_size, -1, -1).gather(1, group_starts),
@@ -784,49 +784,35 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
 
             for start in range(0, seq_length, query_chunk):
                 end = min(start + query_chunk, seq_length)
-                chunk_blocks = num_blocks[:, start:end]
-                block_tokens = torch.full(
-                    (batch_size, end - start, self.block_topk * self.compress_ratio),
-                    -1,
-                    dtype=torch.long,
-                    device=hidden_states.device,
-                )
+                chunk_starts = range_starts[:, start:end, None]
+                chunk_blocks = num_blocks[:, start:end, None]
+                chunk_ranks = None
                 for offset, block_key_states in grids.items():
-                    block_range = torch.arange(block_key_states.shape[1], device=hidden_states.device)
-                    first_block = ((range_starts[:, start:end] - offset) // self.compress_ratio).unsqueeze(-1)
-                    selectable = (
-                        (block_range >= first_block)
-                        & (block_range < first_block + chunk_blocks.unsqueeze(-1))
-                        & (block_offsets[:, start:end] == offset).unsqueeze(-1)
-                    )
+                    first_block = (chunk_starts - offset) // self.compress_ratio
+                    selectable = (block_range >= first_block) & (block_range < first_block + chunk_blocks)
+                    selectable &= block_offsets[:, start:end, None] == offset
                     scores = torch.einsum("bqhd,bjd->bqjh", q[:, start:end].float(), block_key_states.float())
                     scores = torch.relu(scores).sum(dim=-1) / math.sqrt(self.index_head_dim)
                     scores = scores.masked_fill(~selectable, float("-inf"))
 
-                    selected_block_indices = scores.topk(min(self.block_topk, block_range.numel()), dim=-1).indices
+                    selected_block_indices = scores.topk(min(self.block_topk, num_groups), dim=-1).indices
                     tokens = selected_block_indices.unsqueeze(-1) * self.compress_ratio + offset + token_offsets
                     # A query with fewer blocks than block_topk still gets block_topk of them back
-                    selected_block_exists = selectable.gather(-1, selected_block_indices).repeat_interleave(
-                        self.compress_ratio, dim=-1
-                    )
-                    width = selected_block_exists.shape[-1]
-                    block_tokens[..., :width] = torch.where(
-                        selected_block_exists, tokens.flatten(-2), block_tokens[..., :width]
-                    )
+                    selected_block_exists = selectable.gather(-1, selected_block_indices).unsqueeze(-1)
+                    tokens = torch.where(selected_block_exists, tokens, -1).flatten(-2)
+                    # A query is on one grid only, the others give it -1
+                    chunk_ranks = tokens if chunk_ranks is None else torch.maximum(chunk_ranks, tokens)
 
                 # The visible tokens after the last complete block are always kept
-                tail_starts = range_starts[:, start:end] + chunk_blocks * self.compress_ratio
-                tail_lengths = visible_counts[:, start:end] - chunk_blocks * self.compress_ratio
-                tail_offsets = token_offsets[:-1]
-                tail = torch.where(
-                    tail_offsets < tail_lengths.unsqueeze(-1), tail_starts.unsqueeze(-1) + tail_offsets, -1
-                )
+                tail_ranks = chunk_starts + chunk_blocks * self.compress_ratio + token_offsets[:-1]
+                tail = torch.where(tail_ranks < chunk_starts + visible_counts[:, start:end, None], tail_ranks, -1)
+                chunk_ranks = tail if chunk_ranks is None else torch.cat([chunk_ranks, tail], dim=-1)
 
                 # Back from ranks among the seen keys to key indices
-                chunk_ranks = torch.cat([block_tokens, tail], dim=-1)
                 chunk_indices = seen_order.gather(1, chunk_ranks.clamp(min=0).flatten(1)).view_as(chunk_ranks)
-                chunk_indices = torch.where(chunk_ranks >= 0, chunk_indices, -1)
-                selected_token_indices[:, start:end, : chunk_indices.shape[-1]] = chunk_indices
+                selected_token_indices[:, start:end, : chunk_indices.shape[-1]] = chunk_indices.masked_fill(
+                    chunk_ranks < 0, -1
+                )
             queries_alone = has_gaps.nonzero()
 
         # A query scored alone pools its own blocks (a query with gaps has blocks no other query shares)
