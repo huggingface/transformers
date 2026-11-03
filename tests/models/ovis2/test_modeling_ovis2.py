@@ -196,6 +196,8 @@ class Ovis2IntegrationTest(unittest.TestCase):
         self.processor = AutoProcessor.from_pretrained(
             "thisisiron/Ovis2-2B-hf",
         )
+        # left padding is required for batched generation when the samples have different lengths
+        self.processor.tokenizer.padding_side = "left"
         url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
         self.image = load_test_image(url)
         self.prompt_image = ""
@@ -305,7 +307,7 @@ class Ovis2IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=20)
 
         EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\n\nWhat do you see in this image?\nassistant\nAnswer: I see a brown dog standing on a wooden floor in what appears to be a kitchen.',
+            'system\nYou are a helpful assistant.\nuser\n\nWhat do you see in this image?\nassistant\nI see a brown dog standing on a wooden floor in what appears to be a kitchen. The dog',
             'system\nYou are a helpful assistant.\nuser\n\nWhat do you see in this image?\nassistant\nI see two cats lying on a pink blanket. There are also two remote controls on the blanket.'
         ]  # fmt: skip
 
