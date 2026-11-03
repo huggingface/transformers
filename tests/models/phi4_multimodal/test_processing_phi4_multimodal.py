@@ -91,12 +91,11 @@ class Phi4MultimodalProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_str = self.prepare_text_inputs(modalities="image")
 
         inputs_default = processor(text=input_str, images=image_input, return_tensors="pt")
-        inputs_limited = processor(
-            text=input_str,
-            images=image_input,
-            dynamic_hd=4,
-            return_tensors="pt",
-        )
+        # `dynamic_hd` defines `supported_aspect_ratios`, so it's set at init
+        processor_limited = self.processor_class.from_pretrained(self.tmpdirname, dynamic_hd=4)
+        inputs_limited = processor_limited(text=input_str, images=image_input, return_tensors="pt")
+        with self.assertRaises(ValueError):
+            processor(text=input_str, images=image_input, dynamic_hd=4, return_tensors="pt")
 
         self.assertEqual(inputs_limited[self.images_input_name].shape[1], 5)
         self.assertEqual(inputs_default[self.images_input_name].shape[1], 10)

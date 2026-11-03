@@ -15,7 +15,6 @@
 
 import math
 from collections import defaultdict
-from functools import lru_cache
 
 import torch
 from torchvision.transforms.v2 import functional as tvF
@@ -26,26 +25,6 @@ from ...image_transforms import group_images_by_shape, reorder_images, split_to_
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-
-
-def get_factors(dividend: int) -> set[int]:
-    """
-    Calculate all factors of a given number, i.e. a divisor that leaves
-    no remainder. For example, if dividend=12, it will return {1, 2, 3, 4, 6, 12}.
-
-    Args:
-        dividend (int): The number to find factors for.
-
-    Returns:
-        set: A set containing all factors of the number.
-    """
-    factors_set = set()
-
-    for i in range(1, int(dividend**0.5) + 1):
-        if dividend % i == 0:
-            factors_set.add(i)
-            factors_set.add(dividend // i)
-    return factors_set
 
 
 def get_max_res_without_distortion(
@@ -82,63 +61,6 @@ def get_max_res_without_distortion(
         new_width = min(math.floor(original_width * scale_h), target_width)
 
     return new_height, new_width
-
-
-@lru_cache(maxsize=1)
-def find_supported_resolutions(max_num_chunks: int, patch_size: SizeDict) -> torch.Tensor:
-    """
-    Computes all of the allowed resolutions for a fixed number of chunks
-    and patch_size. Useful for when dividing an image into chunks.
-
-    Args:
-        max_num_chunks (int): Maximum number of chunks for processing.
-        patch_size (int): Size of the side of the patch.
-
-    Returns:
-        torch.Tensor: List of possible resolutions as tuples (height, width).
-
-    Example:
-        >>> max_num_chunks = 5
-        >>> patch_size = 224
-        >>> find_supported_resolutions(max_num_chunks, patch_size)
-        tensor([(224, 896), (448, 448), (224, 224), (896, 224), (224, 672),
-        (672, 224), (224, 448), (448, 224)])
-
-        Given max_num_chunks=4, patch_size=224, it will create a dictionary:
-        {
-        0.25: [(1, 4)],
-        1.0: [(2, 2), (1, 1)],
-        4.0: [(4, 1)],
-        0.33: [(1, 3)],
-        3.0: [(3, 1)],
-        0.5: [(1, 2)],
-        2.0: [(2, 1)]
-        }
-
-        and return the resolutions multiplied by the patch_size:
-        [(1*224, 4*224), (2*224, 2*224), ..., (2*224, 1*224)]
-    """
-    height, width = patch_size.height, patch_size.width
-    if height != width:
-        raise ValueError("`size` must be square.")
-
-    patch_size = height
-
-    asp_dict = defaultdict(list)
-    for chunk_size in range(max_num_chunks, 0, -1):
-        _factors = sorted(get_factors(chunk_size))
-        _asp_ratios = [(factor, chunk_size // factor) for factor in _factors]
-        for height, width in _asp_ratios:
-            ratio_float = height / width
-            asp_dict[ratio_float].append((height, width))
-
-    # get the resolutions multiplied by the patch_size
-    possible_resolutions = []
-    for value in asp_dict.values():
-        for height, depth in value:
-            possible_resolutions.append((height * patch_size, depth * patch_size))
-
-    return possible_resolutions
 
 
 def pad_to_best_fit(
@@ -279,8 +201,7 @@ def get_best_fit(
 class Llama4ImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     max_patches (`int`, *optional*, defaults to 16):
-        The maximum number of patches to be extracted from the image.
-        Can be overridden by the `max_patches` parameter in the `preprocess` method.
+        The maximum number of patches to be extracted from the image. Can only be set at init.
     resize_to_max_canvas (`bool`, *optional*, defaults to False):
         Whether to resize the image to the maximum canvas size.
         If True, picks the canvas the allows the largest resizing without distortion.
@@ -289,6 +210,7 @@ class Llama4ImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     max_patches: int
+    supported_aspect_ratios: list[list[int]]
     resize_to_max_canvas: bool
 
 
@@ -303,11 +225,22 @@ class Llama4ImageProcessor(TorchvisionBackend):
     do_normalize = True
     do_convert_rgb = True
     max_patches = 16
+    init_only_kwargs = ("max_patches",)
     resize_to_max_canvas = False
     valid_kwargs = Llama4ImageProcessorKwargs
 
     def __init__(self, **kwargs: Unpack[Llama4ImageProcessorKwargs]):
         super().__init__(**kwargs)
+        # build the grids for configs saved without them, or when `max_patches` was changed
+        tile_counts = [height * width for height, width in self.supported_aspect_ratios or [[0, 0]]]
+        if max(tile_counts) != self.max_patches:
+            # (rows, columns) grids of up to `max_patches` tiles, grouped by aspect ratio
+            grids_by_ratio = defaultdict(list)
+            for num_tiles in range(self.max_patches, 0, -1):
+                for height in range(1, num_tiles + 1):
+                    if num_tiles % height == 0:
+                        grids_by_ratio[height / (num_tiles // height)].append([height, num_tiles // height])
+            self.supported_aspect_ratios = [grid for grids in grids_by_ratio.values() for grid in grids]
 
     @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Llama4ImageProcessorKwargs]) -> BatchFeature:
@@ -349,7 +282,7 @@ class Llama4ImageProcessor(TorchvisionBackend):
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
-        max_patches: int,
+        supported_aspect_ratios: list[list[int]],
         resize_to_max_canvas: bool,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
@@ -361,8 +294,9 @@ class Llama4ImageProcessor(TorchvisionBackend):
                 "supported because the resulting pixel values would have inconsistent shapes and could not be "
                 "tensorized."
             )
-        possible_resolutions = find_supported_resolutions(max_num_chunks=max_patches, patch_size=size)
-        possible_resolutions = torch.tensor(possible_resolutions, device=images[0].device)
+        if size.height != size.width:
+            raise ValueError("`size` must be square.")
+        possible_resolutions = torch.tensor(supported_aspect_ratios, device=images[0].device) * size.height
         # process images by batch, grouped by shape
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         grouped_processed_images = {}

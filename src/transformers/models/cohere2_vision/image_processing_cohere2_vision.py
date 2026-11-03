@@ -18,8 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from functools import lru_cache
-
 import numpy as np
 import torch
 from torchvision.transforms.v2 import functional as tvF
@@ -39,70 +37,38 @@ class Cohere2VisionImageProcessorKwargs(ImagesKwargs, total=False):
         `preprocess` method.
     min_patches (`int`, *optional*, defaults to 1):
         The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-        set to `True`. Can be overridden by the `min_patches` parameter in the `preprocess` method.
+        set to `True`. Can only be set at init.
     max_patches (`int`, *optional*, defaults to 12):
         The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-        set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
+        set to `True`. Can only be set at init.
     """
 
     crop_to_patches: bool
     min_patches: int
     max_patches: int
-
-
-@lru_cache(maxsize=10)
-def get_all_supported_aspect_ratios(max_image_tiles: int) -> list[tuple[int, int]]:
-    """
-    Computes all allowed aspect ratios for a given maximum number of input tiles.
-
-    This function calculates all possible arrangements of tiles that can be formed
-    within the constraint of the maximum number of tiles. Each arrangement is
-    represented by its aspect ratio (width/height) and the corresponding tile configuration.
-
-    Args:
-        max_image_tiles (`int`):
-            The maximum number of tiles allowed.
-
-    Returns:
-        `list[tuple[int, int]]`: A list of tuples, each tuple representing a valid (width, height)
-        configuration in terms of number of tiles.
-
-    Example:
-        >>> get_all_supported_aspect_ratios(4)
-        [(1, 1), (1, 2), (1, 3), (1, 4), (2, 1), (2, 2), (3, 1), (4, 1)]
-
-    """
-    aspect_ratios = []
-    for width in range(1, max_image_tiles + 1):
-        for height in range(1, max_image_tiles + 1):
-            if width * height <= max_image_tiles:
-                aspect_ratios.append((width, height))
-    return aspect_ratios
+    supported_aspect_ratios: list[list[int]]
 
 
 def get_optimal_tiled_canvas(
     original_image_size: tuple[int, int],
     target_tile_size: tuple[int, int],
-    min_image_tiles: int,
-    max_image_tiles: int,
+    supported_aspect_ratios: list[list[int]],
 ) -> tuple[int, int]:
-    possible_resolutions = get_all_supported_aspect_ratios(max_image_tiles)
-    possible_resolutions = sorted(possible_resolutions, key=lambda x: x[0] * x[1])
     image_height, image_width = original_image_size
     patch_size_height, patch_size_width = target_tile_size  # (height == width)
 
-    candidate_resolutions = np.array(possible_resolutions) * patch_size_height
+    candidate_resolutions = np.array(supported_aspect_ratios) * patch_size_height
     # tiles following (width, height) order to align with aspect ratio convention
     tile_size = np.stack([image_width, image_height])
     required_scales = candidate_resolutions / tile_size
     required_scale = np.min(required_scales, axis=-1, keepdims=True)  # [n_resolutions, 1]
     if np.all(required_scale < 1):
         # We are forced to downscale, so try to minimize the amount of downscaling
-        best_grid = possible_resolutions[np.argmax(required_scale)]
+        best_grid = supported_aspect_ratios[np.argmax(required_scale)]
     else:
         # Pick the resolution that required the least upscaling so that it most closely fits the image
         required_scale = np.where(required_scale < 1.0, 10e9, required_scale)
-        best_grid = possible_resolutions[np.argmin(required_scale)]
+        best_grid = supported_aspect_ratios[np.argmin(required_scale)]
     return best_grid  # (width, height)
 
 
@@ -120,16 +86,28 @@ class Cohere2VisionImageProcessor(TorchvisionBackend):
     crop_to_patches = True
     min_patches = 1
     max_patches = 12
+    init_only_kwargs = ("min_patches", "max_patches")
     patch_size = 16
 
     def __init__(self, **kwargs: Unpack[Cohere2VisionImageProcessorKwargs]):
         super().__init__(**kwargs)
+        # build the grids for configs saved without them, or when `min_patches`/`max_patches` were changed
+        tile_counts = [width * height for width, height in self.supported_aspect_ratios or [[0, 0]]]
+        if (min(tile_counts), max(tile_counts)) != (self.min_patches, self.max_patches):
+            self.supported_aspect_ratios = sorted(
+                (
+                    [width, height]
+                    for width in range(1, self.max_patches + 1)
+                    for height in range(1, self.max_patches + 1)
+                    if self.min_patches <= width * height <= self.max_patches
+                ),
+                key=lambda grid: grid[0] * grid[1],
+            )
 
     def crop_image_to_patches(
         self,
         images: "torch.Tensor",
-        min_patches: int,
-        max_patches: int,
+        supported_aspect_ratios: list[list[int]],
         use_thumbnail: bool = True,
         patch_size: SizeDict | None = None,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
@@ -143,10 +121,8 @@ class Cohere2VisionImageProcessor(TorchvisionBackend):
         Args:
             images (`torch.Tensor`):
                 The images to be cropped.
-            min_patches (`int`):
-                The minimum number of patches to be extracted from the image.
-            max_patches (`int`):
-                The maximum number of patches to be extracted from the image.
+            supported_aspect_ratios (`list[list[int]]`):
+                The (columns, rows) tile grids the image can be cropped to.
             use_thumbnail (`bool`, *optional*, defaults to `True`):
                 Whether to add a thumbnail image to the list of cropped patches.
             patch_size (`SizeDict`, *optional*):
@@ -158,7 +134,7 @@ class Cohere2VisionImageProcessor(TorchvisionBackend):
         original_height, original_width = images.shape[-2:]
         # find the closest aspect ratio to the target
         num_columns, num_rows = get_optimal_tiled_canvas(
-            (original_height, original_width), (patch_size_height, patch_size_width), min_patches, max_patches
+            (original_height, original_width), (patch_size_height, patch_size_width), supported_aspect_ratios
         )
 
         # calculate the target width and height
@@ -207,6 +183,7 @@ class Cohere2VisionImageProcessor(TorchvisionBackend):
         crop_to_patches: bool = False,
         min_patches: int = 1,
         max_patches: int = 12,
+        supported_aspect_ratios: list[list[int]] | None = None,
         **kwargs,
     ) -> BatchFeature:
         if crop_to_patches:
@@ -216,8 +193,7 @@ class Cohere2VisionImageProcessor(TorchvisionBackend):
             for shape, stacked_images in grouped_images.items():
                 stacked_images = self.crop_image_to_patches(
                     stacked_images,
-                    min_patches,
-                    max_patches,
+                    supported_aspect_ratios,
                     patch_size=size,
                     resample=resample,
                 )
@@ -269,19 +245,18 @@ class Cohere2VisionImageProcessor(TorchvisionBackend):
             `int`: Number of patches per image.
         """
         images_kwargs = images_kwargs or {}
-        min_patches = images_kwargs.get("min_patches", self.min_patches)
-        max_patches = images_kwargs.get("max_patches", self.max_patches)
+        supported_aspect_ratios = images_kwargs.get("supported_aspect_ratios", self.supported_aspect_ratios)
         patch_size = images_kwargs.get("patch_size", self.size)
         crop_to_patches = images_kwargs.get("crop_to_patches", self.crop_to_patches)
 
         num_patches = 1
-        if crop_to_patches and max_patches > 1:
+        if crop_to_patches and self.max_patches > 1:
             if isinstance(patch_size, dict):
                 patch_height, patch_width = patch_size["height"], patch_size["width"]
             else:
                 patch_height, patch_width = patch_size.height, patch_size.width
             num_columns, num_rows = get_optimal_tiled_canvas(
-                (height, width), (patch_height, patch_width), min_patches, max_patches
+                (height, width), (patch_height, patch_width), supported_aspect_ratios
             )
             if num_columns * num_rows > 1:
                 num_patches += num_columns * num_rows

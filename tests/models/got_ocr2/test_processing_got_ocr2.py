@@ -65,7 +65,9 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["input_ids"].shape, (1, 595))
         self.assertEqual(inputs["pixel_values"].shape, (2, 3, 384, 384))
 
-        inputs = processor(image_input, return_tensors="pt", crop_to_patches=True, max_patches=6)
+        # `max_patches` defines `supported_aspect_ratios`, so it's set at init
+        processor = self.processor_class.from_pretrained(self.tmpdirname, max_patches=6)
+        inputs = processor(image_input, return_tensors="pt", crop_to_patches=True)
         self.assertEqual(inputs["input_ids"].shape, (1, 1872))
         self.assertEqual(inputs["pixel_values"].shape, (7, 3, 384, 384))
 
