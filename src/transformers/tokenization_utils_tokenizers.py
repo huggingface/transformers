@@ -190,7 +190,14 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             local_kwargs["vocab"] = vocab
 
             model_type = getattr(cls, "model", None)
-            if "merges" in tokenizer_json.get("model", {}) and (model_type and model_type.__name__ == "BPE"):
+            model_name = model_type.__name__ if model_type else None
+            if "merges" in tokenizer_json.get("model", {}) and (
+                model_name == "BPE"
+                # Classes without a fixed backend (e.g. BarthezTokenizer, which
+                # serves both Unigram and BPE checkpoints) decide from the
+                # vocabulary itself: a dict vocabulary is the BPE file shape.
+                or (model_name is None and isinstance(vocab, dict))
+            ):
                 merges = tokenizer_json["model"]["merges"]
                 merges = [tuple(merge.split(" ")) if isinstance(merge, str) else tuple(merge) for merge in merges]
                 local_kwargs["merges"] = merges
