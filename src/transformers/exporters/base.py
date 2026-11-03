@@ -106,7 +106,7 @@ class ExportArtifacts(Mapping, PushToHubMixin):
     def runtime(self, device=None, **runner_kwargs) -> ExportedModel:
         """Run this single-graph export on `device` (the backend's default when `None`), as an [`ExportedModel`].
         `runner_kwargs` go to the backend's runner: `providers` and `session_options` for ONNX Runtime, `config`
-        (compile properties) for OpenVINO."""
+        (compile properties) and `torch_threads` (split the CPU with torch work around the model) for OpenVINO."""
         from .auto import get_runner_class
 
         if len(self.components) != 1:
