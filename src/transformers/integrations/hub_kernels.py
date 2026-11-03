@@ -240,24 +240,24 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/fla",
                         layer_name="chunk_gated_delta_rule",
-                        version=1,
+                        version=2,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/fla",
                         layer_name="chunk_gated_delta_rule",
-                        version=1,
+                        version=2,
                     ),
                 },
                 "xpu": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/fla",
                         layer_name="chunk_gated_delta_rule",
-                        version=1,
+                        version=2,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/fla",
                         layer_name="chunk_gated_delta_rule",
-                        version=1,
+                        version=2,
                     ),
                 },
             },
@@ -268,14 +268,14 @@ if is_kernels_available():
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/fla",
                         layer_name="recurrent_gated_delta_rule",
-                        version=1,
+                        version=2,
                     ),
                 },
                 "xpu": {
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/fla",
                         layer_name="recurrent_gated_delta_rule",
-                        version=1,
+                        version=2,
                     ),
                 },
             },
@@ -514,24 +514,24 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/fla",
                         layer_name="FusedRMSNormGated",
-                        version=1,
+                        version=2,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/fla",
                         layer_name="FusedRMSNormGated",
-                        version=1,
+                        version=2,
                     ),
                 },
                 "xpu": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/fla",
                         layer_name="FusedRMSNormGated",
-                        version=1,
+                        version=2,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/fla",
                         layer_name="FusedRMSNormGated",
-                        version=1,
+                        version=2,
                     ),
                 },
             },
@@ -664,12 +664,12 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/fla",
                         layer_name="chunk_kimi_delta_attention",
-                        version=1,
+                        version=2,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/fla",
                         layer_name="chunk_kimi_delta_attention",
-                        version=1,
+                        version=2,
                     ),
                 },
                 "xpu": {
@@ -678,7 +678,7 @@ if is_kernels_available():
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/fla",
                         layer_name="chunk_kimi_delta_attention",
-                        version=1,
+                        version=2,
                     ),
                 },
             },
@@ -689,14 +689,14 @@ if is_kernels_available():
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/fla",
                         layer_name="recurrent_kimi_delta_attention",
-                        version=1,
+                        version=2,
                     ),
                 },
                 "xpu": {
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/fla",
                         layer_name="recurrent_kimi_delta_attention",
-                        version=1,
+                        version=2,
                     ),
                 },
             },
