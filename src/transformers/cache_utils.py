@@ -1509,12 +1509,11 @@ class Cache:
     def prefetch(self, layer_idx: int, only_non_sliding: bool = True):
         """
         Prefetch the next offloaded layer on its device, starting at `layer_idx` and circling back to the beginning
-        if needed. Linear-attention layers and `DummyLayer`s are never offloaded and are skipped, as are sliding
-        layers when `only_non_sliding`. Note that we use a non-default stream for this, to avoid blocking.
+        if needed. Linear-attention layers are never offloaded and are skipped, as are sliding layers when
+        `only_non_sliding`. Note that we use a non-default stream for this, to avoid blocking.
         """
         # Whether each layer is offloaded, hence worth prefetching: linear-attention layers never go through the
-        # offloading `update` path, `DummyLayer`s hold nothing, and sliding layers are skipped when `only_non_sliding`
-        # (kept resident).
+        # offloading `update` path, and sliding layers are skipped when `only_non_sliding` (kept resident).
         is_offloaded = [
             not (is_dummy or is_linear or (is_sliding and only_non_sliding))
             for is_linear, is_sliding, is_dummy in zip(self.is_linear, self.is_sliding, self.is_dummy)
@@ -1724,7 +1723,7 @@ class Cache:
             except StopIteration:
                 raise ValueError(
                     "`get_seq_length` can only be called on Attention layers, and the current Cache seem to only contain "
-                    "LinearAttention layers or `DummyLayer`s."
+                    "LinearAttention layers."
                 )
 
         return self.layers[layer_idx].get_seq_length()
@@ -1800,7 +1799,7 @@ class Cache:
             except StopIteration:
                 raise ValueError(
                     "`get_mask_sizes` can only be called on Attention layers, and the current Cache seem to only contain "
-                    "LinearAttention layers or `DummyLayer`s."
+                    "LinearAttention layers."
                 )
 
         return self.layers[layer_idx].get_mask_sizes(query_length)

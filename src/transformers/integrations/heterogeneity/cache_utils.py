@@ -81,8 +81,8 @@ def _get_layer_type_without_caches(layer_idx: int, layer_type: str, dropped_cach
             f"type '{layer_type}' has no cache layer class, so the caches it holds are unknown."
         )
 
-    # The layer type holds none of the dropped caches, which happens when the spec and `layer_types` don't match for a
-    # layer, so there's nothing to drop
+    # The layer type holds none of the dropped caches, so there's nothing to drop. This happens for the "dummy" layer
+    # type, which holds no caches, or when the spec and `layer_types` don't match for a layer
     if layer_type_caches.isdisjoint(dropped_caches):
         return layer_type
 
