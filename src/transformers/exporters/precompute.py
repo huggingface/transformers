@@ -284,11 +284,14 @@ def _prepare_grid_thw_vision_inputs(config: Any, inputs: dict[str, Any]) -> None
 def _prepare_navit_vision_inputs(config: Any, inputs: dict[str, Any]) -> None:
     """NaViT-style packed encoders carry per-image `(h, w)` as `target_sizes` instead of `grid_thw`."""
     target_sizes = inputs["target_sizes"]
-    num_patches_per_side = _find_config_attr(config, "num_patches_per_side")
+    # The tower's own sizes: an outer config may carry its own `image_size` (MiniCPM-V's slice size, 448 against
+    # the tower's 980).
+    vision_config = getattr(config, "vision_config", None) or config
+    num_patches_per_side = _find_config_attr(vision_config, "num_patches_per_side")
     if num_patches_per_side is None:
         # Derived the way the tower does it (minicpmv4_6).
-        image_size = _find_config_attr(config, "image_size")
-        patch_size = _find_config_attr(config, "patch_size")
+        image_size = _find_config_attr(vision_config, "image_size")
+        patch_size = _find_config_attr(vision_config, "patch_size")
         if image_size is not None and patch_size is not None:
             num_patches_per_side = image_size // patch_size
     if num_patches_per_side is not None:
