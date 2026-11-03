@@ -316,17 +316,17 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertTrue(torch.isfinite(sampled_actions).all())
 
 
-LIBERO_MEAN_STD = {
-    "state_mean": [-0.0419, 0.0354, 0.8257, 2.9083, -0.5562, -0.1665, 0.0283, -0.0286],
-    "state_std": [0.1074, 0.1442, 0.2572, 0.3441, 1.2344, 0.3580, 0.0133, 0.0132],
-    "actions_mean": [0.0182, 0.0586, -0.0559, 0.0046, 0.0029, -0.0077, -0.0916],
-    "actions_std": [0.2825, 0.3590, 0.3674, 0.0377, 0.0543, 0.0872, 0.9958],
-}
-
-
 @require_torch
 @slow
 class PI0ModelIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        self.libero_statistics = {
+            "state_mean": [-0.0419, 0.0354, 0.8257, 2.9083, -0.5562, -0.1665, 0.0283, -0.0286],
+            "state_std": [0.1074, 0.1442, 0.2572, 0.3441, 1.2344, 0.3580, 0.0133, 0.0132],
+            "actions_mean": [0.0182, 0.0586, -0.0559, 0.0046, 0.0029, -0.0077, -0.0916],
+            "actions_std": [0.2825, 0.3590, 0.3674, 0.0377, 0.0543, 0.0872, 0.9958],
+        }
+
     def test_pi0_libero_finetuned_loads_every_weight(self):
         _, loading_info = PI0ForConditionalGeneration.from_pretrained(
             "lerobot/pi0_libero_finetuned_v044", output_loading_info=True
@@ -408,7 +408,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
 
     def test_pi0_base_libero(self):
         model = PI0ForConditionalGeneration.from_pretrained("lerobot/pi0_base", torch_dtype=torch.float32).eval()
-        processor = PI0Processor.from_pretrained("google/paligemma-3b-pt-224", **LIBERO_MEAN_STD)
+        processor = PI0Processor.from_pretrained("google/paligemma-3b-pt-224", **self.libero_statistics)
         model.config.loss_reduction = "none"
 
         small_data = load_dataset("RaushanTurganbay/libero-small-testing", split="train")
@@ -452,7 +452,7 @@ class PI0ModelIntegrationTest(unittest.TestCase):
     @require_torch_non_multi_accelerator
     def test_train_pi0_base_libero(self):
         model = PI0ForConditionalGeneration.from_pretrained("lerobot/pi0_base", torch_dtype=torch.bfloat16).eval()
-        processor = PI0Processor.from_pretrained("google/paligemma-3b-pt-224", **LIBERO_MEAN_STD)
+        processor = PI0Processor.from_pretrained("google/paligemma-3b-pt-224", **self.libero_statistics)
 
         small_data = load_dataset("RaushanTurganbay/libero-small-testing", split="train")
         train_actions = [small_data["action"][i : i + 50] for i in range(len(small_data) - 50)]
