@@ -691,12 +691,13 @@ class TopHLogitsWarper(LogitsProcessor):
 
         # 3. Calculate the entropy-based threshold tau for the whole batch
         # We unsqueeze tau to enable broadcasting against the cumulative entropy tensor.
-        tau = (dist.entropy() * self.top_h).unsqueeze(-1)
+        tau = (torch.distributions.Categorical(logits=scores).entropy() * self.top_h).unsqueeze(-1)
 
         # 4. Calculate cumulative entropy using torch.cumsum
         # The individual entropy terms (-p * log(p)) are calculated for all top_n tokens at once.
         entropy_terms = -probs * log_probs
-        cumulative_entropy = torch.cumsum(entropy_terms, dim=-1)
+        cumulative_mass = torch.cumsum(probs, dim=-1)
+        cumulative_entropy = torch.cumsum(entropy_terms, dim=-1) / cumulative_mass + torch.log(cumulative_mass)
 
         # 5. Determine which tokens to keep based on the stopping condition
         # Create a boolean mask for the top_n tokens.

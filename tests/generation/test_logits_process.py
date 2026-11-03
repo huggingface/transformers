@@ -453,6 +453,33 @@ class LogitsProcessorTest(unittest.TestCase):
         out_again = top_h_warp(input_ids, dist3)
         assert not torch.all(out_again == dist3)
 
+    def test_top_h_dist_warper_uses_renormalized_entropy_of_full_distribution(self):
+        """
+        Top-H keeps the largest prefix of the sorted tokens whose renormalized entropy is at most `top_h` times the
+        entropy of the full distribution (arXiv:2509.02510, Algorithm 1).
+        """
+        input_ids = None
+
+        def expected_num_kept(logits, top_h):
+            probs = logits.double().softmax(-1).sort(descending=True).values
+            budget = top_h * torch.distributions.Categorical(probs=probs).entropy()
+            num_kept = 1
+            while num_kept < min(len(probs), 100):
+                prefix = probs[: num_kept + 1] / probs[: num_kept + 1].sum()
+                if torch.distributions.Categorical(probs=prefix).entropy() > budget:
+                    break
+                num_kept += 1
+            return num_kept
+
+        # Uniform over 50 tokens keeps 50**0.4 -> 4 tokens, not 0.4 * 50 = 20
+        uniform = torch.zeros(50, device=torch_device)
+        # Long-tailed (Zipf) distribution over a large vocabulary: the entropy budget comes from the full distribution
+        zipf = -1.1 * torch.arange(1, 49153, device=torch_device, dtype=torch.float).log()
+        for logits, num_expected in ((uniform, 4), (zipf, 25)):
+            self.assertEqual(expected_num_kept(logits, 0.4), num_expected)
+            filtered_logits = TopHLogitsWarper(top_h=0.4)(input_ids, logits[None].clone())
+            self.assertEqual(torch.isfinite(filtered_logits).sum().item(), num_expected)
+
     def test_min_p_dist_warper(self):
         input_ids = None
         vocab_size = 10
