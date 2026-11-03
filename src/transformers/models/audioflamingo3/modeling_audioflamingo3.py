@@ -446,7 +446,7 @@ class AudioFlamingo3Model(AudioFlamingo3PreTrainedModel):
     _pp_plan = None
     _keep_in_fp32_modules_strict = None
 
-    def __init__(self, config):
+    def __init__(self, config: AudioFlamingo3Config):
         super().__init__(config)
         self.audio_tower = AutoModel.from_config(config.audio_config)
         self.language_model = AutoModel.from_config(config.text_config)
@@ -566,7 +566,7 @@ class AudioFlamingo3Model(AudioFlamingo3PreTrainedModel):
 class AudioFlamingo3ForConditionalGeneration(AudioFlamingo3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = None
 
-    def __init__(self, config):
+    def __init__(self, config: AudioFlamingo3Config):
         super().__init__(config)
         self.model = AudioFlamingo3Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)

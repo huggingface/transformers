@@ -654,7 +654,7 @@ class LagunaForCausalLM(LagunaPreTrainedModel, GenerationMixin):
 
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: LagunaConfig):
         super().__init__(config)
         self.model = LagunaModel(config)
         self.vocab_size = config.vocab_size

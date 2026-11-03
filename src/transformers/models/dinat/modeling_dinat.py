@@ -539,7 +539,7 @@ class DinatPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class DinatModel(DinatPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: DinatConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -620,7 +620,7 @@ class DinatModel(DinatPreTrainedModel):
     """
 )
 class DinatForImageClassification(DinatPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DinatConfig):
         super().__init__(config)
 
         requires_backends(self, ["natten"])
@@ -682,7 +682,7 @@ class DinatForImageClassification(DinatPreTrainedModel):
     """
 )
 class DinatBackbone(BackboneMixin, DinatPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DinatConfig):
         super().__init__(config)
 
         requires_backends(self, ["natten"])

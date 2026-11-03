@@ -39,7 +39,6 @@ from ...utils.generic import (
     get_max_seqlen,
     is_flash_attention_requested,
 )
-from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_attention_seqlens
 from ..hunyuan_v1_dense.configuration_hunyuan_v1_dense import HunYuanDenseV1Config
@@ -442,7 +441,6 @@ class HunYuanVLImageProcessor(Qwen2VLImageProcessor):
         return resized_height // patch_size, resized_width // patch_size
 
 
-@requires(backends=("vision", "torchvision"))
 @auto_docstring
 class HunYuanVLImageProcessorPil(Qwen2VLImageProcessorPil):
     size = {"shortest_edge": 512 * 512, "longest_edge": 2048 * 2048}

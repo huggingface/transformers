@@ -667,7 +667,7 @@ class XLMForQuestionAnsweringOutput(ModelOutput):
 
 @auto_docstring
 class XLMModel(XLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMConfig):
         super().__init__(config)
 
         # encoder / decoder, output layer
@@ -915,7 +915,7 @@ class XLMPredLayer(nn.Module):
 class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"pred_layer.proj.weight": "transformer.embeddings.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: XLMConfig):
         super().__init__(config)
         self.transformer = XLMModel(config)
         self.pred_layer = XLMPredLayer(config)
@@ -1038,7 +1038,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
     """
 )
 class XLMForSequenceClassification(XLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1144,7 +1144,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
     """
 )
 class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMConfig):
         super().__init__(config)
 
         self.transformer = XLMModel(config)
@@ -1243,7 +1243,7 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
 
 @auto_docstring
 class XLMForQuestionAnswering(XLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMConfig):
         super().__init__(config)
 
         self.transformer = XLMModel(config)
@@ -1361,7 +1361,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
 
 @auto_docstring
 class XLMForTokenClassification(XLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1446,7 +1446,7 @@ class XLMForTokenClassification(XLMPreTrainedModel):
 
 @auto_docstring
 class XLMForMultipleChoice(XLMPreTrainedModel):
-    def __init__(self, config, *inputs, **kwargs):
+    def __init__(self, config: XLMConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         self.transformer = XLMModel(config)

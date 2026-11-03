@@ -1225,7 +1225,6 @@ class DeepseekV4PreTrainedModel(PreTrainedModel):
         "hidden_states": DeepseekV4DecoderLayer,
         "attentions": DeepseekV4Attention,
     }
-    config_class = DeepseekV4Config
     _keep_in_fp32_modules_strict = [
         "attn_hc",
         "ffn_hc",
@@ -1445,7 +1444,7 @@ class DeepseekV4ForCausalLM(DeepseekV4PreTrainedModel, GenerationMixin):
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: DeepseekV4Config):
         super().__init__(config)
         self.model = DeepseekV4Model(config)
         self.vocab_size = config.vocab_size

@@ -26,8 +26,7 @@ from ...modeling_flash_attention_utils import lazy_import_flash_attention
 from ...utils import is_torch_xpu_available
 from ...utils.generic import is_flash_attention_requested
 from .cache import ATTN_TYPE_TO_ALLOCATOR, group_layers_by_attn_type
-from .requests import logger
-from .utils import WorkloadHints, get_accelerator_graph_name
+from .utils import WorkloadHints, get_accelerator_graph_name, logger
 
 
 FALLBACK_DEFAULTS = {

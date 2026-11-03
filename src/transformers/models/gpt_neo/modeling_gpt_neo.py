@@ -374,7 +374,7 @@ class GPTNeoPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class GPTNeoModel(GPTNeoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTNeoConfig):
         super().__init__(config)
 
         self.embed_dim = config.hidden_size
@@ -518,7 +518,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 class GPTNeoForCausalLM(GPTNeoPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: GPTNeoConfig):
         super().__init__(config)
         self.transformer = GPTNeoModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -613,7 +613,7 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel, GenerationMixin):
     """
 )
 class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTNeoConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = GPTNeoModel(config)
@@ -729,7 +729,7 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
 
 @auto_docstring
 class GPTNeoForTokenClassification(GPTNeoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTNeoConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -813,7 +813,7 @@ class GPTNeoForTokenClassification(GPTNeoPreTrainedModel):
 
 @auto_docstring
 class GPTNeoForQuestionAnswering(GPTNeoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTNeoConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = GPTNeoModel(config)

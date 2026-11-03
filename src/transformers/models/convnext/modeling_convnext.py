@@ -211,7 +211,7 @@ class ConvNextEncoder(ConvNextPreTrainedModel):
     main_input_name = "hidden_states"
     _can_record_outputs = {"hidden_states": ConvNextStage}
 
-    def __init__(self, config):
+    def __init__(self, config: ConvNextConfig):
         super().__init__(config)
         self.stages = nn.ModuleList()
         drop_path_rates = [
@@ -249,7 +249,7 @@ class ConvNextEncoder(ConvNextPreTrainedModel):
 
 @auto_docstring
 class ConvNextModel(ConvNextPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ConvNextConfig):
         super().__init__(config)
         self.config = config
 
@@ -293,7 +293,7 @@ class ConvNextModel(ConvNextPreTrainedModel):
 class ConvNextForImageClassification(ConvNextPreTrainedModel):
     accepts_loss_kwargs = False
 
-    def __init__(self, config):
+    def __init__(self, config: ConvNextConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -336,7 +336,7 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
 class ConvNextBackbone(BackboneMixin, ConvNextPreTrainedModel):
     has_attentions = False
 
-    def __init__(self, config):
+    def __init__(self, config: ConvNextConfig):
         super().__init__(config)
 
         self.embeddings = ConvNextEmbeddings(config)
