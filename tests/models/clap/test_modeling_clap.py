@@ -468,6 +468,53 @@ class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_loss_is_symmetric(self):
+        # The CLAP loss must average one text->audio term and one audio->text term.
+        # Distinct logit scales (as in the released checkpoints) make a loss that
+        # counts a single direction twice give a different value, so this test
+        # fails on that regression.
+        torch.manual_seed(0)
+        audio_config = ClapAudioConfig(
+            spec_size=64,
+            num_mel_bins=16,
+            patch_embeds_hidden_size=16,
+            hidden_size=32,
+            depths=[2, 2],
+            num_attention_heads=[2, 2],
+            window_size=4,
+            intermediate_size=37,
+        )
+        text_config = ClapTextConfig(
+            vocab_size=99,
+            hidden_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            intermediate_size=37,
+        )
+        config = ClapConfig(text_config=text_config.to_dict(), audio_config=audio_config.to_dict(), projection_dim=32)
+        model = ClapModel(config).to(torch_device).eval()
+        with torch.no_grad():
+            model.logit_scale_a.fill_(3.0)
+            model.logit_scale_t.fill_(2.5)
+
+        batch_size = 8
+        with torch.no_grad():
+            outputs = model(
+                input_ids=torch.randint(0, 99, (batch_size, 7), device=torch_device),
+                input_features=torch.rand(batch_size, 1, 32, 16, device=torch_device),
+                return_loss=True,
+            )
+
+        labels = torch.arange(batch_size, device=torch_device)
+        caption_loss = nn.functional.cross_entropy(outputs.logits_per_text, labels)
+        audio_loss = nn.functional.cross_entropy(outputs.logits_per_audio, labels)
+        # The two directions must actually differ, otherwise the check below is vacuous.
+        self.assertFalse(torch.allclose(caption_loss, audio_loss, atol=1e-3))
+        self.assertTrue(
+            torch.allclose(outputs.loss, (caption_loss + audio_loss) / 2, atol=1e-5),
+            f"loss {outputs.loss.item()} != symmetric loss {(caption_loss + audio_loss).item() / 2}",
+        )
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
