@@ -54,5 +54,9 @@ class Phi4MultimodalProcessor(ProcessorMixin):
         audio_embed_sizes = audio_inputs["audio_embed_sizes"][audio_idx]
         return self.audio_token * audio_embed_sizes
 
+    @property
+    def unused_input_names(self) -> list[str]:
+        return ["num_img_tokens"]
+
 
 __all__ = ["Phi4MultimodalProcessor"]

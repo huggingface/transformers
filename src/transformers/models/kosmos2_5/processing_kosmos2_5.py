@@ -78,6 +78,17 @@ class Kosmos2_5Processor(ProcessorMixin):
             text = [f"{prepend_prompt}{sample}" for sample in text]
         return images, text, None, None
 
+    def validate_inputs(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | list[TextInput] | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        # Do not check that number of placeholders in text is same as number of images
+        # Model uses same id for BOS and IMAGE tokens :(
+        if images is None and text is None:
+            raise ValueError(f"You need to provide at least one input to call {self.__class__.__name__}")
+
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         return self.image_token * self.num_image_tokens
 

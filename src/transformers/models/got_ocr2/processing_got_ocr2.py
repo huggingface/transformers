@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import itertools
 
 import numpy as np
 
@@ -190,12 +191,12 @@ class GotOcr2Processor(ProcessorMixin):
             else:
                 image_sizes = [get_image_size(image) for image in images]
 
-            for box_single, color_single, size in zip(box, color, image_sizes):
-                if box_single[0] is not None:
+            for box_single, color_single, size in itertools.zip_longest(box, color, image_sizes):
+                if box_single is not None and box_single[0] is not None:
                     box_single = preprocess_box_annotation(box_single, size)
                 query = (
                     f"{f'[{color_single}] ' if color_single is not None else ''}"
-                    f"{str(box_single) if box_single[0] is not None else ''} "
+                    f"{str(box_single) if box_single is not None and box_single[0] is not None else ''} "
                     "OCR"
                     f"{' with format' if format_output else ''}"
                     f"{' across multi pages' if multi_page else ''}"

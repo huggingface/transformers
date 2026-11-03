@@ -405,7 +405,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor.chat_template = (
             "{% if task == 'document' %}{{ document_token }}{% else %}{{ query_token }}{% endif %}"
         )
-        with self.assertRaisesRegex(ValueError, "image prompts"):
+        with self.assertRaisesRegex(ValueError, "he total number of <img> tokens"):
             processor.apply_chat_template(messages, task="document", tokenize=True)
 
         processor.chat_template = "{% if task %}{{ document_token + image_token + row_token }}{% endif %}"
