@@ -425,6 +425,7 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
 
 
 class DiaEncoder(DiaPreTrainedModel):
+    config: DiaEncoderConfig
     _can_record_outputs = {
         "hidden_states": DiaEncoderLayer,
         "attentions": DiaSelfAttention,
@@ -540,6 +541,7 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
 class DiaDecoder(DiaPreTrainedModel):
     """Transformer Decoder Stack using DenseGeneral."""
 
+    config: DiaDecoderConfig
     _can_record_outputs = {
         "hidden_states": DiaDecoderLayer,
         "attentions": DiaSelfAttention,
@@ -684,7 +686,7 @@ class DiaModel(DiaPreTrainedModel):
                 "You should either provide text ids or the cached text encodings. Neither has been found."
             )
 
-        if self.is_gradient_checkpointing and self.training:
+        if self.is_activation_checkpointing and self.training:
             if use_cache:
                 logger.warning_once(
                     "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."

@@ -2045,7 +2045,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class LEDForQuestionAnswering(LEDPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LEDConfig):
         super().__init__(config)
 
         config.num_labels = 2

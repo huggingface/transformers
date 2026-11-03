@@ -679,7 +679,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
 class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: RecurrentGemmaConfig):
         super().__init__(config)
         self.model = RecurrentGemmaModel(config)
         self.vocab_size = config.vocab_size

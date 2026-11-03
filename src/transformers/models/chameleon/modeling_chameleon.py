@@ -985,7 +985,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
 class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: ChameleonConfig):
         super().__init__(config)
         self.model = ChameleonModel(config)
         self.vocab_size = config.vocab_size

@@ -889,7 +889,7 @@ class Swinv2PreTrainedModel(PreTrainedModel):
 @auto_docstring
 # Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinModel with SWIN->SWINV2,Swin->Swinv2
 class Swinv2Model(Swinv2PreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
+    def __init__(self, config: Swinv2Config, add_pooling_layer=True, use_mask_token=False):
         r"""
         add_pooling_layer (`bool`, *optional*, defaults to `True`):
             Whether or not to apply pooling layer.
@@ -979,7 +979,7 @@ class Swinv2Model(Swinv2PreTrainedModel):
 )
 # Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinForMaskedImageModeling with swin->swinv2, base-simmim-window6-192->tiny-patch4-window8-256,SWIN->SWINV2,Swin->Swinv2,192->256
 class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Swinv2Config):
         super().__init__(config)
 
         self.swinv2 = Swinv2Model(config, add_pooling_layer=False, use_mask_token=True)
@@ -1098,7 +1098,7 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
 )
 # Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinForImageClassification with SWIN->SWINV2,Swin->Swinv2,swin->swinv2
 class Swinv2ForImageClassification(Swinv2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Swinv2Config):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -1160,7 +1160,7 @@ class Swinv2ForImageClassification(Swinv2PreTrainedModel):
     """
 )
 class Swinv2Backbone(BackboneMixin, Swinv2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Swinv2Config):
         super().__init__(config)
 
         self.num_features = [config.embed_dim] + [int(config.embed_dim * 2**i) for i in range(len(config.depths))]

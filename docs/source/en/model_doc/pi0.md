@@ -38,6 +38,8 @@ You can find all the checkpoints under the [PI0](https://huggingface.co/collecti
 > [!TIP]
 > Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
+The processor normalizes `state` and `actions` with the statistics of the dataset the checkpoint was trained on. Pass them when creating the processor.
+
 ## Usage examples
 
 ```python
@@ -52,14 +54,18 @@ model = PI0ForConditionalGeneration.from_pretrained(
     device_map="auto",
     attn_implementation="sdpa"
 )
-processor = PI0Processor.from_pretrained("google/paligemma2-3b-mix-224")
+processor = PI0Processor.from_pretrained(
+    "google/paligemma2-3b-mix-224",
+    state_mean=[0.0] * 8,  # replace with the mean of your dataset's robot state
+    state_std=[1.0] * 8,  # replace with the standard deviation of your dataset's robot state
+)
 
 prompt = "Pick up the object"
 image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/vla_pi0.jpg")
-inputs = processor(image, prompt, return_tensors="pt").to(model.device)
+state = torch.randn(1, 8)  # replace with the robot state
+inputs = processor(image, prompt, state=state, return_tensors="pt").to(model.device)
 
-state = torch.randn(1, 32) # change with actual robot state
-actions = model.sample_actions(**inputs, state=state, num_steps=3)
+actions = model.sample_actions(**inputs, num_steps=3)
 print(actions)
 ```
 
