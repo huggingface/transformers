@@ -620,6 +620,32 @@ class CacheTest(unittest.TestCase):
                 self.assertTrue(torch.equal(out.sequences, expected.sequences), case)
                 torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores), msg=case)
 
+    def test_chunked_prefill_raises_on_raw_image_inputs(self):
+        """
+        Raw image inputs cannot be split into chunks: a model that does not pre-encode them must raise when the prefill
+        is split, and still work when the prefill fits in one chunk.
+        """
+        model = self._get_tiny_llava()
+        model._supports_mm_encoder_outputs = lambda: False
+        input_ids = torch.tensor([[1] + [63] * 5 + [5, 6, 7, 8]], device=torch_device)
+        pixel_values = torch.randn(1, 3, 8, 8, device=torch_device)
+        generation_kwargs = {
+            "max_new_tokens": 6,
+            "do_sample": False,
+            "output_scores": True,
+            "return_dict_in_generate": True,
+        }
+
+        with self.assertRaisesRegex(ValueError, "pixel_values"):
+            model.generate(input_ids, pixel_values=pixel_values, **generation_kwargs, prefill_chunk_size=6)
+
+        expected = model.generate(input_ids, pixel_values=pixel_values, **generation_kwargs)
+        out = model.generate(
+            input_ids, pixel_values=pixel_values, **generation_kwargs, prefill_chunk_size=input_ids.shape[1]
+        )
+        self.assertTrue(torch.equal(out.sequences, expected.sequences))
+        torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores))
+
     def test_chunked_prefill_keeps_token_type_ids(self):
         """
         Gemma3 and Gemma4 build a bidirectional mask over each image run from `token_type_ids` and `mm_token_type_ids`.

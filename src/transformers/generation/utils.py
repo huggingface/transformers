@@ -4315,6 +4315,16 @@ class GenerationMixin(ContinuousMixin):
             next_sequence_length = 0 if next_sequence_length is None else next_sequence_length
             prefill_ids = input_ids[:, -next_sequence_length:]
             input_chunks = torch.split(prefill_ids, chunk_size, dim=-1)
+            raw_mm_keys = [
+                key
+                for key in MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL
+                if key != "mm_encoder_outputs" and model_kwargs.get(key) is not None
+            ]
+            if is_first_iteration and len(input_chunks) > 1 and raw_mm_keys:
+                raise ValueError(
+                    f"Chunked prefill cannot split the raw multimodal inputs {raw_mm_keys} into chunks, so pass "
+                    "`prefill_chunk_size=None` or use a model that pre-encodes them."
+                )
 
             model_forward = (
                 self.get_compiled_call(generation_config.compile_config)
@@ -4330,10 +4340,6 @@ class GenerationMixin(ContinuousMixin):
                 if model_kwargs.get(key) is not None
             }
             mm_encoder_outputs = model_kwargs.pop("mm_encoder_outputs", None)
-            # Every chunk is part of the first iteration, but only the first one encodes the raw multimodal inputs
-            raw_mm_inputs = {
-                key: model_kwargs.pop(key) for key in MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL if key in model_kwargs
-            }
 
             # Pre-encoded features are consumed in placeholder order over (batch, seq): feature row `i` of a modality
             # fills its `i`-th placeholder token, so each chunk gets the rows of the placeholders it contains
@@ -4364,10 +4370,7 @@ class GenerationMixin(ContinuousMixin):
                 for key, token_type in token_types.items():
                     model_kwargs[key] = token_type[..., :current_length]
                 model_inputs = self.prepare_inputs_for_generation(
-                    input_chunk,
-                    is_first_iteration=is_first_iteration,
-                    **model_kwargs,
-                    **(raw_mm_inputs if chunk_idx == 0 else {}),
+                    input_chunk, is_first_iteration=is_first_iteration, **model_kwargs
                 )
 
                 if chunk_mm_encoder_outputs[chunk_idx]:
@@ -4382,7 +4385,6 @@ class GenerationMixin(ContinuousMixin):
             model_kwargs["attention_mask"] = attention_mask
             model_kwargs["position_ids"] = position_ids
             model_kwargs.update(token_types)
-            model_kwargs.update(raw_mm_inputs)
             if mm_encoder_outputs is not None:
                 model_kwargs["mm_encoder_outputs"] = mm_encoder_outputs
 

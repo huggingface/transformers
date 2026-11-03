@@ -1048,6 +1048,8 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         if is_first_iteration or not use_cache:
             # The block mask reads them by position, so a prefill chunk needs them from the start of the sequence
             model_inputs["mm_token_type_ids"] = kwargs.get("mm_token_type_ids")
+        else:
+            model_inputs["mm_token_type_ids"] = None
         return model_inputs
 
     @staticmethod
