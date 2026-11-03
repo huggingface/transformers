@@ -30,6 +30,8 @@ from ...cache_utils import (
     StaticCache,
 )
 from ...generation import (
+    DiffusionSampler,
+    DiffusionSamplerOutput,
     EosTokenCriteria,
     GenerationConfig,
     LogitsProcessor,
@@ -324,7 +326,7 @@ class EntropyBoundSamplerConfig:
     Args:
         entropy_bound (`float`):
             The entropy bound. The higher this value is, the more tokens will be accepted. See the docstring of
-            [`EntropyBoundSampler.accept_canvas`] for more details on how it is applied.
+            [`EntropyBoundSampler.step`] for more details on how it is applied.
     """
 
     entropy_bound: float
@@ -403,16 +405,17 @@ class EntropyBoundSampler:
         )
         return canvas_ids
 
-    def accept_canvas(
+    def step(
         self,
-        current_canvas: torch.LongTensor,
-        denoiser_canvas: torch.LongTensor,
-        logits: torch.FloatTensor,
-        cur_step: int,
-    ) -> torch.LongTensor:
+        model_output: torch.FloatTensor,
+        timestep: torch.Tensor,
+        sample: torch.LongTensor,
+        *,
+        return_dict: bool = True,
+    ) -> DiffusionSamplerOutput | tuple[torch.LongTensor]:
         """
-        Accepts tokens from the denoiser based on an entropy bound. More concretely, sampling proceeds by accepting
-        k tokens with lowest entropy, such that
+        Samples a canvas from the denoiser logits, accepts its tokens based on an entropy bound, and renoises the
+        rest. More concretely, sampling proceeds by accepting k tokens with lowest entropy, such that
 
         sum_i^k entropy_i - max(entropy_1, ..., entropy_k) <= entropy_bound,
 
@@ -422,20 +425,34 @@ class EntropyBoundSampler:
         Originally proposed in https://arxiv.org/pdf/2505.24857
 
         Args:
-            current_canvas (`torch.LongTensor`):
+            model_output (`torch.FloatTensor`):
+                The (processed) logits from the denoiser.
+            timestep (`torch.Tensor`):
+                The current step. (Unused in this sampler)
+            sample (`torch.LongTensor`):
                 The current canvas.
-            denoiser_canvas (`torch.LongTensor`):
-                The canvas sampled from the denoiser predictions.
-            logits (`torch.FloatTensor`):
-                The logits from the denoiser.
-            cur_step (`int`):
-                The current step.
+            return_dict (`bool`, defaults to `True`):
+                Whether to return a [`DiffusionSamplerOutput`] or a one-item tuple.
 
         Returns:
-            torch.LongTensor: The accepted canvas.
+            [`DiffusionSamplerOutput`] or `tuple`: The next canvas, accepted tokens kept and the rest renoised.
         """
-        dist = torch.distributions.Categorical(logits=logits)
-        token_entropy = dist.entropy()  # (batch_size, canvas_length)
+        batch_size, canvas_length = sample.shape
+        probs = torch.softmax(model_output, dim=-1, dtype=torch.float32)
+        # `torch.multinomial` only works on 2D tensors, so we flatten/unflatten
+        denoiser_canvas = torch.multinomial(probs.view(-1, self.vocab_size), num_samples=1)
+        denoiser_canvas = denoiser_canvas.squeeze(-1).view(batch_size, canvas_length)
+        accepted_canvas = self._accept(sample, denoiser_canvas, model_output)
+        random_canvas = self.initialize_canvas(batch_size, sample.device)
+        prev_sample = torch.where(self.accepted_token_mask, accepted_canvas, random_canvas)
+        if not return_dict:
+            return (prev_sample,)
+        return DiffusionSamplerOutput(prev_sample=prev_sample)
+
+    def _accept(
+        self, current_canvas: torch.LongTensor, denoiser_canvas: torch.LongTensor, logits: torch.FloatTensor
+    ) -> torch.LongTensor:
+        token_entropy = torch.distributions.Categorical(logits=logits).entropy()  # (batch_size, canvas_length)
         sorted_token_entropy, sorted_indices = torch.sort(token_entropy, dim=-1, descending=False)
         cumulative_entropy = torch.cumsum(sorted_token_entropy, dim=-1)
 
@@ -444,29 +461,30 @@ class EntropyBoundSampler:
         self.accepted_token_mask = torch.scatter(
             input=torch.zeros_like(sorted_selection_mask), dim=-1, index=sorted_indices, src=sorted_selection_mask
         )
-        accepted_canvas = torch.where(self.accepted_token_mask, denoiser_canvas, current_canvas)
-        return accepted_canvas
+        return torch.where(self.accepted_token_mask, denoiser_canvas, current_canvas)
+
+    def accept_canvas(
+        self,
+        current_canvas: torch.LongTensor,
+        denoiser_canvas: torch.LongTensor,
+        logits: torch.FloatTensor,
+        cur_step: int,
+    ) -> torch.LongTensor:
+        """Deprecated, use [`~EntropyBoundSampler.step`], which also samples `denoiser_canvas` and renoises."""
+        logger.warning_once(
+            "`EntropyBoundSampler.accept_canvas` is deprecated and will be removed in v5.23. Use `step`, which samples "
+            "the denoiser canvas, accepts and renoises in one call."
+        )
+        return self._accept(current_canvas, denoiser_canvas, logits)
 
     def renoise_canvas(self, accepted_canvas: torch.LongTensor, cur_step: int) -> torch.LongTensor:
-        """
-        Renoises all non-accepted tokens.
-
-        Args:
-            accepted_canvas (`torch.LongTensor`):
-                The accepted canvas.
-            cur_step (`int`):
-                The current step. (Unused in this sampler)
-
-        Returns:
-            torch.LongTensor: The renoised canvas.
-        """
-        device = accepted_canvas.device
-        batch_size = accepted_canvas.shape[0]
-
-        renoise_mask = ~self.accepted_token_mask
-        random_canvas = self.initialize_canvas(batch_size, device)
-        renoised_canvas = torch.where(renoise_mask, random_canvas, accepted_canvas)
-        return renoised_canvas
+        """Deprecated, use [`~EntropyBoundSampler.step`], which also renoises the non-accepted tokens."""
+        logger.warning_once(
+            "`EntropyBoundSampler.renoise_canvas` is deprecated and will be removed in v5.23. Use `step`, which "
+            "accepts and renoises in one call."
+        )
+        random_canvas = self.initialize_canvas(accepted_canvas.shape[0], accepted_canvas.device)
+        return torch.where(~self.accepted_token_mask, random_canvas, accepted_canvas)
 
 
 class DiffusionGemmaAdaptiveStopping(ABC):
@@ -554,6 +572,7 @@ class DiffusionGemmaGenerationMixin:
         generation_config: DiffusionGemmaGenerationConfig | None = None,
         logits_processor: LogitsProcessorList | None = None,
         stopping_criteria: StoppingCriteriaList | None = None,
+        sampler: DiffusionSampler | None = None,
         **kwargs,
     ) -> torch.LongTensor | DiffusionGemmaGenerationOutput:
         """
@@ -568,8 +587,8 @@ class DiffusionGemmaGenerationMixin:
             c. For each denoising (diffusion) step:
                 i.   Run the decoder, taking the current canvas, the encoder KV cache, and the self-conditioning logits
                      (if available) as inputs.
-                ii.  Select new canvas tokens from the output logits.
-                iii. Apply the sampler acceptance and renoising logic.
+                ii.  Process the output logits.
+                iii. Apply the sampler step: sample, accept and renoise tokens.
                 iv.  Update the diffusion stopping criteria.
                 v.   Use the output logits as self-conditioning logits for the next step.
             d. Append the new denoised canvas to the sequence of generated tokens.
@@ -606,6 +625,10 @@ class DiffusionGemmaGenerationMixin:
                 from arguments and a generation config. If provided, these criteria will be first to be applied. This
                 feature is intended for advanced users. You can, for instance, pass here the stopping criteria commonly
                 used with AR LLMs.
+            sampler ([`DiffusionSampler`], *optional*):
+                Any object with the diffusers scheduler `step` signature (e.g. a diffusers scheduler), used instead of the
+                [`EntropyBoundSampler`] built from `generation_config.sampler_config`. The sampler owns the temperature
+                schedule, so `t_min` / `t_max` are not applied to the logits it receives.
             kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generation_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. For instance, you can set the starting canvas with
@@ -695,7 +718,11 @@ class DiffusionGemmaGenerationMixin:
         decoder_attention_mask = torch.nn.functional.pad(attention_mask, (0, canvas_length), value=True)
 
         # 0.e. Initialize samplers, logits processors, and stopping criteria
-        sampler = self._prepare_sampler(generation_config)
+        if sampler is None:
+            sampler = self._prepare_sampler(generation_config)
+        else:
+            # A custom sampler (e.g. a diffusers scheduler) owns its temperature schedule: don't apply ours on top
+            generation_config.t_min = generation_config.t_max = None
         logits_processor = self._prepare_logits_processor(generation_config, logits_processor)
         stopping_criteria = self._prepare_ar_stopping_criteria(generation_config, stopping_criteria)
         diffusion_stopping_criteria = self._prepare_diffusion_stopping_criteria(generation_config)
@@ -967,7 +994,7 @@ class DiffusionGemmaGenerationMixin:
         self,
         decoder_attention_mask: torch.Tensor,
         past_key_values: Cache,
-        sampler: EntropyBoundSampler,
+        sampler: DiffusionSampler,
         diffusion_stopping_criteria: DiffusionGemmaAdaptiveStopping | None,
         batch_size: int,
         device: torch.device,
@@ -982,9 +1009,10 @@ class DiffusionGemmaGenerationMixin:
         # Randomly initialize a canvas of `canvas_length` tokens and prepare the 4D decoder attention mask
         # (The exception is if a user provides their own starting canvas, which gets consumed in the first
         # decoder call)
-        current_canvas = model_kwargs.pop(
-            "decoder_input_ids", sampler.initialize_canvas(batch_size=batch_size, device=device)
+        random_canvas = torch.randint(
+            low=0, high=self.config.text_config.vocab_size, size=(batch_size, self.config.canvas_length), device=device
         )
+        current_canvas = model_kwargs.pop("decoder_input_ids", random_canvas)
         # (The same applies to the self-conditioning logits)
         self_conditioning_logits = model_kwargs.pop("self_conditioning_logits", None)
 
@@ -1012,7 +1040,7 @@ class DiffusionGemmaGenerationMixin:
         past_key_values: Cache,
         finished_denoising: torch.Tensor,
         cur_step: int,
-        sampler: EntropyBoundSampler,
+        sampler: DiffusionSampler,
         logits_processor: LogitsProcessorList,
         diffusion_stopping_criteria: DiffusionGemmaAdaptiveStopping | None,
         **model_kwargs,
@@ -1036,20 +1064,12 @@ class DiffusionGemmaGenerationMixin:
         )
         raw_logits = decoder_outputs.logits
 
-        # 1.c.ii Select new canvas tokens from the output logits.
+        # 1.c.ii Process the output logits.
         processed_logits = logits_processor(input_ids, raw_logits, cur_step=cur_step)
-        probs = torch.softmax(processed_logits, dim=-1, dtype=torch.float32)
-        # `torch.multinomial` only works on 2D tensors, so we flatten/unflatten
-        vocab_size = self.config.text_config.vocab_size
-        batch_size, canvas_length = current_canvas.shape
-        denoiser_canvas = torch.multinomial(probs.view(-1, vocab_size), num_samples=1)
-        denoiser_canvas = denoiser_canvas.squeeze(-1).view(batch_size, canvas_length)
         new_argmax_canvas = torch.argmax(processed_logits, dim=-1)
 
         # 1.c.iii Apply the sampler acceptance and renoising logic.
-        accepted_canvas = sampler.accept_canvas(current_canvas, denoiser_canvas, processed_logits, cur_step)
-        accepted_canvas = accepted_canvas.clone()  # clone needed for compiled sampler
-        new_current_canvas = sampler.renoise_canvas(accepted_canvas, cur_step)
+        new_current_canvas = sampler.step(processed_logits, cur_step, current_canvas, return_dict=False)[0]
         new_current_canvas = new_current_canvas.clone()  # clone needed for compiled sampler
 
         # 1.c.iv Update the diffusion stopping criteria.
@@ -1245,15 +1265,9 @@ class DiffusionGemmaGenerationMixin:
             self._compiled_decoder_forward = torch.compile(self.forward, mode="reduce-overhead", fullgraph=True)
         decoder_forward = self._compiled_decoder_forward
 
-        if not hasattr(self, "_compiled_accept_canvas"):
-            self._compiled_accept_canvas = torch.compile(sampler.accept_canvas, mode="reduce-overhead", fullgraph=True)
-        sampler.accept_canvas = self._compiled_accept_canvas
-
-        if not hasattr(self, "_compiled_renoise_canvas"):
-            self._compiled_renoise_canvas = torch.compile(
-                sampler.renoise_canvas, mode="reduce-overhead", fullgraph=True
-            )
-        sampler.renoise_canvas = self._compiled_renoise_canvas
+        if not hasattr(self, "_compiled_sampler_step"):
+            self._compiled_sampler_step = torch.compile(sampler.step, mode="reduce-overhead", fullgraph=True)
+        sampler.step = self._compiled_sampler_step
 
         if diffusion_stopping_criteria is not None:
             if not hasattr(self, "_compiled_diffusion_stopping_criteria"):

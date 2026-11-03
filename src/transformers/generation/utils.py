@@ -22,7 +22,7 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from itertools import accumulate
-from typing import TYPE_CHECKING, Any, Optional, cast
+from typing import TYPE_CHECKING, Any, Optional, Protocol, cast, runtime_checkable
 
 import torch
 import torch.distributed as dist
@@ -369,6 +369,43 @@ class GenerateBeamEncoderDecoderOutput(ModelOutput):
 GenerateNonBeamOutput = GenerateDecoderOnlyOutput | GenerateEncoderDecoderOutput
 GenerateBeamOutput = GenerateBeamDecoderOnlyOutput | GenerateBeamEncoderDecoderOutput
 GenerateOutput = GenerateNonBeamOutput | GenerateBeamOutput
+
+
+@dataclass
+class DiffusionSamplerOutput(ModelOutput):
+    """
+    Output of [`DiffusionSampler.step`], with the same field name as a diffusers `SchedulerOutput`.
+
+    Args:
+        prev_sample (`torch.Tensor`):
+            The sample to feed the denoiser at the next step: accepted where the sampler commits, renoised elsewhere.
+    """
+
+    prev_sample: torch.Tensor | None = None
+
+
+@runtime_checkable
+class DiffusionSampler(Protocol):
+    """
+    What a diffusion `generate` needs from a sampler: the diffusers scheduler `step` signature. The model owns the
+    denoiser forward, the sampler owns the update rule (acceptance and renoising), so any diffusers scheduler can drive
+    a transformers backbone as is.
+
+    ```
+    sample ──► model forward ──► model_output ──► sampler.step ──► prev_sample (accepted + renoised)
+      ▲                                                                  │
+      └──────────────────────────────────────────────────────────────────┘
+    ```
+    """
+
+    def step(
+        self, model_output: torch.Tensor, timestep: torch.Tensor, sample: torch.Tensor, *, return_dict: bool = True
+    ) -> DiffusionSamplerOutput | tuple:
+        """
+        Update `sample` from the denoiser's `model_output` at `timestep`. Returns an output with `prev_sample`, or a
+        tuple whose first element is `prev_sample` when `return_dict=False`.
+        """
+        ...
 
 
 def _undo_generation_steps(num_steps: int, input_ids: torch.LongTensor, *recorded: "tuple | None") -> tuple:

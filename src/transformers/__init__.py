@@ -378,6 +378,8 @@ else:
             "ClassifierFreeGuidanceLogitsProcessor",
             "ContinuousBatchingManager",
             "ContinuousMixin",
+            "DiffusionSampler",
+            "DiffusionSamplerOutput",
             "EncoderNoRepeatNGramLogitsProcessor",
             "EncoderRepetitionPenaltyLogitsProcessor",
             "EosTokenCriteria",
@@ -522,6 +524,8 @@ if TYPE_CHECKING:
     from .generation import ContinuousBatchingConfig as ContinuousBatchingConfig
     from .generation import ContinuousBatchingManager as ContinuousBatchingManager
     from .generation import ContinuousMixin as ContinuousMixin
+    from .generation import DiffusionSampler as DiffusionSampler
+    from .generation import DiffusionSamplerOutput as DiffusionSamplerOutput
     from .generation import EncoderNoRepeatNGramLogitsProcessor as EncoderNoRepeatNGramLogitsProcessor
     from .generation import EncoderRepetitionPenaltyLogitsProcessor as EncoderRepetitionPenaltyLogitsProcessor
     from .generation import EosTokenCriteria as EosTokenCriteria
