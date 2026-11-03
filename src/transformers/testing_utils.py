@@ -5451,7 +5451,7 @@ def record_ci_source_deps_by_file() -> None:
 
     # BFS from each test file's seeds through the module graph to recover transitive deps
     # missed because sys.modules caching prevented module bodies from re-executing on
-    # 2nd+ encounters.  Results stored under "graph_transitive" key.  # noqa: NC001 NC002
+    # 2nd+ encounters.  Results stored under "graph_transitive" key.  # noqa: NC001, NC002
 
     src_root = _ci_source_deps_src_root
     repo_root = _ci_source_deps_repo_root
