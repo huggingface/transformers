@@ -1229,8 +1229,8 @@ def _patch_interpolate(original):
 def _patch_sdpa(original):
     """Pre-expand K/V to Q's head count before calling SDPA.
 
-    Also clamps the additive mask so fully-masked rows stay finite, and zeroes those rows to match
-    the fused kernels torch runs them through.
+    Also clamps the additive mask so fully-masked rows stay finite: such a row then gets the uniform
+    average the mask describes, as transformers' eager attention gives it with a dtype-minimum mask.
 
         OV's ``opset13::ScaledDotProductAttention`` op rejects GQA shapes (e.g. Q=[B,4,T,D],
         K/V=[B,2,T,D]) with ``Key input shape not compatible with other inputs``. Repeating K/V with
@@ -1244,11 +1244,9 @@ def _patch_sdpa(original):
         # (legit under left padding + causal), poisoning the batch entry
         # (https://github.com/openvinotoolkit/openvino/issues/31630). Pass an additive mask with a
         # finite dtype minimum instead, like optimum-intel does.
-        unattended = None
         if attn_mask is not None:
             masked_value = torch.finfo(query.dtype).min
             if attn_mask.dtype == torch.bool:
-                unattended = ~attn_mask.any(dim=-1, keepdim=True)
                 attn_mask = torch.where(
                     attn_mask,
                     torch.zeros((), dtype=query.dtype, device=attn_mask.device),
@@ -1256,7 +1254,6 @@ def _patch_sdpa(original):
                 )
             else:
                 attn_mask = attn_mask.clamp_min(masked_value)
-                unattended = attn_mask.amax(dim=-1, keepdim=True) <= masked_value
         q_heads, k_heads = query.shape[-3], key.shape[-3]
         if q_heads != k_heads and q_heads % k_heads == 0:
             reps = q_heads // k_heads
@@ -1271,14 +1268,7 @@ def _patch_sdpa(original):
             default_scale = query.shape[-1] ** -0.5
             if scale != default_scale:
                 query = query * (scale / default_scale)
-        attn_output = original(query, key, value, attn_mask, *args, **kwargs)
-        # A row that masks every key has no defined value: OV returns the uniform average the mask
-        # describes, torch's fused kernels write zeros. Zero them so the export answers like eager.
-        if unattended is not None:
-            attn_output = torch.where(
-                unattended, torch.zeros((), dtype=attn_output.dtype, device=attn_output.device), attn_output
-            )
-        return attn_output
+        return original(query, key, value, attn_mask, *args, **kwargs)
 
     return patch
 
