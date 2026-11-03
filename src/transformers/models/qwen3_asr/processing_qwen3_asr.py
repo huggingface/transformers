@@ -467,15 +467,18 @@ class Qwen3ASRProcessor(ProcessorMixin):
                 audio batch. When `None`, the system prompt is left empty.
             transcription (`str` or `list[str]`, *optional*):
                 Target transcript(s) for training, one per audio. When given, each transcript is written as the
+                assistant turn and `labels` are returned (see `output_labels` in [`~Qwen3ASRProcessor.__call__`]).
                 With a `language`, the transcript is prefixed with ``language <NAME><asr_text>`` to match the model's
                 output format. Without one, it is written as is, so it should already be in that format to preserve
                 the pretrained behavior.
             tokenize (`bool`, *optional*, defaults to `True`):
                 Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
+                the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
                 audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
                 `tokenize=True`.
             **kwargs:
                 Additional keyword arguments forwarded to [`~Qwen3ASRProcessor.apply_chat_template`].
+                Processor kwargs (for example `text_kwargs`, `audio_kwargs`, ...) should be passed as
                 `processor_kwargs={...}`.
 
         Returns:

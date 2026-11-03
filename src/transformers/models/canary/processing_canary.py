@@ -138,13 +138,16 @@ class CanaryProcessor(ProcessorMixin):
                 Whether to request punctuation and capitalization in the output.
             transcription (`str` or `list[str]`, *optional*):
                 Target transcript(s) (or translations) for training, one per audio. When given, each transcript is
+                written as the assistant turn and `labels` are returned (see `output_labels` in
                 [`~CanaryProcessor.__call__`]).
             tokenize (`bool`, *optional*, defaults to `True`):
                 Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
+                the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
                 audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
                 `tokenize=True`.
             **kwargs:
                 Additional keyword arguments forwarded to [`~CanaryProcessor.apply_chat_template`].
+                Processor kwargs (for example `text_kwargs`, `audio_kwargs`, ...) should be passed as
                 `processor_kwargs={...}`.
 
         Returns:
