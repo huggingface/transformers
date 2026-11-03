@@ -23,6 +23,7 @@ import dataclasses
 import itertools
 import json
 import os
+import tempfile
 import unittest
 from copy import deepcopy
 from functools import partial
@@ -30,8 +31,15 @@ from functools import partial
 import datasets
 from parameterized import parameterized
 
-import transformers
-from transformers import AutoModel, TrainingArguments, is_torch_available, logging
+from transformers import (
+    AutoModel,
+    AutoModelForCausalLM,
+    LlamaConfig,
+    LlamaForCausalLM,
+    TrainingArguments,
+    is_torch_available,
+    logging,
+)
 from transformers.integrations.deepspeed import (
     HfDeepSpeedConfig,
     is_deepspeed_available,
@@ -1377,36 +1385,36 @@ class TestNonTrainerIntegrationDeepSpeed(TestCasePlus):
         self.assertTrue(torch.allclose(model.new_head.bias, torch.tensor(+100.0, device=model.new_head.bias.device)))
 
     def test_arange_bf16(self):
-        # Tests that configuring DeepSpeed with 16 bits does not cause float `torch.arange()` tensors to be cast down.
-        # NOTE -- this assumes that the function calls have the following downcast-preventing pattern, i.e.
-        # `torch.arange(...,dtype=torch.int64)` followed by a cast like `.to(torch.float32)`. If this pattern is
-        # NOT applied (e.g. `torch.arange(...,dtype=torch.float32)` is used), DeepSpeed can automatically cast it down
-        # at init time. See https://github.com/huggingface/transformers/issues/28685 for more info.
+        """
+        Tests that configuring DeepSpeed with 16 bits does not cause float `torch.arange()` tensors to be cast down when
+        instantiating a model. This is very important to avoid downcasting RoPE's `inv_freq` Buffers that should stay
+        full precision.
+        """
+        # Starts by saving a model
+        config = LlamaConfig(num_hidden_layers=2, vocab_size=100, hidden_size=32, intermediate_size=16)
+        model = LlamaForCausalLM(config)
 
-        ds_config = self._get_zero3_ds_config(bf16={"enabled": True})
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
 
-        dschf = HfDeepSpeedConfig(ds_config)
-        self.assertTrue(dschf.is_zero3())
-        self.assertTrue(is_deepspeed_zero3_enabled())
+            ds_config = self._get_zero3_ds_config(bf16={"enabled": True})
 
-        model, _ = self._load_with_logging(AutoModel, GPTJ_TINY, expect_zero3=True, dtype=torch.float32)
+            dschf = HfDeepSpeedConfig(ds_config)
+            self.assertTrue(dschf.is_zero3())
+            self.assertTrue(is_deepspeed_zero3_enabled())
 
-        # The model weights are in BF16 as per deepspeed config
-        self.assertTrue(str(model.h[0].attn.q_proj.weight.dtype) == "torch.bfloat16")
-        good_deepspeed_sin_cos = model.h[0].attn.embed_positions
+            reloaded_model, _ = self._load_with_logging(AutoModelForCausalLM, tmpdirname, expect_zero3=True)
 
-        good_deepspeed_create_sinusoidal_positions = transformers.models.gptj.modeling_gptj.create_sinusoidal_positions
+        # All state dict members should be bf16 as per deepspeed config. Note that RoPE buffers are NON-PERSISTENT, so they
+        # are not part of the state dict
+        self.assertTrue(all(param.dtype == torch.bfloat16 for param in reloaded_model.state_dict().values()))
 
-        good_torch_sin_cos = good_deepspeed_create_sinusoidal_positions(
-            model.config.max_position_embeddings, model.config.rotary_dim
-        )
-        # check that we get the same results either with torch or deepspeed
-        torch.testing.assert_close(good_torch_sin_cos, good_deepspeed_sin_cos.cpu())
+        # RoPE buffers should stay fp32
+        self.assertTrue(reloaded_model.model.rotary_emb.inv_freq.dtype == torch.float32)
+        self.assertTrue(reloaded_model.model.rotary_emb.original_inv_freq.dtype == torch.float32)
 
     def test_init_zero3_moe_weight_conversion(self):
         # test that weight conversions (MoE expert fusion) work correctly under zero3
-        import tempfile
-
         import deepspeed
 
         from transformers import Qwen3MoeConfig, Qwen3MoeForCausalLM
