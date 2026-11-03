@@ -524,11 +524,11 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, load_config=Non
             if child is not None:
                 load(child, state_dict, prefix + name + ".", assign_to_params_buffers)
 
-    for state_dict in state_dicts:
+    for converted in state_dicts:
         # take care of the case where in the checkpoint we don't have the prefix
         state_dict = {
             (f"{prefix_model}.{k}" if meta_model_state_dict.get(f"{prefix_model}.{k}") is not None else k): v
-            for k, v in state_dict.items()
+            for k, v in converted.items()
         }
         load(model_to_load, state_dict, assign_to_params_buffers=False)
 
