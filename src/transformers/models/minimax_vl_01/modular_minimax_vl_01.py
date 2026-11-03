@@ -125,61 +125,6 @@ class MiniMaxVL01TextConfig(MiniMaxConfig):
         return PreTrainedConfig.convert_rope_params_to_dict(self, **kwargs)
 
 
-class MiniMaxVL01TextCache(MiniMaxCache):
-    def _get_attention_layer_idx(self, layer_idx: int) -> int:
-        if layer_idx != 0 or DynamicCache.get_seq_length(self, layer_idx) > 0:
-            return layer_idx
-
-        # The released layout starts with recurrent layers, so layer 0 cannot provide the global sequence length.
-        for attention_layer_idx in range(1, len(self.layers)):
-            if DynamicCache.get_seq_length(self, attention_layer_idx) > 0:
-                return attention_layer_idx
-        return layer_idx
-
-    def get_seq_length(self, layer_idx: int = 0) -> int:
-        return DynamicCache.get_seq_length(self, self._get_attention_layer_idx(layer_idx))
-
-    def get_mask_sizes(self, query_length: int, layer_idx: int) -> tuple[int, int]:
-        return DynamicCache.get_mask_sizes(self, query_length, self._get_attention_layer_idx(layer_idx))
-
-    def batch_repeat_interleave(self, repeats: int):
-        for layer_idx in range(len(self)):
-            if layer_idx < len(self.linear_cache) and isinstance(self.linear_cache[layer_idx], torch.Tensor):
-                self.linear_cache[layer_idx] = self.linear_cache[layer_idx].repeat_interleave(repeats, dim=0)
-            elif layer_idx < len(self.layers) and self.layers[layer_idx].is_initialized:
-                self.layers[layer_idx].batch_repeat_interleave(repeats)
-
-    def batch_select_indices(self, indices: torch.Tensor):
-        for layer_idx in range(len(self)):
-            if layer_idx < len(self.linear_cache) and isinstance(self.linear_cache[layer_idx], torch.Tensor):
-                self.linear_cache[layer_idx] = self.linear_cache[layer_idx][indices, ...]
-            elif layer_idx < len(self.layers) and self.layers[layer_idx].is_initialized:
-                self.layers[layer_idx].batch_select_indices(indices)
-
-    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
-        self.batch_select_indices(beam_idx)
-
-
-class MiniMaxVL01TextLightningAttention(MiniMaxLightningAttention):
-    pass
-
-
-class MiniMaxVL01TextRotaryEmbedding(Glm4MoeRotaryEmbedding):
-    pass
-
-
-class MiniMaxVL01TextPreTrainedModel(MiniMaxPreTrainedModel):
-    pass
-
-
-class MiniMaxVL01TextModel(MiniMaxModel):
-    @merge_with_config_defaults
-    @capture_outputs
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        return super().forward(**super_kwargs)
-
-
 @auto_docstring(checkpoint="MiniMaxAI/MiniMax-VL-01")
 @strict
 class MiniMaxVL01Config(LlavaNextConfig):
@@ -269,6 +214,61 @@ class MiniMaxVL01Config(LlavaNextConfig):
             raise TypeError("`text_config` must be a dictionary or a native MiniMax-VL-01 text configuration.")
 
         PreTrainedConfig.__post_init__(self, **kwargs)
+
+
+class MiniMaxVL01TextCache(MiniMaxCache):
+    def _get_attention_layer_idx(self, layer_idx: int) -> int:
+        if layer_idx != 0 or DynamicCache.get_seq_length(self, layer_idx) > 0:
+            return layer_idx
+
+        # The released layout starts with recurrent layers, so layer 0 cannot provide the global sequence length.
+        for attention_layer_idx in range(1, len(self.layers)):
+            if DynamicCache.get_seq_length(self, attention_layer_idx) > 0:
+                return attention_layer_idx
+        return layer_idx
+
+    def get_seq_length(self, layer_idx: int = 0) -> int:
+        return DynamicCache.get_seq_length(self, self._get_attention_layer_idx(layer_idx))
+
+    def get_mask_sizes(self, query_length: int, layer_idx: int) -> tuple[int, int]:
+        return DynamicCache.get_mask_sizes(self, query_length, self._get_attention_layer_idx(layer_idx))
+
+    def batch_repeat_interleave(self, repeats: int):
+        for layer_idx in range(len(self)):
+            if layer_idx < len(self.linear_cache) and isinstance(self.linear_cache[layer_idx], torch.Tensor):
+                self.linear_cache[layer_idx] = self.linear_cache[layer_idx].repeat_interleave(repeats, dim=0)
+            elif layer_idx < len(self.layers) and self.layers[layer_idx].is_initialized:
+                self.layers[layer_idx].batch_repeat_interleave(repeats)
+
+    def batch_select_indices(self, indices: torch.Tensor):
+        for layer_idx in range(len(self)):
+            if layer_idx < len(self.linear_cache) and isinstance(self.linear_cache[layer_idx], torch.Tensor):
+                self.linear_cache[layer_idx] = self.linear_cache[layer_idx][indices, ...]
+            elif layer_idx < len(self.layers) and self.layers[layer_idx].is_initialized:
+                self.layers[layer_idx].batch_select_indices(indices)
+
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        self.batch_select_indices(beam_idx)
+
+
+class MiniMaxVL01TextLightningAttention(MiniMaxLightningAttention):
+    pass
+
+
+class MiniMaxVL01TextRotaryEmbedding(Glm4MoeRotaryEmbedding):
+    pass
+
+
+class MiniMaxVL01TextPreTrainedModel(MiniMaxPreTrainedModel):
+    pass
+
+
+class MiniMaxVL01TextModel(MiniMaxModel):
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(self, **super_kwargs):
+        return super().forward(**super_kwargs)
 
 
 class MiniMaxVL01ImageProcessorKwargs(LlavaNextImageProcessorKwargs, total=False):
