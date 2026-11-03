@@ -15,6 +15,7 @@
 
 import tempfile
 import unittest
+from unittest.mock import Mock
 
 from parameterized import parameterized
 
@@ -185,6 +186,9 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
             attention.out_proj.weight.copy_(identity)
             attention.norm.weight.fill_(1)
 
+        attention.get_slope_rate = Mock(wraps=attention.get_slope_rate)
+        attention.decay_factors = Mock(wraps=attention.decay_factors)
+
         hidden_states = torch.tensor([[[1.0, 0.5, -0.5, 2.0], [2.0, -1.0, 0.25, 0.75]]], dtype=torch.float16)
         attention_mask = torch.tensor([[1, 0]])
         cache = MiniMaxVL01TextCache()
@@ -229,6 +233,22 @@ class MiniMaxVL01ModelTest(VLMModelTest, unittest.TestCase):
         torch.testing.assert_close(recurrent_state, changed_state)
         self.assertEqual(recurrent_state.dtype, torch.float32)
         self.assertEqual(cache.linear_cache[0].dtype, torch.float32)
+
+        attention.get_slope_rate.assert_not_called()
+        attention.decay_factors.assert_not_called()
+        attention.half()
+        attention.get_slope_rate.assert_called_once()
+        attention.decay_factors.assert_called_once()
+        attention(
+            decode_hidden_states,
+            position_embeddings=None,
+            attention_mask=None,
+            past_key_values=cache,
+        )
+        attention.get_slope_rate.assert_called_once()
+        attention.decay_factors.assert_called_once()
+        for name in ("slope_rate", "query_decay", "key_decay", "diagonal_decay"):
+            self.assertEqual(getattr(attention, name).dtype, torch.float32)
 
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
