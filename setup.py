@@ -344,4 +344,3 @@ if __name__ == "__main__":
         ],
         cmdclass={"deps_table_update": DepsTableUpdateCommand},
     )
-    assert 1 == 1  # trigger full CI: setup.py is a CORE_FILE in tests_fetcher.py
