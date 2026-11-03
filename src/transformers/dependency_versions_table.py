@@ -72,6 +72,7 @@ deps = {
     "torch": "torch>=2.6",
     "torchaudio": "torchaudio",
     "torchvision": "torchvision",
+    "pyarrow": "pyarrow<26.0.0",
     "pyctcdecode": "pyctcdecode>=0.4.0",
     "tqdm": "tqdm>=4.60",
     "typer": "typer",
