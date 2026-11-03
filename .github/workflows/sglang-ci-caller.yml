@@ -16,64 +16,6 @@ env:
 permissions: {}
 
 jobs:
-  sglang:
-    permissions:
-      contents: read
-    name: SGLang Transformers loader compatibility
-    # aws-m8i-8xl-cache (128 GiB): needed for sufficient RAM and for the writable
-    # shared cache mount (/mnt/cache). The 2xl runner has the same mount read-only.
-    runs-on:
-      group: aws-m8i-8xl-cache
-    container:
-      image: huggingface/transformers-torch-light
-      options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
-    env:
-      HF_HUB_OFFLINE: "1"
-
-    steps:
-      - name: Checkout Transformers under test
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-        with:
-          persist-credentials: false
-          path: transformers
-
-      - name: Checkout SGLang
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-        with:
-          repository: sgl-project/sglang
-          # Includes sgl-project/sglang#38336. Keep code and tests at the same
-          # revision so unrelated SGLang changes do not break Transformers CI.
-          ref: 55b4f4f19506c5571d7c4b04b1b47e85790b6db3
-          persist-credentials: false
-          path: sglang
-
-      - name: Set up Python 3.12 environment
-        run: |
-          uv venv /opt/venv312 --python 3.12
-          echo "VIRTUAL_ENV=/opt/venv312" >> $GITHUB_ENV
-          echo "/opt/venv312/bin" >> $GITHUB_PATH
-          echo "UV_PYTHON=" >> $GITHUB_ENV
-
-      - name: Install dependencies
-        run: |
-          uv pip install 'torch<=2.13.0' torchvision --index-url https://download.pytorch.org/whl/cpu
-          # Import SGLang from source: its full install pulls in CUDA packages
-          # and pins Transformers/tokenizers to releases instead of this checkout.
-          uv pip install -e ./transformers pytest triton \
-            aiohttp dill fastapi ipython msgspec orjson psutil pybase64 pyzmq requests sentencepiece
-          cp sglang/python/pyproject_cpu.toml sglang/python/pyproject.toml
-          SGLANG_BUILD_RUST_EXTS=none uv pip install --no-deps --no-build-isolation -e ./sglang/python
-
-      - name: Pip freeze
-        run: pip freeze
-
-      - name: Test SGLang Transformers loaders
-        env:
-          PYTHONPATH: ${{ github.workspace }}/sglang/python
-        working-directory: sglang
-        run: |
-          python -m pytest -v test/registered/unit/utils/test_hf_transformers_loading.py
-
   sglang-inference:
     permissions:
       contents: read
@@ -92,6 +34,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - suite: loader-compat
+            tests: test/registered/unit/utils/test_hf_transformers_loading.py
           - suite: model-loading
             tests: >-
               test/registered/model_loading/test_external_models.py
