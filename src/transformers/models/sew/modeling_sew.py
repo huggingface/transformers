@@ -511,6 +511,8 @@ class SEWPreTrainedModel(PreTrainedModel):
                         init.kaiming_normal_(module.weight)
             else:
                 init.kaiming_normal_(module.weight)
+        elif isinstance(module, SEWModel) and hasattr(module, "masked_spec_embed"):
+            init.uniform_(module.masked_spec_embed)
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor | int):
         """
@@ -769,7 +771,7 @@ class SEWModel(SEWPreTrainedModel):
     """
 )
 class SEWForCTC(SEWPreTrainedModel):
-    def __init__(self, config, target_lang: str | None = None):
+    def __init__(self, config: SEWConfig, target_lang: str | None = None):
         r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
@@ -874,26 +876,15 @@ class SEWForCTC(SEWPreTrainedModel):
                 attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
             )
             input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
-
-            # assuming that padded tokens are filled with -100
-            # when not being attended to
-            labels_mask = labels >= 0
-            target_lengths = labels_mask.sum(-1)
-            flattened_targets = labels.masked_select(labels_mask)
-
-            # ctc_loss doesn't support fp16
-            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
-
-            with torch.backends.cudnn.flags(enabled=False):
-                loss = nn.functional.ctc_loss(
-                    log_probs,
-                    flattened_targets,
-                    input_lengths,
-                    target_lengths,
-                    blank=self.config.pad_token_id,
-                    reduction=self.config.ctc_loss_reduction,
-                    zero_infinity=self.config.ctc_zero_infinity,
-                )
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                logit_lengths=input_lengths,
+                blank_token_id=self.config.pad_token_id,
+                reduction=self.config.ctc_loss_reduction,
+                zero_infinity=self.config.ctc_zero_infinity,
+                **kwargs,
+            )
 
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
@@ -907,7 +898,7 @@ class SEWForCTC(SEWPreTrainedModel):
     """
 )
 class SEWForSequenceClassification(SEWPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SEWConfig):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:

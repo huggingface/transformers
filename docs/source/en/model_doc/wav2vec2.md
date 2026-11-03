@@ -91,7 +91,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 <PipelineTag pipeline="audio-classification"/>
 
 - A notebook on how to [leverage a pretrained Wav2Vec2 model for emotion classification](https://colab.research.google.com/github/m3hrdadfi/soxan/blob/main/notebooks/Emotion_recognition_in_Greek_speech_using_Wav2Vec2.ipynb). 🌎
-- [`Wav2Vec2ForCTC`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/audio-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/audio_classification.ipynb).
+- [`Wav2Vec2ForCTC`] is supported by this [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/audio_classification.ipynb).
 - [Audio classification task guide](../tasks/audio_classification)
 
 <PipelineTag pipeline="automatic-speech-recognition"/>

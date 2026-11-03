@@ -41,8 +41,7 @@ from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...models.zamba2.modeling_zamba2 import Zamba2RMSNormGated
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
@@ -51,6 +50,27 @@ from .configuration_nemotron_h import NemotronHConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+class NemotronHRMSNormGated(torch.nn.Module):
+    def __init__(self, hidden_size, group_size, eps=1e-6):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+        self.group_size = group_size
+
+    def forward(self, hidden_states, gate=None):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        if gate is not None:
+            hidden_states = hidden_states * nn.functional.silu(gate.to(torch.float32))
+        *prefix_dims, last_dim = hidden_states.shape
+        group_count = last_dim // self.group_size
+        hidden_states_group = hidden_states.view(*prefix_dims, group_count, self.group_size)
+        variance = hidden_states_group.pow(2).mean(-1, keepdim=True)
+        hidden_states_group = hidden_states_group * torch.rsqrt(variance + self.variance_epsilon)
+        hidden_states = hidden_states_group.view(*prefix_dims, group_count * self.group_size)
+        return self.weight * hidden_states.to(input_dtype)
 
 
 # Helper methods for segment sum computation
@@ -418,12 +438,12 @@ class NemotronHMamba2Mixer(nn.Module):
         # S4D real initialization. These are not discretized!
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
         self.A_log = nn.Parameter(torch.empty(self.num_heads))
-        self.norm = Zamba2RMSNormGated(
+        self.norm = NemotronHRMSNormGated(
             self.intermediate_size, group_size=self.intermediate_size // self.n_groups, eps=config.layer_norm_epsilon
         )
         self.D = nn.Parameter(torch.empty(self.num_heads))
         if initialize_mixer_weights and self.dt_bias.device.type != "meta":
-            self.init_nemotron_h_mamba2_weights()
+            self.init_nemotron_h_weights()
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
 
         self.layer_type = config.layer_types[layer_idx]
@@ -436,7 +456,7 @@ class NemotronHMamba2Mixer(nn.Module):
         self.use_mem_eff_path = True
 
     @torch.no_grad()
-    def init_nemotron_h_mamba2_weights(self):
+    def init_nemotron_h_weights(self):
         A = torch.arange(1, self.num_heads + 1, device=self.A_log.device, dtype=torch.float32)
         init.copy_(self.A_log, torch.log(A))
         init.ones_(self.D)
@@ -452,7 +472,12 @@ class NemotronHMamba2Mixer(nn.Module):
     ):
         batch_size, seq_len, _ = hidden_states.shape
         dtype = hidden_states.dtype
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+        # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
+        if cache_params is not None:
+            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
+        else:
+            conv_state, recurrent_state = None, None
 
         # 1. Gated MLP's linear projection
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
@@ -489,13 +514,9 @@ class NemotronHMamba2Mixer(nn.Module):
             [self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
         )
 
-        if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
-            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
-
         # 2. Convolution sequence transformation
         hidden_states_B_C = hidden_states_B_C.transpose(1, 2)
-        if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
+        if conv_state is not None and seq_len == 1 and not cache_params.is_recording_past(self.layer_idx):
             hidden_states_B_C = causal_conv1d_update(
                 hidden_states_B_C,
                 conv_state,
@@ -531,7 +552,7 @@ class NemotronHMamba2Mixer(nn.Module):
         )
 
         # Recurrent form
-        if use_precomputed_states and seq_len == 1:
+        if recurrent_state is not None and seq_len == 1:
             hidden_states = hidden_states.view(batch_size, self.num_heads, self.head_dim)
             dt = dt.transpose(1, 2).expand(-1, -1, self.head_dim)
             A = A[:, None, None].expand(-1, self.head_dim, self.ssm_state_size)
@@ -570,7 +591,7 @@ class NemotronHMamba2Mixer(nn.Module):
                 return_final_states=output_final_state,
                 dt_bias=self.dt_bias,
                 dt_softplus=True,
-                initial_states=recurrent_state if use_precomputed_states else None,
+                initial_states=recurrent_state,
                 dt_limit=self.time_step_limit,
                 **kwargs,
             )
@@ -1053,7 +1074,7 @@ class NemotronHPreTrainedModel(PreTrainedModel):
 
 
 class NemotronHModel(NemotronHPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: NemotronHConfig):
         super().__init__(config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
@@ -1187,9 +1208,8 @@ class NemotronHForCausalLM(NemotronHPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :]).float()
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states).float()
 
         loss = None
         if labels is not None:

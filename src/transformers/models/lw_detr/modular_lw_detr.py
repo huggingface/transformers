@@ -22,8 +22,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -166,7 +165,19 @@ class LwDetrConfig(PreTrainedConfig):
     ```"""
 
     model_type = "lw_detr"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="lw_detr_vit",
+            init_kwargs={
+                "image_size": 1024,
+                "hidden_size": 192,
+                "num_hidden_layers": 10,
+                "window_block_indices": [0, 1, 3, 6, 7, 9],
+                "out_indices": [2, 4, 5, 9],
+            },
+        ),
+    }
 
     backbone_config: dict | PreTrainedConfig | None = None
     projector_scale_factors: list[float] | tuple[float, ...] = ()
@@ -207,19 +218,6 @@ class LwDetrConfig(PreTrainedConfig):
                 "Please use `class_loss_coefficient` instead. `mask_loss_coefficient` will be removed in a future version."
             )
             self.class_loss_coefficient = kwargs.pop("mask_loss_coefficient")
-
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="lw_detr_vit",
-            default_config_kwargs={
-                "image_size": 1024,
-                "hidden_size": 192,
-                "num_hidden_layers": 10,
-                "window_block_indices": [0, 1, 3, 6, 7, 9],
-                "out_indices": [2, 4, 5, 9],
-            },
-            **kwargs,
-        )
 
         self.projector_in_channels = [self.d_model] * len(self.projector_scale_factors)
         self.projector_out_channels = self.d_model
@@ -794,12 +792,16 @@ class LwDetrPreTrainedModel(PreTrainedModel):
         if hasattr(module, "refpoint_embed") and module.refpoint_embed is not None:
             init.constant_(module.refpoint_embed.weight, 0)
         if hasattr(module, "class_embed") and module.class_embed is not None:
-            prior_prob = 0.01
-            bias_value = -math.log((1 - prior_prob) / prior_prob)
-            init.constant_(module.class_embed.bias, bias_value)
+            init.constant_(module.class_embed.bias, -math.log(99))
         if hasattr(module, "bbox_embed") and module.bbox_embed is not None:
             init.constant_(module.bbox_embed.layers[-1].weight, 0)
             init.constant_(module.bbox_embed.layers[-1].bias, 0)
+        # The original deep-copies the initialized `class_embed` / `bbox_embed` into the encoder heads
+        if isinstance(module, LwDetrModel):
+            for class_head, bbox_head in zip(module.enc_out_class_embed, module.enc_out_bbox_embed):
+                init.constant_(class_head.bias, -math.log(99))
+                init.zeros_(bbox_head.layers[-1].weight)
+                init.zeros_(bbox_head.layers[-1].bias)
 
 
 def refine_bboxes(reference_points, deltas):

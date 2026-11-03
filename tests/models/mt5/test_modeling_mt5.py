@@ -472,8 +472,7 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    # `QAPipelineTests` is not working well with slow tokenizers (for some models) and we don't want to touch the file
-    # `src/transformers/data/processors/squad.py` (where this test fails for this model)
+    # `QAPipelineTests` is not working well with slow tokenizers (for some models)
     def is_pipeline_test_to_skip(
         self,
         pipeline_test_case_name,
@@ -831,8 +830,7 @@ class MT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         if tokenizer_name is None:
             return True
 
-        # `MT5EncoderOnlyModelTest` is not working well with slow tokenizers (for some models) and we don't want to touch the file
-        # `src/transformers/data/processors/squad.py` (where this test fails for this model)
+        # `MT5EncoderOnlyModelTest` is not working well with slow tokenizers (for some models)
         if pipeline_test_case_name == "TokenClassificationPipelineTests" and not tokenizer_name.endswith("Fast"):
             return True
 

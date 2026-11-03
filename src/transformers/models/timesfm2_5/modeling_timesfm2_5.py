@@ -105,8 +105,9 @@ class TimesFm2_5ResidualBlock(nn.Module):
         use_bias = use_bias if use_bias is not None else config.use_bias
 
     def forward(self, x):
-        # Align activations to block parameter dtype for mixed precision stability
-        x = x.to(self.input_layer.weight.dtype)
+        # Quantized weights may use integer storage; keep activations floating point.
+        if (target_dtype := self.input_layer.weight.dtype).is_floating_point:
+            x = x.to(target_dtype)
         hidden = self.input_layer(x)
         hidden = self.activation(hidden)
         output = self.output_layer(hidden)
@@ -428,7 +429,6 @@ class TimesFm2_5PreTrainedModel(PreTrainedModel):
         "hidden_states": TimesFm2_5DecoderLayer,
         "attentions": TimesFm2_5Attention,
     }
-    config_class = TimesFm2_5Config
     _supports_flash_attn = True
     _supports_flex_attn = True
 
@@ -845,13 +845,10 @@ class TimesFm2_5ModelForPrediction(TimesFm2_5PreTrainedModel):
 
     @staticmethod
     def _timesfm2_5_moving_average(arr: torch.Tensor, window_size: int) -> list[torch.Tensor]:
-        """Calculates the moving average using PyTorch's convolution function."""
+        """Calculates the moving average over a sliding window."""
         # Pad with zeros to handle initial window positions
         arr_padded = F.pad(arr, (window_size - 1, 0), "constant", 0)
-        # Create a convolution kernel
-        kernel = torch.ones(window_size, dtype=arr.dtype, device=arr.device) / window_size
-        # Apply convolution to calculate the moving average
-        smoothed_arr = F.conv1d(arr_padded.view(1, 1, -1), kernel.view(1, 1, -1)).squeeze()
+        smoothed_arr = arr_padded.unfold(-1, window_size, 1).mean(dim=-1)
         return [smoothed_arr, arr - smoothed_arr]
 
     def _decode_and_project(

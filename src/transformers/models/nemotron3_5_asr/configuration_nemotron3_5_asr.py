@@ -13,9 +13,9 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="nvidia/nemotron-3.5-asr-streaming-0.6b")
@@ -60,7 +60,9 @@ class Nemotron3_5AsrConfig(PreTrainedConfig):
     """
 
     model_type = "nemotron3_5_asr"
-    sub_configs = {"encoder_config": AutoConfig}
+    sub_configs_defaults = {
+        "encoder_config": SubConfigSpec(config_class=AutoConfig, model_type="nemotron_asr_streaming_encoder"),
+    }
 
     vocab_size: int = 13088
     decoder_hidden_size: int = 640
@@ -74,15 +76,6 @@ class Nemotron3_5AsrConfig(PreTrainedConfig):
     num_prompts: int = 128
     prompt_intermediate_size: int = 2048
     default_prompt_id: int = 101
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.encoder_config, dict):
-            self.encoder_config["model_type"] = self.encoder_config.get("model_type", "nemotron_asr_streaming_encoder")
-            self.encoder_config = CONFIG_MAPPING[self.encoder_config["model_type"]](**self.encoder_config)
-        elif self.encoder_config is None:
-            self.encoder_config = CONFIG_MAPPING["nemotron_asr_streaming_encoder"]()
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["Nemotron3_5AsrConfig"]

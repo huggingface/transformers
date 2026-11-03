@@ -30,7 +30,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPooling, Seq2SeqLMOutput, Seq2SeqModelOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -486,7 +486,7 @@ class Florence2VisionBlock(nn.Module):
 
 @auto_docstring
 class Florence2VisionPreTrainedModel(PreTrainedModel):
-    config_class = Florence2VisionConfig
+    config: Florence2VisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _supports_sdpa = True
@@ -643,7 +643,6 @@ class Florence2PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
 
     _supports_attention_backend = False
-    config_class = Florence2Config
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -809,6 +808,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
     _tied_weights_keys = {
         "lm_head.weight": "model.language_model.shared.weight",
     }
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: Florence2Config):
         super().__init__(config)
@@ -891,9 +891,8 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

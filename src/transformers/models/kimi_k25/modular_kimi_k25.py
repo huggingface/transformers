@@ -23,9 +23,9 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import (
     TransformersKwargs,
@@ -41,7 +41,7 @@ from ...vision_utils import (
     get_vision_interpolation_indices_and_weights,
     get_vision_position_ids,
 )
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..auto import AutoConfig, AutoModel
 from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration, Glm4vVisionRotaryEmbedding
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaModelOutputWithPast
 from ..qwen2_vl.modeling_qwen2_vl import (
@@ -145,7 +145,10 @@ class Kimi_K25Config(PreTrainedConfig):
     """
 
     model_type = "kimi_k25"
-    sub_configs = {"text_config": AutoConfig, "vision_config": Kimi_K25VisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="deepseek_v3"),
+        "vision_config": Kimi_K25VisionConfig,
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -159,22 +162,8 @@ class Kimi_K25Config(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         # BC: load from remote config on the hub where the model-type points to remote config
-        if isinstance(self.text_config, dict):
-            model_type = self.text_config.get("model_type", "deepseek_v3")
-            if model_type == "kimi_k2":
-                model_type = "deepseek_v3"
-            self.text_config = CONFIG_MAPPING[model_type](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["deepseek_v3"]()
-        else:
-            model_type = self.text_config.model_type
-            if model_type == "kimi_k2":
-                self.text_config.model_type = "deepseek_v3"
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Kimi_K25VisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = Kimi_K25VisionConfig()
+        if isinstance(self.text_config, dict) and self.text_config.get("model_type", "deepseek_v3") == "kimi_k2":
+            self.text_config["model_type"] = "deepseek_v3"
         super().__post_init__(**kwargs)
 
 
@@ -703,9 +692,8 @@ class Kimi_K25ForConditionalGeneration(Glm4vForConditionalGeneration):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

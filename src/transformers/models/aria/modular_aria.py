@@ -21,7 +21,7 @@ from torchvision.transforms.v2 import functional as tvF
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
 from ...image_transforms import divide_to_patches
@@ -34,7 +34,7 @@ from ...image_utils import (
 from ...integrations import use_experts_implementation
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import (
     TensorType,
@@ -44,7 +44,7 @@ from ...utils import (
     logging,
 )
 from ...utils.output_capturing import OutputRecorder
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoTokenizer
+from ..auto import AutoConfig, AutoTokenizer
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -85,9 +85,17 @@ class AriaTextConfig(LlamaConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_rowwise",
+        "layers.*.mlp.experts.down_proj": "colwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
+    }
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     intermediate_size: int = 4096
@@ -106,10 +114,11 @@ class AriaConfig(PreTrainedConfig):
     """
 
     model_type = "aria"
-    attribute_map = {
-        "image_token_id": "image_token_index",
+    attribute_map = {"image_token_id": "image_token_index"}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="idefics3_vision"),
+        "text_config": AriaTextConfig,
     }
-    sub_configs = {"text_config": AriaTextConfig, "vision_config": AutoConfig}
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | AriaTextConfig | None = None
@@ -129,18 +138,6 @@ class AriaConfig(PreTrainedConfig):
             }
         self.projector_patch_to_query_dict = {int(k): int(v) for k, v in self.projector_patch_to_query_dict.items()}
         self.max_value_projector_patch_to_query_dict = max(self.projector_patch_to_query_dict.values())
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = "idefics3_vision"
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["idefics3_vision"]()
-
-        if isinstance(self.text_config, dict) and "model_type" in self.text_config:
-            self.text_config = AriaTextConfig(**self.text_config)
-        elif self.text_config is None:
-            self.text_config = AriaTextConfig()
-
         super().__post_init__(**kwargs)
 
 
@@ -619,7 +616,8 @@ class AriaTextTopKRouter(nn.Module):
     """Top-k router for the Aria MoE block.
 
     Experts are selected on the raw logits and the routing weights are the softmax over the selected
-    logits only, which is equivalent to renormalizing a softmax taken over every expert.
+    logits only, which is equivalent to renormalizing a softmax taken over every expert. Returns
+    `(router_logits, top_k_weights, top_k_index)`.
     """
 
     def __init__(self, config: AriaTextConfig):
@@ -632,7 +630,7 @@ class AriaTextTopKRouter(nn.Module):
         router_logits = nn.functional.linear(hidden_states, self.weight)  # (num_tokens, num_experts)
         top_k_logits, top_k_index = torch.topk(router_logits, self.top_k, dim=-1)  # (num_tokens, top_k)
         top_k_weights = nn.functional.softmax(top_k_logits, dim=-1)  # (num_tokens, top_k)
-        return top_k_index, top_k_weights, router_logits
+        return router_logits, top_k_weights, top_k_index
 
 
 @use_experts_implementation(is_transposed=True)
@@ -692,7 +690,7 @@ class AriaTextMoELayer(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         original_shape = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_states.size(-1))
-        top_k_index, top_k_weights, _ = self.router(hidden_states)
+        _, top_k_weights, top_k_index = self.router(hidden_states)
         expert_output = self.experts(hidden_states, top_k_index, top_k_weights).view(original_shape)
         shared_expert_output = self.shared_experts(hidden_states.view(original_shape))
         return expert_output + shared_expert_output
@@ -724,7 +722,6 @@ class AriaTextDecoderLayer(LlamaDecoderLayer):
 class AriaTextPreTrainedModel(PreTrainedModel):
     config: AriaTextConfig
     base_model_prefix = "model"
-    input_modalities = ("image", "text")
     _no_split_modules = ["AriaTextDecoderLayer"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = ["past_key_values"]
@@ -735,7 +732,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": AriaTextDecoderLayer,
         "attentions": AriaTextAttention,
-        "router_logits": OutputRecorder(AriaTextTopKRouter, index=2),
+        "router_logits": OutputRecorder(AriaTextTopKRouter, index=0),
     }
 
     @torch.no_grad()
@@ -753,6 +750,7 @@ class AriaPreTrainedModel(LlamaPreTrainedModel):
     base_model_prefix = "model"
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (dynamic slicing)
     _supports_attention_backend = True
+    input_modalities = ("image", "text")
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -818,7 +816,6 @@ class AriaModel(LlavaModel):
         pixel_values: torch.FloatTensor,
         pixel_mask: torch.FloatTensor | None = None,
         vision_feature_layer: int | list[int] = -1,
-        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
@@ -1013,9 +1010,8 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

@@ -242,7 +242,7 @@ class XGLMModelTester:
         model = XGLMForCausalLM(config)
         model.to(torch_device)
         if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable()
 
         result = model(input_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
@@ -316,6 +316,29 @@ class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xglm_weight_initialization(*config_and_inputs)
 
+    def test_sinusoidal_embeddings_grow_in_eager_with_compileable_cache(self):
+        """
+        A compileable cache reports its length as a tensor, so `max_pos` is a tensor even in eager. The growth
+        check is only skipped while tracing, where that branch is untraceable, and must still run otherwise.
+        """
+        config, input_ids, _ = self.model_tester.prepare_config_and_inputs()
+        config.max_position_embeddings = input_ids.shape[1] + 2
+
+        # kept on CPU: without the growth the index goes out of range, which is a device-side assert on CUDA
+        model = XGLMForCausalLM(config).eval()
+        initial_rows = model.model.embed_positions.weights.size(0)
+
+        model.generate(
+            input_ids.cpu(),
+            max_new_tokens=initial_rows,
+            min_new_tokens=initial_rows,
+            do_sample=False,
+            cache_implementation="static",
+            disable_compile=True,
+        )
+
+        self.assertGreater(model.model.embed_positions.weights.size(0), initial_rows)
+
     @slow
     def test_model_from_pretrained(self):
         model_name = "facebook/xglm-564M"
@@ -341,9 +364,9 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
     ):
         model = XGLMForCausalLM.from_pretrained("facebook/xglm-564M")
         if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable()
         else:
-            model.gradient_checkpointing_disable()
+            model.activation_checkpointing_disable()
         model.to(torch_device)
         input_ids = torch.tensor([[2, 268, 9865]], dtype=torch.long, device=torch_device)  # The dog
         # </s> The dog is a very friendly dog. He is very affectionate and loves to play with other

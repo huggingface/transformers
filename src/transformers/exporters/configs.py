@@ -12,13 +12,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
+
 import copy
 from dataclasses import dataclass
 from enum import Enum
 from os import PathLike
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..utils import logging
+
+
+if TYPE_CHECKING:
+    from .quantizers import ExportQuantizer
 
 
 logger = logging.get_logger(__name__)
@@ -97,6 +103,12 @@ class DynamoConfig(ExportConfigMixin):
             fine-grained ``Dim(min=, max=)`` bounds. Not needed with ``dynamic=True`` / ``Dim.AUTO``,
             where ``torch.export`` infers shape relations instead of verifying them against the
             user-stated bounds.
+        quantizer ([`~exporters.quantizers.ExportQuantizer`], *optional*):
+            Post-training quantization applied during the export: [`~exporters.quantizers.PT2EQuantizer`] or
+            [`~exporters.quantizers.NNCFTorchFXQuantizer`] on the FX graph for every backend,
+            [`~exporters.quantizers.OnnxRuntimeQuantizer`] on the converted ONNX model, or
+            [`~exporters.quantizers.NNCFOpenVINOQuantizer`] / [`~exporters.quantizers.NNCFOnnxQuantizer`] on the
+            converted OpenVINO / ONNX model.
     """
 
     export_format: ExportFormat = ExportFormat.DYNAMO
@@ -105,6 +117,8 @@ class DynamoConfig(ExportConfigMixin):
     strict: bool = False
     dynamic_shapes: dict[str, Any] | None = None
     prefer_deferred_runtime_asserts_over_guards: bool = False
+
+    quantizer: ExportQuantizer | None = None
 
 
 @dataclass

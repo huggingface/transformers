@@ -99,7 +99,6 @@ class Exaone4_5_ModelTester(VLMModelTester):
 @require_torch
 class Exaone4_5_ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Exaone4_5_ModelTester
-    test_all_params_have_gradient = False
 
     def test_reverse_loading_mapping(self):
         super().test_reverse_loading_mapping(skip_base_model=True)

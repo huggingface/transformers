@@ -28,7 +28,7 @@ if is_torch_available():
     import torch
     from torch.nn.attention.flex_attention import create_block_mask
 
-    from transformers import DynamicCache, LlamaConfig, Qwen3NextConfig
+    from transformers import DynamicCache, LlamaConfig, Qwen3NextConfig, StaticCache
     from transformers.cache_utils import DynamicSlidingWindowLayer
     from transformers.masking_utils import (
         create_bidirectional_mask,
@@ -227,6 +227,36 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
         compiled_causal_mask, compiled_bidirectional_mask = compiled_create_masks(padded_mask)
         self.assertIsNotNone(compiled_causal_mask)
         self.assertIsNotNone(compiled_bidirectional_mask)
+
+    @require_torch_greater_or_equal("2.14")
+    def test_static_cache_prefill_mask_under_compile(self):
+        """
+        With a static cache, the query offset is a tensor. A compiled prefill without a padding mask (as in chunked
+        prefill) cannot read it to decide whether the cache is empty: the mask must be materialized instead of breaking
+        the graph on a data-dependent condition.
+        """
+        config = LlamaConfig(num_hidden_layers=1, num_attention_heads=2, num_key_value_heads=2, head_dim=8)
+        config._attn_implementation = "sdpa"
+
+        sequence_length, max_cache_len = 4, 16
+        inputs_embeds = torch.empty((1, sequence_length, 8), dtype=torch.float16, device=torch_device)
+        past_key_values = StaticCache(config=config, max_cache_len=max_cache_len)
+        past_key_values.early_initialization(1, 2, 8, torch.float16, torch_device)
+
+        def create_mask(allow_is_causal_skip=True):
+            return create_causal_mask(
+                config=config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=None,
+                past_key_values=past_key_values,
+                allow_is_causal_skip=allow_is_causal_skip,
+            )
+
+        # In eager, the cache is seen to be empty and the mask is skipped
+        self.assertIsNone(create_mask())
+
+        compiled_mask = torch.compile(create_mask, fullgraph=True)()
+        self.assertTrue(torch.equal(compiled_mask, create_mask(allow_is_causal_skip=False)))
 
     def test_chunked_mask_with_left_padding_and_large_prefill(self):
         # Make sure we have an attention_chunk_size in the config
@@ -481,3 +511,61 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
         self.assertIsNone(
             create_masks_for_generate(config, inputs_embeds=None, attention_mask=None, past_key_values=None)
         )
+
+    def test_causal_mask_default_layer_skips_linear_layers(self):
+        """A linear layer is not sliding either, so the default must not pick it over the full-attention layer."""
+        config = LlamaConfig(
+            num_hidden_layers=4,
+            hidden_size=32,
+            sliding_window=4,
+            attn_implementation="sdpa",
+            layer_types=["sliding_attention", "conv", "conv", "full_attention"],
+        )
+        cache = DynamicCache(config=config)
+        self.assertEqual(cache.is_sliding, [True, False, False, False])
+        self.assertEqual(cache.is_linear, [False, True, True, False])
+
+        # 10 cached tokens on both attention layers, then decode a single token at position 10
+        prefill_size = 10
+        inputs_embeds = torch.zeros(1, prefill_size, config.hidden_size)
+        attention_mask = torch.ones(1, prefill_size, dtype=torch.long)
+        position_ids = torch.arange(prefill_size)[None, :]
+
+        # This must not raise saying that the methods get_seq_length/get_mask_sizes do not exist because they were called on index 1
+        # (first non-sliding layer), which is a linear layer that does not have them -> instead it must go to index 3 (full_attention)
+        causal_mask = create_causal_mask(
+            config=config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=cache,
+            position_ids=position_ids,
+            allow_is_causal_skip=False,
+        )
+        # This must be correct
+        self.assertEqual(causal_mask.shape, (1, 1, prefill_size, prefill_size))
+        self.assertTrue((causal_mask == torch.tril(torch.ones(prefill_size, prefill_size))[None, None, :, :]).all())
+
+        # During prefill beyond sliding_window, both sliding and full layers were expected to have the full mask, so now check that after
+        # 1 forward, we are still using the full_attention, i.e. the size must not be the sliding_window (i.e. 4)
+        fake_kv = torch.rand(1, 2, prefill_size, 8)
+        fake_conv_state = torch.rand(1, 8, prefill_size)
+        cache.update(fake_kv, fake_kv, layer_idx=0)
+        cache.update_conv_state(conv_states=fake_conv_state, layer_idx=1)
+        cache.update_conv_state(conv_states=fake_conv_state, layer_idx=2)
+        cache.update(fake_kv, fake_kv, layer_idx=3)
+
+        # Mimic decoding 1 token after prefill
+        inputs_embeds = torch.zeros(1, 1, config.hidden_size)
+        attention_mask = torch.ones(1, prefill_size + 1, dtype=torch.long)
+        position_ids = torch.tensor([[prefill_size]])
+        causal_mask = create_causal_mask(
+            config=config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=cache,
+            position_ids=position_ids,
+            allow_is_causal_skip=False,
+        )
+        # This must be correct
+        self.assertEqual(causal_mask.shape, (1, 1, 1, prefill_size + 1))
+        self.assertTrue(causal_mask.all())

@@ -53,7 +53,6 @@ class DebertaV2SelfOutput(nn.Module):
         return hidden_states
 
 
-@torch.jit.script
 def make_log_bucket_position(relative_pos, bucket_size: int, max_position: int):
     sign = torch.sign(relative_pos)
     mid = bucket_size // 2
@@ -101,27 +100,22 @@ def build_relative_position(query_layer, key_layer, bucket_size: int = -1, max_p
     return rel_pos_ids
 
 
-@torch.jit.script
 def c2p_dynamic_expand(c2p_pos, query_layer, relative_pos):
     return c2p_pos.expand([query_layer.size(0), query_layer.size(1), query_layer.size(2), relative_pos.size(-1)])
 
 
-@torch.jit.script
 def p2c_dynamic_expand(c2p_pos, query_layer, key_layer):
     return c2p_pos.expand([query_layer.size(0), query_layer.size(1), key_layer.size(-2), key_layer.size(-2)])
 
 
-@torch.jit.script
 def pos_dynamic_expand(pos_index, p2c_att, key_layer):
     return pos_index.expand(p2c_att.size()[:2] + (pos_index.size(-2), key_layer.size(-2)))
 
 
-@torch.jit.script
 def scaled_size_sqrt(query_layer: torch.Tensor, scale_factor: int):
     return torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
 
 
-@torch.jit.script
 def build_rpos(query_layer, key_layer, relative_pos, position_buckets: int, max_relative_positions: int):
     if key_layer.size(-2) != query_layer.size(-2):
         return build_relative_position(
@@ -700,7 +694,7 @@ class DebertaV2PreTrainedModel(PreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.deberta.modeling_deberta.DebertaModel with Deberta->DebertaV2
 class DebertaV2Model(DebertaV2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DebertaV2Config):
         super().__init__(config)
 
         self.embeddings = DebertaV2Embeddings(config)
@@ -891,16 +885,14 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
     }
     _keys_to_ignore_on_load_unexpected = [r"mask_predictions.*"]
 
-    def __init__(self, config):
+    def __init__(self, config: DebertaV2Config):
         super().__init__(config)
         self.legacy = config.legacy
         self.deberta = DebertaV2Model(config)
         if self.legacy:
             self.cls = LegacyDebertaV2OnlyMLMHead(config)
         else:
-            self._tied_weights_keys = {
-                "lm_predictions.lm_head.weight": "deberta.embeddings.word_embeddings.weight",
-            }
+            self._tied_weights_keys = {}
             self.lm_predictions = DebertaV2OnlyMLMHead(config)
         # Initialize weights and apply final processing
         self.post_init()
@@ -1000,7 +992,7 @@ class ContextPooler(nn.Module):
     """
 )
 class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DebertaV2Config):
         super().__init__(config)
 
         num_labels = getattr(config, "num_labels", 2)
@@ -1104,7 +1096,7 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.deberta.modeling_deberta.DebertaForTokenClassification with Deberta->DebertaV2
 class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DebertaV2Config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1163,7 +1155,7 @@ class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
 
 @auto_docstring
 class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DebertaV2Config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1241,7 +1233,7 @@ class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
 
 @auto_docstring
 class DebertaV2ForMultipleChoice(DebertaV2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DebertaV2Config):
         super().__init__(config)
 
         num_labels = getattr(config, "num_labels", 2)

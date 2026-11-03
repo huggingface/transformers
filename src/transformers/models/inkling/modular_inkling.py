@@ -31,7 +31,7 @@ from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -108,7 +108,6 @@ class InklingTextConfig(PreTrainedConfig):
     model_type = "inkling_text"
     base_config_key = "text_config"
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
         "layers.*.mlp.experts.gate_up_proj": "colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
@@ -202,6 +201,10 @@ class InklingTextConfig(PreTrainedConfig):
             self.mlp_layer_types = ["dense" if i < dense_mlp_idx else "sparse" for i in range(self.num_hidden_layers)]
 
         if kwargs.get("dense_intermediate_size") is not None:
+            # In checkpoints with `dense_intermediate_size`, `intermediate_size` is the routed experts' width and
+            # `dense_intermediate_size` is the dense MLP's width. Keep the experts' width before it is
+            # overwritten below (see #49416).
+            self.moe_intermediate_size = self.intermediate_size
             self.intermediate_size = kwargs.pop("dense_intermediate_size")
 
         # The architecture contains 4 conv modules per layer, each needing a different conv cache
@@ -292,10 +295,10 @@ class InklingConfig(PreTrainedConfig):
     """
 
     model_type = "inkling_mm_model"
-    sub_configs = {
+    sub_configs_defaults = {
         "text_config": InklingTextConfig,
-        "audio_config": InklingAudioConfig,
         "vision_config": InklingVisionConfig,
+        "audio_config": InklingAudioConfig,
     }
 
     text_config: InklingTextConfig | dict | None = None
@@ -314,24 +317,9 @@ class InklingConfig(PreTrainedConfig):
             self.text_config.setdefault("chain_hidden_post_norm", mtp_config.get("chain_hidden_post_norm", False))
             self.text_config.setdefault("mtp_local_layer_ids", mtp_config.get("local_layer_ids"))
 
-        if isinstance(self.audio_config, dict):
-            self.audio_config = self.sub_configs["audio_config"](**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = self.sub_configs["audio_config"]()
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"]()
-
+        super().__post_init__(**kwargs)
         self.vision_config.text_hidden_size = self.text_config.hidden_size
         self.audio_config.text_hidden_size = self.text_config.hidden_size
-        super().__post_init__(**kwargs)
 
 
 class InklingModelOutputWithPast(Gemma3ModelOutputWithPast):
@@ -637,12 +625,12 @@ class InklingShortConvolution(nn.Module):
         seq_len = hidden_states.shape[1]
         hidden_states = hidden_states.transpose(1, 2)
 
-        use_precomputed_states = past_key_values is not None and past_key_values.has_previous_state(
-            self.layer_idx, self.conv_idx
-        )
+        if past_key_values is not None:
+            conv_state = past_key_values.get_conv_state(self.layer_idx, state_idx=self.conv_idx)
+        else:
+            conv_state = None
 
-        if use_precomputed_states and seq_len == 1 and not past_key_values.layers[self.layer_idx].record_past:
-            conv_state = past_key_values.layers[self.layer_idx].conv_states[self.conv_idx]
+        if conv_state is not None and seq_len == 1 and not past_key_values.is_recording_past(self.layer_idx):
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             hidden_states = causal_conv1d_update(
                 hidden_states, conv_state, self.conv1d.weight.squeeze(1), self.conv1d.bias
@@ -726,7 +714,7 @@ class InklingNormedEmbedding(nn.Embedding):
 
 @auto_docstring
 class InklingPreTrainedModel(PreTrainedModel):
-    config_class = InklingConfig
+    config: InklingConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["InklingDecoderLayer"]
@@ -904,9 +892,8 @@ class InklingForCausalLM(Gemma3ForCausalLM):
         )
 
         hidden_states = outputs.last_hidden_state / self.config.logits_mup_width_multiplier
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         unpadded_vocab_size = self.config.unpadded_vocab_size
         if unpadded_vocab_size is not None and unpadded_vocab_size < logits.shape[-1]:
             logits = logits[..., :unpadded_vocab_size]
@@ -930,6 +917,8 @@ class InklingAudioModelEmbeddings(HiggsAudioV2Embeddings): ...
 
 @auto_docstring
 class InklingAudioModel(InklingPreTrainedModel):
+    config: InklingAudioConfig
+
     def __init__(self, config: InklingAudioConfig):
         super().__init__(config)
         self.embed_audio_tokens = InklingAudioModelEmbeddings(config)
@@ -1067,6 +1056,8 @@ def plan_out_scales(
 
 @auto_docstring
 class InklingVisionModel(InklingPreTrainedModel):
+    config: InklingVisionConfig
+
     def __init__(self, config: InklingVisionConfig):
         super().__init__(config)
         self.scales = plan_out_scales(
@@ -1121,6 +1112,7 @@ class InklingVisionModel(InklingPreTrainedModel):
 class InklingModel(InklingPreTrainedModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
+    input_modalities = ("image", "text", "audio")
 
     def __init__(self, config: InklingConfig):
         super().__init__(config)
@@ -1307,6 +1299,7 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     # Fix: https://github.com/huggingface/transformers/issues/40564
     accepts_loss_kwargs = False
+    input_modalities = ("image", "text", "audio")
 
     def __init__(self, config: InklingConfig):
         super().__init__(config)
@@ -1402,9 +1395,8 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0] / self.config.text_config.logits_mup_width_multiplier
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         unpadded_vocab_size = self.config.text_config.unpadded_vocab_size
         if unpadded_vocab_size is not None and unpadded_vocab_size < logits.shape[-1]:
             logits = logits[..., :unpadded_vocab_size]

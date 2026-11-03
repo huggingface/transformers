@@ -318,7 +318,10 @@ class Step3p7TextConfig(MiniMaxM3VLTextConfig):
 @strict
 class Step3p7Config(PreTrainedConfig):
     model_type = "step3p7"
-    sub_configs = {"vision_config": Step3p7VisionConfig, "text_config": Step3p7TextConfig}
+    sub_configs_defaults = {
+        "vision_config": Step3p7VisionConfig,
+        "text_config": Step3p7TextConfig,
+    }
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
@@ -326,18 +329,11 @@ class Step3p7Config(PreTrainedConfig):
     image_token_id: int = 151679
 
     def __post_init__(self, **kwargs):
-        if self.vision_config is None:
-            self.vision_config = Step3p7VisionConfig()
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = Step3p7VisionConfig(
-                **{k: v for k, v in self.vision_config.items() if k != "model_type"}
-            )
-
-        if self.text_config is None:
-            self.text_config = Step3p7TextConfig()
-        elif isinstance(self.text_config, dict):
-            self.text_config = Step3p7TextConfig(**{k: v for k, v in self.text_config.items() if k != "model_type"})
-
+        # Force default model-type - hub has a remote-code format config
+        if isinstance(self.vision_config, dict):
+            self.vision_config.pop("model_type", None)
+        if isinstance(self.text_config, dict):
+            self.text_config.pop("model_type", None)
         super().__post_init__(**kwargs)
 
 
@@ -693,8 +689,8 @@ class Step3p7PreTrainedModel(PreTrainedModel):
         if isinstance(module, Step3p7VisionEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
         elif isinstance(module, Step3p7VisionEncoderLayer):
-            nn.init.constant_(module.lambda_1, module.config.layer_scale_init_value)
-            nn.init.constant_(module.lambda_2, module.config.layer_scale_init_value)
+            init.constant_(module.lambda_1, module.config.layer_scale_init_value)
+            init.constant_(module.lambda_2, module.config.layer_scale_init_value)
         elif isinstance(module, Step3p7RotaryEmbedding):
             for layer_type in module.layer_types:
                 rope_init_fn = module.compute_default_rope_parameters
@@ -997,6 +993,7 @@ class Step3p7TextModel(Gemma3TextModel):
 
 
 class Step3p7Model(DeepseekOcr2Model):
+    input_modalities = ("image", "text")
     config: Step3p7Config
 
     def __init__(self, config: Step3p7Config):
@@ -1053,6 +1050,7 @@ class Step3p7Model(DeepseekOcr2Model):
 
 
 class Step3p7ForConditionalGeneration(DeepseekOcr2ForConditionalGeneration):
+    input_modalities = ("image", "text")
     config: Step3p7Config
 
 

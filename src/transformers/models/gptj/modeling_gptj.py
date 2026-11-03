@@ -32,12 +32,13 @@ from ...modeling_outputs import (
     QuestionAnsweringModelOutput,
     SequenceClassifierOutputWithPast,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...utils import auto_docstring, logging
+from ...utils.generic import is_flash_attention_requested
 from .configuration_gptj import GPTJConfig
 
 
-if is_flash_attn_available():
+if is_flash_attn_available(kernels_fallback_ok=True):
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
@@ -46,7 +47,7 @@ logger = logging.get_logger(__name__)
 
 def create_sinusoidal_positions(num_pos: int, dim: int) -> torch.Tensor:
     inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64) / dim))
-    sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=torch.int64).float(), inv_freq).float()
+    sinusoid_inp = torch.arange(num_pos, dtype=torch.int64).float()[:, None] * inv_freq
     return torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
 
 
@@ -384,7 +385,10 @@ class GPTJBlock(GradientCheckpointingLayer):
         super().__init__()
         inner_dim = config.n_inner if config.n_inner is not None else 4 * config.n_embd
         self.ln_1 = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
-        self.attn = GPTJ_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
+        attn_implementation = (
+            "flash_attention_2" if is_flash_attention_requested(config) else config._attn_implementation
+        )
+        self.attn = GPTJ_ATTENTION_CLASSES[attn_implementation](config, layer_idx)
         self.mlp = GPTJMLP(inner_dim, config)
 
     def forward(
@@ -431,7 +435,7 @@ class GPTJPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class GPTJModel(GPTJPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTJConfig):
         super().__init__(config)
 
         self.embed_dim = config.n_embd
@@ -567,7 +571,7 @@ class GPTJModel(GPTJPreTrainedModel):
 class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: GPTJConfig):
         super().__init__(config)
         self.transformer = GPTJModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size)
@@ -618,9 +622,8 @@ class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = transformer_outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -654,7 +657,7 @@ class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
     """
 )
 class GPTJForSequenceClassification(GPTJPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTJConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = GPTJModel(config)
@@ -763,7 +766,7 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
 
 @auto_docstring
 class GPTJForQuestionAnswering(GPTJPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTJConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = GPTJModel(config)

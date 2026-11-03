@@ -47,7 +47,7 @@ from ...image_utils import (
     validate_annotations,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, requires_backends
+from ...utils import TensorType, auto_docstring, is_torch_available
 from ...utils.import_utils import requires
 
 
@@ -126,7 +126,7 @@ def prepare_coco_detection_annotation_pil(
     return new_target
 
 
-@requires(backends=("torch",))
+@auto_docstring
 class RTDetrImageProcessorPil(PilBackend):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -532,7 +532,6 @@ class RTDetrImageProcessorPil(PilBackend):
             `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
-        requires_backends(self, ["torch"])
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
         # convert from relative cxcywh to absolute xyxy
         boxes = center_to_corners_format(out_bbox)

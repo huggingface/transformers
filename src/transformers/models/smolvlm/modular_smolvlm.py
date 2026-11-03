@@ -24,7 +24,6 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ..idefics3.configuration_idefics3 import Idefics3Config, Idefics3VisionConfig
 from ..idefics3.image_processing_idefics3 import Idefics3ImageProcessor
@@ -61,8 +60,6 @@ class SmolVLMVisionConfig(Idefics3VisionConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "smolvlm_vision"
-
 
 class SmolVLMPreTrainedModel(Idefics3PreTrainedModel):
     pass
@@ -90,8 +87,6 @@ class SmolVLMConfig(Idefics3Config):
     >>> configuration = model.config
     ```"""
 
-    model_type = "smolvlm"
-
 
 class SmolVLMImageProcessor(Idefics3ImageProcessor):
     pass
@@ -106,43 +101,31 @@ class SmolVLMBaseModelOutputWithPast(Idefics3BaseModelOutputWithPast):
 
 
 class SmolVLMModel(Idefics3Model):
-    """
-    A subclass of Idefics3Model. We do *not* remove or block the call to inputs_merger
-    in forward. Instead, we override inputs_merger here with custom logic.
-    """
-
-    def inputs_merger(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_hidden_states: torch.Tensor
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
     ):
-        _, patch_size, _ = image_hidden_states.shape
-
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
         if input_ids is None:
-            image_mask = inputs_embeds == self.get_input_embeddings()(
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
                 torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
-            image_mask = image_mask[..., 0]  # slice off the hidden dim
+            special_image_mask = special_image_mask.all(-1)
         else:
-            image_mask = input_ids == self.config.image_token_id
+            special_image_mask = input_ids == self.config.image_token_id
 
-        num_image_tokens = image_mask.sum(dim=1)
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         torch_compilable_check(
-            torch.all(num_image_tokens % patch_size == 0),
-            "At least one sample has <image> tokens not divisible by patch_size.",
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
         )
-        blocks_per_sample = num_image_tokens // patch_size
+        return special_image_mask
 
-        offsets = torch.nn.functional.pad(blocks_per_sample.cumsum(dim=0), (1, 0), value=0)
-        block_offset = offsets[:-1]
-        row_cum = image_mask.cumsum(dim=-1)
-        chunk_idx = (row_cum - 1) // patch_size
-        local_idx = (row_cum - 1) % patch_size
-        block_idx = block_offset.unsqueeze(1) + chunk_idx
-
-        image_embeds = torch.zeros_like(inputs_embeds)
-        image_embeds[image_mask] = image_hidden_states[block_idx[image_mask], local_idx[image_mask], :]
-
-        merged_embeds = torch.where(image_mask.unsqueeze(-1), image_embeds, inputs_embeds)
-        return merged_embeds
+    def inputs_merger(self):
+        raise AttributeError("Not needed for SmolVLM")
 
     @can_return_tuple
     @auto_docstring(
@@ -170,6 +153,7 @@ class SmolVLMModel(Idefics3Model):
 
         # If no images, leave one empty image.
         real_images_inds[0] |= ~torch.any(real_images_inds)
+        num_real_images_per_batch = real_images_inds.view(batch_size, num_images).sum(dim=1)
 
         pixel_values = pixel_values[real_images_inds].contiguous()
         # Handle the vision attention mask
@@ -196,7 +180,9 @@ class SmolVLMModel(Idefics3Model):
 
         # Modality projection & resampling
         image_features = self.connector(image_hidden_states)
-        image_outputs.pooler_output = image_features
+        image_outputs.pooler_output = [
+            f.reshape(-1, f.shape[-1]) for f in image_features.split(num_real_images_per_batch.tolist())
+        ]
 
         return image_outputs
 
@@ -213,7 +199,6 @@ class SmolVLMModel(Idefics3Model):
         image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
         """
     )
-    @deprecate_kwarg("image_hidden_states", version="v5.20", new_name="mm_encoder_outputs")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -256,14 +241,15 @@ class SmolVLMModel(Idefics3Model):
             image_hidden_states = None
 
         if image_hidden_states is not None:
+            if isinstance(image_hidden_states, (list, tuple)):
+                image_hidden_states = torch.cat(image_hidden_states, dim=0)
             image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=inputs_embeds.device)
             # When we generate, we don't want to replace the potential image_token_id that we generated by images
             # that simply don't exist
-            inputs_embeds = self.inputs_merger(
-                input_ids=input_ids,
-                inputs_embeds=inputs_embeds,
-                image_hidden_states=image_hidden_states,
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_hidden_states
             )
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_hidden_states)
 
         outputs = self.text_model(
             inputs_embeds=inputs_embeds,
@@ -286,7 +272,7 @@ class SmolVLMModel(Idefics3Model):
 class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration):
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: SmolVLMConfig):
         super().__init__(config)
         self.model = SmolVLMModel(config)
         self.model.text_model.generation_config = GenerationConfig.from_model_config(config)

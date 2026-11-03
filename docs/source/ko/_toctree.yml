@@ -283,8 +283,6 @@
         title: (번역중) Visual Document Retrieval
       title: 멀티모달
     title: 태스크 레시피
-  - local: run_scripts
-    title: 스크립트로 학습하기
   - local: glossary
     title: Glossary
   - local: philosophy

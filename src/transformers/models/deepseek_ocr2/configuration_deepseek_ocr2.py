@@ -157,26 +157,12 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
 
     model_type = "deepseek_ocr2_vision"
     base_config_key = "vision_config"
-    sub_configs = {
+    sub_configs_defaults = {
         "sam_config": DeepseekOcr2SamVisionConfig,
         "encoder_config": DeepseekOcr2VisionEncoderConfig,
     }
-
     sam_config: dict | PreTrainedConfig | None = None
     encoder_config: dict | PreTrainedConfig | None = None
-
-    def __post_init__(self, **kwargs):
-        if self.sam_config is None:
-            self.sam_config = DeepseekOcr2SamVisionConfig()
-        elif isinstance(self.sam_config, dict):
-            self.sam_config = DeepseekOcr2SamVisionConfig(**self.sam_config)
-
-        if self.encoder_config is None:
-            self.encoder_config = DeepseekOcr2VisionEncoderConfig()
-        elif isinstance(self.encoder_config, dict):
-            self.encoder_config = DeepseekOcr2VisionEncoderConfig(**self.encoder_config)
-
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="deepseek-community/DeepSeek-OCR-2")
@@ -282,7 +268,7 @@ class DeepseekOcr2Config(PreTrainedConfig):
     """
 
     model_type = "deepseek_ocr2"
-    sub_configs = {
+    sub_configs_defaults = {
         "vision_config": DeepseekOcr2VisionConfig,
         "text_config": DeepseekOcr2TextConfig,
     }
@@ -291,19 +277,6 @@ class DeepseekOcr2Config(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 128815
     tie_word_embeddings: bool = False
-
-    def __post_init__(self, **kwargs):
-        if self.vision_config is None:
-            self.vision_config = DeepseekOcr2VisionConfig()
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = DeepseekOcr2VisionConfig(**self.vision_config)
-
-        if self.text_config is None:
-            self.text_config = DeepseekOcr2TextConfig()
-        elif isinstance(self.text_config, dict):
-            self.text_config = DeepseekOcr2TextConfig(**self.text_config)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = [

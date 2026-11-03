@@ -26,7 +26,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationMixin
 from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -167,9 +167,9 @@ class GlmImageConfig(PreTrainedConfig):
     ```"""
 
     model_type = "glm_image"
-    sub_configs = {
-        "vision_config": GlmImageVisionConfig,
+    sub_configs_defaults = {
         "text_config": GlmImageTextConfig,
+        "vision_config": GlmImageVisionConfig,
         "vq_config": GlmImageVQVAEConfig,
     }
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -181,24 +181,6 @@ class GlmImageConfig(PreTrainedConfig):
     image_start_token_id: int = 16384
     image_end_token_id: int = 16385
     tie_word_embeddings: bool = False
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"](**kwargs)
-
-        if isinstance(self.vq_config, dict):
-            self.vq_config = self.sub_configs["vq_config"](**self.vq_config)
-        elif self.vq_config is None:
-            self.vq_config = self.sub_configs["vq_config"](**kwargs)
-
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"](**kwargs)
-
-        super().__post_init__(**kwargs)
 
 
 class GlmImageTextRotaryEmbedding(Glm4vMoeTextRotaryEmbedding):
@@ -478,7 +460,7 @@ class GlmImageTextModel(Glm4vTextModel):
 
 
 class GlmImageModel(Glm4vModel):
-    def __init__(self, config):
+    def __init__(self, config: GlmImageConfig):
         super().__init__(config)
         self.visual = GlmImageVisionModel._from_config(config.vision_config)
         self.language_model = GlmImageTextModel._from_config(config.text_config)
@@ -883,12 +865,13 @@ class GlmImageCausalLMOutputWithPast(Glm4vCausalLMOutputWithPast):
 
 class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     base_model_prefix = "model"
     config: GlmImageConfig
 
-    def __init__(self, config):
+    def __init__(self, config: GlmImageConfig):
         super().__init__(config)
         self.model = GlmImageModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vision_vocab_size, bias=False)
@@ -979,9 +962,8 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
 
         hidden_states = outputs[0]
 
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
