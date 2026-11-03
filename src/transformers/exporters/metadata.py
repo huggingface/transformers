@@ -107,6 +107,7 @@ def build_export_metadata(
     metadata["output_names"] = traced_output_names(exported_program)
     cache = next((inputs[name] for name in ("past_key_values", "cache_params") if inputs.get(name) is not None), None)
     if cache is not None:
+        from ..cache_utils import StaticCache
         from .cache import indexer_layers_of, kv_geometry_of, linear_states_of
 
         cache = getattr(cache, "self_attention_cache", cache)
@@ -115,6 +116,10 @@ def build_export_metadata(
             "indexers": indexer_layers_of(cache),
             "linear_states": linear_states_of(cache),
         }
+        if isinstance(cache, StaticCache):
+            # The decode graph only takes a cache of the length it was traced on.
+            lengths = [getattr(layer, "max_cache_len", None) for layer in cache.layers]
+            geometry["max_cache_len"] = max(length for length in lengths if length is not None)
         # As it saves: JSON keys are strings and its sequences lists.
         metadata["cache_geometry"] = json.loads(json.dumps(geometry))
     metadata["in_spec"] = torch.utils._pytree.treespec_dumps(exported_program.call_spec.in_spec)

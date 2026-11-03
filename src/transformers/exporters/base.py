@@ -19,6 +19,7 @@ from __future__ import annotations
 import copy
 import dataclasses
 import json
+import sys
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass
@@ -262,6 +263,16 @@ class ExportArtifacts(Mapping, PushToHubMixin):
         )
 
 
+def _switches_kernels_on_query_length(model) -> bool:
+    """Whether the model's linear attention runs the chunked gated delta rule beyond one token and the recurrent one
+    for a single token (Qwen3.5's, Qwen3-Next's): a decode graph traced on several tokens keeps the chunked kernel,
+    which a one-token step then runs wrong, so the decode graph takes one token and the prompt goes through it a
+    token at a time."""
+    return any(
+        hasattr(sys.modules.get(type(module).__module__), "torch_chunk_gated_delta_rule") for module in model.modules()
+    )
+
+
 class HfExporter(ABC):
     """
     Abstract base class for all Transformers exporters.
@@ -472,8 +483,9 @@ class HfExporter(ABC):
                 `cache_implementation="static"` for a fixed-size `StaticCache`). Saved with the export.
             multi_token_decode (`bool`, *optional*):
                 Whether the decode graph takes several query tokens at once, so it takes the whole prompt in one call.
-                Defaults to whether the decode config is dynamic; refused on a static one, whose decode graph takes
-                the prompt a token at a time.
+                Defaults to whether the decode config is dynamic, except for a model whose linear attention switches
+                kernels on the query length (Qwen3.5's); refused on a static one, whose decode graph takes the prompt
+                a token at a time.
             decoder_writes_cross_cache (`bool`, *optional*):
                 For an encoder-decoder, whether the decode graph computes its own cross-attention cache instead of
                 the encoder graph. Defaults to the exporter's `decoder_writes_cross_cache`.
@@ -549,7 +561,7 @@ class HfExporter(ABC):
         decode_config = config.get(decode_graph_name(config)) if isinstance(config, dict) else config
         dynamic = bool(getattr(decode_config, "dynamic", False) or getattr(decode_config, "dynamic_shapes", None))
         if multi_token_decode is None:
-            multi_token_decode = dynamic
+            multi_token_decode = dynamic and not _switches_kernels_on_query_length(model)
         elif multi_token_decode and not dynamic:
             raise ValueError(
                 "`multi_token_decode=True` needs a dynamic export: a static one freezes the decode graph's query axis "
