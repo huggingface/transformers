@@ -32,7 +32,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ..auto import AutoModel
 from ..llama.modeling_llama import eager_attention_forward, rotate_half
-from ..nanochat.modeling_nanochat import NanoChatRMSNorm
+from ..llama4.modeling_llama4 import Llama4TextL2Norm
 from ..phi3.modeling_phi3 import Phi3MLP
 from .configuration_esmfold2 import EsmFold2AtomEncoderConfig, EsmFold2Config, EsmFold2DiffusionModuleConfig
 from .generation_esmfold2 import EsmFold2FoldingMixin
@@ -102,7 +102,7 @@ class EsmFold2LayerNorm(nn.LayerNorm):
         )
 
 
-class EsmFold2RMSNorm(NanoChatRMSNorm):
+class EsmFold2RMSNorm(Llama4TextL2Norm):
     """Weightless RMSNorm that computes in fp32 and returns its input dtype."""
 
 

@@ -29,14 +29,14 @@ from ..exaone4.modeling_exaone4 import (
     Exaone4DecoderLayer,
     Exaone4Model,
     Exaone4PreTrainedModel,
-    Exaone4RMSNorm,
     eager_attention_forward,
     rotate_half,
 )
+from ..llama.modeling_llama import LlamaRMSNorm
 from .configuration_muse_glimmer_assistant import MuseGlimmerAssistantConfig
 
 
-class MuseGlimmerAssistantRMSNorm(Exaone4RMSNorm):
+class MuseGlimmerAssistantRMSNorm(LlamaRMSNorm):
     pass
 
 

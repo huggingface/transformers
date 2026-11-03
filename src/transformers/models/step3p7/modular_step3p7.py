@@ -45,6 +45,7 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_position_ids
 from ..deepseek_ocr2.modeling_deepseek_ocr2 import DeepseekOcr2ForConditionalGeneration, DeepseekOcr2Model
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts, DeepseekV4MLP
+from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..gemma3.modeling_gemma3 import Gemma3TextModel, _bidirectional_window_overlay
 from ..kimi_k25.modeling_kimi_k25 import Kimi_K25VisionRotaryEmbedding
 from ..laguna.modeling_laguna import (
@@ -56,7 +57,6 @@ from ..laguna.modeling_laguna import (
 )
 from ..minimax_m3_vl.configuration_minimax_m3_vl import MiniMaxM3VLTextConfig
 from ..minimax_m3_vl.modeling_minimax_m3_vl import (
-    MiniMaxM3VLRMSNorm,
     MiniMaxM3VLSparseMoeBlock,
     MiniMaxM3VLTopKRouter,
     MiniMaxM3VLVisionAttention,
@@ -771,8 +771,8 @@ class Step3p7RotaryEmbedding(LagunaRotaryEmbedding):
     pass
 
 
-class Step3p7RMSNorm(MiniMaxM3VLRMSNorm):
-    pass
+class Step3p7RMSNorm(GemmaRMSNorm):
+    """Gemma-style RMSNorm: normalizes in fp32 and scales by `weight + 1`."""
 
 
 class Step3p7MLP(DeepseekV4MLP):

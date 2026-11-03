@@ -30,7 +30,6 @@ from ..glm4v.modeling_glm4v import (
     Glm4vModel,
     Glm4vModelOutputWithPast,
     Glm4vPreTrainedModel,
-    Glm4vRMSNorm,
     Glm4vTextAttention,
     Glm4vTextDecoderLayer,
     Glm4vTextModel,
@@ -41,9 +40,10 @@ from ..glm4v.modeling_glm4v import (
     apply_rotary_pos_emb_vision,
     eager_attention_forward,
 )
+from ..llama.modeling_llama import LlamaRMSNorm
 
 
-class GlmOcrRMSNorm(Glm4vRMSNorm):
+class GlmOcrRMSNorm(LlamaRMSNorm):
     pass
 
 

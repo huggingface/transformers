@@ -66,7 +66,6 @@ if is_torch_available():
         pipeline,
     )
     from transformers.cache_utils import (
-        DummyLayer,
         DynamicIndexedLayer,
         DynamicLayer,
         DynamicSlidingWindowLayer,
@@ -921,7 +920,6 @@ class CacheHardIntegrationTest(unittest.TestCase):
             max_new_tokens=10,
             do_sample=False,
             cache_implementation="static",
-            disable_compile=True,  # we don't care about it and faster without
             prefill_chunk_size=2,
             return_dict_in_generate=True,
         )
@@ -932,23 +930,9 @@ class CacheHardIntegrationTest(unittest.TestCase):
 
         # Each layer must be allocated with its own `head_dim`, instead of all of them sharing a single one
         text_config = model.config.get_text_config(decoder=True)
-        expected_head_dims = [
-            text_config.per_layer_config[i].head_dim
-            for i, layer in enumerate(cache.layers)
-            if not isinstance(layer, DummyLayer)
-        ]
-        self.assertEqual(
-            [layer.keys.shape[-1] for layer in cache.layers if not isinstance(layer, DummyLayer)], expected_head_dims
-        )
+        expected_head_dims = [text_config.per_layer_config[layer].head_dim for layer in range(len(cache.layers))]
+        self.assertEqual([layer.keys.shape[-1] for layer in cache.layers], expected_head_dims)
         self.assertGreater(len(set(expected_head_dims)), 1)
-        # Make sure the dummy layers are expected to be there
-        self.assertTrue(
-            all(
-                text_config.kv_sharing_modes[i] == "reuse"
-                for i, layer in enumerate(cache.layers)
-                if isinstance(layer, DummyLayer)
-            )
-        )
 
     @require_torch_accelerator
     @slow
