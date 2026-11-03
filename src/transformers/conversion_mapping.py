@@ -151,6 +151,28 @@ _MODEL_TO_CONVERSION_PATTERN = {
 }
 
 
+# the released speech encoders carry LFM2's attention names, and every codebook of the depth decoder its own
+# embedding and norm
+_LFM3_SPEECH_CONVERSIONS = [
+    WeightRenaming(
+        source_patterns=r"(audio_encoder\.lfm\.layers\.\d+\.self_attn)\.out_proj\.", target_patterns=r"\1.o_proj."
+    ),
+    WeightRenaming(
+        source_patterns=r"(audio_encoder\.lfm\.layers\.\d+\.self_attn\.[qk])_layernorm\.", target_patterns=r"\1_norm."
+    ),
+    WeightConverter(
+        source_patterns="depth_decoder.depth_embeddings.*.embedding.weight",
+        target_patterns="depth_decoder.codebook_embedding",
+        operations=[MergeModulelist(dim=0)],
+    ),
+    WeightConverter(
+        source_patterns="depth_decoder.depth_embeddings.*.embedding_norm.weight",
+        target_patterns="depth_decoder.codebook_norm.weight",
+        operations=[MergeModulelist(dim=0)],
+    ),
+]
+
+
 def _build_checkpoint_conversion_mapping():
     mapping = {
         "hy_v4": [
@@ -1263,6 +1285,8 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "lfm3_audio": [*_LFM3_SPEECH_CONVERSIONS],
+        "lfm3_omni": [*_LFM3_SPEECH_CONVERSIONS],
         "lfm2_moe": [
             WeightConverter(
                 source_patterns=[
@@ -1277,6 +1301,11 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns="feed_forward.experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
             ),
+        ],
+        "liquid_codec": [
+            WeightRenaming(source_patterns=r"^_frontend\.", target_patterns="frontend."),
+            WeightRenaming(source_patterns=r"^encoder\.lfm\.", target_patterns="encoder."),
+            WeightRenaming(source_patterns=r"^quantizer\.fsq\.", target_patterns="quantizer."),
         ],
         "ernie4_5_vl_moe": [
             # vision

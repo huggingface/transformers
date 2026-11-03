@@ -1030,8 +1030,9 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
             if is_new_implementation and is_torchdynamo_exporting():
                 return torch_function(*args, **kwargs)
 
-            if not is_new_implementation and (
-                kwargs.get("cu_seqlens") is not None or kwargs.get("seq_idx") is not None
+            # a torch fallback that takes the packed-sequence boundaries itself (e.g. `seq_idx`) keeps them
+            if not is_new_implementation and any(
+                kwargs.get(name) is not None and name not in applicable_params for name in ("cu_seqlens", "seq_idx")
             ):
                 distribution = _PACKAGE_TO_DISTRIBUTION.get(package, package)
                 raise ValueError(

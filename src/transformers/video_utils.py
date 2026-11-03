@@ -245,16 +245,21 @@ def make_batched_metadata(videos: VideoInput, video_metadata: VideoMetadataType)
 
     if isinstance(video_metadata, list):
         # Flatten if nested list
-        if isinstance(video_metadata[0], list):
+        if len(video_metadata) > 0 and isinstance(video_metadata[0], list):
             video_metadata = [
                 VideoMetadata(**metadata) for metadata_list in video_metadata for metadata in metadata_list
             ]
         # Simply wrap in VideoMetadata if simple dict
-        elif isinstance(video_metadata[0], dict):
+        elif len(video_metadata) > 0 and isinstance(video_metadata[0], dict):
             video_metadata = [VideoMetadata(**metadata) for metadata in video_metadata]
     else:
         # Create a batched list from single object
         video_metadata = [VideoMetadata(**video_metadata)]
+    if len(video_metadata) != len(videos):
+        # the clips are paired with their metadata by `zip`, which would silently drop the clips past the last entry
+        raise ValueError(
+            f"Received {len(videos)} videos but {len(video_metadata)} `video_metadata` entries; pass one entry per video"
+        )
     return video_metadata
 
 

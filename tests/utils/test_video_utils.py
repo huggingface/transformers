@@ -35,6 +35,7 @@ from transformers.video_utils import (
     VideoMetadata,
     group_videos_by_shape,
     is_torchvision_video_decoding_available,
+    make_batched_metadata,
     make_batched_videos,
     reorder_videos,
 )
@@ -170,6 +171,20 @@ class BaseVideoProcessorTester(unittest.TestCase):
         self.assertIsInstance(videos_list[0], torch.Tensor)
         self.assertEqual(videos_list[0].shape, (8, 16, 32, 3))
         self.assertTrue(np.array_equal(videos_list[0], video))
+
+    def test_make_batched_metadata_needs_one_entry_per_video(self):
+        videos = [get_random_video(16, 32), get_random_video(16, 32)]
+        metadata = {"total_num_frames": 8, "fps": 2.0}
+        batched = make_batched_metadata(videos, [metadata, metadata])
+        self.assertEqual([entry.fps for entry in batched], [2.0, 2.0])
+        self.assertEqual([entry.fps for entry in make_batched_metadata(videos, None)], [None, None])
+        # the clips are paired with their metadata by `zip`, which would silently drop the clips past the last entry
+        for video_metadata in ([metadata], metadata, [[metadata]], [], [metadata] * 3):
+            with (
+                self.subTest(video_metadata=video_metadata),
+                self.assertRaisesRegex(ValueError, "Received 2 videos but"),
+            ):
+                make_batched_metadata(videos, video_metadata)
 
     def test_resize(self):
         video_processor = BaseVideoProcessor(model_init_kwargs=VideosKwargs)

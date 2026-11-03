@@ -107,6 +107,12 @@ class VideoProcessorMixin(BaseImageProcessor):
 
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
+        # `num_frames` and `fps` are mutually exclusive: the caller's one is not paired with the instance's other,
+        # and an instance `num_frames` wins over an instance `fps`
+        if kwargs.get("num_frames") is not None or (kwargs.get("fps") is None and self.num_frames is not None):
+            kwargs.setdefault("fps", None)
+        elif kwargs.get("fps") is not None:
+            kwargs.setdefault("num_frames", None)
         for kwarg_name in self.valid_kwargs.__annotations__:
             kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
 

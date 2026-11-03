@@ -374,27 +374,51 @@ def causal_conv1d_update(
     return out.to(hidden_states.dtype)
 
 
+def _causal_conv1d_fn_torch(
+    hidden_states: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    seq_idx: torch.Tensor | None = None,
+    activation: str | None = None,
+    **kwargs,
+):
+    """Causal depthwise conv; `seq_idx` (batch, seqlen) marks packed documents, and a position only reads the ones
+    that share its index, like the `causal_conv1d` kernel."""
+    _, hidden_size, seq_len = hidden_states.shape
+    padding = weight.shape[-1] - 1
+
+    if seq_idx is None:
+        out = F.conv1d(
+            hidden_states.to(weight.dtype),
+            weight=weight.unsqueeze(1),
+            bias=bias,
+            padding=padding,
+            groups=hidden_size,
+        )[:, :, :seq_len]
+    else:
+        # a cached conv window in front of the sequence belongs to no document
+        seq_idx = F.pad(seq_idx, (seq_len - seq_idx.shape[-1] + padding, 0), value=-1)
+        windows = F.pad(hidden_states.to(weight.dtype), (padding, 0)).unfold(-1, padding + 1, 1)
+        seq_idx_windows = seq_idx.unfold(-1, padding + 1, 1)
+        same_document = (seq_idx_windows == seq_idx_windows[..., -1:]).unsqueeze(1)
+        out = torch.einsum("bdtk,dk->bdt", windows * same_document.to(windows.dtype), weight)
+        if bias is not None:
+            out = out + bias[:, None]
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
+
+
 @use_kernel_func_from_hub_with_fallback("causal_conv1d_fn", "causal_conv1d")
 def causal_conv1d_fn(
     hidden_states: torch.Tensor,
     weight: nn.Parameter,
     bias: nn.Parameter | None = None,
+    seq_idx: torch.Tensor | None = None,
     activation: str | None = None,
     **kwargs,
 ):
-    _, hidden_size, seq_len = hidden_states.shape
-    padding = weight.shape[-1] - 1
-
-    out = F.conv1d(
-        hidden_states.to(weight.dtype),
-        weight=weight.unsqueeze(1),
-        bias=bias,
-        padding=padding,
-        groups=hidden_size,
-    )[:, :, :seq_len]
-    if activation is not None:
-        out = ACT2FN[activation](out)
-    return out.to(hidden_states.dtype)
+    return _causal_conv1d_fn_torch(hidden_states, weight, bias, seq_idx, activation)
 
 
 @use_kernelized_func([causal_conv1d_update, causal_conv1d_fn])
@@ -437,13 +461,23 @@ class Lfm2MoeShortConv(nn.Module):
         BCx = self.in_proj(hidden_states).transpose(-1, -2)
         B, C, x = BCx.chunk(3, dim=-2)
         hidden_states = B * x
+        if self.bias and attention_mask is not None:
+            # the in_proj bias re-fills the padded positions, so mask them again before they enter the conv window
+            hidden_states = hidden_states * attention_mask[:, None, :].to(hidden_states.dtype)
 
         if past_key_values is not None:
             conv_state = past_key_values.get_conv_state(self.layer_idx, state_idx=0)
         else:
             conv_state = None
 
-        if conv_state is not None and seq_len == 1 and not past_key_values.is_recording_past(self.layer_idx):
+        # the causal_conv1d kernels only serve widths 2-4; wider convs (LFM3 uses 7) stay on the torch reference
+        use_kernel = 2 <= self.conv_kernel_size <= 4
+        if (
+            conv_state is not None
+            and seq_len == 1
+            and use_kernel
+            and not past_key_values.is_recording_past(self.layer_idx)
+        ):
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             hidden_states = causal_conv1d_update(
                 hidden_states, conv_state, self.conv.weight.squeeze(1), self.conv.bias
@@ -454,7 +488,8 @@ class Lfm2MoeShortConv(nn.Module):
                     hidden_states, self.layer_idx, conv_kernel_size=self.conv_kernel_size
                 )
 
-            hidden_states = causal_conv1d_fn(hidden_states, self.conv.weight.squeeze(1), self.conv.bias, **kwargs)
+            conv1d_fn = causal_conv1d_fn if use_kernel else _causal_conv1d_fn_torch
+            hidden_states = conv1d_fn(hidden_states, self.conv.weight.squeeze(1), self.conv.bias, **kwargs)
 
             # Drop the additional previous states
             if past_key_values is not None:
