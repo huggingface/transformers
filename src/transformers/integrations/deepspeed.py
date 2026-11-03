@@ -457,7 +457,8 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, load_config=Non
 
     Args:
         model_to_load: The model to load weights into
-        state_dict: The state dict containing the weights
+        state_dict: The state dict containing the weights. Only rank 0 reads the values, so the other ranks can use
+            meta tensors
         load_config: Optional LoadStateDictConfig containing weight_mapping and other loading options
     """
     # copy state_dict so `_load_state_dict_into_zero3_model` can modify it
@@ -496,6 +497,7 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, load_config=Non
         # state_dict
         if is_deepspeed_zero3_enabled():
             import deepspeed
+            from deepspeed.accelerator import get_accelerator
 
             # In sharded models, each shard has only part of the full state_dict, so only gather
             # parameters that are in the current state_dict.
@@ -517,13 +519,20 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, load_config=Non
                     if torch.distributed.get_rank() == 0:
                         module._load_from_state_dict(*args)
 
-            # Buffers are not partitioned by ZeRO-3, load them directly
+            # Buffers are not partitioned by ZeRO-3, but only rank 0 has their checkpoint values: broadcast them
             named_buffers = dict(module.named_buffers(prefix=prefix[:-1], recurse=False))
             for k, buf in named_buffers.items():
                 if k in state_dict and buf is not None:
                     missing_keys.discard(k)
+                    value = state_dict[k]
+                    device = get_accelerator().current_device_name()
+                    if torch.distributed.get_rank() == 0:
+                        value = value.to(device).contiguous()
+                    else:
+                        value = torch.empty(value.shape, dtype=value.dtype, device=device)
+                    torch.distributed.broadcast(value, src=0)
                     with torch.no_grad():
-                        buf.copy_(state_dict[k])
+                        buf.copy_(value)
                     buf._is_hf_initialized = True
 
         for name, child in module._modules.items():

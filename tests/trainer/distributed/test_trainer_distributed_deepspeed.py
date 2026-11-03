@@ -1017,6 +1017,15 @@ class TestTrainerDistributedDeepSpeed(DeepSpeedCommandsMixin, TestCasePlus):
 
         self._check_parity(torchrun_results, accel_results, num_processes, expected_zero_stage=3)
 
+    def test_zero3_from_pretrained_reads_weights_on_rank0_only(self):
+        """Only rank 0 reads checkpoint values under ZeRO-3, the other ranks get params and buffers from it."""
+        cmd = self.get_torchrun_cmd(
+            os.path.join(SCRIPTS_DIR, "zero3_from_pretrained.py"),
+            script_args=["--output_dir", self.get_auto_remove_tmp_dir()],
+            num_processes=2,
+        )
+        execute_subprocess_async(cmd, env=self.get_env())
+
     def _check_parity(self, torchrun_results, accel_results, num_processes, expected_zero_stage):
         for rank in range(num_processes):
             tr, ac = torchrun_results[rank], accel_results[rank]

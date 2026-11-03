@@ -4438,12 +4438,14 @@ class PreTrainedModel(
 
         if is_deepspeed_zero3_enabled() and not is_quantized:
             if state_dict is None:
+                # Only rank 0 copies checkpoint values into the model, the other ranks only need the keys and shapes
+                map_location = "cpu" if torch.distributed.get_rank() == 0 else "meta"
                 merged_state_dict = {}
                 for ckpt_file in checkpoint_files:
                     merged_state_dict.update(
                         load_state_dict(
                             ckpt_file,
-                            map_location="cpu",
+                            map_location=map_location,
                             weights_only=load_config.weights_only,
                             disable_mmap=load_config.disable_mmap,
                         )
