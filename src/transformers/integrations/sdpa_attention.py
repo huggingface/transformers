@@ -27,6 +27,19 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
+def pack_gqa(hidden_states: torch.Tensor | None, n_rep: int) -> torch.Tensor | None:
+    """
+    With a single query token, packs the `n_rep` query heads sharing a key/value head as the query rows of that head,
+    so that attention runs on the key/value heads as they are instead of on their `repeat_kv` copies. The hidden states
+    (the query, or a per-head mask or bias) go from (..., num_attention_heads, 1, dim) to (..., num_key_value_heads,
+    n_rep, dim). `None` and masks shared by all heads are returned as is, as the latter broadcast over the packed rows.
+    """
+    if hidden_states is None or hidden_states.ndim < 3 or hidden_states.shape[-3] == 1:
+        return hidden_states
+    *leading_dims, num_attention_heads, _, dim = hidden_states.shape
+    return hidden_states.reshape(*leading_dims, num_attention_heads // n_rep, n_rep, dim)
+
+
 def use_gqa_in_sdpa(attention_mask: torch.Tensor | None, key: torch.Tensor, value: torch.Tensor) -> bool:
     # XPU and MPS support masked GQA under more recent torch versions
     if _is_torch_xpu_available:
@@ -106,18 +119,19 @@ def sdpa_attention_forward(
         )
 
     sdpa_kwargs = {}
-    fold_query_groups = False
+    batch_size, num_heads, q_length, _ = query.shape
     if hasattr(module, "num_key_value_groups") and module.num_key_value_groups > 1:
         if use_gqa_in_sdpa(attention_mask, key, value):
             sdpa_kwargs["enable_gqa"] = True
-        elif query.shape[2] == 1:
-            # Decoding: the query heads are folded onto their KV head right before the SDPA call, see below
-            fold_query_groups = True
+        elif q_length == 1:
+            # Decoding: packing the query heads onto their key/value head avoids repeating the whole KV cache
+            query = pack_gqa(query, module.num_key_value_groups)
+            attention_mask = pack_gqa(attention_mask, module.num_key_value_groups)
+            position_bias = pack_gqa(position_bias, module.num_key_value_groups)
         else:
             key = repeat_kv(key, module.num_key_value_groups)
             value = repeat_kv(value, module.num_key_value_groups)
 
-    q_length = query.shape[2]
     kv_length = key.shape[2]
 
     # Instead of relying on the value set in the module directly, we use the is_causal passed in kwargs if it is presented
@@ -171,21 +185,6 @@ def sdpa_attention_forward(
         attention_mask = create_position_bias_mask(position_bias, attention_mask, is_causal, query, key)
         is_causal = False
 
-    # With a single query token, the query heads sharing a KV head become query rows of that head:
-    # (batch, num_heads, 1, head_dim) -> (batch, num_kv_heads, num_key_value_groups, head_dim). Query head `i` still
-    # attends to KV head `i // num_key_value_groups` as with `repeat_kv`, without copying K/V. A mask shared by all
-    # heads broadcasts over the new rows, and `is_causal` is already False with a single query token.
-    if fold_query_groups:
-        # Explicit sizes (no -1) so that empty batches or KV sequences can be reshaped as well
-        batch_size, num_heads, _, head_dim = query.shape
-        num_kv_heads, num_groups = key.shape[1], module.num_key_value_groups
-        query = query.reshape(batch_size, num_kv_heads, num_groups, head_dim)
-        # A per-head mask (e.g. built from `position_bias`) is folded the same way
-        if attention_mask is not None and attention_mask.ndim > 2 and attention_mask.shape[-3] > 1:
-            attention_mask = attention_mask.reshape(
-                *attention_mask.shape[:-3], num_kv_heads, num_groups, attention_mask.shape[-1]
-            )
-
     attn_output = torch.nn.functional.scaled_dot_product_attention(
         query,
         key,
@@ -196,8 +195,8 @@ def sdpa_attention_forward(
         is_causal=is_causal,
         **sdpa_kwargs,
     )
-    if fold_query_groups:
-        attn_output = attn_output.reshape(batch_size, num_heads, 1, value.shape[-1])
+    # Unpacks the query heads if they were packed, a no-op otherwise
+    attn_output = attn_output.reshape(batch_size, num_heads, q_length, value.shape[-1])
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, None
