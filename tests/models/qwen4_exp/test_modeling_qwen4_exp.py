@@ -131,9 +131,6 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        inputs_dict["input_ids"][:, :2] = config.pad_token_id
-        inputs_dict["attention_mask"][:, :2] = 0
-        inputs_dict["attention_mask"][:, 2:] = 1
         config._attn_implementation = "eager"
         config.return_dict = True
         seq_len = self.model_tester.seq_length
@@ -150,11 +147,22 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
                 len(outputs.attentions),
                 sum(layer != "linear_attention" for layer in config.layer_types),
             )
-            self.assertTrue(torch.isfinite(outputs.attentions[0]).all())
             self.assertListEqual(
                 list(outputs.attentions[0].shape[-3:]),
                 [config.num_attention_heads, seq_len, seq_len],
             )
+
+    def test_eager_attention_with_left_padding(self):
+        """Regression for #49888: overlapping float masks must not cause NaNs for left-padding queries."""
+        config = self.model_tester.get_config()
+        model = Qwen4ExpTextModel._from_config(config, attn_implementation="eager").to(torch_device).eval()
+        input_ids = torch.tensor([[config.pad_token_id, config.pad_token_id, 5, 6, 7]], device=torch_device)
+        attention_mask = torch.tensor([[0, 0, 1, 1, 1]], device=torch_device)
+
+        with torch.no_grad():
+            outputs = model(input_ids, attention_mask=attention_mask, output_attentions=True, use_cache=False)
+
+        self.assertTrue(torch.isfinite(outputs.attentions[0]).all())
 
     def test_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
