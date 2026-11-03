@@ -376,7 +376,7 @@ class GLPNPreTrainedModel(PreTrainedModel):
 @auto_docstring
 class GLPNModel(GLPNPreTrainedModel):
     # Todo - Refactor as part of vision refactor. Copied from transformers.models.segformer.modeling_segformer.SegformerModel.__init__ with Segformer->GLPN
-    def __init__(self, config):
+    def __init__(self, config: GLPNConfig):
         super().__init__(config)
         self.config = config
 
@@ -563,7 +563,7 @@ class GLPNDepthEstimationHead(nn.Module):
     """
 )
 class GLPNForDepthEstimation(GLPNPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GLPNConfig):
         super().__init__(config)
 
         self.glpn = GLPNModel(config)

@@ -353,6 +353,7 @@ class Data2VecAudioModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         if is_torch_available()
         else {}
     )
+    test_can_init_all_missing_weights_before_2023 = True
 
     def setUp(self):
         self.model_tester = Data2VecAudioModelTester(self)

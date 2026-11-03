@@ -117,7 +117,7 @@ class CwmModelOutputWithPast(BaseModelOutputWithPast):
 
 
 class CwmModel(LlamaModel):
-    config_class = CwmConfig
+    config: CwmConfig
 
     def __init__(self, config: CwmConfig):
         super().__init__(config)

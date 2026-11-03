@@ -43,6 +43,7 @@ limitations under the License.
         <a href="i18n/README_es.md">Español</a> |
         <a href="i18n/README_ja.md">日本語</a> |
         <a href="i18n/README_hd.md">हिन्दी</a> |
+        <a href="i18n/README_mr.md">मराठी</a> |
         <a href="i18n/README_ru.md">Русский</a> |
         <a href="i18n/README_pt-br.md">Português</a> |
         <a href="i18n/README_te.md">తెలుగు</a> |
@@ -84,7 +85,7 @@ Explore the [Hub](https://huggingface.co/) today to find a model and use Transfo
 
 ## Installation
 
-Transformers works with Python 3.10+, and [PyTorch](https://pytorch.org/get-started/locally/) 2.6+.
+Transformers works with Python 3.11+, and [PyTorch](https://pytorch.org/get-started/locally/) 2.6+.
 
 Create and activate a virtual environment with [venv](https://docs.python.org/3/library/venv.html) or [uv](https://docs.astral.sh/uv/), a fast Rust-based Python package and project manager.
 

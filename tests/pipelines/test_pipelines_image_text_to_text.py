@@ -292,7 +292,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
             "defaults": {"role": "assistant"},
             "start_anchor": "<|im_start|>assistant\n",
             "fields": {
-                "thinking": {"open": "<think>", "close": "</think>", "content": "text"},
+                "reasoning_content": {"open": "<think>", "close": "</think>", "content": "text"},
                 "content": {"close": "<|im_end|>", "content": "text"},
             },
         }
@@ -311,14 +311,14 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         outputs = pipe(text=messages, do_sample=False, max_new_tokens=10)
         parsed_message = outputs[0]["generated_text"][-1]
         # The model never emits </think> here, so everything it generates stays inside the
-        # `thinking` region opened by the chat template in the prompt. Without `prefix=`,
+        # `reasoning_content` region opened by the chat template in the prompt. Without `prefix=`,
         # the parser would never see the opening <think> and would mis-route the generated
         # text into `content` instead.
         self.assertEqual(parsed_message["role"], "assistant")
-        self.assertIn("thinking", parsed_message)
+        self.assertIn("reasoning_content", parsed_message)
         self.assertNotIn("content", parsed_message)
-        self.assertIsInstance(parsed_message["thinking"], str)
-        self.assertGreater(len(parsed_message["thinking"]), 0)
+        self.assertIsInstance(parsed_message["reasoning_content"], str)
+        self.assertGreater(len(parsed_message["reasoning_content"]), 0)
 
     @slow
     @require_torch

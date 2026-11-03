@@ -22,7 +22,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_experts_implementation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import (
@@ -30,7 +30,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     MoeModelOutputWithPast,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ProcessorMixin, Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
@@ -213,9 +213,9 @@ class MuseSparkAudioConfig(PreTrainedConfig):
 class MuseSparkConfig(MuseGlimmerConfig):
     model_type = "muse_spark"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=MuseSparkTextConfig),
-        "vision_config": SubConfigSpec(config_class=MuseSparkVisionConfig),
-        "audio_config": SubConfigSpec(config_class=MuseSparkAudioConfig),
+        "text_config": MuseSparkTextConfig,
+        "vision_config": MuseSparkVisionConfig,
+        "audio_config": MuseSparkAudioConfig,
     }
 
     audio_config: dict | PreTrainedConfig | None = None
@@ -1044,8 +1044,8 @@ class MuseSparkForConditionalGeneration(MuseGlimmerForConditionalGeneration):
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         # MuseSpark pre-scales logits by `output_multiplier` before the Gemma-style tanh softcap.
         # Together with `final_logit_softcapping = T`, this gives `T * tanh(logits * mult / T)`.

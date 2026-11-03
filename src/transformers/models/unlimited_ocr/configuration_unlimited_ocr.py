@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -129,8 +129,8 @@ class UnlimitedOcrVisionConfig(PreTrainedConfig):
     model_type = "unlimited_ocr_vision"
     base_config_key = "vision_config"
     sub_configs_defaults = {
-        "sam_config": SubConfigSpec(config_class=UnlimitedOcrSamVisionConfig),
-        "encoder_config": SubConfigSpec(config_class=UnlimitedOcrVisionEncoderConfig),
+        "sam_config": UnlimitedOcrSamVisionConfig,
+        "encoder_config": UnlimitedOcrVisionEncoderConfig,
     }
     sam_config: dict | PreTrainedConfig | None = None
     encoder_config: dict | PreTrainedConfig | None = None
@@ -276,8 +276,8 @@ class UnlimitedOcrConfig(PreTrainedConfig):
 
     model_type = "unlimited_ocr"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=UnlimitedOcrVisionConfig),
-        "text_config": SubConfigSpec(config_class=UnlimitedOcrTextConfig),
+        "vision_config": UnlimitedOcrVisionConfig,
+        "text_config": UnlimitedOcrTextConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None

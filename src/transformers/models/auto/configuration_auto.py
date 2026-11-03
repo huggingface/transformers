@@ -36,8 +36,12 @@ _CallableT = TypeVar("_CallableT", bound=Callable[..., Any])
 CONFIG_MAPPING_NAMES.update(
     {
         "EvollaModel": "EvollaConfig",
+        "mimi_decoder": "MimiDecoderConfig",
+        "mimi_encoder": "MimiEncoderConfig",
         "mlcd": "MLCDVisionConfig",
         "parakeet_tdt": "ParakeetTDTConfig",
+        "pocket_tts_audio_tokenizer_decoder": "PocketTTSAudioTokenizerDecoderConfig",
+        "pocket_tts_audio_tokenizer_encoder": "PocketTTSAudioTokenizerEncoderConfig",
         "vibevoice_acoustic_tokenizer_decoder": "VibeVoiceAcousticTokenizerDecoderConfig",
         "vibevoice_acoustic_tokenizer_encoder": "VibeVoiceAcousticTokenizerEncoderConfig",
     }
@@ -50,7 +54,11 @@ CONFIG_MAPPING_NAMES = OrderedDict(**{"gpt-sw3": "GPT2Config"}, **CONFIG_MAPPING
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME.update(
     {
         "EvollaModel": "evolla",
+        "mimi_encoder": "mimi",
+        "mimi_decoder": "mimi",
         "parakeet_tdt": "parakeet",
+        "pocket_tts_audio_tokenizer_encoder": "pocket_tts_audio_tokenizer",
+        "pocket_tts_audio_tokenizer_decoder": "pocket_tts_audio_tokenizer",
         "vibevoice_acoustic_tokenizer_encoder": "vibevoice_acoustic_tokenizer",
         "vibevoice_acoustic_tokenizer_decoder": "vibevoice_acoustic_tokenizer",
     }

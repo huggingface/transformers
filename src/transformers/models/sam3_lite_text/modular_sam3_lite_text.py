@@ -124,12 +124,12 @@ class Sam3LiteTextConfig(PreTrainedConfig):
 
     model_type = "sam3_lite_text"
     sub_configs_defaults = {
-        "geometry_encoder_config": SubConfigSpec(config_class=Sam3LiteTextGeometryEncoderConfig),
-        "detr_encoder_config": SubConfigSpec(config_class=Sam3LiteTextDETREncoderConfig),
-        "detr_decoder_config": SubConfigSpec(config_class=Sam3LiteTextDETRDecoderConfig),
-        "mask_decoder_config": SubConfigSpec(config_class=Sam3LiteTextMaskDecoderConfig),
+        "geometry_encoder_config": Sam3LiteTextGeometryEncoderConfig,
+        "detr_encoder_config": Sam3LiteTextDETREncoderConfig,
+        "detr_decoder_config": Sam3LiteTextDETRDecoderConfig,
+        "mask_decoder_config": Sam3LiteTextMaskDecoderConfig,
         "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="sam3_vision_model"),
-        "text_config": SubConfigSpec(config_class=Sam3LiteTextTextConfig),
+        "text_config": Sam3LiteTextTextConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -314,7 +314,7 @@ class Sam3LiteTextTextEmbeddings(nn.Module):
 
 @auto_docstring
 class Sam3LiteTextPreTrainedModel(Sam3PreTrainedModel):
-    config_class = Sam3LiteTextConfig
+    config: Sam3LiteTextConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
 
@@ -336,7 +336,7 @@ class Sam3LiteTextPreTrainedModel(Sam3PreTrainedModel):
 """
 )
 class Sam3LiteTextTextModel(Sam3LiteTextPreTrainedModel):
-    config_class = Sam3LiteTextTextConfig
+    config: Sam3LiteTextTextConfig
     config: Sam3LiteTextTextConfig
     _can_record_outputs = {
         "hidden_states": Sam3LiteTextTextEncoderLayer,

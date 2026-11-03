@@ -40,7 +40,8 @@ class VibeVoiceAcousticTokenizerConfig(PreTrainedConfig):
     ffn_expansion (`int`, *optional*, defaults to 4):
         Expansion factor for feed-forward networks.
     vae_std (`float`, *optional*, defaults to 0.625):
-        Standard deviation used for VAE sampling after encoder.
+        Standard deviation of the Gaussian from which the per-sample noise scale is drawn when noise is added to
+        the encoder latents (`sample=True`).
 
     Example:
 
@@ -106,7 +107,8 @@ class VibeVoiceAcousticTokenizerEncoderConfig(VibeVoiceAcousticTokenizerConfig):
     ffn_expansion (`int`, *optional*, defaults to 4):
         Expansion factor for feed-forward networks.
     vae_std (`float`, *optional*, defaults to 0.625):
-        Standard deviation used for VAE sampling after encoder.
+        Standard deviation of the Gaussian from which the per-sample noise scale is drawn when noise is added to
+        the encoder latents (`sample=True`).
     """
 
     model_type = "vibevoice_acoustic_tokenizer_encoder"
@@ -136,7 +138,8 @@ class VibeVoiceAcousticTokenizerDecoderConfig(VibeVoiceAcousticTokenizerConfig):
     ffn_expansion (`int`, *optional*, defaults to 4):
         Expansion factor for feed-forward networks.
     vae_std (`float`, *optional*, defaults to 0.625):
-        Standard deviation used for VAE sampling after encoder.
+        Standard deviation of the Gaussian from which the per-sample noise scale is drawn when noise is added to
+        the encoder latents (`sample=True`).
     """
 
     model_type = "vibevoice_acoustic_tokenizer_decoder"

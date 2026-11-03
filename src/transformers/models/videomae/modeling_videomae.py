@@ -396,7 +396,7 @@ class VideoMAEPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class VideoMAEModel(VideoMAEPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: VideoMAEConfig):
         super().__init__(config)
         self.config = config
 
@@ -509,7 +509,7 @@ class VideoMAEDecoder(nn.Module):
     """
 )
 class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: VideoMAEConfig):
         super().__init__(config)
         self.config = config
 
@@ -682,7 +682,7 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
     """
 )
 class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: VideoMAEConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels

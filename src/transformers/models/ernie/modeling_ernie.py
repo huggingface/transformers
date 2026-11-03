@@ -42,7 +42,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
@@ -517,7 +517,7 @@ class ErnieEncoder(nn.Module):
 
 @auto_docstring
 class ErniePreTrainedModel(PreTrainedModel):
-    config_class = ErnieConfig
+    config: ErnieConfig
     base_model_prefix = "ernie"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
@@ -556,7 +556,7 @@ class ErniePreTrainedModel(PreTrainedModel):
 class ErnieModel(ErniePreTrainedModel):
     _no_split_modules = ["ErnieLayer"]
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: ErnieConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -738,7 +738,7 @@ class ErnieForPreTraining(ErniePreTrainedModel):
         "cls.predictions.decoder.weight": "ernie.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: ErnieConfig):
         super().__init__(config)
 
         self.ernie = ErnieModel(config)
@@ -852,7 +852,7 @@ class ErnieForCausalLM(ErniePreTrainedModel, GenerationMixin):
         "cls.predictions.decoder.bias": "cls.predictions.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: ErnieConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -919,9 +919,8 @@ class ErnieForCausalLM(ErniePreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.cls(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.cls(hidden_states)
 
         loss = None
         if labels is not None:
@@ -944,7 +943,7 @@ class ErnieForMaskedLM(ErniePreTrainedModel):
         "cls.predictions.decoder.weight": "ernie.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: ErnieConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -1033,7 +1032,7 @@ class ErnieOnlyNSPHead(nn.Module):
     """
 )
 class ErnieForNextSentencePrediction(ErniePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ErnieConfig):
         super().__init__(config)
 
         self.ernie = ErnieModel(config)
@@ -1122,7 +1121,7 @@ class ErnieForNextSentencePrediction(ErniePreTrainedModel):
     """
 )
 class ErnieForSequenceClassification(ErniePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ErnieConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1206,7 +1205,7 @@ class ErnieForSequenceClassification(ErniePreTrainedModel):
 
 @auto_docstring
 class ErnieForMultipleChoice(ErniePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ErnieConfig):
         super().__init__(config)
 
         self.ernie = ErnieModel(config)
@@ -1307,7 +1306,7 @@ class ErnieForMultipleChoice(ErniePreTrainedModel):
 
 @auto_docstring
 class ErnieForTokenClassification(ErniePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ErnieConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1372,7 +1371,7 @@ class ErnieForTokenClassification(ErniePreTrainedModel):
 
 @auto_docstring
 class ErnieForQuestionAnswering(ErniePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ErnieConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
