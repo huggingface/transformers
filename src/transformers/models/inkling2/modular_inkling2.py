@@ -652,50 +652,42 @@ class Inkling2MoE(InklingMoE):
         return hidden_states
 
 
-def block_attn_res_forward(
-    block_states: list[torch.Tensor],
-    partial_block_states: torch.Tensor,
-    queries: torch.Tensor,
-    normalize_values: bool,
-) -> tuple[torch.Tensor, ...]:
+class Inkling2BlockAttentionResidual(nn.Module):
     """
-    Attention over depth: at each position, every query in `queries` attends to the completed blocks and the current
-    partial block. Keys are the RMS-normalized sources, values are the raw or normalized sources.
-    Returns one float32 mixture per query.
+    Block attention residual: attention over depth that mixes the completed blocks and the current partial block into
+    the input of the next sublayer. At each position, every learned pseudo-query attends to that position's block
+    states. Keys are the RMS-normalized block states, values are the raw or normalized block states.
     """
-    # with a device map, earlier blocks live on the devices of the layers that produced them
-    device = partial_block_states.device
-    value_states = torch.stack([*(state.to(device) for state in block_states), partial_block_states], dim=-2).float()
-    key_states = value_states * torch.rsqrt(value_states.square().mean(dim=-1, keepdim=True) + 1e-6)
-    if normalize_values:
-        value_states = key_states
 
-    hidden_size = value_states.shape[-1]
-    # (batch, seq_len, num_queries, hidden_size), the same queries at every position
-    query_states = queries.to(device).float().view(-1, hidden_size).expand(*value_states.shape[:-2], -1, -1)
-    attn_output = F.scaled_dot_product_attention(query_states, key_states, value_states, scale=hidden_size**-0.5)
-    return attn_output.unbind(-2)
-
-
-class Inkling2AttnRes(nn.Module):
-    """Pseudo-queries of the block attention residuals: one per sublayer input, three for full-attention inputs."""
-
-    def __init__(self, config: Inkling2TextConfig):
+    def __init__(self, config: Inkling2TextConfig, num_queries: int = 1):
         super().__init__()
-        self.attn_queries = nn.ParameterList(
-            [
-                nn.Parameter(
-                    torch.zeros(config.hidden_size)
-                    if config.layer_types[layer_idx] == "hybrid_sliding"
-                    else torch.zeros(3, config.hidden_size)
-                )
-                for layer_idx in range(1, config.num_hidden_layers)
-            ]
+        self.normalize_values = config.attn_res_normalize_values
+        self.query = nn.Parameter(
+            torch.zeros(config.hidden_size) if num_queries == 1 else torch.zeros(num_queries, config.hidden_size)
         )
-        self.mlp_queries = nn.ParameterList(
-            [nn.Parameter(torch.zeros(config.hidden_size)) for _ in range(config.num_hidden_layers)]
-        )
-        self.output_query = nn.Parameter(torch.zeros(config.hidden_size))
+
+    def forward(
+        self, block_states: list[torch.Tensor], partial_block_states: torch.Tensor
+    ) -> tuple[torch.Tensor, ...]:
+        """
+        Returns one `(batch_size, seq_len, hidden_size)` float32 tensor per query: the block states (completed blocks
+        and the partial block) weighted by that query's attention. Full-attention layers use three queries for separate
+        query, key and value inputs, all other sublayers use one.
+        """
+        # with a device map, earlier blocks live on the devices of the layers that produced them
+        device = partial_block_states.device
+        value_states = torch.stack(
+            [*(state.to(device) for state in block_states), partial_block_states], dim=-2
+        ).float()
+        key_states = value_states * torch.rsqrt(value_states.square().mean(dim=-1, keepdim=True) + 1e-6)
+        if self.normalize_values:
+            value_states = key_states
+
+        hidden_size = value_states.shape[-1]
+        # (batch, seq_len, num_queries, hidden_size), the same queries at every position
+        query_states = self.query.to(device).float().view(-1, hidden_size).expand(*value_states.shape[:-2], -1, -1)
+        attn_output = F.scaled_dot_product_attention(query_states, key_states, value_states, scale=hidden_size**-0.5)
+        return attn_output.unbind(-2)
 
 
 class Inkling2DecoderLayer(GradientCheckpointingLayer):
@@ -704,7 +696,8 @@ class Inkling2DecoderLayer(GradientCheckpointingLayer):
         self.is_sliding = config.layer_types[layer_idx] == "hybrid_sliding"
         self.attention_type = "sliding_attention" if self.is_sliding else "full_attention"
         self.is_block_boundary = layer_idx % config.n_layers_per_attnres_block == 0
-        self.normalize_values = config.attn_res_normalize_values
+        self.attn_res = Inkling2BlockAttentionResidual(config, 1 if self.is_sliding else 3) if layer_idx > 0 else None
+        self.mlp_res = Inkling2BlockAttentionResidual(config)
         self.self_attn = Inkling2Attention(config, layer_idx)
         self.mlp = Inkling2MoE(config)
         if self.is_sliding:
@@ -725,8 +718,6 @@ class Inkling2DecoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         block_states: list[torch.Tensor],
-        attn_res_query: torch.Tensor | None,
-        mlp_res_query: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         conv_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
@@ -734,13 +725,10 @@ class Inkling2DecoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         dtype = hidden_states.dtype
         block_residual = hidden_states
-        if attn_res_query is None:
-            # By default this only happens in the first layer of the model
+        if self.attn_res is None:
             qkv_hidden_states = (hidden_states,) * (1 if self.is_sliding else 3)
         else:
-            qkv_hidden_states = block_attn_res_forward(
-                block_states, hidden_states, attn_res_query, self.normalize_values
-            )
+            qkv_hidden_states = self.attn_res(block_states, hidden_states)
 
         if self.is_sliding:
             attention_inputs = {"hidden_states": self.input_layernorm(qkv_hidden_states[0]).to(dtype)}
@@ -765,7 +753,7 @@ class Inkling2DecoderLayer(GradientCheckpointingLayer):
         else:
             hidden_states = block_residual.float() + hidden_states.float()
 
-        hidden_states = block_attn_res_forward(block_states, hidden_states, mlp_res_query, self.normalize_values)[0]
+        hidden_states = self.mlp_res(block_states, hidden_states)[0]
         hidden_states = self.mlp(self.post_attention_layernorm(hidden_states).to(dtype))
         hidden_states = self.mlp_sconv(hidden_states, past_key_values=past_key_values, conv_mask=conv_mask)
 
@@ -896,7 +884,15 @@ class Inkling2PreTrainedModel(InklingPreTrainedModel):
     _no_split_modules = ["Inkling2DecoderLayer", "Inkling2VisionEncoderLayer"]
     _supports_sdpa = False
     _supports_flex_attn = False
-    _keep_in_fp32_modules_strict = ["attn_sconv", "mlp_sconv", "k_sconv", "v_sconv", "attn_res"]
+    _keep_in_fp32_modules_strict = [
+        "attn_sconv",
+        "mlp_sconv",
+        "k_sconv",
+        "v_sconv",
+        "attn_res",
+        "mlp_res",
+        "output_res",
+    ]
     _keys_to_ignore_on_load_unexpected = AttributeError()
 
     @torch.no_grad()
@@ -920,9 +916,8 @@ class Inkling2PreTrainedModel(InklingPreTrainedModel):
         elif isinstance(module, Inkling2DynamicShortConvolution):
             init.zeros_(module.static_w)
             init.normal_(module.weight_proj, mean=0.0, std=std)
-        elif isinstance(module, Inkling2AttnRes):
-            for query in [*module.attn_queries, *module.mlp_queries, module.output_query]:
-                init.zeros_(query)
+        elif isinstance(module, Inkling2BlockAttentionResidual):
+            init.zeros_(module.query)
         elif isinstance(module, Inkling2VisionEmbeddings):
             init.normal_(module.class_embedding, mean=0.0, std=std)
             init.normal_(module.cls_position_embedding, mean=0.0, std=std)
@@ -937,7 +932,7 @@ class Inkling2TextModel(InklingTextModel):
 
     def __init__(self, config: Inkling2TextConfig):
         super().__init__(config)
-        self.attn_res = Inkling2AttnRes(config)
+        self.output_res = Inkling2BlockAttentionResidual(config)
 
     @merge_with_config_defaults
     @capture_outputs
@@ -982,12 +977,10 @@ class Inkling2TextModel(InklingTextModel):
 
         hidden_states = inputs_embeds
         block_states = []
-        for layer_idx, decoder_layer in enumerate(self.layers):
+        for decoder_layer in self.layers:
             new_hidden_states = decoder_layer(
                 hidden_states,
                 block_states=block_states,
-                attn_res_query=self.attn_res.attn_queries[layer_idx - 1] if layer_idx > 0 else None,
-                mlp_res_query=self.attn_res.mlp_queries[layer_idx],
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 conv_mask=causal_mask_mapping["linear_attention"],
                 past_key_values=past_key_values,
@@ -997,9 +990,7 @@ class Inkling2TextModel(InklingTextModel):
                 block_states = [*block_states, hidden_states]
             hidden_states = new_hidden_states
 
-        hidden_states = block_attn_res_forward(
-            block_states, hidden_states, self.attn_res.output_query, self.config.attn_res_normalize_values
-        )[0]
+        hidden_states = self.output_res(block_states, hidden_states)[0]
         hidden_states = self.norm(hidden_states).to(inputs_embeds.dtype)
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,

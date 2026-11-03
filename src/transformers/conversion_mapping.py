@@ -24,6 +24,7 @@ from .core_model_loading import (
     DequantizeInkling2Experts,
     ErnieFuseAndSplitTextVisionExperts,
     GroupWeightRename,
+    IndexOffsetWeightRename,
     Interleave,
     MergeModulelist,
     PermuteForRope,
@@ -351,6 +352,13 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"mlp_norm", target_patterns=r"post_attention_layernorm"),
             WeightRenaming(source_patterns=r"attn_norm", target_patterns=r"input_layernorm"),
             WeightRenaming(source_patterns=r"(q|k|v)_input_norm", target_patterns=r"\1_input_layernorm"),
+            IndexOffsetWeightRename(
+                source_patterns=r"attn_res\.attn_queries\.(\d+)", target_patterns=r"layers.\1.attn_res.query", offset=1
+            ),
+            WeightRenaming(
+                source_patterns=r"attn_res\.mlp_queries\.(\d+)", target_patterns=r"layers.\1.mlp_res.query"
+            ),
+            WeightRenaming(source_patterns=r"attn_res\.output_query", target_patterns=r"output_res.query"),
         ],
         "GPTNeoXForCausalLM": [
             WeightRenaming(source_patterns=r"^embed_out\.", target_patterns="lm_head."),
