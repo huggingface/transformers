@@ -160,6 +160,10 @@ class AudioClassificationPipeline(Pipeline):
                     "Valid options are ['softmax', 'sigmoid', 'none']"
                 )
             postprocess_params["function_to_apply"] = function_to_apply
+        elif self.model.config.problem_type == "regression":
+            postprocess_params["function_to_apply"] = "none"
+        elif self.model.config.problem_type == "multi_label_classification":
+            postprocess_params["function_to_apply"] = "sigmoid"
         else:
             postprocess_params["function_to_apply"] = "softmax"
         return {}, {}, postprocess_params

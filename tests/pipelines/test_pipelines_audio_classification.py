@@ -246,3 +246,42 @@ class AudioClassificationPipelineTests(unittest.TestCase):
         num_labels = classification_pipeline.model.config.num_labels
 
         self.assertEqual(len(result), num_labels, "Should cap top_k to number of labels")
+
+    @require_torch
+    def test_problem_type_defaults_and_overrides(self):
+        from types import SimpleNamespace
+
+        cases = (
+            ("regression", [-1.5], "none"),
+            ("regression", [2.5], "none"),
+            ("multi_label_classification", [4.0, 4.0, -4.0], "sigmoid"),
+            ("single_label_classification", [4.0, 4.0, -4.0], "softmax"),
+            (None, [4.0, 4.0, -4.0], "softmax"),
+            (None, [-1.5], "softmax"),
+        )
+        for problem_type, values, expected in cases:
+            with self.subTest(problem_type=problem_type, values=values):
+                logits = torch.tensor(values)
+                config = SimpleNamespace(
+                    problem_type=problem_type,
+                    num_labels=len(values),
+                    id2label={i: str(i) for i in range(len(values))},
+                )
+                stub = SimpleNamespace(model=SimpleNamespace(config=config))
+                params = AudioClassificationPipeline._sanitize_parameters(stub, top_k=len(values))[2]
+                self.assertEqual(params["function_to_apply"], expected)
+
+                outputs = SimpleNamespace(logits=logits.unsqueeze(0))
+                result = AudioClassificationPipeline.postprocess(stub, outputs, **params)
+                scores = {int(item["label"]): item["score"] for item in result}
+                reference = {
+                    "none": logits,
+                    "sigmoid": logits.sigmoid(),
+                    "softmax": logits.softmax(-1),
+                }[expected]
+                for i, value in enumerate(reference.tolist()):
+                    self.assertAlmostEqual(scores[i], value, places=5)
+
+                for override in ("none", "sigmoid", "softmax"):
+                    selected = AudioClassificationPipeline._sanitize_parameters(stub, function_to_apply=override)[2]
+                    self.assertEqual(selected["function_to_apply"], override)
