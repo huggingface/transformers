@@ -19,6 +19,7 @@ from transformers import SegformerConfig, is_torch_available, is_vision_availabl
 from transformers.testing_utils import Expectations, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
+from ...test_fast_integration_common import FastIntegrationTestMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -458,3 +459,55 @@ class SegformerModelIntegrationTest(unittest.TestCase):
         segmentation = image_processor.post_process_semantic_segmentation(outputs=outputs)
         expected_shape = torch.Size((128, 128))
         self.assertEqual(segmentation[0].shape, expected_shape)
+
+
+@require_torch
+class SegformerFastIntegrationTest(FastIntegrationTestMixin, unittest.TestCase):
+    model_id = "hf-tiny-v2/tiny-random-SegformerForSemanticSegmentation"
+    all_model_classes = (SegformerForSemanticSegmentation,) if is_torch_available() else ()
+    input_modalities = ("image",)
+    # SegformerForSemanticSegmentation.can_generate() is False → test_fast_generate auto-skipped
+
+    @classmethod
+    def setUpClass(cls):
+        # AutoProcessor for SegFormer loads a tokenizer (no image processor registered);
+        # use AutoImageProcessor directly instead
+
+        from transformers import AutoImageProcessor
+
+        cls.processor = None
+        if not cls.model_id or not cls.all_model_classes:
+            return
+        try:
+            cls.processor = AutoImageProcessor.from_pretrained(cls.model_id)
+        except Exception:  # noqa: S110
+            pass
+
+    @classmethod
+    def tearDownClass(cls):
+        import gc
+
+        del cls.processor
+        gc.collect()
+
+    @require_torch
+    def test_fast_post_process(self):
+        """processor → model → post_process_semantic_segmentation: must not raise."""
+        import torch
+
+        self._skip_if_no_processor()
+        image = self._load_image()
+        raw_inputs = self._get_processor_inputs()
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class=model_class.__name__):
+                model = model_class.from_pretrained(self.model_id).eval()
+                inputs = self.processor(**raw_inputs, return_tensors="pt", **self.processor_call_kwargs)
+                inputs = self._prepare_model_inputs(model, inputs)
+                with torch.no_grad():
+                    outputs = model(**inputs)
+                segmentation = self.processor.post_process_semantic_segmentation(
+                    outputs, target_sizes=[image.size[::-1]]
+                )
+                self.assertEqual(len(segmentation), 1)
+                self.assertIsNotNone(segmentation[0])

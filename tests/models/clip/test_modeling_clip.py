@@ -34,6 +34,7 @@ from transformers.utils import (
 )
 
 from ...test_configuration_common import ConfigTester
+from ...test_fast_integration_common import FastIntegrationTestMixin
 from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
@@ -778,3 +779,23 @@ class CLIPModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(
             outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, rtol=6e-3, atol=4e-4
         )
+
+
+@require_torch
+class CLIPFastIntegrationTest(FastIntegrationTestMixin, unittest.TestCase):
+    model_id = "hf-tiny-v2/tiny-random-CLIPModel"
+    all_model_classes = (CLIPModel,) if is_torch_available() else ()
+    input_modalities = ("text", "image")
+    # CLIPModel.can_generate() is False → test_fast_generate auto-skipped
+    # Output: logits_per_image / logits_per_text (similarity scores, not token IDs)
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        if cls.processor is not None:
+            # Tiny hub repo stores crop_size as {longest_edge, shortest_edge};
+            # TorchvisionBackend.center_crop expects {height, width}
+            cs = cls.processor.image_processor.crop_size
+            if hasattr(cs, "__contains__") and "longest_edge" in cs:
+                size = cs["longest_edge"]
+                cls.processor.image_processor.crop_size = {"height": size, "width": size}
