@@ -710,7 +710,7 @@ class GitModel(GitPreTrainedModel):
         "attentions": GitSelfAttention,
     }
 
-    def __init__(self, config):
+    def __init__(self, config: GitConfig):
         super().__init__(config)
         self.config = config
 
@@ -857,16 +857,14 @@ class GitModel(GitPreTrainedModel):
             # Can attend bidirectionally in images and causally in suffix
             group_ids = torch.where(token_type_ids == 1, 0, -1)
 
-        mask_kwargs = {
-            "config": self.config.get_text_config(),
-            "inputs_embeds": embedding_output,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "position_ids": position_ids,
-            "block_sequence_ids": group_ids,
-        }
-
-        causal_mask = create_causal_mask(**mask_kwargs)
+        causal_mask = create_causal_mask(
+            config=self.config.get_text_config(),
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+            block_sequence_ids=group_ids,
+        )
 
         hidden_states = embedding_output
 
@@ -892,7 +890,7 @@ class GitModel(GitPreTrainedModel):
 class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"output.weight": "git.embeddings.word_embeddings.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: GitConfig):
         super().__init__(config)
 
         self.git = GitModel(config)

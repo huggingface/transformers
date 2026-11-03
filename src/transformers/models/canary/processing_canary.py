@@ -118,8 +118,9 @@ class CanaryProcessor(ProcessorMixin):
         target_language: str | list[str] | None = None,
         punctuation: bool = True,
         transcription: str | list[str] | None = None,
+        tokenize: bool = True,
         **kwargs: Unpack[CanaryProcessorKwargs],
-    ) -> BatchFeature:
+    ) -> BatchFeature | list[str]:
         r"""
         Prepare inputs for transcription or translation without manually writing the chat template, either for
         inference or, when `transcription` is given, for training.
@@ -137,15 +138,18 @@ class CanaryProcessor(ProcessorMixin):
                 Whether to request punctuation and capitalization in the output.
             transcription (`str` or `list[str]`, *optional*):
                 Target transcript(s) (or translations) for training, one per audio. When given, each transcript is
-                written as the assistant turn and `labels` are returned (see `output_labels` in
                 [`~CanaryProcessor.__call__`]).
+            tokenize (`bool`, *optional*, defaults to `True`):
+                Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
+                audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
+                `tokenize=True`.
             **kwargs:
                 Additional keyword arguments forwarded to [`~CanaryProcessor.apply_chat_template`].
-                Processor kwargs (for example `text_kwargs`, `audio_kwargs`, ...) should be passed as
                 `processor_kwargs={...}`.
 
         Returns:
-            [`BatchFeature`]: Processor outputs ready to be passed to
+            [`BatchFeature`] or `list[str]`: One prompt per audio when `tokenize=False`, otherwise processor
+            outputs ready to be passed to
             [`CanaryForConditionalGeneration.generate`], or to [`CanaryForConditionalGeneration.forward`] to compute
             the loss when `transcription` is given.
         """
@@ -188,7 +192,7 @@ class CanaryProcessor(ProcessorMixin):
 
         return self.apply_chat_template(
             conversations,
-            tokenize=True,
+            tokenize=tokenize,
             add_generation_prompt=not is_training,
             return_dict=True,
             **kwargs,

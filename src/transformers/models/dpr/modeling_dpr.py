@@ -102,6 +102,7 @@ class DPRReaderOutput(ModelOutput):
 @auto_docstring
 class DPRPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
+    config: DPRConfig
 
 
 class DPREncoder(DPRPreTrainedModel):
@@ -230,7 +231,6 @@ class DPRPretrainedContextEncoder(DPRPreTrainedModel):
     models.
     """
 
-    config: DPRConfig
     base_model_prefix = "ctx_encoder"
 
 
@@ -240,7 +240,6 @@ class DPRPretrainedQuestionEncoder(DPRPreTrainedModel):
     models.
     """
 
-    config: DPRConfig
     base_model_prefix = "question_encoder"
 
 
@@ -250,7 +249,6 @@ class DPRPretrainedReader(DPRPreTrainedModel):
     models.
     """
 
-    config: DPRConfig
     base_model_prefix = "span_predictor"
 
 

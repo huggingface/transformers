@@ -417,7 +417,7 @@ def main():
     parser.add_argument(
         "--audio_tokenizer_repo",
         type=str,
-        default="eustlb/gradium-phonon-tts-audio-tokenizer",
+        default="gradium/phonon-mimi",
         help="Repo id (or local path) of the audio tokenizer, which the processor points to",
     )
     parser.add_argument(

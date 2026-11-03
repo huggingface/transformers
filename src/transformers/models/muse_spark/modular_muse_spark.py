@@ -22,7 +22,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_experts_implementation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import (
@@ -213,9 +213,9 @@ class MuseSparkAudioConfig(PreTrainedConfig):
 class MuseSparkConfig(MuseGlimmerConfig):
     model_type = "muse_spark"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=MuseSparkTextConfig),
-        "vision_config": SubConfigSpec(config_class=MuseSparkVisionConfig),
-        "audio_config": SubConfigSpec(config_class=MuseSparkAudioConfig),
+        "text_config": MuseSparkTextConfig,
+        "vision_config": MuseSparkVisionConfig,
+        "audio_config": MuseSparkAudioConfig,
     }
 
     audio_config: dict | PreTrainedConfig | None = None

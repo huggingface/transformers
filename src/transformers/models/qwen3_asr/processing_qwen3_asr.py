@@ -443,8 +443,9 @@ class Qwen3ASRProcessor(ProcessorMixin):
         language: str | list[str] | None = None,
         prompt: str | list[str] | None = None,
         transcription: str | list[str] | None = None,
+        tokenize: bool = True,
         **kwargs: Unpack[Qwen3ASRProcessorKwargs],
-    ) -> BatchFeature:
+    ) -> BatchFeature | list[str]:
         """
         Prepare inputs for automatic speech recognition without manually writing the chat template, either for
         inference or, when `transcription` is given, for training.
@@ -466,17 +467,20 @@ class Qwen3ASRProcessor(ProcessorMixin):
                 audio batch. When `None`, the system prompt is left empty.
             transcription (`str` or `list[str]`, *optional*):
                 Target transcript(s) for training, one per audio. When given, each transcript is written as the
-                assistant turn and `labels` are returned (see `output_labels` in [`~Qwen3ASRProcessor.__call__`]).
                 With a `language`, the transcript is prefixed with ``language <NAME><asr_text>`` to match the model's
                 output format. Without one, it is written as is, so it should already be in that format to preserve
                 the pretrained behavior.
+            tokenize (`bool`, *optional*, defaults to `True`):
+                Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
+                audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
+                `tokenize=True`.
             **kwargs:
                 Additional keyword arguments forwarded to [`~Qwen3ASRProcessor.apply_chat_template`].
-                Processor kwargs (for example `text_kwargs`, `audio_kwargs`, ...) should be passed as
                 `processor_kwargs={...}`.
 
         Returns:
-            [`BatchFeature`]: Processor outputs ready to be passed to
+            [`BatchFeature`] or `list[str]`: One prompt per audio when `tokenize=False`, otherwise processor
+            outputs ready to be passed to
             [`Qwen3ASRForConditionalGeneration.generate`], or to [`Qwen3ASRForConditionalGeneration.forward`] to
             compute the loss when `transcription` is given.
         """
@@ -514,7 +518,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
             messages.append({"role": "assistant", "content": [{"type": "text", "text": prefill}]})
         return self.apply_chat_template(
             conversations,
-            tokenize=True,
+            tokenize=tokenize,
             return_dict=True,
             continue_final_message=not is_training,
             **kwargs,

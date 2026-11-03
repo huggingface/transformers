@@ -193,8 +193,9 @@ class GlmAsrProcessor(ProcessorMixin):
         audio: str | list[str] | AudioInput,
         prompt: str | list[str] | None = None,
         transcription: str | list[str] | None = None,
+        tokenize: bool = True,
         **kwargs: Unpack[GlmAsrProcessorKwargs],
-    ) -> BatchFeature:
+    ) -> BatchFeature | list[str]:
         """
         Prepare inputs for automatic speech recognition without manually writing the default transcription prompt,
         either for inference or, when `transcription` is given, for training.
@@ -208,14 +209,17 @@ class GlmAsrProcessor(ProcessorMixin):
                 each sample uses `"Transcribe the input speech."`.
             transcription (`str` or `list[str]`, *optional*):
                 Target transcript(s) for training, one per audio. When given, each transcript is written as the
-                assistant turn and `labels` are returned (see `output_labels` in [`~GlmAsrProcessor.__call__`]).
+            tokenize (`bool`, *optional*, defaults to `True`):
+                Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
+                audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
+                `tokenize=True`.
             **kwargs:
                 Additional keyword arguments forwarded to [`~GlmAsrProcessor.apply_chat_template`].
-                Processor kwargs (for example `text_kwargs`, `audio_kwargs`, ...) should be passed as
                 `processor_kwargs={...}`.
 
         Returns:
-            [`BatchFeature`]: Processor outputs ready to be passed to [`GlmAsrForConditionalGeneration.generate`],
+            [`BatchFeature`] or `list[str]`: One prompt per audio when `tokenize=False`, otherwise processor
+            outputs ready to be passed to [`GlmAsrForConditionalGeneration.generate`],
             or to [`GlmAsrForConditionalGeneration.forward`] to compute the loss when `transcription` is given.
 
         """
@@ -271,7 +275,7 @@ class GlmAsrProcessor(ProcessorMixin):
 
         return self.apply_chat_template(
             conversations,
-            tokenize=True,
+            tokenize=tokenize,
             add_generation_prompt=not is_training,
             return_dict=True,
             **kwargs,

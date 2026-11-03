@@ -407,7 +407,7 @@ class BitNetForCausalLM(BitNetPreTrainedModel, GenerationMixin):
     _pp_plan = None
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: BitNetConfig):
         super().__init__(config)
         self.model = BitNetModel(config)
         self.vocab_size = config.vocab_size

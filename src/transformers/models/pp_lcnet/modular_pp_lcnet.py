@@ -39,7 +39,6 @@ from ...utils import (
     can_return_tuple,
 )
 from ...utils.generic import TensorType, merge_with_config_defaults
-from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..mobilenet_v2.modeling_mobilenet_v2 import make_divisible
 from ..resnet.modeling_resnet import ResNetConvLayer
@@ -138,7 +137,6 @@ class PPLCNetImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
-@requires(backends=("torch",))
 class PPLCNetImageProcessor(TorchvisionBackend):
     resample = 2
     image_mean = [0.406, 0.456, 0.485]

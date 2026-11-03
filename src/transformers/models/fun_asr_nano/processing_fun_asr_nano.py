@@ -139,8 +139,9 @@ class FunAsrNanoProcessor(ProcessorMixin):
         prompt: str | list[str] | None = None,
         keywords: str | list[str] | list[list[str]] | None = None,
         transcription: str | list[str] | None = None,
+        tokenize: bool = True,
         **kwargs: Unpack[FunAsrNanoProcessorKwargs],
-    ) -> BatchFeature:
+    ) -> BatchFeature | list[str]:
         """Prepare inputs for ASR using the checkpoint's structured transcription chat template, either for inference
         or, when `transcription` is given, for training.
 
@@ -159,15 +160,20 @@ class FunAsrNanoProcessor(ProcessorMixin):
             transcription (`str` or `list[str]`, *optional*):
                 Target transcript(s) for training, one per audio. When given, each transcript is written as the
                 assistant turn and `labels` are returned (see `output_labels` in [`~FunAsrNanoProcessor.__call__`]).
+            tokenize (`bool`, *optional*, defaults to `True`):
+                Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
+                the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
+                audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
+                `tokenize=True`.
             **kwargs:
                 Additional keyword arguments forwarded to [`~FunAsrNanoProcessor.apply_chat_template`].
                 Processor kwargs (for example `text_kwargs`, `audio_kwargs`, ...) should be passed as
                 `processor_kwargs={...}`.
 
         Returns:
-            [`BatchFeature`]: Processor outputs ready to be passed to
-            [`FunAsrNanoForConditionalGeneration.generate`], or to [`FunAsrNanoForConditionalGeneration.forward`] to
-            compute the loss when `transcription` is given.
+            [`BatchFeature`] or `list[str]`: One prompt per audio when `tokenize=False`, otherwise processor
+            outputs ready to be passed to [`FunAsrNanoForConditionalGeneration.generate`], or to
+            [`FunAsrNanoForConditionalGeneration.forward`] to compute the loss when `transcription` is given.
         """
         audio_items = list(make_list_of_audio_chat_template(audio))
 
@@ -204,7 +210,7 @@ class FunAsrNanoProcessor(ProcessorMixin):
 
         return self.apply_chat_template(
             conversations,
-            tokenize=True,
+            tokenize=tokenize,
             add_generation_prompt=not is_training,
             return_dict=True,
             **kwargs,

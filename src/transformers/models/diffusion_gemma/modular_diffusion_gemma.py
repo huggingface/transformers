@@ -105,6 +105,9 @@ class DiffusionGemmaTextConfig(Gemma4TextConfig):
     hidden_size_per_layer_input = AttributeError()
     use_cache = AttributeError()
 
+    def kv_sharing_modes(self) -> list[str | None]:
+        raise AttributeError("DiffusionGemma does not use KV cache sharing.")
+
 
 @auto_docstring(checkpoint="google/diffusiongemma-26B-A4B-it")
 @strict
@@ -146,7 +149,7 @@ class DiffusionGemmaConfig(Gemma4Config):
 
     model_type = "diffusion_gemma"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=DiffusionGemmaTextConfig),
+        "text_config": DiffusionGemmaTextConfig,
         "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="gemma4_vision"),
     }
 

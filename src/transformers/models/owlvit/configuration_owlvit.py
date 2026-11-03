@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 
 
@@ -101,8 +101,8 @@ class OwlViTVisionConfig(PreTrainedConfig):
 class OwlViTConfig(PreTrainedConfig):
     model_type = "owlvit"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=OwlViTTextConfig),
-        "vision_config": SubConfigSpec(config_class=OwlViTVisionConfig),
+        "text_config": OwlViTTextConfig,
+        "vision_config": OwlViTVisionConfig,
     }
 
     text_config: dict | PreTrainedConfig | None = None

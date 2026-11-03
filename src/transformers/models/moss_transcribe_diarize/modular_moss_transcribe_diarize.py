@@ -443,8 +443,9 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
         prompt: str | list[str] | None = None,
         keywords: str | list[str] | list[list[str]] | None = None,
         transcription: str | list[str] | None = None,
+        tokenize: bool = True,
         **kwargs: Unpack[MossTranscribeDiarizeProcessorKwargs],
-    ) -> BatchFeature:
+    ) -> BatchFeature | list[str]:
         """
         Prepare inputs for transcription / diarization without manually writing the chat template, either for
         inference or, when `transcription` is given, for training.
@@ -464,6 +465,11 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
                 Target transcript(s) for training, one per audio, in the model's output format (e.g.
                 `"[0.00][S01] Hello world.[1.20]"`). When given, each transcript is written as the assistant turn and
                 `labels` are returned (see `output_labels` in [`~MossTranscribeDiarizeProcessor.__call__`]).
+            tokenize (`bool`, *optional*, defaults to `True`):
+                Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
+                the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
+                audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
+                `tokenize=True`.
             **kwargs:
                 Additional keyword arguments forwarded to [`~MossTranscribeDiarizeProcessor.apply_chat_template`].
                 Processor kwargs (for example `text_kwargs`, `audio_kwargs`, ...) should be passed as
@@ -502,7 +508,7 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
 
         return self.apply_chat_template(
             conversations,
-            tokenize=True,
+            tokenize=tokenize,
             add_generation_prompt=not is_training,
             return_dict=True,
             **kwargs,
@@ -515,6 +521,9 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
         `MM:SS` / `HH:MM:SS` string (`"1:23"`, `"01:02:03"`), for MOSS-Transcribe-Diarize's diarization output.
         """
         return sum(float(part) * 60**i for i, part in enumerate(reversed(value.strip().split(":"))))
+
+    def _decode_complete_segments(self, *args, **kwargs):
+        raise AttributeError("Not needed for MossTranscribeDiarize")
 
     def extract_speaker_dict(self, text: str | list[str]) -> list[dict] | str | list[list[dict] | str]:
         """
