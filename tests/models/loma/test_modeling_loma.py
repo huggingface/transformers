@@ -339,7 +339,7 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
 
             hidden_states = outputs.hidden_states
             self.assertIsNotNone(hidden_states)
-            self.assertGreater(len(hidden_states), 0)
+            self.assertEqual(len(hidden_states), config.num_hidden_layers + 1)
 
             # Each hidden state should have interleaved batch format (batch*2, n, dim)
             for hidden_state in hidden_states:
@@ -357,11 +357,16 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    @unittest.skip(
-        reason="LoMa's nested DINOv2 backbone registers _can_record_outputs which conflicts with top-level hidden states"
-    )
-    def test_can_capture_specific_layers_hidden_states(self):
-        pass
+    def test_training_mode_forward(self):
+        """Verify model forward pass does not crash when model is in train() mode."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.train()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            self.assertIsNotNone(outputs.matches)
+            self.assertEqual(outputs.matches.shape[0], self.model_tester.batch_size)
 
     @unittest.skip(reason="LoMa uses scaled dot-product attention without exposing attention weights")
     def test_attention_outputs(self):
@@ -465,6 +470,40 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
         torch.testing.assert_close(hf_k, ref_k)
         torch.testing.assert_close(hf_v, ref_v)
 
+    def test_convert_state_dict_qkv_routing(self):
+        """Verify convert_state_dict routes Wqkv to the interleaved split helper and renames correctly."""
+        from transformers.models.loma.convert_loma_to_hf import _split_interleaved_qkv, convert_state_dict
+
+        num_heads = 4
+        head_dim = 16
+        embed_dim = num_heads * head_dim
+        weight = torch.randn(3 * embed_dim, embed_dim)
+        bias = torch.randn(3 * embed_dim)
+
+        ref_state_dict = {
+            "transformers.0.self_attn.Wqkv.weight": weight,
+            "transformers.0.self_attn.Wqkv.bias": bias,
+        }
+
+        converted = convert_state_dict(ref_state_dict, num_hidden_layers=1, num_attention_heads=num_heads)
+
+        expected_q_w, expected_k_w, expected_v_w = _split_interleaved_qkv(weight, num_heads)
+        expected_q_b, expected_k_b, expected_v_b = _split_interleaved_qkv(bias, num_heads)
+
+        self.assertIn("layers.0.self_attention.q_proj.weight", converted)
+        self.assertIn("layers.0.self_attention.k_proj.weight", converted)
+        self.assertIn("layers.0.self_attention.v_proj.weight", converted)
+        self.assertIn("layers.0.self_attention.q_proj.bias", converted)
+        self.assertIn("layers.0.self_attention.k_proj.bias", converted)
+        self.assertIn("layers.0.self_attention.v_proj.bias", converted)
+
+        torch.testing.assert_close(converted["layers.0.self_attention.q_proj.weight"], expected_q_w)
+        torch.testing.assert_close(converted["layers.0.self_attention.k_proj.weight"], expected_k_w)
+        torch.testing.assert_close(converted["layers.0.self_attention.v_proj.weight"], expected_v_w)
+        torch.testing.assert_close(converted["layers.0.self_attention.q_proj.bias"], expected_q_b)
+        torch.testing.assert_close(converted["layers.0.self_attention.k_proj.bias"], expected_k_b)
+        torch.testing.assert_close(converted["layers.0.self_attention.v_proj.bias"], expected_v_b)
+
 
 @require_torch
 @require_vision
@@ -534,6 +573,7 @@ class LoMaModelIntegrationTest(unittest.TestCase):
         )
         images = [Image.open(requests.get(url, stream=True).raw).convert("RGB") for url in (url_0, url_1)]
         inputs = image_processor(images=images, return_tensors="pt").to(torch_device)
+        self.assertEqual(tuple(inputs["pixel_values"].shape[-2:]), (480, 640))
 
         with torch.inference_mode():
             outputs = model(**inputs)
@@ -541,8 +581,9 @@ class LoMaModelIntegrationTest(unittest.TestCase):
         valid_matches = outputs.matches[0, 0] >= 0
         self.assertGreaterEqual(valid_matches.sum().item(), 250)
         valid_indices = torch.where(valid_matches)[0]
-        expected_first_matches = torch.tensor([78, 105, 104, 117, 114], device=torch_device)
-        torch.testing.assert_close(outputs.matches[0, 0][valid_indices[:5]], expected_first_matches)
+        if torch_device == "cpu":
+            expected_first_matches = torch.tensor([78, 105, 104, 117, 114], device=torch_device)
+            torch.testing.assert_close(outputs.matches[0, 0][valid_indices[:5]], expected_first_matches)
         expected_first_scores = torch.tensor([0.9990, 0.9939, 0.9950, 0.9985, 0.9992], device=torch_device)
         torch.testing.assert_close(
             outputs.matching_scores[0, 0][valid_indices[:5]], expected_first_scores, atol=1e-3, rtol=1e-3

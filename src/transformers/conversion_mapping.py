@@ -2186,6 +2186,9 @@ def _build_checkpoint_conversion_mapping():
         ),
     ]
 
+    # LoMa matching transformer weight renamings.
+    # Note: Full reference LoMa checkpoints (including detector, DINOv2 backbone, VGG encoder,
+    # and the interleaved QKV projections) must be converted via `convert_loma_to_hf.py`.
     loma_mapping = [
         WeightRenaming(r"^posenc\.Wr\.weight", "positional_encoder.projector.weight"),
         WeightRenaming(r"^input_proj\.", "input_projection."),
