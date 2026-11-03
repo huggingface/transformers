@@ -229,7 +229,7 @@ class ParakeetFeatureExtractor(SequenceFeatureExtractor):
                         f"Only mono-channel audio is supported for input to {self.__class__.__name__}. "
                         "We will take the mean of the channels to convert to mono."
                     )
-                    speech = speech.mean(-1)
+                    raw_speech[i] = speech.mean(-1)
 
         if is_batched_torch or is_batched_sequence:
             raw_speech = [speech[:, None].to(torch.float32) for speech in raw_speech]
