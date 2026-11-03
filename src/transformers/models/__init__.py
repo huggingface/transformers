@@ -303,6 +303,7 @@ if TYPE_CHECKING:
     from .minimax import *
     from .minimax_m2 import *
     from .minimax_m3_vl import *
+    from .minimax_vl_01 import *
     from .ministral import *
     from .ministral3 import *
     from .mistral import *

@@ -392,6 +392,9 @@ class MiniMaxVL01Config(LlavaNextConfig):
 
 class MiniMaxVL01ImageProcessorKwargs(LlavaNextImageProcessorKwargs, total=False):
     r"""
+    image_grid_pinpoints (`list[list[int]]`, *optional*):
+        Candidate `(height, width)` resolutions for any-resolution image processing. Defaults to the 28 resolutions
+        released with MiniMax-VL-01.
     process_image_mode (`str`, *optional*, defaults to `"anyres"`):
         Image processing mode. The released checkpoint supports only `"anyres"`.
     patch_size (`int`, *optional*, defaults to `14`):
