@@ -4995,7 +4995,7 @@ def preserve_module_forwards(model: "PreTrainedModel"):
 # ---------------------------------------------------------------------------
 
 _ci_deps_chains: list[dict[str, object]] = []
-_ci_deps_by_file: dict[str, set[str]] = {}  # test_file -> set of src_files, built incrementally
+_ci_deps_by_file: dict[tuple[str, str], set[str]] = {}  # (test_file, phase) -> set of src_files
 _ci_deps_tracker_reentrant = threading.local()
 # Set to True via CI_RECORD_DEPS_INCLUDE_COLLECTION=1 to also record collection-phase imports
 # in deps_chain.json. Default False: collection imports are noise (not attributed to any test).
