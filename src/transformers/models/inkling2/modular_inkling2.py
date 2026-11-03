@@ -652,29 +652,29 @@ class Inkling2MoE(InklingMoE):
         return hidden_states
 
 
-def block_attention_residual(
+def block_attn_res_forward(
     block_states: list[torch.Tensor],
-    hidden_states: torch.Tensor,
+    partial_block_states: torch.Tensor,
     queries: torch.Tensor,
     normalize_values: bool,
-    partial_addend: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, ...]:
     """
-    Attention over depth: each query in `queries` mixes the completed blocks and the current partial block with a
-    softmax over RMS-normalized sources, independently at each position. Returns one float32 mixture per query.
+    Attention over depth: at each position, every query in `queries` attends to the completed blocks and the current
+    partial block. Keys are the RMS-normalized sources, values are the raw or normalized sources.
+    Returns one float32 mixture per query.
     """
     # with a device map, earlier blocks live on the devices of the layers that produced them
-    device = hidden_states.device
-    values = torch.stack([*(state.to(device) for state in block_states), hidden_states]).float()
-    if partial_addend is not None:
-        values[-1] = values[-1] + partial_addend.float()
-    inv_rms = torch.rsqrt(values.square().mean(dim=-1) + 1e-6)
-    queries = queries.to(device).float().view(-1, values.shape[-1]) * values.shape[-1] ** -0.5
-    logits = torch.einsum("nbld,qd,nbl->qbln", values, queries, inv_rms)
-    probabilities = torch.softmax(logits, dim=-1)
+    device = partial_block_states.device
+    value_states = torch.stack([*(state.to(device) for state in block_states), partial_block_states], dim=-2).float()
+    key_states = value_states * torch.rsqrt(value_states.square().mean(dim=-1, keepdim=True) + 1e-6)
     if normalize_values:
-        values = values * inv_rms.unsqueeze(-1)
-    return torch.einsum("qbln,nbld->qbld", probabilities, values).unbind(0)
+        value_states = key_states
+
+    hidden_size = value_states.shape[-1]
+    # (batch, seq_len, num_queries, hidden_size), the same queries at every position
+    query_states = queries.to(device).float().view(-1, hidden_size).expand(*value_states.shape[:-2], -1, -1)
+    attn_output = F.scaled_dot_product_attention(query_states, key_states, value_states, scale=hidden_size**-0.5)
+    return attn_output.unbind(-2)
 
 
 class Inkling2AttnRes(nn.Module):
@@ -738,7 +738,7 @@ class Inkling2DecoderLayer(GradientCheckpointingLayer):
             # By default this only happens in the first layer of the model
             qkv_hidden_states = (hidden_states,) * (1 if self.is_sliding else 3)
         else:
-            qkv_hidden_states = block_attention_residual(
+            qkv_hidden_states = block_attn_res_forward(
                 block_states, hidden_states, attn_res_query, self.normalize_values
             )
 
@@ -761,15 +761,11 @@ class Inkling2DecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
 
         if self.is_block_boundary:
-            partial_addend = None
             block_states = [*block_states, block_residual]
         else:
-            partial_addend = hidden_states
-            hidden_states = block_residual
+            hidden_states = block_residual.float() + hidden_states.float()
 
-        hidden_states = block_attention_residual(
-            block_states, hidden_states, mlp_res_query, self.normalize_values, partial_addend=partial_addend
-        )[0]
+        hidden_states = block_attn_res_forward(block_states, hidden_states, mlp_res_query, self.normalize_values)[0]
         hidden_states = self.mlp(self.post_attention_layernorm(hidden_states).to(dtype))
         hidden_states = self.mlp_sconv(hidden_states, past_key_values=past_key_values, conv_mask=conv_mask)
 
@@ -1001,7 +997,7 @@ class Inkling2TextModel(InklingTextModel):
                 block_states = [*block_states, hidden_states]
             hidden_states = new_hidden_states
 
-        hidden_states = block_attention_residual(
+        hidden_states = block_attn_res_forward(
             block_states, hidden_states, self.attn_res.output_query, self.config.attn_res_normalize_values
         )[0]
         hidden_states = self.norm(hidden_states).to(inputs_embeds.dtype)
