@@ -204,6 +204,17 @@ class MistralLarge4TextConfig(PreTrainedConfig):
                 )
         super().validate_architecture()
 
+    @property
+    def kv_sharing_modes(self) -> list[str | None]:
+        kv_sharing_modes = [None if i == self.kv_source_layers[i] else "reuse" for i in range(self.num_hidden_layers)]
+        # Find indices of layers that compute AND share their cache (i.e. their index appears at least twice in `kv_source_layers`)
+        producers = [i for i in range(self.num_hidden_layers) if i in self.kv_source_layers[i + 1 :]]
+        # Mark producers as such
+        for producer_index in producers:
+            kv_sharing_modes[producer_index] = "store"
+
+        return kv_sharing_modes
+
 
 @auto_docstring(checkpoint="mistralai/Mistral-Small-3.1-24B-Instruct-2503")
 @strict
