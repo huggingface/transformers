@@ -61,7 +61,6 @@ jobs:
               test/registered/openai_server/basic/test_serving_transcription.py::TestServingTranscription::test_transcription_content_quality
     env:
       SGLANG_IS_IN_CI: "true"
-      SGLANG_USE_CPU_ENGINE: "1"
       VIRTUAL_ENV: /opt/.venv
       CMAKE_BUILD_PARALLEL_LEVEL: "8"
       PYTHONPATH: ${{ github.workspace }}/sglang/python
