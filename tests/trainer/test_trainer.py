@@ -413,12 +413,10 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertAlmostEqual(gas["loss"], base["loss"], places=4)
         self.assertAlmostEqual(gas["grad_norm"], base["grad_norm"], places=4)
 
-    def test_moe_aux_loss_not_scaled_by_num_processes(self):
+    def test_moe_aux_loss_counted_once_across_processes(self):
         """
-        With `average_tokens_across_devices`, the loss is multiplied by the number of processes to undo the gradient
-        averaging, so the model must return its share of the router aux loss, like its share of the token loss. Each
-        of the 2 processes holds half of the `num_items_in_batch` label tokens here, so the scaled loss of one process
-        must be the plain per-batch loss, with the aux loss counted once.
+        Each of the 2 processes holds half of the `num_items_in_batch` label tokens, so once the Trainer multiplies
+        its loss by 2, it must equal the plain loss, router aux loss included.
         """
         torch.manual_seed(0)
         model = Qwen3MoeForCausalLM(self._tiny_moe_config())
