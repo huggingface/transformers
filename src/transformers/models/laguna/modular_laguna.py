@@ -150,7 +150,6 @@ class LagunaConfig(Qwen2MoeConfig):
         )
 
     def convert_rope_params_to_dict(self, **kwargs):
-        # No need to handle BC for new models, because they have no old-format `rope_scaling`
         return kwargs
 
     def validate_architecture(self):
@@ -363,7 +362,7 @@ class LagunaPreTrainedModel(Qwen2MoePreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, LagunaTopKRouter):
-            torch.nn.init.zeros_(module.e_score_correction_bias)
+            init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, LagunaRotaryEmbedding):
             for layer_type in module.layer_types:
                 rope_init_fn = module.compute_default_rope_parameters

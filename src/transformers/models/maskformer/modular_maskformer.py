@@ -22,8 +22,7 @@ from huggingface_hub.dataclasses import strict
 from torch import Tensor, nn
 
 from ... import initialization as init
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -33,7 +32,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
-from ..auto import CONFIG_MAPPING, AutoBackbone, AutoConfig
+from ..auto import AutoBackbone, AutoConfig
 from ..detr.configuration_detr import DetrConfig
 from ..detr.modeling_detr import DetrDecoder, DetrDecoderOutput, DetrSinePositionEmbedding
 from .configuration_maskformer_swin import MaskFormerSwinConfig
@@ -96,7 +95,22 @@ class MaskFormerConfig(PreTrainedConfig):
     """
 
     model_type = "maskformer"
-    sub_configs = {"backbone_config": AutoConfig, "decoder_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="swin",
+            init_kwargs={
+                "depths": [2, 2, 18, 2],
+                "drop_path_rate": 0.3,
+                "image_size": 384,
+                "embed_dim": 128,
+                "num_heads": [4, 8, 16, 32],
+                "window_size": 12,
+                "out_features": ["stage1", "stage2", "stage3", "stage4"],
+            },
+        ),
+        "decoder_config": SubConfigSpec(config_class=AutoConfig, model_type="detr"),
+    }
     attribute_map = {"hidden_size": "mask_feature_size"}
     backbones_supported = ["resnet", "swin"]
     decoders_supported = ["detr"]
@@ -115,50 +129,22 @@ class MaskFormerConfig(PreTrainedConfig):
     output_auxiliary_logits: bool | None = None
 
     def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="swin",
-            default_config_kwargs={
-                "depths": [2, 2, 18, 2],
-                "drop_path_rate": 0.3,
-                "image_size": 384,
-                "embed_dim": 128,
-                "num_heads": [4, 8, 16, 32],
-                "window_size": 12,
-                "out_features": ["stage1", "stage2", "stage3", "stage4"],
-            },
-            **kwargs,
-        )
-
-        # verify that the backbone is supported
-        if self.backbone_config is not None and self.backbone_config.model_type not in self.backbones_supported:
-            logger.warning_once(
-                f"Backbone {self.backbone_config.model_type} is not a supported model and may not be compatible with MaskFormer. "
-                f"Supported model types: {','.join(self.backbones_supported)}"
-            )
-
-        if self.decoder_config is None:
-            # fall back to https://huggingface.co/facebook/detr-resnet-50
-            self.decoder_config = MaskFormerDetrConfig()
-        else:
-            # verify that the decoder is supported
-            decoder_type = (
-                self.decoder_config.pop("model_type")
-                if isinstance(self.decoder_config, dict)
-                else self.decoder_config.model_type
-            )
-            if decoder_type not in self.decoders_supported:
-                raise ValueError(
-                    f"Transformer Decoder {decoder_type} not supported, please use one of"
-                    f" {','.join(self.decoders_supported)}"
-                )
-            if isinstance(self.decoder_config, dict):
-                config_class = CONFIG_MAPPING[decoder_type]
-                self.decoder_config = config_class.from_dict(self.decoder_config)
-
+        super().__post_init__(**kwargs)
         self.num_attention_heads = self.decoder_config.encoder_attention_heads
         self.num_hidden_layers = self.decoder_config.num_hidden_layers
-        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        super().validate_architecture()
+        if self.backbone_config.model_type not in self.backbones_supported:
+            logger.warning_once(
+                f"Backbone {self.backbone_config.model_type} is not a supported model and may not be compatible with Mask2Former. "
+                f"Supported model types: {','.join(self.backbones_supported)}"
+            )
+        if self.decoder_config.model_type not in self.decoders_supported:
+            raise ValueError(
+                f"Transformer Decoder {self.decoder_config.model_type} not supported, please use one of"
+                f" {','.join(self.decoders_supported)}"
+            )
 
 
 class DetrDecoderOutput(DetrDecoderOutput):
@@ -510,6 +496,11 @@ class MaskFormerHungarianMatcher(nn.Module):
     def forward(self, masks_queries_logits, class_queries_logits, mask_labels, class_labels) -> list[tuple[Tensor]]:
         """Performs the matching
 
+        Invalid predictions or targets resulting in NaN or inf values in the matcher cost matrix do not raise
+        errors and instead will only be assigned if no other valid prediction or target can be matched instead.
+        This avoids random crashes at training time. A high training loss indicates that some of the predictions
+        or targets might be invalid. If the loss doesn't improve after a couple of steps the model has likely diverged.
+
         Params:
             masks_queries_logits (`torch.Tensor`):
                 A tensor` of dim `batch_size, num_queries, num_labels` with the
@@ -555,6 +546,10 @@ class MaskFormerHungarianMatcher(nn.Module):
             cost_dice = pair_wise_dice_loss(pred_mask_flat, target_mask_flat)
             # final cost matrix
             cost_matrix = self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
+            # Replace NaN and inf values with max value to avoid linear_sum_assignment errors. Max value is used to match
+            # these predictions only if there are no other valid predictions.
+            max_value = torch.finfo(cost_matrix.dtype).max
+            cost_matrix = torch.nan_to_num(cost_matrix, nan=max_value, posinf=max_value, neginf=max_value)
             # do the assignment using the hungarian algorithm in scipy
             assigned_indices: tuple[np.array] = linear_sum_assignment(cost_matrix.cpu())
             indices.append(assigned_indices)
@@ -1163,7 +1158,7 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, MaskFormerModel
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> # load MaskFormer fine-tuned on ADE20k semantic segmentation
@@ -1347,7 +1342,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, MaskFormerForInstanceSegmentation
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> # load MaskFormer fine-tuned on ADE20k semantic segmentation
@@ -1382,7 +1377,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, MaskFormerForInstanceSegmentation
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> # load MaskFormer fine-tuned on COCO panoptic segmentation

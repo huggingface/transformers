@@ -35,10 +35,11 @@ from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_docstring,
+    get_current_accelerator,
     is_accelerate_available,
-    is_torch_accelerator_available,
     logging,
 )
+from ...utils.generic import is_flash_attention_requested
 from ..auto import AutoModel
 from .configuration_bark import (
     BarkCoarseConfig,
@@ -54,7 +55,7 @@ from .generation_configuration_bark import (
 )
 
 
-if is_flash_attn_available():
+if is_flash_attn_available(kernels_fallback_ok=True):
     from ...integrations.flash_attention import get_target_dtype
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
@@ -284,9 +285,10 @@ class BarkBlock(GradientCheckpointingLayer):
             self.layernorm_1 = nn.LayerNorm(config.hidden_size)
             self.layernorm_2 = nn.LayerNorm(config.hidden_size)
 
-        self.attn = BARK_ATTENTION_CLASSES[config._attn_implementation](
-            config, is_causal=is_causal, layer_idx=layer_idx
+        attn_implementation = (
+            "flash_attention_2" if is_flash_attention_requested(config) else config._attn_implementation
         )
+        self.attn = BARK_ATTENTION_CLASSES[attn_implementation](config, is_causal=is_causal, layer_idx=layer_idx)
 
         self.mlp = BarkMLP(config)
 
@@ -360,7 +362,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
     config: BarkSubModelConfig
     output_modalities = ("audio",)
 
-    def __init__(self, config):
+    def __init__(self, config: BarkSubModelConfig):
         super().__init__(config)
         self.config = config
 
@@ -866,7 +868,7 @@ class BarkFineModel(BarkPreTrainedModel):
     config: BarkFineConfig
     main_input_name = "codebook_idx"
 
-    def __init__(self, config):
+    def __init__(self, config: BarkFineConfig):
         # non-causal gpt-like model with one embedding layer and one lm_head for each codebook of Encodec
         super().__init__(config)
         self.config = config
@@ -1258,7 +1260,7 @@ class BarkFineModel(BarkPreTrainedModel):
 class BarkModel(BarkPreTrainedModel, GenerationMixin):
     config: BarkConfig
 
-    def __init__(self, config):
+    def __init__(self, config: BarkConfig):
         super().__init__(config)
 
         self.semantic = BarkSemanticModel(config.semantic_config)
@@ -1315,9 +1317,7 @@ class BarkModel(BarkPreTrainedModel, GenerationMixin):
         else:
             raise ImportError("`enable_model_cpu_offload` requires `accelerate`.")
 
-        device_type = "cuda"
-        if is_torch_accelerator_available():
-            device_type = torch.accelerator.current_accelerator().type
+        device_type = (get_current_accelerator() or torch.device("cuda")).type
         device = torch.device(f"{device_type}:{accelerator_id}")
 
         torch_accelerator_module = getattr(torch, device_type)

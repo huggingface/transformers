@@ -998,7 +998,7 @@ class SamPreTrainedModel(PreTrainedModel):
     base_model_prefix = "sam"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    _no_split_modules = ["SamVisionAttention"]
+    _no_split_modules = ["SamVisionLayer"]
     supports_gradient_checkpointing = True
     _supports_sdpa = True
 
@@ -1017,6 +1017,7 @@ class SamPreTrainedModel(PreTrainedModel):
 
 
 class SamVisionEncoder(SamPreTrainedModel):
+    config: SamVisionConfig
     _can_record_outputs = {"hidden_states": SamVisionLayer, "attentions": SamVisionAttention}
 
     def __init__(self, config: SamVisionConfig):
@@ -1261,7 +1262,7 @@ class SamModel(SamPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 

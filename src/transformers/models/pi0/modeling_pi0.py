@@ -50,7 +50,7 @@ class PI0TimestepEmbeddings(nn.Module):
         return sinusoid_freq
 
     def forward(self, time):
-        device_type = time.device.type if isinstance(time.device.type, str) and time.device.type != "mps" else "cpu"
+        device_type = time.device.type if isinstance(time.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             sinusoid_freq = self.sinusoid_freq[None, :]
             emb = sinusoid_freq * time[:, None]
@@ -115,28 +115,24 @@ class PI0Model(PI0PreTrainedModel):
         self.vlm.set_input_embeddings(value)
 
     def embed_prefix(self, input_ids, pixel_values, pixel_attention_mask, attention_mask=None):
-        max_num_cameras = pixel_attention_mask.shape[1]
+        batch_size, max_num_cameras = pixel_attention_mask.shape
         pixel_values = pixel_values.flatten(0, 1)
         image_features = self.vlm.get_image_features(pixel_values).pooler_output
-        image_features = image_features.reshape(-1, max_num_cameras, image_features.shape[1], image_features.shape[2])
+        tokens_per_image, hidden_size = image_features.shape[1], image_features.shape[2]
+        image_features = image_features.reshape(batch_size, max_num_cameras * tokens_per_image, hidden_size)
 
-        total_image_features = []
-        for batch_idx, mask in enumerate(pixel_attention_mask):
-            unpadded_image_features = image_features[batch_idx][mask]
-            total_image_features.append(unpadded_image_features)
-        total_image_features = torch.cat(total_image_features, dim=0)
+        special_image_mask = input_ids == self.config.vlm_config.image_token_id
+        image_token_rank = special_image_mask.cumsum(-1) - 1
+        camera_rank = image_token_rank // tokens_per_image
+        token_offset = image_token_rank - camera_rank * tokens_per_image
+        camera_slot = pixel_attention_mask.cumsum(-1) - 1
+        camera_match = (camera_slot[:, None, :] == camera_rank[..., None]) & pixel_attention_mask[:, None, :]
+        feature_index = (camera_match.int().argmax(-1) * tokens_per_image + token_offset).to(image_features.device)
+        image_embeds = image_features.gather(1, feature_index[..., None].expand(-1, -1, hidden_size))
 
-        llm_input_ids = input_ids.clone()
-        llm_input_ids[input_ids == self.config.vlm_config.image_token_id] = 0
-        inputs_embeds = self.vlm.get_input_embeddings()(llm_input_ids)
-        special_image_mask = (
-            (input_ids == self.config.vlm_config.image_token_id).unsqueeze(-1).to(inputs_embeds.device)
-        )
-        inputs_embeds = inputs_embeds.masked_scatter(
-            special_image_mask, total_image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-        )
-
-        return inputs_embeds
+        inputs_embeds = self.vlm.get_input_embeddings()(input_ids.masked_fill(special_image_mask, 0))
+        image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+        return torch.where(special_image_mask[..., None], image_embeds, inputs_embeds)
 
     @can_return_tuple
     @auto_docstring
@@ -363,7 +359,6 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             use_cache=True,
-            return_dict=True,
         ).past_key_values
         prefix_length = past_key_values.get_seq_length()
 
@@ -371,7 +366,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
         dt = -1.0 / num_steps
         for step in range(num_steps):
             time = 1.0 + step * dt
-            time_tensor = torch.tensor(time, dtype=torch.float32, device=device).expand(batch_size)
+            time_tensor = torch.full((batch_size,), time, dtype=torch.float32, device=device)
             output = self(
                 state=state,
                 noise=noise,
@@ -383,7 +378,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             )
 
             # We need to keep only the "vlm-prefix", no attention to past denoising steps!
-            past_key_values.crop(prefix_length)
+            past_key_values.crop(prefix_length - past_key_values.get_seq_length())
             noise = noise + dt * output.logits
         return noise
 

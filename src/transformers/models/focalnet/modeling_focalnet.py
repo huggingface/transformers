@@ -590,7 +590,7 @@ class FocalNetPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class FocalNetModel(FocalNetPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
+    def __init__(self, config: FocalNetConfig, add_pooling_layer=True, use_mask_token=False):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -670,17 +670,10 @@ class FocalNetModel(FocalNetPreTrainedModel):
     FocalNet Model with a decoder on top for masked image modeling.
 
     This follows the same implementation as in [SimMIM](https://huggingface.co/papers/2111.09886).
-
-    <Tip>
-
-    Note that we provide a script to pre-train this model on custom data in our [examples
-    directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-
-    </Tip>
     """
 )
 class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: FocalNetConfig):
         super().__init__(config)
 
         self.focalnet = FocalNetModel(config, add_pooling_layer=False, use_mask_token=True)
@@ -715,7 +708,7 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
         >>> from transformers import AutoImageProcessor, FocalNetConfig, FocalNetForMaskedImageModeling
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -788,7 +781,7 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
 )
 class FocalNetForImageClassification(FocalNetPreTrainedModel):
     # Copied from transformers.models.swin.modeling_swin.SwinForImageClassification.__init__ with Swin->FocalNet, swin->focalnet
-    def __init__(self, config):
+    def __init__(self, config: FocalNetConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -811,12 +804,6 @@ class FocalNetForImageClassification(FocalNetPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | FocalNetImageClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.focalnet(
@@ -879,7 +866,7 @@ class FocalNetBackbone(BackboneMixin, FocalNetPreTrainedModel):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

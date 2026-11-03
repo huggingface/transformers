@@ -211,7 +211,7 @@ class AutoRoundConfig(QuantizationConfigMixin):
 
     Args:
         bits (`int`, *optional*, defaults to 4):
-            The number of bits to quantize to, supported numbers are (2, 3, 4, 8).
+            The number of bits to quantize to, supported numbers are (2, 3, 4, 5, 6, 7, 8).
         group_size (`int`, *optional*, defaults to 128): Group-size value
         sym (`bool`, *optional*, defaults to `True`): Symmetric quantization or not
         backend (`str`, *optional*, defaults to `"auto"`): The inference backend. By default, AutoRound selects a compatible backend based on the device, quantization settings, and installed libraries. See [Specify inference backend](https://github.com/intel/auto-round/blob/main/docs/step_by_step.md#specify-inference-backend) for all backend options.
@@ -238,7 +238,7 @@ class AutoRoundConfig(QuantizationConfigMixin):
 
     def post_init(self):
         r"""Safety checker that arguments are correct."""
-        if self.bits not in [2, 3, 4, 8]:
+        if self.bits not in [2, 3, 4, 5, 6, 7, 8]:
             raise ValueError(f"Only support quantization to [2,3,4,8] bits but found {self.bits}")
         if self.group_size != -1 and self.group_size <= 0:
             raise ValueError("group_size must be greater than 0 or equal to -1")
@@ -1119,8 +1119,8 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             compressed-tensors decompresses them on the first forward pass.
         use_optimized_inference (`bool`, *optional*, defaults to `False`): when `True`, the layers whose scheme we
             have kernels for keep their quantized weights and run through those kernels (currently W8A8 FP8, on
-            CUDA SM89+ or XPU). Inference only, and opt-in: without it the model goes through the regular
-            compressed-tensors route. Ignored when `dequantize=True`.
+            CUDA SM89+, XPU, or MPS with torch >= 2.15). Inference only, and opt-in: without it the model goes
+            through the regular compressed-tensors route. Ignored when `dequantize=True`.
     """
 
     def __init__(
@@ -1705,6 +1705,8 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         scale_fmt (`str`, *optional*, defaults to `"float"`):
             Storage dtype of the per-block weight scales: `"float"` (fp32, V3-style) or
             `"ue8m0"` (1-byte `torch.float8_e8m0fnu`, V4-style).
+        expert_dtype (`str`, *optional*, defaults to `"fp8"`):
+            Format of the MoE experts' weights: `"fp8"`, or `"fp4"` for DeepSeek-V4's FP4-packed experts.
     """
 
     def __init__(
@@ -1715,6 +1717,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         modules_to_not_convert: list | None = None,
         modules_to_convert: list | None = None,
         scale_fmt: str = "float",
+        expert_dtype: str = "fp8",
         **kwargs,
     ):
         self.quant_method = kwargs.pop("quant_method", QuantizationMethod.FP8)
@@ -1728,6 +1731,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         self.weight_block_size = weight_block_size
         self.dequantize = dequantize
         self.scale_fmt = scale_fmt
+        self.expert_dtype = expert_dtype
         self.post_init()
 
     def post_init(self):
@@ -1743,6 +1747,8 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             raise ValueError("weight_block_size must be a tuple of two positive integers")
         if self.scale_fmt not in ("float", "ue8m0"):
             raise ValueError(f"scale_fmt must be 'float' or 'ue8m0'; got {self.scale_fmt!r}")
+        if self.expert_dtype not in ("fp8", "fp4"):
+            raise ValueError(f"expert_dtype must be 'fp8' or 'fp4'; got {self.expert_dtype!r}")
 
     def get_loading_attributes(self):
         return {"dequantize": self.dequantize, "modules_to_not_convert": self.modules_to_not_convert}

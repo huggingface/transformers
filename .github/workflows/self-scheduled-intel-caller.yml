@@ -1,0 +1,18 @@
+name: Self-hosted runner (Intel scheduled CI caller)
+
+on:
+  schedule:
+    - cron: "17 5 * * *"
+
+
+permissions: {}
+
+jobs:
+  run_scheduled_intel_ci:
+    permissions: {}
+    name: Trigger Scheduled Intel CI
+    runs-on: ubuntu-22.04
+    if: ${{ always() }}
+    steps:
+      - name: Trigger scheduled Intel CI via workflow_run
+        run: echo "Trigger scheduled Intel CI via workflow_run"

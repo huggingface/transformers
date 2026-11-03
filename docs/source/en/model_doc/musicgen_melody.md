@@ -36,11 +36,11 @@ The abstract from the paper is the following:
 
 This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The original code can be found [here](https://github.com/facebookresearch/audiocraft). The pre-trained checkpoints can be found on the [Hugging Face Hub](https://huggingface.co/models?sort=downloads&search=facebook%2Fmusicgen).
 
-## Difference with [MusicGen](https://huggingface.co/docs/transformers/main/en/model_doc/musicgen)
+## Difference with [MusicGen](./musicgen)
 
 There are two key differences with MusicGen:
 
-1. The audio prompt is used here as a conditional signal for the generated audio sample, whereas it's used for audio continuation in [MusicGen](https://huggingface.co/docs/transformers/main/en/model_doc/musicgen).
+1. The audio prompt is used here as a conditional signal for the generated audio sample, whereas it's used for audio continuation in [MusicGen](./musicgen).
 2. Conditional text and audio signals are concatenated to the decoder's hidden states instead of being used as a cross-attention signal, as in MusicGen.
 
 ## Generation

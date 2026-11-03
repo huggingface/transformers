@@ -23,7 +23,7 @@ specific language governing permissions and limitations under the License.
 
 The SeamlessM4T model was proposed in [SeamlessM4T — Massively Multilingual & Multimodal Machine Translation](https://huggingface.co/papers/2308.11596) by the Seamless Communication team from Meta AI.
 
-This is the **version 1** release of the model. For the updated **version 2** release, refer to the [Seamless M4T v2 docs](https://huggingface.co/docs/transformers/main/model_doc/seamless_m4t_v2).
+This is the **version 1** release of the model. For the updated **version 2** release, refer to the [Seamless M4T v2 docs](./seamless_m4t_v2).
 
 SeamlessM4T is a collection of models designed to provide high quality translation, allowing people from different linguistic communities to communicate effortlessly through speech and text.
 

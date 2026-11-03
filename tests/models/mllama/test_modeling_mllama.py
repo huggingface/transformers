@@ -27,7 +27,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.cache_utils import Cache
+from transformers.cache_utils import Cache, StaticCache, StaticLayer
 from transformers.models.mllama.configuration_mllama import MllamaTextConfig
 from transformers.testing_utils import (
     Expectations,
@@ -320,6 +320,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
 
         cross_attention_layers = self.model_tester.text_config["cross_attention_layers"]
         use_cache = decoder_past_key_values is not None
+        has_static_cache = isinstance(decoder_past_key_values, StaticCache)
 
         for generated_length, iter_attentions in enumerate(attentions):
             # regardless of using cache, the first forward pass will have the full prompt as input
@@ -327,26 +328,18 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
                 model_input_length = 1
             else:
                 model_input_length = prompt_length + generated_length
-            query_length = prompt_length + generated_length
 
-            expected_shape = (
-                batch_size,
-                config.num_attention_heads,
-                model_input_length,
-                query_length,
-            )
-
-            expected_shape_cross = (
-                batch_size,
-                config.num_attention_heads,
-                model_input_length,
-                self.model_tester.image_length,
-            )
-
-            expected_shapes = [
-                expected_shape if layer_idx not in cross_attention_layers else expected_shape_cross
-                for layer_idx in range(len(iter_attentions))
-            ]
+            expected_shapes = []
+            for layer_idx in range(len(iter_attentions)):
+                if layer_idx in cross_attention_layers:
+                    # cross-attention always attends to all the vision states
+                    key_length = self.model_tester.image_length
+                elif has_static_cache:
+                    # a static cache is preallocated, so attention spans the whole cache
+                    key_length = decoder_past_key_values.get_max_length(layer_idx)
+                else:
+                    key_length = prompt_length + generated_length
+                expected_shapes.append((batch_size, config.num_attention_heads, model_input_length, key_length))
 
             self.assertListEqual([layer_attention.shape for layer_attention in iter_attentions], expected_shapes)
 
@@ -433,6 +426,59 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
 
             model.generate(input_ids, use_cache=True)
 
+    def test_generate_with_static_cache_and_images(self):
+        """
+        Tests that generation with a `StaticCache` works. The cross-attention layers cache the vision encoder states,
+        so they must be preallocated from the image length rather than from `max_cache_len` like the self-attention
+        layers: sizing them from `max_cache_len` used to write out of bounds and crash generation.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        cross_attention_layers = self.model_tester.text_config["cross_attention_layers"]
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+
+            output = model.generate(
+                **inputs,
+                do_sample=False,
+                max_new_tokens=4,
+                cache_implementation="static",
+                return_dict_in_generate=True,
+            )
+
+            past_key_values = output.past_key_values
+            self.assertIsInstance(past_key_values, StaticCache)
+            self.assertTrue(past_key_values.is_compileable)
+            # `generate` sizes the static cache to `max_length - 1`
+            max_cache_len = inputs["input_ids"].shape[1] + 4 - 1
+            for layer_idx, layer in enumerate(past_key_values.layers):
+                self.assertIsInstance(layer, StaticLayer)
+                expected_length = (
+                    self.model_tester.image_length if layer_idx in cross_attention_layers else max_cache_len
+                )
+                self.assertEqual(layer.keys.shape[-2], expected_length)
+
+    @require_torch_accelerator  # `generate` only auto-compiles on an accelerator
+    def test_generate_compile_matches_eager(self):
+        """Generating with a static cache traces a single graph, without breaks, and matches eager."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            generate_kwargs = {"do_sample": False, "max_new_tokens": 5, "min_new_tokens": 5}
+
+            eager_output = model.generate(**inputs, **generate_kwargs, disable_compile=True)
+
+            torch._dynamo.reset()
+            torch._dynamo.utils.counters.clear()
+            compiled_output = model.generate(**inputs, **generate_kwargs, cache_implementation="static")
+
+            self.assertEqual(torch._dynamo.utils.counters["stats"]["unique_graphs"], 1)
+            self.assertEqual(sum(torch._dynamo.utils.counters["graph_break"].values()), 0)
+            torch.testing.assert_close(eager_output, compiled_output)
+
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
         # Overwrite -- mllama needs to prepare `cross_attention_mask`, and it must be padded accordingly
@@ -470,7 +516,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(self.base_model_checkpoint)
 
         prompt = "<|image|>If I had to write a haiku for this one"
-        url = "https://llava-vl.github.io/static/images/view.jpg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
         image = load_test_image(url)
 
         inputs = processor(text=prompt, images=image, return_tensors="pt").to(torch_device)
@@ -500,9 +546,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         expected_outputs = Expectations(
                 {
-                    ("xpu", 3): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
-                    ("cuda", 7): "If I had to write a haiku for this one, it would be:.\\nA dock in the lake.\\nA mountain in the distance.\\nA long exposure.",
-                    ("cuda", 8): 'If I had to write a haiku for this one, it would be:.\\nA dock in the lake.\\nA mountain in the distance.\\nA long exposure.',
+                    (None, None): 'If I had to write a haiku for this one, it would be: "I\'m not a fan of the dock, but I\'m a fan of the lake".\\',
                 }
             )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -566,7 +610,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(self.base_model_checkpoint)
 
         prompt = "<|image|>If I had to write a haiku for this one"
-        url = "https://llava-vl.github.io/static/images/view.jpg"
+        url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
         image = load_test_image(url)
 
         inputs = processor(text=prompt, images=image, return_tensors="pt").to(torch_device)
@@ -584,9 +628,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         actual_logits = output.logits[0, -1, :5].cpu()
         expected_logits_all = Expectations(
             {
-                ("xpu", 3): torch.tensor([9.1562, 8.9141, 5.0664, 1.6855, 3.2324], dtype=actual_logits.dtype),
-                ("cuda", 7): torch.tensor([9.0781, 8.8750, 5.0781, 1.6221, 3.2207], dtype=actual_logits.dtype),
-                ("cuda", 8): torch.tensor([9.0703, 8.8750, 5.0781, 1.6279, 3.2207], dtype=actual_logits.dtype),
+                (None, None): torch.tensor([6.9375, 4.4688, 3.4531, 0.1973, 1.9766], dtype=actual_logits.dtype),
             }
         )
 
@@ -609,7 +651,9 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "<|image|>If I had to write a haiku for this one",
             "<|image|>This image shows",
         ]
-        image1 = load_test_image("https://llava-vl.github.io/static/images/view.jpg")
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        )
         image2 = load_test_image(
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
         )
@@ -630,10 +674,8 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         expected_outputs = Expectations(
                 {
-                    ("xpu", 3): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
-                    ("cuda", 7): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
-                    ("cuda", 8): 'If I had to write a haiku for this one, it would be:.\\nA dock in the lake.\\nA mountain in the distance.\\nA long exposure.',
-                 }
+                    (None, None): 'If I had to write a haiku for this one, it would be: "I\'m not a fan of the dock, but I\'m a fan of the lake".\\',
+                }
             )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
 
@@ -667,7 +709,9 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(self.instruct_model_checkpoint)
 
         # Prepare inputs
-        image1 = load_test_image("https://llava-vl.github.io/static/images/view.jpg")
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        )
         image2 = load_test_image(
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
         )

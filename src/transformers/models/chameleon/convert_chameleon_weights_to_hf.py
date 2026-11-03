@@ -17,9 +17,9 @@ import json
 import os
 from io import BytesIO
 
-import httpx
 import torch
 import yaml
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import (
@@ -72,12 +72,12 @@ def compute_intermediate_size(n, ffn_dim_multiplier=1, multiple_of=256):
 
 
 def read_json(path):
-    with open(path, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def write_json(text, path):
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(text, f)
 
 
@@ -326,7 +326,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
     ffn_dim_multiplier = params.get("ffn_dim_multiplier", 1)
     multiple_of = params.get("multiple_of", 256)
 
-    with open(os.path.join(input_base_path, "tokenizer/text_tokenizer.json")) as tokenizer_file:
+    with open(os.path.join(input_base_path, "tokenizer/text_tokenizer.json"), encoding="utf-8") as tokenizer_file:
         tokenizer_config = json.load(tokenizer_file)
         vocabulary_map = tokenizer_config["model"]["vocab"]
         vocabulary_map["<image>"] = vocabulary_map[
@@ -338,7 +338,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
             if token["content"] == "<reserved08707>":
                 token["content"] = "<image>"
 
-    with open(os.path.join(input_base_path, "tokenizer/text_tokenizer_modified.json"), "w") as f:
+    with open(os.path.join(input_base_path, "tokenizer/text_tokenizer_modified.json"), "w", encoding="utf-8") as f:
         json.dump(tokenizer_config, f)  # save the new file to init tokenizer later
 
     vq_keys_to_replace = [
@@ -349,7 +349,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
         ("double_z", "double_latent"),
         ("z_channels", "latent_channels"),
     ]
-    with open(os.path.join(input_base_path, "tokenizer/vqgan.yaml")) as vqgan_cfg_file:
+    with open(os.path.join(input_base_path, "tokenizer/vqgan.yaml"), encoding="utf-8") as vqgan_cfg_file:
         vq_config = yaml.safe_load(vqgan_cfg_file)["model"]["params"]
         vq_config.update(**vq_config["ddconfig"])
         for old, new in vq_keys_to_replace:
@@ -419,10 +419,10 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
 
     # Multi-image example
     prompt = "I used to know a lot about constellations when I was younger, but as I grew older, I forgot most of what I knew. These are the only two constellations that I really remember now.<image><image>I would like for you to tell me about 3 more constellations and give me a little bit of history about the constellation."
-    url = "https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg"
+    url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/big_dipper.jpg"
     with httpx.stream("GET", url) as response:
         image_1 = Image.open(BytesIO(response.read()))
-    url = "https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg"
+    url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/orion.jpg"
     with httpx.stream("GET", url) as response:
         image_2 = Image.open(BytesIO(response.read()))
 

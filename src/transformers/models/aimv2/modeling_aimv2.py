@@ -493,7 +493,7 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Siglip2VisionModel
 
@@ -535,7 +535,7 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
 )
 class Aimv2TextModel(Aimv2PreTrainedModel):
     main_input_name = "input_ids"
-
+    config: Aimv2TextConfig
     _can_record_outputs = {
         "hidden_states": Aimv2EncoderLayer,
         "attentions": Aimv2Attention,
@@ -723,7 +723,7 @@ class Aimv2Model(Aimv2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Aimv2Model
 

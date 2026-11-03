@@ -47,19 +47,41 @@ class PI0ProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 @requires(backends=("vision", "torch"))
 class PI0Processor(ProcessorMixin):
-    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
-        self.height, self.width = image_processor.size["height"], image_processor.size["width"]
-        state_mean = kwargs.get("state_mean", [-0.0419, 0.0354, 0.8257, 2.9083, -0.5562, -0.1665, 0.0283, -0.0286])
-        state_std = kwargs.get("state_std", [0.1074, 0.1442, 0.2572, 0.3441, 1.2344, 0.3580, 0.0133, 0.0132])
-        actions_mean = kwargs.get("actions_mean", [0.0182, 0.0586, -0.0559, 0.0046, 0.0029, -0.0077, -0.0916])
-        actions_std = kwargs.get("actions_std", [0.2825, 0.3590, 0.3674, 0.0377, 0.0543, 0.0872, 0.9958])
+    valid_processor_kwargs = PI0ProcessorKwargs
 
-        self.state_mean = torch.tensor(state_mean)
-        self.state_std = torch.tensor(state_std)
-        self.actions_mean = torch.tensor(actions_mean)
-        self.actions_std = torch.tensor(actions_std)
-        self.max_state_dim = kwargs.get("max_state_dim", 32)
-        self.chunk_size = kwargs.get("chunk_size", 50)
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        chat_template=None,
+        state_mean: list[float] | None = None,
+        state_std: list[float] | None = None,
+        actions_mean: list[float] | None = None,
+        actions_std: list[float] | None = None,
+        max_state_dim: int = 32,
+        chunk_size: int = 50,
+        **kwargs,
+    ):
+        r"""
+        state_mean (`list[float]`, *optional*):
+            Dataset mean of the robot state. Required to process `state`.
+        state_std (`list[float]`, *optional*):
+            Dataset standard deviation of the robot state. Required to process `state`.
+        actions_mean (`list[float]`, *optional*):
+            Dataset mean of the actions. Required to process `actions`.
+        actions_std (`list[float]`, *optional*):
+            Dataset standard deviation of the actions. Required to process `actions`.
+        max_state_dim (`int`, *optional*, defaults to 32):
+            Size the state and actions are zero-padded to.
+        chunk_size (`int`, *optional*, defaults to 50):
+            Number of actions per chunk.
+        """
+        self.state_mean = state_mean
+        self.state_std = state_std
+        self.actions_mean = actions_mean
+        self.actions_std = actions_std
+        self.max_state_dim = max_state_dim
+        self.chunk_size = chunk_size
         if not hasattr(image_processor, "image_seq_length"):
             raise ValueError("Image processor is missing an `image_seq_length` attribute.")
 
@@ -94,9 +116,9 @@ class PI0Processor(ProcessorMixin):
     ) -> BatchFeature:
         r"""
         actions (`list | np.ndarray | torch.Tensor`, *optional*):
-            Actions to be predicted by the model. If provided, padding, mean and std normalization will be applied.
+            Actions to be predicted by the model. Normalized with the processor's dataset statistics, then padded.
         state (`list | np.ndarray | torch.Tensor`, *optional*):
-            Robotic states to be predicted by the model. If provided, padding, mean and std normalization will be applied.
+            Robot state. Normalized with the processor's dataset statistics, then padded.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -112,7 +134,7 @@ class PI0Processor(ProcessorMixin):
             - **actions** -- Label-actions compatible with training if `actions` is not None
         """
         output_kwargs = self._merge_kwargs(
-            PI0ProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
+            self.valid_processor_kwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
         )
 
         if text is None:
@@ -142,16 +164,15 @@ class PI0Processor(ProcessorMixin):
         text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
 
         # Here is the diff from PaliGemma. Ideally we'd create a new ImageProcessor if it were a VLM
-        max_num_cameras = max(len(sample_images) for sample_images in batched_images)
-        pixel_attention_mask = torch.zeros((len(batched_images), max_num_cameras), dtype=torch.bool)
-        padded_pixel_values = torch.zeros(len(batched_images), max_num_cameras, 3, self.height, self.width)
-
-        for batch, sample_images in enumerate(batched_images):
-            processed = self.image_processor(sample_images, return_tensors="pt", **output_kwargs["images_kwargs"])
-
-            num_cameras = len(sample_images)
-            pixel_attention_mask[batch, :num_cameras] = True
-            padded_pixel_values[batch, :num_cameras] = processed["pixel_values"]
+        num_cameras = torch.tensor([len(sample_images) for sample_images in batched_images])
+        pixel_attention_mask = torch.arange(num_cameras.max())[None, :] < num_cameras[:, None]
+        pixel_values = self.image_processor(
+            [image for sample_images in batched_images for image in sample_images],
+            return_tensors="pt",
+            **output_kwargs["images_kwargs"],
+        )["pixel_values"]
+        padded_pixel_values = pixel_values.new_zeros(*pixel_attention_mask.shape, *pixel_values.shape[1:])
+        padded_pixel_values[pixel_attention_mask] = pixel_values
 
         model_inputs = {
             **text_inputs,
@@ -160,18 +181,28 @@ class PI0Processor(ProcessorMixin):
         }
 
         if actions is not None:
-            actions = (torch.tensor(actions) - self.actions_mean) / (self.actions_std + 1e-08)
+            actions = self.normalize(torch.as_tensor(actions, dtype=torch.float32), "actions")
             if actions.shape[-1] < self.max_state_dim:
                 actions = F.pad(actions, (0, self.max_state_dim - actions.shape[-1]))
             model_inputs["actions"] = actions.view(-1, self.chunk_size, self.max_state_dim)
 
         if state is not None:
-            state = (torch.tensor(state) - self.state_mean) / (self.state_std + 1e-08)
+            state = self.normalize(torch.as_tensor(state, dtype=torch.float32), "state")
             if state.shape[-1] < self.max_state_dim:
                 state = F.pad(state, (0, self.max_state_dim - state.shape[-1]))
             model_inputs["state"] = state.view(-1, self.max_state_dim)
 
         return BatchFeature(data=model_inputs, tensor_type=return_tensors)
+
+    def normalize(self, values: torch.Tensor, feature: str) -> torch.Tensor:
+        """Normalizes `state` or `actions` with the dataset mean and standard deviation."""
+        mean, std = getattr(self, f"{feature}_mean"), getattr(self, f"{feature}_std")
+        if mean is None or std is None:
+            raise ValueError(
+                f"Processing `{feature}` needs `{feature}_mean` and `{feature}_std`. Pass the statistics of the "
+                "dataset the checkpoint was trained on when creating the processor."
+            )
+        return (values - torch.tensor(mean)) / (torch.tensor(std) + 1e-08)
 
     @property
     def model_input_names(self):

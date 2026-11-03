@@ -26,6 +26,12 @@ from ...test_processing_common import ProcessorTesterMixin
 class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Emu3Processor
 
+    @unittest.skip(
+        "Processor prepends the BOS token as text, which shifts the offsets the assistant mask is computed from"
+    )
+    def test_apply_chat_template_assistant_mask(self):
+        pass
+
     @classmethod
     def _setup_image_processor(cls):
         image_processor_class = cls._get_component_class_from_processor("image_processor")

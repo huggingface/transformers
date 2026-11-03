@@ -25,6 +25,7 @@ from huggingface_hub.errors import StrictDataclassClassValidationError
 
 from transformers import EsmFold2Config, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     TestCasePlus,
     require_torch,
     require_torch_accelerator,
@@ -41,7 +42,7 @@ if is_torch_available():
     from transformers import EsmFold2Model
     from transformers.models.esmfold2.modeling_esmfold2 import EsmFold2AtomAttention, EsmFold2AtomInputs
 
-_INTEGRATION_CKPT = "biohub/ESMFold2-hf"
+_INTEGRATION_CKPT = "biohub/ESMFold2"
 
 
 def get_tiny_config(**overrides) -> "EsmFold2Config":
@@ -186,6 +187,24 @@ class EsmFold2ModelTest(unittest.TestCase):
                 self.assertTrue(torch.isfinite(coords).all())
                 self.assertEqual(out["distogram_logits"].shape[-1], model.config.structure_head.num_distogram_bins)
 
+    def test_msa_encoder_disabled(self):
+        # Checkpoints without MSA conditioning (e.g. `biohub/ESMFold2-Fast`) set `msa_encoder.enabled=False`: no
+        # MSA-encoder weights exist, so the module must not be built (it would otherwise run with random weights).
+        torch.manual_seed(0)
+        model = EsmFold2Model(get_tiny_config(msa_encoder={"enabled": False})).eval()
+        self.assertIsNone(model.msa_encoder)
+        self.assertFalse(any(key.startswith("msa_encoder.") for key in model.state_dict()))
+        with torch.no_grad():
+            torch.manual_seed(1)
+            out = model.infer_protein(self.seq, num_loops=1, num_diffusion_samples=1, num_sampling_steps=2)
+        self.assertTrue(torch.isfinite(out["sample_atom_coords"]).all())
+
+        with tempfile.TemporaryDirectory() as tmp:
+            model.save_pretrained(tmp)
+            reloaded = EsmFold2Model.from_pretrained(tmp).eval()
+        self.assertFalse(reloaded.config.msa_encoder.enabled)
+        self.assertIsNone(reloaded.msa_encoder)
+
     def test_attention_dispatch_attached(self):
         model = self._build("eager")
         swa_modules = [m for m in model.modules() if isinstance(m, EsmFold2AtomAttention)]
@@ -208,6 +227,8 @@ class EsmFold2ModelTest(unittest.TestCase):
         self.assertEqual(adaln.cond_norm.weight.dtype, torch.float32)
         tri_mul = reloaded.msa_encoder.layers[0].tri_mul_in
         self.assertEqual(tri_mul.norm_start.weight.dtype, torch.float32)  # prefix-named norm stays pinned
+        self.assertEqual(reloaded.distogram_head.weight.dtype, torch.float32)
+        self.assertEqual(reloaded.distogram_head.bias.dtype, torch.float32)
         with torch.no_grad():
             out = reloaded.infer_protein(self.seq, num_loops=1, num_diffusion_samples=1, num_sampling_steps=2)
         self.assertTrue(torch.isfinite(out["sample_atom_coords"].float()).all())
@@ -543,7 +564,14 @@ class EsmFold2IntegrationTest(TestCasePlus):
             with torch.no_grad():
                 output = model.infer_protein(seq, num_loops=4, num_diffusion_samples=2, num_sampling_steps=32)
 
-            expected_distogram = torch.tensor([6.4062, 7.7500, 9.5625, 9.5000, 16.2500, 18.7500, 19.7500, 22.7500])
+            # fmt: off
+            expected_distogram = Expectations(
+                {
+                    ("cuda", 8): torch.tensor([6.3493, 7.7382, 9.4400, 9.4147, 16.2251, 18.6971, 19.6784, 22.7508]),
+                    ("xpu", 5): torch.tensor([6.1462, 7.4562, 9.1028, 9.0691, 15.9278, 18.4071, 19.3449, 22.4337]),
+                }
+            ).get_expectation()
+            # fmt: on
             torch.testing.assert_close(
                 output["distogram_logits"][0, 0, 1, :8].float().cpu(), expected_distogram, rtol=0, atol=0.2
             )

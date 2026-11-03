@@ -547,7 +547,6 @@ class ZoeDepthSeedBinRegressor(nn.Module):
             return bin_centers, bin_centers
 
 
-@torch.jit.script
 def inv_attractor(dx, alpha: float = 300, gamma: int = 2):
     """Inverse attractor: dc = dx / (1 + alpha*dx^gamma), where dx = a - c, a = attractor point, c = bin center, dc = shift in bin center
     This is the default one according to the accompanying paper.
@@ -1223,7 +1222,7 @@ class ZoeDepthPreTrainedModel(PreTrainedModel):
     """
 )
 class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ZoeDepthConfig):
         super().__init__(config)
 
         self.backbone = load_backbone(config)
@@ -1259,16 +1258,13 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
         **kwargs,
     ) -> tuple[torch.Tensor] | DepthEstimatorOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth depth estimation maps for computing the loss.
-
         Examples:
         ```python
         >>> from transformers import AutoImageProcessor, ZoeDepthForDepthEstimation
         >>> import torch
         >>> import numpy as np
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

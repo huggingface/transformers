@@ -115,7 +115,7 @@ class Sam3TrackerFeedForward(nn.Module):
     """
 )
 class Sam3TrackerPreTrainedModel(PreTrainedModel):
-    config_class = Sam3TrackerConfig
+    config: Sam3TrackerConfig
     base_model_prefix = "sam3_tracker"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
@@ -957,7 +957,7 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 

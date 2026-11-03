@@ -622,7 +622,7 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
     """
 )
 class TrOCRDecoderWrapper(TrOCRPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: TrOCRConfig):
         super().__init__(config)
         self.decoder = TrOCRDecoder(config)
         self.post_init()
@@ -639,7 +639,7 @@ class TrOCRDecoderWrapper(TrOCRPreTrainedModel):
 class TrOCRForCausalLM(TrOCRPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"output_projection.weight": "model.decoder.embed_tokens.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: TrOCRConfig):
         config.is_decoder = True
         config.is_encoder_decoder = False
         super().__init__(config)
@@ -679,11 +679,6 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> tuple | CausalLMOutputWithCrossAttentions:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -695,7 +690,7 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel, GenerationMixin):
         ...     ViTModel,
         ...     VisionEncoderDecoderModel,
         ... )
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
 

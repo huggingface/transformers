@@ -18,7 +18,6 @@ import unittest
 from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -26,6 +25,7 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -34,6 +34,7 @@ if is_torch_available():
     torch.set_float32_matmul_precision("highest")
 
     from transformers import (
+        AXK1Config,
         AXK1Model,
     )
 
@@ -51,7 +52,6 @@ class AXK1ModelTester(CausalLMModelTester):
         n_group=2,
         topk_group=1,
         num_experts_per_tok=2,
-        first_k_dense_replace=1,
         moe_intermediate_size=16,
         kv_lora_rank=16,
         q_lora_rank=32,
@@ -66,7 +66,7 @@ class AXK1ModelTester(CausalLMModelTester):
         self.n_group = n_group
         self.topk_group = topk_group
         self.num_experts_per_tok = num_experts_per_tok
-        self.first_k_dense_replace = first_k_dense_replace
+        self.mlp_layer_types = ["dense", "sparse"]
         self.moe_intermediate_size = moe_intermediate_size
         self.kv_lora_rank = kv_lora_rank
         self.q_lora_rank = q_lora_rank
@@ -78,7 +78,6 @@ class AXK1ModelTester(CausalLMModelTester):
 @require_torch
 class AXK1ModelTest(CausalLMModelTest, unittest.TestCase):
     # Routed experts that receive no token in a step get no gradient.
-    test_all_params_have_gradient = False
     model_tester_class = AXK1ModelTester
     model_split_percents = [0.5, 0.8, 0.9]
 
@@ -86,17 +85,17 @@ class AXK1ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
+    def test_legacy_mlp_layer_types(self):
+        # Checkpoints describe the MLP layout with `first_k_dense_replace` / `moe_layer_freq`
+        # See https://github.com/huggingface/transformers/pull/49518
+        config = AXK1Config(num_hidden_layers=5, first_k_dense_replace=1, moe_layer_freq=2)
+        self.assertEqual(config.mlp_layer_types, ["dense", "dense", "sparse", "dense", "sparse"])
+
 
 @slow
 @require_torch_accelerator
-class AXK1IntegrationTest(unittest.TestCase):
+class AXK1IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "hf-internal-testing/tiny-axk1"
-
-    def setup(self):
-        cleanup(torch_device, gc_collect=False)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=False)
 
     def test_model_logits_batched(self):
         dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(torch_device)

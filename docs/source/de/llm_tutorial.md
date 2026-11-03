@@ -45,7 +45,7 @@ Ein Sprachmodell, das für [causal language modeling](tasks/language_modeling) t
     <video
         style="max-width: 90%; margin: auto;"
         autoplay loop muted playsinline
-        src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/assisted-generation/gif_1_1080p.mov"
+        src="https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/video/assisted_generation_gif_1_1080p.mov"
     ></video>
     <figcaption>"Forward pass of an LLM"</figcaption>
 </figure>

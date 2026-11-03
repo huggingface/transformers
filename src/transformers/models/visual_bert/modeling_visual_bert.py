@@ -490,7 +490,7 @@ class VisualBertForPreTrainingOutput(ModelOutput):
     """
 )
 class VisualBertModel(VisualBertPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: VisualBertConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -684,7 +684,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         "cls.predictions.decoder.weight": "visual_bert.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: VisualBertConfig):
         super().__init__(config)
 
         self.visual_bert = VisualBertModel(config)
@@ -834,7 +834,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
 
 @auto_docstring
 class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: VisualBertConfig):
         super().__init__(config)
 
         self.visual_bert = VisualBertModel(config)
@@ -903,10 +903,6 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
             *visual_token_type_ids* to *1* for all tokens.
         image_text_alignment (`torch.LongTensor` of shape `(batch_size, visual_seq_length, alignment_number)`, *optional*):
             Image-Text alignment uses to decide the position IDs of the visual embeddings.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
 
         Example:
 
@@ -1020,7 +1016,7 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
     """
 )
 class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: VisualBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1157,7 +1153,7 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
     """
 )
 class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: VisualBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1330,7 +1326,7 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
         "cls.predictions.decoder.weight": "visual_bert.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: VisualBertConfig):
         super().__init__(config)
 
         self.visual_bert = VisualBertModel(config)

@@ -110,7 +110,7 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16, processor
     # 2) Prepare feature extractor
     audio_config = {}
     if processor_config is not None:
-        with open(processor_config, "r") as f:
+        with open(processor_config, "r", encoding="utf-8") as f:
             processor_config = json.load(f)
         audio_config = processor_config.get("audio_processor", {})
     if "sampling_rate" not in audio_config:
@@ -124,7 +124,7 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16, processor
     feature_extractor = VibeVoiceAcousticTokenizerFeatureExtractor(**audio_config)
 
     # 3) Prepare model configuration
-    with open(config_path, "r") as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         model_config = json.load(f)
 
     # Clean up acoustic tokenizer config

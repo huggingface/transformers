@@ -63,6 +63,11 @@ class NemotronAsrStreamingFeatureExtractor(SequenceFeatureExtractor):
             A preemphasis filter coefficient. 0.0 means no preemphasis filter.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
+        mel_filters_dtype (`str`, *optional*, defaults to `"float32"`):
+            Precision of the stored mel filter bank and STFT window. Some checkpoints keep these constants in a reduced
+            precision (`"bfloat16"` for Nemotron 3.5 Transcribe): the filter bank and the window are then rounded to
+            that dtype when the features are computed, so the log-mel features match the original front-end; the
+            spectrogram itself is always computed in float32.
     """
 
     model_input_names = ["input_features", "attention_mask"]
@@ -76,6 +81,7 @@ class NemotronAsrStreamingFeatureExtractor(SequenceFeatureExtractor):
         win_length=400,
         preemphasis=0.97,
         padding_value=0.0,
+        mel_filters_dtype="float32",
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
@@ -100,9 +106,11 @@ class NemotronAsrStreamingFeatureExtractor(SequenceFeatureExtractor):
             sr=sampling_rate, n_fft=n_fft, n_mels=feature_size, fmin=0.0, fmax=sampling_rate / 2, norm="slaney"
         )
         self.mel_filters = torch.from_numpy(mel_filters).to(torch.float32)
+        self.mel_filters_dtype = mel_filters_dtype
 
     def _torch_extract_fbank_features(self, waveform, device="cpu", center=True):
-        window = torch.hann_window(self.win_length, periodic=False, device=device)
+        dtype = getattr(torch, self.mel_filters_dtype)
+        window = torch.hann_window(self.win_length, periodic=False, device=device).to(dtype).float()
         stft = torch.stft(
             waveform,
             self.n_fft,
@@ -118,7 +126,7 @@ class NemotronAsrStreamingFeatureExtractor(SequenceFeatureExtractor):
         magnitudes = magnitudes.pow(2)
 
         # log mel spectrogram
-        mel_filters = self.mel_filters.to(device)
+        mel_filters = self.mel_filters.to(device).to(dtype).float()
         mel_spec = mel_filters @ magnitudes
         mel_spec = torch.log(mel_spec + LOG_ZERO_GUARD_VALUE)
 
@@ -140,6 +148,7 @@ class NemotronAsrStreamingFeatureExtractor(SequenceFeatureExtractor):
         device: str | None = "cpu",
         return_token_timestamps: bool | None = None,
         center: bool = True,
+        is_last_audio_chunk: bool = False,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -179,6 +188,10 @@ class NemotronAsrStreamingFeatureExtractor(SequenceFeatureExtractor):
                 subsequent streaming chunks: feeding `audio[hop * frame - n_fft // 2 : ...]` with `center=False`
                 reproduces, frame-for-frame, the features that a single `center=True` pass over the whole utterance
                 would have produced for those frames.
+            is_last_audio_chunk (`bool`, *optional*, defaults to `False`):
+                Whether the audio is the last chunk of a streaming session. With `center=False`, the end of the audio
+                is then zero-padded by `n_fft // 2 - hop_length`, what the last frame of a `center=True` pass over the
+                whole utterance reaches past the audio at most, so that this frame is kept rather than dropped.
         """
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
@@ -245,15 +258,21 @@ class NemotronAsrStreamingFeatureExtractor(SequenceFeatureExtractor):
             )
             input_features = input_features.masked_fill(~timemask, 0.0)
 
+        audio_lengths = padded_inputs.audio_lengths
+        if is_last_audio_chunk and not center:
+            # the last frame a `center=True` pass counts reaches up to `n_fft // 2 - hop` past the audio; padded
+            # after the preemphasis, which would otherwise turn the first zero into `-preemphasis * audio[-1]`
+            num_padding = self.n_fft // 2 - self.hop_length
+            input_features = torch.nn.functional.pad(input_features, (0, num_padding))
+            audio_lengths = audio_lengths + num_padding
+
         input_features = self._torch_extract_fbank_features(input_features, device, center=center)
         if center:
             # `center=True` pads `n_fft // 2` on each side, so the number of valid frames is `floor(L / hop)`.
-            features_lengths = torch.floor_divide(
-                padded_inputs.audio_lengths + self.n_fft // 2 * 2 - self.n_fft, self.hop_length
-            )
+            features_lengths = torch.floor_divide(audio_lengths + self.n_fft // 2 * 2 - self.n_fft, self.hop_length)
         else:
             # `center=False` does no padding: `floor((L - n_fft) / hop) + 1` frames.
-            features_lengths = torch.floor_divide(padded_inputs.audio_lengths - self.n_fft, self.hop_length) + 1
+            features_lengths = torch.floor_divide(audio_lengths - self.n_fft, self.hop_length) + 1
         attention_mask = torch.arange(input_features.shape[1], device=device)[None, :] < features_lengths[:, None]
 
         # NemotronAsrStreaming never normalizes the mel features

@@ -172,11 +172,11 @@ class WavLMAttention(nn.Module):
         return attn_output, attn_weights
 
     def compute_bias(self, query_length: int, key_length: int) -> torch.FloatTensor:
-        context_position = torch.arange(query_length, dtype=torch.long)[:, None]
-        memory_position = torch.arange(key_length, dtype=torch.long)[None, :]
+        device = self.rel_attn_embed.weight.device
+        context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None]
+        memory_position = torch.arange(key_length, dtype=torch.long, device=device)[None, :]
         relative_position = memory_position - context_position
         relative_position_bucket = self._relative_positions_bucket(relative_position)
-        relative_position_bucket = relative_position_bucket.to(self.rel_attn_embed.weight.device)
         values = self.rel_attn_embed(relative_position_bucket)
         values = values.permute([2, 0, 1])
         return values
@@ -495,6 +495,12 @@ class WavLMPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 init.uniform_(module.bias, a=-k, b=k)
+        elif isinstance(module, WavLMModel) and hasattr(module, "masked_spec_embed"):
+            init.uniform_(module.masked_spec_embed)
+        elif isinstance(module, WavLMAttention):
+            init.ones_(module.gru_rel_pos_const)
+        elif isinstance(module, AMSoftmaxLoss):  # noqa: F821
+            init.normal_(module.weight)
 
     def _get_adapters(self):
         raise AttributeError("Not needed for WavLM")

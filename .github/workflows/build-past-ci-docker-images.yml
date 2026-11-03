@@ -9,11 +9,13 @@ concurrency:
   group: docker-images-builds
   cancel-in-progress: false
 
-permissions:
-  contents: read
+
+permissions: {}
 
 jobs:
   past-pytorch-docker:
+    permissions:
+      contents: read
     name: "Past PyTorch Docker"
     strategy:
       fail-fast: false
@@ -61,6 +63,8 @@ jobs:
           tags: huggingface/transformers-pytorch-past-${{ matrix.version }}-gpu
 
   past-tensorflow-docker:
+    permissions:
+      contents: read
     name: "Past TensorFlow Docker"
     strategy:
       fail-fast: false

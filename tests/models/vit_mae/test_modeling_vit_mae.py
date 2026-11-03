@@ -169,6 +169,17 @@ class ViTMAEModelTester:
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
+    def prepare_config_and_inputs_for_model_class(self, model_class):
+        config, inputs_dict = self.prepare_config_and_inputs_for_common()
+        # `random_masking` draws its own `noise` when none is passed, so anything comparing two runs
+        # of this model (eager against exported, batched against unbatched) would be comparing two
+        # different random subsets of patches. `forward` takes `noise` precisely so a caller can pin
+        # it; the integration tests above do the same.
+        generator = torch.Generator().manual_seed(0)
+        noise = torch.rand(self.batch_size, self.mask_length, generator=generator)
+        inputs_dict["noise"] = noise.to(torch_device)
+        return config, inputs_dict
+
 
 @require_torch
 class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):

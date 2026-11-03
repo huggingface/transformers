@@ -53,7 +53,7 @@ pip install mamba-ssm causal-conv1d>=1.2.0
 
 You also have to have the model on a CUDA device.
 
-You can run the model not using the optimized Mamba kernels, but it is **not** recommended as it will result in significantly lower latencies. In order to do that, you'll need to specify `use_mamba_kernels=False` when loading the model.
+If the optimized Mamba kernels are not available, the model falls back to the PyTorch implementation, but it is **not** recommended as it results in significantly higher latencies.
 
 ## Inference
 
@@ -71,6 +71,10 @@ input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 outputs = model.generate(**input_ids, max_new_tokens=100)
 print(tokenizer.decode(outputs[0]))
 ```
+
+## Notes
+
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
 
 ## Model card
 

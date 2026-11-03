@@ -107,7 +107,9 @@ class InternVLProcessor(ProcessorMixin):
 
         # Merge image and video pixel into a single array, as model expects only `pixel_values` as arg
         if images is not None:
-            image_num_patches_indices = np.cumsum(model_inputs.pop("num_patches"))
+            num_patches = model_inputs.pop("num_patches")
+            num_patches = num_patches.tolist() if hasattr(num_patches, "tolist") else num_patches
+            image_num_patches_indices = np.cumsum(num_patches)
         if videos is not None:
             video_pixel_values = model_inputs.pop("pixel_values_videos")
             batch_size, num_frames, *_ = video_pixel_values.shape

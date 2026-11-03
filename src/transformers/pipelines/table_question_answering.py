@@ -331,9 +331,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
             else:
                 outputs = self.batch_inference(**model_inputs)
         else:
-            # User-defined `generation_config` passed to the pipeline call take precedence
-            if "generation_config" not in generate_kwargs:
-                generate_kwargs["generation_config"] = self.generation_config
+            generate_kwargs = self._prepare_generate_kwargs(generate_kwargs)
 
             outputs = self.model.generate(**model_inputs, **generate_kwargs)
         model_outputs = {"model_inputs": model_inputs, "table": table, "outputs": outputs}

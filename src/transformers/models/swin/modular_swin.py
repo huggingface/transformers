@@ -782,7 +782,7 @@ class SwinEncoder(SwinPreTrainedModel):
 
 @auto_docstring
 class SwinModel(SwinPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
+    def __init__(self, config: SwinConfig, add_pooling_layer=True, use_mask_token=False):
         r"""
         add_pooling_layer (`bool`, *optional*, defaults to `True`):
             Whether or not to apply pooling layer.
@@ -851,17 +851,10 @@ class SwinModel(SwinPreTrainedModel):
 @auto_docstring(
     custom_intro="""
     Swin Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://huggingface.co/papers/2111.09886).
-
-    <Tip>
-
-    Note that we provide a script to pre-train this model on custom data in our [examples
-    directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-
-    </Tip>
     """
 )
 class SwinForMaskedImageModeling(SwinPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SwinConfig):
         super().__init__(config)
 
         self.swin = SwinModel(config, add_pooling_layer=False, use_mask_token=True)
@@ -895,7 +888,7 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
         >>> from transformers import AutoImageProcessor, SwinForMaskedImageModeling
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -969,7 +962,7 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
     """
 )
 class SwinForImageClassification(SwinPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SwinConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -992,12 +985,6 @@ class SwinForImageClassification(SwinPreTrainedModel):
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> SwinImageClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         outputs = self.swin(
             pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
@@ -1059,7 +1046,7 @@ class SwinBackbone(BackboneMixin, SwinPreTrainedModel):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

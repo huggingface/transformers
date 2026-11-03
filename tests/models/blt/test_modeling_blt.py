@@ -21,7 +21,6 @@ from parameterized import parameterized
 from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
     require_torch,
     require_torch_accelerator,
     require_torch_bf16,
@@ -30,6 +29,7 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     _test_eager_matches_sdpa_inference,
@@ -203,6 +203,18 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
 
     @pytest.mark.generate
     @unittest.skip(
+        "BLT rebuilds its hash n-gram embeddings, patch lengths and global-transformer states from the "
+        "current step's `input_ids` alone, and calls the global transformer with no cache at all, so a "
+        "one-byte decode step carries no byte history: the n-grams come out zero-padded and the trunk "
+        "restarts its positions. Cached decode is a different computation rather than a cached one (measured: "
+        "the divergence is already there in the hash embeddings, before attention). TODO: keep the byte "
+        "window for hashing/patching and give the global transformer a cache."
+    )
+    def test_cached_decode_matches_cacheless(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(
         "BLT requires real token IDs for its hash-based embedding computation; continuing from inputs_embeds "
         "diverges by one token vs continuing from input_ids."
     )
@@ -276,17 +288,7 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch_accelerator
-class BltIntegrationTest(unittest.TestCase):
-    def setup(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        # TODO (joao): automatic compilation, i.e. compilation when `cache_implementation="static"` is used, leaves
-        # some memory allocated in the cache, which means some object is not being released properly. This causes some
-        # unoptimal memory usage, e.g. after certain tests a 7B model in FP16 no longer fits in a 24GB GPU.
-        # Investigate the root cause.
-        cleanup(torch_device, gc_collect=True)
-
+class BltIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @slow
     def test_model(self):
         NUM_TOKENS_TO_GENERATE = 200

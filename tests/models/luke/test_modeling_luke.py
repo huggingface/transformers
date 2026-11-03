@@ -702,6 +702,11 @@ class LukeModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_inputs_embeds_matches_input_ids(self):
+        position_ids = torch.arange(self.model_tester.seq_length).to(torch_device)
+        position_ids = position_ids[None, :].repeat(self.model_tester.batch_size, 1)
+        return super().test_inputs_embeds_matches_input_ids(position_ids=position_ids)
+
     @slow
     def test_model_from_pretrained(self):
         model_name = "studio-ousia/luke-base"

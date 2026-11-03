@@ -15,10 +15,13 @@
 Integration with Deepspeed
 """
 
+import contextlib
 import copy
 import importlib.metadata
 import importlib.util
+import os
 import weakref
+from collections.abc import Callable
 from functools import partialmethod
 
 from ..dependency_versions_check import dep_version_check
@@ -244,9 +247,11 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
             num_training_steps,
             "num_training_steps (calculated)",
         )
+        # `deepspeed>=0.19.6` rejects a non-positive `warmup_num_steps`, while older versions silently
+        # clamped it to 2. Keep the auto-filled value positive so that no-warmup runs still work.
         self.fill_match(
             "scheduler.params.warmup_num_steps",
-            args.get_warmup_steps(num_training_steps),
+            max(1, args.get_warmup_steps(num_training_steps)),
             "warmup_steps",
         )
 
@@ -313,6 +318,10 @@ def initialize_weights_zero3(model):
                 _apply_zero3(child, fn)
 
         params = list(model_or_module.parameters(recurse=False))
+        # `_init_weights` may also touch direct children's params (e.g. `module.q_proj.weight`)
+        for child in model_or_module.children():
+            if not isinstance(child, PreTrainedModel):
+                params.extend(child.parameters(recurse=False))
         if params:
             with deepspeed.zero.GatheredParameters(params, modifier_rank=0):
                 if deepspeed.comm.get_rank() == 0:
@@ -742,3 +751,42 @@ def deepspeed_sp_compute_loss(accelerator, model, inputs, return_outputs, pc):
     loss = total_loss / total_good_tokens.clamp(min=1)
 
     return (loss, outputs) if return_outputs else loss
+
+
+@contextlib.contextmanager
+def prevent_arange_dtype_change():
+    """
+    Prevent the `zero.Init` context from changing the dtype of `torch.arange` constructors, so that the explicit dtypes
+    passed inside the initialization of RoPE buffers do not get downcasted.
+    Note: it must be entered BEFORE zero.Init.
+    """
+    from deepspeed.runtime.zero import partition_parameters as pp
+
+    original_wrapper = pp.zero_wrapper_for_fp_tensor_constructor
+
+    def wrapper_without_arange(fn: Callable, *args, **kwargs) -> Callable:
+        # If it's torch.arange, override to not change the dtype
+        if fn is pp._orig_torch_arange:
+            # Only wrap the device, not the dtype!
+            def wrapped_fn(*inner_args, **inner_kwargs):
+                # If no explicit device is passed, deepspeed overrides it (but differently between versions)
+                if inner_kwargs.get("device") is None:
+                    # On recent versions, it's always passed explicitly as a kwarg to the wrapper
+                    if "target_device" in kwargs:
+                        inner_kwargs["device"] = kwargs["target_device"]
+                    # If it's not present in kwargs, it means older versions, and it was always computed as such
+                    else:
+                        inner_kwargs["device"] = torch.device(
+                            pp.get_accelerator().device_name(os.environ["LOCAL_RANK"])
+                        )
+                return fn(*inner_args, **inner_kwargs)
+
+            return wrapped_fn
+
+        return original_wrapper(fn, *args, **kwargs)
+
+    try:
+        pp.zero_wrapper_for_fp_tensor_constructor = wrapper_without_arange
+        yield
+    finally:
+        pp.zero_wrapper_for_fp_tensor_constructor = original_wrapper

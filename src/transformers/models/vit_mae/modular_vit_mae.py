@@ -455,7 +455,7 @@ class ViTMAEModel(ViTModel):
         ```python
         >>> from transformers import AutoImageProcessor, ViTMAEModel
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -493,13 +493,6 @@ class ViTMAEModel(ViTModel):
 @auto_docstring(
     custom_intro="""
     The ViTMAE Model transformer with the decoder on top for self-supervised pre-training.
-
-    <Tip>
-
-    Note that we provide a script to pre-train this model on custom data in our [examples
-    directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-
-    </Tip>
     """
 )
 class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
@@ -623,7 +616,7 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, ViTMAEForPreTraining
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

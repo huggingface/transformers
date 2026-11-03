@@ -38,7 +38,7 @@ from ...modeling_outputs import (
     Seq2SeqQuestionAnsweringModelOutput,
     Seq2SeqSequenceClassifierOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -512,7 +512,7 @@ class MBartEncoder(MBartPreTrainedModel):
     def _backward_compatibility_gradient_checkpointing(self):
         # Override to not delete the attribute from the config
         if self.supports_gradient_checkpointing and getattr(self.config, "gradient_checkpointing", False):
-            self.gradient_checkpointing_enable()
+            self.activation_checkpointing_enable()
 
     @merge_with_config_defaults
     @capture_outputs
@@ -941,10 +941,6 @@ class MBartForConditionalGeneration(MBartPreTrainedModel, GenerationMixin):
         decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example Translation:
 
@@ -1092,9 +1088,6 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
             If you want to change padding behavior, you should read [`modeling_bart._prepare_decoder_attention_mask`]
             and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
             information on the default strategy.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         if labels is not None:
             use_cache = False
@@ -1170,7 +1163,7 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
 
 @auto_docstring
 class MBartForQuestionAnswering(MBartPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MBartConfig):
         super().__init__(config)
 
         config.num_labels = 2
@@ -1282,7 +1275,7 @@ class MBartDecoderWrapper(MBartPreTrainedModel):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: MBartConfig):
         super().__init__(config)
         self.decoder = MBartDecoder(config)
         self.post_init()
@@ -1297,7 +1290,7 @@ class MBartForCausalLM(MBartPreTrainedModel, GenerationMixin):
         "lm_head.weight": "model.decoder.embed_tokens.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: MBartConfig):
         config.is_decoder = True
         config.is_encoder_decoder = False
         super().__init__(config)
@@ -1330,11 +1323,6 @@ class MBartForCausalLM(MBartPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithCrossAttentions:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -1364,9 +1352,8 @@ class MBartForCausalLM(MBartPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

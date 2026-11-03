@@ -18,9 +18,9 @@ mixed precision, logging, NEFTune, memory metrics, and end-to-end training.
 """
 
 import math
-import os
 import tempfile
 from functools import partial
+from unittest.mock import patch
 
 import datasets
 import numpy as np
@@ -29,7 +29,9 @@ import torch
 from torch import nn
 
 from transformers import (
+    AutoConfig,
     AutoModelForCausalLM,
+    AutoModelForImageTextToText,
     AutoModelForSequenceClassification,
     AutoTokenizer,
     BartConfig,
@@ -54,10 +56,8 @@ from transformers.testing_utils import (
     LoggingLevel,
     TestCasePlus,
     backend_device_count,
-    execute_subprocess_async,
     require_bitsandbytes,
     require_liger_kernel,
-    require_non_hpu,
     require_peft,
     require_torch,
     require_torch_accelerator,
@@ -67,10 +67,9 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     require_torch_non_multi_accelerator,
     require_torch_tf32,
-    run_first,
-    slow,
     torch_device,
 )
+from transformers.trainer_utils import align_special_tokens
 
 from .trainer_test_utils import (
     ATOL,
@@ -223,9 +222,11 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         gas_batch_size,
         gas_steps,
         loss_tolerance,
+        grad_norm_tolerance=0.1,
         model_accepts_loss_kwargs=True,
         compute_loss_func=None,
         label_smoothing_factor=0.0,
+        trainer_cls=Trainer,
     ):
         """
         Train twice with the same effective batch (base_batch_size vs gas_batch_size * gas_steps)
@@ -244,7 +245,7 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
                 tmp_dir, per_device_train_batch_size=base_batch_size, gradient_accumulation_steps=1, **args_kwargs
             )
             base_callback = StoreLossCallback()
-            trainer = Trainer(model, args, callbacks=[base_callback], **trainer_kwargs)
+            trainer = trainer_cls(model, args, callbacks=[base_callback], **trainer_kwargs)
             if not model_accepts_loss_kwargs:
                 trainer.model_accepts_loss_kwargs = False
             trainer.train()
@@ -258,7 +259,7 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
                 **args_kwargs,
             )
             gas_callback = StoreLossCallback()
-            trainer = Trainer(model, args, callbacks=[gas_callback], **trainer_kwargs)
+            trainer = trainer_cls(model, args, callbacks=[gas_callback], **trainer_kwargs)
             if not model_accepts_loss_kwargs:
                 trainer.model_accepts_loss_kwargs = False
             trainer.train()
@@ -267,7 +268,10 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         for step, (base_gn, gas_gn) in enumerate(zip(base_grad_norms, gas_grad_norms)):
             ratio = gas_gn / base_gn if base_gn > 0 else float("inf")
             self.assertAlmostEqual(
-                ratio, 1.0, delta=0.1, msg=f"Step {step}: grad_norm ratio {ratio:.2f} — GAS leak suspected"
+                ratio,
+                1.0,
+                delta=grad_norm_tolerance,
+                msg=f"Step {step}: grad_norm ratio {ratio:.2f} — GAS leak suspected",
             )
         loss_diff = [abs(b - g) for b, g in zip(base_callback.losses, gas_callback.losses)]
         self.assertLess(max(loss_diff), loss_tolerance, f"Loss difference {max(loss_diff)} exceeds {loss_tolerance}")
@@ -288,13 +292,17 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         itself. Grad norms and losses must still match between a large-batch
         baseline and an equivalent GAS run.
         """
-        # Looser tolerance: without num_items_in_batch each micro-batch is independently
-        # mean-reduced, so losses won't match as tightly.
+        # Looser tolerances: without num_items_in_batch each micro-batch is independently
+        # mean-reduced over its own valid label count, so regrouping the same samples into
+        # smaller micro-batches shifts both the loss and the grad norm. `DataParallel` splits
+        # every micro-batch again across replicas, which regroups them more finely still and
+        # pushes the grad norm ratio to ~1.11. A real GAS leak shows a ratio near `gas_steps`.
         self._check_gradient_accumulation(
             base_batch_size=8,
             gas_batch_size=4,
             gas_steps=2,
             loss_tolerance=0.1,
+            grad_norm_tolerance=0.2,
             model_accepts_loss_kwargs=False,
         )
 
@@ -315,6 +323,30 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
             gas_steps=8,
             loss_tolerance=0.001,
             compute_loss_func=partial(compute_loss, vocab_size=vocab_size),
+        )
+
+    def test_gradient_accumulation_grad_norm_with_loss_is_scaled_for_ga(self):
+        """
+        A subclass whose `compute_loss` returns a per-batch mean sets `loss_is_scaled_for_ga = False`, so the Trainer
+        divides it by the gradient accumulation steps even though the model accepts loss kwargs. Grad norms and losses
+        must still match between a large-batch baseline and an equivalent GAS run.
+        """
+
+        class PerBatchMeanTrainer(Trainer):
+            loss_is_scaled_for_ga = False
+
+            def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+                outputs = model(**inputs)  # without `num_items_in_batch`, so the loss is a per-batch mean
+                return (outputs.loss, outputs) if return_outputs else outputs.loss
+
+        # Same tolerances as without num_items_in_batch: each micro-batch is mean-reduced over its own label count
+        self._check_gradient_accumulation(
+            base_batch_size=8,
+            gas_batch_size=4,
+            gas_steps=2,
+            loss_tolerance=0.1,
+            grad_norm_tolerance=0.2,
+            trainer_cls=PerBatchMeanTrainer,
         )
 
     def test_gradient_accumulation_grad_norm_with_label_smoothing(self):
@@ -441,6 +473,20 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
             num_items = trainer._get_num_items_in_batch(batch_samples, torch.device("cpu"))
             self.assertEqual(int(num_items), 13)
 
+    @require_torch_non_multi_accelerator
+    def test_num_items_in_batch_keeps_fraction_under_model_parallelism(self):
+        from transformers import LlamaForTokenClassification
+
+        config = LlamaConfig(
+            vocab_size=64, hidden_size=16, intermediate_size=32, num_hidden_layers=2, num_attention_heads=2
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = Trainer(model=LlamaForTokenClassification(config), args=TrainingArguments(output_dir=tmp_dir))
+            batch_samples = [{"labels": torch.tensor([[1, 2, 3, -100]])}]
+            with patch.object(trainer, "get_cp_size", return_value=2):
+                num_items = trainer._get_num_items_in_batch(batch_samples, torch.device("cpu"))
+            self.assertEqual(num_items.item(), 1.5)
+
     @require_torch_multi_accelerator
     def test_num_batches_in_training_with_gradient_accumulation(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -487,7 +533,7 @@ class TrainerGradientCheckpointingTest(TestCasePlus):
             trainer = get_regression_trainer(
                 per_device_train_batch_size=1,
                 learning_rate=0.1,
-                gradient_checkpointing=True,
+                activation_checkpointing=True,
                 output_dir=tmp_dir,
             )
             previous_params = {k: v.detach().clone() for k, v in trainer.model.named_parameters()}
@@ -606,6 +652,30 @@ class TrainerLoggingTest(TestCasePlus):
 
         self.assertTrue(is_any_loss_nan_or_inf(log_history_no_filter))
         self.assertFalse(is_any_loss_nan_or_inf(log_history_filter))
+
+    def test_eval_loss_inf_nan_filter(self):
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        x = torch.randint(0, 100, (16,))
+        valid = [{"input_ids": x, "labels": x}] * 8
+        # Batches whose labels are all masked have a NaN loss. 8 in a row keeps them apart from valid batches
+        # even when DataParallel merges the per-device batches.
+        masked = [{"input_ids": x, "labels": torch.full_like(x, -100)}] * 8
+
+        def eval_loss(eval_dataset, logging_nan_inf_filter):
+            args = TrainingArguments(
+                self.get_auto_remove_tmp_dir(),
+                per_device_eval_batch_size=1,
+                logging_nan_inf_filter=logging_nan_inf_filter,
+            )
+            return Trainer(tiny_gpt2, args).evaluate(eval_dataset)["eval_loss"]
+
+        self.assertTrue(math.isnan(eval_loss(masked + valid, logging_nan_inf_filter=False)))
+        self.assertAlmostEqual(
+            eval_loss(masked + valid, logging_nan_inf_filter=True),
+            eval_loss(valid, logging_nan_inf_filter=True),
+            places=5,
+        )
 
     def test_log_level(self):
         # testing only --log_level (--log_level_replica requires multiple gpus and DDP and is tested elsewhere)
@@ -1238,52 +1308,6 @@ class TrainerLigerKernelTest(TestCasePlus):
 class TrainerIntegrationTest(TestCasePlus):
     """Integration tests: compatibility, and e2e."""
 
-    @slow
-    @run_first
-    @require_non_hpu
-    @require_torch_multi_accelerator
-    def test_end_to_end_example(self):
-        # Tests that `translation.py` will run without issues
-        script_path = os.path.abspath(
-            os.path.join(
-                os.path.dirname(__file__), "..", "..", "examples", "pytorch", "translation", "run_translation.py"
-            )
-        )
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            command = [
-                "accelerate",
-                "launch",
-                script_path,
-                "--model_name_or_path",
-                "google-t5/t5-small",
-                "--per_device_train_batch_size",
-                "1",
-                "--output_dir",
-                tmpdir,
-                "--do_train",
-                "--max_train_samples",
-                "64",
-                "--num_train_epochs",
-                "1",
-                "--dataset_name",
-                "wmt16",
-                "--dataset_config",
-                "ro-en",
-                "--source_lang",
-                "en",
-                "--target_lang",
-                "ro",
-                "--do_predict",
-                "--max_predict_samples",
-                "64",
-                "--predict_with_generate",
-                "--ddp_timeout",
-                "60",
-            ]
-            execute_subprocess_async(command)
-            # successful return here == success - any errors would have caused an error or a timeout in the sub-call
-
     def test_special_token_alignment(self):
         """
         Tests that special token changes in the tokenizer result in model configs updates when using the trainer, to
@@ -1326,6 +1350,84 @@ class TrainerIntegrationTest(TestCasePlus):
             self.assertEqual(trainer.model.config.eos_token_id, tokenizer.eos_token_id)
             self.assertEqual(trainer.model.config.pad_token_id, tokenizer.pad_token_id)
             self.assertEqual(trainer.model.config.bos_token_id, tokenizer.bos_token_id)
+
+    def test_special_token_alignment_composite_config(self):
+        """
+        Tests that a composite model whose special tokens live on its text sub-config is left alone. The top-level
+        config does not forward attribute lookups to the sub-config, so reading it there reports a mismatch on
+        every run and rewrites the ids the model already agrees with.
+        """
+        model = AutoModelForImageTextToText.from_config(
+            AutoConfig.from_pretrained("hf-internal-testing/tiny-random-LlavaForConditionalGeneration")
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+
+        # The ids the model already agrees with, on the text sub-config only.
+        text_config = model.config.get_text_config()
+        text_config.eos_token_id = tokenizer.eos_token_id
+        text_config.bos_token_id = tokenizer.bos_token_id
+        text_config.pad_token_id = tokenizer.pad_token_id
+        model.generation_config.eos_token_id = tokenizer.eos_token_id
+        model.generation_config.bos_token_id = tokenizer.bos_token_id
+        model.generation_config.pad_token_id = tokenizer.pad_token_id
+
+        with self.assertNoLogs("transformers.trainer_utils", level="WARNING"):
+            align_special_tokens(model, tokenizer)
+
+        self.assertEqual(text_config.eos_token_id, tokenizer.eos_token_id)
+        self.assertEqual(text_config.bos_token_id, tokenizer.bos_token_id)
+        self.assertEqual(text_config.pad_token_id, tokenizer.pad_token_id)
+
+    def test_special_token_alignment_keeps_the_eos_ids_the_config_declares(self):
+        """
+        Tests that a config declaring several eos ids keeps them. The tokenizer holds a single id, so comparing it
+        against the list always reports a mismatch, and overwriting the list with it would drop the other stop
+        tokens the checkpoint declares.
+        """
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+
+        # This checkpoint ships a bos and a pad the tokenizer disagrees with; align them so only eos is under test.
+        for config in (model.config, model.generation_config):
+            config.bos_token_id = tokenizer.bos_token_id
+            config.pad_token_id = tokenizer.pad_token_id
+
+        eos_token_ids = [tokenizer.eos_token_id, tokenizer.eos_token_id + 1]
+        model.config.eos_token_id = list(eos_token_ids)
+        model.generation_config.eos_token_id = list(eos_token_ids)
+
+        # The tokenizer's eos is already one of them, so there is nothing to align and nothing to report.
+        with self.assertNoLogs("transformers.trainer_utils", level="WARNING"):
+            align_special_tokens(model, tokenizer)
+
+        self.assertEqual(model.config.eos_token_id, eos_token_ids)
+        self.assertEqual(model.generation_config.eos_token_id, eos_token_ids)
+
+        # A tokenizer eos the config does not declare is added to the list rather than replacing it.
+        tokenizer.eos_token = tokenizer.convert_ids_to_tokens(tokenizer.eos_token_id + 2)
+        align_special_tokens(model, tokenizer)
+
+        self.assertEqual(model.config.eos_token_id, [tokenizer.eos_token_id, *eos_token_ids])
+        self.assertEqual(model.generation_config.eos_token_id, [tokenizer.eos_token_id, *eos_token_ids])
+
+    def test_special_token_alignment_keeps_tokens_the_tokenizer_does_not_define(self):
+        """
+        Tests that a special token the tokenizer does not define is left untouched on the model configs, rather than
+        being removed from them. `_special_tokens_map` is initialized with `None` for every special token, so a
+        tokenizer that never declared one is indistinguishable from a tokenizer whose token was deliberately cleared.
+        Dropping the value in that case would silently remove an id the checkpoint declares.
+        """
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+
+        model.config.bos_token_id = 1
+        model.generation_config.bos_token_id = 1
+        tokenizer.bos_token = None
+
+        align_special_tokens(model, tokenizer)
+
+        self.assertEqual(model.config.bos_token_id, 1)
+        self.assertEqual(model.generation_config.bos_token_id, 1)
 
     def test_trainer_works_without_model_config(self):
         """

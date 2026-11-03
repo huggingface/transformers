@@ -38,7 +38,7 @@ The example below demonstrates how to detect text with SLANet using the [`AutoMo
 ```python
 from io import BytesIO
 
-import httpx
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import AutoImageProcessor, AutoModelForTableRecognition
