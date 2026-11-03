@@ -335,6 +335,9 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     """
     Apply weight conversions (renaming and merging/splitting operations) to a state dict.
     This is a simplified version that handles the conversion without loading into the model.
+
+    This is a generator: it first yields the tensors that only need renaming, then the output of each conversion, one
+    at a time, so the caller can load them before the next conversion allocates new tensors.
     """
     # Check for Tensor Parallelism - weight conversions are not tested with TP
     # TP uses ReplaceWithTensorSlicing which may conflict with our weight conversions
@@ -354,9 +357,6 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
             )
 
     from ..core_model_loading import WeightConverter, WeightRenaming, dot_natural_key, rename_source_key
-
-    # Preserve metadata from the original state dict
-    metadata = getattr(state_dict, "_metadata", None)
 
     base_model_prefix = model.base_model_prefix
 
@@ -378,10 +378,8 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
             )
             if renamed_key in model_state_dict:
                 new_state_dict[renamed_key] = tensor
-        # Attach metadata to the new state dict
-        if metadata is not None:
-            new_state_dict._metadata = metadata
-        return new_state_dict
+        yield new_state_dict
+        return
 
     # Full path: we have WeightConverter operations that require tensor fusion/splitting
     pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
@@ -417,7 +415,8 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
                 # (this handles keys like embed_tokens, lm_head, layernorm, attention)
                 new_state_dict[renamed_key] = tensor
 
-    # Apply the conversions and build the new state dict
+    yield new_state_dict
+
     for renamed_key, mapping in conversion_mapping.items():
         try:
             realized_value = mapping.convert(
@@ -425,21 +424,13 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
                 model=model,
                 config=model.config,
             )
-            for target_name, param in realized_value.items():
-                param = param[0] if isinstance(param, list) else param
-                new_state_dict[target_name] = param
         except Exception as e:
             raise RuntimeError(
                 f"Failed to apply weight conversion for '{renamed_key}'. "
                 f"This likely means the checkpoint format is incompatible with the current model version. "
                 f"Error: {e}"
             ) from e
-
-    # Attach metadata to the new state dict
-    if metadata is not None:
-        new_state_dict._metadata = metadata
-
-    return new_state_dict
+        yield {name: param[0] if isinstance(param, list) else param for name, param in realized_value.items()}
 
 
 def _load_state_dict_into_zero3_model(model_to_load, state_dict, load_config=None):
@@ -466,9 +457,11 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, load_config=Non
     if load_config is not None:
         weight_mapping = getattr(load_config, "weight_mapping", None)
 
-    # Apply weight conversions if provided
+    # Apply weight conversions if provided. The converted weights are loaded one conversion at a time, instead of
+    # holding the whole converted checkpoint in memory
+    state_dicts = [state_dict]
     if weight_mapping is not None and len(weight_mapping) > 0:
-        state_dict = _apply_weight_conversions_to_state_dict(model_to_load, state_dict, weight_mapping)
+        state_dicts = _apply_weight_conversions_to_state_dict(model_to_load, state_dict, weight_mapping)
         # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user)
         model_to_load._weight_conversions = weight_mapping
 
@@ -477,11 +470,6 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, load_config=Non
     missing_keys = set(meta_model_state_dict.keys())
 
     prefix_model = getattr(model_to_load, "base_model_prefix", None)
-    # take care of the case where in the checkpoint we don't have the prefix
-    state_dict = {
-        (f"{prefix_model}.{k}" if meta_model_state_dict.get(f"{prefix_model}.{k}") is not None else k): v
-        for k, v in state_dict.items()
-    }
 
     # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
     # so we need to apply the function recursively.
@@ -536,7 +524,13 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, load_config=Non
             if child is not None:
                 load(child, state_dict, prefix + name + ".", assign_to_params_buffers)
 
-    load(model_to_load, state_dict, assign_to_params_buffers=False)
+    for state_dict in state_dicts:
+        # take care of the case where in the checkpoint we don't have the prefix
+        state_dict = {
+            (f"{prefix_model}.{k}" if meta_model_state_dict.get(f"{prefix_model}.{k}") is not None else k): v
+            for k, v in state_dict.items()
+        }
+        load(model_to_load, state_dict, assign_to_params_buffers=False)
 
     return error_msgs, missing_keys
 
