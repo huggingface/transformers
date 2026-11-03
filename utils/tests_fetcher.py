@@ -786,7 +786,9 @@ def get_module_dependencies(module_fname: str, cache: dict[str, list[str]] | Non
                     except OSError:
                         disk_files = set()
                     submodule_names = {i for i in imports if f"{i}.py" in disk_files}
-                    dependencies.extend([f"{module.replace('__init__.py', '')}{i}.py" for i in submodule_names])
+                    dependencies.extend(
+                        f"{module.replace('__init__.py', '')}{i}.py" for i in imports if i in submodule_names
+                    )
                     imports = [i for i in imports if i not in submodule_names]
                     if len(imports) > 0:
                         # Then if there are still objects left, they are fully defined in the init, so we keep it as a
