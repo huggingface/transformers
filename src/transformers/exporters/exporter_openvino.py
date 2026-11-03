@@ -40,6 +40,8 @@ Extends [`DynamoExporter`] with the stages that turn an ``ExportedProgram`` into
 
 from __future__ import annotations
 
+import contextlib
+import copy
 import math
 import operator
 import re
@@ -56,7 +58,9 @@ from .utils import (
     apply_fx_node_fixes,
     apply_fx_program_fixes,
     apply_patches,
+    cast_leaf_tensors,
     get_leaf_tensors,
+    module_device,
     register_fx_node_fix,
     register_fx_program_fix,
     register_patch,
@@ -114,11 +118,13 @@ class OpenVINOExporter(DynamoExporter):
         elif type(config) is not OpenVINOConfig:
             raise TypeError(f"Expected config to be an OpenVINOConfig or dict, got {type(config)}")
 
-        with patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("openvino"):
-            exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
-
-        exported_program, graph_module = _fix_exported_program(exported_program)
-        ov_model = _convert_to_openvino(graph_module)
+        # From here on the inputs match the graph's dtypes: calibration and the state folding read them too.
+        with _traced_in_float32(model, sample_inputs) as sample_inputs:
+            with patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("openvino"):
+                exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
+            # Converted before the model gets its dtypes back: the program's constants are its own tensors.
+            exported_program, graph_module = _fix_exported_program(exported_program)
+            ov_model = _convert_to_openvino(graph_module)
 
         inputs_names = [name for name in inputs_names if name in get_leaf_tensors(sample_inputs)]
         inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
@@ -136,6 +142,53 @@ class OpenVINOExporter(DynamoExporter):
             openvino.save_model(ov_model, config.output_path, compress_to_fp16=config.compress_to_fp16)
 
         return ov_model
+
+
+@contextlib.contextmanager
+def _traced_in_float32(model: PreTrainedModel, sample_inputs: MutableMapping[str, Any]):
+    """Trace a bf16 or fp16 model as an f32 graph and restore its own dtypes afterwards.
+
+    OV's CPU plugin fuses its kernels on f32-typed graphs and picks the inference precision itself (bf16 on CPUs with
+    AMX or AVX-512 BF16): a bf16-typed graph misses some of them, notably the compressed-weight matmuls of an NNCF
+    int8/int4 graph, which then decompress every weight on each call. The file keeps its size: weights are saved
+    fp16-compressed (`compress_to_fp16`) or quantized. Each parameter and buffer gets its own dtype back, so modules a
+    model keeps in fp32 stay fp32.
+    """
+    half = (torch.bfloat16, torch.float16)
+    tensors = [*model.parameters(), *model.buffers()]
+    dtypes = [tensor.dtype for tensor in tensors]
+    if not any(dtype in half for dtype in dtypes):
+        yield sample_inputs
+        return
+    # The configs too: masks and caches the forward builds take their dtype from them.
+    configs = {id(config): config for config in _configs(model) if getattr(config, "dtype", None) in half}
+    config_dtypes = {key: config.dtype for key, config in configs.items()}
+    for tensor in tensors:
+        if tensor.dtype in half:
+            tensor.data = tensor.data.float()
+    for config in configs.values():
+        config.dtype = torch.float32
+    try:
+        # A copy: casting rewrites dicts and caches in place, and the caller's inputs stay theirs.
+        yield cast_leaf_tensors(copy.deepcopy(sample_inputs), torch.float32, module_device(model))
+    finally:
+        for tensor, dtype in zip(tensors, dtypes):
+            tensor.data = tensor.data.to(dtype)
+        for key, config in configs.items():
+            config.dtype = config_dtypes[key]
+
+
+def _configs(model):
+    """Every config `model` holds: its modules' and their sub-configs (a multimodal model's text and vision ones)."""
+    pending = [module.config for module in model.modules() if hasattr(module, "config")]
+    while pending:
+        config = pending.pop()
+        yield config
+        pending.extend(
+            getattr(config, name)
+            for name in getattr(config, "sub_configs", {})
+            if getattr(config, name, None) is not None
+        )
 
 
 # ── Conversion helpers ──────────────────────────────────────────────────────
