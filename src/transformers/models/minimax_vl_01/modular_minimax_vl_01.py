@@ -17,7 +17,6 @@ from typing import Literal
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
@@ -31,7 +30,6 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
 )
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -163,134 +161,7 @@ class MiniMaxVL01TextCache(MiniMaxCache):
 
 
 class MiniMaxVL01TextLightningAttention(MiniMaxLightningAttention):
-    def get_slope_rate(self, device=None):
-        base = 1 / (2 ** (8 / self.num_attention_heads))
-        exponent = torch.arange(self.num_attention_heads, dtype=torch.float32, device=device) + 1
-        factor = 1 - self.layer_idx / max(self.num_hidden_layers - 1, 1) + 1e-5
-
-        rate = base**exponent
-        rate = rate * factor
-        return rate[:, None, None]
-
-    def decay_factors(self, slope_rate):
-        block_size_range = torch.arange(self.block_size, dtype=torch.float32, device=slope_rate.device) + 1
-
-        query_decay = torch.exp(-slope_rate * block_size_range[:, None])
-        key_decay = torch.exp(-slope_rate * (self.block_size - block_size_range[:, None]))
-
-        diagonal_decay = block_size_range[:, None] - block_size_range[None, :]
-        diagonal_decay = diagonal_decay[None, None, :, :]
-        diagonal_decay = slope_rate * diagonal_decay
-        diagonal_decay = torch.where(diagonal_decay >= 0, -diagonal_decay, float("-inf"))
-        diagonal_decay = torch.exp(diagonal_decay)
-
-        return query_decay, key_decay, diagonal_decay
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        batch_size, seq_len, hidden_size = hidden_states.shape
-        num_blocks = (seq_len + self.block_size - 1) // self.block_size
-
-        qkv_states = self.act_fn(self.qkv_proj(hidden_states))
-        qkv_states = qkv_states.reshape(batch_size, seq_len, self.num_attention_heads, 3 * self.head_dim)
-
-        query_states, key_states, value_states = torch.split(qkv_states, self.head_dim, dim=3)
-
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
-
-        # Keep the decays and recurrent accumulator in float32, matching the released implementation.
-        slope_rate = self.get_slope_rate(device=value_states.device)
-        query_decay, key_decay, diagonal_decay = self.decay_factors(slope_rate)
-
-        if attention_mask is not None:
-            padding_mask = ~attention_mask[:, None, :, None].to(torch.bool)
-            value_states = value_states.masked_fill(padding_mask, 0)
-
-        attn_weights_inter = None
-        if past_key_values is not None:
-            attn_weights_inter = past_key_values.get_linear_cache(self.layer_idx)
-
-        if attn_weights_inter is None:
-            attn_weights_inter = torch.zeros(
-                batch_size,
-                self.num_attention_heads,
-                self.head_dim,
-                self.head_dim,
-                dtype=torch.float32,
-                device=value_states.device,
-            )
-
-            attn_output = torch.empty(
-                batch_size,
-                self.num_attention_heads,
-                seq_len,
-                self.head_dim,
-                dtype=query_states.dtype,
-                device=query_states.device,
-            )
-            for i in range(num_blocks):
-                start_idx = i * self.block_size
-                end_idx = min(start_idx + self.block_size, seq_len)
-                current_block_size = end_idx - start_idx
-
-                current_query_states = query_states[:, :, start_idx:end_idx]
-                current_key_states = key_states[:, :, start_idx:end_idx]
-                current_value_states = value_states[:, :, start_idx:end_idx]
-
-                current_query_decay = query_decay[:, :current_block_size]
-                current_key_decay = key_decay[:, -current_block_size:]
-                current_diagonal_decay = diagonal_decay[:, :, :current_block_size, :current_block_size]
-                block_decay = torch.exp(-slope_rate * current_block_size)
-
-                attn_weights_intra = torch.matmul(current_query_states, current_key_states.transpose(-1, -2)).float()
-                attn_output_intra = torch.matmul(
-                    attn_weights_intra * current_diagonal_decay, current_value_states.float()
-                )
-                attn_output_inter = torch.matmul(
-                    current_query_states * current_query_decay, attn_weights_inter.float()
-                )
-                attn_output[:, :, start_idx:end_idx] = attn_output_inter + attn_output_intra
-
-                next_attn_weights_inter = torch.matmul(
-                    (current_key_states * current_key_decay).transpose(-1, -2).to(current_value_states.dtype),
-                    current_value_states,
-                )
-                attn_weights_inter = attn_weights_inter.float() * block_decay + next_attn_weights_inter
-
-        else:
-            attn_weights_inter = attn_weights_inter.float()
-            ratio = torch.exp(-slope_rate)
-            attn_output = []
-            for i in range(seq_len):
-                current_query_states = query_states[:, :, i : i + 1]
-                current_key_states = key_states[:, :, i : i + 1]
-                current_value_states = value_states[:, :, i : i + 1]
-
-                current_attn_weights_inter = torch.matmul(current_key_states.transpose(-1, -2), current_value_states)
-                attn_weights_inter = ratio * attn_weights_inter + current_attn_weights_inter
-                current_attn_output = torch.matmul(current_query_states, attn_weights_inter.to(query_states.dtype))
-                attn_output.append(current_attn_output)
-
-            attn_output = torch.cat(attn_output, dim=-2)
-
-        attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(batch_size, seq_len, self.num_attention_heads * self.head_dim)
-        attn_output = self.norm(attn_output)
-        attn_output = F.sigmoid(self.output_gate(hidden_states)) * attn_output
-        attn_output = self.out_proj(attn_output)
-
-        if past_key_values is not None:
-            past_key_values.set_linear_cache(self.layer_idx, attn_weights_inter)
-
-        return attn_output, attn_weights_inter
+    pass
 
 
 class MiniMaxVL01TextRotaryEmbedding(Glm4MoeRotaryEmbedding):

@@ -110,18 +110,6 @@ class MiniMaxCache(DynamicCache):
         raise RuntimeError("MiniMaxCache does not support `crop` method")
 
 
-def apply_mask_to_padding_states(hidden_states, attention_mask):
-    """
-    Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
-    """
-    # NOTE: attention mask is a 2D boolean tensor
-    if attention_mask is not None:
-        dtype = hidden_states.dtype
-        hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
-
-    return hidden_states
-
-
 class MiniMaxLightningAttention(nn.Module):
     def __init__(self, config: MiniMaxConfig, layer_idx: int):
         super().__init__()
@@ -149,8 +137,8 @@ class MiniMaxLightningAttention(nn.Module):
 
     def get_slope_rate(self, device=None):
         base = 1 / (2 ** (8 / self.num_attention_heads))
-        exponent = torch.arange(self.num_attention_heads, device=device) + 1
-        factor = 1 - self.layer_idx / (self.num_hidden_layers - 1 + 1e-5) + 1e-5
+        exponent = torch.arange(self.num_attention_heads, dtype=torch.float32, device=device) + 1
+        factor = 1 - self.layer_idx / max(self.num_hidden_layers - 1, 1) + 1e-5
 
         rate = base**exponent
         rate = rate * factor
@@ -159,7 +147,7 @@ class MiniMaxLightningAttention(nn.Module):
         return rate
 
     def decay_factors(self, slope_rate):
-        block_size_range = torch.arange(self.block_size, device=slope_rate.device) + 1
+        block_size_range = torch.arange(self.block_size, dtype=torch.float32, device=slope_rate.device) + 1
 
         query_decay = torch.exp(-slope_rate * block_size_range[:, None])
         key_decay = torch.exp(-slope_rate * (self.block_size - block_size_range[:, None]))
@@ -179,12 +167,11 @@ class MiniMaxLightningAttention(nn.Module):
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, seq_len, hidden_size = hidden_states.shape
         num_blocks = (seq_len + self.block_size - 1) // self.block_size
 
         qkv_states = self.act_fn(self.qkv_proj(hidden_states))
-        qkv_states = apply_mask_to_padding_states(qkv_states, attention_mask)
         qkv_states = qkv_states.reshape(batch_size, seq_len, self.num_attention_heads, 3 * self.head_dim)
 
         query_states, key_states, value_states = torch.split(qkv_states, self.head_dim, dim=3)
@@ -193,19 +180,26 @@ class MiniMaxLightningAttention(nn.Module):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
+        # Recompute in float32 because model dtype conversions also cast the precomputed buffers.
+        slope_rate = self.get_slope_rate(device=value_states.device)
+        if attention_mask is not None:
+            padding_mask = ~attention_mask[:, None, :, None].to(torch.bool)
+            value_states = value_states.masked_fill(padding_mask, 0)
+
         # calculated (K.T @ V) and saved as cache
         attn_weights_inter = None
         if past_key_values is not None:
             attn_weights_inter = past_key_values.get_linear_cache(self.layer_idx)
 
         if attn_weights_inter is None:
+            query_decay, key_decay, diagonal_decay = self.decay_factors(slope_rate)
             attn_weights_inter = torch.zeros(
                 batch_size,
                 self.num_attention_heads,
                 self.head_dim,
                 self.head_dim,
                 device=value_states.device,
-                dtype=value_states.dtype,
+                dtype=torch.float32,
             )
 
             attn_output = []
@@ -218,30 +212,36 @@ class MiniMaxLightningAttention(nn.Module):
                 current_key_states = key_states[:, :, start_idx:end_idx]
                 current_value_states = value_states[:, :, start_idx:end_idx]
 
-                current_query_decay = self.query_decay[:, :current_block_size]
-                current_key_decay = self.key_decay[:, -current_block_size:]
-                current_diagonal_decay = self.diagonal_decay[:, :, :current_block_size, :current_block_size]
-                block_decay = torch.exp(-self.slope_rate * current_block_size)
+                current_query_decay = query_decay[:, :current_block_size]
+                current_key_decay = key_decay[:, -current_block_size:]
+                current_diagonal_decay = diagonal_decay[:, :, :current_block_size, :current_block_size]
+                block_decay = torch.exp(-slope_rate * current_block_size)
 
                 # intra: ( Q @ K.T ) @ V -> QK * V
-                attn_weights_intra = torch.matmul(current_query_states, current_key_states.transpose(-1, -2))
-                attn_output_intra = torch.matmul(attn_weights_intra * current_diagonal_decay, current_value_states)
+                attn_weights_intra = torch.matmul(current_query_states, current_key_states.transpose(-1, -2)).float()
+                attn_output_intra = torch.matmul(
+                    attn_weights_intra * current_diagonal_decay, current_value_states.float()
+                )
 
                 # inter: Q @ ( K.T @ V ) -> Q * KV
-                attn_output_inter = torch.matmul(current_query_states * current_query_decay, attn_weights_inter)
+                attn_output_inter = torch.matmul(
+                    current_query_states * current_query_decay, attn_weights_inter.float()
+                )
 
                 # final attention output
-                current_attn_output = attn_output_inter + attn_output_intra
+                current_attn_output = (attn_output_inter + attn_output_intra).to(query_states.dtype)
                 attn_output.append(current_attn_output)
 
                 # calculate attn_weights_inter for next block or cache
                 next_attn_weights_inter = torch.matmul(
-                    (current_key_states * current_key_decay).transpose(-1, -2), current_value_states
+                    (current_key_states * current_key_decay).transpose(-1, -2).to(current_value_states.dtype),
+                    current_value_states,
                 )
-                attn_weights_inter = attn_weights_inter * block_decay + next_attn_weights_inter
+                attn_weights_inter = attn_weights_inter.float() * block_decay + next_attn_weights_inter
 
         else:
-            ratio = torch.exp(-self.slope_rate)
+            attn_weights_inter = attn_weights_inter.float()
+            ratio = torch.exp(-slope_rate)
             attn_output = []
             for i in range(seq_len):
                 current_query_states = query_states[:, :, i : i + 1]
@@ -250,7 +250,7 @@ class MiniMaxLightningAttention(nn.Module):
 
                 current_attn_weights_inter = torch.matmul(current_key_states.transpose(-1, -2), current_value_states)
                 attn_weights_inter = ratio * attn_weights_inter + current_attn_weights_inter
-                current_attn_output = torch.matmul(current_query_states, attn_weights_inter)
+                current_attn_output = torch.matmul(current_query_states, attn_weights_inter.to(query_states.dtype))
 
                 attn_output.append(current_attn_output)
 
