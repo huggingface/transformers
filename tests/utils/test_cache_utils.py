@@ -307,6 +307,84 @@ class CacheTest(unittest.TestCase):
         self.assertIsInstance(layer, Fp8QuantizedLayer)
         self.assertFalse(hasattr(layer, "q_group_size"))
 
+    def test_fp8_quantized_layer_crop(self):
+        """Tests that `Fp8QuantizedLayer.crop` correctly truncates the FP8 quantized states."""
+        layer = Fp8QuantizedLayer()
+
+        keys = torch.randn(1, 2, 8, 8)
+        values = torch.randn(1, 2, 8, 8)
+        layer.update(keys, values)
+        self.assertEqual(layer.get_seq_length(), 8)
+
+        layer.crop(-2)
+        self.assertEqual(layer.get_seq_length(), 6)
+        fp8_keys, _ = layer._quantized_keys
+        fp8_values, _ = layer._quantized_values
+        self.assertEqual(fp8_keys.shape[-2], 6)
+        self.assertEqual(fp8_values.shape[-2], 6)
+
+        # Subsequent append must still work
+        new_keys, new_values = layer.update(torch.randn(1, 2, 1, 8), torch.randn(1, 2, 1, 8))
+        self.assertEqual(layer.get_seq_length(), 7)
+        self.assertEqual(new_keys.shape[-2], 7)
+
+    def test_fp8_quantized_layer_crop_no_op(self):
+        """Tests that `crop(0)` is a no-op for `Fp8QuantizedLayer`."""
+        layer = Fp8QuantizedLayer()
+        layer.update(torch.randn(1, 2, 4, 8), torch.randn(1, 2, 4, 8))
+        layer.crop(0)
+        self.assertEqual(layer.get_seq_length(), 4)
+
+    @require_optimum_quanto
+    def test_quantized_layer_crop_within_residual(self):
+        """Tests that cropping within the residual buffer of a group-wise quantized layer works."""
+        layer = QuantoQuantizedLayer(nbits=4, q_group_size=16, residual_length=128)
+
+        states = torch.ones(1, 2, 8, 16, device=torch_device)
+        layer.update(states, 2 * states)
+        self.assertEqual(layer.get_seq_length(), 8)
+
+        layer.crop(-2)
+        self.assertEqual(layer.get_seq_length(), 6)
+        keys_after, values_after = layer.update(torch.ones(1, 2, 1, 16, device=torch_device), 2 * torch.ones(1, 2, 1, 16, device=torch_device))
+        self.assertEqual(layer.get_seq_length(), 7)
+        self.assertEqual(keys_after.shape[-2], 7)
+
+    @require_optimum_quanto
+    def test_quantized_layer_crop_across_quantized_boundary(self):
+        """Tests that cropping beyond the residual into the quantized storage works."""
+        layer = QuantoQuantizedLayer(nbits=4, q_group_size=16, residual_length=4)
+
+        # Fill enough tokens to trigger a flush (residual_length=4)
+        states = torch.ones(1, 2, 6, 16, device=torch_device)
+        layer.update(states, 2 * states)
+        self.assertEqual(layer.get_seq_length(), 6)
+        residual_len = layer.keys.shape[-2] if layer.keys.dim() == 4 else 0
+
+        # Crop more tokens than what is in the residual
+        layer.crop(-(residual_len + 1))
+        expected_len = 6 - residual_len - 1
+        self.assertEqual(layer.get_seq_length(), expected_len)
+
+        # Subsequent append must still produce correct shapes
+        keys_after, values_after = layer.update(torch.ones(1, 2, 1, 16, device=torch_device), 2 * torch.ones(1, 2, 1, 16, device=torch_device))
+        self.assertEqual(keys_after.shape[-2], expected_len + 1)
+        torch.testing.assert_close(keys_after, torch.ones_like(keys_after), rtol=0, atol=1e-1)
+
+    @require_optimum_quanto
+    def test_quantized_layer_crop_with_empty_residual(self):
+        """Tests that cropping when the residual buffer is empty (flushed) does not raise."""
+        layer = QuantoQuantizedLayer(nbits=4, q_group_size=16, residual_length=4)
+
+        # Exactly at capacity triggers a flush, leaving an empty residual
+        states = torch.ones(1, 2, 4, 16, device=torch_device)
+        layer.update(states, 2 * states)
+        self.assertEqual(layer.get_seq_length(), 4)
+        self.assertEqual(layer.keys.dim(), 1)  # empty 1D tensor after flush
+
+        layer.crop(-1)
+        self.assertEqual(layer.get_seq_length(), 3)
+
     def test_dynamic_cache_uses_per_layer_sliding_windows(self):
         config = LlamaConfig(
             hidden_size=64,

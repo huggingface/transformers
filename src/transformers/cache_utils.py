@@ -845,6 +845,44 @@ class QuantizedLayer(BaseQuantizedLayer):
         beam_idx = self._pending_beam_idx.to(keys.device)
         return keys.index_select(0, beam_idx), values.index_select(0, beam_idx)
 
+    def crop(self, tokens_to_remove: int) -> None:
+        if tokens_to_remove > 0:
+            raise ValueError(
+                f"Calling `crop` with a positive value (`{tokens_to_remove}`) is not supported. "
+                "Please use a negative integer to remove that number of tokens from the cache instead."
+            )
+        if tokens_to_remove == 0 or not self.is_initialized:
+            return
+
+        n = abs(tokens_to_remove)
+        residual_len = self.keys.shape[-2] if self.keys.dim() == 4 else 0
+
+        if n <= residual_len:
+            self.keys = self.keys[..., :-n, :]
+            self.values = self.values[..., :-n, :]
+        else:
+            dequant_keys = self._dequantize(self._quantized_keys)
+            dequant_values = self._dequantize(self._quantized_values)
+            dequant_keys, dequant_values = self._apply_pending_reorder(dequant_keys, dequant_values)
+            self._pending_beam_idx = None
+
+            if residual_len > 0:
+                full_keys = torch.cat([dequant_keys, self.keys], dim=-2)
+                full_values = torch.cat([dequant_values, self.values], dim=-2)
+            else:
+                full_keys = dequant_keys
+                full_values = dequant_values
+
+            full_keys = full_keys[..., :-n, :]
+            full_values = full_values[..., :-n, :]
+
+            self._quantized_keys = self._quantize(full_keys.contiguous(), axis=self.axis_key)
+            self._quantized_values = self._quantize(full_values.contiguous(), axis=self.axis_value)
+            self.keys = torch.tensor([], dtype=self.dtype, device=self.device)
+            self.values = torch.tensor([], dtype=self.dtype, device=self.device)
+
+        self.cumulative_length -= n
+
     def reset(self) -> None:
         """Resets the cache values while preserving the objects."""
         super().reset()
@@ -1031,6 +1069,22 @@ class Fp8QuantizedLayer(BaseQuantizedLayer):
         beam_idx = beam_idx.to(quantized_keys.device)
         self._quantized_keys = (quantized_keys.index_select(0, beam_idx), key_scale)
         self._quantized_values = (quantized_values.index_select(0, beam_idx), value_scale)
+
+    def crop(self, tokens_to_remove: int) -> None:
+        if tokens_to_remove > 0:
+            raise ValueError(
+                f"Calling `crop` with a positive value (`{tokens_to_remove}`) is not supported. "
+                "Please use a negative integer to remove that number of tokens from the cache instead."
+            )
+        if tokens_to_remove == 0 or not self.is_initialized:
+            return
+
+        n = abs(tokens_to_remove)
+        fp8_keys, key_scale = self._quantized_keys
+        fp8_values, value_scale = self._quantized_values
+        self._quantized_keys = (fp8_keys[..., :-n, :], key_scale)
+        self._quantized_values = (fp8_values[..., :-n, :], value_scale)
+        self.cumulative_length -= n
 
 
 class LinearAttentionCacheLayerMixin(ABC):
