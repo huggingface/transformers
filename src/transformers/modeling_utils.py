@@ -72,7 +72,7 @@ from .integrations.accelerate import (
     get_device,
     load_offloaded_parameter,
 )
-from .integrations.deepspeed import _load_state_dict_into_zero3_model
+from .integrations.deepspeed import _load_state_dict_into_zero3_model, prevent_arange_dtype_change
 from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS
 from .integrations.flash_attention import flash_attention_forward
@@ -1442,6 +1442,7 @@ class PreTrainedModel(
             init_contexts.extend(
                 [
                     init.no_init_weights(),
+                    prevent_arange_dtype_change(),  # needed to avoid changing dtype of RoPE buffers with zero.Init()
                     deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
                     set_zero3_state(),
                 ]
@@ -3781,6 +3782,7 @@ class PreTrainedModel(
                 init_contexts.extend(
                     [
                         init.no_init_weights(),
+                        prevent_arange_dtype_change(),  # needed to avoid changing dtype of RoPE buffers with zero.Init()
                         deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
                         set_zero3_state(),
                     ]
