@@ -16,7 +16,6 @@ rendered properly in your Markdown viewer.
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
 # MiMo V2 VL
@@ -236,38 +235,6 @@ For batches, pass a list of conversations and set `processor_kwargs={"text_kwarg
 The processor also accepts `image_url`, `audio_url`, and `video_url` content types with a string or a nested
 `{"url": ...}` value, for example `{"type": "image_url", "image_url": {"url": "https://..."}}`.
 Applying the chat template leaves the original messages unchanged.
-
-### Save and reload
-
-Save the model and processor to the same directory after generation. The saved weights include the audio
-tokenizer. A BF16 export requires approximately as much disk space as the in-memory weights. Release the original
-model before loading the saved copy.
-
-```python
-import gc
-import torch
-from transformers import AutoModelForImageTextToText, AutoProcessor
-
-output_dir = "./mimo-v2-vl-native"
-model.save_pretrained(output_dir, max_shard_size="5GB")
-processor.save_pretrained(output_dir)
-
-del model
-gc.collect()
-if torch.cuda.is_available():
-    torch.cuda.empty_cache()
-
-processor = AutoProcessor.from_pretrained(output_dir, local_files_only=True)
-model = AutoModelForImageTextToText.from_pretrained(
-    output_dir,
-    device_map="auto",
-    dtype="auto",
-    local_files_only=True,
-)
-```
-
-Preprocess `messages` again and use the generation example with the reloaded objects. To save only the processor,
-call `processor.save_pretrained()`; the resulting directory can be loaded with [`AutoProcessor`] on CPU.
 
 ## Configuration and input notes
 

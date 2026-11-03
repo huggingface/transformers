@@ -19,16 +19,15 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
-from torch import nn
-from torch.nn import functional as F
 
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...generation import GenerationMixin
-from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ChannelDimension, ImageInput, PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask
@@ -37,13 +36,18 @@ from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
-    ModelOutput,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils import (
+    ModelOutput,
+    TensorType,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    torch_compilable_check,
+)
 from ...utils.output_capturing import capture_outputs
-from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import (
     VideoInput,
     VideoMetadata,
@@ -53,8 +57,6 @@ from ...video_utils import (
     reorder_videos,
 )
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
-from ..glm4_moe.modeling_glm4_moe import apply_rotary_pos_emb
-from ..llama.modeling_llama import eager_attention_forward
 from ..mimo_v2_flash.configuration_mimo_v2_flash import MiMoV2FlashConfig
 from ..mimo_v2_flash.modeling_mimo_v2_flash import (
     MiMoV2FlashAttention,
@@ -63,6 +65,8 @@ from ..mimo_v2_flash.modeling_mimo_v2_flash import (
     MiMoV2FlashPreTrainedModel,
     MiMoV2FlashRMSNorm,
     MiMoV2FlashRotaryEmbedding,
+    apply_rotary_pos_emb,
+    eager_attention_forward,
 )
 from ..qwen2.modeling_qwen2 import Qwen2Attention, Qwen2DecoderLayer, Qwen2MLP, Qwen2RotaryEmbedding
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
@@ -75,9 +79,6 @@ from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLI
 from ..qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessor, Qwen2VLVideoProcessorInitKwargs
 from ..qwen3_vl.modeling_qwen3_vl import Qwen3VLVisionPatchEmbed, Qwen3VLVisionPatchMerger
 from ..whisper.modeling_whisper import WhisperAttention
-
-
-logger = logging.get_logger(__name__)
 
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -427,7 +428,9 @@ class MiMoV2VLRMSNorm(MiMoV2FlashRMSNorm):
     pass
 
 
-def apply_rotary_pos_emb_fp32(query, key, cos, sin):
+def apply_rotary_pos_emb_fp32(
+    query: torch.Tensor, key: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Rotates the rotary part of queries and keys in float32 and leaves their remaining channels untouched."""
     rotary_dim = cos.shape[-1]
     query_rotary, key_rotary = apply_rotary_pos_emb(
@@ -436,113 +439,6 @@ def apply_rotary_pos_emb_fp32(query, key, cos, sin):
     query = torch.cat((query_rotary.to(query.dtype), query[..., rotary_dim:]), dim=-1)
     key = torch.cat((key_rotary.to(key.dtype), key[..., rotary_dim:]), dim=-1)
     return query, key
-
-
-def add_attention_sinks(
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    sinks: torch.Tensor,
-    query: torch.Tensor,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """
-    Adds learned attention sinks, i.e. one extra logit per head in the softmax denominator, as an additional key whose
-    value is zero and whose logit is set by the attention mask. This works with any attention implementation.
-    """
-    batch_size, num_heads, query_length, _ = query.shape
-    key_length = key.shape[-2]
-    if attention_mask is None:
-        attention_mask = query.new_zeros(batch_size, 1, query_length, key_length)
-    attention_mask = attention_mask.expand(batch_size, num_heads, query_length, key_length)
-    sink_logits = sinks.to(query.dtype).view(1, num_heads, 1, 1).expand(batch_size, -1, query_length, -1)
-    attention_mask = torch.cat((attention_mask, sink_logits), dim=-1)
-    key = F.pad(key, (0, 0, 0, 1))
-    value = F.pad(value, (0, 0, 0, 1))
-    return key, value, attention_mask
-
-
-def sink_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    window_size: tuple[int, int] | None = None,
-    query_chunk_size: int = 512,
-    **kwargs,
-) -> tuple[torch.Tensor, None]:
-    """
-    Attention with the learned sinks of `module` (if any), optionally restricted to a local window, computed with the
-    attention implementation of `module.config`.
-
-    `window_size=(left, right)` limits each query to the keys at most `left` positions before and `right` positions
-    after it (-1 means unbounded). Queries are aligned with the end of the keys, as in both prefill and cached decoding.
-    Long or windowed inputs are processed in chunks of `query_chunk_size` queries, each only reading the keys inside its
-    window, so that the memory of local attention stays linear in the sequence length.
-    """
-    attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-        module.config._attn_implementation, eager_attention_forward
-    )
-    sinks = getattr(module, "sinks", None)
-    query_length, key_length = query.shape[-2], key.shape[-2]
-    offset = key_length - query_length
-    if window_size is None:
-        query_chunk_size = max(query_chunk_size, query_length)
-
-    attn_outputs = []
-    for start in range(0, query_length, query_chunk_size):
-        end = min(start + query_chunk_size, query_length)
-        key_start, key_end = 0, key_length
-        if window_size is not None:
-            left, right = window_size
-            if left >= 0:
-                key_start = max(0, offset + start - left)
-            if right >= 0:
-                key_end = min(key_length, offset + end + right)
-
-        mask = attention_mask
-        if mask is not None:
-            if mask.shape[-2] != 1:
-                mask = mask[..., start:end, :]
-            mask = mask[..., key_start:key_end]
-        if window_size is not None:
-            query_positions = torch.arange(start, end, device=query.device) + offset
-            key_positions = torch.arange(key_start, key_end, device=query.device)
-            distance = key_positions[None] - query_positions[:, None]
-            allowed = torch.ones_like(distance, dtype=torch.bool)
-            if left >= 0:
-                allowed &= distance >= -left
-            if right >= 0:
-                allowed &= distance <= right
-            if mask is None:
-                mask = allowed
-            elif mask.dtype == torch.bool:
-                mask = mask & allowed
-            else:
-                mask = mask.masked_fill(~allowed, -torch.inf)
-        if mask is not None and mask.dtype == torch.bool:
-            mask = torch.zeros_like(mask, dtype=query.dtype).masked_fill(~mask, -torch.inf)
-
-        query_chunk = query[..., start:end, :]
-        key_chunk = key[..., key_start:key_end, :]
-        value_chunk = value[..., key_start:key_end, :]
-        if sinks is not None:
-            key_chunk, value_chunk, mask = add_attention_sinks(key_chunk, value_chunk, mask, sinks, query_chunk)
-        attn_output, _ = attention_interface(
-            module,
-            query_chunk,
-            key_chunk,
-            value_chunk,
-            mask,
-            scaling=scaling,
-            dropout=dropout,
-            is_causal=False,
-            **kwargs,
-        )
-        attn_outputs.append(attn_output)
-    return torch.cat(attn_outputs, dim=1), None
 
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -585,27 +481,20 @@ class MiMoV2VLAttention(MiMoV2FlashAttention):
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        # The mask builders skip the causal mask when SDPA could use `is_causal`, which cannot be combined with the
-        # additional key of the attention sinks: build it explicitly.
-        query_length, key_length = query_states.shape[-2], key_states.shape[-2]
-        if attention_mask is None and query_length > 1:
-            query_positions = torch.arange(query_length, device=query_states.device) + key_length - query_length
-            key_positions = torch.arange(key_length, device=query_states.device)
-            attention_mask = query_states.new_zeros(query_length, key_length).masked_fill(
-                key_positions[None, :] > query_positions[:, None], -torch.inf
-            )[None, None]
-
-        # The sliding-window mask already hides the keys outside the window. Passing `window_size` as well lets each
-        # chunk of queries only read the keys inside its window, which keeps long-context prefill memory linear.
-        attn_output, attn_weights = sink_attention_forward(
+        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        attn_output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
             value_states,
             attention_mask,
-            scaling=self.scaling,
             dropout=0.0 if not self.training else self.attention_dropout,
-            window_size=(self.sliding_window - 1, 0) if self.sliding_window is not None else None,
+            scaling=self.scaling,
+            sliding_window=self.sliding_window,
+            s_aux=self.sinks,  # Optional learned attention sinks
+            **kwargs,
         )
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
@@ -620,7 +509,7 @@ class MiMoV2VLDecoderLayer(MiMoV2FlashDecoderLayer):
 class MiMoV2VLPreTrainedModel(MiMoV2FlashPreTrainedModel):
     config: MiMoV2VLConfig
     input_modalities = ("image", "video", "audio", "text")
-    _supports_sdpa = True
+    _supports_sdpa = False  # SDPA has no API for the learned attention sinks
     _supports_flash_attn = False
     _supports_flex_attn = False
     _supports_attention_backend = False
@@ -693,7 +582,7 @@ class MiMoV2VLVisionAttention(nn.Module):
 
         self.is_sliding = config.layer_types[layer_idx] == "sliding_attention"
         # CODEPATH: sliding-window blocks only see `sliding_window` patches on each side, plus the attention sinks.
-        self.window_size = (config.sliding_window, config.sliding_window) if self.is_sliding else None
+        self.sliding_window = config.sliding_window if self.is_sliding else None
 
         self.qkv = nn.Linear(self.dim, (self.num_heads + 2 * self.num_key_value_heads) * self.head_dim, bias=True)
         self.proj = nn.Linear(self.num_heads * self.head_dim, self.dim)
@@ -706,7 +595,7 @@ class MiMoV2VLVisionAttention(nn.Module):
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
         query_size = self.num_heads * self.head_dim
@@ -725,22 +614,33 @@ class MiMoV2VLVisionAttention(nn.Module):
         key_states = key_states.transpose(0, 1).unsqueeze(0)
         value_states = value_states.transpose(0, 1).unsqueeze(0)
 
+        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
         # Process each image or video frame separately.
         lengths = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
         splits = [torch.split(tensor, lengths, dim=2) for tensor in (query_states, key_states, value_states)]
-        attn_outputs = [
-            sink_attention_forward(
+        attn_outputs = []
+        for query, key, value in zip(*splits):
+            attention_mask = None
+            # CODEPATH: sliding-window blocks only attend to the `sliding_window` patches on each side of the query.
+            if self.sliding_window is not None:
+                positions = torch.arange(query.shape[2], device=query.device)
+                outside = (positions[None, :] - positions[:, None]).abs() > self.sliding_window
+                attention_mask = query.new_zeros(outside.shape).masked_fill(outside, -torch.inf)[None, None]
+            attn_output, _ = attention_interface(
                 self,
                 query,
                 key,
                 value,
-                attention_mask=None,
+                attention_mask=attention_mask,
                 scaling=self.scaling,
                 dropout=0.0 if not self.training else self.attention_dropout,
-                window_size=self.window_size,
-            )[0]
-            for query, key, value in zip(*splits)
-        ]
+                is_causal=False,
+                **kwargs,
+            )
+            attn_outputs.append(attn_output)
         attn_output = torch.cat(attn_outputs, dim=1)
 
         attn_output = attn_output.reshape(seq_length, -1).contiguous()
@@ -767,7 +667,7 @@ class MiMoV2VLVisionPatchMerger(Qwen3VLVisionPatchMerger):
         super().__init__(config)
         # No DeepStack mergers: the norm always applies to the patches before grouping.
         self.use_postshuffle_norm = False
-        self.norm = MiMoV2VLRMSNorm(config.hidden_size, eps=1e-6)
+        self.norm = MiMoV2VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.linear_fc1 = nn.Linear(self.hidden_size, self.hidden_size, bias=config.merger_bias)
         self.linear_fc2 = nn.Linear(self.hidden_size, config.out_hidden_size, bias=config.merger_bias)
 
@@ -872,6 +772,7 @@ class MiMoV2VLAudioAttention(Qwen2Attention):
     def __init__(self, config: MiMoV2VLAudioConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.is_causal = config.is_causal
+        self.sinks = None
 
 
 class MiMoV2VLAudioEncoderLayer(Qwen2DecoderLayer):
@@ -1020,7 +921,7 @@ class MiMoV2VLAudioTokenizerAttention(WhisperAttention):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
@@ -1059,7 +960,7 @@ class MiMoV2VLAudioTokenizerLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
@@ -1131,6 +1032,7 @@ class MiMoV2VLAudioTokenizerEncoder(MiMoV2VLPreTrainedModel):
         positions = torch.arange(sequence_length, device=lengths.device)
         distance = positions[None, :] - positions[:, None]
         allowed = positions[None, None, :] < lengths[:, None, None]
+        # CODEPATH: the tokenizer encoder attends causally unless `is_causal=False`.
         if self.config.is_causal:
             allowed = allowed & (distance <= 0)
         masks = {"full_attention": allowed}
@@ -1158,6 +1060,7 @@ class MiMoV2VLAudioTokenizerEncoder(MiMoV2VLPreTrainedModel):
             hidden_states = layer(
                 hidden_states, attention_masks[self.config.layer_types[layer_idx]], position_embeddings
             )
+            # CODEPATH: the output of `skip_layer_idx` is added to the output of the last layer.
             if layer_idx == self.config.skip_layer_idx:
                 skip_hidden_states = hidden_states
         if skip_hidden_states is not None:
@@ -1184,7 +1087,10 @@ class MiMoV2VLAudioTokenizerEncoder(MiMoV2VLPreTrainedModel):
     @torch.no_grad()
     @auto_docstring
     def forward(
-        self, input_features: torch.Tensor, feature_attention_mask: torch.Tensor | None = None, **kwargs
+        self,
+        input_features: torch.Tensor,
+        feature_attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> MiMoV2VLAudioTokenizerOutput:
         r"""
         input_features (`torch.FloatTensor` of shape `(batch_size, mel_time, num_mel_bins)`):
@@ -1626,7 +1532,7 @@ class MiMoV2VLForConditionalGeneration(MiMoV2VLPreTrainedModel, GenerationMixin)
 
 
 def smart_resize(height: int, width: int, factor: int, min_pixels: int, max_pixels: int) -> tuple[int, int]:
-    """Apply MiMo's minimum merge-block scaling before Qwen-style pixel-budget rounding."""
+    """Applies MiMo's minimum merge-block scaling before Qwen-style pixel-budget rounding."""
     if min(height, width, factor, min_pixels) <= 0 or max_pixels < min_pixels:
         raise ValueError("Image dimensions and pixel limits must be positive and min_pixels <= max_pixels.")
     if min(height, width) < factor:
@@ -1650,7 +1556,7 @@ def smart_resize(height: int, width: int, factor: int, min_pixels: int, max_pixe
 
 
 def resize_frames(frames: torch.Tensor, size: SizeDict, resample: PILImageResampling, factor: int) -> torch.Tensor:
-    """Resize float32 frames without antialiasing, as in the original MiMo processor."""
+    """Resizes float32 frames without antialiasing, as in the original MiMo processor."""
     if not size.shortest_edge or not size.longest_edge:
         raise ValueError("size must contain shortest_edge and longest_edge pixel budgets.")
     resized_size = smart_resize(
@@ -1667,8 +1573,16 @@ def resize_frames(frames: torch.Tensor, size: SizeDict, resample: PILImageResamp
     return frames
 
 
-def normalize_frames(processor, frames, do_rescale, rescale_factor, do_normalize, image_mean, image_std):
-    """Use the common backend operations with explicitly float32 source-pixel statistics."""
+def normalize_frames(
+    processor,
+    frames: torch.Tensor,
+    do_rescale: bool,
+    rescale_factor: float,
+    do_normalize: bool,
+    image_mean: float | list[float],
+    image_std: float | list[float],
+) -> torch.Tensor:
+    """Rescales and normalizes with the common backend operations, using float32 source-pixel statistics."""
     frames = frames.float()
     if do_normalize:
         scale = 1 / rescale_factor if do_rescale else 1.0
@@ -1712,8 +1626,8 @@ class MiMoV2VLImageProcessor(Qwen2VLImageProcessor):
     ) -> torch.Tensor:
         if isinstance(image, np.ndarray) and any(stride < 0 for stride in image.strides):
             image = np.ascontiguousarray(image)
-        return TorchvisionBackend.process_image(
-            self, image, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device, **kwargs
+        return super().process_image(
+            image, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device, **kwargs
         )
 
     def resize(
@@ -1721,10 +1635,20 @@ class MiMoV2VLImageProcessor(Qwen2VLImageProcessor):
     ) -> torch.Tensor:
         return resize_frames(images, size, resample, factor)
 
-    def rescale_and_normalize(self, images, do_rescale, rescale_factor, do_normalize, image_mean, image_std):
+    def rescale_and_normalize(
+        self,
+        images: torch.Tensor,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float],
+        image_std: float | list[float],
+    ) -> torch.Tensor:
         return normalize_frames(self, images, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
 
-    def patchify(self, images, patch_size, merge_size, temporal_patch_size):
+    def patchify(
+        self, images: torch.Tensor, patch_size: int, merge_size: int, temporal_patch_size: int
+    ) -> tuple[torch.Tensor, int, int]:
         if min(patch_size, temporal_patch_size, merge_size) <= 0:
             raise ValueError("Patch and merge sizes must be positive.")
         if any(length % (patch_size * merge_size) for length in images.shape[-2:]):
@@ -1745,7 +1669,7 @@ class MiMoV2VLImageProcessor(Qwen2VLImageProcessor):
 
 
 def get_video_frame_size(size: SizeDict, num_frames: int, temporal_factor: int, total_max_pixels: int) -> SizeDict:
-    """Share the pre-padding pixel budget between preprocessing and patch-count estimation."""
+    """Returns the per-frame pixel budget, shared between preprocessing and patch-count estimation."""
     if min(num_frames, temporal_factor, total_max_pixels) <= 0:
         raise ValueError("Video frame count, temporal factor and total_max_pixels must be positive.")
     if not size.shortest_edge or not size.longest_edge:
@@ -1799,7 +1723,13 @@ class MiMoV2VLVideoProcessor(Qwen2VLVideoProcessor):
     cap_pixels_per_frame = AttributeError()
     max_video_tokens = AttributeError()
 
-    def _decode_and_sample_videos(self, videos, video_metadata, do_sample_frames=None, sample_indices_fn=None):
+    def _decode_and_sample_videos(
+        self,
+        videos: VideoInput,
+        video_metadata: VideoMetadata | dict,
+        do_sample_frames: bool | None = None,
+        sample_indices_fn: Callable | None = None,
+    ) -> list[torch.Tensor]:
         if video_metadata is not None:
             num_videos = len(make_batched_videos(videos))
             metadata = (
@@ -1809,8 +1739,8 @@ class MiMoV2VLVideoProcessor(Qwen2VLVideoProcessor):
             )
             if len(metadata) != num_videos:
                 raise ValueError("video_metadata must contain one entry per video.")
-        return BaseVideoProcessor._decode_and_sample_videos(
-            self, videos, video_metadata, do_sample_frames=do_sample_frames, sample_indices_fn=sample_indices_fn
+        return super()._decode_and_sample_videos(
+            videos, video_metadata, do_sample_frames=do_sample_frames, sample_indices_fn=sample_indices_fn
         )
 
     def _prepare_input_videos(
@@ -1826,8 +1756,8 @@ class MiMoV2VLVideoProcessor(Qwen2VLVideoProcessor):
             else video
             for video in videos
         ]
-        return BaseVideoProcessor._prepare_input_videos(
-            self, videos, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+        return super()._prepare_input_videos(
+            videos, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
         )
 
     @auto_docstring
@@ -1838,7 +1768,7 @@ class MiMoV2VLVideoProcessor(Qwen2VLVideoProcessor):
             kwargs["num_frames"] = None
         elif self.num_frames is not None and "fps" not in kwargs:
             kwargs["fps"] = None
-        return BaseVideoProcessor.preprocess(self, videos, **kwargs)
+        return super().preprocess(videos, **kwargs)
 
     def sample_frames(
         self,
@@ -1850,7 +1780,7 @@ class MiMoV2VLVideoProcessor(Qwen2VLVideoProcessor):
         max_frames: int | None = None,
         **kwargs,
     ) -> np.ndarray:
-        """Use rounded, endpoint-exclusive intervals, retaining repeats for short videos."""
+        """Samples frames at rounded, endpoint-exclusive intervals, retaining repeats for short videos."""
         if num_frames is not None and fps is not None:
             raise ValueError("num_frames and fps are mutually exclusive.")
         total_num_frames = metadata.total_num_frames
@@ -1898,11 +1828,24 @@ class MiMoV2VLVideoProcessor(Qwen2VLVideoProcessor):
         frames = resize_frames(videos.flatten(0, 1), video_size, resample, factor)
         return frames.reshape(batch_size, num_frames, *frames.shape[1:])
 
-    def rescale_and_normalize(self, images, do_rescale, rescale_factor, do_normalize, image_mean, image_std):
+    def rescale_and_normalize(
+        self,
+        images: torch.Tensor,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float],
+        image_std: float | list[float],
+    ) -> torch.Tensor:
         return normalize_frames(self, images, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
 
     def patchify(
-        self, videos, patch_size, merge_size, temporal_patch_size, temporal_compression_ratio=1
+        self,
+        videos: torch.Tensor,
+        patch_size: int,
+        merge_size: int,
+        temporal_patch_size: int,
+        temporal_compression_ratio: int = 1,
     ) -> tuple[torch.Tensor, int, int, int]:
         if min(patch_size, temporal_patch_size, merge_size, temporal_compression_ratio) <= 0:
             raise ValueError("Patch, merge and compression sizes must be positive.")

@@ -200,21 +200,30 @@ def eager_attention_forward(
     value: torch.Tensor,
     attention_mask: torch.Tensor | None,
     scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
+    dropout: float | int = 0.0,
+    **kwargs,
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
-
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    # Key difference from `eager_attention_forward`: optional attention sinks.
+    if module.sinks is not None:
+        sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
+        attn_weights = torch.cat([attn_weights, sinks], dim=-1)
+
+    # Subtract max for BF16/FP16 numerical stability
+    attn_weights = attn_weights - attn_weights.max(dim=-1, keepdim=True).values
+    probs = F.softmax(attn_weights, dim=-1, dtype=attn_weights.dtype)
+
+    if module.sinks is not None:
+        probs = probs[..., :-1]  # drop the sink
+
+    attn_weights = nn.functional.dropout(probs, p=dropout, training=module.training).to(value_states.dtype)
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
-
     return attn_output, attn_weights
 
 
@@ -227,113 +236,6 @@ def apply_rotary_pos_emb_fp32(query, key, cos, sin):
     query = torch.cat((query_rotary.to(query.dtype), query[..., rotary_dim:]), dim=-1)
     key = torch.cat((key_rotary.to(key.dtype), key[..., rotary_dim:]), dim=-1)
     return query, key
-
-
-def add_attention_sinks(
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    sinks: torch.Tensor,
-    query: torch.Tensor,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """
-    Adds learned attention sinks, i.e. one extra logit per head in the softmax denominator, as an additional key whose
-    value is zero and whose logit is set by the attention mask. This works with any attention implementation.
-    """
-    batch_size, num_heads, query_length, _ = query.shape
-    key_length = key.shape[-2]
-    if attention_mask is None:
-        attention_mask = query.new_zeros(batch_size, 1, query_length, key_length)
-    attention_mask = attention_mask.expand(batch_size, num_heads, query_length, key_length)
-    sink_logits = sinks.to(query.dtype).view(1, num_heads, 1, 1).expand(batch_size, -1, query_length, -1)
-    attention_mask = torch.cat((attention_mask, sink_logits), dim=-1)
-    key = F.pad(key, (0, 0, 0, 1))
-    value = F.pad(value, (0, 0, 0, 1))
-    return key, value, attention_mask
-
-
-def sink_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    window_size: tuple[int, int] | None = None,
-    query_chunk_size: int = 512,
-    **kwargs,
-) -> tuple[torch.Tensor, None]:
-    """
-    Attention with the learned sinks of `module` (if any), optionally restricted to a local window, computed with the
-    attention implementation of `module.config`.
-
-    `window_size=(left, right)` limits each query to the keys at most `left` positions before and `right` positions
-    after it (-1 means unbounded). Queries are aligned with the end of the keys, as in both prefill and cached decoding.
-    Long or windowed inputs are processed in chunks of `query_chunk_size` queries, each only reading the keys inside its
-    window, so that the memory of local attention stays linear in the sequence length.
-    """
-    attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-        module.config._attn_implementation, eager_attention_forward
-    )
-    sinks = getattr(module, "sinks", None)
-    query_length, key_length = query.shape[-2], key.shape[-2]
-    offset = key_length - query_length
-    if window_size is None:
-        query_chunk_size = max(query_chunk_size, query_length)
-
-    attn_outputs = []
-    for start in range(0, query_length, query_chunk_size):
-        end = min(start + query_chunk_size, query_length)
-        key_start, key_end = 0, key_length
-        if window_size is not None:
-            left, right = window_size
-            if left >= 0:
-                key_start = max(0, offset + start - left)
-            if right >= 0:
-                key_end = min(key_length, offset + end + right)
-
-        mask = attention_mask
-        if mask is not None:
-            if mask.shape[-2] != 1:
-                mask = mask[..., start:end, :]
-            mask = mask[..., key_start:key_end]
-        if window_size is not None:
-            query_positions = torch.arange(start, end, device=query.device) + offset
-            key_positions = torch.arange(key_start, key_end, device=query.device)
-            distance = key_positions[None] - query_positions[:, None]
-            allowed = torch.ones_like(distance, dtype=torch.bool)
-            if left >= 0:
-                allowed &= distance >= -left
-            if right >= 0:
-                allowed &= distance <= right
-            if mask is None:
-                mask = allowed
-            elif mask.dtype == torch.bool:
-                mask = mask & allowed
-            else:
-                mask = mask.masked_fill(~allowed, -torch.inf)
-        if mask is not None and mask.dtype == torch.bool:
-            mask = torch.zeros_like(mask, dtype=query.dtype).masked_fill(~mask, -torch.inf)
-
-        query_chunk = query[..., start:end, :]
-        key_chunk = key[..., key_start:key_end, :]
-        value_chunk = value[..., key_start:key_end, :]
-        if sinks is not None:
-            key_chunk, value_chunk, mask = add_attention_sinks(key_chunk, value_chunk, mask, sinks, query_chunk)
-        attn_output, _ = attention_interface(
-            module,
-            query_chunk,
-            key_chunk,
-            value_chunk,
-            mask,
-            scaling=scaling,
-            dropout=dropout,
-            is_causal=False,
-            **kwargs,
-        )
-        attn_outputs.append(attn_output)
-    return torch.cat(attn_outputs, dim=1), None
 
 
 class MiMoV2VLAttention(nn.Module):
@@ -385,27 +287,20 @@ class MiMoV2VLAttention(nn.Module):
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        # The mask builders skip the causal mask when SDPA could use `is_causal`, which cannot be combined with the
-        # additional key of the attention sinks: build it explicitly.
-        query_length, key_length = query_states.shape[-2], key_states.shape[-2]
-        if attention_mask is None and query_length > 1:
-            query_positions = torch.arange(query_length, device=query_states.device) + key_length - query_length
-            key_positions = torch.arange(key_length, device=query_states.device)
-            attention_mask = query_states.new_zeros(query_length, key_length).masked_fill(
-                key_positions[None, :] > query_positions[:, None], -torch.inf
-            )[None, None]
-
-        # The sliding-window mask already hides the keys outside the window. Passing `window_size` as well lets each
-        # chunk of queries only read the keys inside its window, which keeps long-context prefill memory linear.
-        attn_output, attn_weights = sink_attention_forward(
+        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+        attn_output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
             value_states,
             attention_mask,
-            scaling=self.scaling,
             dropout=0.0 if not self.training else self.attention_dropout,
-            window_size=(self.sliding_window - 1, 0) if self.sliding_window is not None else None,
+            scaling=self.scaling,
+            sliding_window=self.sliding_window,
+            s_aux=self.sinks,  # Optional learned attention sinks
+            **kwargs,
         )
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
@@ -584,7 +479,7 @@ class MiMoV2VLPreTrainedModel(PreTrainedModel):
     ]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = False
-    _supports_sdpa = True
+    _supports_sdpa = False  # SDPA has no API for the learned attention sinks
     _supports_flex_attn = False
     _can_compile_fullgraph = False
     _supports_attention_backend = False
@@ -837,7 +732,7 @@ class MiMoV2VLVisionAttention(nn.Module):
 
         self.is_sliding = config.layer_types[layer_idx] == "sliding_attention"
         # CODEPATH: sliding-window blocks only see `sliding_window` patches on each side, plus the attention sinks.
-        self.window_size = (config.sliding_window, config.sliding_window) if self.is_sliding else None
+        self.sliding_window = config.sliding_window if self.is_sliding else None
 
         self.qkv = nn.Linear(self.dim, (self.num_heads + 2 * self.num_key_value_heads) * self.head_dim, bias=True)
         self.proj = nn.Linear(self.num_heads * self.head_dim, self.dim)
@@ -869,22 +764,33 @@ class MiMoV2VLVisionAttention(nn.Module):
         key_states = key_states.transpose(0, 1).unsqueeze(0)
         value_states = value_states.transpose(0, 1).unsqueeze(0)
 
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
         # Process each image or video frame separately.
         lengths = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
         splits = [torch.split(tensor, lengths, dim=2) for tensor in (query_states, key_states, value_states)]
-        attn_outputs = [
-            sink_attention_forward(
+        attn_outputs = []
+        for query, key, value in zip(*splits):
+            attention_mask = None
+            # CODEPATH: sliding-window blocks only attend to the `sliding_window` patches on each side of the query.
+            if self.sliding_window is not None:
+                positions = torch.arange(query.shape[2], device=query.device)
+                outside = (positions[None, :] - positions[:, None]).abs() > self.sliding_window
+                attention_mask = query.new_zeros(outside.shape).masked_fill(outside, -torch.inf)[None, None]
+            attn_output, _ = attention_interface(
                 self,
                 query,
                 key,
                 value,
-                attention_mask=None,
+                attention_mask=attention_mask,
                 scaling=self.scaling,
                 dropout=0.0 if not self.training else self.attention_dropout,
-                window_size=self.window_size,
-            )[0]
-            for query, key, value in zip(*splits)
-        ]
+                is_causal=False,
+                **kwargs,
+            )
+            attn_outputs.append(attn_output)
         attn_output = torch.cat(attn_outputs, dim=1)
 
         attn_output = attn_output.reshape(seq_length, -1).contiguous()
@@ -1107,6 +1013,7 @@ class MiMoV2VLAudioAttention(nn.Module):
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
+        self.sinks = None
 
     def forward(
         self,

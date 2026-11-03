@@ -48,7 +48,7 @@ if is_torch_available():
     from transformers.models.mimo_v2_vl.modeling_mimo_v2_vl import (
         MiMoV2VLAudioTokenizerRotaryEmbedding,
         apply_rotary_pos_emb_fp32,
-        sink_attention_forward,
+        eager_attention_forward,
     )
 
 
@@ -168,6 +168,10 @@ class MiMoV2VLCommonTestMixin:
 
     @unittest.skip("MiMo V2 VL does not return router logits, it has no auxiliary load-balancing loss.")
     def test_moe_models_record_router_logits(self):
+        pass
+
+    @unittest.skip("SDPA has no API for the learned attention sinks, so MiMo V2 VL does not support SDPA.")
+    def test_can_set_attention_dynamically_composite_model(self):
         pass
 
 
@@ -492,68 +496,35 @@ class MiMoV2VLModelTest(unittest.TestCase):
                     expected_ids, restored.generate(**inputs, **generation_kwargs), rtol=0, atol=0
                 )
 
-    @parameterized.expand([("eager",), ("sdpa",)])
-    def test_sink_is_extra_softmax_mass(self, implementation):
+    def test_sink_is_extra_softmax_mass(self):
         from types import SimpleNamespace
 
         query = torch.zeros(1, 2, 1, 4)
         key = torch.zeros(1, 1, 2, 4)
         value = torch.ones(1, 1, 2, 3)
         module = SimpleNamespace(
-            sinks=torch.tensor([0.0, torch.log(torch.tensor(2.0))]),
-            num_key_value_groups=2,
-            training=False,
-            config=SimpleNamespace(_attn_implementation=implementation),
+            sinks=torch.tensor([0.0, torch.log(torch.tensor(2.0))]), num_key_value_groups=2, training=False
         )
-        actual, _ = sink_attention_forward(module, query, key, value, attention_mask=None, scaling=0.5)
+        actual, _ = eager_attention_forward(module, query, key, value, attention_mask=None, scaling=0.5)
         # Two keys with equal logits, plus a sink of logit 0 (head 0) or log(2) (head 1).
         expected = torch.tensor([2 / 3, 1 / 2]).reshape(1, 1, 2, 1).expand_as(actual)
         torch.testing.assert_close(actual, expected)
 
-    @parameterized.expand([("eager", None), ("sdpa", None), ("eager", (3, 0)), ("sdpa", (2, 2))])
-    def test_windowed_sink_attention_matches_dense(self, implementation, window):
-        from types import SimpleNamespace
-
-        query = torch.randn(2, 4, 11, 8, requires_grad=True)
-        key = torch.randn(2, 2, 14, 8, requires_grad=True)
-        value = torch.randn(2, 2, 14, 4, requires_grad=True)
-        sinks = torch.randn(4, requires_grad=True)
-        mask = torch.zeros(2, 1, 11, 14)
-        mask[0, :, :, :2] = -torch.inf
-        expected_mask = mask.clone()
-        if window is not None:
-            queries = torch.arange(11) + 3
-            keys = torch.arange(14)
-            allowed = (keys[None] >= queries[:, None] - window[0]) & (keys[None] <= queries[:, None] + window[1])
-            expected_mask = expected_mask.masked_fill(~allowed, -torch.inf)
-
-        def module(attn_implementation):
-            return SimpleNamespace(
-                sinks=sinks,
-                num_key_value_groups=2,
-                training=False,
-                config=SimpleNamespace(_attn_implementation=attn_implementation),
-            )
-
-        expected, _ = sink_attention_forward(
-            module("eager"), query, key, value, expected_mask, scaling=8**-0.5, query_chunk_size=32
-        )
-        actual, _ = sink_attention_forward(
-            module(implementation),
-            query,
-            key,
-            value,
-            mask,
-            scaling=8**-0.5,
-            window_size=window,
-            query_chunk_size=3,
-        )
-        self.assertEqual(actual.shape, (2, 11, 4, 4))
-        torch.testing.assert_close(actual, expected, atol=1e-6, rtol=1e-5)
-        actual_grads = torch.autograd.grad(actual.sum(), (query, key, value, sinks), retain_graph=True)
-        expected_grads = torch.autograd.grad(expected.sum(), (query, key, value, sinks))
-        for actual_gradient, expected_gradient in zip(actual_grads, expected_grads):
-            torch.testing.assert_close(actual_gradient, expected_gradient, atol=2e-6, rtol=1e-5)
+    def test_vision_sliding_window_is_local(self):
+        # Block 1 of the test config is a sliding-window block of window 2, block 0 a full-attention block.
+        visual = self.model.model.visual
+        hidden_states = torch.randn(8, visual.config.hidden_size)
+        cu_seqlens = torch.tensor([0, 8])
+        head_dim = visual.config.head_dim
+        position_embeddings = (torch.ones(8, head_dim), torch.zeros(8, head_dim))
+        perturbed = hidden_states.clone()
+        perturbed[-1] += 1.0
+        with torch.no_grad():
+            for block, is_local in ((visual.blocks[1], True), (visual.blocks[0], False)):
+                expected = block.attn(hidden_states, cu_seqlens, position_embeddings)
+                actual = block.attn(perturbed, cu_seqlens, position_embeddings)
+                # The first patch only sees the last one with full attention.
+                self.assertEqual(torch.allclose(actual[0], expected[0]), is_local)
 
     def test_segmented_audio_token_count_and_left_padding(self):
         from transformers import MiMoV2VLFeatureExtractor
