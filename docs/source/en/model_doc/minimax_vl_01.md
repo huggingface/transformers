@@ -111,14 +111,13 @@ inputs = processor.apply_chat_template(
     return_tensors="pt",
 ).to(model.device)
 
-with torch.inference_mode():
-    generated_ids = model.generate(
-        **inputs,
-        max_new_tokens=64,
-        do_sample=False,
-        eos_token_id=processor.tokenizer.eos_token_id,
-        pad_token_id=processor.tokenizer.eos_token_id,
-    )
+generated_ids = model.generate(
+    **inputs,
+    max_new_tokens=64,
+    do_sample=False,
+    eos_token_id=processor.tokenizer.eos_token_id,
+    pad_token_id=processor.tokenizer.eos_token_id,
+)
 
 if int(os.environ["RANK"]) == 0:
     response_ids = generated_ids[:, inputs["input_ids"].shape[1] :]
