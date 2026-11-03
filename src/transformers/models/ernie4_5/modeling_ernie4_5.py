@@ -82,8 +82,6 @@ class Ernie4_5RotaryEmbedding(nn.Module):
         emb = torch.cat((freqs, freqs), dim=-1)
         cos = emb.cos() * self.attention_scaling
         sin = emb.sin() * self.attention_scaling
-
-        # keeping it in full precision
         return cos, sin
 
 

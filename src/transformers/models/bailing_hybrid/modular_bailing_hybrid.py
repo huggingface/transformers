@@ -34,7 +34,6 @@ from ...models.deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
     DeepseekV3MLP,
     DeepseekV3MoE,
-    DeepseekV3RotaryEmbedding,
     DeepseekV3TopkRouter,
     apply_rotary_pos_emb_interleave,
 )
@@ -56,6 +55,7 @@ from ...models.qwen3_next.modeling_qwen3_next import (
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.output_capturing import OutputRecorder
+from ..llama.modeling_llama import LlamaRotaryEmbedding
 
 
 @auto_docstring(checkpoint="inclusionAI/Ling-3.0-Flash")
@@ -198,7 +198,7 @@ class BailingHybridRMSNormGated(Glm5NextTextRMSNormGated):
     pass
 
 
-class BailingHybridRotaryEmbedding(DeepseekV3RotaryEmbedding):
+class BailingHybridRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
