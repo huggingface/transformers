@@ -809,7 +809,7 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, GenerationMi
 
     input_modalities = ("image", "video", "text")
 
-    def __init__(self, config):
+    def __init__(self, config: Exaone4_5_Config):
         super().__init__(config)
         self.model = Exaone4_5_Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)

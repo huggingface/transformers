@@ -877,7 +877,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
     accepts_loss_kwargs = False
     _no_split_modules = ["GlmImageTextDecoderLayer", "GlmImageVisionBlock"]
 
-    def __init__(self, config):
+    def __init__(self, config: GlmImageConfig):
         super().__init__(config)
         self.visual = GlmImageVisionModel._from_config(config.vision_config)
         self.language_model = GlmImageTextModel._from_config(config.text_config)
@@ -1350,7 +1350,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
     base_model_prefix = "model"
     config: GlmImageConfig
 
-    def __init__(self, config):
+    def __init__(self, config: GlmImageConfig):
         super().__init__(config)
         self.model = GlmImageModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vision_vocab_size, bias=False)

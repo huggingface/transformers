@@ -830,7 +830,7 @@ class Swinv2Encoder(Swinv2PreTrainedModel):
 
 @auto_docstring
 class Swinv2Model(Swinv2PreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
+    def __init__(self, config: Swinv2Config, add_pooling_layer=True, use_mask_token=False):
         r"""
         add_pooling_layer (`bool`, *optional*, defaults to `True`):
             Whether or not to apply pooling layer.
@@ -903,10 +903,17 @@ class Swinv2Model(Swinv2PreTrainedModel):
     custom_intro="""
         Swinv2 Model with a decoder on top for masked image modeling, as proposed in
     [SimMIM](https://huggingface.co/papers/2111.09886).
+
+        <Tip>
+
+        Note that we provide a script to pre-train this model on custom data in our [examples
+        directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
+
+        </Tip>
     """
 )
 class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Swinv2Config):
         super().__init__(config)
 
         self.swinv2 = Swinv2Model(config, add_pooling_layer=False, use_mask_token=True)
@@ -1016,7 +1023,7 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
 class Swinv2ForImageClassification(Swinv2PreTrainedModel):
     accepts_loss_kwargs = False
 
-    def __init__(self, config):
+    def __init__(self, config: Swinv2Config):
         super().__init__(config)
 
         self.num_labels = config.num_labels

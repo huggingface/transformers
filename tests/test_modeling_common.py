@@ -120,6 +120,7 @@ from transformers.utils import (
     GENERATION_CONFIG_NAME,
     SAFE_WEIGHTS_NAME,
     ModelOutput,
+    is_rocm_platform,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
@@ -137,7 +138,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING
-    from transformers.distributed.tensor_parallel import _get_parameter_plan
+    from transformers.distributed.parallel_utils import _get_parameter_plan
     from transformers.integrations.accelerate import compute_module_sizes
     from transformers.modeling_utils import load_state_dict
     from transformers.pytorch_utils import id_tensor_storage
@@ -756,6 +757,8 @@ class ModelTesterMixin(ExportTesterMixin):
     test_torch_exportable = True
     # Used in `check_training_gradient_checkpointing` to NOT check all params having gradient (e.g. for some MOE models)
     test_all_params_have_gradient = True
+    # Models added before 2023 skip `test_can_init_all_missing_weights` unless they set this once their `_init_weights` is fixed
+    test_can_init_all_missing_weights_before_2023 = False
     is_encoder_decoder = False
     has_attentions = True
     _is_composite = False
@@ -866,6 +869,7 @@ class ModelTesterMixin(ExportTesterMixin):
             # Nothing we can't do
             "Gemma3nTextModelTest": 4,  # need to test KV shared layer for both types: `full_attention` and `sliding_attention`
             "Gemma3nVision2TextModelTest": 4,  # need to test KV shared layer for both types: `full_attention` and `sliding_attention`
+            "MistralLarge4ModelTest": 4,  # need to test KV shared layer for both types: RoPE and NoPE
             "BeitModelTest": 4,  # BeitForSemanticSegmentation requires config.out_indices to be a list of 4 integers
             "ZambaModelTest": 5,  # The minimum number to test beyond the initial ["mamba", "mamba", "hybrid"] in `ZambaConfig._layers_block_type`
             "Wav2Vec2BertModelTest": 4,
@@ -1083,7 +1087,7 @@ class ModelTesterMixin(ExportTesterMixin):
 
             config.gradient_checkpointing = True
             model = model_class(copy.deepcopy(config))
-            self.assertTrue(model.is_gradient_checkpointing)
+            self.assertTrue(model.is_activation_checkpointing)
 
     def test_gradient_checkpointing_enable_disable(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1094,7 +1098,7 @@ class ModelTesterMixin(ExportTesterMixin):
 
             # at init model should have gradient checkpointing disabled
             model = model_class(copy.deepcopy(config))
-            self.assertFalse(model.is_gradient_checkpointing)
+            self.assertFalse(model.is_activation_checkpointing)
 
             # Gradient checkpointing is implemented via GradientCheckpointingLayer, if none is present this is likely
             # an implementation issue. Note we exclude clvp for now since they are still not using
@@ -1103,8 +1107,8 @@ class ModelTesterMixin(ExportTesterMixin):
                 self.assertTrue([m for m in model.modules() if isinstance(m, GradientCheckpointingLayer)])
 
             # check enable works
-            model.gradient_checkpointing_enable()
-            self.assertTrue(model.is_gradient_checkpointing)
+            model.activation_checkpointing_enable()
+            self.assertTrue(model.is_activation_checkpointing)
 
             # Loop over all modules and check that relevant modules have gradient_checkpointing set to True
             for n, m in model.named_modules():
@@ -1114,8 +1118,8 @@ class ModelTesterMixin(ExportTesterMixin):
                     )
 
             # check disable works
-            model.gradient_checkpointing_disable()
-            self.assertFalse(model.is_gradient_checkpointing)
+            model.activation_checkpointing_disable()
+            self.assertFalse(model.is_activation_checkpointing)
 
             # Loop over all modules and check that relevant modules have gradient_checkpointing set to False
             for n, m in model.named_modules():
@@ -1133,16 +1137,16 @@ class ModelTesterMixin(ExportTesterMixin):
 
             # at init model should have gradient checkpointing disabled
             model = model_class(copy.deepcopy(config))
-            self.assertFalse(model.is_gradient_checkpointing)
+            self.assertFalse(model.is_activation_checkpointing)
 
             # check enable works
             model._hf_peft_config_loaded = True
             try:
-                model.gradient_checkpointing_enable()
+                model.activation_checkpointing_enable()
             except NotImplementedError:
                 continue
 
-            self.assertTrue(model.is_gradient_checkpointing)
+            self.assertTrue(model.is_activation_checkpointing)
 
             # Loop over all modules and check that relevant modules have gradient_checkpointing set to True
             for n, m in model.named_modules():
@@ -1152,8 +1156,8 @@ class ModelTesterMixin(ExportTesterMixin):
                     )
 
             # check disable works
-            model.gradient_checkpointing_disable()
-            self.assertFalse(model.is_gradient_checkpointing)
+            model.activation_checkpointing_disable()
+            self.assertFalse(model.is_activation_checkpointing)
 
             # Loop over all modules and check that relevant modules have gradient_checkpointing set to False
             for n, m in model.named_modules():
@@ -1232,7 +1236,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 continue
 
             model.zero_grad(set_to_none=True)
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable()
             model.enable_input_require_grads()
 
             set_seed(42)
@@ -1283,7 +1287,7 @@ class ModelTesterMixin(ExportTesterMixin):
             addition_year = int(match_object.group(1))
         # For now, skip everything older than 2023 and "important models" (too many models to patch otherwise)
         # TODO: relax this as we patch more and more models
-        if addition_year < 2023:
+        if addition_year < 2023 and not self.test_can_init_all_missing_weights_before_2023:
             self.skipTest(reason="Not a prioritized model for now.")
 
         for model_class in self.all_model_classes:
@@ -1735,7 +1739,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 optimizer.zero_grad()
 
                 # now enable gradient checkpointing and compare the gradients
-                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+                model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
 
                 checkpointing_layer = next(m for m in model.modules() if isinstance(m, GradientCheckpointingLayer))
 
@@ -2419,8 +2423,9 @@ class ModelTesterMixin(ExportTesterMixin):
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             if is_deepspeed_zero3_enabled():
-                with deepspeed.zero.Init():
-                    model = model_class(config)
+                # `_from_config` properly handles the ZeRO-3 init, i.e. it defers the weight initialization until
+                # the params can be gathered (they are empty shards during `__init__`)
+                model = model_class._from_config(config)
             else:
                 model = model_class(config)
                 model.to(torch_device)
@@ -2496,8 +2501,7 @@ class ModelTesterMixin(ExportTesterMixin):
             # Copy again. config changed with embedding resizing (`vocab_size` changed)
             config = copy.deepcopy(original_config)
             if is_deepspeed_zero3_enabled():
-                with deepspeed.zero.Init():
-                    model = model_class(config)
+                model = model_class._from_config(config)
             else:
                 model = model_class(config)
                 model.to(torch_device)
@@ -2536,8 +2540,7 @@ class ModelTesterMixin(ExportTesterMixin):
             config.vocab_size = 4
             config.pad_token_id = 3
             if is_deepspeed_zero3_enabled():
-                with deepspeed.zero.Init():
-                    model = model_class(config)
+                model = model_class._from_config(config)
             else:
                 model = model_class(config)
                 model.to(torch_device)
@@ -2570,6 +2573,7 @@ class ModelTesterMixin(ExportTesterMixin):
     @require_torch_accelerator
     def test_resize_tokens_embeddings_with_deepspeed(self):
         ds_config = {
+            "train_micro_batch_size_per_gpu": 1,
             "zero_optimization": {
                 "stage": 3,
                 "offload_param": {"device": "cpu", "pin_memory": True},
@@ -2582,6 +2586,7 @@ class ModelTesterMixin(ExportTesterMixin):
     @require_torch_multi_accelerator
     def test_resize_tokens_embeddings_with_deepspeed_multi_gpu(self):
         ds_config = {
+            "train_micro_batch_size_per_gpu": 1,
             "zero_optimization": {
                 "stage": 3,
             },
@@ -2611,8 +2616,7 @@ class ModelTesterMixin(ExportTesterMixin):
             with self.subTest(model_class):
                 config = copy.deepcopy(original_config)
                 if is_deepspeed_zero3_enabled():
-                    with deepspeed.zero.Init():
-                        model = model_class(config)
+                    model = model_class._from_config(config)
                 else:
                     model = model_class(config).to(torch_device)
                 model.eval()
@@ -2684,6 +2688,7 @@ class ModelTesterMixin(ExportTesterMixin):
     @require_torch_accelerator
     def test_resize_embeddings_untied_with_deepspeed(self):
         ds_config = {
+            "train_micro_batch_size_per_gpu": 1,
             "zero_optimization": {
                 "stage": 3,
                 "offload_param": {"device": "cpu", "pin_memory": True},
@@ -2696,6 +2701,7 @@ class ModelTesterMixin(ExportTesterMixin):
     @require_torch_multi_accelerator
     def test_resize_embeddings_untied_with_deepspeed_multi_gpu(self):
         ds_config = {
+            "train_micro_batch_size_per_gpu": 1,
             "zero_optimization": {
                 "stage": 3,
             },
@@ -3582,6 +3588,9 @@ class ModelTesterMixin(ExportTesterMixin):
             set_seed(42)
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
+            # disable flakiness via norms as much as possible
+            set_config_for_less_flaky_test(config)
+
             # flash attention variants does not always support arbitrary headim
             config = self._prepare_config_headdim(config, 16)
 
@@ -3671,6 +3680,8 @@ class ModelTesterMixin(ExportTesterMixin):
                 model = model_class.from_pretrained(
                     tmpdirname, dtype=dtype, attn_implementation="eager", device_map=torch_device
                 )
+                # disable flakiness via norms as much as possible
+                set_model_for_less_flaky_test(model)
 
                 def _get_output_logits(outputs):
                     if "hidden_states" in outputs:
@@ -3696,18 +3707,23 @@ class ModelTesterMixin(ExportTesterMixin):
                 model = model_class.from_pretrained(
                     tmpdirname, dtype=dtype, attn_implementation=attn_implementation, device_map=torch_device
                 )
+                set_model_for_less_flaky_test(model)
+
                 outputs = model(**first_inputs)
                 logits_1_fa = _get_output_logits(outputs)
-                # Second run with attention mask and padding
                 outputs = model(**second_inputs)
                 logits_2_fa = _get_output_logits(outputs)
 
                 # Check the results
+                # No mask
                 torch.testing.assert_close(logits_1_eager, logits_1_fa, atol=atol, rtol=rtol)
-                if padding_side == "left":
-                    torch.testing.assert_close(logits_2_eager[1:], logits_2_fa[1:], atol=atol, rtol=rtol)
-                else:
-                    torch.testing.assert_close(logits_2_eager[:-1], logits_2_fa[:-1], atol=atol, rtol=rtol)
+
+                # With mask
+                if dummy_attention_mask is not None:
+                    attention_mask = slice(1, None) if padding_side == "left" else slice(None, -1)
+                    logits_2_fa = logits_2_fa[:, attention_mask]
+                    logits_2_eager = logits_2_eager[:, attention_mask]
+                torch.testing.assert_close(logits_2_eager, logits_2_fa, atol=atol, rtol=rtol)
 
         # In this case, the test should appear as skipped, not successful
         if not _has_run_at_least_one_model:
@@ -3721,7 +3737,11 @@ class ModelTesterMixin(ExportTesterMixin):
     @slow
     @is_flaky()
     def test_flash_attn_kernels_inference_equivalence(self):
-        self.flash_attn_inference_equivalence(attn_implementation="kernels-community/flash-attn3", padding_side="left")
+        # flash-attn3 is CUDA-only; on ROCm use aiter-flash-attn, which serves FA3 there.
+        attn_implementation = (
+            "kernels-community/aiter-flash-attn" if is_rocm_platform() else "kernels-community/flash-attn3"
+        )
+        self.flash_attn_inference_equivalence(attn_implementation=attn_implementation, padding_side="left")
 
     @require_torch_mps
     @require_kernels
@@ -4212,6 +4232,10 @@ class ModelTesterMixin(ExportTesterMixin):
         for model_class in self.all_generative_model_classes:  # TODO: this test should run on all classes instead
             if not model_class._supports_flash_attn:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+            # This test is about the `flash_attn` package: skip models that can't use it
+            valid_fa_implementations = model_class._compatible_flash_implementations
+            if valid_fa_implementations is not None and "flash_attention_2" not in valid_fa_implementations:
+                self.skipTest(f"{model_class.__name__} only supports {valid_fa_implementations}")
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
             if not all(

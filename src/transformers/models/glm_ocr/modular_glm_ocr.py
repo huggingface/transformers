@@ -237,7 +237,7 @@ class GlmOcrVisionPatchMerger(Glm4vVisionPatchMerger):
 
 
 class GlmOcrVisionModel(Glm4vVisionModel):
-    def __init__(self, config) -> None:
+    def __init__(self, config: GlmOcrVisionConfig) -> None:
         super().__init__(config)
         del self.embeddings
         del self.post_conv_layernorm

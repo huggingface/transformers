@@ -629,7 +629,7 @@ class BitEncoder(BitPreTrainedModel):
 
 @auto_docstring
 class BitModel(BitPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BitConfig):
         super().__init__(config)
         self.config = config
 
@@ -671,7 +671,7 @@ class BitModel(BitPreTrainedModel):
 class BitForImageClassification(BitPreTrainedModel):
     accepts_loss_kwargs = False
 
-    def __init__(self, config):
+    def __init__(self, config: BitConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.bit = BitModel(config)
@@ -713,7 +713,7 @@ class BitForImageClassification(BitPreTrainedModel):
 class BitBackbone(BackboneMixin, BitPreTrainedModel):
     has_attentions = False
 
-    def __init__(self, config):
+    def __init__(self, config: BitConfig):
         super().__init__(config)
 
         self.bit = BitModel(config)

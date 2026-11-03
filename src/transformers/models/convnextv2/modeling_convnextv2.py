@@ -230,7 +230,7 @@ class ConvNextV2Encoder(ConvNextV2PreTrainedModel):
     main_input_name = "hidden_states"
     _can_record_outputs = {"hidden_states": ConvNextV2Stage}
 
-    def __init__(self, config):
+    def __init__(self, config: ConvNextV2Config):
         super().__init__(config)
         self.stages = nn.ModuleList()
         drop_path_rates = [
@@ -268,7 +268,7 @@ class ConvNextV2Encoder(ConvNextV2PreTrainedModel):
 
 @auto_docstring
 class ConvNextV2Model(ConvNextV2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ConvNextV2Config):
         super().__init__(config)
         self.config = config
 

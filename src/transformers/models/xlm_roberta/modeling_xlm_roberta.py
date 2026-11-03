@@ -562,7 +562,7 @@ class XLMRobertaPooler(nn.Module):
 class XLMRobertaModel(XLMRobertaPreTrainedModel):
     _no_split_modules = ["XLMRobertaEmbeddings", "XLMRobertaLayer"]
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: XLMRobertaConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -697,7 +697,7 @@ class XLMRobertaForCausalLM(XLMRobertaPreTrainedModel, GenerationMixin):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: XLMRobertaConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -804,7 +804,7 @@ class XLMRobertaForMaskedLM(XLMRobertaPreTrainedModel):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: XLMRobertaConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -908,7 +908,7 @@ class XLMRobertaClassificationHead(nn.Module):
     """
 )
 class XLMRobertaForSequenceClassification(XLMRobertaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMRobertaConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -989,7 +989,7 @@ class XLMRobertaForSequenceClassification(XLMRobertaPreTrainedModel):
 
 @auto_docstring
 class XLMRobertaForMultipleChoice(XLMRobertaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMRobertaConfig):
         super().__init__(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
@@ -1082,7 +1082,7 @@ class XLMRobertaForMultipleChoice(XLMRobertaPreTrainedModel):
 
 @auto_docstring
 class XLMRobertaForTokenClassification(XLMRobertaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMRobertaConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         classifier_dropout = (
@@ -1151,7 +1151,7 @@ class XLMRobertaForTokenClassification(XLMRobertaPreTrainedModel):
 
 @auto_docstring
 class XLMRobertaForQuestionAnswering(XLMRobertaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMRobertaConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)

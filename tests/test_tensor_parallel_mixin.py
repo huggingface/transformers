@@ -13,7 +13,6 @@
 # limitations under the License.
 import copy
 import os
-import socket
 import tempfile
 from abc import ABC, abstractmethod
 
@@ -21,7 +20,7 @@ from parameterized import parameterized
 
 from transformers import TorchAoConfig, set_seed
 from transformers.distributed.configuration_utils import DistributedConfig
-from transformers.distributed.tensor_parallel import _get_parameter_plan
+from transformers.distributed.parallel_utils import _get_parameter_plan
 from transformers.testing_utils import (
     SINGLE_PROCESS_DEVICES,
     is_tensor_parallel_test,
@@ -30,7 +29,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_greater_or_equal, is_torchao_available
 
-from .test_fsdp_mixin import _get_distributed_backend, _set_rank_device
+from .distributed_testing_utils import run_distributed
 
 
 if is_torchao_available():
@@ -41,9 +40,7 @@ if is_torchao_available():
 if is_torch_available():
     import torch
     import torch.distributed as dist
-    import torch.multiprocessing as mp
     from torch.distributed.tensor import DTensor
-    from torch.multiprocessing.spawn import ProcessRaisedException
 
 
 # =============================================================================
@@ -56,6 +53,7 @@ TP_DISTRIBUTED_TEST_MODEL_TYPES = {
     # Dense
     "qwen3",
     "qwen2",
+    "granite_swa",
     # MoE
     "qwen4_exp_text",
     "qwen3_moe",
@@ -75,16 +73,8 @@ TP_DISTRIBUTED_TEST_MODEL_TYPES = {
 
 
 # =============================================================================
-# Distributed helpers (top-level for pickling by mp.spawn)
+# Distributed helpers (top-level for pickling to the ranks)
 # =============================================================================
-
-
-def _find_free_port():
-    """Find a free port by binding a socket and releasing it."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind(("localhost", 0))
-        return s.getsockname()[1]
 
 
 def get_packed_grad_shard(grad, world_size, rank, dim):
@@ -111,55 +101,6 @@ def get_packed_grad_shard(grad, world_size, rank, dim):
 
     # Select along the sharded dimension
     return grad.index_select(dim, torch.tensor(indices, device=grad.device))
-
-
-def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs):
-    """Wrapper to set up distributed environment and run the test function."""
-
-    def setup_dist_env(rank, world_size, port):
-        os.environ["WORLD_SIZE"] = str(world_size)
-        os.environ["RANK"] = str(rank)
-        os.environ["LOCAL_RANK"] = str(rank)
-        os.environ["MASTER_ADDR"] = "localhost"
-        os.environ["MASTER_PORT"] = str(port)
-
-    world_size = tp
-    setup_dist_env(rank, world_size, port)
-
-    # some backends, e.g. tpu, require the rank to be set before initializing the process group
-    _set_rank_device(rank, backend)
-
-    dist.init_process_group(backend=backend, rank=rank, world_size=world_size)
-
-    func(rank, *func_args, **func_kwargs)
-
-    dist.barrier()
-    dist.destroy_process_group()
-
-
-def _init_distributed(tp: int, max_retries: int = 5, backend: str | None = None):
-    """Decorator to initialize distributed environment and spawn processes."""
-    # default to the current accelerator's backend, as "gloo" cannot carry every accelerator's tensors
-    if backend is None:
-        backend = _get_distributed_backend()
-
-    def _init_distributed_inner(func):
-        def wrapper(*args, **kwargs):
-            world_size = tp
-            for attempt in range(max_retries):
-                port = _find_free_port()
-                spawn_args = (func, tp, port, backend, args, kwargs)
-                try:
-                    mp.spawn(_global_wrapper, args=spawn_args, nprocs=world_size)
-                    return
-                except ProcessRaisedException as e:
-                    if "EADDRINUSE" in str(e) and attempt < max_retries - 1:
-                        continue
-                    raise
-
-        return wrapper
-
-    return _init_distributed_inner
 
 
 def _get_expert_weight_names(model):
@@ -572,7 +513,9 @@ class TensorParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
-            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_forward_impl)(tmp_dir, model_class, atol, rtol)
+            run_distributed(world_size=self.tensor_parallel_size)(_test_tp_forward_impl)(
+                tmp_dir, model_class, atol, rtol
+            )
 
     @is_tensor_parallel_test
     def test_tp_backward(self):
@@ -588,7 +531,9 @@ class TensorParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
-            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_backward_impl)(tmp_dir, model_class, atol, rtol)
+            run_distributed(world_size=self.tensor_parallel_size)(_test_tp_backward_impl)(
+                tmp_dir, model_class, atol, rtol
+            )
 
     @is_tensor_parallel_test
     def test_tp_generation(self):
@@ -606,7 +551,7 @@ class TensorParallelTesterMixin(ABC):
             set_seed(42)
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
-            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_generation_impl)(
+            run_distributed(world_size=self.tensor_parallel_size)(_test_tp_generation_impl)(
                 tmp_dir, model_class, atol, rtol, max_new_tokens
             )
 
@@ -626,6 +571,6 @@ class TensorParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
-            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_generation_quantized_impl)(
+            run_distributed(world_size=self.tensor_parallel_size)(_test_tp_generation_quantized_impl)(
                 tmp_dir, model_class, max_new_tokens
             )

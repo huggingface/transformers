@@ -755,7 +755,7 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
                 selected_tokens = torch.cat([selected_tokens, tail]).to(torch.int32)
                 selected_token_indices[batch_idx, query_idx, : selected_tokens.numel()] = selected_tokens
 
-        # Create the additive mask to be added to the main causal mask
+        # Create the selection mask to combine with the main causal mask
         kv_length = attention_mask.shape[-1]
         selected_token_mask = torch.zeros(
             (*selected_token_indices.shape[:-1], kv_length + 1), device=attention_mask.device, dtype=torch.bool
@@ -763,10 +763,6 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         # We absorb all the -1 by scaterring them to the last index that we will drop
         scatter_indices = torch.where(selected_token_indices >= 0, selected_token_indices, kv_length)
         selected_token_mask = selected_token_mask.scatter(-1, scatter_indices, True)[..., :kv_length].unsqueeze(1)
-        # if using eager, convert to float mask
-        if attention_mask.is_floating_point():
-            min_dtype = torch.finfo(attention_mask.dtype).min
-            selected_token_mask = torch.where(selected_token_mask, attention_mask.new_zeros(()), min_dtype)
 
         return selected_token_mask
 
@@ -845,11 +841,12 @@ class Qwen4ExpTextAttention(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         selected_token_mask = self.indexer(hidden_states, position_embeddings, attention_mask, past_key_values)
-        # Combine both masks (they are never None, and are always 4D with either bool for sdpa, or float for eager)
-        if attention_mask.is_floating_point():
-            attention_mask = attention_mask + selected_token_mask
-        else:
+        # Combine the boolean selection mask with the causal mask (bool for sdpa, float for eager).
+        if attention_mask.dtype == torch.bool:
             attention_mask = attention_mask & selected_token_mask
+        else:
+            # Adding minimum-finite values overflows to -inf and yields NaNs for fully masked queries.
+            attention_mask = attention_mask.masked_fill(~selected_token_mask, torch.finfo(attention_mask.dtype).min)
 
         # The cos/sin are the full positions here due to the indexer, so we need to slice to get current positions
         position_embeddings = (x[:, -hidden_states.shape[1] :, :] for x in position_embeddings)
@@ -1591,7 +1588,7 @@ class Qwen4ExpForCausalLM(Qwen4ExpPreTrainedModel, GenerationMixin):
     config: Qwen4ExpTextConfig
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*", r"^model.visual.*"]
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen4ExpTextConfig):
         super().__init__(config)
         self.model = Qwen4ExpTextModel(config)
         self.vocab_size = config.vocab_size
@@ -1929,7 +1926,7 @@ class Qwen4ExpVisionModel(Qwen4ExpPreTrainedModel):
     }
     _no_split_modules = ["Qwen4ExpVisionBlock"]
 
-    def __init__(self, config, *inputs, **kwargs) -> None:
+    def __init__(self, config: Qwen4ExpVisionConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         self.spatial_merge_size = config.spatial_merge_size
         self.patch_size = config.patch_size
@@ -2012,9 +2009,10 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     input_modalities = ("image", "video", "text")
-    _no_split_modules = ["Qwen4ExpDecoderLayer", "Qwen4ExpVisionBlock"]
+    # Qwen4ExpDecoderLayer, inherited from Qwen3_5MoeModel and renamed by prefix, does not exist
+    _no_split_modules = ["Qwen4ExpTextDecoderLayer", "Qwen4ExpVisionBlock"]
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen4ExpConfig):
         super().__init__(config)
         self.visual = AutoModel.from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
@@ -2402,7 +2400,7 @@ class Qwen4ExpForConditionalGeneration(Qwen4ExpPreTrainedModel, GenerationMixin)
 
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen4ExpConfig):
         super().__init__(config)
         self.model = Qwen4ExpModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)

@@ -244,7 +244,7 @@ class RegNetModel(RegNetPreTrainedModel, ResNetModel):
 class RegNetForImageClassification(RegNetPreTrainedModel, ResNetForImageClassification):
     accepts_loss_kwargs = False
 
-    def __init__(self, config):
+    def __init__(self, config: RegNetConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.regnet = RegNetModel(config)
