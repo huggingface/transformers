@@ -64,7 +64,6 @@ def apply_rotary_pos_emb(
 
 
 class DeepseekV4RMSNorm(Olmo2RMSNorm):
-    # DSV4: norm weights are kept in float32, so multiply in float32 and cast once at the end
     pass
 
 

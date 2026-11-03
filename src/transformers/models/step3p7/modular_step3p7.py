@@ -772,7 +772,7 @@ class Step3p7RotaryEmbedding(LagunaRotaryEmbedding):
 
 
 class Step3p7RMSNorm(GemmaRMSNorm):
-    """Gemma-style RMSNorm: normalizes in fp32 and scales by `weight + 1`."""
+    pass
 
 
 class Step3p7MLP(DeepseekV4MLP):

@@ -498,8 +498,6 @@ class Step3p7RotaryEmbedding(nn.Module):
 
 
 class Step3p7RMSNorm(nn.Module):
-    """Gemma-style RMSNorm: normalizes in fp32 and scales by `weight + 1`."""
-
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
