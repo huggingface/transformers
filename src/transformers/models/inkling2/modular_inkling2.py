@@ -38,6 +38,7 @@ from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ...vision_utils import get_vision_interpolation_indices_and_weights, get_vision_position_ids
 from ..clip.modeling_clip import CLIPMLP
 from ..inkling.configuration_inkling import InklingConfig, InklingTextConfig
 from ..inkling.modeling_inkling import (
@@ -845,25 +846,33 @@ class Inkling2VisionEmbeddings(nn.Module):
         self.class_embedding = nn.Parameter(torch.zeros(config.hidden_size))
         self.cls_position_embedding = nn.Parameter(torch.zeros(config.hidden_size))
 
-    def interpolate_pos_encoding(self, height: int, width: int) -> torch.Tensor:
-        position_embedding = self.position_embedding.weight
-        grid = position_embedding.view(self.grid_size, self.grid_size, -1).permute(2, 0, 1).unsqueeze(0)
-        grid = F.interpolate(grid.float(), size=(height, width), mode="bilinear", align_corners=False)
-        return grid[0].permute(1, 2, 0).reshape(height * width, -1).to(position_embedding.dtype)
-
-    def forward(self, pixel_values: torch.Tensor, image_grid_thw: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        patch_grid_thw: torch.Tensor,
+        patch_index: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         merge, patch = self.merge_size, self.patch_size
-        cls_embedding = (self.class_embedding + self.cls_position_embedding).unsqueeze(0)
-        embeddings = []
-        for image, (_, height, width) in zip(
-            torch.split(pixel_values, (image_grid_thw[:, 1] * image_grid_thw[:, 2]).tolist()), image_grid_thw
-        ):
-            # native patches in raster order over the (height * merge, width * merge) grid, channels last
-            patches = image.reshape(height, width, merge, patch, merge, patch, -1).permute(0, 2, 1, 4, 3, 5, 6)
-            patch_embeddings = self.patch_embedding(patches.reshape(height * width * merge * merge, -1))
-            patch_embeddings = patch_embeddings + self.interpolate_pos_encoding(height * merge, width * merge)
-            embeddings.extend((cls_embedding.to(patch_embeddings.dtype), patch_embeddings))
-        return torch.cat(embeddings)
+        patches = pixel_values.reshape(-1, merge, patch, merge, patch, pixel_values.shape[-1]).transpose(2, 3)
+        patch_embeddings = self.patch_embedding(patches.reshape(-1, self.patch_embedding.in_features))
+
+        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+            patch_grid_thw,
+            num_grid_per_side=self.grid_size,
+            mode="bilinear",
+            align_corners=False,
+            spatial_merge_size=merge,
+            kwargs=kwargs,
+        )
+        position_embeddings = (self.position_embedding(interp_indices) * interp_weights[:, :, None]).sum(1)
+        patch_embeddings = patch_embeddings + position_embeddings.to(patch_embeddings.dtype)
+
+        # each image starts with a class token, followed by its patches
+        cls_embedding = (self.class_embedding + self.cls_position_embedding).to(patch_embeddings.dtype)
+        embeddings = cls_embedding.repeat(patch_embeddings.shape[0] + patch_grid_thw.shape[0], 1)
+        embeddings[patch_index] = patch_embeddings
+        return embeddings
 
 
 class Inkling2VisionMerger(VoxtralMultiModalProjector):
@@ -1089,29 +1098,34 @@ class Inkling2VisionModel(Inkling2PreTrainedModel):
             Temporal, height and width of each image, counted in language model image tokens.
         """
         merge = self.config.spatial_merge_size
+        patch_grid_thw = (image_grid_thw * image_grid_thw.new_tensor([1, merge, merge])).to(pixel_values.device)
+        patches_per_image = patch_grid_thw.prod(-1)
+        num_patches = pixel_values.shape[0] * merge**2
+        if (cu_seqlens := kwargs.pop("cu_seqlens", None)) is None:
+            cu_seqlens = F.pad((patches_per_image + 1).cumsum(0), (1, 0)).to(torch.int32)
+        # sequence index of every patch, skipping the class token in front of each image
+        image_ids = torch.arange(1, patch_grid_thw.shape[0] + 1, device=pixel_values.device)
+        patch_index = torch.arange(num_patches, device=pixel_values.device) + torch.repeat_interleave(
+            image_ids, patches_per_image, output_size=num_patches
+        )
+
         pixel_values = pixel_values.to(self.embeddings.patch_embedding.weight.dtype)
-        hidden_states = self.embeddings(pixel_values, image_grid_thw)
+        hidden_states = self.embeddings(pixel_values, patch_grid_thw, patch_index, **kwargs)
         hidden_states = self.pre_layernorm(hidden_states)
 
-        lengths = image_grid_thw[:, 1] * image_grid_thw[:, 2] * merge**2 + 1
-        position_ids = []
-        for _, height, width in image_grid_thw:
-            rows = torch.arange(height * merge * width * merge, device=hidden_states.device)
-            positions = torch.stack((rows // (width * merge), rows % (width * merge)), dim=-1) + 1
-            position_ids.extend((positions.new_zeros(1, 2), positions))
-        position_embeddings = self.rotary_emb(hidden_states, torch.cat(position_ids))
-        cu_seqlens = F.pad(lengths.cumsum(0), (1, 0)).to(device=hidden_states.device, dtype=torch.int32)
+        # patches are 1-indexed (row, col) and class tokens sit at (0, 0)
+        position_ids = get_vision_position_ids(patch_grid_thw, merge, kwargs=kwargs)
+        position_ids = position_ids.new_zeros(hidden_states.shape[0], 2).index_copy(0, patch_index, position_ids + 1)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for layer in self.layers:
             hidden_states = layer(
                 hidden_states, cu_seqlens=cu_seqlens, position_embeddings=position_embeddings, **kwargs
             )
 
-        merged_features = [
-            image[1:].reshape(height, merge, width, merge, -1).permute(0, 2, 1, 3, 4).reshape(height * width, -1)
-            for image, (_, height, width) in zip(torch.split(hidden_states, lengths.tolist()), image_grid_thw)
-        ]
-        pooler_output = self.merger(torch.cat(merged_features))
+        # with a device map, the last layers can live on another device than the embeddings
+        patch_states = hidden_states[patch_index.to(hidden_states.device)]
+        pooler_output = self.merger(patch_states.reshape(-1, merge**2 * hidden_states.shape[-1]))
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=pooler_output)
 
 
