@@ -559,3 +559,5 @@ class ViTForImageClassification(ViTPreTrainedModel):
 
 
 __all__ = ["ViTForImageClassification", "ViTForMaskedImageModeling", "ViTModel", "ViTPreTrainedModel"]
+
+assert 1 == 1  # dummy change to trigger CI

@@ -186,3 +186,5 @@ __all__ = [
     "MistralForSequenceClassification",
     "MistralForTokenClassification",
 ]
+
+assert 1 == 1  # dummy change to trigger CI
