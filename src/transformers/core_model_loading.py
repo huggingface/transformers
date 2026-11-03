@@ -127,6 +127,12 @@ class Chunk(ConversionOps):
         tensor = tensors[0] if isinstance(tensors, list) else tensors
         targets = self.get_target_patterns(target_patterns, **kwargs)
         num_shards = len(targets)
+        if kwargs.get("full_layer_name", "").endswith(".weight_shape"):
+            weight = torch.empty(tensor.tolist(), device="meta")
+            return {
+                target: tensor.new_tensor(chunk.shape)
+                for target, chunk in zip(targets, torch.chunk(weight, num_shards, dim=self.dim))
+            }
         chunks = tuple(chunk.contiguous() for chunk in torch.chunk(tensor, num_shards, dim=self.dim))
         return dict(zip(targets, chunks))
 
@@ -212,6 +218,11 @@ class Concatenate(ConversionOps):
                 all_tensors.extend(tensors)
             else:
                 all_tensors.append(tensors)
+        if kwargs.get("full_layer_name", "").endswith(".weight_shape"):
+            # Infer the fused weight's shape without materializing its data.
+            weights = [torch.empty(tensor.tolist(), device="meta") for tensor in all_tensors]
+            shape = torch.cat(weights, dim=self.dim).shape
+            return {target_pattern: all_tensors[0].new_tensor(shape)}
         return {target_pattern: torch.cat(all_tensors, dim=self.dim)}
 
     def get_target_pattern(self, target_patterns: list[str]) -> str:
@@ -235,6 +246,8 @@ class Interleave(ConversionOps):
     def convert(self, input_dict, source_patterns, target_patterns, **kwargs):
         tensor = next(iter(input_dict.values()))
         tensor = tensor[0] if isinstance(tensor, list) else tensor
+        if kwargs.get("full_layer_name", "").endswith(".weight_shape"):
+            return {target_patterns[0]: tensor}
 
         # Split into two in given dim and transpose to interleave along it
         shape = list(tensor.shape)
