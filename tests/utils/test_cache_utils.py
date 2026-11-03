@@ -66,6 +66,7 @@ if is_torch_available():
         pipeline,
     )
     from transformers.cache_utils import (
+        DummyLayer,
         DynamicIndexedLayer,
         DynamicLayer,
         DynamicSlidingWindowLayer,
@@ -73,7 +74,6 @@ if is_torch_available():
         LinearAttentionAndFullAttentionLayer,
         LinearAttentionAndSlidingWindowAttentionLayer,
         LinearAttentionLayer,
-        NoCacheLayer,
         QuantoQuantizedLayer,
         StaticLayer,
         StaticSlidingWindowLayer,
@@ -346,13 +346,13 @@ class CacheTest(unittest.TestCase):
         self.assertIsInstance(layers[3], StaticSlidingWindowLayer)
         self.assertEqual(layers[3].max_cache_len, 48)
 
-    @parameterized.expand([("linear_attention", LinearAttentionLayer), ("no_cache", NoCacheLayer)])
+    @parameterized.expand([("linear_attention", LinearAttentionLayer), ("dummy", DummyLayer)])
     @require_torch_accelerator
     def test_offloaded_cache_prefetches_across_layers_that_are_not_offloaded(self, _, interleaved_layer_cls):
         """
         Regression test for offloaded caches on hybrid (attention + linear-attention) models and on models with
-        `NoCacheLayer`s. Attention layers are offloaded to CPU after their `update` and must be prefetched back before
-        the next decoding step. The prefetch has to skip the interleaved linear-attention layers and `NoCacheLayer`s
+        `DummyLayer`s. Attention layers are offloaded to CPU after their `update` and must be prefetched back before
+        the next decoding step. The prefetch has to skip the interleaved linear-attention layers and `DummyLayer`s
         (which never go through the offloading `update` path) and target the next attention layer; otherwise the
         offloaded KV stays on CPU and the next `update` fails with a cpu/accelerator device mismatch.
         """
@@ -596,12 +596,12 @@ class CacheTest(unittest.TestCase):
                 # of bounds of the (shorter) key length downstream.
                 self.assertEqual(layer.update_indexer(indexer_keys).shape[1], 5)
 
-    def test_no_cache_layer_rejects_writes(self):
-        cache = Cache(layers=[DynamicLayer(), NoCacheLayer()])
+    def test_dummy_layer_rejects_writes(self):
+        cache = Cache(layers=[DynamicLayer(), DummyLayer()])
         states = torch.rand(1, 4, 2, 8, device=torch_device)
         cache.update(states, states, layer_idx=0)
 
-        with self.assertRaisesRegex(RuntimeError, "`update` was called on a `NoCacheLayer`"):
+        with self.assertRaisesRegex(NotImplementedError, "Dummy layer don't store cache"):
             cache.update(states, states, layer_idx=1)
 
 

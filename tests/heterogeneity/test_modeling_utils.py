@@ -599,7 +599,7 @@ class TestHeterogeneousCache(unittest.TestCase):
         # Both skipped mixers were their layer's only cache writer
         self.assertEqual(
             [type(layer).__name__ for layer in DynamicCache(config=config).layers],
-            ["NoCacheLayer", "DynamicLayer", "LinearAttentionLayer", "NoCacheLayer"],
+            ["DummyLayer", "DynamicLayer", "LinearAttentionLayer", "DummyLayer"],
         )
 
         input_ids = torch.tensor([[5, 6, 7, 8, 9, 10]])
@@ -627,7 +627,7 @@ class TestHeterogeneousCache(unittest.TestCase):
         # Each skipped mixer was its layer's only cache writer
         self.assertEqual(
             [type(layer).__name__ for layer in DynamicCache(config=config).layers],
-            ["NoCacheLayer", "NoCacheLayer", "LinearAttentionLayer", "DynamicLayer"],
+            ["DummyLayer", "DummyLayer", "LinearAttentionLayer", "DynamicLayer"],
         )
 
     def test_skip_type_with_a_member_the_layer_doesnt_build_raises(self):

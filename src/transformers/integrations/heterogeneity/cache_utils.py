@@ -86,10 +86,10 @@ def _get_layer_type_without_caches(layer_idx: int, layer_type: str, dropped_cach
     if layer_type_caches.isdisjoint(dropped_caches):
         return layer_type
 
-    # Every cache of the layer type was dropped, so the layer gets a `NoCacheLayer`
+    # Every cache of the layer type was dropped, so the layer gets a `DummyLayer`
     remaining_caches = layer_type_caches - dropped_caches
     if not remaining_caches:
-        return "no_cache"
+        return "dummy"
 
     # Only some caches remain, which happens only for hybrid layer types. Use the layer type that holds just those.
     reduced_layer_type = _HYBRID_LAYER_TYPE_TO_REDUCED_LAYER_TYPES.get(layer_type, {}).get(frozenset(remaining_caches))
@@ -107,7 +107,7 @@ def get_generic_heterogeneous_modeling_cache_layer_types(
     """Return the cache layer types of a model built with generic heterogeneous modeling.
 
     When the skips of a layer replaced every writer of some of its caches, the layer gets the layer type that holds
-    only the remaining caches, or a `NoCacheLayer` when no cache remains.
+    only the remaining caches, or a `DummyLayer` when no cache remains.
 
     Args:
         config: The model's config.

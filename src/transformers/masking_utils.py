@@ -848,6 +848,23 @@ def _preprocess_mask_arguments(
     return False, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset
 
 
+def find_first_full_attention_index(cache: Cache | None) -> int:
+    """
+    Return the index of the first full attention layer inside `cache` if any and if possible to find it.
+    Otherwise, returns 0, i.e. the first layer.
+    """
+    if isinstance(cache, Cache):
+        is_full = [
+            not is_sliding and not is_linear and not is_dummy
+            for is_sliding, is_linear, is_dummy in zip(cache.is_sliding, cache.is_linear, cache.is_dummy)
+        ]
+        layer_idx = is_full.index(True) if True in is_full else 0
+    else:
+        layer_idx = 0
+
+    return layer_idx
+
+
 @support_per_layer_mask_creation()
 def create_causal_mask(
     config: PreTrainedConfig,
@@ -914,14 +931,7 @@ def create_causal_mask(
 
     # If we have a hybrid cache structure (i.e. sliding or linear layers), here we want to create the mask for the full layers
     if layer_idx is None:
-        if hasattr(past_key_values, "is_sliding") and hasattr(past_key_values, "is_linear"):
-            is_full = [
-                not is_sliding and not is_linear
-                for is_sliding, is_linear in zip(past_key_values.is_sliding, past_key_values.is_linear)
-            ]
-            layer_idx = is_full.index(True) if True in is_full else 0
-        else:
-            layer_idx = 0
+        layer_idx = find_first_full_attention_index(past_key_values)
 
     early_exit, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset = (
         _preprocess_mask_arguments(config, inputs_embeds, attention_mask, past_key_values, position_ids, layer_idx)
@@ -1029,16 +1039,9 @@ def create_bidirectional_mask(
             correct whenever all layers of a given mask type have seen the same tokens. Pass it explicitly for caches
             where layers of the same type hold different lengths (e.g. per-depth MTP streams).
     """
+    # If we have a hybrid cache structure (i.e. sliding or linear layers), here we want to create the mask for the full layers
     if layer_idx is None:
-        # If we have a hybrid cache structure (i.e. sliding or linear layers), here we want to create the mask for the full layers
-        if hasattr(past_key_values, "is_sliding") and hasattr(past_key_values, "is_linear"):
-            is_full = [
-                not is_sliding and not is_linear
-                for is_sliding, is_linear in zip(past_key_values.is_sliding, past_key_values.is_linear)
-            ]
-            layer_idx = is_full.index(True) if True in is_full else 0
-        else:
-            layer_idx = 0
+        layer_idx = find_first_full_attention_index(past_key_values)
 
     # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
     early_exit, attention_mask, _, q_length, kv_length, q_offset, kv_offset = _preprocess_mask_arguments(
