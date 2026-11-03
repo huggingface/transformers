@@ -392,6 +392,33 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         attention_mask: torch.Tensor,
         past_key_values: Cache | None,
     ) -> torch.Tensor:
+        q, raw_keys = self.project(hidden_states, position_embeddings)
+        if past_key_values is not None:
+            raw_keys = past_key_values.update_indexer(raw_keys, self.layer_idx)
+
+        # Note that the mask is never None here as we only allow eager and sdpa, and we do not allow sdpa's mask skip
+        # It's always 4D with either bool (sdpa) or float (eager) and already gives us the valid indices
+        visible_token_indices = attention_mask if attention_mask.dtype == torch.bool else attention_mask == 0
+
+        # Each query keeps its `block_topk` best complete blocks plus its trailing partial block. A query that sees
+        # fewer than `token_budget + compress_ratio` keys has at most `block_topk` complete blocks, so it keeps all of
+        # them: when no query can see that many keys, the selection is exactly the visible keys and needs no scoring
+        if attention_mask.shape[-1] < self.token_budget + self.compress_ratio:
+            selected_token_mask = visible_token_indices
+        else:
+            selected_token_mask = self.select_token_mask(q, raw_keys, visible_token_indices, position_embeddings)
+
+        # if using eager, convert to float mask
+        if attention_mask.is_floating_point():
+            min_dtype = torch.finfo(attention_mask.dtype).min
+            selected_token_mask = torch.where(selected_token_mask, attention_mask.new_zeros(()), min_dtype)
+
+        return selected_token_mask
+
+    def project(
+        self, hidden_states: torch.Tensor, position_embeddings: tuple[torch.Tensor, torch.Tensor]
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """The indexer's rotated queries and its raw keys for `hidden_states`."""
         batch_size, seq_length, _ = hidden_states.shape
         hidden_shape = (batch_size, seq_length, -1, self.index_head_dim)
         # The cos/sin here are the full positions for the keys, so we need to slice to get only the current positions for the queries
@@ -407,19 +434,23 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         q, raw_keys = q.reshape(*hidden_shape), token_k.reshape(*hidden_shape).squeeze(2)
         q = self.q_layernorm(q)
         q = apply_rotary_pos_emb(q, cos=current_cos, sin=current_sin, unsqueeze_dim=2)
+        return q, raw_keys
 
-        if past_key_values is not None:
-            raw_keys = past_key_values.update_indexer(raw_keys, self.layer_idx)
-
-        # Note that the mask is never None here as we only allow eager and sdpa, and we do not allow sdpa's mask skip
-        # It's always 4D with either bool (sdpa) or float (eager) and already gives us the valid indices
-        visible_token_indices = attention_mask if attention_mask.dtype == torch.bool else attention_mask == 0
-
+    def select_token_mask(
+        self,
+        q: torch.Tensor,
+        raw_keys: torch.Tensor,
+        visible_token_indices: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+    ) -> torch.Tensor:
+        """Boolean mask of the keys each query selects: its top-scoring complete key blocks and its partial block."""
+        batch_size, seq_length = q.shape[:2]
+        full_cos, full_sin = position_embeddings
         selected_token_indices = torch.full(
             (batch_size, seq_length, self.token_budget + self.compress_ratio - 1),
             -1,
             dtype=torch.int32,
-            device=hidden_states.device,
+            device=q.device,
         )
         for batch_idx in range(batch_size):
             for query_idx in range(seq_length):
@@ -453,25 +484,18 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
                     # Remap the indices of the blocks to the indices of individual tokens
                     selected_tokens = block_token_indices.index_select(0, selected_block_indices).flatten()
                 else:
-                    selected_tokens = torch.tensor([], device=hidden_states.device)
+                    selected_tokens = torch.tensor([], device=q.device)
                 tail = local_visible_indices[num_complete_blocks * self.compress_ratio :]
                 selected_tokens = torch.cat([selected_tokens, tail]).to(torch.int32)
                 selected_token_indices[batch_idx, query_idx, : selected_tokens.numel()] = selected_tokens
 
-        # Create the additive mask to be added to the main causal mask
-        kv_length = attention_mask.shape[-1]
+        # Turn the indices into a mask, absorbing all the -1 by scattering them to the last index that we will drop
+        kv_length = visible_token_indices.shape[-1]
         selected_token_mask = torch.zeros(
-            (*selected_token_indices.shape[:-1], kv_length + 1), device=attention_mask.device, dtype=torch.bool
+            (*selected_token_indices.shape[:-1], kv_length + 1), device=visible_token_indices.device, dtype=torch.bool
         )
-        # We absorb all the -1 by scaterring them to the last index that we will drop
         scatter_indices = torch.where(selected_token_indices >= 0, selected_token_indices, kv_length)
-        selected_token_mask = selected_token_mask.scatter(-1, scatter_indices, True)[..., :kv_length].unsqueeze(1)
-        # if using eager, convert to float mask
-        if attention_mask.is_floating_point():
-            min_dtype = torch.finfo(attention_mask.dtype).min
-            selected_token_mask = torch.where(selected_token_mask, attention_mask.new_zeros(()), min_dtype)
-
-        return selected_token_mask
+        return selected_token_mask.scatter(-1, scatter_indices, True)[..., :kv_length].unsqueeze(1)
 
 
 class Qwen4ExpTextAttention(Qwen3_5Attention):
