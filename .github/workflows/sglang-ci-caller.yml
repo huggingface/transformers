@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - sglang_ci
+      - sglang_ci*
 
 env:
   SGLANG_USE_CPU_ENGINE: "1"
