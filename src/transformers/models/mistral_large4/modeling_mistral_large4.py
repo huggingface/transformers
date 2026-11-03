@@ -331,6 +331,9 @@ class MistralLarge4TextAttention(nn.Module):
 
     def __init__(self, config: MistralLarge4TextConfig, layer_idx: int):
         super().__init__()
+        self.use_rope = config.no_rope_layers[layer_idx]
+        self.is_kv_shared_layer = config.kv_sharing_modes[layer_idx] == "reuse"
+        self.store_full_length_kv = config.kv_sharing_modes[layer_idx] == "store"
         self.config = config
         self.layer_idx = layer_idx
         self.attention_dropout = config.attention_dropout
@@ -371,10 +374,6 @@ class MistralLarge4TextAttention(nn.Module):
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
         self.softmax_scaling = MistralLarge4TextSoftmaxScaling(self.num_heads)
-
-        self.use_rope = config.no_rope_layers[layer_idx]
-        self.is_kv_shared_layer = config.kv_sharing_modes[layer_idx] == "reuse"
-        self.store_full_length_kv = config.kv_sharing_modes[layer_idx] == "store"
 
     def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Expands the compressed latents into key and value states. Args:

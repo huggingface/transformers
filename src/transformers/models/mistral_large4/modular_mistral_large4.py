@@ -384,6 +384,9 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
     """DSA attention from GlmMoeDsa, with no Q-LoRA and KV sharing."""
 
     def __init__(self, config: MistralLarge4TextConfig, layer_idx: int):
+        self.use_rope = config.no_rope_layers[layer_idx]
+        self.is_kv_shared_layer = config.kv_sharing_modes[layer_idx] == "reuse"
+        self.store_full_length_kv = config.kv_sharing_modes[layer_idx] == "store"
         super().__init__(config, layer_idx)
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
@@ -402,10 +405,6 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
         self.kv_a_layernorm = (
             MistralLarge4RMSNorm(config.kv_lora_rank, eps=config.rms_norm_eps) if not self.is_kv_shared_layer else None
         )
-
-        self.use_rope = config.no_rope_layers[layer_idx]
-        self.is_kv_shared_layer = config.kv_sharing_modes[layer_idx] == "reuse"
-        self.store_full_length_kv = config.kv_sharing_modes[layer_idx] == "store"
 
     # trf-ignore: TRF043
     def forward(
