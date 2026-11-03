@@ -40,6 +40,11 @@ jobs:
             tests: >-
               test/registered/model_loading/test_external_models.py
               test/registered/model_loading/test_weight_loader_v2_e2e.py
+          # TODO: model-loading and transformers-backend fail with
+          # "Unsupported TP style 'embedding_rowwise'" because transformers
+          # introduced this style (PR #49570) after the pinned SGLang commit.
+          # Fix needed in SGLang: sglang/srt/models/transformers.py
+          # _normalize_tp_style() should handle embedding_rowwise/colwise.
           - suite: transformers-backend
             tests: >-
               test/registered/e2e/models/test_transformers_backend_eval.py
@@ -105,37 +110,6 @@ jobs:
           echo "=== CPU ===" && lscpu | grep -E "^CPU\(s\)|^Model name|^Socket"
           echo "=== Memory ===" && free -h
           echo "=== Disk ===" && df -h
-
-      - name: Patch SGLang for CPU CI compatibility
-        run: |
-          python3 - << 'PATCHEOF'
-          import re, pathlib
-
-          # Skip unknown TP styles (e.g. embedding_rowwise / embedding_colwise added
-          # to transformers after the pinned SGLang commit) instead of raising.
-          # For TP=1 CPU CI, skipping is safe: the module runs unreplaced.
-          p_tf = pathlib.Path("python/sglang/srt/models/transformers.py")
-          src_tf = p_tf.read_text()
-          target = "normalized[pattern] = _normalize_tp_style(style)"
-          if target not in src_tf:
-              print("[PATCH] WARNING: _normalize_tp_plan target not found; skipping", flush=True)
-          else:
-              src_tf2 = re.sub(
-                  r'([ \t]+)(normalized\[pattern\] = _normalize_tp_style\(style\))',
-                  lambda m: (
-                      m.group(1) + 'try:\n' +
-                      m.group(1) + '    ' + m.group(2) + '\n' +
-                      m.group(1) + 'except ValueError:\n' +
-                      m.group(1) + '    pass'
-                  ),
-                  src_tf,
-              )
-              if src_tf2 == src_tf:
-                  print("[PATCH] WARNING: _normalize_tp_plan regex did not match", flush=True)
-              else:
-                  p_tf.write_text(src_tf2)
-                  print("[PATCH] OK: _normalize_tp_plan graceful skip for unknown styles", flush=True)
-          PATCHEOF
 
       - name: Cap SGLang server KV-cache for CPU CI
         # SGLang's CPU engine reads total NUMA RAM (~126 GB) as "GPU memory" and
