@@ -475,6 +475,19 @@ This will match the previous behavior in the large majority of cases. If your mo
 
 Linked PR: https://github.com/huggingface/transformers/pull/42564
 
+### `hidden_states[-1]` of vision models is the pre-norm output
+
+For vision models such as `ViTModel` and `DINOv3ViTModel`, `hidden_states[-1]` is the output of the last block **before** the final layernorm, while `last_hidden_state` is the normalized output. Up to v4.57.1 the two were identical. Since [#40994](https://github.com/huggingface/transformers/pull/40994) (released in v4.57.2) they differ, and v5 keeps the new behavior, which is the one `Dinov2Model` already had. Code that took `hidden_states[-1]` as the final features gets different features without any error. For the released `facebook/dinov3-vitb16-pretrain-lvd1689m` weights the two differ by about 1300 in max absolute value.
+
+If you need the normalized features, use `last_hidden_state` (or apply the model's final layernorm to `hidden_states[-1]`):
+
+```python
+outputs = model(pixel_values=pixel_values, output_hidden_states=True)
+features = outputs.last_hidden_state  # normalized; outputs.hidden_states[-1] is pre-norm
+```
+
+Model authors who need the old tying can set `tie_last_hidden_states` in the model config ([#48087](https://github.com/huggingface/transformers/pull/48087)).
+
 ## Quantization changes
 
 We clean up the quantization API in transformers, and significantly refactor the weight loading as highlighted
