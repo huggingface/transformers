@@ -582,7 +582,10 @@ class TestFetcherTester(unittest.TestCase):
             p = Path(tmp_dir) / "lower_name.py"
             p.touch()
             self.assertTrue(_file_exists_case_sensitive(p))
-            self.assertFalse(_file_exists_case_sensitive(p.parent / "LOWER_NAME.py"))
+            # Simulate case-insensitive is_file() (Windows/macOS HFS+): is_file returns True
+            # even for a wrong-cased name. The listdir() check must still reject it.
+            with patch.object(Path, "is_file", return_value=True):
+                self.assertFalse(_file_exists_case_sensitive(p.parent / "LOWER_NAME.py"))
             self.assertFalse(_file_exists_case_sensitive(p.parent / "nosuchfile.py"))
 
     def test_get_module_dependencies_constant_not_mistaken_for_submodule(self):
@@ -591,7 +594,8 @@ class TestFetcherTester(unittest.TestCase):
         On case-insensitive filesystems (Windows, macOS), bare ``is_file()`` would match
         ``UPPER_CASE.py`` against ``lower_case.py``, wrongly recording an UPPER_CASE.py dep
         and silently dropping the ``__init__.py`` dep.  This test pins the correct behaviour
-        (the __init__.py remains a dep) so a regression is caught on any platform.
+        on every platform by patching ``Path.is_file`` to simulate a case-insensitive
+        filesystem, so the regression is caught in Linux CI as well.
         """
         with tempfile.TemporaryDirectory() as tmp_folder:
             tmp_folder = Path(tmp_folder)
@@ -606,7 +610,19 @@ class TestFetcherTester(unittest.TestCase):
             with open(tmp_folder / BERT_MODELING_FILE, "a", encoding="utf-8") as f:
                 f.write("from ...utils import LOWER_NAME\n")
 
-            with patch_transformer_repo_path(tmp_folder):
+            # Patch is_file to simulate a case-insensitive filesystem: return True whenever a
+            # file with the same name (ignoring case) exists in the directory.
+            _original_is_file = Path.is_file
+
+            def _case_insensitive_is_file(path):
+                if _original_is_file(path):
+                    return True
+                try:
+                    return path.name.lower() in {f.lower() for f in os.listdir(path.parent)}
+                except OSError:
+                    return False
+
+            with patch_transformer_repo_path(tmp_folder), patch.object(Path, "is_file", _case_insensitive_is_file):
                 deps = get_module_dependencies(BERT_MODELING_FILE)
 
             # The wrong-cased path must never appear

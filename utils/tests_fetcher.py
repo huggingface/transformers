@@ -776,16 +776,18 @@ def get_module_dependencies(module_fname: str, cache: dict[str, list[str]] | Non
                         imports = [i for i in imports if i not in new_imports]
 
                 if len(imports) > 0:
-                    # If there are any objects lefts, they may be a submodule
+                    # If there are any objects lefts, they may be a submodule.
+                    # Read the directory listing once; set-membership checks are O(1) and
+                    # exact-case, so a single listdir() replaces two _file_exists_case_sensitive
+                    # calls per import (which each called listdir internally).
                     path_to_module = PATH_TO_REPO / module.replace("__init__.py", "")
-                    dependencies.extend(
-                        [
-                            f"{module.replace('__init__.py', '')}{i}.py"
-                            for i in imports
-                            if _file_exists_case_sensitive(path_to_module / f"{i}.py")
-                        ]
-                    )
-                    imports = [i for i in imports if not _file_exists_case_sensitive(path_to_module / f"{i}.py")]
+                    try:
+                        disk_files = set(os.listdir(path_to_module))
+                    except OSError:
+                        disk_files = set()
+                    submodule_names = {i for i in imports if f"{i}.py" in disk_files}
+                    dependencies.extend([f"{module.replace('__init__.py', '')}{i}.py" for i in submodule_names])
+                    imports = [i for i in imports if i not in submodule_names]
                     if len(imports) > 0:
                         # Then if there are still objects left, they are fully defined in the init, so we keep it as a
                         # dependency.
