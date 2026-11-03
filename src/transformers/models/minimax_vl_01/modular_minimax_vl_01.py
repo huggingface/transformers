@@ -97,17 +97,34 @@ MINIMAX_VL_01_IMAGE_GRID_PINPOINTS = [
 class MiniMaxVL01TextConfig(MiniMaxConfig):
     model_type = "minimax_vl_01_text"
     base_config_key = "text_config"
+    # The released checkpoint uses the original MiniMax names for the residual scaling factors.
+    attribute_map = {
+        "num_experts": "num_local_experts",
+        "layernorm_full_attention_alpha": "full_attn_alpha_factor",
+        "layernorm_full_attention_beta": "full_attn_beta_factor",
+        "layernorm_linear_attention_alpha": "linear_attn_alpha_factor",
+        "layernorm_linear_attention_beta": "linear_attn_beta_factor",
+        "layernorm_mlp_alpha": "mlp_alpha_factor",
+        "layernorm_mlp_beta": "mlp_beta_factor",
+    }
     sliding_window: None = None
     router_aux_loss_coef = AttributeError()
 
     def __post_init__(self, **kwargs):
-        kwargs.pop("router_aux_loss_coef", None)
-        if "attn_type_list" in kwargs or any(key.startswith("layernorm_") for key in kwargs):
-            raise ValueError(
-                "The original MiniMax-VL-01 text config must be converted with "
-                "`convert_minimax_vl_01_weights_to_hf.py` before native loading."
-            )
+        kwargs.pop("model_type", None)
+        attn_type_list = kwargs.pop("attn_type_list", None)
+        if self.layer_types is None and attn_type_list is not None:
+            self.layer_types = [
+                "linear_attention" if attention_type == 0 else "full_attention" for attention_type in attn_type_list
+            ]
         super().__post_init__(**kwargs)
+
+    def convert_rope_params_to_dict(self, **kwargs):
+        rotary_dim = kwargs.pop("rotary_dim", None)
+        if rotary_dim is not None:
+            head_dim = self.head_dim or self.hidden_size // self.num_attention_heads
+            kwargs.setdefault("partial_rotary_factor", rotary_dim / head_dim)
+        return PreTrainedConfig.convert_rope_params_to_dict(self, **kwargs)
 
 
 class MiniMaxVL01TextCache(MiniMaxCache):
@@ -347,14 +364,7 @@ class MiniMaxVL01Config(LlavaNextConfig):
             raise TypeError("`vision_config` must be a dictionary or a native CLIP vision configuration instance.")
 
         if isinstance(self.text_config, dict):
-            text_config = dict(self.text_config)
-            text_model_type = text_config.pop("model_type", "minimax_vl_01_text")
-            if text_model_type not in {"minimax", "minimax_vl_01_text"}:
-                raise TypeError(
-                    "`text_config` must contain a native MiniMax or MiniMax-VL-01 text model type. "
-                    "Convert the original checkpoint with `convert_minimax_vl_01_weights_to_hf.py` first."
-                )
-            self.text_config = MiniMaxVL01TextConfig(**text_config)
+            self.text_config = MiniMaxVL01TextConfig(**self.text_config)
         elif self.text_config is None:
             layernorm_factor = 3.5565588200778455
             self.text_config = MiniMaxVL01TextConfig(

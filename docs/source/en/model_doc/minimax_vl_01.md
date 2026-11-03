@@ -37,23 +37,8 @@ The original code can be found in the [MiniMax-VL-01 checkpoint repository](http
 
 ## Usage
 
-### Prepare the configuration
-
-The released checkpoint uses a custom configuration schema. From the root of the Transformers repository, download
-its configuration and convert it to the native [`MiniMaxVL01Config`] format:
-
-```bash
-hf download MiniMaxAI/MiniMax-VL-01 config.json --local-dir ./MiniMax-VL-01
-
-python src/transformers/models/minimax_vl_01/convert_minimax_vl_01_weights_to_hf.py \
-    ./MiniMax-VL-01 ./MiniMax-VL-01-native-config
-```
-
-If you already have the original `config.json` locally, use its directory as the converter's first argument.
-The converter writes only a new `config.json`; the output directory is not a complete checkpoint. The example below
-loads the converted configuration locally and the weights, tokenizer, and image processor from the original checkpoint.
-Pass the converted configuration to both the model and the processor when loading.
-Transformers applies the weight-name and expert-layout conversions during model loading.
+The original checkpoint can be loaded directly. Transformers handles the legacy configuration fields and applies
+the weight-name and expert-layout conversions during model loading.
 
 ### Image-text generation
 
@@ -77,16 +62,14 @@ import os
 
 import torch
 
-from transformers import AutoModelForImageTextToText, DistributedConfig, MiniMaxVL01Config, MiniMaxVL01Processor
+from transformers import AutoModelForImageTextToText, DistributedConfig, MiniMaxVL01Processor
 
 
 checkpoint = "MiniMaxAI/MiniMax-VL-01"
 world_size = int(os.environ["WORLD_SIZE"])
-config = MiniMaxVL01Config.from_pretrained("./MiniMax-VL-01-native-config")
-processor = MiniMaxVL01Processor.from_pretrained(checkpoint, config=config)
+processor = MiniMaxVL01Processor.from_pretrained(checkpoint)
 model = AutoModelForImageTextToText.from_pretrained(
     checkpoint,
-    config=config,
     dtype=torch.bfloat16,
     distributed_config=DistributedConfig(tp_size=world_size, ep_size=world_size),
 )
