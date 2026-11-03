@@ -195,6 +195,7 @@ IGNORE_NON_TESTED = (
         "EdgeTamVisionModel",  # Building part of bigger (tested) model.
         "EdgeTamVideoModel",  # Partly tested in EdgeTamModel, not regular model.
         "Cosmos3EdgeVisionModel",  # Building part of the tested Cosmos3EdgeModel.
+        "Inkling2VisionModel",  # Building part of the tested Inkling2Model.
         "SeamlessM4TTextToUnitModel",  # Building part of bigger (tested) model.
         "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
         "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
@@ -605,6 +606,9 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
         ("inkling_audio", "inkling"),
         ("inkling_vision", "inkling"),
         ("inkling_mm_model", "inkling"),
+        ("inkling2_text", "inkling2"),
+        ("inkling2_vision", "inkling2"),
+        ("inkling2_mm_model", "inkling2"),
         ("nemo_speechlm", "nemotron3_5_transcribe"),
     ]
 )

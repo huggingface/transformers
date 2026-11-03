@@ -281,6 +281,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("informer", "InformerModel"),
         ("inkling2_mm_model", "Inkling2Model"),
         ("inkling2_text", "Inkling2TextModel"),
+        ("inkling2_vision", "Inkling2VisionModel"),
         ("inkling_mm_model", "InklingModel"),
         ("inkling_text", "InklingTextModel"),
         ("instructblip", "InstructBlipModel"),

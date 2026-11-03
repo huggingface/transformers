@@ -110,6 +110,15 @@ class Inkling2TextConfig(InklingTextConfig):
     """
 
     model_type = "inkling2_text"
+    base_model_tp_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.shared_experts": "all_reduce",
+    }
     attribute_map = {
         "sliding_window": "sliding_window_size",
         "num_local_experts": "n_routed_experts",
@@ -140,6 +149,7 @@ class Inkling2TextConfig(InklingTextConfig):
     mlp_gate_softcap: float = 4.0
     mlp_up_softcap: float = 25.0
     final_logit_softcapping: float | None = 30.0
+    use_cache: bool = True
 
     intermediate_size = AttributeError()
     mlp_layer_types = AttributeError()
@@ -561,7 +571,7 @@ class Inkling2Experts(InklingExperts):
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
-        final_hidden_states = torch.zeros_like(hidden_states)
+        final_hidden_states = torch.zeros_like(hidden_states, dtype=torch.float32)
         with torch.no_grad():
             expert_mask = F.one_hot(top_k_index, num_classes=self.num_experts + 1).permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
@@ -577,7 +587,7 @@ class Inkling2Experts(InklingExperts):
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
 
-        return final_hidden_states
+        return final_hidden_states.to(hidden_states.dtype)
 
 
 class Inkling2TopkRouter(InklingTopkRouter):
@@ -850,12 +860,12 @@ class Inkling2VisionEmbeddings(nn.Module):
         grid = F.interpolate(grid.float(), size=(height, width), mode="bilinear", align_corners=False)
         return grid[0].permute(1, 2, 0).reshape(height * width, -1).to(position_embedding.dtype)
 
-    def forward(self, pixel_values: torch.Tensor, image_grid_thw: list[list[int]]) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, image_grid_thw: torch.Tensor) -> torch.Tensor:
         merge, patch = self.merge_size, self.patch_size
         cls_embedding = (self.class_embedding + self.cls_position_embedding).unsqueeze(0)
         embeddings = []
         for image, (_, height, width) in zip(
-            pixel_values.split([h * w for _, h, w in image_grid_thw]), image_grid_thw
+            torch.split(pixel_values, (image_grid_thw[:, 1] * image_grid_thw[:, 2]).tolist()), image_grid_thw
         ):
             # native patches in raster order over the (height * merge, width * merge) grid, channels last
             patches = image.reshape(height, width, merge, patch, merge, patch, -1).permute(0, 2, 1, 4, 3, 5, 6)
@@ -1009,6 +1019,19 @@ class Inkling2ForCausalLM(InklingForCausalLM):
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Inkling2CausalLMOutputWithPast:
+        r"""
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, Inkling2ForCausalLM
+
+        >>> model = Inkling2ForCausalLM.from_pretrained("thinkingmachines/model-share")
+        >>> tokenizer = AutoTokenizer.from_pretrained("thinkingmachines/model-share")
+
+        >>> inputs = tokenizer("What is your favorite condiment?", return_tensors="pt")
+        >>> generate_ids = model.generate(**inputs, max_new_tokens=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True)[0]
+        ```"""
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1072,19 +1095,18 @@ class Inkling2VisionModel(Inkling2PreTrainedModel):
             Temporal, height and width of each image, counted in language model image tokens.
         """
         merge = self.config.spatial_merge_size
-        grid = image_grid_thw.tolist()
         pixel_values = pixel_values.to(self.embeddings.patch_embedding.weight.dtype)
-        hidden_states = self.embeddings(pixel_values, grid)
+        hidden_states = self.embeddings(pixel_values, image_grid_thw)
         hidden_states = self.pre_layernorm(hidden_states)
 
-        lengths = [height * width * merge * merge + 1 for _, height, width in grid]
+        lengths = image_grid_thw[:, 1] * image_grid_thw[:, 2] * merge**2 + 1
         position_ids = []
-        for _, height, width in grid:
+        for _, height, width in image_grid_thw:
             rows = torch.arange(height * merge * width * merge, device=hidden_states.device)
             positions = torch.stack((rows // (width * merge), rows % (width * merge)), dim=-1) + 1
             position_ids.extend((positions.new_zeros(1, 2), positions))
         position_embeddings = self.rotary_emb(hidden_states, torch.cat(position_ids))
-        cu_seqlens = F.pad(torch.tensor(lengths, device=hidden_states.device).cumsum(0), (1, 0)).to(torch.int32)
+        cu_seqlens = F.pad(lengths.cumsum(0), (1, 0)).to(device=hidden_states.device, dtype=torch.int32)
 
         for layer in self.layers:
             hidden_states = layer(
@@ -1093,7 +1115,7 @@ class Inkling2VisionModel(Inkling2PreTrainedModel):
 
         merged_features = [
             image[1:].reshape(height, merge, width, merge, -1).permute(0, 2, 1, 3, 4).reshape(height * width, -1)
-            for image, (_, height, width) in zip(hidden_states.split(lengths), grid)
+            for image, (_, height, width) in zip(torch.split(hidden_states, lengths.tolist()), image_grid_thw)
         ]
         pooler_output = self.merger(torch.cat(merged_features))
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=pooler_output)
@@ -1111,7 +1133,9 @@ class Inkling2Model(InklingModel):
     def get_image_features(
         self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
-        return self.vision_tower(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
+        image_outputs = self.vision_tower(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
+        image_outputs.pooler_output = image_outputs.pooler_output.split(image_grid_thw.prod(-1).tolist())
+        return image_outputs
 
     def get_audio_features(self):
         raise AttributeError("Not needed for Inkling2")
@@ -1128,6 +1152,7 @@ class Inkling2Model(InklingModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Inkling2ModelOutputWithPast:
         r"""
@@ -1137,12 +1162,19 @@ class Inkling2Model(InklingModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_grid_thw, return_dict=True)
+
         image_embeds = None
-        if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw, return_dict=True).pooler_output
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output)
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds, image_embeds, self.config.image_token_id
@@ -1190,6 +1222,7 @@ class Inkling2ForConditionalGeneration(InklingForConditionalGeneration):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Inkling2CausalLMOutputWithPast:
         r"""
@@ -1205,6 +1238,7 @@ class Inkling2ForConditionalGeneration(InklingForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 

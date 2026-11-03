@@ -78,9 +78,6 @@ class Inkling2TextConfig(PreTrainedConfig):
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
         "layers.*.mlp.shared_experts": "all_reduce",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -141,6 +138,7 @@ class Inkling2TextConfig(PreTrainedConfig):
     mlp_gate_softcap: float = 4.0
     mlp_up_softcap: float = 25.0
     final_logit_softcapping: float | None = 30.0
+    use_cache: bool = True
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
