@@ -259,9 +259,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         keyword_batches = prepare_keyword_inputs(keywords, batch_size)
 
         is_training = transcription is not None
-        if isinstance(transcription, str):
-            transcription = [transcription]
-        transcriptions = prepare_prompt_input(transcription, batch_size, input_name="transcription")
+        transcriptions = prepare_prompt_input(transcription, batch_size, input_name="transcription", broadcast=False)
         if is_training:
             kwargs["processor_kwargs"] = {"output_labels": True, **kwargs.get("processor_kwargs", {})}
 

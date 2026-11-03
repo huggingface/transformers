@@ -252,9 +252,7 @@ class GlmAsrProcessor(ProcessorMixin):
             raise TypeError("`prompt` must be a string, a sequence of strings, or `None`.")
 
         is_training = transcription is not None
-        if isinstance(transcription, str):
-            transcription = [transcription]
-        transcriptions = prepare_prompt_input(transcription, batch_size, input_name="transcription")
+        transcriptions = prepare_prompt_input(transcription, batch_size, input_name="transcription", broadcast=False)
         if is_training:
             kwargs["processor_kwargs"] = {"output_labels": True, **kwargs.get("processor_kwargs", {})}
 

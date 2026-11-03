@@ -2714,6 +2714,7 @@ def prepare_prompt_input(
     inputs: str | list[str] | None,
     batch_size: int,
     input_name: str = "inputs",
+    broadcast: bool = True,
 ) -> list[str | None]:
     """
     Normalize a string, list of strings, or ``None`` into a list of length ``batch_size``.
@@ -2726,6 +2727,9 @@ def prepare_prompt_input(
             Expected length of the output list.
         input_name (`str`, *optional*, defaults to `"inputs"`):
             Name used in error messages to identify the argument.
+        broadcast (`bool`, *optional*, defaults to `True`):
+            Whether a single string is broadcast to all batch items. If `False`, it is treated as a list of one item,
+            so it is only valid for a batch of one (e.g. a target transcription, which is specific to each audio).
 
     Returns:
         `list[str | None]`: A list of length ``batch_size``.
@@ -2733,7 +2737,9 @@ def prepare_prompt_input(
     if inputs is None:
         return [None] * batch_size
     if isinstance(inputs, str):
-        return [inputs] * batch_size
+        if broadcast:
+            return [inputs] * batch_size
+        inputs = [inputs]
     if isinstance(inputs, (list, tuple)):
         if len(inputs) != batch_size:
             raise ValueError(
