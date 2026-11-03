@@ -115,7 +115,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             and os.path.isfile(fast_tokenizer_file)
             and (cls is TokenizersBackend or "__init__" not in cls.__dict__ or trust_remote_code)
         ):
-            local_kwargs["tokenizer_object"] = TokenizerFast.from_file(fast_tokenizer_file)
+            # Let `__init__` load the file: passing a `tokenizer_object` would make it deepcopy the whole backend
+            local_kwargs["tokenizer_file"] = fast_tokenizer_file
             return local_kwargs
         elif fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file):
             # we extract vocab/merges and pass decoder/pre_tokenizer/post_processor
@@ -883,6 +884,15 @@ class TokenizersBackend(PreTrainedTokenizerBase):
     def tokenize(self, text: str, pair: str | None = None, add_special_tokens: bool = False, **kwargs) -> list[str]:
         return self._encode_plus(text=text, text_pair=pair, add_special_tokens=add_special_tokens, **kwargs).tokens()
 
+    def _encode_without_added_tokens(self, text: str) -> list[int]:
+        # `split_special_tokens` only skips special tokens here, so run the backend's pipeline without its added tokens
+        if self._tokenizer.normalizer is not None:
+            text = self._tokenizer.normalizer.normalize_str(text)
+        splits = [text]
+        if self._tokenizer.pre_tokenizer is not None:
+            splits = [split for split, _ in self._tokenizer.pre_tokenizer.pre_tokenize_str(text)]
+        return [token.id for split in splits for token in self._tokenizer.model.tokenize(split)]
+
     def set_truncation_and_padding(
         self,
         padding_strategy: PaddingStrategy,
@@ -1375,6 +1385,44 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             else:
                 # Some other TypeError, re-raise it
                 raise
+
+    @staticmethod
+    def _tokenizer_json_has_byte_level(
+        pretrained_model_name_or_path: str | os.PathLike[str],
+        cache_dir: str | os.PathLike[str] | None = None,
+        force_download: bool = False,
+        proxies: dict[str, str] | None = None,
+        token: bool | str | None = None,
+        revision: str | None = None,
+        local_files_only: bool = False,
+        subfolder: str = "",
+        **kwargs,
+    ) -> bool:
+        """Return whether `tokenizer.json` declares a ByteLevel pre_tokenizer or decoder.
+
+        Used when Hub `tokenizer_class` is `LlamaTokenizer` but the serialized tokenizer is
+        byte-level, so AutoTokenizer loads with `TokenizersBackend` instead.
+        """
+        resolved_file = cached_file(
+            pretrained_model_name_or_path,
+            TOKENIZER_FILE,
+            cache_dir=cache_dir,
+            force_download=force_download,
+            proxies=proxies,
+            token=token,
+            revision=revision,
+            local_files_only=local_files_only,
+            subfolder=subfolder,
+            _raise_exceptions_for_gated_repo=False,
+            _raise_exceptions_for_missing_entries=False,
+            _raise_exceptions_for_connection_errors=False,
+            _commit_hash=kwargs.get("_commit_hash"),
+        )
+        if resolved_file is None:
+            return False
+
+        with open(resolved_file, encoding="utf-8") as reader:
+            return '"ByteLevel"' in reader.read()
 
     @classmethod
     def _patch_mistral_regex(

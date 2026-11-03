@@ -34,9 +34,9 @@ from ...image_utils import (
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, logging
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ..llava_next.image_processing_llava_next import LlavaNextImageProcessor, LlavaNextImageProcessorKwargs
 from ..llava_next.image_processing_pil_llava_next import LlavaNextImageProcessorPil
@@ -51,6 +51,7 @@ from ..llava_next_video.modeling_llava_next_video import (
     image_size_to_num_patches,
     unpad_image,
 )
+from .configuration_llava_onevision import LlavaOnevisionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -398,7 +399,7 @@ class LlavaOnevisionPreTrainedModel(LlavaNextVideoPreTrainedModel):
 
 
 class LlavaOnevisionModel(LlavaNextVideoModel):
-    def __init__(self, config):
+    def __init__(self, config: LlavaOnevisionConfig):
         super().__init__(config)
         del self.vision_resampler
 
@@ -559,7 +560,6 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
     @merge_with_config_defaults
     @can_return_tuple
-    @deprecate_kwarg("pixel_values", version="v5.22.0", new_name="pixel_values_videos")
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower, apply multimodal projection and pooling."
     )
@@ -791,9 +791,8 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

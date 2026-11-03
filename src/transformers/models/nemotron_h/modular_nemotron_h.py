@@ -27,7 +27,7 @@ from ...integrations import use_experts_implementation
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...models.deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE, DeepseekV3TopkRouter
 from ...models.jamba.modeling_jamba import JambaAttention
 from ...models.llama.modeling_llama import LlamaRMSNorm
@@ -42,6 +42,10 @@ from .configuration_nemotron_h import NemotronHConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+class NemotronHRMSNormGated(Zamba2RMSNormGated):
+    pass
 
 
 class NemotronHMamba2Mixer(Zamba2MambaMixer):
@@ -74,7 +78,7 @@ class NemotronHMamba2Mixer(Zamba2MambaMixer):
             projection_size,
             bias=config.use_bias,
         )
-        self.norm = Zamba2RMSNormGated(
+        self.norm = NemotronHRMSNormGated(
             self.intermediate_size, group_size=self.intermediate_size // self.n_groups, eps=config.layer_norm_epsilon
         )
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
@@ -376,7 +380,7 @@ class NemotronHPreTrainedModel(PreTrainedModel):
 
 
 class NemotronHModel(NemotronHPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: NemotronHConfig):
         super().__init__(config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
@@ -499,9 +503,8 @@ class NemotronHForCausalLM(ZambaForCausalLM):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :]).float()
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states).float()
 
         loss = None
         if labels is not None:

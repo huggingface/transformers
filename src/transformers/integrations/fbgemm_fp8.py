@@ -283,6 +283,8 @@ def replace_with_fbgemm_fp8_linear(
         pre_quantized (`bool`, defaults to `False`):
             Whether the model is pre-quantized or not
     """
+    from ..models.llama4.modeling_llama4 import Llama4TextExperts
+
     global quantize_fp8_per_row
     quantize_fp8_per_row = get_quantize_fp8_per_row()
 
@@ -295,7 +297,7 @@ def replace_with_fbgemm_fp8_linear(
 
         new_module = None
         with init_empty_weights(include_buffers=True):
-            if module.__class__.__name__ == "Llama4TextExperts":
+            if isinstance(module, Llama4TextExperts):
                 # TODO: make sure tp works later
                 text_config = getattr(model.config, "text_config", model.config)
                 new_module = FbgemmFp8Llama4TextExperts(text_config or model.config)

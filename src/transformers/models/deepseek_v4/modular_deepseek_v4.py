@@ -1075,7 +1075,7 @@ class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
 
 
 class DeepseekV4PreTrainedModel(MixtralPreTrainedModel):
-    config_class = DeepseekV4Config
+    config: DeepseekV4Config
     base_model_prefix = "model"
     _no_split_modules = ["DeepseekV4DecoderLayer"]
     # V4 ships eager-only. The non-eager backends are off for the following reasons:
@@ -1246,8 +1246,7 @@ class DeepseekV4Model(LlamaModel):
 
 
 class DeepseekV4ForCausalLM(MixtralForCausalLM):
-    # Deepseek V4 ships only an EP plan
-    _tp_plan = AttributeError()
+    pass
 
 
 __all__ = [

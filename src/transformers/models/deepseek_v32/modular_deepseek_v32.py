@@ -30,6 +30,7 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeModelOutputWithPast
@@ -159,8 +160,7 @@ class DeepseekV32Config(Glm4MoeLiteConfig):
         # BC: re-route `num_experts` to `n_routed_experts`
         if (num_experts := kwargs.get("num_experts")) is not None:
             self.n_routed_experts = num_experts
-
-        super().__post_init__(**kwargs)
+        PreTrainedConfig.__post_init__(self, **kwargs)
 
 
 class DeepseekV32RMSNorm(DeepseekV3RMSNorm):

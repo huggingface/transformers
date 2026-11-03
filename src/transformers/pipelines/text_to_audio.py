@@ -27,7 +27,6 @@ if is_torch_available():
     import torch
 
     from ..models.auto.modeling_auto import MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING
-    from ..models.speecht5.modeling_speecht5 import SpeechT5HifiGan
 
 DEFAULT_VOCODER_ID = "microsoft/speecht5_hifigan"
 
@@ -122,11 +121,11 @@ class TextToAudioPipeline(Pipeline):
 
         self.vocoder = None
         if self.model.__class__ in MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING.values():
-            self.vocoder = (
-                SpeechT5HifiGan.from_pretrained(DEFAULT_VOCODER_ID).to(self.model.device)
-                if vocoder is None
-                else vocoder
-            )
+            if vocoder is None:
+                from ..models.speecht5.modeling_speecht5 import SpeechT5HifiGan
+
+                vocoder = SpeechT5HifiGan.from_pretrained(DEFAULT_VOCODER_ID).to(self.model.device)
+            self.vocoder = vocoder
 
         if self.model.config.model_type in ["musicgen", "speecht5"]:
             # MusicGen and SpeechT5 expect to use their tokenizer instead

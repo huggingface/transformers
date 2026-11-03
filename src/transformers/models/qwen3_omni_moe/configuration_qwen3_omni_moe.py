@@ -20,7 +20,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -140,9 +140,15 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -214,9 +220,9 @@ class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
     # Override parent's attribute_map as we use audio_token_id directly, not audio_token_index
     attribute_map = {}
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Qwen3OmniMoeTextConfig),
-        "vision_config": SubConfigSpec(config_class=Qwen3OmniMoeVisionEncoderConfig),
-        "audio_config": SubConfigSpec(config_class=Qwen3OmniMoeAudioEncoderConfig),
+        "text_config": Qwen3OmniMoeTextConfig,
+        "vision_config": Qwen3OmniMoeVisionEncoderConfig,
+        "audio_config": Qwen3OmniMoeAudioEncoderConfig,
     }
 
     audio_config: dict | PreTrainedConfig | None = None
@@ -446,8 +452,8 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     ```"""
 
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Qwen3OmniMoeTalkerTextConfig),
-        "code_predictor_config": SubConfigSpec(config_class=Qwen3OmniMoeTalkerCodePredictorConfig),
+        "text_config": Qwen3OmniMoeTalkerTextConfig,
+        "code_predictor_config": Qwen3OmniMoeTalkerCodePredictorConfig,
     }
 
     code_predictor_config: dict | PreTrainedConfig | None = None
@@ -580,9 +586,9 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
 
     model_type = "qwen3_omni_moe"
     sub_configs_defaults = {
-        "thinker_config": SubConfigSpec(config_class=Qwen3OmniMoeThinkerConfig),
-        "talker_config": SubConfigSpec(config_class=Qwen3OmniMoeTalkerConfig),
-        "code2wav_config": SubConfigSpec(config_class=Qwen3OmniMoeCode2WavConfig),
+        "thinker_config": Qwen3OmniMoeThinkerConfig,
+        "talker_config": Qwen3OmniMoeTalkerConfig,
+        "code2wav_config": Qwen3OmniMoeCode2WavConfig,
     }
 
     thinker_config: dict | PreTrainedConfig | None = None

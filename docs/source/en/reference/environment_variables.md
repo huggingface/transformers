@@ -53,6 +53,7 @@ Optimized kernels are downloaded from the Hub when [kernels](https://github.com/
 | `USE_HUB_KERNELS` | boolean, enabled by default | Set to a false value to fall back to the reference implementations. |
 | `TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR` | `1` | Forces the Triton fallback instead of DeepGEMM for FP8 linear layers in finegrained FP8 quantization. |
 | `TRANSFORMERS_DISABLE_TORCH_CHECK` | `1` | Skips the minimum PyTorch version check at import. |
+| `TRANSFORMERS_SDPA_FORCE_GQA` | `1` | Forces PyTorch SDPA to use `enable_gqa=True` for grouped-query attention. Otherwise, Transformers selects between setting `enable_gqa=True` and repeating key/value heads. |
 
 > [!WARNING]
 > `TRANSFORMERS_DISABLE_TORCH_CHECK` removes a guard rather than changing behavior. On an unsupported PyTorch version you get import errors or silently wrong results instead of a clear message.

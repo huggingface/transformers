@@ -421,15 +421,15 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
         last_hidden_state = encoder_outputs[0]
 
         list_keypoints_scores = [
-            self.keypoint_decoder(last_hidden_state[None, ...]) for last_hidden_state in last_hidden_state
+            self.keypoint_decoder(image_hidden_state[None, ...]) for image_hidden_state in last_hidden_state
         ]
 
         list_keypoints = [keypoints_scores[0] for keypoints_scores in list_keypoints_scores]
         list_scores = [keypoints_scores[1] for keypoints_scores in list_keypoints_scores]
 
         list_descriptors = [
-            self.descriptor_decoder(last_hidden_state[None, ...], keypoints[None, ...])
-            for last_hidden_state, keypoints in zip(last_hidden_state, list_keypoints)
+            self.descriptor_decoder(image_hidden_state[None, ...], keypoints[None, ...])
+            for image_hidden_state, keypoints in zip(last_hidden_state, list_keypoints)
         ]
 
         maximum_num_keypoints = max(keypoints.shape[0] for keypoints in list_keypoints)

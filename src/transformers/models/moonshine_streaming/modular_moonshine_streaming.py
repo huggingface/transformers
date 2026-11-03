@@ -19,6 +19,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import (
@@ -254,7 +255,7 @@ class MoonshineStreamingPreTrainedModel(MoonshinePreTrainedModel):
 
     def _init_weights(self, module: nn.Module):
         if isinstance(module, MoonshineStreamingLayerNorm):
-            nn.init.constant_(module.gamma, 1.0 - module.unit_offset)
+            init.constant_(module.gamma, 1.0 - module.unit_offset)
         else:
             super()._init_weights(module)
 
@@ -349,7 +350,7 @@ class MoonshinMoonshineStreamingDecoderMLP(LlamaMLP): ...
 
 
 class MoonshineStreamingDecoder(MoonshineDecoder):
-    def __init__(self, config):
+    def __init__(self, config: MoonshineStreamingConfig):
         super().__init__(config)
         self.pos_emb = nn.Embedding(self.config.max_position_embeddings, config.encoder_config.hidden_size)
 
@@ -402,7 +403,7 @@ class MoonshineStreamingDecoder(MoonshineDecoder):
 
 
 class MoonshineStreamingModel(MoonshineModel):
-    def __init__(self, config):
+    def __init__(self, config: MoonshineStreamingConfig):
         super().__init__(config)
         self.encoder = MoonshineStreamingEncoder(config.encoder_config)
         self.decoder = MoonshineStreamingDecoder(config)
