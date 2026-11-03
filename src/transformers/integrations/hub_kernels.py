@@ -140,12 +140,11 @@ if is_kernels_available():
                     ),
                 },
             },
-            # TODO: Update the references, using staging for now
             "MultiScaleDeformableAttention": {
                 "cuda": LayerRepository(
-                    repo_id="kernels-staging/deformable-detr",
+                    repo_id="kernels-community/deformable-detr",
                     layer_name="MultiScaleDeformableAttention",
-                    revision="pr-1234",
+                    version=2,
                 )
             },
             # GB10/SM121 GDN fast path (no fla/causal_conv1d build there); dense and MoE share it.
