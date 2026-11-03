@@ -20,13 +20,13 @@ mixed precision, logging, NEFTune, memory metrics, and end-to-end training.
 import math
 import tempfile
 from functools import partial
-from unittest.mock import PropertyMock, patch
+from unittest.mock import patch
 
 import datasets
 import numpy as np
 import pytest
 import torch
-from accelerate import Accelerator
+from parameterized import parameterized
 from torch import nn
 
 from transformers import (
@@ -385,11 +385,11 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
             output_router_logits=True,
         )
 
-    def test_gradient_accumulation_moe_aux_loss(self):
+    @parameterized.expand([("with_num_items_in_batch", True), ("without_num_items_in_batch", False)])
+    def test_gradient_accumulation_moe_aux_loss(self, _, use_num_items_in_batch):
         """
-        MoE models add the router aux loss, a per-batch mean, to the token loss. Unlike the token loss, it must not be
-        summed over the accumulated micro-batches. Every sample is the same sequence, so every micro-batch has the
-        routing of the full batch and the GAS run must match the large-batch run.
+        Every sample is the same sequence, so every micro-batch has the routing of the full batch: 4 accumulated
+        batches of 1 must give the same loss and grad norm as one batch of 4, router aux loss included.
         """
         train_dataset = RepeatDataset(torch.randint(0, 128, (16,)), length=8)
 
@@ -406,28 +406,14 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
                 use_cpu=True,
             )
             trainer = Trainer(model, args, train_dataset=train_dataset)
+            # Without loss kwargs, the Trainer passes no `num_items_in_batch` and divides the loss by the GAS itself
+            trainer.model_accepts_loss_kwargs = use_num_items_in_batch
             trainer.train()
             return trainer.state.log_history[0]
 
         base, gas = first_log(batch_size=4, gas_steps=1), first_log(batch_size=1, gas_steps=4)
         self.assertAlmostEqual(gas["loss"], base["loss"], places=4)
         self.assertAlmostEqual(gas["grad_norm"], base["grad_norm"], places=4)
-
-    def test_moe_aux_loss_counted_once_across_processes(self):
-        """
-        Each of the 2 processes holds half of the `num_items_in_batch` label tokens, so once the Trainer multiplies
-        its loss by 2, it must equal the plain loss, router aux loss included.
-        """
-        torch.manual_seed(0)
-        model = Qwen3MoeForCausalLM(self._tiny_moe_config())
-        input_ids = torch.randint(0, 128, (2, 16))
-        inputs = {"input_ids": input_ids, "labels": input_ids}
-        trainer = Trainer(model, TrainingArguments(self.get_auto_remove_tmp_dir(), use_cpu=True))
-
-        num_items_in_batch = torch.tensor(2 * 2 * 15)  # 2 processes x 2 rows x 15 predicted tokens
-        with patch.object(Accelerator, "num_processes", new_callable=PropertyMock, return_value=2):
-            loss = trainer.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
-        torch.testing.assert_close(loss, model(**inputs).loss)
 
     @require_torch_non_multi_accelerator
     def test_num_items_in_batch_causal_lm(self):
