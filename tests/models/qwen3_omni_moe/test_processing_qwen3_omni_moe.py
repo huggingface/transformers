@@ -222,7 +222,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(out_dict[self.audio_input_name]), 1)  # 1 audio in the conversation
         self.assertEqual(len(out_dict[self.videos_input_name]), 10800)  # 1 video in the conversation
 
-    def test_get_num_audio_tokens(self):
+    def test_get_num_multimodal_tokens_matches_processor_call_audio(self):
         "Tests that `_get_num_multimodal_tokens` agrees with `__call__`"
 
         processor = self.get_processor()

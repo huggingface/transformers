@@ -175,9 +175,6 @@ class Qwen3OmniMoeProcessor(OmniModalProcessorMixin):
         audio_inputs["feature_attention_mask"] = audio_inputs.pop(
             "attention_mask"
         )  # rename feature_attention_mask to prevent conflicts later on
-        audio_inputs["input_features"] = audio_inputs.pop(
-            "input_features"
-        )  # rename input_features to prevent conflicts later on
         audio_inputs["num_audio_tokens"] = _get_feat_extract_output_lengths(
             audio_inputs["feature_attention_mask"].sum(-1), n_window
         )
@@ -254,6 +251,8 @@ class Qwen3OmniMoeProcessor(OmniModalProcessorMixin):
     def replace_video_with_audio_token(
         self, video_inputs: dict, video_idx: int, audio_inputs: dict, audio_idx: int, **kwargs
     ) -> str:
+        # Each video grid (`temporal_patch_size` frames) goes at its start time, followed by the audio tokens up to
+        # the next grid. Times are counted in position ids, one per audio token
         audio_token_indices = np.arange(audio_inputs["num_audio_tokens"][audio_idx])
         curr_video_grid_thw = video_inputs["video_grid_thw"][video_idx]
         height = curr_video_grid_thw[1] // self.video_processor.merge_size
@@ -390,9 +389,9 @@ class Qwen3OmniMoeProcessor(OmniModalProcessorMixin):
         """
 
         vision_data = {}
+        merged_kwargs = self._merge_kwargs(self.valid_processor_kwargs, **kwargs)
         if image_sizes is not None:
-            images_kwargs = Qwen3OmniMoeProcessorKwargs._defaults.get("images_kwargs", {}).copy()
-            images_kwargs.update(kwargs)
+            images_kwargs = merged_kwargs["images_kwargs"]
             merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
 
             num_image_patches = [
@@ -403,8 +402,7 @@ class Qwen3OmniMoeProcessor(OmniModalProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
-            videos_kwargs = Qwen3OmniMoeProcessorKwargs._defaults.get("videos_kwargs", {}).copy()
-            videos_kwargs.update(kwargs)
+            videos_kwargs = merged_kwargs["videos_kwargs"]
             merge_size = videos_kwargs.get("merge_size", None) or self.video_processor.merge_size
             num_video_patches = [
                 self.video_processor.get_num_of_video_patches(*video_size, videos_kwargs) for video_size in video_sizes
@@ -414,7 +412,7 @@ class Qwen3OmniMoeProcessor(OmniModalProcessorMixin):
 
         if audio_lengths is not None:
             vision_data["num_audio_tokens"] = [
-                self._get_num_audio_tokens(length, **kwargs) for length in audio_lengths
+                self._get_num_audio_tokens(length, **merged_kwargs["audio_kwargs"]) for length in audio_lengths
             ]
 
         return MultiModalData(**vision_data)
@@ -423,9 +421,7 @@ class Qwen3OmniMoeProcessor(OmniModalProcessorMixin):
         """
         Computes the output length of the convolutional layers and the output length of the audio encoder
         """
-        audio_kwargs = Qwen3OmniMoeProcessorKwargs._defaults.get("audio_kwargs", {}).copy()
-        audio_kwargs.update(kwargs)
-        n_window = audio_kwargs["n_window"]
+        n_window = kwargs.get("n_window", 50)
         input_lengths = audio_length // self.feature_extractor.hop_length
         return int(_get_feat_extract_output_lengths(input_lengths, n_window))
 

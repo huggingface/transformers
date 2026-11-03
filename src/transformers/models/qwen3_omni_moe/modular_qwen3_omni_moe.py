@@ -2777,9 +2777,7 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor):
         """
         Computes the output length of the convolutional layers and the output length of the audio encoder
         """
-        audio_kwargs = Qwen3OmniMoeProcessorKwargs._defaults.get("audio_kwargs", {}).copy()
-        audio_kwargs.update(kwargs)
-        n_window = audio_kwargs["n_window"]
+        n_window = kwargs.get("n_window", 50)
         input_lengths = audio_length // self.feature_extractor.hop_length
         return int(_get_feat_extract_output_lengths(input_lengths, n_window))
 
@@ -2789,9 +2787,6 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor):
         audio_inputs["feature_attention_mask"] = audio_inputs.pop(
             "attention_mask"
         )  # rename feature_attention_mask to prevent conflicts later on
-        audio_inputs["input_features"] = audio_inputs.pop(
-            "input_features"
-        )  # rename input_features to prevent conflicts later on
         audio_inputs["num_audio_tokens"] = _get_feat_extract_output_lengths(
             audio_inputs["feature_attention_mask"].sum(-1), n_window
         )
@@ -2843,6 +2838,8 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor):
     def replace_video_with_audio_token(
         self, video_inputs: dict, video_idx: int, audio_inputs: dict, audio_idx: int, **kwargs
     ) -> str:
+        # Each video grid (`temporal_patch_size` frames) goes at its start time, followed by the audio tokens up to
+        # the next grid. Times are counted in position ids, one per audio token
         audio_token_indices = np.arange(audio_inputs["num_audio_tokens"][audio_idx])
         curr_video_grid_thw = video_inputs["video_grid_thw"][video_idx]
         height = curr_video_grid_thw[1] // self.video_processor.merge_size

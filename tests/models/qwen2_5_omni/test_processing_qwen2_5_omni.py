@@ -227,7 +227,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         expected_video_tokens = sum(thw[0] * thw[1] * thw[2] for thw in out_dict["video_grid_thw"])
         self.assertEqual(len(out_dict[self.videos_input_name]), expected_video_tokens)  # 1 video in the conversation
 
-    def test_get_num_audio_tokens(self):
+    def test_get_num_multimodal_tokens_matches_processor_call_audio(self):
         "Tests that `_get_num_multimodal_tokens` agrees with `__call__`"
 
         processor = self.get_processor()

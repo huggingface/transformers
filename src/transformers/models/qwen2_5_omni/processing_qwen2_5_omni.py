@@ -107,6 +107,14 @@ class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+def _get_feat_extract_output_lengths(input_lengths):
+    """
+    Computes the output length of the convolutional layers and the output length of the audio encoder
+    """
+    input_lengths = (input_lengths - 1) // 2 + 1
+    return (input_lengths - 2) // 2 + 1
+
+
 @auto_docstring
 class Qwen2_5OmniProcessor(OmniModalProcessorMixin):
     valid_processor_kwargs = Qwen2_5OmniProcessorKwargs
@@ -162,11 +170,9 @@ class Qwen2_5OmniProcessor(OmniModalProcessorMixin):
         audio_inputs["feature_attention_mask"] = audio_inputs.pop(
             "attention_mask"
         )  # rename feature_attention_mask to prevent conflicts later on
-        audio_inputs["input_features"] = audio_inputs.pop(
-            "input_features"
-        )  # rename input_features to prevent conflicts later on
-        input_lengths = (audio_inputs["feature_attention_mask"].sum(-1) - 1) // 2 + 1
-        audio_inputs["num_audio_tokens"] = (input_lengths - 2) // 2 + 1
+        audio_inputs["num_audio_tokens"] = _get_feat_extract_output_lengths(
+            audio_inputs["feature_attention_mask"].sum(-1)
+        )
 
         audio_replacements = []
         for idx in range(len(audio)):
@@ -382,9 +388,9 @@ class Qwen2_5OmniProcessor(OmniModalProcessorMixin):
         """
 
         vision_data = {}
+        merged_kwargs = self._merge_kwargs(self.valid_processor_kwargs, **kwargs)
         if image_sizes is not None:
-            images_kwargs = Qwen2_5OmniProcessorKwargs._defaults.get("images_kwargs", {}).copy()
-            images_kwargs.update(kwargs)
+            images_kwargs = merged_kwargs["images_kwargs"]
             merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
 
             num_image_patches = [
@@ -395,8 +401,7 @@ class Qwen2_5OmniProcessor(OmniModalProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
-            videos_kwargs = Qwen2_5OmniProcessorKwargs._defaults.get("videos_kwargs", {}).copy()
-            videos_kwargs.update(kwargs)
+            videos_kwargs = merged_kwargs["videos_kwargs"]
             merge_size = videos_kwargs.get("merge_size", None) or self.video_processor.merge_size
             num_video_patches = [
                 self.video_processor.get_num_of_video_patches(*video_size, videos_kwargs) for video_size in video_sizes
@@ -406,7 +411,7 @@ class Qwen2_5OmniProcessor(OmniModalProcessorMixin):
 
         if audio_lengths is not None:
             vision_data["num_audio_tokens"] = [
-                self._get_num_audio_tokens(length, **kwargs) for length in audio_lengths
+                self._get_num_audio_tokens(length, **merged_kwargs["audio_kwargs"]) for length in audio_lengths
             ]
 
         return MultiModalData(**vision_data)
@@ -418,8 +423,7 @@ class Qwen2_5OmniProcessor(OmniModalProcessorMixin):
         input_lengths = min(
             math.ceil(audio_length / self.feature_extractor.hop_length), self.feature_extractor.nb_max_frames
         )
-        input_lengths = (input_lengths - 1) // 2 + 1
-        return (input_lengths - 2) // 2 + 1
+        return _get_feat_extract_output_lengths(input_lengths)
 
     @property
     def unused_input_names(self) -> list[str]:
