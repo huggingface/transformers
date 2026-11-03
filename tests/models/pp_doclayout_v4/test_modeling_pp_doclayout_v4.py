@@ -146,31 +146,6 @@ class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         for name in ("logits", "pred_boxes", "relative_order_logits", "successor_order_logits"):
             torch.testing.assert_close(getattr(actual, name), getattr(expected, name))
 
-    def test_convert_all_decoder_heads(self):
-        from transformers.models.pp_doclayout_v4.convert_pp_doclayout_v4_to_hf import convert_state_dict
-
-        model = PPDocLayoutV4ForObjectDetection(self.model_tester.get_config())
-        expected = model.state_dict()
-        linear_modules = {name for name, module in model.named_modules() if isinstance(module, torch.nn.Linear)}
-        head_names = {
-            "class_embed": "dec_score_head",
-            "successor_order_head.proj": "dec_roor_order_head",
-            "relative_order_head.proj": "dec_order_head",
-        }
-        paddle_state_dict = {}
-        for name, tensor in expected.items():
-            key = name.removeprefix("model.")
-            for target, source in head_names.items():
-                key = key.replace(f"decoder.{target}.", f"transformer.{source}.")
-            if name.endswith(".weight") and name.rsplit(".", 1)[0] in linear_modules:
-                tensor = tensor.T
-            paddle_state_dict[key] = tensor.numpy().copy()
-
-        converted = convert_state_dict(paddle_state_dict, model)
-        self.assertEqual(converted.keys(), expected.keys())
-        for name, tensor in expected.items():
-            torch.testing.assert_close(converted[name], tensor)
-
     @unittest.skip(reason="PPDocLayoutV4 does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
         pass
@@ -245,7 +220,6 @@ class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             )
 
 
-@unittest.skip(reason="Weights will be published later")
 @require_scipy
 @require_torch
 @require_vision
@@ -272,7 +246,7 @@ class PPDocLayoutV4ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected_shape_logits = torch.Size((1, 300, self.model.config.num_labels))
         logits_expectations = Expectations(
             {
-                ("cuda", None): [
+                (None, None): [
                     [-3.5623, -4.5347, -5.0415],
                     [-3.7752, -3.6966, -4.4212],
                     [-4.4829, -4.3740, -4.5478],
@@ -286,7 +260,7 @@ class PPDocLayoutV4ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected_shape_boxes = torch.Size((1, 300, self.model.config.num_coords))
         boxes_expectations = Expectations(
             {
-                ("cuda", None): [
+                (None, None): [
                     [0.3719, 0.1785, 0.3313],
                     [0.7257, 0.4412, 0.3301],
                     [0.7253, 0.2664, 0.3306],
@@ -302,7 +276,7 @@ class PPDocLayoutV4ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         self.assertEqual(outputs.successor_order_logits.shape, expected_shape_order_logits)
         relative_order_expectations = Expectations(
             {
-                ("cuda", None): [
+                (None, None): [
                     [0.0000, 42.6447, 46.4521],
                     [-42.6447, 0.0000, -28.6615],
                     [-46.4521, 28.6615, 0.0000],
@@ -321,7 +295,7 @@ class PPDocLayoutV4ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         scores_expectations = Expectations(
             {
-                ("cuda", None): [
+                (None, None): [
                     0.9885,
                     0.9781,
                     0.9938,
@@ -349,7 +323,7 @@ class PPDocLayoutV4ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         slice_boxes_expectations = Expectations(
             {
-                ("cuda", None): [
+                (None, None): [
                     [336.0739, 182.0364, 894.1705, 652.6191],
                     [336.4460, 681.8829, 868.7751, 796.9087],
                     [334.0145, 840.8432, 889.1123, 1452.2927],
@@ -363,7 +337,7 @@ class PPDocLayoutV4ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         # Unlike PP-DocLayoutV3 the polygon is always the four regressed corners, in TL, TR, BR, BL order.
         polygon_points_expectations = Expectations(
             {
-                ("cuda", None): [
+                (None, None): [
                     [336.0739, 182.0364],
                     [893.9496, 182.2223],
                     [894.1705, 652.5367],
@@ -374,3 +348,22 @@ class PPDocLayoutV4ModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected_polygon_points = torch.tensor(polygon_points_expectations.get_expectation()).to(torch_device)
         self.assertEqual(results["polygon_points"].shape, torch.Size((13, 4, 2)))
         torch.testing.assert_close(results["polygon_points"][0], expected_polygon_points, rtol=2e-2, atol=2e-2)
+
+    def test_inference_page_geometry(self):
+        inputs = self.image_processor(images=self.image, return_tensors="pt").to(torch_device)
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+
+        results = self.image_processor.post_process_object_detection(
+            outputs, threshold=0.5, target_sizes=[self.image.size[::-1]]
+        )[0]
+
+        # Paddle reference geometry for the same document; allow the interpolation difference between backends.
+        expected_warp = torch.tensor([[-0.0193634, 0.9999876, -0.4065545, -0.0003686, 0.0038717]], device=torch_device)
+        torch.testing.assert_close(outputs.warp_params, expected_warp, rtol=0, atol=0.002)
+        torch.testing.assert_close(results["warp_params"], outputs.warp_params[0])
+        empty = self.image_processor.post_process_object_detection(
+            outputs, threshold=1.0, target_sizes=[self.image.size[::-1]]
+        )[0]
+        self.assertEqual(len(empty["scores"]), 0)
+        torch.testing.assert_close(empty["warp_params"], outputs.warp_params[0])

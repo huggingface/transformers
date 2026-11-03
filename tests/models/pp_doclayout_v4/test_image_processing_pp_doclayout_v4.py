@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import unittest
-from types import SimpleNamespace
 
 from transformers import is_torch_available
 from transformers.testing_utils import require_scipy, require_torch, require_vision
@@ -23,6 +22,8 @@ from ...test_image_processing_common import ImageProcessingTester, ImageProcessi
 
 if is_torch_available():
     import torch
+
+    from transformers.models.pp_doclayout_v4.modeling_pp_doclayout_v4 import PPDocLayoutV4ForObjectDetectionOutput
 
 
 class PPDocLayoutV4ImageProcessingTester(ImageProcessingTester):
@@ -68,7 +69,7 @@ def _dummy_outputs(num_queries=8, num_labels=25):
     relative = torch.triu(torch.full((num_queries, num_queries), 5.0), diagonal=1)
     relative = (relative - relative.T).unsqueeze(0).contiguous()
     quad = torch.tensor(_DUMMY_QUAD)
-    return SimpleNamespace(
+    return PPDocLayoutV4ForObjectDetectionOutput(
         logits=_dummy_logits([1.0 + query for query in range(num_queries)], num_labels=num_labels),
         pred_boxes=quad.expand(1, num_queries, 10).contiguous(),
         relative_order_logits=relative,
@@ -81,6 +82,20 @@ def _dummy_outputs(num_queries=8, num_labels=25):
 @require_vision
 class PPDocLayoutV4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processor_tester_class = PPDocLayoutV4ImageProcessingTester
+
+    def test_post_process_page_geometry(self):
+        for image_processing_class in self.image_processing_classes.values():
+            processor = image_processing_class()
+            outputs = _dummy_outputs()
+            outputs.warp_params = torch.tensor([[90.0, 0.9, 10.0, 0.2, -0.3]])
+            for threshold in (0.5, 1.0):
+                result = processor.post_process_object_detection(
+                    outputs, threshold=threshold, target_sizes=[(200, 400)]
+                )[0]
+                torch.testing.assert_close(result["warp_params"], outputs.warp_params[0])
+            outputs.warp_params = None
+            result = processor.post_process_object_detection(outputs, target_sizes=[(200, 400)])[0]
+            self.assertNotIn("warp_params", result)
 
     @unittest.skip(
         reason="PPDocLayoutV4 uses antialias=False which is not supported for 4-channel images consistently"
@@ -152,7 +167,7 @@ class PPDocLayoutV4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
         successor[:, 1, 2] = 5.0
         relative = torch.triu(torch.full((num_queries, num_queries), 5.0), diagonal=1)
         relative = (relative - relative.T).unsqueeze(0).contiguous()
-        outputs = SimpleNamespace(
+        outputs = PPDocLayoutV4ForObjectDetectionOutput(
             logits=logits,
             pred_boxes=torch.tensor(_DUMMY_QUAD).expand(1, num_queries, 10).contiguous(),
             relative_order_logits=relative,
@@ -185,7 +200,7 @@ class PPDocLayoutV4ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
 
     def test_resize_runs_in_float_and_clips_overshoot(self):
         """Bicubic resizing must clip ringing in the input range without quantizing rescaled pixels."""
-        image = torch.zeros(3, 64, 64, dtype=torch.uint8)
+        image = torch.zeros(3, 64, 64, dtype=torch.float32)
         image[:, :, 30:34] = 255
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
