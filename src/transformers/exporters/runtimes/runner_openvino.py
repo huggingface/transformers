@@ -42,6 +42,14 @@ def _openvino_device(device=None) -> str:
     raise ValueError(f"OpenVINO cannot run on {device}; pass `cpu`, `xpu` (Intel GPU), or no device for `AUTO`.")
 
 
+def openvino_output(value, port) -> torch.Tensor:
+    """An inference result as a torch tensor. OpenVINO's Python API returns a bf16 output as a float16 array of the
+    bf16 bits (NumPy has no bf16), which read as float16 give wrong values: reinterpret those bits as bf16."""
+    if port.get_element_type() == openvino.Type.bf16:
+        return torch.from_numpy(value.view("int16")).view(torch.bfloat16)
+    return torch.from_numpy(value)
+
+
 class OpenVINOModelRunner(ModelRunner):
     """Runs an `openvino.Model`, compiled for a device, through one infer request."""
 
@@ -80,4 +88,4 @@ class OpenVINOModelRunner(ModelRunner):
     def __call__(self, share_inputs: bool = True, share_outputs: bool = False, **kwargs) -> Any:
         feed = openvino_feed(self.compiled_model, kwargs)
         outputs = self.request.infer(feed, share_inputs=share_inputs, share_outputs=share_outputs)
-        return self.unflatten([torch.from_numpy(outputs[port]) for port in self.compiled_model.outputs])
+        return self.unflatten([openvino_output(outputs[port], port) for port in self.compiled_model.outputs])
