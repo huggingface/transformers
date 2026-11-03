@@ -3218,6 +3218,7 @@ class GenerationMixin(ContinuousMixin):
         else:
             stop_check = StopCheck(streamer)
 
+        accepts_attention_mask = logits_processor._accepts_kwarg("attention_mask")
         with self._optimize_model_for_decode():
             while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
                 if prefill_consumed:
@@ -3239,8 +3240,9 @@ class GenerationMixin(ContinuousMixin):
                 # (the clone itself is always small)
                 next_token_logits = outputs.logits[:, -1].to(copy=True, dtype=torch.float32, device=input_ids.device)
                 processor_kwargs = {}
-                if any("attention_mask" in inspect.signature(p.__call__).parameters for p in logits_processor):
-                    attention_mask = model_kwargs.get("attention_mask")
+                if accepts_attention_mask:
+                    mask_key = "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
+                    attention_mask = model_kwargs.get(mask_key)
                     if attention_mask is not None and attention_mask.shape[-1] != input_ids.shape[-1]:
                         attention_mask = attention_mask[:, : input_ids.shape[-1]]
                     processor_kwargs["attention_mask"] = attention_mask
@@ -3716,6 +3718,7 @@ class GenerationMixin(ContinuousMixin):
         )
 
         # 4. run the generation loop
+        accepts_attention_mask = logits_processor._accepts_kwarg("attention_mask")
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             if prefill_consumed:
                 # a. Forward current tokens, obtain the logits
@@ -3743,8 +3746,9 @@ class GenerationMixin(ContinuousMixin):
             # `temperature`, ...), and add new logprobs to existing running logprobs scores.
             log_probs = nn.functional.log_softmax(logits, dim=-1)
             processor_kwargs = {}
-            if any("attention_mask" in inspect.signature(p.__call__).parameters for p in logits_processor):
-                attention_mask = model_kwargs.get("attention_mask")
+            if accepts_attention_mask:
+                mask_key = "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
+                attention_mask = model_kwargs.get(mask_key)
                 if attention_mask is not None and attention_mask.shape[-1] != flat_running_sequences.shape[-1]:
                     attention_mask = attention_mask[:, : flat_running_sequences.shape[-1]]
                 processor_kwargs["attention_mask"] = attention_mask

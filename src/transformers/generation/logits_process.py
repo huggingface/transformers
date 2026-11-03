@@ -67,6 +67,65 @@ class LogitsProcessorList(list):
     inputs.
     """
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._processor_signature_cache: list[dict] | None = None
+
+    def _compute_signature_cache(self) -> list[dict]:
+        """Compute per-processor accepted/required extra-kwarg info, parallel to self."""
+        cache: list[dict] = []
+        for processor in self:
+            parameters = inspect.signature(processor.__call__).parameters
+            accepted: set[str] = set()
+            required: list[str] = []
+            var_keyword = False
+            for name, param in parameters.items():
+                if name in ("self", "input_ids", "scores"):
+                    continue
+                if param.kind is inspect.Parameter.VAR_KEYWORD:
+                    var_keyword = True
+                    break
+                if param.kind in (
+                    inspect.Parameter.POSITIONAL_ONLY,
+                    inspect.Parameter.VAR_POSITIONAL,
+                ):
+                    # Cannot be supplied as a keyword argument
+                    continue
+                # POSITIONAL_OR_KEYWORD or KEYWORD_ONLY
+                accepted.add(name)
+                if param.default is inspect.Parameter.empty:
+                    required.append(name)
+            cache.append(
+                {
+                    "processor_id": id(processor),
+                    "accepted": None if var_keyword else frozenset(accepted),
+                    "required": tuple(required),
+                }
+            )
+        return cache
+
+    def _ensure_signature_cache(self) -> None:
+        """Populate or refresh the signature cache if the list was mutated."""
+        if self._processor_signature_cache is None:
+            self._processor_signature_cache = self._compute_signature_cache()
+            return
+        cache = self._processor_signature_cache
+        if len(cache) != len(self):
+            self._processor_signature_cache = self._compute_signature_cache()
+            return
+        for entry, processor in zip(cache, self):
+            if entry["processor_id"] != id(processor):
+                self._processor_signature_cache = self._compute_signature_cache()
+                return
+
+    def _accepts_kwarg(self, name: str) -> bool:
+        """Return True if any processor accepts `name` as a keyword argument."""
+        self._ensure_signature_cache()
+        return any(
+            info["accepted"] is None or name in info["accepted"]
+            for info in self._processor_signature_cache
+        )
+
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.FloatTensor:
         r"""
         Args:
@@ -83,22 +142,24 @@ class LogitsProcessorList(list):
                 The processed prediction scores.
 
         """
-        for processor in self:
-            function_args = inspect.signature(processor.__call__).parameters
-            if len(function_args) > 2:
-                extra_params = list(function_args.keys())[2:]
-                required_extra_params = [
-                    arg for arg in extra_params
-                    if function_args[arg].default is inspect.Parameter.empty
-                ]
-                if not all(arg in kwargs for arg in required_extra_params):
-                    raise ValueError(
-                        f"Make sure that all the required parameters: {required_extra_params} for "
-                        f"{processor.__class__} are passed to the logits processor."
-                    )
+        self._ensure_signature_cache()
+        for processor, info in zip(self, self._processor_signature_cache):
+            accepted = info["accepted"]
+            required = info["required"]
+
+            missing = [arg for arg in required if arg not in kwargs]
+            if missing:
+                raise ValueError(
+                    f"Make sure that all the required parameters: {missing} for "
+                    f"{processor.__class__} are passed to the logits processor."
+                )
+            if accepted is None:
+                # **kwargs processor: forward everything
                 scores = processor(input_ids, scores, **kwargs)
             else:
-                scores = processor(input_ids, scores)
+                # Forward only kwargs this processor declares
+                filtered_kwargs = {k: v for k, v in kwargs.items() if k in accepted}
+                scores = processor(input_ids, scores, **filtered_kwargs)
 
         return scores
 

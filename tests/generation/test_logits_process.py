@@ -60,10 +60,45 @@ if is_torch_available():
         DiaClassifierFreeGuidanceLogitsProcessor,
         DiaEOSChannelFilterLogitsProcessor,
         DiaEOSDelayPatternLogitsProcessor,
+        LogitsProcessor,
     )
     from transformers.models.unlimited_ocr.generation_unlimited_ocr import (
         UnlimitedOcrSlidingWindowNoRepeatNgramLogitsProcessor,
     )
+
+
+class CurLenProcessor(LogitsProcessor):
+    def __init__(self):
+        self.received_kwargs = None
+
+    def __call__(self, input_ids, scores, cur_len=0):
+        self.received_kwargs = {"cur_len": cur_len}
+        return scores
+
+
+class RequiredCurLenProcessor(LogitsProcessor):
+    def __call__(self, input_ids, scores, cur_len):
+        return scores
+
+
+class KwargsProcessor(LogitsProcessor):
+    def __init__(self):
+        self.received_kwargs = None
+
+    def __call__(self, input_ids, scores, **kwargs):
+        self.received_kwargs = kwargs
+        return scores
+
+
+class AttentionMaskProcessor(LogitsProcessor):
+    def __init__(self):
+        self.received_kwargs = None
+
+    def __call__(self, input_ids, scores, attention_mask=None):
+        self.received_kwargs = {
+            "attention_mask_provided": attention_mask is not None,
+        }
+        return scores
 
 
 @require_torch
@@ -351,6 +386,90 @@ class LogitsProcessorTest(unittest.TestCase):
 
         # Both rows should produce identical EOS scores (batch-independence from padding)
         self.assertAlmostEqual(processed_scores[0, 0].item(), processed_scores[1, 0].item())
+
+    def test_custom_processor_optional_param_filters_attention_mask(self):
+        input_ids = torch.tensor([[1, 2, 3]], device=torch_device, dtype=torch.long)
+        scores = torch.zeros(1, 10, device=torch_device)
+        mask = torch.tensor([[1, 1, 1]], device=torch_device, dtype=torch.long)
+        rep = RepetitionPenaltyLogitsProcessor(penalty=2.0)
+        cur = CurLenProcessor()
+        lst = LogitsProcessorList([rep, cur])
+        lst(input_ids, scores, attention_mask=mask, cur_len=5)
+        assert cur.received_kwargs == {"cur_len": 5}
+
+    def test_custom_processor_required_param_still_validated(self):
+        input_ids = torch.tensor([[1, 2, 3]], device=torch_device, dtype=torch.long)
+        scores = torch.zeros(1, 10, device=torch_device)
+        lst = LogitsProcessorList([RequiredCurLenProcessor()])
+        with self.assertRaises(ValueError):
+            lst(input_ids, scores)  # cur_len missing
+
+    def test_var_keyword_processor_receives_all_kwargs(self):
+        input_ids = torch.tensor([[1, 2, 3]], device=torch_device, dtype=torch.long)
+        scores = torch.zeros(1, 10, device=torch_device)
+        proc = KwargsProcessor()
+        lst = LogitsProcessorList([proc])
+        lst(
+            input_ids,
+            scores,
+            attention_mask=torch.tensor([[1, 1, 1]], device=torch_device),
+            cur_len=5,
+        )
+        assert proc.received_kwargs is not None
+        assert "attention_mask" in proc.received_kwargs
+        assert proc.received_kwargs["cur_len"] == 5
+
+    def test_duplicate_processor_instances_cache_correctness(self):
+        input_ids = torch.tensor([[1, 2, 3]], device=torch_device, dtype=torch.long)
+        scores = torch.zeros(1, 10, device=torch_device)
+        proc = CurLenProcessor()
+        lst = LogitsProcessorList([proc, proc])  # duplicate instance
+        lst(
+            input_ids,
+            scores,
+            attention_mask=torch.tensor([[1, 1, 1]], device=torch_device),
+            cur_len=7,
+        )
+        assert proc.received_kwargs == {"cur_len": 7}
+
+    def test_cache_refreshes_after_append(self):
+        input_ids = torch.tensor([[1, 2, 3]], device=torch_device, dtype=torch.long)
+        scores = torch.zeros(1, 10, device=torch_device)
+        mask = torch.tensor([[1, 1, 1]], device=torch_device, dtype=torch.long)
+
+        cur = CurLenProcessor()
+        lst = LogitsProcessorList([cur])
+        # Populate the signature cache with a single processor.
+        lst(input_ids, scores, cur_len=5)
+        assert cur.received_kwargs == {"cur_len": 5}
+
+        # Append a processor with a different signature.
+        attn = AttentionMaskProcessor()
+        lst.append(attn)
+
+        # The cache must refresh: len changed, so both processors get cache entries.
+        lst(input_ids, scores, cur_len=9, attention_mask=mask)
+        assert cur.received_kwargs == {"cur_len": 9}
+        assert attn.received_kwargs == {"attention_mask_provided": True}
+
+    def test_cache_refreshes_after_replace(self):
+        input_ids = torch.tensor([[1, 2, 3]], device=torch_device, dtype=torch.long)
+        scores = torch.zeros(1, 10, device=torch_device)
+        mask = torch.tensor([[1, 1, 1]], device=torch_device, dtype=torch.long)
+
+        cur = CurLenProcessor()
+        lst = LogitsProcessorList([cur])
+        # Populate the signature cache.
+        lst(input_ids, scores, cur_len=5)
+        assert cur.received_kwargs == {"cur_len": 5}
+
+        # Replace the processor with one having a different signature.
+        attn = AttentionMaskProcessor()
+        lst[0] = attn
+
+        # The cache must refresh: processor id changed.
+        lst(input_ids, scores, attention_mask=mask)
+        assert attn.received_kwargs == {"attention_mask_provided": True}
 
     def test_encoder_repetition_penalty_dist_process(self):
         input_ids = torch.tensor([[0, 1], [5, 0]], device=torch_device, dtype=torch.long)

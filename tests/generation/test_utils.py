@@ -4152,6 +4152,144 @@ class GenerationIntegrationTests(unittest.TestCase):
             penalized_out.scores[0][0, eos_token_id].item(),
         )
 
+    def test_t5_decoder_attention_mask_explicitly_supplied(self):
+        """decoder_attention_mask grows in lockstep with decoder input_ids when explicitly supplied."""
+        model = AutoModelForSeq2SeqLM.from_pretrained("hf-internal-testing/tiny-random-t5").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-t5")
+
+        inputs = tokenizer("Hello world", return_tensors="pt")
+        encoder_input_ids = inputs.input_ids.to(torch_device)
+        encoder_attention_mask = inputs.attention_mask.to(torch_device)
+        decoder_attention_mask = torch.tensor([[1]], device=torch_device, dtype=torch.long)
+
+        observed_shapes = []
+        orig_update = model._update_model_kwargs_for_generation
+
+        def tracking_update(outputs, model_kwargs, is_encoder_decoder, num_new_tokens=1):
+            result = orig_update(outputs, model_kwargs, is_encoder_decoder, num_new_tokens)
+            dam = result.get("decoder_attention_mask")
+            if dam is not None:
+                observed_shapes.append(tuple(dam.shape))
+            return result
+
+        model._update_model_kwargs_for_generation = tracking_update
+
+        out = model.generate(
+            encoder_input_ids,
+            attention_mask=encoder_attention_mask,
+            decoder_attention_mask=decoder_attention_mask,
+            max_new_tokens=3,
+            repetition_penalty=2.0,
+            do_sample=True,
+            return_dict_in_generate=True,
+            output_scores=True,
+        )
+
+        # decoder starts at [1, 1], grows by 1 per generated token -> [1, 2], [1, 3], [1, 4]
+        assert observed_shapes == [(1, 2), (1, 3), (1, 4)], observed_shapes
+        # Decoder output: 1 start token + 3 generated = 4 tokens (encoder tokens NOT included)
+        assert out.sequences.shape[-1] == 4
+
+    def test_t5_decoder_attention_mask_absent(self):
+        """When no decoder_attention_mask is supplied, it remains absent and processing uses None."""
+        model = AutoModelForSeq2SeqLM.from_pretrained("hf-internal-testing/tiny-random-t5").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-t5")
+
+        inputs = tokenizer("Hello world", return_tensors="pt")
+        encoder_input_ids = inputs.input_ids.to(torch_device)
+        encoder_attention_mask = inputs.attention_mask.to(torch_device)
+
+        dam_seen = []
+        orig_update = model._update_model_kwargs_for_generation
+
+        def tracking_update(outputs, model_kwargs, is_encoder_decoder, num_new_tokens=1):
+            result = orig_update(outputs, model_kwargs, is_encoder_decoder, num_new_tokens)
+            dam_seen.append(model_kwargs.get("decoder_attention_mask"))
+            return result
+
+        model._update_model_kwargs_for_generation = tracking_update
+
+        out = model.generate(
+            encoder_input_ids,
+            attention_mask=encoder_attention_mask,
+            max_new_tokens=3,
+            repetition_penalty=2.0,
+            do_sample=True,
+            return_dict_in_generate=True,
+            output_scores=True,
+        )
+
+        # decoder_attention_mask was never created automatically
+        assert all(dam is None for dam in dam_seen), dam_seen
+        # Generation still succeeds with attention_mask=None passed to processor
+        assert out.sequences is not None
+        assert out.sequences.shape[-1] == 4
+
+    def test_t5_beam_search_decoder_attention_mask_dimensions(self):
+        """decoder_attention_mask shape matches flat_running_sequences in beam search."""
+        model = AutoModelForSeq2SeqLM.from_pretrained("hf-internal-testing/tiny-random-t5").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-t5")
+
+        inputs = tokenizer("Hello world", return_tensors="pt")
+        encoder_input_ids = inputs.input_ids.to(torch_device)
+        encoder_attention_mask = inputs.attention_mask.to(torch_device)
+        decoder_attention_mask = torch.tensor([[1]], device=torch_device, dtype=torch.long)
+
+        observed_shapes = []
+        orig_update = model._update_model_kwargs_for_generation
+
+        def tracking_update(outputs, model_kwargs, is_encoder_decoder, num_new_tokens=1):
+            result = orig_update(outputs, model_kwargs, is_encoder_decoder, num_new_tokens)
+            dam = result.get("decoder_attention_mask")
+            if dam is not None:
+                observed_shapes.append(tuple(dam.shape))
+            return result
+
+        model._update_model_kwargs_for_generation = tracking_update
+
+        out = model.generate(
+            encoder_input_ids,
+            attention_mask=encoder_attention_mask,
+            decoder_attention_mask=decoder_attention_mask,
+            max_new_tokens=3,
+            repetition_penalty=2.0,
+            num_beams=2,
+            num_return_sequences=2,
+            return_dict_in_generate=True,
+            output_scores=True,
+        )
+
+        # flat_running_sequences: [batch * num_beams, cur_len] = [2, cur_len]
+        expected_flat_bs = 1 * 2
+        assert all(s[0] == expected_flat_bs for s in observed_shapes), observed_shapes
+        # Grows by 1 per beam-search step: [2, 2], [2, 3], [2, 4]
+        assert observed_shapes == [(expected_flat_bs, 2), (expected_flat_bs, 3), (expected_flat_bs, 4)], observed_shapes
+        # Decoder output: [num_return_sequences, 1+3] = [2, 4]
+        assert out.sequences.shape == (2, 4)
+
+    def test_t5_padded_encoder_repetition_penalty_no_shape_mismatch(self):
+        """Regression: encoder mask must not be applied to decoder tokens (no shape mismatch)."""
+        model = AutoModelForSeq2SeqLM.from_pretrained("hf-internal-testing/tiny-random-t5").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-t5")
+        tokenizer.pad_token = tokenizer.eos_token
+
+        inputs = tokenizer(["Hi", "Hello world"], return_tensors="pt", padding=True)
+        encoder_input_ids = inputs.input_ids.to(torch_device)
+        encoder_attention_mask = inputs.attention_mask.to(torch_device)
+
+        # Encoder mask length (padded encoder input) != decoder sequence length.
+        # Must not crash: decoder_attention_mask (or None) is used, not encoder mask.
+        out = model.generate(
+            encoder_input_ids,
+            attention_mask=encoder_attention_mask,
+            max_new_tokens=3,
+            repetition_penalty=2.0,
+            do_sample=True,
+            return_dict_in_generate=True,
+            output_scores=True,
+        )
+        assert out.sequences is not None
+
     def test_eos_token_id_int_and_list_top_k_top_sampling(self):
         "Tests that `generate` can run with a list of EOS token ids."
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
