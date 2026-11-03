@@ -1045,32 +1045,34 @@ def _aten_grouped_mm(mat_a: TReal, mat_b: TReal, offs: INT64, bias=None, out_dty
     cumulative end index per group.
 
     Per-group `Slice + MatMul + Concat`. `G` (number of experts) is static for any
-    concrete model, so unroll at translation time: emit one `Slice + MatMul` triple
-    per group and a final `Concat`. Avoids the `(M, K, N)` materialisation a naive
-    `weight[group_idx]` gather would emit — peak memory is `O(M·N + max(n_g)·K + K·N)`.
+    concrete model, so unroll at translation time: one `MatMul` per group and a final
+    `Concat`. Avoids the `(M, K, N)` materialisation a naive `weight[group_idx]` gather
+    would emit — peak memory is `O(M·N + max(n_g)·K + K·N)`. No `Slice`: onnxscript's
+    `SlicesSplit` rule tries every pair of `Slice`s in the graph, which a `Slice` per group
+    and layer makes the bulk of the export's time. The group ends and weights come from one
+    `Split` each, and each group's rows are gathered from a `Range`.
     """
     G = mat_b.shape[0]
     if not isinstance(G, int):
         raise ValueError("_aten_grouped_mm: number of experts (mat_b.shape[0]) must be static at translation time")
 
-    offs_i64 = op.Cast(offs, to=7)
     axes_0 = op.Constant(value_ints=[0])
-    zero_1d = op.Constant(value_ints=[0])
+    ends = op.Split(op.Cast(offs, to=7), axis=0, num_outputs=G) if G > 1 else [op.Cast(offs, to=7)]
+    weights = op.Split(mat_b, axis=0, num_outputs=G) if G > 1 else [mat_b]
+    biases = (op.Split(bias, axis=0, num_outputs=G) if G > 1 else [bias]) if bias is not None else None
 
     outputs = []
-    prev_end = zero_1d
+    prev_end = op.Constant(value_ints=[0])
+    one = op.Constant(value_int=1)
     for g in range(G):
-        g_lo = op.Constant(value_ints=[g])
-        g_hi = op.Constant(value_ints=[g + 1])
-        end = op.Slice(offs_i64, g_lo, g_hi, axes_0)  # (1,) — offs[g]
-        a_g = op.Slice(mat_a, prev_end, end, axes_0)  # (n_g, K)
-        w_g = op.Squeeze(op.Slice(mat_b, g_lo, g_hi, axes_0), axes_0)  # (K, N)
-        out_g = op.MatMul(a_g, w_g)  # (n_g, N)
-        if bias is not None:
+        rows_g = op.Range(op.Squeeze(prev_end, axes_0), op.Squeeze(ends[g], axes_0), one)
+        a_g = op.Gather(mat_a, rows_g, axis=0)  # (n_g, K)
+        out_g = op.MatMul(a_g, op.Squeeze(weights[g], axes_0))  # (n_g, N)
+        if biases is not None:
             # per-group bias ``(G, N)`` → ``(N,)`` broadcasts over the group's rows
-            out_g = op.Add(out_g, op.Squeeze(op.Slice(bias, g_lo, g_hi, axes_0), axes_0))
+            out_g = op.Add(out_g, op.Squeeze(biases[g], axes_0))
         outputs.append(out_g)
-        prev_end = end
+        prev_end = ends[g]
 
     result = op.Concat(*outputs, axis=0)  # (M, N)
     if out_dtype is not None:
