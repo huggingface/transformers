@@ -131,6 +131,9 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs_dict["input_ids"][:, :2] = config.pad_token_id
+        inputs_dict["attention_mask"][:, :2] = 0
+        inputs_dict["attention_mask"][:, 2:] = 1
         config._attn_implementation = "eager"
         config.return_dict = True
         seq_len = self.model_tester.seq_length
@@ -147,6 +150,7 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
                 len(outputs.attentions),
                 sum(layer != "linear_attention" for layer in config.layer_types),
             )
+            self.assertTrue(torch.isfinite(outputs.attentions[0]).all())
             self.assertListEqual(
                 list(outputs.attentions[0].shape[-3:]),
                 [config.num_attention_heads, seq_len, seq_len],
