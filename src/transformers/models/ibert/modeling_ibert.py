@@ -628,7 +628,7 @@ class IBertModel(IBertPreTrainedModel):
 
     """
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: IBertConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -731,7 +731,7 @@ class IBertForMaskedLM(IBertPreTrainedModel):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: IBertConfig):
         super().__init__(config)
 
         self.ibert = IBertModel(config, add_pooling_layer=False)
@@ -822,7 +822,7 @@ class IBertLMHead(nn.Module):
     """
 )
 class IBertForSequenceClassification(IBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: IBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -897,7 +897,7 @@ class IBertForSequenceClassification(IBertPreTrainedModel):
 
 @auto_docstring
 class IBertForMultipleChoice(IBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: IBertConfig):
         super().__init__(config)
 
         self.ibert = IBertModel(config)
@@ -995,7 +995,7 @@ class IBertForMultipleChoice(IBertPreTrainedModel):
 
 @auto_docstring
 class IBertForTokenClassification(IBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: IBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1076,7 +1076,7 @@ class IBertClassificationHead(nn.Module):
 
 @auto_docstring
 class IBertForQuestionAnswering(IBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: IBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

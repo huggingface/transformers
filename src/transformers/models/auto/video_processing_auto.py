@@ -61,6 +61,7 @@ else:
             ("hyperclovax_vision_v2", {"torchvision": "Qwen2VLVideoProcessor"}),
             ("instructblip", {"torchvision": "InstructBlipVideoVideoProcessor"}),
             ("minicpmv4_7", {"torchvision": "MiniCPMV4_6VideoProcessor"}),
+            ("muse_spark", {"torchvision": "MuseGlimmerVideoProcessor"}),
             ("pe_audio_video", {"torchvision": "PeVideoVideoProcessor"}),
             ("qwen2_5_omni", {"torchvision": "Qwen2VLVideoProcessor"}),
             ("qwen2_5_vl", {"torchvision": "Qwen2VLVideoProcessor"}),
@@ -424,7 +425,6 @@ class AutoVideoProcessor:
             )
 
         if has_remote_code and trust_remote_code and not explicit_local_code:
-            class_ref = video_processor_auto_map
             video_processor_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
             _ = kwargs.pop("code_revision", None)
             video_processor_class.register_for_auto_class()

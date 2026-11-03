@@ -36,7 +36,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.generic import merge_with_config_defaults
@@ -514,7 +514,7 @@ class VoxtralRealtimeEncoder(VoxtralRealtimePreTrainedModel):
         "hidden_states": VoxtralRealtimeEncoderLayer,
     }
 
-    def __init__(self, config):
+    def __init__(self, config: VoxtralRealtimeEncoderConfig):
         super().__init__(config)
         self.embedder = VoxtralRealtimeEmbedder(config)
         self.layers = nn.ModuleList(
@@ -750,7 +750,7 @@ class VoxtralRealtimeTextPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class VoxtralRealtimeTextModel(VoxtralRealtimeTextPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: VoxtralRealtimeTextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -861,7 +861,7 @@ class VoxtralRealtimeMultiModalProjector(nn.Module):
     """
 )
 class VoxtralRealtimeModel(VoxtralRealtimePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: VoxtralRealtimeConfig):
         super().__init__(config)
         self.audio_tower = VoxtralRealtimeEncoder(config.audio_config)
         self.language_model = VoxtralRealtimeTextModel(config.text_config)
@@ -1010,8 +1010,9 @@ class VoxtralRealtimeModel(VoxtralRealtimePreTrainedModel):
 
 class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
-    def __init__(self, config):
+    def __init__(self, config: VoxtralRealtimeConfig):
         super().__init__(config)
         self.model = VoxtralRealtimeModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
@@ -1086,8 +1087,8 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

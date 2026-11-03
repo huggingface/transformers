@@ -18,9 +18,9 @@ mixed precision, logging, NEFTune, memory metrics, and end-to-end training.
 """
 
 import math
-import os
 import tempfile
 from functools import partial
+from unittest.mock import patch
 
 import datasets
 import numpy as np
@@ -56,10 +56,8 @@ from transformers.testing_utils import (
     LoggingLevel,
     TestCasePlus,
     backend_device_count,
-    execute_subprocess_async,
     require_bitsandbytes,
     require_liger_kernel,
-    require_non_hpu,
     require_peft,
     require_torch,
     require_torch_accelerator,
@@ -69,8 +67,6 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     require_torch_non_multi_accelerator,
     require_torch_tf32,
-    run_first,
-    slow,
     torch_device,
 )
 from transformers.trainer_utils import align_special_tokens
@@ -477,6 +473,20 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
             num_items = trainer._get_num_items_in_batch(batch_samples, torch.device("cpu"))
             self.assertEqual(int(num_items), 13)
 
+    @require_torch_non_multi_accelerator
+    def test_num_items_in_batch_keeps_fraction_under_model_parallelism(self):
+        from transformers import LlamaForTokenClassification
+
+        config = LlamaConfig(
+            vocab_size=64, hidden_size=16, intermediate_size=32, num_hidden_layers=2, num_attention_heads=2
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = Trainer(model=LlamaForTokenClassification(config), args=TrainingArguments(output_dir=tmp_dir))
+            batch_samples = [{"labels": torch.tensor([[1, 2, 3, -100]])}]
+            with patch.object(trainer, "get_cp_size", return_value=2):
+                num_items = trainer._get_num_items_in_batch(batch_samples, torch.device("cpu"))
+            self.assertEqual(num_items.item(), 1.5)
+
     @require_torch_multi_accelerator
     def test_num_batches_in_training_with_gradient_accumulation(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -642,6 +652,30 @@ class TrainerLoggingTest(TestCasePlus):
 
         self.assertTrue(is_any_loss_nan_or_inf(log_history_no_filter))
         self.assertFalse(is_any_loss_nan_or_inf(log_history_filter))
+
+    def test_eval_loss_inf_nan_filter(self):
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        x = torch.randint(0, 100, (16,))
+        valid = [{"input_ids": x, "labels": x}] * 8
+        # Batches whose labels are all masked have a NaN loss. 8 in a row keeps them apart from valid batches
+        # even when DataParallel merges the per-device batches.
+        masked = [{"input_ids": x, "labels": torch.full_like(x, -100)}] * 8
+
+        def eval_loss(eval_dataset, logging_nan_inf_filter):
+            args = TrainingArguments(
+                self.get_auto_remove_tmp_dir(),
+                per_device_eval_batch_size=1,
+                logging_nan_inf_filter=logging_nan_inf_filter,
+            )
+            return Trainer(tiny_gpt2, args).evaluate(eval_dataset)["eval_loss"]
+
+        self.assertTrue(math.isnan(eval_loss(masked + valid, logging_nan_inf_filter=False)))
+        self.assertAlmostEqual(
+            eval_loss(masked + valid, logging_nan_inf_filter=True),
+            eval_loss(valid, logging_nan_inf_filter=True),
+            places=5,
+        )
 
     def test_log_level(self):
         # testing only --log_level (--log_level_replica requires multiple gpus and DDP and is tested elsewhere)
@@ -1273,52 +1307,6 @@ class TrainerLigerKernelTest(TestCasePlus):
 @require_torch
 class TrainerIntegrationTest(TestCasePlus):
     """Integration tests: compatibility, and e2e."""
-
-    @slow
-    @run_first
-    @require_non_hpu
-    @require_torch_multi_accelerator
-    def test_end_to_end_example(self):
-        # Tests that `translation.py` will run without issues
-        script_path = os.path.abspath(
-            os.path.join(
-                os.path.dirname(__file__), "..", "..", "examples", "pytorch", "translation", "run_translation.py"
-            )
-        )
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            command = [
-                "accelerate",
-                "launch",
-                script_path,
-                "--model_name_or_path",
-                "google-t5/t5-small",
-                "--per_device_train_batch_size",
-                "1",
-                "--output_dir",
-                tmpdir,
-                "--do_train",
-                "--max_train_samples",
-                "64",
-                "--num_train_epochs",
-                "1",
-                "--dataset_name",
-                "wmt16",
-                "--dataset_config",
-                "ro-en",
-                "--source_lang",
-                "en",
-                "--target_lang",
-                "ro",
-                "--do_predict",
-                "--max_predict_samples",
-                "64",
-                "--predict_with_generate",
-                "--ddp_timeout",
-                "60",
-            ]
-            execute_subprocess_async(command)
-            # successful return here == success - any errors would have caused an error or a timeout in the sub-call
 
     def test_special_token_alignment(self):
         """

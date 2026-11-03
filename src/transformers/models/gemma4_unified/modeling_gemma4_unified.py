@@ -17,16 +17,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from collections import UserDict
 from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
 from torch import nn
-from torch.nn import init
 
+from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, KVSharingDict
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...masking_utils import (
@@ -42,7 +41,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -86,7 +85,7 @@ class Gemma4UnifiedTextModelOutputWithPast(BaseModelOutputWithPast):
             Used to pass shared KV states between layers during KV sharing.
     """
 
-    shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
+    shared_kv_states: KVSharingDict | None = None
 
 
 @auto_docstring(
@@ -126,7 +125,7 @@ class Gemma4UnifiedCausalLMOutputWithPast(ModelOutput):
 
     audio_hidden_states: torch.FloatTensor | None = None
 
-    shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
+    shared_kv_states: KVSharingDict | None = None
 
 
 @auto_docstring(
@@ -157,7 +156,7 @@ class Gemma4UnifiedModelOutputWithPast(BaseModelOutputWithPast):
 
     audio_hidden_states: torch.FloatTensor | None = None
 
-    shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
+    shared_kv_states: KVSharingDict | None = None
 
 
 class Gemma4UnifiedRMSNorm(nn.Module):
@@ -348,12 +347,9 @@ class Gemma4UnifiedTextAttention(nn.Module):
         self.is_causal = config.use_bidirectional_attention != "all"
 
         # Shared kv cache
-        first_kv_shared_layer_idx = self.config.num_hidden_layers - getattr(self.config, "num_kv_shared_layers", 0)
-        self.is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx >= 0
-        prev_layers = config.layer_types[:first_kv_shared_layer_idx]
-        self.store_full_length_kv = not self.is_kv_shared_layer and layer_idx == len(prev_layers) - 1 - prev_layers[
-            ::-1
-        ].index(config.layer_types[layer_idx])
+        kv_sharing_mode = config.kv_sharing_modes[layer_idx]
+        self.is_kv_shared_layer = kv_sharing_mode == "reuse"
+        self.store_full_length_kv = kv_sharing_mode == "store"
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -385,7 +381,7 @@ class Gemma4UnifiedTextAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor,
         attention_mask: torch.Tensor | None,
-        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]],
+        shared_kv_states: KVSharingDict,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
@@ -404,9 +400,7 @@ class Gemma4UnifiedTextAttention(nn.Module):
         # once we are past the sliding window - so we always use `shared_kv_states` instead, even when past_key_values is not None
         if self.is_kv_shared_layer:
             key_states, value_states = shared_kv_states[self.layer_type]
-            # Device of past layer may be different from current one
-            key_states = key_states.to(query_states.device)
-            value_states = value_states.to(query_states.device)
+
         else:
             key_states = self.k_proj(hidden_states).view(hidden_shape)
             value_states = self.v_proj(hidden_states).view(hidden_shape) if self.v_proj is not None else key_states
@@ -418,8 +412,9 @@ class Gemma4UnifiedTextAttention(nn.Module):
             value_states = self.v_norm(value_states)
             value_states = value_states.transpose(1, 2)
 
-        if past_key_values is not None and not self.is_kv_shared_layer:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+            if past_key_values is not None:
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+
         if self.store_full_length_kv:
             shared_kv_states[self.layer_type] = key_states, value_states
 
@@ -447,8 +442,8 @@ class Gemma4UnifiedTextAttention(nn.Module):
 class Gemma4UnifiedTextMLP(nn.Module):
     def __init__(self, config: Gemma4UnifiedTextConfig, layer_idx: int):
         super().__init__()
-        first_kv_shared_layer_idx = config.num_hidden_layers - config.num_kv_shared_layers
-        is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx > 0
+        kv_sharing_mode = config.kv_sharing_modes[layer_idx]
+        is_kv_shared_layer = kv_sharing_mode == "reuse"
         use_double_wide_mlp = config.use_double_wide_mlp and is_kv_shared_layer
         self.config = config
         self.hidden_size = config.hidden_size
@@ -534,7 +529,7 @@ class Gemma4UnifiedPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Gemma4UnifiedTextDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values", "shared_kv_states"]
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -639,10 +634,10 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel):
         for layer_type in self.unique_layer_types:
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
-        # Initialize as empty dict, or reuse past shared states. We use a UserDict instead of built-in dict (it behaves
-        # the same) for fsdp2 support (otherwise, `_apply_to_tensors` rebuilds every dict it recurses into, and `shared_kv_states`
-        # is not correctly shared, see https://github.com/pytorch/pytorch/blob/v2.10.0/torch/distributed/utils.py#L223-L255)
-        shared_kv_states = kwargs.pop("shared_kv_states", UserDict())
+        # Initialize as empty storage, or reuse past shared states
+        shared_kv_states = kwargs.pop("shared_kv_states", None)
+        if not isinstance(shared_kv_states, KVSharingDict):
+            shared_kv_states = KVSharingDict(shared_kv_states)
 
         # decoder layers
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
@@ -695,7 +690,7 @@ class Gemma4UnifiedForCausalLM(Gemma4UnifiedPreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
-        **kwargs: Unpack[TransformersKwargs],
+        **kwargs,
     ) -> Gemma4UnifiedCausalLMOutputWithPast:
         r"""
         Example:
@@ -726,9 +721,8 @@ class Gemma4UnifiedForCausalLM(Gemma4UnifiedPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         if self.config.final_logit_softcapping is not None:
             logits = logits / self.config.final_logit_softcapping
             logits = torch.tanh(logits)
@@ -985,6 +979,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
         use_cache: bool | None = None,
         image_position_ids: torch.LongTensor | None = None,
         video_position_ids: torch.LongTensor | None = None,
+        num_frames_per_video: torch.LongTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4UnifiedModelOutputWithPast:
@@ -997,6 +992,9 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
         video_position_ids (`torch.LongTensor` of shape `(total_num_frames, max_patches, 2)`, *optional*):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
+        num_frames_per_video (`torch.LongTensor` of shape `(num_videos,)`, *optional*):
+            Number of frames belonging to each video. Required whenever `pixel_values_videos` is passed,
+            since the frames of all videos are concatenated along a single axis.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1041,7 +1039,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
 
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
             mm_encoder_outputs["video"] = self.get_video_features(
-                pixel_values_videos, video_position_ids, return_dict=True
+                pixel_values_videos, video_position_ids, num_frames_per_video=num_frames_per_video, return_dict=True
             )
 
         if mm_encoder_outputs.get("video") is not None:
@@ -1275,6 +1273,7 @@ def create_masks_for_vision_model(
 )
 class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     accepts_loss_kwargs = False
     base_model_prefix = "model"
 
@@ -1349,15 +1348,15 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
             use_cache=use_cache,
             image_position_ids=image_position_ids,
             video_position_ids=video_position_ids,
+            num_frames_per_video=num_frames_per_video,
             mm_encoder_outputs=mm_encoder_outputs,
             return_dict=True,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         if (final_logit_softcapping := self.config.get_text_config().final_logit_softcapping) is not None:
             logits = logits / final_logit_softcapping
             logits = torch.tanh(logits)

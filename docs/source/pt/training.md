@@ -409,8 +409,5 @@ e calcular a métrica apenas no final.
 
 Para mais exemplos de fine-tuning acesse:
 
-- [🤗 Transformers Examples](https://github.com/huggingface/transformers/tree/main/examples) inclui scripts
-para treinas tarefas comuns de NLP em PyTorch e TensorFlow.
-
 - [🤗 Transformers Notebooks](notebooks) contém vários notebooks sobre como aplicar o fine-tuning a um modelo
 para tarefas específicas no PyTorch e TensorFlow.

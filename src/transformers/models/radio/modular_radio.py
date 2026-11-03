@@ -251,7 +251,7 @@ class RadioLayer(Dinov2Layer):
 
 @auto_docstring
 class RadioPreTrainedModel(PreTrainedModel):
-    config_class = RadioConfig
+    config: RadioConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

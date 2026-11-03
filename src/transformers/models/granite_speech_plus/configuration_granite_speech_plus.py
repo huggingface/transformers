@@ -123,7 +123,7 @@ class GraniteSpeechPlusConfig(PreTrainedConfig):
     attribute_map = {"audio_token_id": "audio_token_index"}
     sub_configs_defaults = {
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="granite"),
-        "encoder_config": SubConfigSpec(config_class=GraniteSpeechPlusEncoderConfig),
+        "encoder_config": GraniteSpeechPlusEncoderConfig,
         "projector_config": SubConfigSpec(config_class=AutoConfig, model_type="blip_2_qformer"),
     }
 

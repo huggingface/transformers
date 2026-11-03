@@ -245,6 +245,7 @@ class CLIPSegDecoderLayer(CLIPEncoderLayer):
 
 @auto_docstring
 class CLIPSegPreTrainedModel(CLIPPreTrainedModel):
+    base_model_prefix = "clip"
     _can_record_outputs = {
         "hidden_states": [CLIPSegEncoderLayer, CLIPSegDecoderLayer],
         "attentions": CLIPSegAttention,

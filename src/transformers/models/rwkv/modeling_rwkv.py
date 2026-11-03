@@ -23,7 +23,7 @@ from torch import nn
 from ... import initialization as init
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...utils import (
     ModelOutput,
     auto_docstring,
@@ -485,7 +485,7 @@ class RwkvCausalLMOutput(ModelOutput):
 
 @auto_docstring
 class RwkvModel(RwkvPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RwkvConfig):
         super().__init__(config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
@@ -667,7 +667,7 @@ class RwkvModel(RwkvPreTrainedModel):
 class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"head.weight": "rwkv.embeddings.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: RwkvConfig):
         super().__init__(config)
         self.rwkv = RwkvModel(config)
         self.head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -732,9 +732,8 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = rwkv_outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.head(hidden_states)
 
         loss = None
         if labels is not None:

@@ -854,7 +854,7 @@ class EdgeTamVideoPositionalEmbedding(nn.Module):
 
 @auto_docstring
 class EdgeTamVideoPreTrainedModel(PreTrainedModel):
-    config_class = EdgeTamVideoConfig
+    config: EdgeTamVideoConfig
     base_model_prefix = "edgetam_video"
     main_input_name = "pixel_values"
     input_modalities = "video"

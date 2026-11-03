@@ -24,6 +24,7 @@ from transformers import (
     AutoTokenizer,
     GenerationConfig,
     GgufConfig,
+    Lfm2ForCausalLM,
     Qwen3_5ForCausalLM,
     Qwen3_5MoeForCausalLM,
 )
@@ -104,6 +105,13 @@ class GgufTokenizerTesterMixin:
                     from_gguf(text, add_special_tokens=False).input_ids,
                     reference(text, add_special_tokens=False).input_ids,
                 )
+
+    def test_tokenizer_matches_transformers_with_special_tokens(self):
+        """BOS and EOS come from the file's `add_bos_token` / `add_eos_token`, so they are added like the reference."""
+        from_gguf, reference = self.tokenizer, self.reference_tokenizer
+        for text in self.tokenizer_texts:
+            with self.subTest(text=text):
+                self.assertEqual(from_gguf(text).input_ids, reference(text).input_ids)
 
     def test_decodes_like_transformers(self):
         """The decoder comes from the tokenizer class, and nothing else here exercises it."""
@@ -480,6 +488,26 @@ class Qwen35MoeLargeGgufModelTest(GgufModelIntegrationTesterMixin, unittest.Test
     @unittest.skip("the bf16 checkpoint is ~70GB and split across shards the reader cannot open")
     def test_state_dict_matches_transformers(self):
         pass
+
+
+@require_torch_accelerator
+@slow
+class Lfm2GgufModelTest(GgufModelIntegrationTesterMixin, unittest.TestCase):
+    gguf_repo = "LiquidAI/LFM2.5-230M-GGUF"
+    gguf_file = "LFM2.5-230M-BF16.gguf"
+    quantized_gguf_file = "LFM2.5-230M-Q4_K_M.gguf"
+    reference_repo = "LiquidAI/LFM2.5-230M"
+    model_class = Lfm2ForCausalLM
+
+    prompt = "The capital of France is Paris. The capital of Germany is"
+    expected_completion = " Berlin"
+
+
+@slow
+class Lfm2GgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
+    gguf_repo = "LiquidAI/LFM2.5-230M-GGUF"
+    quantized_gguf_file = "LFM2.5-230M-Q4_K_M.gguf"
+    reference_repo = "LiquidAI/LFM2.5-230M"
 
 
 @slow

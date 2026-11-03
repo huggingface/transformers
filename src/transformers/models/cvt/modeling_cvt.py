@@ -497,7 +497,7 @@ class CvtPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class CvtModel(CvtPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: CvtConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -547,7 +547,7 @@ class CvtModel(CvtPreTrainedModel):
     """
 )
 class CvtForImageClassification(CvtPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CvtConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
