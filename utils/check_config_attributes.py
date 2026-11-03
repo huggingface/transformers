@@ -387,6 +387,7 @@ ATTRIBUTES_TO_ALLOW = (
     "num_mtp_layers",  # for MTP, not used by main model architecture
     # used by GenericForTokenClassification in modeling_layers.py via getattr
     "token_classification_bias",
+    "num_kv_shared_layers",  # used to derive other config properties that are used
 )
 
 
