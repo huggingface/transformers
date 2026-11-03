@@ -676,7 +676,10 @@ def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None
     result = []
     # Double check we get proper modules (either a python file or a folder with an init).
     for module_file, imports in imported_modules:
-        if (PATH_TO_REPO / f"{module_file}.py").is_file():
+        candidate = PATH_TO_REPO / f"{module_file}.py"
+        if candidate.is_file() and candidate.resolve().name == candidate.name:
+            # Exact case-sensitive match (resolve() returns actual disk name; compare against
+            # the constructed name to avoid false positives on case-insensitive filesystems).
             module_file = f"{module_file}.py"
         elif (PATH_TO_REPO / module_file).is_dir() and (PATH_TO_REPO / module_file / "__init__.py").is_file():
             module_file = f"{module_file}/__init__.py"
@@ -765,7 +768,11 @@ def get_module_dependencies(module_fname: str, cache: dict[str, list[str]] | Non
                         [
                             f"{module.replace('__init__.py', '')}{i}.py"
                             for i in imports
+                            # Exact case-sensitive match: resolve() returns the actual disk filename;
+                            # comparing against the constructed name avoids false positives on
+                            # case-insensitive filesystems (e.g. SLIDING_ATTENTION matching sliding_attention.py).
                             if (path_to_module / f"{i}.py").is_file()
+                            and (path_to_module / f"{i}.py").resolve().name == f"{i}.py"
                         ]
                     )
                     imports = [i for i in imports if not (path_to_module / f"{i}.py").is_file()]
