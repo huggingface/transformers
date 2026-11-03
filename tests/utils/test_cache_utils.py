@@ -921,6 +921,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
             max_new_tokens=10,
             do_sample=False,
             cache_implementation="static",
+            disable_compile=True,  # we don't care about it and faster without
             prefill_chunk_size=2,
             return_dict_in_generate=True,
         )
