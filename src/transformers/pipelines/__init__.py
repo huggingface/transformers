@@ -177,6 +177,8 @@ TASK_ALIASES = {
     "ner": "token-classification",
     "text-to-speech": "text-to-audio",
 }
+# Note: `["impl"]` values are dotted-path strings (e.g. "transformers.pipelines.text_classification.TextClassificationPipeline"),
+# not class objects — resolved lazily at call time via `_resolve_impl()` to avoid eagerly importing all pipeline submodules.
 SUPPORTED_TASKS = {
     "audio-classification": {
         "impl": "transformers.pipelines.audio_classification.AudioClassificationPipeline",
