@@ -394,7 +394,7 @@ class MiniCPMOcrViTWindowAttentionMerger(nn.Module):
 
 
 class MiniCPMOcrVisionPreTrainedModel(PreTrainedModel):
-    config_class = MiniCPMOcrVisionConfig
+    config: MiniCPMOcrVisionConfig
     main_input_name = "pixel_values"
     _input_embed_layer = "patch_embedding"
     supports_gradient_checkpointing = True
@@ -571,7 +571,7 @@ class MiniCPMOcrMerger(nn.Module):
 
 
 class MiniCPMOcrPreTrainedModel(PreTrainedModel):
-    config_class = MiniCPMOcrConfig
+    config: MiniCPMOcrConfig
     base_model_prefix = "model"
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True

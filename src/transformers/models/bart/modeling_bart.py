@@ -1089,7 +1089,7 @@ class BartForSequenceClassification(BartPreTrainedModel):
 
 @auto_docstring
 class BartForQuestionAnswering(BartPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BartConfig):
         super().__init__(config)
 
         config.num_labels = 2
@@ -1199,7 +1199,7 @@ class BartDecoderWrapper(BartPreTrainedModel):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: BartConfig):
         super().__init__(config)
         self.decoder = BartDecoder(config)
         self.post_init()
@@ -1218,7 +1218,7 @@ class BartForCausalLM(BartPreTrainedModel, GenerationMixin):
         "lm_head.weight": "model.decoder.embed_tokens.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: BartConfig):
         config.is_decoder = True
         config.is_encoder_decoder = False
         super().__init__(config)

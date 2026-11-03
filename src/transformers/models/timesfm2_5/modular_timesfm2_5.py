@@ -264,7 +264,7 @@ class TimesFm2_5DecoderLayer(LlamaDecoderLayer):
 
 @auto_docstring
 class TimesFm2_5PreTrainedModel(TimesFmPreTrainedModel):
-    config_class = TimesFm2_5Config
+    config: TimesFm2_5Config
     base_model_prefix = "model"
     _no_split_modules = ["TimesFm2_5DecoderLayer"]
     _supports_flash_attn = True

@@ -427,7 +427,7 @@ class BertGenerationEmbeddings(nn.Module):
 
 @auto_docstring
 class BertGenerationPreTrainedModel(PreTrainedModel):
-    config_class = BertGenerationConfig
+    config: BertGenerationConfig
     base_model_prefix = "bert"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
@@ -472,7 +472,7 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: BertGenerationConfig):
         super().__init__(config)
         self.config = config
         self.gradient_checkpointing = False
@@ -609,7 +609,7 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel, GenerationMixin):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: BertGenerationConfig):
         super().__init__(config)
 
         if not config.is_decoder:

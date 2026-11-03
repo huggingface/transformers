@@ -488,7 +488,7 @@ class RemBertPreTrainedModel(PreTrainedModel):
     """
 )
 class RemBertModel(RemBertPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: RemBertConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -611,7 +611,7 @@ class RemBertModel(RemBertPreTrainedModel):
 
 @auto_docstring
 class RemBertForMaskedLM(RemBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RemBertConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -689,7 +689,7 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
     """
 )
 class RemBertForCausalLM(RemBertPreTrainedModel, GenerationMixin):
-    def __init__(self, config):
+    def __init__(self, config: RemBertConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -794,7 +794,7 @@ class RemBertForCausalLM(RemBertPreTrainedModel, GenerationMixin):
     """
 )
 class RemBertForSequenceClassification(RemBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RemBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.rembert = RemBertModel(config)
@@ -872,7 +872,7 @@ class RemBertForSequenceClassification(RemBertPreTrainedModel):
 
 @auto_docstring
 class RemBertForMultipleChoice(RemBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RemBertConfig):
         super().__init__(config)
 
         self.rembert = RemBertModel(config)
@@ -971,7 +971,7 @@ class RemBertForMultipleChoice(RemBertPreTrainedModel):
 
 @auto_docstring
 class RemBertForTokenClassification(RemBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RemBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1033,7 +1033,7 @@ class RemBertForTokenClassification(RemBertPreTrainedModel):
 
 @auto_docstring
 class RemBertForQuestionAnswering(RemBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RemBertConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels

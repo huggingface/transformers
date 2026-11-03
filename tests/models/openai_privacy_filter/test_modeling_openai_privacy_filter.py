@@ -27,6 +27,7 @@ from transformers.models.openai_privacy_filter.configuration_openai_privacy_filt
 from transformers.testing_utils import Expectations, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
+from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
@@ -162,7 +163,7 @@ class OpenAIPrivacyFilterModelTester:
 
 @require_torch
 class OpenAIPrivacyFilterModelTest(
-    ModelTesterMixin, PipelineTesterMixin, TensorParallelTesterMixin, unittest.TestCase
+    ModelTesterMixin, PipelineTesterMixin, TensorParallelTesterMixin, ExpertParallelTesterMixin, unittest.TestCase
 ):
     all_model_classes = (
         (

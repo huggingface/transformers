@@ -594,7 +594,7 @@ class AfmoeForCausalLM(AfmoePreTrainedModel, GenerationMixin):
 
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: AfmoeConfig):
         super().__init__(config)
         self.model = AfmoeModel(config)
         self.vocab_size = config.vocab_size

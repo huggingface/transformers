@@ -486,7 +486,7 @@ class Florence2VisionBlock(nn.Module):
 
 @auto_docstring
 class Florence2VisionPreTrainedModel(PreTrainedModel):
-    config_class = Florence2VisionConfig
+    config: Florence2VisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _supports_sdpa = True
@@ -643,7 +643,6 @@ class Florence2PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
 
     _supports_attention_backend = False
-    config_class = Florence2Config
 
     def _init_weights(self, module):
         super()._init_weights(module)

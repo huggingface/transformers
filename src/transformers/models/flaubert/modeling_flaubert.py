@@ -690,7 +690,7 @@ class FlaubertPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class FlaubertModel(FlaubertPreTrainedModel):
-    def __init__(self, config):  # , dico, is_encoder, with_output):
+    def __init__(self, config: FlaubertConfig):  # , dico, is_encoder, with_output):
         super().__init__(config)
 
         # encoder / decoder, output layer
@@ -942,7 +942,7 @@ class FlaubertModel(FlaubertPreTrainedModel):
 class FlaubertWithLMHeadModel(FlaubertPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"pred_layer.proj.weight": "transformer.embeddings.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: FlaubertConfig):
         super().__init__(config)
         self.transformer = FlaubertModel(config)
         self.pred_layer = FlaubertPredLayer(config)
@@ -1049,7 +1049,7 @@ class FlaubertWithLMHeadModel(FlaubertPreTrainedModel, GenerationMixin):
 )
 # Copied from transformers.models.xlm.modeling_xlm.XLMForSequenceClassification with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
 class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: FlaubertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1151,7 +1151,7 @@ class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.xlm.modeling_xlm.XLMForTokenClassification with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
 class FlaubertForTokenClassification(FlaubertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: FlaubertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1242,7 +1242,7 @@ class FlaubertForTokenClassification(FlaubertPreTrainedModel):
 )
 # Copied from transformers.models.xlm.modeling_xlm.XLMForQuestionAnsweringSimple with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
 class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: FlaubertConfig):
         super().__init__(config)
 
         self.transformer = FlaubertModel(config)
@@ -1377,7 +1377,7 @@ class FlaubertForQuestionAnsweringOutput(ModelOutput):
 @auto_docstring
 # Copied from transformers.models.xlm.modeling_xlm.XLMForQuestionAnswering with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
 class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: FlaubertConfig):
         super().__init__(config)
 
         self.transformer = FlaubertModel(config)
@@ -1496,7 +1496,7 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.xlm.modeling_xlm.XLMForMultipleChoice with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
 class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
-    def __init__(self, config, *inputs, **kwargs):
+    def __init__(self, config: FlaubertConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         self.transformer = FlaubertModel(config)

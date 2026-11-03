@@ -639,7 +639,7 @@ class LongcatFlashForCausalLM(LongcatFlashPreTrainedModel, GenerationMixin):
     _fsdp_plan = {"lm_head": "keep_full_weight"}
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp.*"]
 
-    def __init__(self, config):
+    def __init__(self, config: LongcatFlashConfig):
         super().__init__(config)
         self.model = LongcatFlashModel(config)
         self.vocab_size = config.vocab_size
