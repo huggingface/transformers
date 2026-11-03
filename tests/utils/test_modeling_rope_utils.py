@@ -1658,3 +1658,47 @@ class RopeTest(unittest.TestCase):
         for layer_type in layer_types:
             inv_freq, _ = rope_fn(config=config, layer_type=layer_type)
             torch.testing.assert_close(inv_freq, EXPECTED_INV_FREQ, atol=1e-04, rtol=1e-04)
+
+
+@require_torch
+class RopeZeRO3DtypeRegressionTest(unittest.TestCase):
+    """Regression test for #50135: RoPE inv_freq must stay float32 even when a
+    framework (e.g. DeepSpeed ZeRO-3) wraps torch.arange to cast floating results
+    to a lower-precision training dtype like bfloat16.
+
+    The original fix (#28760) used int64 arange so the wrapper's
+    ``tensor.is_floating_point()`` check would not trigger. PR #47598 regressed
+    this by switching to ``dtype=torch.float``.
+    """
+
+    def _simulate_zero3_arange_wrapper(self, target_dtype=torch.bfloat16):
+        """Context manager that patches torch.arange to cast floating results,
+        mimicking DeepSpeed ZeRO-3's ``zero_wrapper_for_fp_tensor_constructor``."""
+        import contextlib
+        from unittest.mock import patch
+
+        original_arange = torch.arange
+
+        def wrapped_arange(*args, **kwargs):
+            tensor = original_arange(*args, **kwargs)
+            if tensor.is_floating_point():
+                tensor = tensor.to(target_dtype)
+            return tensor
+
+        return patch("torch.arange", side_effect=wrapped_arange)
+
+    def test_default_rope_inv_freq_stays_fp32_under_zero3(self):
+        config = LlamaConfig(
+            hidden_size=256,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=64,
+            rope_parameters={"rope_type": "default", "rope_theta": 10000.0},
+        )
+        ref_inv_freq, _ = LlamaRotaryEmbedding.compute_default_rope_parameters(config)
+
+        with self._simulate_zero3_arange_wrapper(torch.bfloat16):
+            inv_freq, _ = LlamaRotaryEmbedding.compute_default_rope_parameters(config)
+
+        self.assertEqual(inv_freq.dtype, torch.float32)
+        torch.testing.assert_close(inv_freq, ref_inv_freq)
