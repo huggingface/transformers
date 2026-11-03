@@ -46,6 +46,7 @@ import re
 from collections.abc import Mapping, MutableMapping
 from typing import TYPE_CHECKING, Any
 
+from ..integrations.sdpa_attention import repeat_kv
 from ..utils import logging
 from ..utils.import_utils import is_openvino_available, is_torch_available
 from .configs import OpenVINOConfig
@@ -1232,8 +1233,10 @@ def _patch_sdpa(original):
     the fused kernels torch runs them through.
 
         OV's ``opset13::ScaledDotProductAttention`` op rejects GQA shapes (e.g. Q=[B,4,T,D],
-        K/V=[B,2,T,D]) with ``Key input shape not compatible with other inputs``. Repeating K/V via
-        ``repeat_interleave`` on the head axis keeps the math identical and gives OV matching shapes.
+        K/V=[B,2,T,D]) with ``Key input shape not compatible with other inputs``. Repeating K/V with
+        ``repeat_kv`` (unsqueeze, expand, reshape) keeps the math identical and gives OV matching
+        shapes, in the form OV's CPU plugin fuses with a stateful KV cache: a ``repeat_interleave``
+        (a ``Gather``) between the cache and the attention leaves every attention decomposed.
     """
 
     def patch(query, key, value, attn_mask=None, *args, **kwargs):
@@ -1257,8 +1260,8 @@ def _patch_sdpa(original):
         q_heads, k_heads = query.shape[-3], key.shape[-3]
         if q_heads != k_heads and q_heads % k_heads == 0:
             reps = q_heads // k_heads
-            key = key.repeat_interleave(reps, dim=-3)
-            value = value.repeat_interleave(reps, dim=-3)
+            key = repeat_kv(key, reps)
+            value = repeat_kv(value, reps)
         # OV's SDPA op takes no `scale` from the traced graph (the aten node's scalar `scale` isn't
         # surfaced as a frontend input), so it always applies its own default ``head_dim**-0.5``. Models
         # with a non-default scale (T5-family fold ``1/sqrt(d)`` into init and pass ``scale=1.0``) would be
@@ -1276,30 +1279,6 @@ def _patch_sdpa(original):
                 unattended, torch.zeros((), dtype=attn_output.dtype, device=attn_output.device), attn_output
             )
         return attn_output
-
-    return patch
-
-
-@register_patch(
-    "openvino",
-    "transformers.integrations.sdpa_attention.repeat_kv",
-    "transformers.integrations.eager_paged.repeat_kv",
-    "transformers.integrations.flex_attention.repeat_kv",
-)
-def _patch_repeat_kv(original):
-    """Expand GQA K/V heads via ``repeat_interleave`` instead of a 5-D ``expand`` + ``reshape``.
-
-    The stock ``repeat_kv`` unsqueezes to ``[b, kv_heads, 1, kv_seq, head_dim]`` then
-    ``expand``s the new axis to ``n_rep``. OV's frontend can't keep the ``kv_seq`` axis dynamic
-    through that 5-D broadcast in stateful decode (``Broadcast Check 'input_shape[j] == 1'`` on
-    dim 3), baking it to the traced length. ``repeat_interleave`` on the head axis is the exact
-    equivalent (per ``repeat_kv``'s own docstring) and lowers to an OV op that stays dynamic.
-    """
-
-    def patch(hidden_states, n_rep):
-        if n_rep == 1:
-            return hidden_states
-        return hidden_states.repeat_interleave(n_rep, dim=1)
 
     return patch
 
