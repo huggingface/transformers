@@ -43,6 +43,7 @@ from transformers.testing_utils import (
     record_ci_source_deps_by_file,
     record_ci_source_deps_chains,
     scan_preloaded_test_module_deps,
+    write_ci_module_graph,
     set_ci_collecting_file,
     set_ci_deps_phase,
     snapshot_ci_source_deps_baseline,
@@ -436,6 +437,7 @@ def pytest_sessionfinish(session, exitstatus):
     record_ci_source_deps()
     record_ci_source_deps_by_file()
     record_ci_source_deps_chains()
+    write_ci_module_graph()
 
 
 # Doctest custom flag to ignore output.
