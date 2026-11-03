@@ -257,10 +257,11 @@ class Inkling2ShortConvolution(nn.Module):
         seq_len = hidden_states.shape[1]
         hidden_states = hidden_states.transpose(1, 2)
 
-        if past_key_values is not None:
-            conv_state = past_key_values.get_conv_state(self.layer_idx, state_idx=self.conv_idx)
-        else:
-            conv_state = None
+        conv_state = (
+            None
+            if past_key_values is None
+            else past_key_values.get_conv_state(self.layer_idx, state_idx=self.conv_idx)
+        )
 
         if conv_state is not None and seq_len == 1 and not past_key_values.is_recording_past(self.layer_idx):
             hidden_states = causal_conv1d_update(
