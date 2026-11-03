@@ -83,11 +83,10 @@ from transformers import AutoModelForImageTextToText, DistributedConfig, MiniMax
 checkpoint = "MiniMaxAI/MiniMax-VL-01"
 world_size = int(os.environ["WORLD_SIZE"])
 config = MiniMaxVL01Config.from_pretrained("./MiniMax-VL-01-native-config")
-processor = MiniMaxVL01Processor.from_pretrained(checkpoint, config=config, trust_remote_code=False)
+processor = MiniMaxVL01Processor.from_pretrained(checkpoint, config=config)
 model = AutoModelForImageTextToText.from_pretrained(
     checkpoint,
     config=config,
-    trust_remote_code=False,
     dtype=torch.bfloat16,
     distributed_config=DistributedConfig(tp_size=world_size, ep_size=world_size),
 )
