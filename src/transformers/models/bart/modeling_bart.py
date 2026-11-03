@@ -89,8 +89,9 @@ class BartLearnedPositionalEmbedding(nn.Embedding):
 
         if position_ids is None:
             bsz, seq_len = input_ids.shape[:2]
-            position_ids = torch.arange(
-                past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
+            # Offsetting a fixed-length arange keeps the length static when `past_key_values_length` is data-dependent
+            position_ids = (
+                torch.arange(seq_len, dtype=torch.long, device=self.weight.device) + past_key_values_length
             ).expand(bsz, -1)
         else:
             position_ids = position_ids.unsqueeze(0)
