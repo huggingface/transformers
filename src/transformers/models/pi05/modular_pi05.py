@@ -404,6 +404,71 @@ class PI05ForConditionalGeneration(PI0ForConditionalGeneration):
             attentions=outputs.attentions,
         )
 
+    @torch.no_grad()
+    def sample_actions(
+        self,
+        input_ids: torch.LongTensor,
+        pixel_values: torch.FloatTensor,
+        noise: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        pixel_attention_mask: torch.BoolTensor | None = None,
+        num_steps: int | None = None,
+        **kwargs,
+    ) -> torch.FloatTensor:
+        """Run flow matching inference to generate actions."""
+
+        num_steps = num_steps or self.config.num_inference_steps
+        batch_size = input_ids.shape[0]
+        device = input_ids.device
+
+        # 1. Sample random noise
+        if noise is None:
+            noise = torch.normal(
+                mean=0.0,
+                std=1.0,
+                size=(
+                    batch_size,
+                    self.config.chunk_size,
+                    self.config.max_action_dim,
+                ),
+                dtype=pixel_values.dtype,
+                device=device,
+            )
+
+        # 2. Run VLM once and obtain prefix cache. Must infer positions here!
+        position_ids = None
+        if attention_mask is not None:
+            position_ids = attention_mask.cumsum(-1) - 1
+        inputs_embeds = self.model.embed_prefix(input_ids, pixel_values, pixel_attention_mask)
+        token_type_ids = torch.zeros_like(inputs_embeds)[:, :, 0]
+        past_key_values = self.model.vlm(
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            token_type_ids=token_type_ids,
+            use_cache=True,
+        ).past_key_values
+        prefix_length = past_key_values.get_seq_length()
+
+        # 3. Denoise `num_steps` times
+        dt = -1.0 / num_steps
+        for step in range(num_steps):
+            time = 1.0 + step * dt
+            time_tensor = torch.full((batch_size,), time, dtype=torch.float32, device=device)
+            output = self(
+                noise=noise,
+                timestep=time_tensor,
+                pixel_attention_mask=pixel_attention_mask,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                **kwargs,
+            )
+
+            # We need to keep only the "vlm-prefix", no attention to past denoising steps!
+            past_key_values.crop(prefix_length - past_key_values.get_seq_length())
+            noise = noise + dt * output.logits
+        return noise
+
 
 __all__ = [
     "PI05Config",

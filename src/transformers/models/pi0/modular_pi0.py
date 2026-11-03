@@ -634,6 +634,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
     @torch.no_grad()
     def sample_actions(
         self,
+        state: torch.FloatTensor,
         input_ids: torch.LongTensor,
         pixel_values: torch.FloatTensor,
         noise: torch.FloatTensor | None = None,
@@ -683,6 +684,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             time = 1.0 + step * dt
             time_tensor = torch.full((batch_size,), time, dtype=torch.float32, device=device)
             output = self(
+                state=state,
                 noise=noise,
                 timestep=time_tensor,
                 pixel_attention_mask=pixel_attention_mask,
