@@ -244,10 +244,11 @@ print(decoded_outputs)
 
 ➡️ Training:
 
-The model can be trained with the loss it outputs. Pass the target transcripts to `apply_transcription_request` with
-`transcription`, which writes them as the assistant turn and returns `labels`. The audio placeholders and the padding
-are masked automatically. For other tasks, put the target in an assistant turn of a conversation passed to
-`apply_chat_template` and pass `processor_kwargs={"output_labels": True}`.
+
+<hfoptions id="training">
+<hfoption id="transcription">
+
+Pass the target transcripts to `apply_transcription_request` with `transcription`. They are written as the assistant turn, and `labels` are returned for computing the loss.
 
 ```python
 from datasets import Audio, load_dataset
@@ -273,6 +274,49 @@ loss = model(**inputs).loss
 print("Loss:", loss.item())
 loss.backward()
 ```
+
+</hfoption>
+<hfoption id="chat template">
+
+For other tasks, put the target in the assistant turn and pass `processor_kwargs={"output_labels": True}`.
+
+```python
+from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
+
+
+model_id = "nvidia/audio-flamingo-3-hf"
+processor = AutoProcessor.from_pretrained(model_id)
+model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+model.train()
+
+conversation = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "How does the tone of female speech change throughout the audio?"},
+            {"type": "audio", "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/000000786159.31.wav"},
+        ],
+    },
+    {
+        "role": "assistant",
+        "content": [{"type": "text", "text": "It goes from sad to happy."}],
+    },
+]
+
+inputs = processor.apply_chat_template(
+    conversation,
+    tokenize=True,
+    return_dict=True,
+    processor_kwargs={"output_labels": True},
+).to(model.device, dtype=model.dtype)
+
+loss = model(**inputs).loss
+print("Loss:", loss.item())
+loss.backward()
+```
+
+</hfoption>
+</hfoptions>
 
 ➡️ transcription shortcut
 

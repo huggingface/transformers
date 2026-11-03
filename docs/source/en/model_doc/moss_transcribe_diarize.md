@@ -196,24 +196,24 @@ print(transcription)
 
 ### Training
 
-MOSS-Transcribe-Diarize can be trained with the loss returned by the model when `labels` are provided. Pass the target
-transcriptions, in the model's timestamped and speaker-tagged output format, to `apply_transcription_request` with
-`transcription`. They are written as the assistant turn and `labels` are returned, with the audio and padding tokens
-masked out with `-100`. With the [chat template](#advanced-usage-with-the-chat-template), the same is done by putting
-the transcription in the assistant turn and passing `processor_kwargs={"output_labels": True}`.
+Pass the target transcriptions, in the model's timestamped and speaker-tagged output format, to `apply_transcription_request` with `transcription`. The returned `labels` are used to compute the loss.
 
 ```python
-from transformers import AutoProcessor, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoProcessor
 
 model_id = "itazap/MOSS-Transcribe-Diarize-HF"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 model.train()
 
-inputs = processor.apply_transcription_request(
-    "https://huggingface.co/datasets/itazap/audio_samples/resolve/main/intro_sample.wav",
-    transcription="[0.00][S01] Welcome to this demonstration of automatic speech recognition and speaker diarization using an end-to-end transformer model.[7.47]",
-).to(model.device, dtype=model.dtype)
+audio_url = "https://huggingface.co/datasets/itazap/audio_samples/resolve/main/intro_sample.wav"
+transcription = (
+    "[0.00][S01] Welcome to this demonstration of automatic speech recognition and speaker diarization using an "
+    "end-to-end transformer model.[7.47]"
+)
+
+inputs = processor.apply_transcription_request(audio_url, transcription=transcription)
+inputs.to(model.device, dtype=model.dtype)
 
 loss = model(**inputs).loss
 print("Loss:", loss.item())

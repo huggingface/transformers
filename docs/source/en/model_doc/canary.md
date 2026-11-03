@@ -113,7 +113,7 @@ print(processor.decode(generated_ids, skip_special_tokens=True)[0])
 
 ### Training
 
-Canary can be trained with the loss outputted by the model. Pass the target transcripts to `apply_transcription_request` with `transcription`, which writes them as the assistant turn and returns `labels`. With `apply_chat_template`, the same is done by putting the transcript in the assistant turn and passing `processor_kwargs={"output_labels": True}`.
+Pass the target transcripts to `apply_transcription_request` with `transcription`, and the returned `labels` are used to compute the loss.
 
 ```python
 from datasets import Audio, load_dataset
@@ -134,9 +134,9 @@ text_samples = ds["text"][:NUM_SAMPLES]
 inputs = processor.apply_transcription_request(speech_samples, source_language="en", transcription=text_samples)
 inputs.to(model.device, dtype=model.dtype)
 
-outputs = model(**inputs)
-print("Loss:", outputs.loss.item())
-outputs.loss.backward()
+loss = model(**inputs).loss
+print("Loss:", loss.item())
+loss.backward()
 ```
 
 ## CanaryConfig
