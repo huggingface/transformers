@@ -118,6 +118,7 @@ class OpenVINOExporter(DynamoExporter):
         elif type(config) is not OpenVINOConfig:
             raise TypeError(f"Expected config to be an OpenVINOConfig or dict, got {type(config)}")
 
+        weight_dtype = next((p.dtype for p in model.parameters() if p.dtype in (torch.bfloat16, torch.float16)), None)
         # From here on the inputs match the graph's dtypes: calibration and the state folding read them too.
         with _traced_in_float32(model, sample_inputs) as sample_inputs:
             with patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("openvino"):
@@ -135,6 +136,8 @@ class OpenVINOExporter(DynamoExporter):
         quantizer = config.quantizer
         if quantizer is not None and not quantizer.quantizes_fx_graph:
             ov_model = quantizer.quantize(ov_model, sample_inputs, config.export_format)
+        if weight_dtype is not None:
+            _restore_16bit_weights(ov_model, weight_dtype)
 
         if config.stateful:
             _make_stateful(ov_model, exported_program, graph_module, sample_inputs, inputs_names, outputs_names)
@@ -151,9 +154,9 @@ def _traced_in_float32(model: PreTrainedModel, sample_inputs: MutableMapping[str
 
     OV's CPU plugin fuses its kernels on f32-typed graphs and picks the inference precision itself (bf16 on CPUs with
     AMX or AVX-512 BF16): a bf16-typed graph misses some of them, notably the compressed-weight matmuls of an NNCF
-    int8/int4 graph, which then decompress every weight on each call. The file keeps its size: weights are saved
-    fp16-compressed (`compress_to_fp16`) or quantized. Each parameter and buffer gets its own dtype back, so modules a
-    model keeps in fp32 stay fp32.
+    int8/int4 graph, which then decompress every weight on each call. The file keeps its size: the weights get their
+    16-bit type back afterwards ([`_restore_16bit_weights`]), or are quantized. Each parameter, buffer and config gets
+    its own dtype back, so modules a model keeps in fp32 stay fp32.
     """
     half = (torch.bfloat16, torch.float16)
     tensors = [*model.parameters(), *model.buffers()]
@@ -190,6 +193,34 @@ def _configs(model):
             for name in getattr(config, "sub_configs", {})
             if getattr(config, name, None) is not None
         )
+
+
+def _restore_16bit_weights(ov_model: openvino.Model, dtype: torch.dtype) -> None:
+    """Give the weights of a model traced in f32 ([`_traced_in_float32`]) their 16-bit type back, as a 16-bit
+    constant and a `Convert` to f32: OV's CPU plugin decompresses that pattern
+    inside its matmuls, and the file keeps the checkpoint's own values. A constant is restored when every value is
+    exactly a `dtype` value, which holds for every upcast weight and is lossless by construction; weights an NNCF
+    quantizer compressed are no longer f32 and are left alone.
+    """
+    for op in ov_model.get_ordered_ops():
+        if op.get_type_name() != "Constant" or op.get_element_type() != openvino.Type.f32:
+            continue
+        data = op.get_data()
+        if data.size < 1024:  # scalars and shapes the graph computes with stay f32
+            continue
+        if dtype == torch.bfloat16:
+            # bf16 is the top half of an f32: a value is a bf16 one when its low 16 bits are zero
+            bits = data.view(np.uint32)
+            if (bits & 0xFFFF).any():
+                continue
+            values = openvino.Tensor((bits >> 16).astype(np.uint16), list(data.shape), openvino.Type.bf16)
+        else:
+            half = data.astype(np.float16)
+            if not np.array_equal(half.astype(np.float32), data):
+                continue
+            values = openvino.Tensor(half)
+        constant = openvino.op.Constant(values, shared_memory=False)
+        op.output(0).replace(ov_ops.convert(constant, openvino.Type.f32).output(0))
 
 
 def _fold_scalar_converts(ov_model: openvino.Model) -> None:
