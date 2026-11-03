@@ -144,6 +144,20 @@ class ZeroShotObjectDetectionPipelineTests(unittest.TestCase):
         )
 
     @require_torch
+    def test_batched_input_validation(self):
+        object_detector = pipeline(
+            "zero-shot-object-detection",
+            model="hf-internal-testing/tiny-random-owlvit-object-detection",
+        )
+        images = [Image.new("RGB", (64, 64)) for _ in range(3)]
+        for labels in (["cat", "dog"], ["cat"] * 4, "cat,dog"):
+            with self.assertRaisesRegex(ValueError, "one candidate_labels entry per image"):
+                object_detector(images, candidate_labels=labels)
+
+        outputs = object_detector(images, candidate_labels=[["cat"]] * 3, threshold=0.0)
+        self.assertEqual(len(outputs), 3)
+
+    @require_torch
     @slow
     def test_large_model_pt(self):
         object_detector = pipeline("zero-shot-object-detection")
