@@ -49,8 +49,9 @@ from ..glm4_moe_lite.modeling_glm4_moe_lite import (
     apply_rotary_pos_emb,
 )
 from ..glm5_next.modeling_glm5_next import Glm5NextTextExperts
-from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaAttention, GlmMoeDsaRotaryEmbedding
+from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaAttention
 from ..gpt_oss.modeling_gpt_oss import eager_attention_forward
+from ..llama.modeling_llama import LlamaRotaryEmbedding
 
 
 @auto_docstring(checkpoint="tencent/Hy4-preview")
@@ -198,7 +199,7 @@ class HYV4UnweightedRMSNorm(DeepseekV4UnweightedRMSNorm):
         return torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.eps).to(x.dtype)
 
 
-class HYV4RotaryEmbedding(GlmMoeDsaRotaryEmbedding):
+class HYV4RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

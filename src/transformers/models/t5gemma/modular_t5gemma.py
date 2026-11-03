@@ -56,9 +56,9 @@ from ..gemma2.modeling_gemma2 import (
     Gemma2MLP,
     Gemma2PreTrainedModel,
     Gemma2RMSNorm,
-    Gemma2RotaryEmbedding,
     eager_attention_forward,
 )
+from ..llama.modeling_llama import LlamaRotaryEmbedding
 
 
 logger = logging.get_logger(__name__)
@@ -157,7 +157,7 @@ class T5GemmaMLP(Gemma2MLP):
         return down_proj
 
 
-class T5GemmaRotaryEmbedding(Gemma2RotaryEmbedding):
+class T5GemmaRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

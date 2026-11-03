@@ -36,7 +36,7 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import LlamaDecoderLayer
-from ..olmo2.modeling_olmo2 import Olmo2RotaryEmbedding
+from ..olmo.modeling_olmo import OlmoRotaryEmbedding
 from ..olmo3.modeling_olmo3 import (
     Olmo3Attention,
     Olmo3DecoderLayer,
@@ -247,19 +247,8 @@ class OlmoHybridAttention(Olmo3Attention):
         return attn_output, attn_weights
 
 
-class OlmoHybridRotaryEmbedding(Olmo2RotaryEmbedding):
-    """
-    RoPE for OLMo Hybrid that returns float32 cos/sin to match OLMo-core.
-    """
-
-    def forward(self, x, position_ids):
-        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
-        emb = torch.cat((freqs, freqs), dim=-1)
-        cos = emb.cos() * self.attention_scaling
-        sin = emb.sin() * self.attention_scaling
-
-        # KEY difference from parent: return float32, don't cast to x.dtype
-        return cos, sin
+class OlmoHybridRotaryEmbedding(OlmoRotaryEmbedding):
+    pass
 
 
 @use_kernelized_func(

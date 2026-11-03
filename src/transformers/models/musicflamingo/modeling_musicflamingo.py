@@ -71,9 +71,7 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
         self.position_angles = nn.Buffer(position_angles, persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: MusicFlamingoConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: MusicFlamingoConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -84,6 +82,7 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
+        # diff with Llama: only `partial_rotary_factor` of the head dim is rotated, as in `ROPE_INIT_FUNCTIONS`
         partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
@@ -91,7 +90,7 @@ class MusicFlamingoRotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     def forward(self, timestamps: Tensor, seq_len: int) -> tuple[Tensor, Tensor]:

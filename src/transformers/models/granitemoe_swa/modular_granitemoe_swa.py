@@ -42,8 +42,8 @@ from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedForCausalLM,
     GraniteMoeSharedModel,
     GraniteMoeSharedPreTrainedModel,
-    GraniteMoeSharedRotaryEmbedding,
 )
+from ..llama.modeling_llama import LlamaRotaryEmbedding
 
 
 logger = logging.get_logger(__name__)
@@ -150,7 +150,7 @@ class GraniteMoeSWAPreTrainedModel(GraniteMoeSharedPreTrainedModel):
             init.zeros_(module.sinks)
 
 
-class GraniteMoeSWARotaryEmbedding(GraniteMoeSharedRotaryEmbedding):
+class GraniteMoeSWARotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

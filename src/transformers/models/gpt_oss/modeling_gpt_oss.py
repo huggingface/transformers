@@ -189,7 +189,7 @@ class GptOssRotaryEmbedding(nn.Module):
         cos = emb.cos() * self.attention_scaling
         sin = emb.sin() * self.attention_scaling
 
-        return cos.to(x.dtype), sin.to(x.dtype)
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:

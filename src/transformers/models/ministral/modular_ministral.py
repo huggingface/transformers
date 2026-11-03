@@ -25,6 +25,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..llama.modeling_llama import LlamaRotaryEmbedding
 from ..mistral.configuration_mistral import MistralConfig
 from ..qwen2.modeling_qwen2 import (
     Qwen2Attention,
@@ -37,7 +38,6 @@ from ..qwen2.modeling_qwen2 import (
     Qwen2Model,
     Qwen2PreTrainedModel,
     Qwen2RMSNorm,
-    Qwen2RotaryEmbedding,
 )
 
 
@@ -101,7 +101,7 @@ class MinistralPreTrainedModel(Qwen2PreTrainedModel):
     pass
 
 
-class MinistralRotaryEmbedding(Qwen2RotaryEmbedding):
+class MinistralRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

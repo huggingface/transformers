@@ -26,6 +26,7 @@ from ...utils import TransformersKwargs, logging
 from ..gemma.modeling_gemma import GemmaMLP
 from ..llama.modeling_llama import (
     LlamaAttention,
+    LlamaRotaryEmbedding,
 )
 from ..qwen2.modeling_qwen2 import (
     Qwen2ForCausalLM,
@@ -33,7 +34,6 @@ from ..qwen2.modeling_qwen2 import (
     Qwen2ForSequenceClassification,
     Qwen2ForTokenClassification,
     Qwen2RMSNorm,
-    Qwen2RotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -53,7 +53,7 @@ class Qwen3MLP(GemmaMLP):
     pass
 
 
-class Qwen3RotaryEmbedding(Qwen2RotaryEmbedding):
+class Qwen3RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
