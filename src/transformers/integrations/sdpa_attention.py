@@ -29,10 +29,8 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 def pack_gqa(hidden_states: torch.Tensor | None, n_rep: int) -> torch.Tensor | None:
     """
-    With a single query token, packs the `n_rep` query heads sharing a key/value head as the query rows of that head,
-    so that attention runs on the key/value heads as they are instead of on their `repeat_kv` copies. The hidden states
-    (the query, or a per-head mask or bias) go from (..., num_attention_heads, 1, dim) to (..., num_key_value_heads,
-    n_rep, dim). `None` and masks shared by all heads are returned as is, as the latter broadcast over the packed rows.
+    For a single query token: (..., num_attention_heads, 1, dim) -> (..., num_key_value_heads, n_rep, dim), so that
+    attention runs on the key/value heads without `repeat_kv`. Masks shared by all heads are returned as is.
     """
     if hidden_states is None or hidden_states.ndim < 3 or hidden_states.shape[-3] == 1:
         return hidden_states
@@ -124,7 +122,6 @@ def sdpa_attention_forward(
         if use_gqa_in_sdpa(attention_mask, key, value):
             sdpa_kwargs["enable_gqa"] = True
         elif q_length == 1:
-            # Decoding: packing the query heads onto their key/value head avoids repeating the whole KV cache
             query = pack_gqa(query, module.num_key_value_groups)
             attention_mask = pack_gqa(attention_mask, module.num_key_value_groups)
             position_bias = pack_gqa(position_bias, module.num_key_value_groups)
@@ -195,7 +192,7 @@ def sdpa_attention_forward(
         is_causal=is_causal,
         **sdpa_kwargs,
     )
-    # Unpacks the query heads if they were packed, a no-op otherwise
+    # Undoes `pack_gqa`, a no-op otherwise
     attn_output = attn_output.reshape(batch_size, num_heads, q_length, value.shape[-1])
     attn_output = attn_output.transpose(1, 2).contiguous()
 

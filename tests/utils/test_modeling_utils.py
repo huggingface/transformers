@@ -3250,7 +3250,6 @@ class TestAttentionImplementation(unittest.TestCase):
 
     @parameterized.expand([(False,), (True,)])
     def test_gqa_in_sdpa_decoding_packs_query_heads(self, use_position_bias):
-        # When decoding with a mask, the query heads are packed onto their key/value head instead of repeating K/V
         from transformers.integrations.sdpa_attention import repeat_kv, sdpa_attention_forward
 
         module = torch.nn.Module()
@@ -3260,7 +3259,7 @@ class TestAttentionImplementation(unittest.TestCase):
         value = torch.randn(2, 2, 16, 64, device=torch_device)
         attention_mask = torch.ones(2, 1, 1, 16, device=torch_device, dtype=torch.bool)
         attention_mask[1, ..., :5] = False  # left padding
-        # `position_bias` makes the mask per-head, so it is packed as well
+        # makes the mask per-head
         position_bias = torch.randn(1, 8, 1, 16, device=torch_device) if use_position_bias else None
 
         expected, _ = sdpa_attention_forward(
