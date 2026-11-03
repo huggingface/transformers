@@ -398,6 +398,25 @@ class CacheTest(unittest.TestCase):
                 torch.testing.assert_close(keys, torch.cat([states, new_states], dim=-2), rtol=0, atol=0)
                 torch.testing.assert_close(values, torch.cat([states, new_states], dim=-2), rtol=0, atol=0)
 
+    @require_torch_accelerator
+    def test_offloaded_static_cache_with_only_sliding_layers(self):
+        """
+        Regression test for `offloaded_static` on models whose layers are all sliding (e.g. Mistral-7B-v0.1 or
+        Phi-3-mini). `StaticCache` only offloads the non-sliding layers by default, so no layer is offloaded, and
+        `update` used to raise `ValueError: True is not in list` while looking for a layer to prefetch.
+        """
+        config = LlamaConfig(
+            hidden_size=64, num_hidden_layers=2, num_attention_heads=4, num_key_value_heads=4, sliding_window=8
+        )
+        cache = StaticCache(config=config, max_cache_len=32, offloading=True)
+        self.assertTrue(all(cache.is_sliding))
+
+        for seq_len in (5, 1):
+            for layer_idx in range(2):
+                states = torch.rand(1, 4, seq_len, 16, device=torch_device)
+                keys, _ = cache.update(states, states.clone(), layer_idx)
+                self.assertEqual(keys.device.type, torch.device(torch_device).type)
+
     def test_chunked_prefill_static_cache_per_layer_head_shapes(self):
         """
         Regression test for heterogeneous models with per-layer head shapes. The static cache is eagerly initialized
