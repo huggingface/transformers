@@ -821,6 +821,33 @@ for (int64_t position = prompt_len; position < max_cache_len; ++position) {
 
 </details>
 
+## ONNX Runtime fusions
+
+Set `ort_fusions` to fuse an ONNX export into ONNX Runtime's own transformer ops before it's saved, which ONNX Runtime
+runs much faster than the plain graph: RMS and layer norms (`SimplifiedLayerNormalization`, `SkipLayerNormalization`,
+...), attention (`MultiHeadAttention`, and `GroupQueryAttention` over a key-value cache, applying the rotary embedding
+itself), rotary embeddings (`RotaryEmbedding`), GELU, and the projections reading one input packed into one matmul.
+Every fusion computes exactly what it replaces.
+
+```python
+config = OnnxConfig(ort_fusions="cpu")
+```
+
+Fuse for the provider the graph will run on. `"cuda"` leaves out the fusions the CUDA provider's kernels miscompute
+or run slower (float16 skip norms, `GroupQueryAttention` over a mask), rewrites the ops it would run on the CPU (so a
+static export runs under ONNX Runtime's CUDA graphs), and fuses into the ops only it has, which the graph then needs:
+today, a mixture-of-experts block (a softmax / top-k router and its experts) as one `MoE`.
+
+```python
+config = OnnxConfig(ort_fusions="cuda")
+```
+
+Those ops are ONNX Runtime's, not standard ONNX, so by default (`ort_fusions=None`) the graph stays standard, for any
+ONNX consumer (TensorRT, OpenVINO, ...). To run one model on several, export it once per target.
+
+The fusions run before a quantizer that quantizes the ONNX graph ([`~exporters.OnnxRuntimeQuantizer`]), as ONNX
+Runtime recommends, and not on a graph quantized before the conversion. They need `optimize=True`, the default.
+
 ## Quantization
 
 Every export config takes a `quantizer` that quantizes the model during the export, on the `torch.export` FX graph

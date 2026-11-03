@@ -18,7 +18,7 @@ import copy
 from dataclasses import dataclass
 from enum import Enum
 from os import PathLike
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from ..utils import logging
 
@@ -151,6 +151,11 @@ class OnnxConfig(DynamoConfig):
         keep_initializers_as_inputs (`bool`, *optional*, defaults to `False`):
             Expose weight initializers as explicit graph inputs. Required by
             some older ONNX runtimes (opset < 9).
+        ort_fusions (`str`, *optional*):
+            Fuse the graph into ONNX Runtime's own transformer ops (`SimplifiedLayerNormalization`, …) before it is
+            quantized and saved, which ONNX Runtime runs faster, for the provider it will run on: `"cpu"`, or
+            `"cuda"`, which also uses the ops only the CUDA provider has (`MoE`); the graph then runs on GPU only. Those ops are ONNX Runtime's, not standard ONNX, so the default, `None`,
+            leaves the graph standard. Runs with `optimize` only: the fusions optimize the graph themselves.
     """
 
     export_format: ExportFormat = ExportFormat.ONNX
@@ -161,6 +166,11 @@ class OnnxConfig(DynamoConfig):
     optimize: bool = True
     export_params: bool = True
     keep_initializers_as_inputs: bool = False
+    ort_fusions: Literal["cpu", "cuda"] | None = None
+
+    def __post_init__(self):
+        if self.ort_fusions not in (None, "cpu", "cuda"):
+            raise ValueError(f"`ort_fusions` must be None, 'cpu' or 'cuda', got {self.ort_fusions!r}")
 
 
 @dataclass

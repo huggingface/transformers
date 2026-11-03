@@ -75,6 +75,8 @@ if is_onnxscript_available():
     from onnxscript.function_libs.torch_lib.ops.core import aten_index_put
     from onnxscript.onnx_opset import opset18 as op
 
+    from .onnxruntime_fusions import fuse_for_onnxruntime
+
     # torch.dtype -> onnx_ir.DataType, mirroring torch.onnx's private _TORCH_DTYPE_TO_ONNX so we
     # don't depend on that path. Only the dtypes a `Cast` target can realistically be; exotic
     # float8/float4 variants (never emitted as an ``out_dtype``) are omitted.
@@ -152,6 +154,11 @@ class OnnxExporter(DynamoExporter):
         apply_onnx_ir_fixes(onnx_program)
 
         quantizer = config.quantizer
+        fusions = config.ort_fusions and config.optimize and (quantizer is None or not quantizer.quantizes_fx_graph)
+
+        if fusions:
+            fuse_for_onnxruntime(onnx_program.model, device=config.ort_fusions)
+
         if quantizer is not None and not quantizer.quantizes_fx_graph:
             onnx_program.model = quantizer.quantize(onnx_program.model, sample_inputs, config.export_format)
 
@@ -259,19 +266,22 @@ def _patch_sdpa(original):
     the whole batch. Rows like these are routine: any padded frame under a padding mask has one.
 
     A boolean mask goes in as an additive one: torchlib guards its boolean softmax with an `IsNaN`/`Where`
-    over the whole `(query, key)` weight matrix, which the zeroing here already makes redundant.
+    over the whole `(query, key)` weight matrix, which the zeroing here already makes redundant. Its unattended
+    rows are counted with a sum: `any`/`amax` export as `ReduceMax`, which ONNX Runtime's CUDA provider runs on
+    the CPU at recent opsets, copying the mask over and waiting every call.
     """
 
     def patch(query, key, value, attn_mask=None, *args, **kwargs):
         if attn_mask is None:
             return original(query, key, value, attn_mask, *args, **kwargs)
+        # Built from scalars only, so every layer's copy of this, reading the same mask, is one after CSE.
         if attn_mask.dtype == torch.bool:
-            unattended = ~attn_mask.any(dim=-1, keepdim=True)
-            attn_mask = torch.zeros(attn_mask.shape, dtype=query.dtype, device=query.device).masked_fill(
-                ~attn_mask, torch.finfo(query.dtype).min
-            )
+            attended = attn_mask.to(query.dtype)
+            attn_mask = (~attn_mask).to(query.dtype) * torch.finfo(query.dtype).min
         else:
-            unattended = attn_mask.amax(dim=-1, keepdim=True) <= torch.finfo(attn_mask.dtype).min
+            attended = (attn_mask > torch.finfo(attn_mask.dtype).min).to(query.dtype)
+        # `< 1` rather than `== 0`: the provider runs `Equal` on the CPU too.
+        unattended = attended.sum(dim=-1, keepdim=True) < 1
         attn_output = original(query, key, value, attn_mask, *args, **kwargs)
         zero = torch.zeros((), dtype=attn_output.dtype, device=attn_output.device)
         return torch.where(unattended, zero, attn_output)
