@@ -775,19 +775,19 @@ class Trainer:
             args["parallelism_config"] = self.args.parallelism_config
 
         model_tp_size = getattr(self.model, "tp_size", None) or 1
-        model_fsdp_size = getattr(self.model, "fsdp_size", None) or 1
         if model_tp_size > 1:
-            # Sharded at load time (tensor/expert parallelism, optionally with FSDP2 on a second mesh
-            # dimension): accelerate has to know both sizes.
+            # Sharded at load time (tensor/expert parallelism, optionally with FSDP2 or HSDP on more mesh
+            # dimensions): accelerate has to know the TP size and the data parallel size, HSDP replicas included.
+            model_dp_size = self.model.config.distributed_config.dp_size
             if not is_accelerate_available("1.12.0"):
                 raise ValueError("Requires accelerate>1.12.0 to use Tensor Parallelism.")
             if args.get("parallelism_config") is None:
                 from accelerate import ParallelismConfig
 
-                args["parallelism_config"] = ParallelismConfig(tp_size=model_tp_size, dp_shard_size=model_fsdp_size)
+                args["parallelism_config"] = ParallelismConfig(tp_size=model_tp_size, dp_shard_size=model_dp_size)
             else:
                 args["parallelism_config"].tp_size = model_tp_size
-                args["parallelism_config"].dp_shard_size = model_fsdp_size
+                args["parallelism_config"].dp_shard_size = model_dp_size
 
         if is_accelerate_available("1.2.0"):
             # it we don't have the correct version, we will rely on env var instead that were set in TrainingArguments

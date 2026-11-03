@@ -186,7 +186,10 @@ def apply_fully_sharded_data_parallelism(
     are asserted upstream by `initialize_distributed_mesh`.
     """
     distributed_config = getattr(model.config, "distributed_config", None)
-    fsdp_mesh = mesh_manager.get_mesh("fsdp")
+    if distributed_config is not None and distributed_config.dp_replicate_size > 1:
+        fsdp_mesh = mesh_manager.get_mesh(("dp_replicate", "fsdp"))
+    else:
+        fsdp_mesh = mesh_manager.get_mesh("fsdp")
     fsdp_policy_kwargs = _get_fsdp_policy_kwargs(distributed_config)
 
     if distributed_config is not None and distributed_config.ep_size > 1:
