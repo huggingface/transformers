@@ -37,6 +37,7 @@ from ...integrations import (
     use_kernelized_func,
 )
 from ...integrations.accelerate import force_accelerate_hooks
+from ...loss.loss_utils import aux_loss_share
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -1925,7 +1926,7 @@ class Qwen3_5MoeForCausalLM(Qwen3_5MoePreTrainedModel, GenerationMixin):
                 attention_mask,
             )
             if labels is not None:
-                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+                loss += self.router_aux_loss_coef * aux_loss_share(aux_loss, labels, **kwargs).to(loss.device)
 
         return MoeCausalLMOutputWithPast(
             loss=loss,
@@ -2080,9 +2081,9 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3_5MoePreTrainedModel, GenerationMi
                 attention_mask,
             )
             if labels is not None:
-                loss += self.config.text_config.router_aux_loss_coef * aux_loss.to(
+                loss += self.config.text_config.router_aux_loss_coef * aux_loss_share(aux_loss, labels, **kwargs).to(
                     loss.device
-                )  # make sure to reside in the same device
+                )
 
         return Qwen3_5MoeCausalLMOutputWithPast(
             loss=loss,

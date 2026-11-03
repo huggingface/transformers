@@ -26,6 +26,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_experts_implementation
+from ...loss.loss_utils import aux_loss_share
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -395,7 +396,7 @@ class MixtralForCausalLM(MistralForCausalLM):
                 attention_mask,
             )
             if labels is not None:
-                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+                loss += self.router_aux_loss_coef * aux_loss_share(aux_loss, labels, **kwargs).to(loss.device)
 
         return MoeCausalLMOutputWithPast(
             loss=loss,

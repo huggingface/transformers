@@ -25,6 +25,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, DynamicLayer, StaticLayer
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import TorchvisionBackend
+from ...loss.loss_utils import aux_loss_share
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
@@ -1193,7 +1194,9 @@ class MiniMaxM3SparseForConditionalGeneration(LlavaForConditionalGeneration):
                 attention_mask,
             )
             if labels is not None:
-                loss += self.config.text_config.router_aux_loss_coef * aux_loss.to(loss.device)
+                loss += self.config.text_config.router_aux_loss_coef * aux_loss_share(aux_loss, labels, **kwargs).to(
+                    loss.device
+                )
 
         return MiniMaxM3VLCausalLMOutputWithPast(
             loss=loss,

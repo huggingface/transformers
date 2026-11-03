@@ -32,6 +32,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationMixin
 from ...image_utils import ImageInput
+from ...loss.loss_utils import aux_loss_share
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -1457,7 +1458,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
                 attention_mask,
             )
             if labels is not None:
-                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+                loss += self.router_aux_loss_coef * aux_loss_share(aux_loss, labels, **kwargs).to(loss.device)
 
         return Qwen3OmniMoeThinkerCausalLMOutputWithPast(
             loss=loss,
@@ -1963,7 +1964,7 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
                 attention_mask,
             )
             if labels is not None:
-                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+                loss += self.router_aux_loss_coef * aux_loss_share(aux_loss, labels, **kwargs).to(loss.device)
 
         return Qwen3OmniMoeTalkerOutputWithPast(
             loss=loss,

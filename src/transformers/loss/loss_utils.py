@@ -48,6 +48,31 @@ def fixed_cross_entropy(
     return loss
 
 
+def aux_loss_share(
+    aux_loss: torch.Tensor,
+    labels: torch.Tensor,
+    num_items_in_batch: torch.Tensor | int | None = None,
+    ignore_index: int = -100,
+    shift_labels: torch.Tensor | None = None,
+    **kwargs,
+) -> torch.Tensor:
+    """
+    Weights a per-batch mean loss, like the MoE router aux loss, by this batch's share of the `num_items_in_batch`
+    label tokens. With `num_items_in_batch`, the causal LM loss is this batch's share of a sum over several batches
+    (gradient accumulation steps, data parallel ranks) that the caller adds up, so the aux loss must be a share too,
+    or it is counted once per batch. Without `num_items_in_batch`, the aux loss is returned as is.
+    """
+    if num_items_in_batch is None:
+        return aux_loss
+    if shift_labels is None:
+        shift_labels = labels[..., 1:]
+    # Same count as the causal LM loss and the Trainer's `num_items_in_batch`
+    num_label_tokens = (shift_labels != ignore_index).sum().to(aux_loss.device)
+    if torch.is_tensor(num_items_in_batch):
+        num_items_in_batch = num_items_in_batch.to(aux_loss.device)
+    return aux_loss * num_label_tokens / num_items_in_batch
+
+
 def ForCausalLMLoss(
     logits,
     labels,

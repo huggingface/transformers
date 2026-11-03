@@ -17,6 +17,7 @@ import torch
 from torch import nn
 
 from ...cache_utils import Cache
+from ...loss.loss_utils import aux_loss_share
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -165,7 +166,7 @@ class Qwen3MoeForCausalLM(MixtralForCausalLM):
                 attention_mask,
             )
             if labels is not None:
-                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+                loss += self.router_aux_loss_coef * aux_loss_share(aux_loss, labels, **kwargs).to(loss.device)
 
         return MoeCausalLMOutputWithPast(
             loss=loss,
