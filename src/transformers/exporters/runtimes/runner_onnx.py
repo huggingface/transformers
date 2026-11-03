@@ -19,6 +19,7 @@ from typing import Any
 
 from ...utils.import_utils import is_onnxruntime_available, is_torch_available
 from ..metadata import ExportMetadata
+from ..utils import get_leaf_tensors
 from .base import ModelRunner
 
 
@@ -82,22 +83,21 @@ class OnnxModelRunner(ModelRunner):
 
     def __call__(self, share_inputs: bool = True, share_outputs: bool = False, **kwargs) -> Any:
         """Run with the inputs and outputs bound in place on the session's device (IO binding), instead of copied
-        through host arrays: sharing either way already. The graph binds inputs by position, so they go in traced
-        order."""
+        through host arrays: sharing either way already. Inputs bind by name, the leaf's path (with an `input.` prefix
+        on a mutated one): the export prunes the ones the graph doesn't read (a linear-attention layer's mask)."""
         from torch.onnx._internal.exporter._core import torch_dtype_to_onnx_dtype
 
         inputs = {name: kwargs[name] for name in self.metadata.kwargs if name in kwargs}
         device = self.device
         on_gpu = device.type == "cuda"
-        # The tensor leaves: `torch.export` bakes Python scalars (`output_router_logits=False`) into the graph.
-        leaves = [leaf for leaf in torch.utils._pytree.tree_leaves(inputs) if isinstance(leaf, torch.Tensor)]
+        leaves = get_leaf_tensors(inputs)
         specs = self.session.get_inputs()
-        if len(leaves) != len(specs):
-            raise ValueError(
-                f"The graph takes {len(specs)} inputs, but got {len(leaves)} tensors from {list(inputs)}."
-            )
+        missing = [spec.name for spec in specs if spec.name.removeprefix("input.") not in leaves]
+        if missing:
+            raise ValueError(f"The graph takes {missing}, which {list(inputs)} don't hold.")
         binding, kept = self.session.io_binding(), []
-        for spec, leaf in zip(specs, leaves):
+        for spec in specs:
+            leaf = leaves[spec.name.removeprefix("input.")]
             # Integers bind on host: ORT reads them on its CPU, where a GPU pointer is an illegal access.
             on_host = not (on_gpu and leaf.is_floating_point())
             tensor = (leaf.cpu() if on_host else leaf.to(device)).contiguous()

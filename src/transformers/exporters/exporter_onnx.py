@@ -662,6 +662,45 @@ def _fix_dead_comparison(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     return False
 
 
+# Each takes `(input, weight, bias, ...)`.
+_CONVOLUTIONS = frozenset(
+    {
+        torch.ops.aten.conv1d.default,
+        torch.ops.aten.conv2d.default,
+        torch.ops.aten.conv3d.default,
+        torch.ops.aten.convolution.default,
+    }
+)
+
+
+@register_fx_node_fix("onnx")
+def _fix_bfloat16_convolution(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Run a bf16 convolution in fp32: ONNX's `Conv` takes no bf16 before opset 22 (Qwen3.5's causal conv1d)."""
+    if node.target not in _CONVOLUTIONS or node.meta.get("_bf16_convolution_cast"):
+        return False
+    value = node.args[0].meta.get("val") if isinstance(node.args[0], torch.fx.Node) else None
+    if value is None or value.dtype != torch.bfloat16:
+        return False
+
+    def to(argument, dtype):
+        if not isinstance(argument, torch.fx.Node):
+            return argument
+        with gm.graph.inserting_before(node):
+            cast = gm.graph.call_function(torch.ops.aten._to_copy.default, (argument,), {"dtype": dtype})
+        cast.meta["val"] = argument.meta["val"].to(dtype)
+        return cast
+
+    output = node.meta["val"]
+    node.args = (*(to(argument, torch.float32) for argument in node.args[:3]), *node.args[3:])
+    node.meta["val"] = output.to(torch.float32)
+    node.meta["_bf16_convolution_cast"] = True
+    with gm.graph.inserting_after(node):
+        cast = gm.graph.call_function(torch.ops.aten._to_copy.default, (node,), {"dtype": torch.bfloat16})
+    cast.meta["val"] = output
+    node.replace_all_uses_with(cast, delete_user_cb=lambda user: user is not cast)
+    return False
+
+
 @register_fx_node_fix("onnx")
 def _fix_alias(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
     """Replace alias(x) -> x to break the alias -> detach_ -> index_put_ chain."""
