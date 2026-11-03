@@ -332,7 +332,7 @@ class MistralLarge4TextAttention(nn.Module):
     def __init__(self, config: MistralLarge4TextConfig, layer_idx: int):
         super().__init__()
         self.use_rope = config.no_rope_layers[layer_idx]
-        self.is_kv_shared_layer = config.kv_sharing_modes[layer_idx] == "reuse"
+        self.is_kv_shared_layer = config.kv_sharing_modes[layer_idx] in ("reuse", "reuse_but_indexer")
         self.store_full_length_kv = config.kv_sharing_modes[layer_idx] == "store"
         self.config = config
         self.layer_idx = layer_idx

@@ -180,6 +180,11 @@ class MistralLarge4TextConfig(GlmMoeDsaConfig):
     @property
     def kv_sharing_modes(self) -> list[str | None]:
         kv_sharing_modes = [None if i == self.kv_source_layers[i] else "reuse" for i in range(self.num_hidden_layers)]
+        for i in range(self.num_hidden_layers):
+            # These specific layers share the k/v part, but still need a cache for the indexer part - setting it to `reuse_but_indexer`
+            # will still attribute them an IndexedLayer cache
+            if kv_sharing_modes[i] == "reuse" and self.indexer_types[i] != "shared":
+                kv_sharing_modes[i] = "reuse_but_indexer"
         # Find indices of layers that compute AND share their cache (i.e. their index appears at least twice in `kv_source_layers`)
         producers = [i for i in range(self.num_hidden_layers) if i in self.kv_source_layers[i + 1 :]]
         # Mark producers as such
@@ -385,7 +390,7 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
 
     def __init__(self, config: MistralLarge4TextConfig, layer_idx: int):
         self.use_rope = config.no_rope_layers[layer_idx]
-        self.is_kv_shared_layer = config.kv_sharing_modes[layer_idx] == "reuse"
+        self.is_kv_shared_layer = config.kv_sharing_modes[layer_idx] in ("reuse", "reuse_but_indexer")
         self.store_full_length_kv = config.kv_sharing_modes[layer_idx] == "store"
         super().__init__(config, layer_idx)
 

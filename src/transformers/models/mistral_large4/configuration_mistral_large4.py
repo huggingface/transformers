@@ -207,6 +207,11 @@ class MistralLarge4TextConfig(PreTrainedConfig):
     @property
     def kv_sharing_modes(self) -> list[str | None]:
         kv_sharing_modes = [None if i == self.kv_source_layers[i] else "reuse" for i in range(self.num_hidden_layers)]
+        for i in range(self.num_hidden_layers):
+            # These specific layers share the k/v part, but still need a cache for the indexer part - setting it to `reuse_but_indexer`
+            # will still attribute them an IndexedLayer cache
+            if kv_sharing_modes[i] == "reuse" and self.indexer_types[i] != "shared":
+                kv_sharing_modes[i] = "reuse_but_indexer"
         # Find indices of layers that compute AND share their cache (i.e. their index appears at least twice in `kv_source_layers`)
         producers = [i for i in range(self.num_hidden_layers) if i in self.kv_source_layers[i + 1 :]]
         # Mark producers as such
