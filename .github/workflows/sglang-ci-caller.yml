@@ -106,89 +106,14 @@ jobs:
           echo "=== Memory ===" && free -h
           echo "=== Disk ===" && df -h
 
-      - name: Patch SGLang for memory debug logging
+      - name: Patch SGLang for CPU CI compatibility
         run: |
           python3 - << 'PATCHEOF'
-          import re, pathlib, sys
+          import re, pathlib
 
-          def patch(path, old, new, label):
-              p = pathlib.Path(path)
-              src = p.read_text()
-              if old not in src:
-                  print(f"[PATCH] WARNING: marker not found in {label}", flush=True)
-                  sys.exit(1)
-              p.write_text(src.replace(old, new, 1))
-              print(f"[PATCH] OK: {label}", flush=True)
-
-          # ── 1. get_available_gpu_memory – CPU branch ─────────────────────
-          patch(
-              "python/sglang/srt/utils/common.py",
-              old=(
-                  '    elif device == "cpu":\n'
-                  '        # TODO: rename the variables in the current function to be not GPU specific\n'
-                  '        total_free_memory = psutil.virtual_memory().available\n'
-                  '        n_numa_node: int = len(get_cpu_ids_by_node())\n'
-                  '        free_gpu_memory = round(total_free_memory / n_numa_node, 3)\n'
-              ),
-              new=(
-                  '    elif device == "cpu":\n'
-                  '        # TODO: rename the variables in the current function to be not GPU specific\n'
-                  '        total_free_memory = psutil.virtual_memory().available\n'
-                  '        n_numa_node: int = len(get_cpu_ids_by_node())\n'
-                  '        free_gpu_memory = round(total_free_memory / n_numa_node, 3)\n'
-                  '        print(f"[SGLANG-DEBUG] get_available_gpu_memory(cpu): '
-                  'sys_avail={total_free_memory/(1024**3):.2f}GB '
-                  'n_numa={n_numa_node} per_numa={free_gpu_memory/(1024**3):.2f}GB", flush=True)\n'
-              ),
-              label="get_available_gpu_memory CPU branch",
-          )
-
-          # ── 2. handle_gpu_memory_settings – mem_fraction_static resolution ──
-          patch(
-              "python/sglang/srt/arg_groups/memory_hook.py",
-              old=(
-                  '        mem_fraction_static = (\n'
-                  '            round((gpu_mem - reserved_mem) / gpu_mem, 3)\n'
-                  '            if gpu_mem is not None\n'
-                  '            else 0.95\n'
-                  '        )\n'
-              ),
-              new=(
-                  '        mem_fraction_static = (\n'
-                  '            round((gpu_mem - reserved_mem) / gpu_mem, 3)\n'
-                  '            if gpu_mem is not None\n'
-                  '            else 0.95\n'
-                  '        )\n'
-                  '        print(f"[SGLANG-DEBUG] mem_fraction_static resolved: '
-                  'gpu_mem={gpu_mem} reserved_mem={reserved_mem} '
-                  'mem_fraction_static={mem_fraction_static}", flush=True)\n'
-              ),
-              label="mem_fraction_static resolution",
-          )
-
-          # ── 3. KVCacheConfigurator.configure – available_bytes + config ───
-          patch(
-              "python/sglang/srt/mem_cache/kv_cache_configurator.py",
-              old=(
-                  '        available_bytes = self._profile_available_bytes(pre_model_load_memory)\n'
-                  '        config = self.config_from_budget(available_bytes)\n'
-              ),
-              new=(
-                  '        available_bytes = self._profile_available_bytes(pre_model_load_memory)\n'
-                  '        print(f"[SGLANG-DEBUG] KV cache budget: '
-                  'available_bytes={available_bytes/(1024**3):.2f}GB '
-                  'pre_model_load_memory={pre_model_load_memory:.2f}GB", flush=True)\n'
-                  '        config = self.config_from_budget(available_bytes)\n'
-                  '        print(f"[SGLANG-DEBUG] KV cache config: '
-                  'max_total_num_tokens={config.max_total_num_tokens}", flush=True)\n'
-              ),
-              label="KVCacheConfigurator.configure available_bytes",
-          )
-
-          # ── 4. _normalize_tp_plan – skip unknown TP styles gracefully ────────
-          # embedding_rowwise / embedding_colwise were added to transformers
-          # after the pinned SGLang commit.  For TP=1 CPU CI, skipping an
-          # unknown style is safe: the module simply runs unreplaced.
+          # Skip unknown TP styles (e.g. embedding_rowwise / embedding_colwise added
+          # to transformers after the pinned SGLang commit) instead of raising.
+          # For TP=1 CPU CI, skipping is safe: the module runs unreplaced.
           p_tf = pathlib.Path("python/sglang/srt/models/transformers.py")
           src_tf = p_tf.read_text()
           target = "normalized[pattern] = _normalize_tp_style(style)"
@@ -200,8 +125,8 @@ jobs:
                   lambda m: (
                       m.group(1) + 'try:\n' +
                       m.group(1) + '    ' + m.group(2) + '\n' +
-                      m.group(1) + 'except ValueError as _tp_err:\n' +
-                      m.group(1) + '    print(f"[SGLANG-CI] Skipping TP style {style!r} for {pattern!r}: {_tp_err}", flush=True)'
+                      m.group(1) + 'except ValueError:\n' +
+                      m.group(1) + '    pass'
                   ),
                   src_tf,
               )
@@ -210,67 +135,18 @@ jobs:
               else:
                   p_tf.write_text(src_tf2)
                   print("[PATCH] OK: _normalize_tp_plan graceful skip for unknown styles", flush=True)
-
-          print("[PATCH] All patches applied.", flush=True)
           PATCHEOF
 
-      - name: Write memory-monitor conftest
+      - name: Cap SGLang server KV-cache for CPU CI
+        # SGLang's CPU engine reads total NUMA RAM (~126 GB) as "GPU memory" and
+        # pre-allocates ~102 GB of KV cache at server startup, OOM-killing the runner.
+        # Inject --max-total-tokens 4096 into every server launch that doesn't already
+        # cap it.  4096 tokens keeps the KV cache well under 1 GB.
+        # Applied to both sglang.test.test_utils and sglang.test.runners because
+        # SRTRunner imports popen_launch_server directly into its own namespace.
         run: |
           cat > test/conftest.py << 'CONFTEST'
-          import logging
-          import os
-          import threading
-          import psutil
-
-          _logger = logging.getLogger("mem_monitor")
-          _stop = threading.Event()
-
-
-          def _monitor():
-              proc = psutil.Process(os.getpid())
-              while not _stop.wait(timeout=1.0):
-                  vm = psutil.virtual_memory()
-                  rss = proc.memory_info().rss / (1024 ** 3)
-                  _logger.warning(
-                      "[MEM] sys used=%.1fGB / %.1fGB (%.0f%% used, %.1fGB avail) | proc RSS=%.2fGB",
-                      vm.used / (1024 ** 3),
-                      vm.total / (1024 ** 3),
-                      vm.percent,
-                      vm.available / (1024 ** 3),
-                      rss,
-                  )
-
-
-          def pytest_sessionstart(session):
-              _stop.clear()
-              t = threading.Thread(target=_monitor, daemon=True, name="mem_monitor")
-              t.start()
-              session._mem_monitor_thread = t
-
-
-          def pytest_sessionfinish(session, exitstatus):
-              _stop.set()
-
-
           def pytest_configure(config):
-              """Cap KV-cache token count on the CPU engine to prevent OOM.
-
-              SGLang's CPU engine uses total NUMA-node RAM (~126 GB) as its
-              "GPU memory capacity", computes mem_fraction_static≈0.898, and
-              pre-allocates ~102 GB of KV-cache at server startup.  On a 128 GB
-              runner that reliably triggers the OOM killer.
-
-              We monkey-patch popen_launch_server so every server launched by
-              the SGLang test suite gets --max-total-tokens 4096 unless the
-              caller already specified it.  4096 tokens is ample for correctness
-              tests (Whisper audio expands to ~1500 tokens) while keeping the
-              KV cache well under 1 GB.
-
-              The patch is applied to both sglang.test.test_utils and
-              sglang.test.runners because some test helpers (e.g. SRTRunner)
-              import popen_launch_server directly into their own module
-              namespace rather than looking it up via sglang.test.test_utils.
-              """
               try:
                   import sglang.test.test_utils as _tu
               except ImportError:
@@ -282,16 +158,10 @@ jobs:
                   other_args = list(other_args or [])
                   if "--max-total-tokens" not in other_args:
                       other_args += ["--max-total-tokens", "4096"]
-                      print(
-                          "[CONFTEST] Injected --max-total-tokens 4096 into popen_launch_server",
-                          flush=True,
-                      )
                   return _orig(model, base_url, timeout, *args, other_args=other_args, **kwargs)
 
               _tu.popen_launch_server = _patched
 
-              # Also patch the reference in sglang.test.runners (SRTRunner imports
-              # popen_launch_server directly into that module's namespace).
               try:
                   import sglang.test.runners as _runners
                   if hasattr(_runners, "popen_launch_server"):
@@ -304,7 +174,7 @@ jobs:
         run: |
           mkdir -p "${REPORT_DIR}"
           read -r -a targets <<< "${TEST_TARGETS}"
-          python3 -m pytest -v -s --log-cli-level=WARNING "${targets[@]}" --junitxml="${REPORT_DIR}/results.xml"
+          python3 -m pytest -v "${targets[@]}" --junitxml="${REPORT_DIR}/results.xml"
 
       - name: Upload integration test results
         if: always()
