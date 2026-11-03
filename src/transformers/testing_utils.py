@@ -5514,7 +5514,3 @@ def record_ci_source_deps_by_file() -> None:
             json.dump(out, f, indent=2)
     except OSError:
         pass
-
-
-
-
