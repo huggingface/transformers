@@ -14,7 +14,6 @@
 
 import sys
 import unittest
-from unittest.mock import patch
 
 import numpy as np
 
@@ -77,13 +76,19 @@ class AnyToAnyPipelineTests(unittest.TestCase):
         self.assertEqual(len(single), 2)
         self.assertEqual(len(batched), 4)
 
-        # Audio generation may return a tuple instead of a tensor.
-        with patch.object(pipe.model, "generate", return_value=(None, None)):
-            result = pipe._forward(
-                pipe.preprocess("Hello"),
-                generate_kwargs={"generation_mode": "audio"},
-            )
-        self.assertIsInstance(result["generated_sequence"], tuple)
+        # Test real audio generation through the full pipeline.
+        audio_outputs = pipe(
+            text="Hello",
+            generation_mode="audio",
+            generate_kwargs={
+                "thinker_do_sample": False,
+                "thinker_max_new_tokens": 4,
+                "talker_do_sample": False,
+                "talker_max_new_tokens": 10,
+            },
+        )
+        self.assertEqual(len(audio_outputs), 1)
+        self.assertIsInstance(audio_outputs[0]["generated_audio"], np.ndarray)
 
     # We only need `processor` but the Mixin will pass all possible preprocessing classes for a model.
     # So we add them all in signature
