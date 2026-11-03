@@ -1413,6 +1413,22 @@ class TestNonTrainerIntegrationDeepSpeed(TestCasePlus):
         self.assertTrue(reloaded_model.model.rotary_emb.inv_freq.dtype == torch.float32)
         self.assertTrue(reloaded_model.model.rotary_emb.original_inv_freq.dtype == torch.float32)
 
+        # Perform the same check, using `from_config` instead of `from_pretrained`
+        with LoggingLevel(logging.INFO):
+            with mockenv_context(**self.dist_env_1_gpu):
+                logger = logging.get_logger("transformers.modeling_utils")
+                with CaptureLogger(logger) as cl:
+                    config_model = AutoModelForCausalLM.from_config(config)
+        self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
+
+        # All state dict members should be bf16 as per deepspeed config. Note that RoPE buffers are NON-PERSISTENT, so they
+        # are not part of the state dict
+        self.assertTrue(all(param.dtype == torch.bfloat16 for param in config_model.state_dict().values()))
+
+        # RoPE buffers should stay fp32
+        self.assertTrue(config_model.model.rotary_emb.inv_freq.dtype == torch.float32)
+        self.assertTrue(config_model.model.rotary_emb.original_inv_freq.dtype == torch.float32)
+
     def test_init_zero3_moe_weight_conversion(self):
         # test that weight conversions (MoE expert fusion) work correctly under zero3
         import deepspeed
