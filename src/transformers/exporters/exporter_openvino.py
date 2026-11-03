@@ -601,16 +601,30 @@ def _make_stateful(
     _pin_state_update_shapes(ov_model)
 
 
+def _refined_state_shape(variable_shape, update_shape):
+    """`variable_shape` with the dims `update_shape` fixes and it leaves dynamic, or `None` when the two disagree
+    on a static dim or on rank."""
+    if variable_shape.rank.is_dynamic or update_shape.rank.is_dynamic or len(variable_shape) != len(update_shape):
+        return None
+    dims = []
+    for variable_dim, update_dim in zip(variable_shape, update_shape):
+        if variable_dim.is_static and update_dim.is_static and variable_dim.get_length() != update_dim.get_length():
+            return None
+        dims.append(variable_dim if variable_dim.is_static or update_dim.is_dynamic else update_dim)
+    return openvino.PartialShape(dims)
+
+
 def _pin_state_update_shapes(ov_model: openvino.Model) -> None:
     """Reconcile each ``Assign``'s update shape with its variable's shape.
 
     The CPU plugin refuses to reorder dynamic descriptors into the state memory, so the two
-    sides must agree. When the update is fully static and the variable is not (a static trace
-    bakes the batch into the update while the variable was declared batch-dynamic), the variable
-    is pinned to the update's shape. Conversely, when shape inference leaves the update
-    under-specified against a static variable (olmo_hybrid's rolled conv state comes out
-    ``[?,32,2..]`` against a ``[?,32,3]`` variable), a ``special_zero`` Reshape pins the
-    statically-known dims and copies the dynamic ones from the input. Pinning a variable
+    sides must agree. When the update fixes dims the variable leaves dynamic (a static trace bakes
+    the batch into the update, or a batch-1 sample's size-1 batch gets specialized), the variable
+    takes those dims. Conversely, when shape inference leaves the update under-specified against a
+    static variable dim (olmo_hybrid's rolled conv state comes out ``[?,32,2..]`` against a
+    ``[?,32,3]`` variable), a ``special_zero`` Reshape pins the statically-known dims and copies the
+    dynamic ones from the input. Nothing else gets a Reshape: one between the KV-cache concat and its
+    ``Assign`` keeps the CPU plugin from fusing the cache into its attention. Pinning a variable
     refines shapes downstream (other updates read from it), so this iterates to a fixpoint.
     """
     variables = {variable.get_info().variable_id: variable for variable in ov_model.get_variables()}
@@ -626,26 +640,31 @@ def _pin_state_update_shapes(ov_model: openvino.Model) -> None:
             update_shape = update.get_partial_shape()
             if update_shape == variable_shape:
                 continue
-            if update_shape.is_static:
+            refined = _refined_state_shape(variable_shape, update_shape)
+            if refined is not None and refined != variable_shape:
+                # The update fixes dims the variable left dynamic (a static trace bakes the batch, or a
+                # batch-1 sample's size-1 axis gets specialized): give the variable those dims, so the
+                # update feeds its `Assign` as is. A `Reshape` between them would keep the CPU plugin
+                # from fusing the KV-cache concat into its attention.
                 info = variable.get_info()
-                info.data_shape = update_shape
+                info.data_shape = refined
                 variable.update(info)
                 # The variable's shape must relax its init expression's, so the init gets the
-                # same static shape (its dims were runtime-derived but numerically identical).
+                # same dims (they were runtime-derived but numerically identical).
                 read_value = read_values.get(op.get_variable_id())
                 if read_value is not None and read_value.get_input_size() > 0:
-                    target = np.array([dim.get_length() for dim in update_shape], dtype=np.int64)
-                    pinned_init = ov_ops.reshape(
-                        read_value.input_value(0), ov_ops.constant(target), special_zero=False
-                    )
+                    target = np.array([dim.get_length() if dim.is_static else 0 for dim in refined], dtype=np.int64)
+                    pinned_init = ov_ops.reshape(read_value.input_value(0), ov_ops.constant(target), special_zero=True)
                     read_value.set_arguments([pinned_init])
                 changed = True
                 continue
-            if variable_shape.rank.is_dynamic:
+            if variable_shape.rank.is_dynamic or len(variable_shape) != len(update_shape):
+                continue
+            # Only a dim the variable fixes and the update leaves dynamic needs the update pinned; an
+            # update narrower than a dynamic variable dim (a decode step's `1..` cache length) already fits.
+            if not any(v.is_static and u.is_dynamic for v, u in zip(variable_shape, update_shape)):
                 continue
             target = [dim.get_length() if dim.is_static else 0 for dim in variable_shape]
-            if all(t == 0 for t in target):
-                continue
             pinned = ov_ops.reshape(update, ov_ops.constant(np.array(target, dtype=np.int64)), special_zero=True)
             op.input(0).replace_source_output(pinned.output(0))
             changed = True
