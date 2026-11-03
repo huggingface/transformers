@@ -2204,7 +2204,7 @@ class ProcessorMixin(PushToHubMixin):
         continue_final_message: bool | str = False,
         return_assistant_tokens_mask: bool = False,
         tokenize: bool = False,
-        return_tensors: str | TensorType | None = "auto,
+        return_tensors: str | TensorType | None = "auto",
         return_dict: bool = False,
         load_audio_from_video: bool = False,
         processor_kwargs: dict | None = None,
