@@ -132,7 +132,11 @@ def _ensure_torch_distributed(device_type: str | None = None):
             # Bind the accelerator before init so the process group is created with a
             # device_id, otherwise collectives like barrier() warn (and may spin up an
             # extra NCCL comm) about the missing device binding.
-            device_id = None if device_type == "cpu" else _bind_local_device(device_type, local_rank)
+            device = _bind_local_device(device_type, local_rank)
+            # Only pass device_id to backends that support communicator splitting, for now we limit
+            # it to NCCL: a bound device makes DeviceMesh create its subgroups with `split_group`,
+            # which fails on backends without split support (e.g. Neuron).
+            device_id = device if backend == "nccl" else None
             torch.distributed.init_process_group(
                 backend=backend,
                 rank=rank,
