@@ -31,6 +31,7 @@ from transformers.testing_utils import (
     CaptureLogger,
     require_torch,
     require_torch_accelerator,
+    require_torchcodec_greater_or_equal,
     slow,
     torch_device,
 )
@@ -158,6 +159,12 @@ class EmbeddingGemma2TextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @unittest.skip(
+        reason="EmbeddingGemma 2 is bidirectional and always builds an attention mask, which the SDPA flash backend rejects"
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
 
 class EmbeddingGemma2ModelTester:
@@ -307,6 +314,12 @@ class EmbeddingGemma2ModelTest(ModelTesterMixin, unittest.TestCase):
     # NOTE: no `test_config` here (unlike the text-model test): `ConfigTester.run_common_tests`
     # asserts a `vocab_size` attribute, which on a composite config only lives on `text_config`.
     # Gemma 4's multimodal test leaves its config tester unused for the same reason.
+
+    @unittest.skip(
+        reason="EmbeddingGemma 2 is bidirectional and always builds an attention mask, which the SDPA flash backend rejects"
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
     def test_vision_axial_rope(self):
         # Override: the inherited Gemma 4 vision rope takes position IDs with a batch dim, which the
@@ -464,18 +477,19 @@ class EmbeddingGemma2ModelTest(ModelTesterMixin, unittest.TestCase):
 class EmbeddingGemma2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     """
     reproducer (uploads the golden to
-    ``hf://buckets/hf-internal-testing/embeddinggemma2-integration-test/<case>/expected_embeddings.safetensors``,
+    ``hf://buckets/hf-internal-testing/embeddinggemma2-integration-tests/<case>/expected_embeddings.safetensors``,
     holding the `embeddings` and, where the case computes one, the `similarities` matrix):
-        TODO
+        https://gist.github.com/eustlb/459dcbaf16fc98b48982fb767a9c8704
     """
 
-    # TODO: pick the correct values once the golden embeddings are generated on the CI hardware
-    # Tolerance against the golden embeddings and similarities from the bucket
-    RTOL = 1e-2
-    ATOL = 1e-2
-    # Tolerance between batched and single-input embeddings of the same run (bf16 kernels vary with padded shapes)
-    BATCH_RTOL = 2e-3
-    BATCH_ATOL = 2e-3
+    # Tolerance against the golden embeddings and similarities from the bucket. The goldens are reproduced bit-exactly
+    # on the CI A10G; the margin covers kernel changes across CI image updates (up to 2.6e-3 measured between GPUs).
+    RTOL = 0
+    ATOL = 5e-3
+    # Tolerance between batched and single-input embeddings of the same run (bf16 kernels vary with padded shapes;
+    # up to 2.2e-3 measured on the CI A10G).
+    BATCH_RTOL = 0
+    BATCH_ATOL = 5e-3
 
     IMAGE_URL = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
     IMAGE_2_URL = (
@@ -483,18 +497,19 @@ class EmbeddingGemma2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     )
     AUDIO_URL = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/song_1.mp3"
     VIDEO_URL = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+    SILENT_VIDEO_URL = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/karate.mp4"
 
     @classmethod
     def setUpClass(cls):
-        # TODO: switch to `google/embeddinggemma-2` at release
-        cls.checkpoint_name = "gg-hf-em/embeddinggemma-2"
-        cls.bucket = "hf-internal-testing/embeddinggemma2-integration-test"
+        cls.checkpoint_name = "google/embeddinggemma-2"
+        cls.bucket = "hf-internal-testing/embeddinggemma2-integration-tests"
         cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
 
         cls.image = url_to_local_path(cls.IMAGE_URL)
         cls.image_2 = url_to_local_path(cls.IMAGE_2_URL)
         cls.audio = url_to_local_path(cls.AUDIO_URL)
         cls.video = url_to_local_path(cls.VIDEO_URL)
+        cls.video_silent = url_to_local_path(cls.SILENT_VIDEO_URL)
 
     @staticmethod
     def _pool(model, inputs):
@@ -514,7 +529,11 @@ class EmbeddingGemma2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     # ==== Text retrieval ====
 
     def test_model_text_query_document(self):
-        """`encode_query` / `encode_document`: the query and the documents carry different task prompts."""
+        """
+        `encode_query` / `encode_document`: the query and the documents carry different task prompts.
+
+        reproducer: https://gist.github.com/eustlb/459dcbaf16fc98b48982fb767a9c8704#file-reproducer-text-query-document-py
+        """
         model = EmbeddingGemma2Model.from_pretrained(self.checkpoint_name, device_map=torch_device)
 
         venus = "Venus is often called Earth's twin because of its similar size and proximity."
@@ -587,7 +606,11 @@ class EmbeddingGemma2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     # ==== Single modality ====
 
     def test_model_single_modality(self):
-        """One key per modality: text, image, audio and video each embedded on their own, one conversation per row."""
+        """
+        One key per modality: text, image, audio and video each embedded on their own, one conversation per row.
+
+        reproducer: https://gist.github.com/eustlb/459dcbaf16fc98b48982fb767a9c8704#file-reproducer-single-modality-py
+        """
         model = EmbeddingGemma2Model.from_pretrained(self.checkpoint_name, device_map=torch_device)
 
         conversations = [
@@ -638,7 +661,11 @@ class EmbeddingGemma2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     # ==== Several modalities in one input ====
 
     def test_model_multiple_modalities(self):
-        """Several modalities in one input give one embedding: text + image, text + audio and image + audio."""
+        """
+        Several modalities in one input give one embedding: text + image, text + audio and image + audio.
+
+        reproducer: https://gist.github.com/eustlb/459dcbaf16fc98b48982fb767a9c8704#file-reproducer-multiple-modalities-py
+        """
         model = EmbeddingGemma2Model.from_pretrained(self.checkpoint_name, device_map=torch_device)
 
         conversations = [
@@ -681,8 +708,68 @@ class EmbeddingGemma2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected = self._load_expected("multiple_modalities")
         torch.testing.assert_close(embeddings.cpu(), expected["embeddings"], rtol=self.RTOL, atol=self.ATOL)
 
+    @require_torchcodec_greater_or_equal("0.17.0")
+    def test_model_video_and_audio(self):
+        """Test that we can load the audio track from video file and interleave them frame by frame."""
+        model = EmbeddingGemma2Model.from_pretrained(self.checkpoint_name, device_map=torch_device)
+
+        conversations = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "A man practicing karate."},
+                        {"type": "video", "url": self.video_silent},
+                    ],
+                },
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "A man playing tennis."},
+                        {"type": "video", "url": self.video},
+                    ],
+                },
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "A song"},
+                        {"type": "audio", "url": self.audio},
+                    ],
+                },
+            ],
+        ]
+        inputs = self.processor.apply_chat_template(
+            conversations,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            load_audio_from_video=True,
+            processor_kwargs={
+                "videos_kwargs": {
+                    "overflow_strategy": "uniform",
+                    "max_frames": 10,
+                    "do_sample_frames": True,
+                    "add_timestamps": True,
+                },
+                "audio_kwargs": {"truncation": False},
+                "text_kwargs": {"padding": True},
+            },
+        ).to(model.device)
+        embeddings = self._pool(model, inputs)
+
+        expected = self._load_expected("video_and_audio")
+        torch.testing.assert_close(embeddings.cpu(), expected["embeddings"], rtol=self.RTOL, atol=self.ATOL)
+
     def test_model_manual_placeholders(self):
-        """Placeholders written in the text interleave the media with it, in the order the media items are given."""
+        """
+        Placeholders written in the text interleave the media with it, in the order the media items are given.
+
+        reproducer: https://gist.github.com/eustlb/459dcbaf16fc98b48982fb767a9c8704#file-reproducer-manual-placeholders-py
+        """
         model = EmbeddingGemma2Model.from_pretrained(self.checkpoint_name, device_map=torch_device)
 
         messages = [
@@ -714,7 +801,11 @@ class EmbeddingGemma2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     # ==== Batching ====
 
     def test_model_mixed_modality_batch(self):
-        """A batch mixing text, image, text + image and audio embeds each row as if it were alone."""
+        """
+        A batch mixing text, image, text + image and audio embeds each row as if it were alone.
+
+        reproducer: https://gist.github.com/eustlb/459dcbaf16fc98b48982fb767a9c8704#file-reproducer-mixed-modality-batch-py
+        """
         model = EmbeddingGemma2Model.from_pretrained(self.checkpoint_name, device_map=torch_device)
 
         conversations = [

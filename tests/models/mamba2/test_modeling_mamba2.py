@@ -251,7 +251,7 @@ class Mamba2ModelTester:
         model.eval()
         model.to(torch_device)
         if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable()
 
         token_emb = model.embeddings(input_ids)
         outputs_slow = model.layers[0].mixer(token_emb)

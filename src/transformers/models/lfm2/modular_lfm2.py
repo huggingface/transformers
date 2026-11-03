@@ -155,7 +155,7 @@ class Lfm2ShortConv(nn.Module):
         hidden_states: torch.Tensor,
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
-        seq_idx: torch.IntTensor | None = None,
+        **kwargs,
     ):
         seq_len = hidden_states.shape[1]
 
@@ -180,9 +180,7 @@ class Lfm2ShortConv(nn.Module):
                     hidden_states, self.layer_idx, conv_kernel_size=self.conv_kernel_size
                 )
 
-            hidden_states = causal_conv1d_fn(
-                hidden_states, self.conv.weight.squeeze(1), self.conv.bias, seq_idx=seq_idx
-            )
+            hidden_states = causal_conv1d_fn(hidden_states, self.conv.weight.squeeze(1), self.conv.bias, **kwargs)
 
             # Drop the additional previous states
             if past_key_values is not None:
@@ -231,7 +229,7 @@ class Lfm2DecoderLayer(GradientCheckpointingLayer):
                 hidden_states=self.operator_norm(hidden_states),
                 past_key_values=past_key_values,
                 attention_mask=attention_mask,
-                seq_idx=kwargs.get("seq_idx"),
+                **kwargs,
             )
         hidden_states = hidden_states + residual
         hidden_states = hidden_states + self.feed_forward(self.ffn_norm(hidden_states))

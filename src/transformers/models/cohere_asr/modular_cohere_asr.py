@@ -259,7 +259,7 @@ class CohereAsrDecoder(MoonshineDecoder):
         "cross_attentions": OutputRecorder(CohereAsrCrossAttention, index=1, layer_name="encoder_attn"),
     }
 
-    def __init__(self, config):
+    def __init__(self, config: CohereAsrConfig):
         super().__init__(config)
         del self.rotary_emb
         self.norm = nn.LayerNorm(config.hidden_size)
@@ -345,7 +345,7 @@ class CohereAsrDecoder(MoonshineDecoder):
 
 
 class CohereAsrModel(MoonshineModel):
-    def __init__(self, config):
+    def __init__(self, config: CohereAsrConfig):
         super().__init__(config)
         self.encoder = AutoModel.from_config(config.encoder_config)
 
@@ -423,7 +423,7 @@ class CohereAsrModel(MoonshineModel):
 
 
 class CohereAsrForConditionalGeneration(MoonshineForConditionalGeneration):
-    def __init__(self, config):
+    def __init__(self, config: CohereAsrConfig):
         super().__init__(config)
         self.proj_out = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
         self.post_init()

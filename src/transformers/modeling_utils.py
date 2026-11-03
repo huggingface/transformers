@@ -73,7 +73,7 @@ from .integrations.accelerate import (
     get_device,
     load_offloaded_parameter,
 )
-from .integrations.deepspeed import _load_state_dict_into_zero3_model
+from .integrations.deepspeed import _load_state_dict_into_zero3_model, prevent_arange_dtype_change
 from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS
 from .integrations.flash_attention import flash_attention_forward
@@ -1354,7 +1354,7 @@ class PreTrainedModel(
 
     def _backward_compatibility_gradient_checkpointing(self):
         if self.supports_gradient_checkpointing and getattr(self.config, "gradient_checkpointing", False):
-            self.gradient_checkpointing_enable()
+            self.activation_checkpointing_enable()
             # Remove the attribute now that is has been consumed, so it's no saved in the config.
             delattr(self.config, "gradient_checkpointing")
 
@@ -1443,6 +1443,7 @@ class PreTrainedModel(
             init_contexts.extend(
                 [
                     init.no_init_weights(),
+                    prevent_arange_dtype_change(),  # needed to avoid changing dtype of RoPE buffers with zero.Init()
                     deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
                     set_zero3_state(),
                 ]
@@ -3107,11 +3108,11 @@ class PreTrainedModel(
         # Tie weights needs to be called here, but it can use the pre-computed `all_tied_weights_keys`
         self.tie_weights(recompute_mapping=False)
 
-    def gradient_checkpointing_enable(
-        self, gradient_checkpointing_kwargs=None, every_n_layers: int = 1, offload: bool = False
+    def activation_checkpointing_enable(
+        self, activation_checkpointing_kwargs=None, every_n_layers: int = 1, offload: bool = False
     ):
         """
-        Activates gradient checkpointing for the current model.
+        Activates activation checkpointing for the current model.
 
         We pass the `__call__` method of the modules instead of `forward` because `__call__` attaches all the hooks of
         the module. https://discuss.pytorch.org/t/any-different-between-model-input-and-model-forward-input/3690/2
@@ -3126,14 +3127,14 @@ class PreTrainedModel(
                 This frees `layers x sequence x hidden` bytes of device memory, which is what dominates at long
                 sequence lengths, and costs a device-to-host copy in the forward and a host-to-device copy in the
                 backward. Both copies run on the compute stream, so the step gets slower.
-            gradient_checkpointing_kwargs (dict, *optional*):
+            activation_checkpointing_kwargs (dict, *optional*):
                 Additional keyword arguments passed along to the `torch.utils.checkpoint.checkpoint` function.
         """
         if not self.supports_gradient_checkpointing:
-            raise ValueError(f"{self.__class__.__name__} does not support gradient checkpointing.")
+            raise ValueError(f"{self.__class__.__name__} does not support activation checkpointing.")
 
-        if gradient_checkpointing_kwargs is None:
-            gradient_checkpointing_kwargs = {"use_reentrant": False}
+        if activation_checkpointing_kwargs is None:
+            activation_checkpointing_kwargs = {"use_reentrant": False}
 
         if offload:
             # `get_current_accelerator()` is None when no accelerator is available, in which case the
@@ -3146,7 +3147,7 @@ class PreTrainedModel(
         else:
             checkpoint_func = checkpoint
 
-        gradient_checkpointing_func = functools.partial(checkpoint_func, **gradient_checkpointing_kwargs)
+        gradient_checkpointing_func = functools.partial(checkpoint_func, **activation_checkpointing_kwargs)
 
         # For old GC format (transformers < 4.35.0) for models that live on the Hub
         # we will fall back to the overwritten `_set_gradient_checkpointing` method
@@ -3161,7 +3162,7 @@ class PreTrainedModel(
         else:
             self.apply(partial(self._set_gradient_checkpointing, value=True))
             logger.warning(
-                "You are using an old version of the checkpointing format that is deprecated (We will also silently ignore `gradient_checkpointing_kwargs` in case you passed it)."
+                "You are using an old version of the checkpointing format that is deprecated (We will also silently ignore `activation_checkpointing_kwargs` in case you passed it)."
                 "Please update to the new format on your modeling file. To use the new format, you need to completely remove the definition of the method `_set_gradient_checkpointing` in your model."
             )
 
@@ -3174,6 +3175,17 @@ class PreTrainedModel(
             # When training with PEFT, only LoRA layers will have requires grad set to True, but the output of frozen layers need to propagate
             # the gradients to make sure the gradient flows.
             self.enable_input_require_grads()
+
+    def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None, **kwargs):
+        """
+        Deprecated alias of [`~PreTrainedModel.activation_checkpointing_enable`], will be removed in v6.
+        """
+        warnings.warn(
+            "`gradient_checkpointing_enable` is deprecated and will be removed in v6. Use "
+            "`activation_checkpointing_enable` instead.",
+            FutureWarning,
+        )
+        self.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs, **kwargs)
 
     def _set_gradient_checkpointing(
         self,
@@ -3212,9 +3224,9 @@ class PreTrainedModel(
                 " `gradient_checkpointing` to modules of the model that uses checkpointing."
             )
 
-    def gradient_checkpointing_disable(self):
+    def activation_checkpointing_disable(self):
         """
-        Deactivates gradient checkpointing for the current model.
+        Deactivates activation checkpointing for the current model.
         """
         if self.supports_gradient_checkpointing:
             # For old GC format (transformers < 4.35.0) for models that live on the Hub
@@ -3224,7 +3236,7 @@ class PreTrainedModel(
                 self._set_gradient_checkpointing(enable=False)
             else:
                 logger.warning(
-                    "You are using an old version of the checkpointing format that is deprecated (We will also silently ignore `gradient_checkpointing_kwargs` in case you passed it)."
+                    "You are using an old version of the checkpointing format that is deprecated (We will also silently ignore `activation_checkpointing_kwargs` in case you passed it)."
                     "Please update to the new format on your modeling file. To use the new format, you need to completely remove the definition of the method `_set_gradient_checkpointing` in your model."
                 )
                 self.apply(partial(self._set_gradient_checkpointing, value=False))
@@ -3232,12 +3244,35 @@ class PreTrainedModel(
         if getattr(self, "_hf_peft_config_loaded", False):
             self.disable_input_require_grads()
 
+    def gradient_checkpointing_disable(self):
+        """
+        Deprecated alias of [`~PreTrainedModel.activation_checkpointing_disable`], will be removed in v6.
+        """
+        warnings.warn(
+            "`gradient_checkpointing_disable` is deprecated and will be removed in v6. Use "
+            "`activation_checkpointing_disable` instead.",
+            FutureWarning,
+        )
+        self.activation_checkpointing_disable()
+
+    @property
+    def is_activation_checkpointing(self) -> bool:
+        """
+        Whether activation checkpointing is activated for this model or not.
+        """
+        return any(hasattr(m, "gradient_checkpointing") and m.gradient_checkpointing for m in self.modules())
+
     @property
     def is_gradient_checkpointing(self) -> bool:
         """
-        Whether gradient checkpointing is activated for this model or not.
+        Deprecated alias of [`~PreTrainedModel.is_activation_checkpointing`], will be removed in v6.
         """
-        return any(hasattr(m, "gradient_checkpointing") and m.gradient_checkpointing for m in self.modules())
+        warnings.warn(
+            "`is_gradient_checkpointing` is deprecated and will be removed in v6. Use `is_activation_checkpointing` "
+            "instead.",
+            FutureWarning,
+        )
+        return self.is_activation_checkpointing
 
     def save_pretrained(
         self,
@@ -3748,6 +3783,7 @@ class PreTrainedModel(
                 init_contexts.extend(
                     [
                         init.no_init_weights(),
+                        prevent_arange_dtype_change(),  # needed to avoid changing dtype of RoPE buffers with zero.Init()
                         deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
                         set_zero3_state(),
                     ]
@@ -4838,12 +4874,9 @@ class PreTrainedModel(
         if is_deepspeed_zero3_enabled() and not is_quantized:
             return
 
-        # In this case we need to move everything back
+        # Non-persistent buffers need real placeholders as they won't be broadcasted by fsdp2
         if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
-            for key, param in self.named_parameters():
-                value = torch.zeros_like(param, device="cpu")
-                _load_parameter_into_model(self, key, value)
-            for key, buffer in self.named_buffers():
+            for key, buffer in self.named_non_persistent_buffers():
                 value = torch.zeros_like(buffer, device="cpu")
                 _load_parameter_into_model(self, key, value)
             return
@@ -5082,6 +5115,36 @@ def is_accelerator_device(device: str | int | torch.device) -> bool:
         return False
     else:
         return torch.device(device).type not in ["meta", "cpu"]
+
+
+def slice_logits_to_keep(hidden_states: torch.Tensor, logits_to_keep: int | torch.Tensor) -> torch.Tensor:
+    """
+    Slice `hidden_states` according to `logits_to_keep`, before the `lm_head` projection, so logits are only
+    computed for the positions that are actually needed. `logits_to_keep` can be:
+        - an `int`: keep the last `logits_to_keep` positions (`0` keeps all of them), e.g. in `generate`'s prefill.
+        - a 1D tensor: keep these positions for every sample.
+        - a 2D tensor, either:
+            - integer `(batch_size, num_positions)`: keep these positions for each sample (same count for all).
+            - boolean `(batch_size, sequence_length)`: keep the `True` positions, the count can differ per sample
+              (e.g. packed training). The output is flattened to `(num_true, hidden_size)`.
+        - an `int`: keep the last `logits_to_keep` positions (`0` keeps all of them). E.g. in `generate`, we use `logits_to_keep=1` whenever possible to only project the last logit onto the (usually huge) vocab size dimension since we only care about the next token.
+        - a 1D tensor: keep these positions for every batch sample.
+        - a 2D tensor, either:
+            - integer `(batch_size, num_positions)`: keep these positions for each sample (same count for all).
+            - boolean `(batch_size, sequence_length)`: keep the `True` positions, the count can differ per sample
+              (e.g. packed training). The output is flattened to `(num_true, hidden_size)`.
+    Except for the boolean mask, the output has shape `(batch_size, num_positions, hidden_size)`.
+
+    NOTE: a 2D integer tensor holds positions, not a mask: so a valid mask casted to integer dtype would be understood as positions, not mask. To slice with a mask, the tensor really needs to be of dtype `bool`.
+    """
+    if isinstance(logits_to_keep, torch.Tensor) and logits_to_keep.ndim == 2:
+        if logits_to_keep.dtype == torch.bool:
+            return hidden_states[logits_to_keep]
+        return torch.take_along_dim(hidden_states, logits_to_keep[..., None], dim=1)
+
+    if isinstance(logits_to_keep, int):
+        logits_to_keep = slice(-logits_to_keep, None)
+    return hidden_states[:, logits_to_keep, :]
 
 
 def get_total_byte_count(

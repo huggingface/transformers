@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import math
 
 import torch
@@ -678,19 +679,18 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
         """Initialize the weights"""
         PreTrainedModel._init_weights(self, module)
         # initialize linear layer bias value according to a given probability value.
-        if isinstance(module, (DFineForObjectDetection, DFineDecoder)):
-            if module.class_embed is not None:
-                for layer in module.class_embed:
-                    prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
-                    bias = float(-math.log((1 - prior_prob) / prior_prob))
-                    init.xavier_uniform_(layer.weight)
-                    init.constant_(layer.bias, bias)
+        if isinstance(module, DFineForObjectDetection):
+            for layer in module.model.decoder.class_embed:
+                prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
+                bias = float(-math.log((1 - prior_prob) / prior_prob))
+                init.xavier_uniform_(layer.weight)
+                init.constant_(layer.bias, bias)
 
-            if module.bbox_embed is not None:
-                for layer in module.bbox_embed:
-                    init.constant_(layer.layers[-1].weight, 0)
-                    init.constant_(layer.layers[-1].bias, 0)
+            for layer in module.model.decoder.bbox_embed:
+                init.constant_(layer.layers[-1].weight, 0)
+                init.constant_(layer.layers[-1].bias, 0)
 
+        if isinstance(module, DFineDecoder):
             if hasattr(module, "reg_scale"):
                 init.constant_(module.reg_scale, self.config.reg_scale)
 
@@ -951,8 +951,8 @@ class DFineForObjectDetection(RTDetrForObjectDetection):
             ]
         )
 
-        self.model.decoder.class_embed = self.class_embed
-        self.model.decoder.bbox_embed = self.bbox_embed
+        self.model.decoder.class_embed = copy.deepcopy(self.class_embed)
+        self.model.decoder.bbox_embed = copy.deepcopy(self.bbox_embed)
         # Initialize weights and apply final processing
         self.post_init()
 
