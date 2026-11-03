@@ -1,3 +1,5 @@
+import os
+
 import torch
 
 from ..generation.continuous_batching.cache import PagedAttentionCache
@@ -28,6 +30,8 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 
 def use_gqa_in_sdpa(attention_mask: torch.Tensor | None, key: torch.Tensor, value: torch.Tensor) -> bool:
+    if os.environ.get("TRANSFORMERS_SDPA_FORCE_GQA", "0") == "1":
+        return True
     # XPU and MPS support masked GQA under more recent torch versions
     if _is_torch_xpu_available:
         return _is_torch_greater_or_equal_than_2_8

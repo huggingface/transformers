@@ -319,7 +319,7 @@ def get_impacted_files_from_tiny_model_summary(diff_with_last_commit: bool = Fal
         for model_class in impacted_model_classes:
             module = reversed_structure[model_class]
             fn = f"modeling_{module.split('.')[-1]}.py"
-            files.add(f"src.transformers.{module}.{fn}".replace(".", os.path.sep).replace(f"{os.path.sep}py", ".py"))
+            files.add(f"src.transformers.{module}.{fn}".replace(".", "/").replace("/py", ".py"))
 
     return sorted(files)
 
@@ -442,12 +442,10 @@ def get_all_doctest_files() -> list[str]:
     Returns:
         `List[str]`: The complete list of Python and Markdown files on which we run doctest.
     """
-    py_files = [str(x.relative_to(PATH_TO_REPO)) for x in PATH_TO_REPO.glob("**/*.py")]
-    md_files = [str(x.relative_to(PATH_TO_REPO)) for x in PATH_TO_REPO.glob("**/*.md")]
+    py_files = [x.relative_to(PATH_TO_REPO).as_posix() for x in PATH_TO_REPO.glob("**/*.py")]
+    md_files = [x.relative_to(PATH_TO_REPO).as_posix() for x in PATH_TO_REPO.glob("**/*.md")]
 
     test_files_to_run = py_files + md_files
-    # change to use "/" as path separator
-    test_files_to_run = ["/".join(Path(x).parts) for x in test_files_to_run]
     # don't run doctest for files in `src/transformers/models/deprecated`
     test_files_to_run = [x for x in test_files_to_run if "models/deprecated" not in x]
 
@@ -637,7 +635,7 @@ def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None
     splits = content.split('\"\"\"')  # fmt: skip
     content = "".join(splits[::2])
 
-    module_parts = str(module_fname).split(os.path.sep)
+    module_parts = str(module_fname).split("/")
     imported_modules = []
 
     # Let's start with relative imports
@@ -659,7 +657,7 @@ def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None
             dep_parts = module_parts[: len(module_parts) - level] + module.split(".")
         else:
             dep_parts = module_parts[: len(module_parts) - level]
-        imported_module = os.path.sep.join(dep_parts)
+        imported_module = "/".join(dep_parts)
         imported_modules.append((imported_module, [imp.strip() for imp in imports.split(",")]))
 
     # Let's continue with direct imports
@@ -672,7 +670,7 @@ def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None
     for module, imports in direct_imports:
         import_parts = module.split(".")[1:]  # ignore the name of the repo since we add it below.
         dep_parts = ["src", "transformers"] + import_parts
-        imported_module = os.path.sep.join(dep_parts)
+        imported_module = "/".join(dep_parts)
         imported_modules.append((imported_module, [imp.strip() for imp in imports.split(",")]))
 
     result = []
@@ -681,11 +679,12 @@ def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None
         if (PATH_TO_REPO / f"{module_file}.py").is_file():
             module_file = f"{module_file}.py"
         elif (PATH_TO_REPO / module_file).is_dir() and (PATH_TO_REPO / module_file / "__init__.py").is_file():
-            module_file = os.path.sep.join([module_file, "__init__.py"])
+            module_file = f"{module_file}/__init__.py"
         else:
             # Some supported imports, such as deprecated module aliases, have no file on disk.
             continue
-        imports = [imp for imp in imports if len(imp) > 0 and re.match("^[A-Za-z0-9_]*$", imp)]
+        imports = [imp.split(" as ")[0].strip() for imp in imports]
+        imports = [imp for imp in imports if imp and re.match("^[A-Za-z0-9_]*$", imp)]
         if len(imports) > 0:
             result.append((module_file, imports))
 
@@ -728,7 +727,12 @@ def get_module_dependencies(module_fname: str, cache: dict[str, list[str]] | Non
             # the object is fully defined in the __init__)
             if module.endswith("__init__.py"):
                 # So we get the imports from that init then try to find where our objects come from.
-                new_imported_modules = dict(extract_imports(module, cache=cache))
+                new_imported_modules = {}
+                for _mod, _names in extract_imports(module, cache=cache):
+                    if _mod not in new_imported_modules:
+                        new_imported_modules[_mod] = list(_names)
+                    else:
+                        new_imported_modules[_mod].extend(n for n in _names if n not in new_imported_modules[_mod])
 
                 # Add imports via `define_import_structure` after the #35167 as we remove explicit import in `__init__.py`
                 from transformers.utils.import_utils import define_import_structure
@@ -738,8 +742,7 @@ def get_module_dependencies(module_fname: str, cache: dict[str, list[str]] | Non
                 for mapping in new_imported_modules_from_import_structure.values():
                     for _module, _imports in mapping.items():
                         # Import Structure returns _module keys as import paths rather than local paths
-                        # We replace with os.path.sep so that it's Windows-compatible
-                        _module = _module.replace(".", os.path.sep)
+                        _module = _module.replace(".", "/")
                         _module = module.replace("__init__.py", f"{_module}.py")
                         if _module not in new_imported_modules:
                             new_imported_modules[_module] = list(_imports)
@@ -760,7 +763,7 @@ def get_module_dependencies(module_fname: str, cache: dict[str, list[str]] | Non
                     path_to_module = PATH_TO_REPO / module.replace("__init__.py", "")
                     dependencies.extend(
                         [
-                            os.path.join(module.replace("__init__.py", ""), f"{i}.py")
+                            f"{module.replace('__init__.py', '')}{i}.py"
                             for i in imports
                             if (path_to_module / f"{i}.py").is_file()
                         ]
@@ -987,7 +990,7 @@ def get_repo_utils_tests() -> list[str]:
     repo_utils_dir = PATH_TO_TESTS / "repo_utils"
     if not repo_utils_dir.is_dir():
         return []
-    return sorted(str(path.relative_to(PATH_TO_REPO)) for path in repo_utils_dir.glob("test_*.py"))
+    return sorted(path.relative_to(PATH_TO_REPO).as_posix() for path in repo_utils_dir.glob("test_*.py"))
 
 
 def should_run_repo_utils_tests(modified_files: list[str]) -> bool:
@@ -1014,7 +1017,7 @@ def get_conftest_tests() -> list[str]:
     conftest_dir = PATH_TO_TESTS / "conftest_tests"
     if not conftest_dir.is_dir():
         return []
-    return sorted(str(path.relative_to(PATH_TO_REPO)) for path in conftest_dir.glob("test_*.py"))
+    return sorted(path.relative_to(PATH_TO_REPO).as_posix() for path in conftest_dir.glob("test_*.py"))
 
 
 def should_run_conftest_tests(modified_files: list[str]) -> bool:
@@ -1060,7 +1063,11 @@ def infer_tests_to_run(output_file: str, diff_with_last_commit: bool = False, te
     if not test_all:
         modified_files = get_modified_python_files(diff_with_last_commit=diff_with_last_commit)
     else:
-        modified_files = [str(k) for k in PATH_TO_TESTS.glob("*/*") if str(k).endswith(".py") and "test_" in str(k)]
+        modified_files = [
+            k.relative_to(PATH_TO_REPO).as_posix()
+            for k in PATH_TO_TESTS.glob("*/*")
+            if k.suffix == ".py" and "test_" in k.name
+        ]
         print("\n### test_all is TRUE, FETCHING ALL FILES###\n")
     print(f"\n### MODIFIED FILES ###\n{_print_list(modified_files)}")
 
@@ -1081,7 +1088,7 @@ def infer_tests_to_run(output_file: str, diff_with_last_commit: bool = False, te
         or len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI
         or commit_flags["test_all"]
     ):
-        test_files_to_run = glob.glob("tests/**/test_**.py", recursive=True)
+        test_files_to_run = [Path(f).as_posix() for f in glob.glob("tests/**/test_**.py", recursive=True)]
         if len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI:
             print(
                 f"More than {NUM_MODELS_TO_TRIGGER_FULL_CI - 1} models are impacted. CI is configured to test everything."
@@ -1105,7 +1112,7 @@ def infer_tests_to_run(output_file: str, diff_with_last_commit: bool = False, te
 
     test_files_to_run = sorted(set(test_files_to_run))
     # Remove SageMaker tests
-    test_files_to_run = [f for f in test_files_to_run if f.split(os.path.sep)[1] != "sagemaker"]
+    test_files_to_run = [f for f in test_files_to_run if f.split("/")[1] != "sagemaker"]
     # Make sure we did not end up with a test file that was removed
     test_files_to_run = [f for f in test_files_to_run if (PATH_TO_REPO / f).exists()]
 
@@ -1143,9 +1150,9 @@ def filter_tests(output_file: str, filters: list[str]):
         return
 
     if test_files == ["tests"]:
-        test_files = [os.path.join("tests", f) for f in os.listdir("tests") if f not in ["__init__.py"] + filters]
+        test_files = [f"tests/{f}" for f in os.listdir("tests") if f not in ["__init__.py"] + filters]
     else:
-        test_files = [f for f in test_files if f.split(os.path.sep)[1] not in filters]
+        test_files = [f for f in test_files if f.split("/")[1] not in filters]
 
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(" ".join(test_files))
@@ -1208,7 +1215,7 @@ def create_test_list_from_filter(full_test_list, out_path):
     # Collect info: job_name, file_name and files_to_test, so we can process after the loop
     to_output = []
     for job_name, _filter in JOB_TO_TEST_FILE.items():
-        file_name = os.path.join(out_path, f"{job_name}_test_list.txt")
+        file_name = Path(out_path) / f"{job_name}_test_list.txt"
         files_to_test = list(re.findall(_filter, all_test_files))
 
         print(job_name, file_name, len(files_to_test))

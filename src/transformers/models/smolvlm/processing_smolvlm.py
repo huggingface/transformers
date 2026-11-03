@@ -212,6 +212,15 @@ class SmolVLMProcessor(ProcessorMixin):
         self,
         conversation: list[dict[str, str]] | list[list[dict[str, str]]],
         chat_template: str | None = None,
+        tools: list[dict] | None = None,
+        documents: list[dict[str, str]] | None = None,
+        add_generation_prompt: bool = False,
+        continue_final_message: bool | str = False,
+        return_assistant_tokens_mask: bool = False,
+        tokenize: bool = False,
+        return_tensors: str | None = None,
+        return_dict: bool = False,
+        load_audio_from_video: bool = False,
         processor_kwargs: dict | None = None,
         **kwargs,
     ) -> str:
@@ -258,14 +267,29 @@ class SmolVLMProcessor(ProcessorMixin):
             chat_template = DEFAULT_CHAT_TEMPLATE
 
         # Users might be passing processor kwargs simply as `**kwargs`
-        if processor_kwargs:
+        if processor_kwargs or not kwargs:
+            processor_kwargs = processor_kwargs.copy() if processor_kwargs is not None else {}
             processor_kwargs.setdefault("num_frames", self.video_processor.num_frames)
             processor_kwargs.setdefault("fps", self.video_processor.fps)
-        else:
+        elif kwargs:
             kwargs.setdefault("num_frames", self.video_processor.num_frames)
             kwargs.setdefault("fps", self.video_processor.fps)
 
-        return super().apply_chat_template(conversation, chat_template, processor_kwargs=processor_kwargs, **kwargs)
+        return super().apply_chat_template(
+            conversation,
+            chat_template,
+            tools=tools,
+            documents=documents,
+            add_generation_prompt=add_generation_prompt,
+            continue_final_message=continue_final_message,
+            return_assistant_tokens_mask=return_assistant_tokens_mask,
+            tokenize=tokenize,
+            return_tensors=return_tensors,
+            return_dict=return_dict,
+            load_audio_from_video=load_audio_from_video,
+            processor_kwargs=processor_kwargs,
+            **kwargs,
+        )
 
     @property
     def unused_input_names(self) -> list[str]:

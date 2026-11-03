@@ -597,6 +597,8 @@ class OwlViTEncoder(nn.Module):
 
 
 class OwlViTTextTransformer(OwlViTPreTrainedModel):
+    config: OwlViTTextConfig
+
     def __init__(self, config: OwlViTTextConfig):
         super().__init__(config)
 
@@ -710,6 +712,8 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
 
 
 class OwlViTVisionTransformer(OwlViTPreTrainedModel):
+    config: OwlViTVisionConfig
+
     def __init__(self, config: OwlViTVisionConfig):
         super().__init__(config)
 
