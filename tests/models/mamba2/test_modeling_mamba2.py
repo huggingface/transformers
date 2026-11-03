@@ -462,6 +462,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): """<s>[INST]Write a hello world program in C++.[/INST] Sure, here is a simple "Hello, World!" program written in C++:\n\n```cpp\n#include <iostream>\n""",
                 ("cuda", 7): """<s>[INST]Write a hello world program in C++.[/INST] Sure, here is a simple "Hello, World!" program in C++:\n\n```cpp\n#include <iostream>\n\n""",
+                ("cuda", 8): """<s>[INST]Write a hello world program in C++.[/INST] Sure, here is a simple "Hello, World!" program written in C++:\n\n```cpp\n#include <iostream>\n""",
             }
         )  # fmt: skip
         ground_truth_sentence = ground_truth_sentences.get_expectation()
