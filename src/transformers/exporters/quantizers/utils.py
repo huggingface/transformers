@@ -21,6 +21,7 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+import torch
 
 from ..utils import decompose_for_generation, get_leaf_tensors
 
@@ -70,10 +71,24 @@ def onnx_feed(input_names: list[str], sample) -> dict[str, np.ndarray]:
     return {name: leaves[path] for name, path in paths.items() if path in leaves}
 
 
+def openvino_tensor(tensor: torch.Tensor) -> Any:
+    """`tensor` as an OpenVINO input value. NumPy has no bf16, so a bf16 tensor travels as an `openvino.Tensor` of its
+    raw bits."""
+    tensor = tensor.detach().cpu()
+    if tensor.dtype == torch.bfloat16:
+        import openvino
+
+        value = openvino.Tensor(openvino.Type.bf16, list(tensor.shape))
+        # The Python API exposes a bf16 tensor's buffer as float16: copy the bits in through an int16 view.
+        value.data.view(np.int16)[...] = tensor.view(torch.int16).numpy()
+        return value
+    return tensor.numpy()
+
+
 def openvino_feed(ov_model: Any, sample) -> dict[str, Any]:
     """`sample`'s forward kwargs as the converted model's inputs: tensor leaves by port name (folded state takes none),
     the identity `beam_idx`, and scalars as they are."""
-    leaves = {path: tensor.cpu().numpy() for path, tensor in get_leaf_tensors(sample).items()}
+    leaves = {path: openvino_tensor(tensor) for path, tensor in get_leaf_tensors(sample).items()}
     batch = next(iter(leaves.values())).shape[0] if leaves else 1
 
     def port_value(name: str) -> Any:
