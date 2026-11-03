@@ -61,17 +61,28 @@ Use [`MiniMaxVL01Processor`] to format the conversation and prepare images. Its 
 role markers, and the processor expands each image placeholder to match that image's visual features.
 
 > [!NOTE]
-> The full checkpoint occupies approximately 913 GB in 16-bit precision. The example uses `device_map="auto"` to
-> distribute the model across available devices.
+> The full checkpoint occupies approximately 913 GB in 16-bit precision. The example uses [`DistributedConfig`] for
+> tensor and expert parallelism. Use GPUs with enough memory for the model and inference, and PyTorch 2.7 or later
+> for expert parallelism.
+
+Save the example below as `minimax_vl_01_inference.py`. Set `NUM_GPUS` to the number of GPUs to use, which must
+evenly divide the checkpoint's 8 key-value heads and 32 experts, and launch one process per GPU:
+
+```bash
+torchrun --nproc_per_node="$NUM_GPUS" minimax_vl_01_inference.py
+```
 
 ```python
+import os
+
 import torch
 
-from transformers import AutoModelForImageTextToText, MiniMaxVL01Config, MiniMaxVL01Processor
+from transformers import AutoModelForImageTextToText, DistributedConfig, MiniMaxVL01Config, MiniMaxVL01Processor
 from transformers.image_utils import load_image
 
 
 checkpoint = "MiniMaxAI/MiniMax-VL-01"
+world_size = int(os.environ["WORLD_SIZE"])
 config = MiniMaxVL01Config.from_pretrained("./MiniMax-VL-01-native-config")
 processor = MiniMaxVL01Processor.from_pretrained(checkpoint, config=config, trust_remote_code=False)
 model = AutoModelForImageTextToText.from_pretrained(
@@ -79,7 +90,7 @@ model = AutoModelForImageTextToText.from_pretrained(
     config=config,
     trust_remote_code=False,
     dtype=torch.bfloat16,
-    device_map="auto",
+    distributed_config=DistributedConfig(tp_size=world_size, ep_size=world_size),
 )
 
 image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg")
@@ -104,8 +115,9 @@ with torch.inference_mode():
         pad_token_id=processor.tokenizer.eos_token_id,
     )
 
-response_ids = generated_ids[:, inputs["input_ids"].shape[1]:]
-print(processor.batch_decode(response_ids, skip_special_tokens=True)[0])
+if int(os.environ["RANK"]) == 0:
+    response_ids = generated_ids[:, inputs["input_ids"].shape[1] :]
+    print(processor.batch_decode(response_ids, skip_special_tokens=True)[0])
 ```
 
 ## Notes
