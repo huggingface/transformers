@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import gc
+import json
 import tempfile
 import unittest
 from contextlib import ExitStack, contextmanager
@@ -392,6 +393,11 @@ class Mxfp4IntegrationTest(unittest.TestCase):
             )
             quantized.save_pretrained(mxfp4_dir)
             state_dict = load_file(f"{mxfp4_dir}/model.safetensors")
+            with open(f"{mxfp4_dir}/config.json", encoding="utf-8") as f:
+                modules_to_not_convert = json.load(f)["quantization_config"]["modules_to_not_convert"]
+
+        # The modules left unquantized are saved as a list, like in a pre-quantized checkpoint
+        self.assertIsInstance(modules_to_not_convert, list)
 
         triton_kernels_hub = get_kernel("kernels-community/gpt-oss-triton-kernels", version=1)
         for proj in ("gate_up_proj", "down_proj"):
