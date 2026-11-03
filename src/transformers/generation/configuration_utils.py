@@ -194,7 +194,7 @@ class GenerationConfig(PushToHubMixin):
             the 0.99-0.8 range (use the opposite of normal `top_p` values).
         top_h (`float`, *optional*):
             Entropy budget scaling factor, which controls how much of the distribution’s entropy is preserved when sampling.
-            Must be a value between 0 and 1. At each step, tokens are sorted by probability, and the smallest prefix of tokens
+            Must be a value between 0 and 1. At each step, tokens are sorted by probability, and the largest prefix of tokens
             is kept whose *renormalized* entropy is less than or equal to `top_h` times the entropy of the full distribution.
             Smaller values (e.g., 0.2–0.5) lead to more focused, deterministic outputs, while values closer to 1.0 allow more
             randomness and diversity. Typical values are in the 0.3–0.6 range.

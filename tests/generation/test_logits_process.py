@@ -453,6 +453,46 @@ class LogitsProcessorTest(unittest.TestCase):
         out_again = top_h_warp(input_ids, dist3)
         assert not torch.all(out_again == dist3)
 
+    @parameterized.expand([(50, 0.0, 0.4, 4), (50, 1.0, 0.4, 4), (49152, 1.1, 0.4, 25), (4096, 0.0, 1.0, 100)])
+    def test_top_h_entropy_budget(self, vocab_size, exponent, top_h, expected_count):
+        scores = -exponent * torch.arange(1, vocab_size + 1, device=torch_device, dtype=torch.float).log()
+        scores = scores.unsqueeze(0)
+        original_scores = scores.clone()
+        output = TopHLogitsWarper(top_h)(None, scores)
+        kept = torch.isfinite(output)
+        self.assertEqual(kept.sum().item(), expected_count)
+        torch.testing.assert_close(output[kept], scores[kept])
+        torch.testing.assert_close(scores, original_scores)
+        probabilities = output.double().softmax(dim=-1)
+        entropy = torch.special.entr(probabilities).sum(dim=-1)
+        budget = top_h * torch.special.entr(scores.double().softmax(dim=-1)).sum(dim=-1)
+        self.assertTrue(torch.all(entropy <= budget + 1e-6))
+
+    @parameterized.expand([("float32",), ("float64",), ("float16",), ("bfloat16",)])
+    def test_top_h_matches_reference(self, dtype):
+        generator = torch.Generator().manual_seed(42)
+        scores = torch.randn(6, 257, generator=generator).to(device=torch_device, dtype=getattr(torch, dtype))
+        scores[0, 2:] = -float("inf")
+        scores[1, 1:] = -float("inf")
+        for top_h in (0.2, 0.4, 0.9, 1.0):
+            with self.subTest(top_h=top_h):
+                output = TopHLogitsWarper(top_h)(None, scores)
+                for row, actual in zip(scores, output):
+                    probabilities = row.double().softmax(dim=-1)
+                    budget = top_h * torch.special.entr(probabilities).sum()
+                    values, indices = probabilities.sort(descending=True)
+                    expected = torch.zeros_like(row, dtype=torch.bool)
+                    for count in range(1, min(100, row.numel()) + 1):
+                        prefix = values[:count] / values[:count].sum()
+                        if count > 1 and torch.special.entr(prefix).sum() > budget + 1e-12:
+                            break
+                        expected[indices[count - 1]] = True
+                    # Equal logits can be ordered differently by topk and sort.
+                    torch.testing.assert_close(
+                        row[torch.isfinite(actual)].sort().values,
+                        row[expected & torch.isfinite(row)].sort().values,
+                    )
+
     def test_min_p_dist_warper(self):
         input_ids = None
         vocab_size = 10

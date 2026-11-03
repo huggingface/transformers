@@ -684,26 +684,16 @@ class TopHLogitsWarper(LogitsProcessor):
         # 1. Get top-k logits and indices for the whole batch
         top_logits, top_idx = torch.topk(scores, top_n, dim=-1, largest=True, sorted=True)
 
-        # 2. Create a batch of categorical distributions
-        dist = torch.distributions.Categorical(logits=top_logits)
-        probs = dist.probs
-        log_probs = torch.log(probs)  # dist.log_prob(idx)
+        # Accumulate entropy in float32 for low-precision model outputs.
+        entropy_scores = scores.float() if scores.dtype in (torch.float16, torch.bfloat16) else scores
+        top_logits = top_logits.to(entropy_scores.dtype)
+        probs = torch.distributions.Categorical(logits=top_logits).probs
+        tau = (torch.distributions.Categorical(logits=entropy_scores).entropy() * self.top_h).unsqueeze(-1)
 
-        # 3. Calculate the entropy-based threshold tau for the whole batch
-        # We unsqueeze tau to enable broadcasting against the cumulative entropy tensor.
-        tau = (dist.entropy() * self.top_h).unsqueeze(-1)
-
-        # 4. Calculate cumulative entropy using torch.cumsum
-        # The individual entropy terms (-p * log(p)) are calculated for all top_n tokens at once.
-        entropy_terms = -probs * log_probs
-        cumulative_entropy = torch.cumsum(entropy_terms, dim=-1)
-
-        # 5. Determine which tokens to keep based on the stopping condition
-        # Create a boolean mask for the top_n tokens.
-        # Stopping rule: keep adding tokens in order of probability until the cumulative entropy
-        # exceeds the threshold τ = H(p) * top_h. This ensures diversity (via entropy) while
-        # guaranteeing at least the most probable token is always included.
-        selection_mask = cumulative_entropy <= tau
+        # Normalize each prefix before comparing its entropy with the full-distribution budget.
+        cumulative_mass = probs.cumsum(dim=-1)
+        cumulative_entropy = torch.special.entr(probs).cumsum(dim=-1) / cumulative_mass + cumulative_mass.log()
+        selection_mask = torch.ones_like(probs, dtype=torch.bool) if self.top_h == 1.0 else cumulative_entropy <= tau
         selection_mask[:, 0] = True
 
         # 6. Update the final keep_mask for the entire batch in one operation
