@@ -1411,12 +1411,10 @@ def set_param_for_module(
 
     ref = getattr(module_obj, param_name)
     if is_dtensor(ref) and ref._local_tensor.numel() == 0:
-        # Uneven sharding left this rank an empty local shard. Its pre-sharded tensor is already
-        # correct, but it still has to count as loaded: otherwise `_init_weights` re-initializes it,
-        # and the first DTensor RNG op is a collective the fully loaded ranks never join.
-        loading_info.missing_keys.discard(target_name)
-        ref._is_hf_initialized = True
-        return
+        # Uneven sharding left this rank an empty local shard, possibly still on the meta device. Load an empty
+        # tensor of its shape so that it is materialized and counts as loaded: otherwise `_init_weights`
+        # re-initializes it, and the first DTensor RNG op is a collective the fully loaded ranks never join.
+        param_value = torch.empty(ref._local_tensor.shape, dtype=ref.dtype, device=ref.device_mesh.device_type)
 
     if ref is None:
         loading_info.unexpected_keys.add(target_name)
