@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from ...utils.import_utils import is_openvino_available, is_torch_available
@@ -42,6 +43,22 @@ def _openvino_device(device=None) -> str:
     raise ValueError(f"OpenVINO cannot run on {device}; pass `cpu`, `xpu` (Intel GPU), or no device for `AUTO`.")
 
 
+def _physical_cores() -> int:
+    """The physical cores this process may run on: its CPU affinity, one logical CPU per core (OpenVINO schedules on
+    physical cores)."""
+    if not hasattr(os, "sched_getaffinity"):  # macOS: no affinity or topology to read
+        return os.cpu_count() or 1
+    cpus = os.sched_getaffinity(0)
+    cores = set()
+    for cpu in cpus:
+        try:
+            with open(f"/sys/devices/system/cpu/cpu{cpu}/topology/thread_siblings_list", encoding="utf-8") as siblings:
+                cores.add(siblings.read().strip())
+        except OSError:
+            cores.add(str(cpu))
+    return len(cores)
+
+
 def openvino_output(value, port) -> torch.Tensor:
     """An inference result as a torch tensor. OpenVINO's Python API returns a bf16 output as a float16 array of the
     bf16 bits (NumPy has no bf16), which read as float16 give wrong values: reinterpret those bits as bf16."""
@@ -65,11 +82,22 @@ class OpenVINOModelRunner(ModelRunner):
 
     @classmethod
     def from_program(
-        cls, program: openvino.Model, metadata: ExportMetadata, device=None, config: dict | None = None
+        cls,
+        program: openvino.Model,
+        metadata: ExportMetadata,
+        device=None,
+        config: dict | None = None,
+        torch_threads: int | None = None,
     ) -> OpenVINOModelRunner:
         """`config`, OpenVINO compile properties, goes over the CPU defaults, which keep the export's precision:
         inference and KV cache in its dtype (OpenVINO otherwise keeps a stateful cache in uint8, and may run fp32 in
-        bf16 on CPUs that have it), tuned for latency."""
+        bf16 on CPUs that have it), tuned for latency.
+
+        `torch_threads` splits the CPU between torch and OpenVINO, for torch work around the model (pre- and
+        post-processing, `generate`'s loop): torch keeps that many threads and OpenVINO runs pinned on the remaining
+        physical cores. Both thread pools otherwise span every core, and torch's, which spins for a while after each op,
+        slows the OpenVINO call next to it (EmbeddingGemma2 on 56 Xeon cores, torch pooling after each call: 69.5 ms
+        with both pools on every core, 50.1 ms with 8 torch threads, OpenVINO alone 49.5 ms)."""
         device = _openvino_device(device)
         defaults = {}
         if device == "CPU":
@@ -79,6 +107,10 @@ class OpenVINOModelRunner(ModelRunner):
                 "INFERENCE_PRECISION_HINT": precision,
                 "KV_CACHE_PRECISION": precision,
             }
+            if torch_threads is not None:
+                torch.set_num_threads(torch_threads)
+                defaults["INFERENCE_NUM_THREADS"] = max(1, _physical_cores() - torch_threads)
+                defaults["ENABLE_CPU_PINNING"] = True
         return cls(openvino.Core().compile_model(program, device, {**defaults, **(config or {})}), metadata)
 
     def reset_state(self) -> None:
