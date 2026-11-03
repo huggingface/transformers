@@ -866,6 +866,50 @@ def _fuse_mixture_of_experts(model: ir.Model) -> int:
     return count
 
 
+def _unfuse_attentions(model: ir.Model) -> int:
+    """Turn each `MultiHeadAttention` over `[batch, length, heads * head_dim]` queries, keys and values with an
+    attention bias and no cache (an encoder's, or one `GroupQueryAttention` didn't take) back into `MatMul`s and a
+    `Softmax`: ONNX Runtime's CPU kernel for it runs slower than the ops it fused (2.5x on Qwen3's decode).
+    Returns how many."""
+    count = 0
+    for node in list(model.graph.all_nodes()):
+        if node.op_type != "MultiHeadAttention" or len(node.inputs) != 6 or len(node.outputs) != 1:
+            continue
+        # One `GroupQueryAttention` replaced, left for the clean-up to remove.
+        if not node.outputs[0].uses() and not node.outputs[0].is_graph_output():
+            continue
+        query, key, value, projection_bias, padding_mask, bias = node.inputs
+        if projection_bias is not None or padding_mask is not None or bias is None:
+            continue
+        if any(item is None or item.shape is None or len(item.shape) != 3 for item in (query, key, value)):
+            continue
+        heads = node.attributes.get_int("num_heads")
+        head_size = _static_dim(query, 2) // heads if _static_dim(query, 2) is not None else None
+        if head_size is None:
+            continue
+        scale = node.attributes["scale"].as_float() if "scale" in node.attributes else head_size**-0.5
+        graph, tape = node.graph, ir.tape.Tape()
+        split_heads = _initializer(graph, f"unfused_attention_{count}_heads", np.array([0, 0, heads, -1]))
+        merge_heads = _initializer(graph, f"unfused_attention_{count}_merge", np.array([0, 0, -1]))
+        factor = _initializer(graph, f"unfused_attention_{count}_scale", np.array(scale, dtype=query.dtype.numpy()))
+
+        def heads_of(states, perm, tape=tape, split_heads=split_heads):
+            return tape.op("Transpose", [tape.op("Reshape", [states, split_heads])], attributes={"perm": perm})
+
+        scores = tape.op("MatMul", [heads_of(query, [0, 2, 1, 3]), heads_of(key, [0, 2, 3, 1])])
+        scores = tape.op("Add", [tape.op("Mul", [scores, factor]), bias])
+        probabilities = tape.op("Softmax", [scores], attributes={"axis": -1})
+        context = tape.op("MatMul", [probabilities, heads_of(value, [0, 2, 1, 3])])
+        context = tape.op("Transpose", [context], attributes={"perm": [0, 2, 1, 3]})
+        output = tape.op("Reshape", [context, merge_heads])
+        output.dtype = query.dtype
+        graph.insert_before(node, tape.nodes)
+        _replace(node.outputs[0], output)
+        graph.remove(node, safe=True)
+        count += 1
+    return count
+
+
 def _pack_sibling_matmuls(model: ir.Model) -> int:
     """Turn the `MatMul`s reading one input with constant `[in, out]` weights (an attention's query, key and value
     projections; an MLP's gate and up ones) into one, their weights concatenated, its output split back: one kernel
@@ -983,6 +1027,8 @@ _STEPS = (
     ("narrowed_skip_norms", lambda model, device: fuse_skip_rms_normalization(model) if device != "cuda" else 0),
     ("group_query_attention", _fuse_group_query_attention),
     ("mixture_of_experts", lambda model, device: _fuse_mixture_of_experts(model) if device == "cuda" else 0),
+    # On the CPU, the attentions left as `MultiHeadAttention`, back to the ops it fused.
+    ("unfused_attentions", lambda model, device: _unfuse_attentions(model) if device == "cpu" else 0),
     ("packed_matmuls", lambda model, device: _pack_sibling_matmuls(model)),
     # 6. CUDA provider.
     ("integer_equals", lambda model, device: _INTEGER_EQUAL.apply_to_model(model) if device == "cuda" else 0),
