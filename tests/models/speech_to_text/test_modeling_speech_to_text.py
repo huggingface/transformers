@@ -270,7 +270,6 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     def setUp(self):
         self.model_tester = Speech2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Speech2TextConfig)
-        self.maxDiff = 3000
 
     def test_config(self):
         self.config_tester.run_common_tests()

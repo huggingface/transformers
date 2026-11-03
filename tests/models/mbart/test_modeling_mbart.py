@@ -394,7 +394,6 @@ def _long_tensor(tok_lst):
 @require_sentencepiece
 @require_tokenizers
 class AbstractSeq2SeqIntegrationTest(unittest.TestCase):
-    maxDiff = 1000  # longer string compare tracebacks
     checkpoint_name = None
 
     @classmethod

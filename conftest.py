@@ -25,7 +25,7 @@ import sys
 import tempfile
 import warnings
 from os.path import abspath, dirname, join
-from unittest import mock
+from unittest import TestCase, mock
 
 import _pytest
 import pytest
@@ -250,6 +250,9 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 
 
 def pytest_configure(config):
+    # Show longer assertion diffs for all unittest-based tests.
+    TestCase.maxDiff = 10_000
+
     # Shared directory for the read-only cache fallback events. The controller creates it and
     # exports the path; xdist workers (spawned later) inherit the env var and write into the
     # same directory, so `pytest_terminal_summary` on the controller can aggregate all of them.
