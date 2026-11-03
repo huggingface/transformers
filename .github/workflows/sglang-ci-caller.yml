@@ -58,6 +58,10 @@ jobs:
             tests: >-
               test/registered/openai_server/basic/test_openai_server.py::TestOpenAIServer::test_chat_completion
               test/registered/openai_server/basic/test_openai_server.py::TestOpenAIServer::test_chat_completion_stream
+          # TODO: vision-language fails with "Qwen2_5_VLVisionRotaryEmbedding supports only
+          # axial rope, but requested default" (modeling_qwen2_5_vl.py:134).
+          # This is a regression in transformers' Qwen2.5-VL RoPE initialisation — fix
+          # needed in transformers, not in the workflow.
           - suite: vision-language
             tests: test/registered/vlm/test_vlm_input_format.py::TestQwenVLUnderstandsImage
           - suite: audio
