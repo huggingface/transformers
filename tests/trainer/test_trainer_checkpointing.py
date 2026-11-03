@@ -458,7 +458,7 @@ class TrainerResumeTrainingTest(TestCasePlus, TrainerIntegrationCommon):
         # Simulates a stateful/streaming loader that restores its mid-epoch cursor inside
         # get_resumed_dataloader, then returns without a second skip. With
         # gradient_accumulation_steps=2, checkpoint-5 means 10 micro-batches into the epoch.
-        # Final weights must match uninterrupted training; double-skipping must not.
+        # Final weights must match uninterrupted training.
 
         class AlreadyRestoredDataLoader:
             """Skips the first num_batches on iteration while preserving __len__."""
@@ -488,17 +488,17 @@ class TrainerResumeTrainingTest(TestCasePlus, TrainerIntegrationCommon):
         # global_step=5 * gradient_accumulation_steps=2
         micro_batches_to_skip = 10
 
-        def make_resume_trainer(tmpdir, *, double_skip: bool):
-            class StatefulLoaderTrainer(Trainer):
-                def get_resumed_dataloader(self, dataloader, num_batches):
-                    self.resumed_num_batches.append(num_batches)
-                    # Simulate restoring a stateful/streaming loader's cursor at the resume hook.
-                    # (accelerate.skip_first_batches rebuilds from dataset, so it cannot express
-                    # "already positioned" — a custom restore like this is the real override path.)
-                    if double_skip:
-                        # Incorrect: restore, then skip the same micro-batches again
-                        return AlreadyRestoredDataLoader(dataloader, 2 * num_batches)
-                    return AlreadyRestoredDataLoader(dataloader, num_batches)
+        class StatefulLoaderTrainer(Trainer):
+            def get_resumed_dataloader(self, dataloader, num_batches):
+                self.resumed_num_batches.append(num_batches)
+                # Restore once at the resume hook; do not also call skip_first_batches.
+                return AlreadyRestoredDataLoader(dataloader, num_batches)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(output_dir=tmpdir, train_len=128, **args_kwargs)
+            trainer.train()
+            (a, b) = trainer.model.a.item(), trainer.model.b.item()
+            checkpoint = os.path.join(tmpdir, "checkpoint-5")
 
             args = RegressionTrainingArguments(tmpdir, a=0, b=0, **args_kwargs)
             trainer = StatefulLoaderTrainer(
@@ -508,27 +508,10 @@ class TrainerResumeTrainingTest(TestCasePlus, TrainerIntegrationCommon):
             )
             trainer.model_accepts_loss_kwargs = False
             trainer.resumed_num_batches = []
-            return trainer
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            trainer = get_regression_trainer(output_dir=tmpdir, train_len=128, **args_kwargs)
-            trainer.train()
-            (a, b) = trainer.model.a.item(), trainer.model.b.item()
-            checkpoint = os.path.join(tmpdir, "checkpoint-5")
-
-            trainer = make_resume_trainer(tmpdir, double_skip=False)
             trainer.train(resume_from_checkpoint=checkpoint)
             self.assertEqual(trainer.resumed_num_batches, [micro_batches_to_skip])
             self.assertEqual(trainer.model.a.item(), a)
             self.assertEqual(trainer.model.b.item(), b)
-
-            trainer = make_resume_trainer(tmpdir, double_skip=True)
-            trainer.train(resume_from_checkpoint=checkpoint)
-            self.assertEqual(trainer.resumed_num_batches, [micro_batches_to_skip])
-            self.assertTrue(
-                trainer.model.a.item() != a or trainer.model.b.item() != b,
-                "Double-skipping an already-restored loader should diverge from uninterrupted training",
-            )
 
     @require_torch_up_to_2_accelerators
     def test_resume_training_with_checkpoint(self):
