@@ -262,6 +262,15 @@ def decompose_prefill_decode(
     first_decode = 2 if getattr(model.config, "is_encoder_decoder", False) else 1
     num_new_tokens = first_decode + (2 if multi_token_decode else 1)
     capture_config = copy.deepcopy(generation_config if generation_config is not None else model.generation_config)
+    if (
+        capture_config.cache_implementation == "static"
+        and capture_config.max_cache_len is None
+        and capture_config.max_new_tokens is not None
+    ):
+        # A fixed-size cache sized for the generation the config asks for, not for the few steps captured.
+        text = next(inputs[name] for name in ("input_ids", "inputs_embeds") if inputs.get(name) is not None)
+        prompt_length = 1 if getattr(model.config, "is_encoder_decoder", False) else text.shape[1]
+        capture_config.max_cache_len = prompt_length + capture_config.max_new_tokens
     capture_config.max_new_tokens = num_new_tokens
     capture_config.min_new_tokens = num_new_tokens
     capture_config.disable_compile = True
