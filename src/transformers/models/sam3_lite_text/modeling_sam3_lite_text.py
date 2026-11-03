@@ -341,7 +341,7 @@ class Sam3LiteTextTextEmbeddings(nn.Module):
 
 @auto_docstring
 class Sam3LiteTextPreTrainedModel(PreTrainedModel):
-    config_class = Sam3LiteTextConfig
+    config: Sam3LiteTextConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ["image", "text"]
@@ -369,7 +369,7 @@ class Sam3LiteTextPreTrainedModel(PreTrainedModel):
 """
 )
 class Sam3LiteTextTextModel(Sam3LiteTextPreTrainedModel):
-    config_class = Sam3LiteTextTextConfig
+    config: Sam3LiteTextTextConfig
     config: Sam3LiteTextTextConfig
     _can_record_outputs = {
         "hidden_states": Sam3LiteTextTextEncoderLayer,
@@ -1139,6 +1139,7 @@ class Sam3LiteTextDetrEncoder(Sam3LiteTextPreTrainedModel):
     resolutions) and fuses them with text prompts through a stack of transformer encoder layers.
     """
 
+    config: Sam3LiteTextDETREncoderConfig
     _can_record_outputs = {
         "hidden_states": Sam3LiteTextDetrEncoderLayer,
         "attentions": Sam3LiteTextAttention,
@@ -1407,6 +1408,7 @@ class Sam3LiteTextDetrDecoder(Sam3LiteTextPreTrainedModel):
     - Presence token is used
     """
 
+    config: Sam3LiteTextDETRDecoderConfig
     _can_record_outputs = {
         "hidden_states": Sam3LiteTextDetrDecoderLayer,
         "attentions": Sam3LiteTextAttention,
@@ -1791,6 +1793,7 @@ class Sam3LiteTextMaskDecoder(Sam3LiteTextPreTrainedModel):
     Also produces a semantic segmentation output and supports cross-attention to prompts.
     """
 
+    config: Sam3LiteTextMaskDecoderConfig
     _can_record_outputs = {
         "attentions": Sam3LiteTextAttention,
     }

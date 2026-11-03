@@ -108,7 +108,7 @@ class InternVLConfig(PreTrainedConfig):
     model_type = "internvl"
     sub_configs_defaults = {
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen2"),
-        "vision_config": SubConfigSpec(config_class=InternVLVisionConfig),
+        "vision_config": InternVLVisionConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None

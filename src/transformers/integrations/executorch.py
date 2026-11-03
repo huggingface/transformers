@@ -16,6 +16,7 @@ from itertools import zip_longest
 import torch
 
 from ..cache_utils import (
+    DummyLayer,
     DynamicCache,
     DynamicLayer,
     DynamicSlidingWindowLayer,
@@ -1060,9 +1061,9 @@ def _get_dynamic_cache_layout(cache: DynamicCache) -> list[int | None]:
 
 def _get_cache_dict(cache: DynamicCache):
     """Convert cache to dictionary format for pytree operations."""
-    if any(type(layer) not in (DynamicLayer, DynamicSlidingWindowLayer) for layer in cache.layers):
+    if any(type(layer) not in (DynamicLayer, DynamicSlidingWindowLayer, DummyLayer) for layer in cache.layers):
         raise RuntimeError(
-            "This pytree flattening function should be applied to DynamicCache containing only `DynamicLayer` and `DynamicSlidingWindowLayer`"
+            "This pytree flattening function should be applied to DynamicCache containing only `DynamicLayer`, `DynamicSlidingWindowLayer` and `DummyLayer`"
         )
 
     return {

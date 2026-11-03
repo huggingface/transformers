@@ -718,27 +718,7 @@ class LongformerSelfAttention(nn.Module):
             chunk_stride[1] = chunk_stride[1] // 2
             return hidden_states.as_strided(size=chunk_size, stride=chunk_stride)
 
-        # When exporting to ONNX, use this separate logic
-        # have to use slow implementation since as_strided, unfold and 2d-tensor indexing aren't supported (yet) in ONNX export
-
-        # TODO replace this with
-        # > return hidden_states.unfold(dimension=1, size=window_overlap * 2, step=window_overlap).transpose(2, 3)
-        # once `unfold` is supported
-        # the case hidden_states.size(1) == window_overlap * 2 can also simply return hidden_states.unsqueeze(1), but that's control flow
-
-        chunk_size = [
-            hidden_states.size(0),
-            torch.div(hidden_states.size(1), window_overlap, rounding_mode="trunc") - 1,
-            window_overlap * 2,
-            hidden_states.size(2),
-        ]
-
-        overlapping_chunks = torch.empty(chunk_size, device=hidden_states.device)
-        for chunk in range(chunk_size[1]):
-            overlapping_chunks[:, chunk, :, :] = hidden_states[
-                :, chunk * window_overlap : chunk * window_overlap + 2 * window_overlap, :
-            ]
-        return overlapping_chunks
+        return hidden_states.unfold(dimension=1, size=window_overlap * 2, step=window_overlap).transpose(2, 3)
 
     @staticmethod
     def _mask_invalid_locations(input_tensor, affected_seq_len) -> torch.Tensor:
@@ -1309,7 +1289,7 @@ class LongformerModel(LongformerPreTrainedModel):
 
     """
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: LongformerConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -1545,7 +1525,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: LongformerConfig):
         super().__init__(config)
 
         self.longformer = LongformerModel(config, add_pooling_layer=False)
@@ -1657,7 +1637,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
     """
 )
 class LongformerForSequenceClassification(LongformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LongformerConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1776,7 +1756,7 @@ class LongformerClassificationHead(nn.Module):
 
 @auto_docstring
 class LongformerForQuestionAnswering(LongformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LongformerConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1905,7 +1885,7 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
 
 @auto_docstring
 class LongformerForTokenClassification(LongformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LongformerConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1984,7 +1964,7 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
 
 @auto_docstring
 class LongformerForMultipleChoice(LongformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LongformerConfig):
         super().__init__(config)
 
         self.longformer = LongformerModel(config)
