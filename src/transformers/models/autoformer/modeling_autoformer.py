@@ -1797,11 +1797,13 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         params = self.output_params(decoder_last_hidden + trend)
         distr = self.output_distribution(params, loc=repeated_loc, scale=repeated_scale)
         future_samples = distr.sample()
+        output_shape = (-1, num_parallel_samples, self.config.prediction_length) + self.target_shape
 
         return SampleTSPredictionOutput(
-            sequences=future_samples.reshape(
-                (-1, num_parallel_samples, self.config.prediction_length) + self.target_shape,
-            )
+            sequences=future_samples.reshape(output_shape),
+            params=tuple(param.reshape(output_shape) for param in params),
+            loc=loc.unsqueeze(1),
+            scale=scale.unsqueeze(1),
         )
 
 

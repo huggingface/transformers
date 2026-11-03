@@ -198,6 +198,26 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unit
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @parameterized.expand([("student_t", 3), ("normal", 2), ("negative_binomial", 2)])
+    def test_generate_distribution_params(self, distribution_output, num_params):
+        config, inputs = self.model_tester.prepare_config_and_inputs()
+        config.distribution_output = distribution_output
+        config.scaling = "mean" if distribution_output == "negative_binomial" else "std"
+        config.num_parallel_samples = 2
+        model = TimeSeriesTransformerForPrediction(config).to(torch_device).eval()
+        inputs.pop("future_values")
+        outputs = model.generate(**inputs)
+
+        self.assertEqual(len(outputs.params), num_params)
+        params = tuple(param.clone() for param in outputs.params)
+        for param in outputs.params:
+            self.assertEqual(param.shape, outputs.sequences.shape)
+        distribution = model.output_distribution(outputs.params, loc=outputs.loc, scale=outputs.scale)
+        self.assertEqual(distribution.sample().shape, outputs.sequences.shape)
+        self.assertTrue(torch.isfinite(distribution.log_prob(outputs.sequences)).all())
+        for param, original in zip(outputs.params, params):
+            torch.testing.assert_close(param, original)
+
     def test_save_load_strict(self):
         config, _ = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:

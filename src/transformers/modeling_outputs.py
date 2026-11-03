@@ -1627,9 +1627,22 @@ class SampleTSPredictionOutput(ModelOutput):
     Args:
         sequences (`torch.FloatTensor` of shape `(batch_size, num_samples, prediction_length)` or `(batch_size, num_samples, prediction_length, input_size)`):
             Sampled values from the chosen distribution.
+        params (`tuple(torch.FloatTensor)`, *optional*):
+            Parameters of the chosen distribution before applying `loc` and `scale`, with each tensor having the same
+            shape as `sequences`. The tuple contains `(df, loc, scale)` for Student-t, `(loc, scale)` for normal, or
+            `(total_count, logits)` for negative binomial distributions. For autoregressive models, each sample's
+            parameters are conditioned on its sampled history.
+        loc (`torch.FloatTensor` of shape `(batch_size, 1, 1)` or `(batch_size, 1, 1, input_size)`, *optional*):
+            Shift values used to restore the original magnitude of each time series.
+        scale (`torch.FloatTensor` of shape `(batch_size, 1, 1)` or `(batch_size, 1, 1, input_size)`, *optional*):
+            Scaling values used to restore the original magnitude of each time series. Reconstruct the distribution
+            with `model.output_distribution(outputs.params, loc=outputs.loc, scale=outputs.scale)`.
     """
 
     sequences: torch.FloatTensor | None = None
+    params: tuple[torch.FloatTensor, ...] | None = None
+    loc: torch.FloatTensor | None = None
+    scale: torch.FloatTensor | None = None
 
 
 @dataclass

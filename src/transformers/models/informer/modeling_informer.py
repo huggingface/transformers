@@ -1735,6 +1735,7 @@ class InformerForPrediction(InformerPreTrainedModel):
         repeated_enc_last_hidden = enc_last_hidden.repeat_interleave(repeats=num_parallel_samples, dim=0)
 
         future_samples = []
+        future_params = []
 
         # greedy decoding
         for k in range(self.config.prediction_length):
@@ -1753,6 +1754,7 @@ class InformerForPrediction(InformerPreTrainedModel):
             dec_last_hidden = dec_output.last_hidden_state
 
             params = self.parameter_projection(dec_last_hidden[:, -1:])
+            future_params.append(params)
             distr = self.output_distribution(params, loc=repeated_loc, scale=repeated_scale)
             next_sample = distr.sample()
 
@@ -1762,11 +1764,13 @@ class InformerForPrediction(InformerPreTrainedModel):
             future_samples.append(next_sample)
 
         concat_future_samples = torch.cat(future_samples, dim=1)
+        output_shape = (-1, num_parallel_samples, self.config.prediction_length) + self.target_shape
 
         return SampleTSPredictionOutput(
-            sequences=concat_future_samples.reshape(
-                (-1, num_parallel_samples, self.config.prediction_length) + self.target_shape,
-            )
+            sequences=concat_future_samples.reshape(output_shape),
+            params=tuple(torch.cat(param, dim=1).reshape(output_shape) for param in zip(*future_params)),
+            loc=loc.unsqueeze(1),
+            scale=scale.unsqueeze(1),
         )
 
 

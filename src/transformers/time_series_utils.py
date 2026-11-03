@@ -220,6 +220,6 @@ class NegativeBinomialOutput(DistributionOutput):
 
         if scale is not None:
             # See scaling property of Gamma.
-            logits += scale.log()
+            logits = logits + scale.log()
 
         return self._base_distribution((total_count, logits))
