@@ -3129,6 +3129,19 @@ class PreTrainedModel(
             activation_checkpointing_kwargs (dict, *optional*):
                 Additional keyword arguments passed along to the `torch.utils.checkpoint.checkpoint` function.
         """
+        # Subclasses and wrappers of the deprecated `gradient_checkpointing_enable` stay the entry point until v6
+        if self._overrides_deprecated_alias("gradient_checkpointing_enable"):
+            self.gradient_checkpointing_enable(
+                gradient_checkpointing_kwargs=activation_checkpointing_kwargs,
+                every_n_layers=every_n_layers,
+                offload=offload,
+            )
+        else:
+            self._activation_checkpointing_enable(activation_checkpointing_kwargs, every_n_layers, offload)
+
+    def _activation_checkpointing_enable(
+        self, activation_checkpointing_kwargs=None, every_n_layers: int = 1, offload: bool = False
+    ):
         if not self.supports_gradient_checkpointing:
             raise ValueError(f"{self.__class__.__name__} does not support activation checkpointing.")
 
@@ -3184,7 +3197,17 @@ class PreTrainedModel(
             "`activation_checkpointing_enable` instead.",
             FutureWarning,
         )
-        self.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs, **kwargs)
+        # Reached from the override itself, which `activation_checkpointing_enable` would call again
+        if self._overrides_deprecated_alias("gradient_checkpointing_enable"):
+            self._activation_checkpointing_enable(gradient_checkpointing_kwargs, **kwargs)
+        else:
+            self.activation_checkpointing_enable(
+                activation_checkpointing_kwargs=gradient_checkpointing_kwargs, **kwargs
+            )
+
+    def _overrides_deprecated_alias(self, name: str) -> bool:
+        # A subclass override is another function and a wrapper set on the instance is not a bound method
+        return getattr(getattr(self, name), "__func__", None) is not getattr(PreTrainedModel, name)
 
     def _set_gradient_checkpointing(
         self,
@@ -3227,6 +3250,13 @@ class PreTrainedModel(
         """
         Deactivates activation checkpointing for the current model.
         """
+        # Subclasses and wrappers of the deprecated `gradient_checkpointing_disable` stay the entry point until v6
+        if self._overrides_deprecated_alias("gradient_checkpointing_disable"):
+            self.gradient_checkpointing_disable()
+        else:
+            self._activation_checkpointing_disable()
+
+    def _activation_checkpointing_disable(self):
         if self.supports_gradient_checkpointing:
             # For old GC format (transformers < 4.35.0) for models that live on the Hub
             # we will fall back to the overwritten `_set_gradient_checkpointing` method
@@ -3252,7 +3282,11 @@ class PreTrainedModel(
             "`activation_checkpointing_disable` instead.",
             FutureWarning,
         )
-        self.activation_checkpointing_disable()
+        # Reached from the override itself, which `activation_checkpointing_disable` would call again
+        if self._overrides_deprecated_alias("gradient_checkpointing_disable"):
+            self._activation_checkpointing_disable()
+        else:
+            self.activation_checkpointing_disable()
 
     @property
     def is_activation_checkpointing(self) -> bool:

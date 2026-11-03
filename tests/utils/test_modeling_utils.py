@@ -4265,6 +4265,47 @@ class GradientCheckpointingDeprecatedAliasTest(unittest.TestCase):
             model.gradient_checkpointing_disable()
         self.assertFalse(model.is_activation_checkpointing)
 
+    def test_subclass_overrides_of_the_aliases_are_called(self):
+        from transformers import LlamaModel
+
+        class LegacyLlamaModel(LlamaModel):
+            def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None, **kwargs):
+                self.calls.append("enable")
+                super().gradient_checkpointing_enable(gradient_checkpointing_kwargs, **kwargs)
+
+            def gradient_checkpointing_disable(self):
+                self.calls.append("disable")
+                super().gradient_checkpointing_disable()
+
+        config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=64, num_attention_heads=4)
+        model = LegacyLlamaModel(config)
+        model.calls = []
+        with self.assertWarns(FutureWarning):
+            model.activation_checkpointing_enable()
+        self.assertTrue(model.is_activation_checkpointing)
+        with self.assertWarns(FutureWarning):
+            model.activation_checkpointing_disable()
+        self.assertFalse(model.is_activation_checkpointing)
+        self.assertEqual(model.calls, ["enable", "disable"])
+
+    def test_wrappers_of_the_aliases_are_called(self):
+        from transformers import LlamaModel
+
+        config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=64, num_attention_heads=4)
+        model = LlamaModel(config)
+        original_enable = model.gradient_checkpointing_enable
+        received_kwargs = []
+
+        def gradient_checkpointing_enable(gradient_checkpointing_kwargs=None, **kwargs):
+            received_kwargs.append(gradient_checkpointing_kwargs)
+            original_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs, **kwargs)
+
+        model.gradient_checkpointing_enable = gradient_checkpointing_enable
+        with self.assertWarns(FutureWarning):
+            model.activation_checkpointing_enable({"use_reentrant": False}, every_n_layers=2)
+        self.assertEqual(received_kwargs, [{"use_reentrant": False}])
+        self.assertEqual([layer.gradient_checkpointing for layer in model.layers], [True, False])
+
 
 @require_torch_accelerator
 class GradientCheckpointingOffloadTest(unittest.TestCase):
