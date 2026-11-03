@@ -12,18 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections
 import copy
 import functools
 import importlib.util
 import inspect
 import itertools
 import re
+import unittest
 
 import pytest
 import torch
 from parameterized import parameterized
 
-from transformers import GenerationConfig, set_seed
+from transformers import GenerationConfig, Qwen3Config, Qwen3ForCausalLM, set_seed
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
@@ -40,6 +42,7 @@ from transformers.exporters.utils import (
 )
 from transformers.testing_utils import (
     require_executorch,
+    require_nncf,
     require_onnxruntime,
     require_onnxscript,
     require_openvino,
@@ -1369,3 +1372,100 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                     if executorch_outputs is None:  # ExecuTorch runtime limit / inputs not reconstructible
                         continue
                     self.assertEqual(len(executorch_outputs), len(eager_outputs[name]))
+
+
+@require_openvino
+class OpenVINOFusionTest(unittest.TestCase):
+    """The CPU plugin's fused kernels on an exported decoder: OpenVINO only fuses the patterns it recognizes, and a
+    graph that misses them still runs, just decomposed and slower. A tiny GQA Qwen3 stands in for the decoder LLMs."""
+
+    layers = 2
+
+    def _model(self, dtype=torch.float32):
+        set_seed(0)
+        config = Qwen3Config(
+            vocab_size=128,
+            hidden_size=64,
+            intermediate_size=128,
+            num_hidden_layers=self.layers,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=16,
+        )
+        return Qwen3ForCausalLM(config).to(dtype).eval()
+
+    def _decode(self, model, multi_token_decode, quantizer=None):
+        inputs = {"input_ids": torch.tensor([[1, 5, 7, 9, 11]]), "attention_mask": torch.ones(1, 5, dtype=torch.long)}
+        config = OpenVINOConfig(dynamic=True, quantizer=quantizer)
+        exported = OpenVINOExporter().export_for_generation(
+            model,
+            inputs,
+            config,
+            generation_config=GenerationConfig(max_new_tokens=3),
+            multi_token_decode=multi_token_decode,
+        )
+        return exported["decode"]
+
+    @staticmethod
+    def _compiled_layers(ov_model) -> collections.Counter:
+        import openvino
+
+        # f32 inference: the fusions must not depend on the CPU having bf16 (AMX or AVX-512 BF16)
+        compiled = openvino.Core().compile_model(ov_model, "CPU", {"INFERENCE_PRECISION_HINT": "f32"})
+        return collections.Counter(
+            op.get_rt_info()["layerType"].astype(str) for op in compiled.get_runtime_model().get_ordered_ops()
+        )
+
+    @parameterized.expand(
+        [("multi_token", True, torch.float32), ("single_token", False, torch.float32), ("bf16", True, torch.bfloat16)]
+    )
+    def test_decode_fuses_attention_rope_and_kv_cache(self, name, multi_token_decode, dtype):
+        decode = self._decode(self._model(dtype), multi_token_decode)
+        # The cache update feeds its state as is: anything between them keeps the plugin from fusing the cache
+        # into its attention.
+        assign_sources = [
+            op.input_value(0).get_node().get_type_name()
+            for op in decode.get_ordered_ops()
+            if op.get_type_name() == "Assign"
+        ]
+        self.assertEqual(assign_sources, ["Concat"] * 2 * self.layers)
+        layers = self._compiled_layers(decode)
+        self.assertEqual(layers["ScaledDotProductAttention"], self.layers)
+        self.assertEqual(layers["RoPE"], 2 * self.layers)  # queries and keys
+        self.assertEqual(layers["MatMul"], 0, "attention left decomposed")
+
+    def test_16bit_model_exports_float32_graph_with_16bit_weights(self):
+        import openvino
+
+        model = self._model(torch.bfloat16)
+        decode = self._decode(model, multi_token_decode=True)
+        self.assertTrue(all(p.dtype == torch.bfloat16 for p in model.parameters()), "the model keeps its dtype")
+        self.assertTrue(all(output.get_element_type() == openvino.Type.f32 for output in decode.outputs))
+        weights = [
+            op
+            for op in decode.get_ordered_ops()
+            if op.get_type_name() == "Constant"
+            and len(op.get_output_shape(0)) == 2
+            and op.get_output_shape(0)[1] == 64
+        ]
+        self.assertTrue(weights)
+        self.assertTrue(all(op.get_element_type() == openvino.Type.bf16 for op in weights))
+        self.assertGreater(self._compiled_layers(decode)["FullyConnected"], 0)
+
+    @require_nncf
+    def test_nncf_int8_weights_fuse_compressed_matmuls(self):
+        import nncf
+        import openvino
+
+        from transformers.exporters import NNCFOpenVINOQuantizer, NNCFWeightCompressionConfig
+
+        quantizer = NNCFOpenVINOQuantizer(NNCFWeightCompressionConfig(mode=nncf.CompressWeightsMode.INT8_ASYM))
+        decode = self._decode(self._model(torch.bfloat16), multi_token_decode=True, quantizer=quantizer)
+        compiled = openvino.Core().compile_model(decode, "CPU", {"INFERENCE_PRECISION_HINT": "f32"})
+        precisions = collections.Counter(
+            op.get_rt_info()["runtimePrecision"].astype(str)
+            for op in compiled.get_runtime_model().get_ordered_ops()
+            if op.get_rt_info()["layerType"].astype(str) == "FullyConnected"
+        )
+        # q, k, v, o, gate, up and down per layer read u8 weights in the fused matmul instead of decompressing them
+        self.assertGreaterEqual(precisions["u8"], 7 * self.layers)
