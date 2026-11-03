@@ -477,16 +477,23 @@ Linked PR: https://github.com/huggingface/transformers/pull/42564
 
 ### `hidden_states[-1]` of vision models is the pre-norm output
 
-For vision models such as `ViTModel` and `DINOv3ViTModel`, `hidden_states[-1]` is the output of the last block **before** the final layernorm, while `last_hidden_state` is the normalized output. Up to v4.57.1 the two were identical. Since [#40994](https://github.com/huggingface/transformers/pull/40994) (released in v4.57.2) they differ, and v5 keeps the new behavior, which is the one `Dinov2Model` already had. Code that took `hidden_states[-1]` as the final features gets different features without any error. For the released `facebook/dinov3-vitb16-pretrain-lvd1689m` weights the two differ by about 1300 in max absolute value.
+For many vision encoders (ViT, DeiT, DINOv2, DINOv3, and others), `hidden_states[-1]` is the output of the last block *before* the final layernorm. `last_hidden_state` is the normalized output. Up to v4.57.1, the two tensors were identical. They differ starting in v4.57.2, and v5 keeps this behavior. This only affects you if you're upgrading from v4.57.1 or earlier.
 
-If you need the normalized features, use `last_hidden_state` (or apply the model's final layernorm to `hidden_states[-1]`):
+Code that uses `hidden_states[-1]` as the final features runs without errors but gets different values, and the difference can be large with pretrained weights. To check a model, compare the two tensors.
 
 ```python
 outputs = model(pixel_values=pixel_values, output_hidden_states=True)
 features = outputs.last_hidden_state  # normalized; outputs.hidden_states[-1] is pre-norm
 ```
 
-Model authors who need the old tying can set `tie_last_hidden_states` in the model config ([#48087](https://github.com/huggingface/transformers/pull/48087)).
+Use `last_hidden_state` for the normalized features. From v5.18.0 onward, you can also restore the old behavior by setting `tie_last_hidden_states=True` in the model config.
+
+```python
+from transformers import ViTConfig, ViTModel
+
+config = ViTConfig(tie_last_hidden_states=True)
+model = ViTModel(config)  # outputs.hidden_states[-1] is now identical to outputs.last_hidden_state
+```
 
 ## Quantization changes
 

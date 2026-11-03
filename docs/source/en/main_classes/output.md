@@ -45,6 +45,8 @@ an optional `attentions` attribute. Here we have the `loss` since we passed alon
 When passing `output_hidden_states=True` you may expect the `outputs.hidden_states[-1]` to match `outputs.last_hidden_state` exactly.
 However, this is not always the case. Some models apply normalization or subsequent process to the last hidden state when it's returned.
 
+For many vision encoders (ViT, DeiT, DINOv2, DINOv3, and others), `hidden_states[-1]` is the output of the last block *before* the final layernorm, while `last_hidden_state` is the normalized output. Up to v4.57.1 the two were identical for these models; they differ starting in v4.57.2. Use `last_hidden_state` for the normalized features.
+
 </Tip>
 
 You can access each attribute as you would usually do, and if that attribute has not been returned by the model, you
