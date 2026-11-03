@@ -27,7 +27,6 @@ from .utils import (
     is_flash_attn_4_available,
     is_rocm_platform,
     is_torch_cuda_available,
-    is_torch_greater_or_equal,
     is_torch_mlu_available,
     is_torch_musa_available,
     is_torch_npu_available,
