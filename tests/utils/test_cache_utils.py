@@ -933,8 +933,8 @@ class CacheHardIntegrationTest(unittest.TestCase):
         # Each layer must be allocated with its own `head_dim`, instead of all of them sharing a single one
         text_config = model.config.get_text_config(decoder=True)
         expected_head_dims = [
-            text_config.per_layer_config[layer].head_dim
-            for layer in range(len(cache.layers))
+            text_config.per_layer_config[i].head_dim
+            for i, layer in enumerate(cache.layers)
             if not isinstance(layer, DummyLayer)
         ]
         self.assertEqual(
