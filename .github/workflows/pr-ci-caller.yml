@@ -23,5 +23,5 @@ permissions:
 jobs:
   pr-ci:
     # DON'T use commit sha here before the CI migration is finished
-    uses: huggingface/transformers-ci/.github/workflows/pr-ci_dynamic_caller_example.yml@fetcher-recording # runtime-dep-recorder
+    uses: huggingface/transformers-ci/.github/workflows/pr-ci_dynamic_caller_example.yml@runtime-dep-recorder # main
 
