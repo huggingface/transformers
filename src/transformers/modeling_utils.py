@@ -3130,7 +3130,7 @@ class PreTrainedModel(
                 Additional keyword arguments passed along to the `torch.utils.checkpoint.checkpoint` function.
         """
         # Subclasses and wrappers of the deprecated `gradient_checkpointing_enable` stay the entry point until v6
-        if self._overrides_deprecated_alias("gradient_checkpointing_enable"):
+        if self._is_overridden("gradient_checkpointing_enable"):
             self.gradient_checkpointing_enable(
                 gradient_checkpointing_kwargs=activation_checkpointing_kwargs,
                 every_n_layers=every_n_layers,
@@ -3198,14 +3198,14 @@ class PreTrainedModel(
             FutureWarning,
         )
         # Reached from the override itself, which `activation_checkpointing_enable` would call again
-        if self._overrides_deprecated_alias("gradient_checkpointing_enable"):
+        if self._is_overridden("gradient_checkpointing_enable"):
             self._activation_checkpointing_enable(gradient_checkpointing_kwargs, **kwargs)
         else:
             self.activation_checkpointing_enable(
                 activation_checkpointing_kwargs=gradient_checkpointing_kwargs, **kwargs
             )
 
-    def _overrides_deprecated_alias(self, name: str) -> bool:
+    def _is_overridden(self, name: str) -> bool:
         # A subclass override is another function and a wrapper set on the instance is not a bound method
         return getattr(getattr(self, name), "__func__", None) is not getattr(PreTrainedModel, name)
 
@@ -3251,7 +3251,7 @@ class PreTrainedModel(
         Deactivates activation checkpointing for the current model.
         """
         # Subclasses and wrappers of the deprecated `gradient_checkpointing_disable` stay the entry point until v6
-        if self._overrides_deprecated_alias("gradient_checkpointing_disable"):
+        if self._is_overridden("gradient_checkpointing_disable"):
             self.gradient_checkpointing_disable()
         else:
             self._activation_checkpointing_disable()
@@ -3283,7 +3283,7 @@ class PreTrainedModel(
             FutureWarning,
         )
         # Reached from the override itself, which `activation_checkpointing_disable` would call again
-        if self._overrides_deprecated_alias("gradient_checkpointing_disable"):
+        if self._is_overridden("gradient_checkpointing_disable"):
             self._activation_checkpointing_disable()
         else:
             self.activation_checkpointing_disable()
