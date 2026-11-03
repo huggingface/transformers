@@ -667,7 +667,7 @@ class Inkling2AttnRes(nn.Module):
 
 def block_attention_residual(
     block_states: list[torch.Tensor],
-    partial_state: torch.Tensor,
+    hidden_states: torch.Tensor,
     queries: torch.Tensor,
     normalize_values: bool,
     partial_addend: torch.Tensor | None = None,
@@ -677,8 +677,8 @@ def block_attention_residual(
     softmax over RMS-normalized sources, independently at each position. Returns one float32 mixture per query.
     """
     # with a device map, earlier blocks live on the devices of the layers that produced them
-    device = partial_state.device
-    values = torch.stack([*(state.to(device) for state in block_states), partial_state]).float()
+    device = hidden_states.device
+    values = torch.stack([*(state.to(device) for state in block_states), hidden_states]).float()
     if partial_addend is not None:
         values[-1] = values[-1] + partial_addend.float()
     inv_rms = torch.rsqrt(values.square().mean(dim=-1) + 1e-6)
@@ -725,44 +725,50 @@ class Inkling2DecoderLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         dtype = hidden_states.dtype
-        if block_states:
-            attention_sources = block_attention_residual(
+        block_residual = hidden_states
+        if attn_res_query is None:
+            # By default this only happens in the first layer of the model
+            qkv_hidden_states = (hidden_states,) * (1 if self.is_sliding else 3)
+        else:
+            qkv_hidden_states = block_attention_residual(
                 block_states, hidden_states, attn_res_query, self.normalize_values
             )
-        else:
-            attention_sources = (hidden_states,) * (1 if self.is_sliding else 3)
 
         if self.is_sliding:
-            attention_inputs = {"hidden_states": self.input_layernorm(attention_sources[0]).to(dtype)}
+            attention_inputs = {"hidden_states": self.input_layernorm(qkv_hidden_states[0]).to(dtype)}
         else:
             attention_inputs = {
-                "hidden_states": self.q_input_layernorm(attention_sources[0]).to(dtype),
-                "key_hidden_states": self.k_input_layernorm(attention_sources[1]).to(dtype),
-                "value_hidden_states": self.v_input_layernorm(attention_sources[2]).to(dtype),
+                "hidden_states": self.q_input_layernorm(qkv_hidden_states[0]).to(dtype),
+                "key_hidden_states": self.k_input_layernorm(qkv_hidden_states[1]).to(dtype),
+                "value_hidden_states": self.v_input_layernorm(qkv_hidden_states[2]).to(dtype),
             }
-        attention_output, _ = self.self_attn(
+        hidden_states, _ = self.self_attn(
             **attention_inputs,
             attention_mask=attention_mask,
             conv_mask=conv_mask,
             past_key_values=past_key_values,
             **kwargs,
         )
-        attention_output = self.attn_sconv(attention_output, past_key_values=past_key_values, conv_mask=conv_mask)
+        hidden_states = self.attn_sconv(hidden_states, past_key_values=past_key_values, conv_mask=conv_mask)
+        residual = hidden_states
 
         if self.is_block_boundary:
-            mlp_input = block_attention_residual(
-                [*block_states, hidden_states], attention_output, mlp_res_query, self.normalize_values
-            )[0]
+            partial_addend = None
+            block_states = [*block_states, block_residual]
         else:
-            mlp_input = block_attention_residual(
-                block_states, hidden_states, mlp_res_query, self.normalize_values, partial_addend=attention_output
-            )[0]
-        mlp_output = self.mlp(self.post_attention_layernorm(mlp_input).to(dtype))
-        mlp_output = self.mlp_sconv(mlp_output, past_key_values=past_key_values, conv_mask=conv_mask)
+            partial_addend = hidden_states
+            hidden_states = block_residual
 
-        if self.is_block_boundary:
-            return attention_output + mlp_output
-        return hidden_states + attention_output + mlp_output
+        hidden_states = block_attention_residual(
+            block_states, hidden_states, mlp_res_query, self.normalize_values, partial_addend=partial_addend
+        )[0]
+        hidden_states = self.mlp(self.post_attention_layernorm(hidden_states).to(dtype))
+        hidden_states = self.mlp_sconv(hidden_states, past_key_values=past_key_values, conv_mask=conv_mask)
+
+        if not self.is_block_boundary:
+            residual = block_residual + residual
+        hidden_states = residual + hidden_states
+        return hidden_states
 
 
 class Inkling2VisionRotaryEmbedding(nn.Module):
