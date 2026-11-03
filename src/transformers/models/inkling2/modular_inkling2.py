@@ -35,13 +35,12 @@ from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
-from ...processing_utils import ProcessorMixin, Unpack
+from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import CLIPMLP
 from ..inkling.configuration_inkling import InklingConfig, InklingTextConfig
-from ..inkling.image_processing_inkling import InklingImageProcessor, InklingImageProcessorKwargs
 from ..inkling.modeling_inkling import (
     InklingAttention,
     InklingCausalLMOutputWithPast,
@@ -59,7 +58,6 @@ from ..inkling.modeling_inkling import (
     InklingShortConvolution,
     InklingTopkRouter,
 )
-from ..inkling.processing_inkling import InklingProcessor
 from ..llama.modeling_llama import repeat_kv
 from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states, causal_conv1d_fn, causal_conv1d_update
 from ..sam3.modeling_sam3 import Sam3ViTRotaryEmbedding
@@ -1323,31 +1321,14 @@ class Inkling2ForConditionalGeneration(InklingForConditionalGeneration):
         return model_inputs
 
 
-# Ceil columns: the last column is partial, there is no extra empty column
-def divide_to_patches(image: "torch.Tensor", patch_size: int) -> list["torch.Tensor"]:
-    height, width = image.shape[-2], image.shape[-1]
-    num_rows = (height + patch_size - 1) // patch_size
-    num_cols = (width + patch_size - 1) // patch_size
-
-    patches = []
-    for i in range(num_rows):
-        for j in range(num_cols):
-            y_base = i * patch_size
-            x_base = j * patch_size
-            patch = image[..., y_base : y_base + patch_size, x_base : x_base + patch_size]
-            patches.append(patch)
-    return patches
-
-
-class Inkling2ImageProcessorKwargs(InklingImageProcessorKwargs):
-    pass
-
-
 @auto_docstring(custom_intro="Constructs an Inkling2 image processor.")
-class Inkling2ImageProcessor(InklingImageProcessor):
+class Inkling2ImageProcessor(TorchvisionBackend):
     image_mean = [0.5, 0.5, 0.5]
     image_std = [0.5, 0.5, 0.5]
-    rescale_image_max_upscaled_long_edge = None
+    do_convert_rgb = True
+    do_rescale = True
+    do_normalize = True
+    size = {"height": 40, "width": 40}
     model_input_names = ["pixel_values", "image_grid_thw"]
 
     def process_image(
@@ -1356,21 +1337,21 @@ class Inkling2ImageProcessor(InklingImageProcessor):
         do_convert_rgb: bool | None = None,
         input_data_format: str | ChannelDimension | None = None,
         device: "torch.device | None" = None,
-        **kwargs: Unpack[Inkling2ImageProcessorKwargs],
+        **kwargs: Unpack[ImagesKwargs],
     ) -> "torch.Tensor":
         # keep the alpha channel of PIL images so that `convert_to_rgb` composites it onto the checkerboard
         if do_convert_rgb and get_image_type(image) == ImageType.PIL:
             image = np.array(image.convert("RGBA" if image.has_transparency_data else "RGB"))
             input_data_format = ChannelDimension.LAST
-        return TorchvisionBackend.process_image(
-            self, image, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device, **kwargs
+        return super().process_image(
+            image, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device, **kwargs
         )
 
     def convert_to_rgb(
         self, image: "torch.Tensor", input_data_format: str | ChannelDimension | None = None
     ) -> "torch.Tensor":
         if image.shape[-3] != 4:
-            return TorchvisionBackend.convert_to_rgb(self, image, input_data_format=input_data_format)
+            return super().convert_to_rgb(image, input_data_format=input_data_format)
         height, width = image.shape[-2:]
         rows = torch.arange(height, device=image.device)[:, None] // 8
         columns = torch.arange(width, device=image.device)[None, :] // 8
@@ -1391,64 +1372,35 @@ class Inkling2ImageProcessor(InklingImageProcessor):
         return_tensors: str | None,
         **kwargs,
     ) -> BatchFeature:
-        per_image_patches, image_grid_thw = [], []
+        patches, image_grid_thw = [], []
         for image in images:
-            height, width = image.shape[-2:]
-            patches = [patch.float() for patch in divide_to_patches(image, size.height)]
-            patches = self.pad(patches, pad_size=SizeDict(height=size.height, width=size.width), fill_value=-1.0)
-            patches = self.rescale_and_normalize(
-                torch.stack(patches), do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
-            per_image_patches.append(patches)
-            image_grid_thw.append([1, math.ceil(height / size.height), math.ceil(width / size.width)])
-        pixel_values = torch.cat(per_image_patches).permute(0, 2, 3, 1).unsqueeze(1)
+            channels, height, width = image.shape
+            rows, columns = math.ceil(height / size.height), math.ceil(width / size.width)
+            # pad to the grid with -1 on the 0-255 scale, then cut it into one patch per image token
+            image = F.pad(image.float(), (0, columns * size.width - width, 0, rows * size.height - height), value=-1.0)
+            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
+            image = image.reshape(channels, rows, size.height, columns, size.width).permute(1, 3, 2, 4, 0)
+            patches.append(image.flatten(0, 1))
+            image_grid_thw.append([1, rows, columns])
         return BatchFeature(
-            data={"pixel_values": pixel_values, "image_grid_thw": torch.tensor(image_grid_thw)},
+            data={"pixel_values": torch.cat(patches).unsqueeze(1), "image_grid_thw": torch.tensor(image_grid_thw)},
             tensor_type=return_tensors,
         )
 
 
-class Inkling2Processor(InklingProcessor):
-    def __init__(
-        self,
-        image_processor=None,
-        tokenizer=None,
-        chat_template=None,
-        image_token="<|unused_200054|>",
-        image_bos_token="<|content_image|>",
-        **kwargs,
-    ):
+@auto_docstring
+class Inkling2Processor(ProcessorMixin):
+    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, image_token="<|unused_200054|>"):
         r"""
         image_token (`str`, *optional*, defaults to `"<|unused_200054|>"`):
-            Placeholder token for each image soft-token slot (replaced by image features).
-        image_bos_token (`str`, *optional*, defaults to `"<|content_image|>"`):
-            Marker token that begins an image span (kept as an ordinary embedded token).
+            Placeholder token for each image soft-token slot, replaced by image features.
         """
-        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
-        self.image_token_id = tokenizer.encode(self.image_token, add_special_tokens=False)[0]
-        self.image_bos_token = image_bos_token
-        self.image_bos_token_id = tokenizer.encode(self.image_bos_token, add_special_tokens=False)[0]
-        ProcessorMixin.__init__(self, image_processor, tokenizer, chat_template=chat_template)
+        self.image_token = image_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(image_token)
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         return self.image_token * int(image_inputs["image_grid_thw"][image_idx].prod())
-
-    def _extract_dmel_bins(self):
-        raise AttributeError("Not needed for Inkling2")
-
-    def _process_audio(self):
-        raise AttributeError("Not needed for Inkling2")
-
-    def replace_audio_token(self):
-        raise AttributeError("Not needed for Inkling2")
-
-    @property
-    def unused_input_names(self) -> list[str]:
-        return []
-
-    @property
-    def model_input_names(self) -> list[str]:
-        return list(dict.fromkeys([*self.image_processor.model_input_names, *self.tokenizer.model_input_names]))
 
 
 __all__ = [

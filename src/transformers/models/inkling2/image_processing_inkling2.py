@@ -22,142 +22,24 @@ import math
 
 import numpy as np
 import torch
-from torchvision.transforms.v2 import functional as tvF
+import torch.nn.functional as F
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
-from ...image_utils import (
-    ChannelDimension,
-    ImageInput,
-    ImageType,
-    PILImageResampling,
-    SizeDict,
-    get_image_type,
-    validate_preprocess_arguments,
-)
+from ...image_utils import ChannelDimension, ImageInput, ImageType, SizeDict, get_image_type
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import auto_docstring
 
 
-class Inkling2ImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    rescale_image_frac (`float`, *optional*):
-        Factor applied to the image's long edge before patch division, preserving aspect ratio. `None` disables
-        the pre-scaling.
-    rescale_image_max_upscaled_long_edge (`int`, *optional*):
-        Cap, in pixels, on the upscaled long edge. Only limits growth: an image already above the cap is kept
-        as is.
-    """
-
-    rescale_image_frac: float | None
-    rescale_image_max_upscaled_long_edge: int | None
-
-
-# Ceil columns: the last column is partial, there is no extra empty column
-def divide_to_patches(image: "torch.Tensor", patch_size: int) -> list["torch.Tensor"]:
-    height, width = image.shape[-2], image.shape[-1]
-    num_rows = (height + patch_size - 1) // patch_size
-    num_cols = (width + patch_size - 1) // patch_size
-
-    patches = []
-    for i in range(num_rows):
-        for j in range(num_cols):
-            y_base = i * patch_size
-            x_base = j * patch_size
-            patch = image[..., y_base : y_base + patch_size, x_base : x_base + patch_size]
-            patches.append(patch)
-    return patches
-
-
 @auto_docstring(custom_intro="Constructs an Inkling2 image processor.")
 class Inkling2ImageProcessor(TorchvisionBackend):
-    resample = PILImageResampling.LANCZOS
     image_mean = [0.5, 0.5, 0.5]
     image_std = [0.5, 0.5, 0.5]
-    default_to_square = False
     do_convert_rgb = True
     do_rescale = True
     do_normalize = True
     size = {"height": 40, "width": 40}
-    rescale_image_frac = None
-    rescale_image_max_upscaled_long_edge = None
-    valid_kwargs = Inkling2ImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw"]
-
-    def __init__(self, **kwargs: Unpack[Inkling2ImageProcessorKwargs]):
-        super().__init__(**kwargs)
-
-    def _validate_preprocess_kwargs(
-        self,
-        do_rescale: bool | None = None,
-        rescale_factor: float | None = None,
-        do_normalize: bool | None = None,
-        image_mean: float | tuple[float] | None = None,
-        image_std: float | tuple[float] | None = None,
-        do_resize: bool | None = None,
-        size: SizeDict | None = None,
-        do_center_crop: bool | None = None,
-        crop_size: SizeDict | None = None,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
-        **kwargs,
-    ):
-        """
-        Validate the kwargs for the preprocess method.
-        """
-        if do_resize is False:
-            raise ValueError("`do_resize` cannot be set to `False` for this model!")
-
-        if size.height != size.width:
-            raise ValueError(f"Can resize only to square size but got {size}")
-
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-        )
-
-    @auto_docstring
-    def preprocess(
-        self,
-        images: ImageInput,
-        **kwargs: Unpack[ImagesKwargs],
-    ) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
-
-    def _preprocess(
-        self,
-        images: list["torch.Tensor"],
-        size: SizeDict,
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: float | list[float] | None,
-        image_std: float | list[float] | None,
-        return_tensors: str | None,
-        **kwargs,
-    ) -> BatchFeature:
-        per_image_patches, image_grid_thw = [], []
-        for image in images:
-            height, width = image.shape[-2:]
-            patches = [patch.float() for patch in divide_to_patches(image, size.height)]
-            patches = self.pad(patches, pad_size=SizeDict(height=size.height, width=size.width), fill_value=-1.0)
-            patches = self.rescale_and_normalize(
-                torch.stack(patches), do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
-            per_image_patches.append(patches)
-            image_grid_thw.append([1, math.ceil(height / size.height), math.ceil(width / size.width)])
-        pixel_values = torch.cat(per_image_patches).permute(0, 2, 3, 1).unsqueeze(1)
-        return BatchFeature(
-            data={"pixel_values": pixel_values, "image_grid_thw": torch.tensor(image_grid_thw)},
-            tensor_type=return_tensors,
-        )
 
     def process_image(
         self,
@@ -165,7 +47,7 @@ class Inkling2ImageProcessor(TorchvisionBackend):
         do_convert_rgb: bool | None = None,
         input_data_format: str | ChannelDimension | None = None,
         device: "torch.device | None" = None,
-        **kwargs: Unpack[Inkling2ImageProcessorKwargs],
+        **kwargs: Unpack[ImagesKwargs],
     ) -> "torch.Tensor":
         # keep the alpha channel of PIL images so that `convert_to_rgb` composites it onto the checkerboard
         if do_convert_rgb and get_image_type(image) == ImageType.PIL:
@@ -187,6 +69,33 @@ class Inkling2ImageProcessor(TorchvisionBackend):
         rgba = image.to(torch.int32)
         alpha = rgba[3:4]
         return ((rgba[:3] * alpha + background * (255 - alpha) + 127) // 255).to(torch.uint8)
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        return_tensors: str | None,
+        **kwargs,
+    ) -> BatchFeature:
+        patches, image_grid_thw = [], []
+        for image in images:
+            channels, height, width = image.shape
+            rows, columns = math.ceil(height / size.height), math.ceil(width / size.width)
+            # pad to the grid with -1 on the 0-255 scale, then cut it into one patch per image token
+            image = F.pad(image.float(), (0, columns * size.width - width, 0, rows * size.height - height), value=-1.0)
+            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
+            image = image.reshape(channels, rows, size.height, columns, size.width).permute(1, 3, 2, 4, 0)
+            patches.append(image.flatten(0, 1))
+            image_grid_thw.append([1, rows, columns])
+        return BatchFeature(
+            data={"pixel_values": torch.cat(patches).unsqueeze(1), "image_grid_thw": torch.tensor(image_grid_thw)},
+            tensor_type=return_tensors,
+        )
 
 
 __all__ = ["Inkling2ImageProcessor"]

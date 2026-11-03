@@ -18,51 +18,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import ProcessorMixin
 from ...utils import auto_docstring
-from ...utils.import_utils import requires
-
-
-class Inkling2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
 
 
 @auto_docstring
-@requires(backends=("torch",))
 class Inkling2Processor(ProcessorMixin):
-    valid_processor_kwargs = Inkling2ProcessorKwargs
-
-    def __init__(
-        self,
-        image_processor=None,
-        tokenizer=None,
-        chat_template=None,
-        image_token="<|unused_200054|>",
-        image_bos_token="<|content_image|>",
-        **kwargs,
-    ):
+    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, image_token="<|unused_200054|>"):
         r"""
         image_token (`str`, *optional*, defaults to `"<|unused_200054|>"`):
-            Placeholder token for each image soft-token slot (replaced by image features).
-        image_bos_token (`str`, *optional*, defaults to `"<|content_image|>"`):
-            Marker token that begins an image span (kept as an ordinary embedded token).
+            Placeholder token for each image soft-token slot, replaced by image features.
         """
-        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
-        self.image_token_id = tokenizer.encode(self.image_token, add_special_tokens=False)[0]
-        self.image_bos_token = image_bos_token
-        self.image_bos_token_id = tokenizer.encode(self.image_bos_token, add_special_tokens=False)[0]
+        self.image_token = image_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(image_token)
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         return self.image_token * int(image_inputs["image_grid_thw"][image_idx].prod())
-
-    @property
-    def unused_input_names(self) -> list[str]:
-        return []
-
-    @property
-    def model_input_names(self) -> list[str]:
-        return list(dict.fromkeys([*self.image_processor.model_input_names, *self.tokenizer.model_input_names]))
 
 
 __all__ = ["Inkling2Processor"]
