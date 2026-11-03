@@ -51,6 +51,7 @@ if is_torch_available():
         CompileConfig,
         DynamicCache,
         Gemma2Config,
+        Gemma3TextConfig,
         Gemma4ForCausalLM,
         Gemma4TextConfig,
         GenerationConfig,
@@ -379,7 +380,7 @@ class CacheTest(unittest.TestCase):
         """
         With right-aligned sliding layers, generation past the window matches a dynamic cache, with or without padding.
         """
-        config = Gemma2Config(
+        config = Gemma3TextConfig(
             vocab_size=99,
             hidden_size=32,
             intermediate_size=64,
@@ -388,6 +389,7 @@ class CacheTest(unittest.TestCase):
             num_key_value_heads=2,
             head_dim=16,
             sliding_window=4,
+            layer_types=["sliding_attention", "full_attention"],
             pad_token_id=0,
         )
         model = AutoModelForCausalLM.from_config(config).to(torch_device).eval()
@@ -415,7 +417,7 @@ class CacheTest(unittest.TestCase):
         compatibility = patch("transformers.cache_utils._is_torch_greater_or_equal_than_2_10", has_fusion_fix)
         compatibility.start()
         self.addCleanup(compatibility.stop)
-        config = Gemma2Config(
+        config = Gemma3TextConfig(
             vocab_size=99,
             hidden_size=32,
             intermediate_size=64,
@@ -424,6 +426,7 @@ class CacheTest(unittest.TestCase):
             num_key_value_heads=2,
             head_dim=16,
             sliding_window=4,
+            layer_types=["sliding_attention", "full_attention"],
         )
         model = AutoModelForCausalLM.from_config(config).to(torch_device).eval()
         input_ids = torch.randint(1, 99, (1, 3), device=torch_device)
