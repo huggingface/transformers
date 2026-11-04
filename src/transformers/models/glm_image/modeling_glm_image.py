@@ -495,18 +495,6 @@ class GlmImagePreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
 
-@auto_docstring
-@dataclass
-class GlmImageModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
-
-
 class GlmImageVQVAEVectorQuantizer(nn.Module):
     """
     A module for vector quantization using learned embedding vectors.
@@ -1235,7 +1223,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
         images_per_sample: torch.LongTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | GlmImageModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         r"""
         images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Number of images (including target grids) for each sample in the batch.
@@ -1281,13 +1269,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
             **kwargs,
         )
 
-        return GlmImageModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            rope_deltas=self.rope_deltas,
-        )
+        return outputs
 
     def get_image_tokens(
         self,
@@ -1328,18 +1310,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
             # Fallback for batch_size=1: all but last grid are source images
             source_grids = image_grid_thw[:-1]
         return source_grids
-
-
-@auto_docstring
-@dataclass
-class GlmImageCausalLMOutputWithPast(CausalLMOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
 
 
 class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin):
@@ -1389,7 +1359,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | GlmImageCausalLMOutputWithPast:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
         images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Number of images (including target grids) for each sample in the batch.
@@ -1450,13 +1420,12 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return GlmImageCausalLMOutputWithPast(
+        return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=outputs.rope_deltas,
         )
 
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
