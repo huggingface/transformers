@@ -2,7 +2,7 @@ FROM ci-base
 ARG REF=main
 RUN apt-get update && apt-get install -y time git g++ cmake pkg-config make git-lfs
 RUN uv pip install --no-cache-dir GitPython
-RUN uv pip install --no-cache-dir --upgrade 'torch==2.15.0' 'torchaudio' 'torchvision' --index-url https://download.pytorch.org/whl/cpu
+RUN uv pip install --no-cache-dir --upgrade 'torch<=2.15.0' 'torchaudio' 'torchvision' --index-url https://download.pytorch.org/whl/cpu
 RUN uv pip install --no-cache-dir kenlm
 RUN uv pip install --no-cache-dir "git+https://github.com/huggingface/transformers.git@${REF}#egg=transformers[quality,testing,torch-speech,vision]"
 RUN git lfs install
