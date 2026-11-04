@@ -127,7 +127,7 @@ class PagedAttentionCache:
         distributed_helper: DistributedHelper,
         dtype: torch.dtype = torch.float16,
         model_supports_logits_to_keep: bool = False,
-        linear_attention_states: dict[int, list[StateSpec]] | None = None,
+        cache_states: dict[int, list[StateSpec]] | None = None,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage. Also turns in prefix sharing if the model has
         only full attention layers.
@@ -140,8 +140,8 @@ class PagedAttentionCache:
             dtype: Data type of the activation and the cache (for now, these are the same)
             model_supports_logits_to_keep: When True, memory sizing charges the LM head peak per request instead of
                 per batch token, since the model slices hidden states before the LM head
-            linear_attention_states: The shape and dtype of the per-request states of each linear attention layer,
-                by layer index, as the layers declare them through `linear_attention_states`
+            cache_states: The shape and dtype of the per-request states of each linear attention layer,
+                by layer index, as the layers declare them through `cache_states`
         """
         self.config = config
         self.dtype = dtype
@@ -176,7 +176,7 @@ class PagedAttentionCache:
         for attn_type, layer_indices in layer_groups.items():
             self._add_cache_allocator(attn_type, layer_indices, ca_kwargs)
         if linear_layers is not None:
-            states = self._get_linear_attention_states(linear_layers, linear_attention_states or {})
+            states = self._get_cache_states(linear_layers, cache_states or {})
             block_alignment = lcm(*(ca.bytes_per_block for ca in self.cache_allocators.values()), 128)
             linear_kwargs = ca_kwargs | {"states": states, "block_alignment": block_alignment}
             self._add_cache_allocator(LINEAR_ATTENTION, linear_layers, linear_kwargs)
@@ -241,20 +241,18 @@ class PagedAttentionCache:
         self.max_tokens_read = max(ca.tokens_per_page * ca.num_blocks for ca in self.cache_allocators.values())
 
     @staticmethod
-    def _get_linear_attention_states(
-        layer_indices: list[int], linear_attention_states: dict[int, list[StateSpec]]
-    ) -> list[StateSpec]:
+    def _get_cache_states(layer_indices: list[int], cache_states: dict[int, list[StateSpec]]) -> list[StateSpec]:
         """The states the linear attention layers declare, which have to be the same for all of them since the
         allocator gives every layer the same page."""
         states = []
         for layer_idx in layer_indices:
-            if layer_idx not in linear_attention_states:
+            if layer_idx not in cache_states:
                 raise ValueError(
                     f"Layer {layer_idx} is a linear attention layer that declares no states: continuous batching "
                     "supports the linear attention layers that declare their per-request states through "
-                    "`linear_attention_states`, like the gated delta net of Qwen3-Next."
+                    "`cache_states`, like the gated delta net of Qwen3-Next."
                 )
-            states.append(linear_attention_states[layer_idx])
+            states.append(cache_states[layer_idx])
         if any(layer_states != states[0] for layer_states in states):
             raise ValueError(f"The linear attention layers declare different states: {states}")
         return states[0]
@@ -469,7 +467,7 @@ class PagedAttentionCache:
         return key_states, value_states
 
     @torch.compiler.disable  # does not play well with the views of the cache tensor
-    def read_linear_attention_states(self, layer_idx: int, kwargs: dict[str, Any]) -> tuple[torch.Tensor, ...]:
+    def read_cache_states(self, layer_idx: int, kwargs: dict[str, Any]) -> tuple[torch.Tensor, ...]:
         """Reads the states of the batch's sequences for a linear attention layer, in batch order and in the order the
         layer declares them, each of shape [num_sequences, *shape]. A sequence with no past reads zeros, from the
         read trash block."""
@@ -478,9 +476,7 @@ class PagedAttentionCache:
         return tuple(view[index] for view in allocator.state_views(layer_idx))
 
     @torch.compiler.disable  # does not play well with the views of the cache tensor
-    def write_linear_attention_states(
-        self, layer_idx: int, states: tuple[torch.Tensor, ...], kwargs: dict[str, Any]
-    ) -> None:
+    def write_cache_states(self, layer_idx: int, states: tuple[torch.Tensor, ...], kwargs: dict[str, Any]) -> None:
         """Writes the states of the batch's sequences for a linear attention layer, given in batch order and in the
         order the layer declares them. Padding sequences write to the write trash block."""
         allocator: LinearAttentionCacheAllocator = self.layer_to_allocator[layer_idx]  # type: ignore

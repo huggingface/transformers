@@ -490,16 +490,16 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         allocator.free_blocks("req")
         self.assertEqual(pool.count_free_blocks(allocator.index), free_blocks + 1)
 
-    def test_linear_attention_states_are_declared_by_the_layers(self) -> None:
+    def test_cache_states_are_declared_by_the_layers(self) -> None:
         """The paged cache sizes the states from what the linear attention layers declare: a layer that declares none
         is refused with a readable error, and all layers of the group have to declare the same states."""
         states = [((32, 2), torch.float16), ((4, 4, 4), torch.float32)]
-        self.assertEqual(PagedAttentionCache._get_linear_attention_states([0, 2], {0: states, 2: states}), states)
+        self.assertEqual(PagedAttentionCache._get_cache_states([0, 2], {0: states, 2: states}), states)
         with self.assertRaisesRegex(ValueError, "Layer 2 is a linear attention layer that declares no states"):
-            PagedAttentionCache._get_linear_attention_states([0, 2], {0: states})
+            PagedAttentionCache._get_cache_states([0, 2], {0: states})
         other_states = [((32, 2), torch.float16)]
         with self.assertRaisesRegex(ValueError, "declare different states"):
-            PagedAttentionCache._get_linear_attention_states([0, 2], {0: states, 2: other_states})
+            PagedAttentionCache._get_cache_states([0, 2], {0: states, 2: other_states})
 
     def test_linear_attention_block_alignment(self) -> None:
         """The block is sized to a multiple of the alignment, which the paged cache sets to the other allocators'
@@ -512,7 +512,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         self.assertEqual(allocator.state_offsets[1] % 128, 0)
         self.assertGreaterEqual(allocator.state_offsets[1], 32 * 2 * torch.float16.itemsize)
 
-    def test_linear_attention_states_round_trip(self) -> None:
+    def test_cache_states_round_trip(self) -> None:
         """The paged cache reads and writes the states of the batch's sequences through the allocator's views, from
         the index storages on the varlen path and from the block table on the decode fast path, and sends padding
         sequences to the trash blocks. Forks copy blocks, states included."""
@@ -535,29 +535,29 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
 
         # Varlen path: the requests have no past, so they read zeros and write their block
         kwargs = {"read_index": [torch.tensor([0, 0])], "write_index": [torch.tensor(blocks)], "block_table": None}
-        read_conv, read_recurrent = cache.read_linear_attention_states(0, kwargs)
+        read_conv, read_recurrent = cache.read_cache_states(0, kwargs)
         self.assertEqual(read_conv.shape, conv_states.shape)
         self.assertEqual(read_recurrent.shape, recurrent_states.shape)
         self.assertTrue((read_conv == 0).all() and (read_recurrent == 0).all())
-        cache.write_linear_attention_states(0, (conv_states, recurrent_states), kwargs)
+        cache.write_cache_states(0, (conv_states, recurrent_states), kwargs)
 
         # Then they read what they wrote, in the cache dtypes, and the other layer is untouched
         kwargs["read_index"] = [torch.tensor(blocks)]
-        read_conv, read_recurrent = cache.read_linear_attention_states(0, kwargs)
+        read_conv, read_recurrent = cache.read_cache_states(0, kwargs)
         torch.testing.assert_close(read_conv, conv_states.to(torch.float16))
         torch.testing.assert_close(read_recurrent, recurrent_states)
-        read_conv, read_recurrent = cache.read_linear_attention_states(2, kwargs)
+        read_conv, read_recurrent = cache.read_cache_states(2, kwargs)
         self.assertTrue((read_conv == 0).all() and (read_recurrent == 0).all())
 
         # Decode fast path: the block table gives the blocks, and its padding rows (-1) go to the trash blocks
         block_table = torch.tensor([[[blocks[1], -1], [-1, -1], [blocks[0], -1]]], dtype=torch.int32)
         kwargs = {"block_table": block_table}
-        read_conv, read_recurrent = cache.read_linear_attention_states(0, kwargs)
+        read_conv, read_recurrent = cache.read_cache_states(0, kwargs)
         torch.testing.assert_close(read_conv[[0, 2]], conv_states[[1, 0]].to(torch.float16))
         torch.testing.assert_close(read_recurrent[[0, 2]], recurrent_states[[1, 0]])
         self.assertTrue((read_conv[1] == 0).all() and (read_recurrent[1] == 0).all())
-        cache.write_linear_attention_states(0, (read_conv + 1, read_recurrent + 1), kwargs)
-        read_conv, read_recurrent = cache.read_linear_attention_states(0, kwargs)
+        cache.write_cache_states(0, (read_conv + 1, read_recurrent + 1), kwargs)
+        read_conv, read_recurrent = cache.read_cache_states(0, kwargs)
         torch.testing.assert_close(read_conv[[0, 2]], conv_states[[1, 0]].to(torch.float16) + 1)
         torch.testing.assert_close(read_recurrent[[0, 2]], recurrent_states[[1, 0]] + 1)
         # The padding row wrote to the write trash, so the read trash still reads zeros
@@ -569,7 +569,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         fork = allocator.block_table["c"][0]
         allocator.copy_blocks([blocks[0]], [fork])
         kwargs = {"read_index": [torch.tensor([fork])], "write_index": [torch.tensor([fork])], "block_table": None}
-        read_conv, read_recurrent = cache.read_linear_attention_states(0, kwargs)
+        read_conv, read_recurrent = cache.read_cache_states(0, kwargs)
         torch.testing.assert_close(read_conv[0], conv_states[0].to(torch.float16) + 1)
         torch.testing.assert_close(read_recurrent[0], recurrent_states[0] + 1)
 
