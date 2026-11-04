@@ -7,6 +7,7 @@ from .quantizers_utils import get_module_from_name
 
 if is_torch_available():
     import torch
+    from torch import nn
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -114,23 +115,31 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
-        from ..integrations.finegrained_fp8 import replace_with_fp8_embedding, replace_with_fp8_linear
-
         self._normalize_modules_to_not_convert(model)
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
+        self.text_config = model.config.get_text_config()
 
-        modules_to_convert = self.quantization_config.modules_to_convert
-        if self.pre_quantized and modules_to_convert:
-            replace_with_fp8_embedding(model, modules_to_convert, self.modules_to_not_convert)
+    def quantized_module(self, name, module):
+        from ..integrations.finegrained_fp8 import FP8Embedding, fp8_experts_for, fp8_linear_for
 
-        model = replace_with_fp8_linear(
-            model,
-            modules_to_not_convert=self.modules_to_not_convert,
-            quantization_config=self.quantization_config,
-            pre_quantized=self.pre_quantized,
-        )
+        config = self.quantization_config
+        modules_to_convert = config.modules_to_convert if self.pre_quantized else None
+        if modules_to_convert and type(module) is nn.Embedding and name.endswith(tuple(modules_to_convert)):
+            # Also under `dequantize=True`: a table worth quantizing is one we cannot afford to expand
+            new_module = FP8Embedding(module.num_embeddings, module.embedding_dim, module.padding_idx)
+        elif config.dequantize:
+            return None
+        elif name.endswith(".experts"):
+            new_module = fp8_experts_for(module, config, self.text_config)
+        elif isinstance(module, nn.Linear):
+            new_module = fp8_linear_for(module, config)
+        else:
+            return None
+        if new_module is not None:
+            new_module._hf_quantized_needs_local_tp = True
+        return new_module
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         # Single-process multi-device is unsafe for DeepGEMM (its kernels are bound to one CUDA

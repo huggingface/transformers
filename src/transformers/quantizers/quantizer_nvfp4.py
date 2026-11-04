@@ -94,15 +94,16 @@ class NVFP4HfQuantizer(HfQuantizer):
         return isinstance(module, NVFP4Linear) and tensor_name == "weight"
 
     def _process_model_before_weight_loading(self, model: PreTrainedModel, **kwargs):
-        if self.pre_quantized and self.quantization_config.dequantize:
-            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
-            return
-        from ..integrations.nvfp4 import replace_with_nvfp4_linear
-
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
-        replace_with_nvfp4_linear(model, modules_to_not_convert=self.modules_to_not_convert)
+
+    def quantized_module(self, name, module):
+        from ..integrations.nvfp4 import NVFP4Linear, is_nvfp4_compatible
+
+        if (self.pre_quantized and self.quantization_config.dequantize) or not is_nvfp4_compatible(module):
+            return None
+        return NVFP4Linear(module.in_features, module.out_features)
 
     def get_quantize_ops(self):
         from ..integrations.nvfp4 import NVFP4Quantize

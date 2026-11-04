@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from ..utils import is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin, QuantizationMethod
-from .quantizers_utils import get_module_from_name
+from .quantizers_utils import get_module_from_name, should_convert_module
 
 
 if TYPE_CHECKING:
@@ -187,6 +187,48 @@ class HfQuantizer(ABC):
     def _process_model_before_weight_loading(self, model, **kwargs):
         return model
 
+    def quantized_module(self, name: str, module: "torch.nn.Module") -> "torch.nn.Module | None":
+        """
+        The quantized module replacing `module` (named `name`) before loading, created on meta, or `None` to keep it.
+        `replace_modules` swaps them in one pass over the model, shared by the quantizers of a quantization plan.
+        """
+        return None
+
+    @property
+    def replaces_modules(self) -> bool:
+        "Whether this quantizer swaps its modules through `quantized_module`"
+        return type(self).quantized_module is not HfQuantizer.quantized_module
+
+    def replace_modules(self, model):
+        """
+        Swaps the modules for their quantized ones, in one pass: like the dtype plan's, the pattern a module's params
+        match picks its quantizer (this one, or in a quantization plan the one of its pattern).
+        """
+        replaced, swapped = set(), ()
+        for name, module in list(model.named_modules()):
+            if name.startswith(swapped):  # inside a module already swapped
+                continue
+            param = next(iter(module._parameters), None)
+            quantizer = self.quantizer_for(f"{name}.{param}") if param is not None else None
+            if quantizer is None or not quantizer.replaces_modules:
+                continue
+            if not should_convert_module(name, getattr(quantizer, "modules_to_not_convert", None)):
+                continue
+            with torch.device("meta"):
+                new_module = quantizer.quantized_module(name, module)
+            if new_module is None:
+                continue
+            new_module.source_cls = type(module)
+            model.set_submodule(name, new_module)
+            replaced.add(quantizer)
+            swapped += (f"{name}.",)
+        for quantizer in getattr(self, "quantizers", {"": self}).values():
+            if quantizer.replaces_modules and quantizer not in replaced:
+                logger.warning(
+                    f"No module was quantized with {quantizer.quantization_config.quant_method}: please double check "
+                    "the model architecture and `modules_to_not_convert`."
+                )
+
     def preprocess_model(self, model: "PreTrainedModel", dtype=None, **kwargs):
         """
         Setting model attributes and/or converting model before weights loading. At this point
@@ -204,8 +246,10 @@ class HfQuantizer(ABC):
         if self.pre_quantized:
             self._convert_model_for_quantization(model)
         self._process_model_before_weight_loading(model, **kwargs)
-        self.update_parallel_plan(model, model.tp_plan)
-        self.update_parallel_plan(model, model.ep_plan)
+        if self.plan is None:  # a quantization plan swaps the modules of all its quantizers at once, then does this
+            self.replace_modules(model)
+            self.update_parallel_plan(model, model.tp_plan)
+            self.update_parallel_plan(model, model.ep_plan)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         return model
@@ -280,8 +324,9 @@ class HfQuantizer(ABC):
             modules_to_not_convert.extend(keep_in_fp32_modules)
 
         modules_to_not_convert = list(set(modules_to_not_convert))
-        # In a quantization plan, the modules whose params belong to another quantizer, or to none
-        if self.plan is not None:
+        # In a quantization plan, the modules whose params belong to another quantizer, or to none (`replace_modules`
+        # already gives each module its quantizer)
+        if self.plan is not None and not self.replaces_modules:
             modules_to_not_convert += [
                 rf"{re.escape(name)}$"
                 for name, module in model.named_modules()
