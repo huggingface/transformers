@@ -325,7 +325,7 @@ class PPFormulaNetVisionModel(SLANeXtVisionEncoder):
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     def forward(
-        self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
+        self, pixel_values: torch.Tensor | None = None, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -362,16 +362,16 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor
         | None = None,  # Kept in the signature for compatibility to avoid duplicate-keyword errors.
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
-        encoder_outputs: list[torch.FloatTensor] | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
+        encoder_outputs: list[torch.Tensor] | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor
+        inputs_embeds: torch.Tensor
         | None = None,  # Kept in the signature for compatibility to avoid duplicate-keyword errors.
         use_cache: bool | None = None,
         **kwargs,
@@ -425,15 +425,15 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        encoder_outputs: list[torch.FloatTensor] | None = None,
+        encoder_outputs: list[torch.Tensor] | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,

@@ -640,14 +640,14 @@ class GlmImageModel(Glm4vModel):
 
     def get_image_tokens(
         self,
-        hidden_states: torch.FloatTensor,
+        hidden_states: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
     ) -> torch.LongTensor:
         """
         Tokenizes image features into discrete tokens with VQVAE module.
 
         Args:
-            hidden_states (`torch.FloatTensor` of shape `(total_patches, hidden_size)`):
+            hidden_states (`torch.Tensor` of shape `(total_patches, hidden_size)`):
                 The packed image features from vision encoder.
             image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
                 The temporal, height and width of feature shape of each image.
@@ -667,7 +667,7 @@ class GlmImageModel(Glm4vModel):
 
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         images_per_sample: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -792,7 +792,7 @@ class GlmImageModel(Glm4vModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         images_per_sample: torch.LongTensor | None = None,
@@ -866,7 +866,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         images_per_sample: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -877,7 +877,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, images_per_sample, **kwargs)
 
-    def get_image_tokens(self, hidden_states: torch.FloatTensor, image_grid_thw: torch.LongTensor | None = None):
+    def get_image_tokens(self, hidden_states: torch.Tensor, image_grid_thw: torch.LongTensor | None = None):
         return self.model.get_image_tokens(hidden_states, image_grid_thw)
 
     def forward(
@@ -886,7 +886,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
