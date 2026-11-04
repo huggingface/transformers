@@ -101,6 +101,7 @@ from .logits_process import (
     SequenceBiasLogitsProcessor,
     SuppressTokensAtBeginLogitsProcessor,
     SuppressTokensLogitsProcessor,
+    SynthIDTextWatermarkLogitsProcessor,
     TemperatureLogitsWarper,
     TopHLogitsWarper,
     TopKLogitsWarper,
@@ -2986,6 +2987,14 @@ class GenerationMixin(ContinuousMixin):
             negative_prompt_ids=negative_prompt_ids,
             negative_prompt_attention_mask=negative_prompt_attention_mask,
         )
+        if generation_mode == GenerationMode.ASSISTED_GENERATION and any(
+            isinstance(p, SynthIDTextWatermarkLogitsProcessor)
+            or (isinstance(p, UnbatchedClassifierFreeGuidanceLogitsProcessor) and p.guidance_scale != 1)
+            for p in prepared_logits_processor
+        ):
+            raise ValueError(
+                "assisted generation is not supported with classifier-free guidance or SynthID watermarking"
+            )
         prepared_stopping_criteria = self._get_stopping_criteria(
             generation_config=generation_config,
             stopping_criteria=stopping_criteria,

@@ -4168,6 +4168,15 @@ class GenerationIntegrationTests(unittest.TestCase):
         )
         self.assertTrue(out.shape[-1] <= (input_length + 7))
 
+    def test_assisted_generation_rejects_stateful_logits_processors(self):
+        # https://github.com/huggingface/transformers/issues/50051
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        input_ids = torch.tensor([[1, 2, 3, 1, 2, 3]], device=torch_device)
+        watermarking_config = SynthIDTextWatermarkingConfig(keys=[10, 20], ngram_len=5)
+        for kwargs in ({"guidance_scale": 1.5}, {"watermarking_config": watermarking_config}):
+            with self.assertRaisesRegex(ValueError, "not supported with classifier-free guidance or SynthID"):
+                model.generate(input_ids, prompt_lookup_num_tokens=3, max_new_tokens=5, **kwargs)
+
     def test_assisted_decoding_sliding_window_multi_token_draft(self):
         """
         Test that assisted decoding works correctly when the assistant model has sliding window and will draft several
