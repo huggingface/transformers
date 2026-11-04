@@ -210,7 +210,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         keywords: str | list[str] | list[list[str]] | None = None,
         tokenize: bool = True,
         **kwargs: Unpack[ProcessingKwargs],
-    ) -> BatchFeature:
+    ) -> BatchFeature | list[str]:
         """
         Prepare inputs for transcription / diarization without manually writing the chat template.
 

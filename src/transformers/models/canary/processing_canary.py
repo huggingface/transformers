@@ -112,7 +112,7 @@ class CanaryProcessor(ProcessorMixin):
         punctuation: bool = True,
         tokenize: bool = True,
         **kwargs: Unpack[ProcessingKwargs],
-    ) -> BatchFeature:
+    ) -> BatchFeature | list[str]:
         r"""
         Prepare inputs for transcription or translation without manually writing the chat template.
 

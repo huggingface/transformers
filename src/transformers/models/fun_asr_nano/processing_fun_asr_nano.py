@@ -139,7 +139,7 @@ class FunAsrNanoProcessor(ProcessorMixin):
         keywords: str | list[str] | list[list[str]] | None = None,
         tokenize: bool = True,
         **kwargs: Unpack[ProcessingKwargs],
-    ) -> BatchFeature:
+    ) -> BatchFeature | list[str]:
         """Prepare inputs for ASR using the checkpoint's structured transcription chat template.
 
         Args:

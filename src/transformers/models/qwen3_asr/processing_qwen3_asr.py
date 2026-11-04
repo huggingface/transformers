@@ -438,7 +438,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
         prompt: str | list[str] | None = None,
         tokenize: bool = True,
         **kwargs: Unpack[ProcessingKwargs],
-    ) -> BatchFeature:
+    ) -> BatchFeature | list[str]:
         """
         Prepare inputs for automatic speech recognition without manually writing the chat template.
 
