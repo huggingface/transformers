@@ -63,6 +63,7 @@ from .candidate_generator import (
     AssistedCandidateGeneratorDifferentTokenizers,
     CandidateGenerator,
     DFlashTokenCandidateGenerator,
+    DSparkTokenCandidateGenerator,
     EarlyExitCandidateGenerator,
     MTPCandidateGenerator,
     PromptLookupCandidateGenerator,
@@ -1356,6 +1357,14 @@ class GenerationMixin(ContinuousMixin):
                 generation_config=generation_config,
                 logits_processor=logits_processor,
             )
+        elif generation_config.speculation_type == "dspark":
+            candidate_generator = DSparkTokenCandidateGenerator(
+                assistant_model=assistant_model,
+                main_model_input_embeddings=self.get_input_embeddings(),
+                main_model_output_embeddings=self.get_output_embeddings(),
+                generation_config=generation_config,
+                logits_processor=logits_processor,
+            )
         elif different_tokenizers:
             assistant_model = cast("PreTrainedModel", assistant_model)
             target_tokenizer = cast("PreTrainedTokenizerBase", target_tokenizer)
@@ -1877,7 +1886,7 @@ class GenerationMixin(ContinuousMixin):
 
         if (
             assistant_model := generation_mode_kwargs.get("assistant_model")
-        ) is not None and generation_config.speculation_type != "dflash":
+        ) is not None and generation_config.speculation_type not in ("dflash", "dspark"):
             if self.config.is_encoder_decoder and not assistant_model.config.is_encoder_decoder:
                 attributes_to_check = ["encoder_attention_heads", "encoder_ffn_dim", "encoder_layers"]
                 attributes_to_check = [attr for attr in dir(assistant_model.config) if attr in attributes_to_check]

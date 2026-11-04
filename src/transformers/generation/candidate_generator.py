@@ -1566,27 +1566,14 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
         return embeds
 
-    def get_candidates(
+    def _get_assistant_hidden_states(
         self,
+        assistant_model: "PreTrainedModel",  # passed as an argument so DSpark can pass only the backbone module
         input_ids: torch.LongTensor,
         model_kwargs: dict[str, Any],
         model_outputs: ModelOutput,
-        is_first_iteration: bool,
         n_last_matches: int,
-        **kwargs,
-    ) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
-        """Generate draft token candidates using the drafter."""
-        # This is a trick to skip the first loop of the main model's `_assisted_decoding` method. Since we need the
-        # main model's outputs here to get the candidates, we skip the first loop to allow the main model to get the outputs
-        # (this is because usually `get_candidates` is called first in the main `_assisted_decoding` loop)
-        if is_first_iteration:
-            return input_ids, None
-
-        # Early exit if we cannot generate new tokens.
-        max_new_tokens = min(int(self.block_size), self.main_model_max_length - input_ids.shape[1] - 1)
-        if max_new_tokens <= 0:
-            return input_ids, None
-
+    ) -> torch.Tensor:
         # Make sure we correctly collected all the main model outputs we needed
         if model_outputs is None or not hasattr(model_outputs, "hidden_states"):
             raise ValueError("`model_outputs` cannot be None and they need to contain `hidden_states`!")
@@ -1631,20 +1618,55 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
             )
             attention_mask = torch.cat([attention_mask, noise_attention_mask], dim=-1)
 
-        # Get assistant model outputs
-        outputs = self.assistant_model(
+        # Get the assistant hidden states, possibly unwrapping them from a ModelOutput object
+        outputs = assistant_model(
             noise_embeds=noise_embeds.to(self.device),
             context_hidden_states=context_hidden_states,
             position_ids=position_ids.to(self.device),
             attention_mask=attention_mask.to(self.device) if attention_mask is not None else None,
             past_key_values=self.cache,
         )
+        if hasattr(outputs, "last_hidden_state"):
+            outputs = outputs.last_hidden_state
+        if not isinstance(outputs, torch.Tensor):
+            raise ValueError(f"assistant model returned an unexpected type: {type(outputs) = }")
 
         # Once we arrive here the first time, it's no longer the case
         self.is_main_model_prefill = False
+        return outputs
+
+    def get_candidates(
+        self,
+        input_ids: torch.LongTensor,
+        model_kwargs: dict[str, Any],
+        model_outputs: ModelOutput,
+        is_first_iteration: bool,
+        n_last_matches: int,
+        **kwargs,
+    ) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
+        """Generate draft token candidates using the drafter."""
+        # This is a trick to skip the first loop of the main model's `_assisted_decoding` method. Since we need the
+        # main model's outputs here to get the candidates, we skip the first loop to allow the main model to get the outputs
+        # (this is because usually `get_candidates` is called first in the main `_assisted_decoding` loop)
+        if is_first_iteration:
+            return input_ids, None
+
+        # Early exit if we cannot generate new tokens.
+        max_new_tokens = min(int(self.block_size), self.main_model_max_length - input_ids.shape[1] - 1)
+        if max_new_tokens <= 0:
+            return input_ids, None
+
+        # Get the hidden states from the DFlash backbone
+        draft_hidden_states = self._get_assistant_hidden_states(
+            assistant_model=self.assistant_model,
+            input_ids=input_ids,
+            model_kwargs=model_kwargs,
+            model_outputs=model_outputs,
+            n_last_matches=n_last_matches,
+        )
 
         candidate_logits = self.main_model_output_embeddings(
-            outputs.last_hidden_state[:, 1:].to(self.main_model_output_embeddings.weight.device)
+            draft_hidden_states[:, 1:].to(self.main_model_output_embeddings.weight.device)
         ).to(input_ids.device)
 
         # Potentially allow some logits manipulation and sampling - in this case we need to loop over new tokens to correctly apply processors
@@ -1672,6 +1694,141 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
             else:
                 candidate_ids = candidate_logits.argmax(dim=-1)
             candidate_ids = torch.cat([input_ids, candidate_ids], dim=-1)
+
+        return candidate_ids, candidate_logits
+
+
+class DSparkTokenCandidateGenerator(DFlashTokenCandidateGenerator):
+    """
+    Candidate generator for predicting multiple draft tokens from a single forward pass with a draft model.
+    DSpark is based on DFlash, which predicts several draft tokens in parallel, but adds a small sequential block on top
+    of the DFlash backbone to add cross-token dependency. Hence, this class expects the assistant model to have:
+        - a "backbone" module, that will run as a DFlash model,
+        - a "sequential_block" module, that will run after the backbone.
+
+    Note that since DSpark is based on DFlash, this class inherits from "DFlashTokenCandidateGenerator", and the forward
+    is pretty similar (it evens called the main part of DFlash's forward). Only the ladt step, of translating logits to
+    tokens, is different, because the logits from DSpark are added with the bias computed sequentially. Also, for the
+    same `block_size`, DSpark predicts one more token than DFlash: DFlash predicts `block_size - 1` tokens, whereas
+    DSpark predicts `block_size` tokens. Check "DFlashTokenCandidateGenerator" for more details on how DFlash works.
+
+    Args:
+        assistant_model (`PreTrainedModel`):
+            The model to be used for generating candidates. This model should be smaller than the main model, and should
+            have a "backbone" module and a "sequential_block" module.
+        main_model_input_embeddings (`torch.nn.Embedding`):
+            The input embedding table from main model, used to get the embeddings from the last seen token.
+        main_model_output_embeddings (`torch.nn.Linear`):
+            The output embedding table from main model, used to get the candidate logits.
+        generation_config (`~generation.GenerationConfig`, *optional*):
+            The generation configuration to be used as base parametrization for the generation call.
+    """
+
+    # TODO: right now, DSpark is missing its confidence head. It will be added in the future, though its absence is not
+    # critical because the goal of the confidence head is to reduce the amount of sampling in the case of high
+    # concurrency: since we only support batch_size == 1 in assisted generation, the concurrency can't be that high.
+
+    def __init__(
+        self,
+        assistant_model: "PreTrainedModel",
+        main_model_input_embeddings: nn.Embedding,
+        main_model_output_embeddings: nn.Linear,
+        generation_config: "GenerationConfig",
+        logits_processor: Optional["LogitsProcessorList"] = None,
+        **kwargs,
+    ) -> None:
+        # Check that the assistant model has a "backbone" module and a "sequential_block" module
+        backbone = getattr(assistant_model, "backbone", None)
+        if not isinstance(backbone, nn.Module):
+            raise ValueError(f"assistant.backbone is not a valid nn.Module: {backbone = }")
+        sequential_block = getattr(assistant_model, "sequential_block", None)
+        if not isinstance(sequential_block, nn.Module):
+            raise ValueError(f"assistant.sequential_block is not a valid nn.Module: {sequential_block = }")
+
+        # DSpark is based on DFlash, so we init all DFlash attributes + candidate generator attributes here
+        super().__init__(
+            assistant_model,
+            main_model_input_embeddings,
+            main_model_output_embeddings,
+            generation_config,
+            logits_processor,
+            **kwargs,
+        )
+
+        # There are two possible head types for DSpark:
+        # - "vanilla": a drafted token is biased only by the one right before it
+        # - "rnn": a drafted token is biased by all that came before it, requiring a state to be passed
+        self.head_type = self.assistant_model.config.head_type
+        if self.head_type not in ["vanilla", "rnn"]:
+            raise ValueError(f"Invalid head type: {self.head_type = }. Only 'vanilla' and 'rnn' are supported.")
+
+    def get_candidates(
+        self,
+        input_ids: torch.LongTensor,
+        model_kwargs: dict[str, Any],
+        model_outputs: ModelOutput,
+        is_first_iteration: bool,
+        n_last_matches: int,
+        **kwargs,
+    ) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
+        """Generate draft token candidates using the drafter. Start with a call to the DSpark backbone, and then call
+        the sequential block token by token to get the final logits."""
+        # This is a trick to skip the first loop of the main model's `_assisted_decoding` method. Since we need the
+        # main model's outputs here to get the candidates, we skip the first loop to allow the main model to get the
+        # outputs (this is because usually `get_candidates` is called first in the main `_assisted_decoding` loop)
+        if is_first_iteration:
+            return input_ids, None
+
+        # Early exit if we cannot generate new tokens.
+        max_new_tokens = min(int(self.block_size), self.main_model_max_length - input_ids.shape[1] - 1)
+        if max_new_tokens <= 0:
+            return input_ids, None
+
+        draft_hidden_states = self._get_assistant_hidden_states(
+            assistant_model=self.assistant_model.backbone,
+            input_ids=input_ids,
+            model_kwargs=model_kwargs,
+            model_outputs=model_outputs,
+            n_last_matches=n_last_matches,
+        )
+
+        # Logits for all candidate tokens are obtained in one forward, and the biases will be computed sequentially
+        candidate_logits = self.main_model_output_embeddings(
+            draft_hidden_states.to(self.main_model_output_embeddings.weight.device)
+        ).to(dtype=torch.float32, device=input_ids.device)
+
+        # We initialize the previous drafted ID with the last real token ID
+        previous_drafted_id = input_ids[:, -1]
+        candidate_ids = input_ids  # for logits processors
+        state = None  # for "rnn" head if there is one
+
+        for i in range(draft_hidden_states.shape[1]):
+            # Compute bias
+            previous_drafted_id = previous_drafted_id.to(self.device)
+            if self.head_type == "vanilla":
+                bias = self.assistant_model.sequential_block(previous_drafted_id)
+            elif self.head_type == "rnn":
+                bias, state = self.assistant_model.sequential_block(
+                    previous_drafted_id, draft_hidden_states[:, i], state
+                )
+            else:
+                raise ValueError(f"Invalid head type: {self.head_type = }")
+
+            # Compute logits, maybe apply logits processor, and change them in place
+            logits = candidate_logits[:, i] + bias.to(candidate_logits.device)
+            if self.logits_processor is not None:
+                logits = self.logits_processor(candidate_ids, logits)
+            candidate_logits[:, i, :].copy_(logits)
+
+            # Sample next token
+            if self.do_sample:
+                probs = nn.functional.softmax(candidate_logits[:, i, :], dim=-1, dtype=torch.float32)
+                next_token = torch.multinomial(probs, num_samples=1)
+            else:
+                next_token = torch.argmax(candidate_logits[:, i, :], dim=-1, keepdim=True)
+            previous_drafted_id = next_token[:, 0]
+            # Append it to the full sequence to be used by the next round of `self.logits_processor`
+            candidate_ids = torch.cat([candidate_ids, next_token], dim=-1)
 
         return candidate_ids, candidate_logits
 
