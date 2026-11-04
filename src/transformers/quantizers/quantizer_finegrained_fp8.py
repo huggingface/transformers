@@ -122,7 +122,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         self.text_config = model.config.get_text_config()
 
     def quantized_module(self, name, module):
-        from ..integrations.finegrained_fp8 import FP8Embedding, fp8_experts_for, fp8_linear_for
+        from ..integrations.finegrained_fp8 import FP8Embedding, build_fp8_experts, build_fp8_linear
 
         config = self.quantization_config
         modules_to_convert = config.modules_to_convert if self.pre_quantized else None
@@ -132,9 +132,9 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         elif config.dequantize:
             return None
         elif name.endswith(".experts"):
-            new_module = fp8_experts_for(module, config, self.text_config)
+            new_module = build_fp8_experts(module, config, self.text_config)
         elif isinstance(module, nn.Linear):
-            new_module = fp8_linear_for(module, config)
+            new_module = build_fp8_linear(module, config)
         else:
             return None
         if new_module is not None:

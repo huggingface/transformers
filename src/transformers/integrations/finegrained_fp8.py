@@ -915,15 +915,15 @@ def _disable_deepgemm_on_multi_device(model: nn.Module) -> None:
     )
 
 
-def fp8_experts_for(module, quantization_config, text_config):
-    "The `FP8Experts` replacing the experts `module`"
-    has_gate = getattr(module, "has_gate", True)
-    has_bias = getattr(module, "has_bias", False)
+def build_fp8_experts(experts, quantization_config, text_config):
+    "Builds the `FP8Experts` replacing `experts`"
+    has_gate = getattr(experts, "has_gate", True)
+    has_bias = getattr(experts, "has_bias", False)
     new_class = use_experts_implementation(
         experts_class=FP8Experts, experts_interface=ALL_FP8_EXPERTS_FUNCTIONS, has_bias=has_bias, has_gate=has_gate
     )
     return new_class(
-        config=getattr(module, "config", text_config),
+        config=getattr(experts, "config", text_config),
         block_size=quantization_config.weight_block_size,
         activation_scheme=quantization_config.activation_scheme,
         scale_fmt=quantization_config.scale_fmt,
@@ -933,19 +933,19 @@ def fp8_experts_for(module, quantization_config, text_config):
     )
 
 
-def fp8_linear_for(module, quantization_config):
-    "The `FP8Linear` (or `FP8GroupedLinear`) replacing the linear `module`, `None` for other linear subclasses"
+def build_fp8_linear(linear, quantization_config):
+    "Builds the `FP8Linear` (or `FP8GroupedLinear`) replacing `linear`, `None` for other `nn.Linear` subclasses"
     kwargs = {
-        "out_features": module.out_features,
+        "out_features": linear.out_features,
         "block_size": quantization_config.weight_block_size,
         "activation_scheme": quantization_config.activation_scheme,
         "scale_fmt": quantization_config.scale_fmt,
-        "has_bias": module.bias is not None,
+        "has_bias": linear.bias is not None,
     }
-    if type(module) is nn.Linear:
-        return FP8Linear(in_features=module.in_features, **kwargs)
-    if "GroupedLinear" in type(module).__name__:
-        return FP8GroupedLinear(in_features_per_group=module.in_features, n_groups=module.n_groups, **kwargs)
+    if type(linear) is nn.Linear:
+        return FP8Linear(in_features=linear.in_features, **kwargs)
+    if "GroupedLinear" in type(linear).__name__:
+        return FP8GroupedLinear(in_features_per_group=linear.in_features, n_groups=linear.n_groups, **kwargs)
     return None
 
 
