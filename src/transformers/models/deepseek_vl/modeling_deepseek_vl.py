@@ -192,13 +192,7 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
             **kwargs,
         )
 
-        return DeepseekVLBaseModelOutputWithPast(
-            last_hidden_state=lm_output.last_hidden_state,
-            past_key_values=lm_output.past_key_values,
-            hidden_states=lm_output.hidden_states,
-            attentions=lm_output.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-        )
+        return DeepseekVLBaseModelOutputWithPast(**lm_output, mm_encoder_outputs=mm_encoder_outputs)
 
 
 class DeepseekVLForConditionalGeneration(DeepseekVLPreTrainedModel, GenerationMixin):
@@ -259,7 +253,7 @@ class DeepseekVLForConditionalGeneration(DeepseekVLPreTrainedModel, GenerationMi
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            mm_encoder_outputs=outputs.mm_encoder_outputs,
         )
 
 

@@ -604,13 +604,7 @@ class GotOcr2Model(GotOcr2PreTrainedModel):
             **kwargs,
         )
 
-        return GotOcr2ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-        )
+        return GotOcr2ModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
 
 
 @auto_docstring(
@@ -714,7 +708,7 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            mm_encoder_outputs=outputs.mm_encoder_outputs,
         )
 
 

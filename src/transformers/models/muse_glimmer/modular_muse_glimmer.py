@@ -1152,7 +1152,7 @@ class MuseGlimmerForConditionalGeneration(Kimi_K25ForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            mm_encoder_outputs=outputs.mm_encoder_outputs,
         )
 
 

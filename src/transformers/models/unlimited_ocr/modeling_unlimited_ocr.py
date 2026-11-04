@@ -1962,14 +1962,7 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
             **kwargs,
         )
 
-        return UnlimitedOcrModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=mm_encoder_outputs["image"].pooler_output if mm_encoder_outputs.get("image") else None,
-            router_logits=outputs.router_logits,
-        )
+        return UnlimitedOcrModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
 
 
 # Cannot inherit from XYZForConditionalGeneration as this results in MRO clashes between GenerationMixin
@@ -2132,7 +2125,7 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Unlimite
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            mm_encoder_outputs=outputs.mm_encoder_outputs,
             router_logits=outputs.router_logits,
         )
 

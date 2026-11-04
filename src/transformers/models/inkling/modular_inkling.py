@@ -1277,14 +1277,7 @@ class InklingModel(InklingPreTrainedModel):
             **kwargs,
         )
 
-        return InklingModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=mm_encoder_outputs["image"].pooler_output if mm_encoder_outputs.get("image") else None,
-            router_logits=outputs.router_logits,
-        )
+        return InklingModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
 
 
 @auto_docstring(
@@ -1411,7 +1404,7 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            mm_encoder_outputs=outputs.mm_encoder_outputs,
             router_logits=outputs.router_logits,
         )
 

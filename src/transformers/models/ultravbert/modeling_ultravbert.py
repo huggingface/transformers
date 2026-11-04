@@ -43,7 +43,6 @@ from ..auto import AutoModel
 from .configuration_ultravbert import UltraVBertConfig
 
 
-@auto_docstring
 @dataclass
 class UltraVBertBaseModelOutput(BaseModelOutput):
     """
@@ -74,7 +73,6 @@ class UltraVBertBaseModelOutput(BaseModelOutput):
     image_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
-@auto_docstring
 @dataclass
 class UltraVBertMaskedLMOutput(MaskedLMOutput):
     """

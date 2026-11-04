@@ -14,7 +14,6 @@
 
 import itertools
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import numpy as np
 import torch
@@ -31,7 +30,7 @@ from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...image_utils import PILImageResampling, SizeDict
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
@@ -53,6 +52,7 @@ from ..hunyuan_v1_dense.modeling_hunyuan_v1_dense import (
     rotate_half,
 )
 from ..llama.modeling_llama import LlamaRMSNorm
+from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaModelOutputWithPast
 from ..mllama.modeling_mllama import MllamaVisionAttention
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 from ..qwen2_vl.image_processing_pil_qwen2_vl import (
@@ -64,15 +64,10 @@ from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLModel
 from ..siglip.modeling_siglip import SiglipEncoderLayer, SiglipMLP
 
 
-@auto_docstring
-@dataclass
-class HunYuanVLModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        Last image features produced by the vision tower and scattered into the language-model token stream.
-    """
+class HunYuanVLModelOutputWithPast(LlavaModelOutputWithPast): ...
 
-    image_hidden_states: torch.FloatTensor | None = None
+
+class HynYuanVLCausalLMOutputWithPast(LlavaCausalLMOutputWithPast): ...
 
 
 @auto_docstring(
@@ -1313,13 +1308,7 @@ class HunYuanVLModel(Qwen2VLModel):
             **kwargs,
         )
 
-        return HunYuanVLModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_embeds if mm_encoder_outputs.get("image") is not None else None,
-        )
+        return HunYuanVLModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
 
 
 @auto_docstring
@@ -1366,7 +1355,7 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
+    ) -> HynYuanVLCausalLMOutputWithPast:
         r"""
         Example:
 
@@ -1425,12 +1414,13 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, GenerationMixi
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.vocab_size, **kwargs)
 
-        return CausalLMOutputWithPast(
+        return HynYuanVLCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            mm_encoder_outputs=outputs.mm_encoder_outputs,
         )
 
     def prepare_inputs_for_generation(
