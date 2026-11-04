@@ -48,8 +48,9 @@ TEMPLATE = '''\
 
 """Fast integration tests: one pytest item per model contract check.
 
-Each test calls run.main() in-process (exec, same process, no subprocess)
-for a single (fleet, contract, target, variant) and asserts it passes.
+The session fixture runs each fleet+variant exactly as the original workflow
+(no --contract/--target), so results match the old non-pytest CI behaviour.
+Individual pytest items then assert against the collected results.
 
 Run all:
     pytest tests/test_fast_integration.py -v
@@ -59,6 +60,7 @@ Run one model:
 """
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -66,25 +68,39 @@ from transformersci.contracts import run as _run
 
 
 FLEET_REVISION = "{revision}"
+FLEET_VARIANTS = {fleet_variants}
 PARAMS = {params}
 
 
+@pytest.fixture(scope="session")
+def fleet_results():
+    """Run each fleet+variant once (full fleet, no --contract/--target) and collect results."""
+    results = {{}}
+    for fleet_name, variants in FLEET_VARIANTS.items():
+        for variant in variants:
+            output = Path(f"/tmp/mic-{{fleet_name}}-{{variant}}.jsonl")
+            output.unlink(missing_ok=True)
+            _run.main([
+                "--fixtures-only",
+                "--run-all",
+                "--fleet", fleet_name,
+                "--fleet-revision", FLEET_REVISION,
+                "--variant", variant,
+                "--output", str(output),
+            ])
+            if output.exists():
+                for line in output.read_text(encoding="utf-8").splitlines():
+                    if line.strip():
+                        r = json.loads(line)
+                        key = (fleet_name, r.get("target", ""), variant)
+                        results[key] = r
+    return results
+
+
 @pytest.mark.parametrize("fleet,contract,target,variant", PARAMS)
-def test_contract(fleet, contract, target, variant, capsys):
-    _run.main([
-        "--fixtures-only",
-        "--run-all",
-        "--fleet", fleet,
-        "--fleet-revision", FLEET_REVISION,
-        "--contract", contract,
-        "--target", target,
-        "--variant", variant,
-        "--output", "/tmp/results.jsonl",
-    ])
-    out = capsys.readouterr().out
-    results = [json.loads(l) for l in out.splitlines() if l.startswith("{")]
-    assert results, f"no result emitted for {{fleet}}/{{contract}}/{{target}}[{{variant}}]"
-    r = results[-1]
+def test_contract(fleet, contract, target, variant, fleet_results):
+    r = fleet_results.get((fleet, target, variant))
+    assert r is not None, f"no result for {{fleet}}/{{target}}[{{variant}}]"
     if r["status"] == "unsupported":
         reason = r["failures"][0] if r.get("failures") else "unsupported on this platform"
         pytest.skip(reason)
@@ -117,7 +133,11 @@ def main():
         params_repr += f"    {item!r},\n"
     params_repr += "]"
 
-    content = TEMPLATE.replace("{revision}", revision).replace("{params}", params_repr)
+    content = (
+        TEMPLATE.replace("{revision}", revision)
+        .replace("{fleet_variants}", repr(FLEET_VARIANTS))
+        .replace("{params}", params_repr)
+    )
     output_path.write_text(content, encoding="utf-8")
     print(f"Written: {output_path}")
 
