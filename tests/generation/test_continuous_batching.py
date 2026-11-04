@@ -1606,6 +1606,41 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             dtype=torch.bfloat16 if is_fa else None,
         )
 
+    @require_flash_linear_attention
+    @slow
+    def test_continuous_batching_linear_attention_layers_get_the_engine_mask(self) -> None:
+        """Under sdpa, the attention layers of a hybrid model get the engine's mask, over all the keys each batch
+        reads from the cache, and not a mask the model would build from the new tokens alone."""
+        tokenizer, model = get_tokenizer_and_model(
+            "hf-tiny-v2/tiny-random-Qwen3_5ForCausalLM", "sdpa", torch_device, torch.float32
+        )
+        seen = []
+
+        def record_mask(module, args, kwargs):
+            num_keys = int(kwargs["cu_seq_lens_k"]["full_attention"][-1])
+            seen.append((kwargs["attention_mask"], kwargs["hidden_states"].shape[1], num_keys))
+
+        hooks = [
+            layer.self_attn.register_forward_pre_hook(record_mask, with_kwargs=True)
+            for layer, layer_type in zip(model.model.layers, model.config.layer_types)
+            if layer_type == "full_attention"
+        ]
+        model.generation_config.max_new_tokens = 3
+        model.generation_config.do_sample = False
+        input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES[:2], tokenizer, for_continuous_batching=True)
+        model.generate_batch(
+            inputs=input_ids,
+            generation_config=model.generation_config,
+            continuous_batching_config=ContinuousBatchingConfig(auto_switch_to_flash=False),
+        )
+        for hook in hooks:
+            hook.remove()
+
+        self.assertGreater(len(seen), 0)
+        for attention_mask, num_queries, num_keys in seen:
+            self.assertIsInstance(attention_mask, torch.Tensor)
+            self.assertEqual(tuple(attention_mask.shape[-2:]), (num_queries, num_keys))
+
     @parameterized.expand(
         [
             (False, False),  # _supports_flash_attn=False: stays on sdpa
