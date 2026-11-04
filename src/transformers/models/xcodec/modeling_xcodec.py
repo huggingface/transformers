@@ -41,12 +41,12 @@ class XcodecOutput(ModelOutput):
     Args:
         audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
             Discrete code indices computed using `model.encode`.
-        audio_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`, *optional*)
+        audio_values (`torch.Tensor` of shape `(batch_size, channels, num_samples)`, *optional*)
             Decoded audio values obtained using the decoder part of Xcodec.
     """
 
     audio_codes: torch.LongTensor | None = None
-    audio_values: torch.FloatTensor | None = None
+    audio_values: torch.Tensor | None = None
 
 
 @dataclass
@@ -64,11 +64,11 @@ class XcodecEncoderOutput(ModelOutput):
 class XcodecDecoderOutput(ModelOutput):
     """
     Args:
-        audio_values (`torch.FloatTensor`  of shape `(batch_size, channels, num_samples)`, *optional*):
+        audio_values (`torch.Tensor`  of shape `(batch_size, channels, num_samples)`, *optional*):
             Decoded audio values obtained using the decoder part of Xcodec.
     """
 
-    audio_values: torch.FloatTensor | None = None
+    audio_values: torch.Tensor | None = None
 
 
 class XcodecResidualUnit(nn.Module):
@@ -476,7 +476,7 @@ class XcodecModel(XcodecPreTrainedModel):
         if hasattr(decoder, "tanh") and isinstance(decoder.tanh, nn.Tanh):
             decoder.tanh = nn.Identity()
 
-    def _extract_semantic_features(self, input_values: torch.FloatTensor) -> torch.FloatTensor:
+    def _extract_semantic_features(self, input_values: torch.Tensor) -> torch.Tensor:
         input_values = input_values[:, 0, :]
         input_values = F.pad(input_values, (self.pad, self.pad))
         with torch.no_grad():
@@ -494,7 +494,7 @@ class XcodecModel(XcodecPreTrainedModel):
         return_dict: bool | None = None,
     ) -> torch.Tensor | XcodecEncoderOutput:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`):
+        input_values (`torch.Tensor` of shape `(batch_size, channels, num_samples)`):
             Float values of the input audio waveform.
         bandwidth (`float`, *optional*):
             The target bandwidth in (kbps) supports only values in `config.target_bandwidths`.
@@ -576,7 +576,7 @@ class XcodecModel(XcodecPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor] | XcodecOutput:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, channels, num_samples)`):
+        input_values (`torch.Tensor` of shape `(batch_size, channels, num_samples)`):
             The raw float values of the input audio waveform.
         audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`:
             Discrete code indices computed using `model.encode`.
