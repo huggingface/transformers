@@ -318,7 +318,7 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         penalty (`float`):
             The parameter for repetition penalty. 1.0 means no penalty. Above 1.0 penalizes previously generated
             tokens. Between 0.0 and 1.0 rewards previously generated tokens.
-        prompt_ignore_length (`int`, `list[int]` or `torch.LongTensor`, *optional*):
+        prompt_ignore_length (`int`, or `torch.LongTensor`, *optional*):
             Number of leading tokens to ignore, optionally specified per batch element.
 
     Examples:
