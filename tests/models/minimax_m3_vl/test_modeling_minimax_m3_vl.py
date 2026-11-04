@@ -52,6 +52,7 @@ if is_torch_available():
 
     from transformers.models.minimax_m3_vl.configuration_minimax_m3_vl import MiniMaxM3VLVisionConfig
     from transformers.models.minimax_m3_vl.modeling_minimax_m3_vl import (
+        MiniMaxM3VLVisionModel,
         MiniMaxM3VLVisionRotaryEmbedding,
     )
     from transformers.vision_utils import get_vision_position_ids
@@ -138,6 +139,63 @@ class MiniMaxM3VLModelTest(VLMModelTest, unittest.TestCase):
     # which is non-differentiable — their gradients flow through a separate objective in
     # the upstream training recipe, not the main causal-LM loss (same as DeepSeek-V4).
     test_all_params_have_gradient = False
+
+    @parameterized.expand([("eager",), ("sdpa",)])
+    def test_images_do_not_mix_across_samples(self, attn_implementation):
+        torch.manual_seed(0)
+        config = MiniMaxM3VLConfig(
+            text_config=self.model_tester.get_config().text_config,
+            vision_config=MiniMaxM3VLVisionConfig(
+                hidden_size=32,
+                intermediate_size=64,
+                num_hidden_layers=2,
+                num_attention_heads=4,
+                image_size=8,
+                patch_size=4,
+                temporal_patch_size=2,
+                spatial_merge_size=2,
+            ),
+            projector_hidden_size=32,
+            image_token_index=self.model_tester.image_token_id,
+            video_token_index=self.model_tester.video_token_id,
+        )
+        config._attn_implementation = attn_implementation
+        config.text_config._experts_implementation = "eager"
+        model = MiniMaxM3SparseForConditionalGeneration(config).to(torch_device).eval()
+        processor = MiniMaxM3VLImageProcessorFast(
+            patch_size=4,
+            temporal_patch_size=2,
+            merge_size=2,
+            do_resize=False,
+            do_rescale=False,
+            do_normalize=False,
+        )
+        image_token = config.image_token_index
+        # Unequal image sizes: A has one merged image token and B has two.
+        input_ids = torch.tensor(
+            [[0, image_token, 10, 11, 12], [0, image_token, image_token, 20, 21]], device=torch_device
+        )
+        images = [torch.rand(3, 8, 8, device=torch_device), torch.rand(3, 8, 16, device=torch_device)]
+
+        def forward(pictures, labels=None):
+            inputs = processor(images=pictures, return_tensors="pt").to(torch_device)
+            ids = input_ids[: len(pictures)]
+            return model(input_ids=ids, attention_mask=torch.ones_like(ids), **inputs, labels=labels, use_cache=False)
+
+        with torch.no_grad():
+            original = forward(images).logits[0]
+            perturbed = forward([images[0], torch.rand_like(images[1])]).logits[0]
+            alone = forward(images[:1]).logits[0]
+        torch.testing.assert_close(original, perturbed, atol=1e-7, rtol=1e-6)
+        torch.testing.assert_close(original, alone, atol=1e-6, rtol=1e-5)
+
+        model.train()
+        pixels = [image.clone().requires_grad_() for image in images]
+        labels = input_ids.clone()
+        labels[1] = -100
+        gradients = torch.autograd.grad(forward(pixels, labels=labels).loss, pixels)
+        self.assertGreater(gradients[0].abs().max().item(), 0)
+        self.assertEqual(gradients[1].count_nonzero().item(), 0)
 
     def test_indexer_selects_blocks_per_head(self):
         """The lightning indexer must select key blocks *per head* (one selection per KV / GQA group),
@@ -377,6 +435,80 @@ class MiniMaxM3VLModelTest(VLMModelTest, unittest.TestCase):
 
         torch.testing.assert_close(cosine, angles.cos())
         torch.testing.assert_close(sine, angles.sin())
+
+
+@require_torch
+class MiniMaxM3VLVisionSegmentationTest(unittest.TestCase):
+    def get_model(self, attn_implementation, max_frames):
+        torch.manual_seed(0)
+        config = MiniMaxM3VLVisionConfig(
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            image_size=8,
+            patch_size=4,
+            temporal_patch_size=2,
+            spatial_merge_size=2,
+            vision_segment_max_frames=max_frames,
+        )
+        config._attn_implementation = attn_implementation
+        return MiniMaxM3VLVisionModel(config).to(torch_device).eval()
+
+    @parameterized.expand(
+        [
+            (backend, limit, segments)
+            for backend in ("eager", "sdpa")
+            for limit, segments in (
+                (None, [[9, 2, 2], [1, 2, 4]]),
+                (4, [[4, 2, 2], [4, 2, 2], [1, 2, 2], [1, 2, 4]]),
+                (2, [[2, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2], [1, 2, 2], [1, 2, 4]]),
+            )
+        ]
+    )
+    def test_packed_vision_matches_independent_segments(self, backend, limit, segments):
+        model = self.get_model(backend, limit)
+        grid = torch.tensor([[9, 2, 2], [1, 2, 4]], device=torch_device)
+        lengths = [t * h * w for t, h, w in segments]
+        pixels = torch.randn(44, 3 * 2 * 4 * 4, device=torch_device, requires_grad=True)
+        outputs = model(pixels, grid, output_attentions=backend == "eager", output_hidden_states=True)
+        with torch.no_grad():
+            independent = [
+                model(chunk, torch.tensor([segment], device=torch_device)).last_hidden_state
+                for chunk, segment in zip(pixels.split(lengths), segments)
+            ]
+        torch.testing.assert_close(outputs.last_hidden_state, torch.cat(independent, dim=1), atol=1e-6, rtol=1e-5)
+        self.assertEqual(len(outputs.hidden_states), model.config.num_hidden_layers + 1)
+
+        # The first frame attends to later frames in its segment, but never to another segment/image.
+        gradient = torch.autograd.grad(outputs.last_hidden_state[:, :4].square().sum(), pixels)[0]
+        self.assertGreater(gradient[4 : lengths[0]].abs().max().item(), 0)
+        self.assertEqual(gradient[lengths[0] :].count_nonzero().item(), 0)
+        if backend == "eager":
+            self.assertEqual(len(outputs.attentions), model.config.num_hidden_layers)
+            segment_ids = torch.repeat_interleave(
+                torch.arange(len(lengths), device=torch_device), torch.tensor(lengths, device=torch_device)
+            )
+            cross_segment = segment_ids[:, None] != segment_ids[None, :]
+            for weights in outputs.attentions:
+                self.assertEqual(weights.shape, (1, 4, 44, 44))
+                self.assertEqual(weights[..., cross_segment].count_nonzero().item(), 0)
+                torch.testing.assert_close(weights.sum(-1), torch.ones_like(weights.sum(-1)))
+
+    @parameterized.expand([("eager",), ("sdpa",)])
+    def test_compile_with_precomputed_vision_metadata(self, backend):
+        model = self.get_model(backend, 4)
+        grid = torch.tensor([[9, 2, 2], [1, 2, 4]], device=torch_device)
+        segments = torch.tensor([[4, 2, 2], [4, 2, 2], [1, 2, 2], [1, 2, 4]], device=torch_device)
+        pixels = torch.randn(44, 3 * 2 * 4 * 4, device=torch_device)
+        position_ids = get_vision_position_ids(segments, spatial_merge_size=2, include_temporal=True)
+        compiled = torch.compile(model, backend="eager", fullgraph=True)
+        with torch.no_grad():
+            expected = model(pixels, grid).last_hidden_state
+            actual = compiled(
+                pixels, grid, position_ids=position_ids, segment_lengths=[16, 16, 4, 8]
+            ).last_hidden_state
+        torch.testing.assert_close(actual, expected)
 
 
 @slow

@@ -1072,6 +1072,7 @@ class MiniMaxM3VLVisionAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
+        segment_lengths: list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
@@ -1089,16 +1090,29 @@ class MiniMaxM3VLVisionAttention(nn.Module):
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-        attn_output, attn_weights = attention_interface(
-            self,
-            queries,
-            keys,
-            values,
-            attention_mask,
-            scaling=self.scale,
-            dropout=0.0 if not self.training else self.dropout,
-            **kwargs,
-        )
+        segment_lengths = segment_lengths if segment_lengths is not None else [input_shape[1]]
+        splits = [torch.split(tensor, segment_lengths, dim=2) for tensor in (queries, keys, values)]
+        attn_outputs, attn_weights = [], []
+        start = 0
+        for length, (query, key, value) in zip(segment_lengths, zip(*splits)):
+            end = start + length
+            segment_mask = attention_mask[..., start:end, start:end] if attention_mask is not None else None
+            output, weights = attention_interface(
+                self,
+                query,
+                key,
+                value,
+                segment_mask,
+                scaling=self.scale,
+                dropout=0.0 if not self.training else self.dropout,
+                **kwargs,
+            )
+            attn_outputs.append(output)
+            if weights is not None and kwargs.get("output_attentions", self.config.output_attentions):
+                attn_weights.append(F.pad(weights, (start, input_shape[1] - end)))
+            start = end
+        attn_output = torch.cat(attn_outputs, dim=1)
+        attn_weights = torch.cat(attn_weights, dim=2) if attn_weights else None
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         return self.out_proj(attn_output), attn_weights
 
@@ -1181,6 +1195,18 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
             The temporal, height and width of feature shape of each image.
         """
         embeds = self.embeddings(pixel_values).to(self.pre_layrnorm.weight.dtype)
+        segment_lengths = kwargs.pop("segment_lengths", None)
+        max_frames = getattr(self.config, "vision_segment_max_frames", None)
+        if max_frames is not None and (segment_lengths is None or kwargs.get("position_ids") is None):
+            grid_thw = grid_thw.new_tensor(
+                [
+                    [min(max_frames, t - start), h, w]
+                    for t, h, w in grid_thw.tolist()
+                    for start in range(0, t, max_frames)
+                ]
+            )
+        if segment_lengths is None:
+            segment_lengths = grid_thw.prod(dim=-1).tolist()
         position_ids = get_vision_position_ids(
             grid_thw, self.config.spatial_merge_size, include_temporal=True, kwargs=kwargs
         )
@@ -1188,7 +1214,11 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
         hidden_states = self.pre_layrnorm(embeds).unsqueeze(0)
         for layer in self.layers:
             hidden_states = layer(
-                hidden_states, attention_mask=None, position_embeddings=position_embeddings, **kwargs
+                hidden_states,
+                attention_mask=None,
+                position_embeddings=position_embeddings,
+                segment_lengths=segment_lengths,
+                **kwargs,
             )
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=hidden_states[:, 0])
 
