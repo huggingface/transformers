@@ -29,7 +29,7 @@ class LinearAttentionCacheAllocator(CacheAllocator):
     """Cache allocator for a group of linear attention layers.
 
     A linear attention layer does not cache the tokens it has seen: it keeps states of fixed size per request, which
-    the layer declares through `linear_attention_states` (for a gated delta net, the last inputs of its causal
+    the layer declares through `cache_states` (for a gated delta net, the last inputs of its causal
     convolution and its recurrent state). The allocator stores them in one page per layer, so a request owns exactly
     one block, allocated with its first tokens and overwritten in place by every forward pass. A page holds the states
     one after the other, each starting on a 128-byte boundary:

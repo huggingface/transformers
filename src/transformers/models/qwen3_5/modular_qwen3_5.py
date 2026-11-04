@@ -242,7 +242,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         paged_cache = kwargs.get("cache")
         # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
         if paged_cache is not None:
-            conv_state, recurrent_state = paged_cache.read_linear_attention_states(self.layer_idx, kwargs)
+            conv_state, recurrent_state = paged_cache.read_cache_states(self.layer_idx, kwargs)
         elif cache_params is not None:
             conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
             recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
@@ -333,7 +333,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 use_qk_l2norm_in_kernel=True,
                 cu_seqlens=kwargs["cu_seq_lens_q"],
             )
-            paged_cache.write_linear_attention_states(self.layer_idx, (conv_state, last_recurrent_state), kwargs)
+            paged_cache.write_cache_states(self.layer_idx, (conv_state, last_recurrent_state), kwargs)
         elif recurrent_state is not None and seq_len == 1:
             core_attn_out, last_recurrent_state = torch_recurrent_gated_delta_rule(
                 query,
