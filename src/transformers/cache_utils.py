@@ -854,7 +854,9 @@ class QuantizedLayer(BaseQuantizedLayer):
         if tokens_to_remove == 0 or not self.is_initialized:
             return
 
-        n = abs(tokens_to_remove)
+        n = min(abs(tokens_to_remove), self.cumulative_length)
+        if n == 0:
+            return
         residual_len = self.keys.shape[-2] if self.keys.dim() == 4 else 0
 
         if n <= residual_len:
@@ -1079,7 +1081,9 @@ class Fp8QuantizedLayer(BaseQuantizedLayer):
         if tokens_to_remove == 0 or not self.is_initialized:
             return
 
-        n = abs(tokens_to_remove)
+        n = min(abs(tokens_to_remove), self.cumulative_length)
+        if n == 0:
+            return
         fp8_keys, key_scale = self._quantized_keys
         fp8_values, value_scale = self._quantized_values
         self._quantized_keys = (fp8_keys[..., :-n, :], key_scale)
