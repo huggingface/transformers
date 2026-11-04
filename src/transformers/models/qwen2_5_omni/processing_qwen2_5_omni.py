@@ -150,9 +150,6 @@ class Qwen2_5OmniProcessor(OmniModalProcessorMixin):
             )
             if not (kwargs.get("load_audio_from_video") or videos_kwargs.get("load_audio_from_video")):
                 kwargs["load_audio_from_video"] = True
-            # Indices that link no video, e.g. from a chat template with `load_audio_from_video` off, don't apply here
-            if not any(idx is not None for idx in kwargs.get("audio_from_video_indices") or []):
-                kwargs["audio_from_video_indices"] = None
         return super().__call__(images=images, text=text, videos=videos, audio=audio, **kwargs)
 
     def validate_inputs(

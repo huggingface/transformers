@@ -1842,8 +1842,6 @@ class ProcessorTesterMixin:
         audio_inputs = [np.zeros(length, dtype=np.float32) for length in audio_lengths]
 
         num_audio_tokens_from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths)
-        if num_audio_tokens_from_helper["num_audio_tokens"] is None:
-            self.skipTest("Processor doesn't count audio tokens yet")
 
         audio_token = getattr(self, "audio_token", "")
         text = [f"This is an audio {audio_token}"] * len(audio_inputs)
