@@ -144,7 +144,6 @@ class EncodecModelTester:
 @require_torch
 class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (EncodecModel,) if is_torch_available() else ()
-    is_encoder_decoder = True
 
     test_resize_embeddings = False
     test_torch_exportable = False  # data-dependent control flow in `_pad1d` (`if length <= max_pad`)

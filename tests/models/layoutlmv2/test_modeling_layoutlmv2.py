@@ -264,7 +264,7 @@ class LayoutLMv2ModelTester:
 @require_torch
 @require_detectron2
 class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    test_mismatched_shapes = False
+    test_mismatched_shapes = True
 
     all_model_classes = (
         (

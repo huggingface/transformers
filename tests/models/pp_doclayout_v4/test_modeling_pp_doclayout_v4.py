@@ -112,7 +112,6 @@ class PPDocLayoutV4ModelTester:
 class PPDocLayoutV4ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (PPDocLayoutV4ForObjectDetection,) if is_torch_available() else ()
     pipeline_model_mapping = {"object-detection": PPDocLayoutV4ForObjectDetection} if is_torch_available() else {}
-    is_encoder_decoder = True
 
     test_resize_embeddings = False
 

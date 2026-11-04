@@ -94,7 +94,11 @@ class TrOCRStandaloneDecoderModelTester:
         if self.use_labels:
             lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
 
-        config = TrOCRConfig(
+        config = self.get_config()
+        return (config, input_ids, attention_mask, lm_labels)
+
+    def get_config(self):
+        return TrOCRConfig(
             vocab_size=self.vocab_size,
             d_model=self.d_model,
             decoder_layers=self.decoder_layers,
@@ -107,8 +111,6 @@ class TrOCRStandaloneDecoderModelTester:
             decoder_start_token_id=self.decoder_start_token_id,
             max_position_embeddings=self.max_position_embeddings,
         )
-
-        return (config, input_ids, attention_mask, lm_labels)
 
     def create_and_check_decoder_model_past(
         self,

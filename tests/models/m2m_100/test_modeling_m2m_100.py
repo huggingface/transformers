@@ -233,7 +233,7 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available()
         else {}
     )
-    is_encoder_decoder = True
+
     test_missing_keys = False
 
     def setUp(self):

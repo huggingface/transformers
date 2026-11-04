@@ -225,7 +225,7 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available()
         else {}
     )
-    is_encoder_decoder = True
+
     test_missing_keys = False
 
     def setUp(self):
@@ -673,7 +673,11 @@ class MarianStandaloneDecoderModelTester:
         if self.use_labels:
             lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
 
-        config = MarianConfig(
+        config = self.get_config()
+        return config, input_ids, attention_mask, lm_labels
+
+    def get_config(self):
+        return MarianConfig(
             vocab_size=self.vocab_size,
             d_model=self.d_model,
             decoder_layers=self.decoder_layers,
@@ -688,13 +692,6 @@ class MarianStandaloneDecoderModelTester:
             decoder_start_token_id=self.decoder_start_token_id,
             max_position_embeddings=self.max_position_embeddings,
             is_encoder_decoder=self.is_encoder_decoder,
-        )
-
-        return (
-            config,
-            input_ids,
-            attention_mask,
-            lm_labels,
         )
 
     def create_and_check_decoder_model_past(
@@ -799,8 +796,6 @@ class MarianStandaloneDecoderModelTester:
 @require_torch
 class MarianStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (MarianDecoder, MarianForCausalLM) if is_torch_available() else ()
-
-    is_encoder_decoder = False
 
     def setUp(
         self,

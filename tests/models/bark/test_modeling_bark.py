@@ -520,7 +520,6 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
     # `BarkCausalModel` does not, so we run generation tests there.
     all_generative_model_classes = (BarkCausalModel,) if is_torch_available() else ()
 
-    is_encoder_decoder = False
     test_missing_keys = False
 
     test_resize_embeddings = True
@@ -568,7 +567,6 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     # `BarkCausalModel` does not, so we run generation tests there.
     all_generative_model_classes = (BarkCausalModel,) if is_torch_available() else ()
 
-    is_encoder_decoder = False
     test_missing_keys = False
 
     test_resize_embeddings = True
@@ -613,7 +611,6 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
 class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (BarkFineModel,) if is_torch_available() else ()
 
-    is_encoder_decoder = False
     test_missing_keys = False
 
     test_resize_embeddings = True

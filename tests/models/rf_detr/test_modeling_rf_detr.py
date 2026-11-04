@@ -211,7 +211,7 @@ class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    is_encoder_decoder = False
+
     test_missing_keys = False
     test_resize_embeddings = False
     model_split_percents = [0.5, 0.87, 0.9]

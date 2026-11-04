@@ -16,10 +16,10 @@ from inspect import signature
 
 from transformers.testing_utils import _TEXT_MODEL_TESTER_DEFAULTS
 
+from .generation.test_utils import GenerationTesterMixin
 from .test_configuration_common import ConfigTester
 from .test_expert_parallel_mixin import ExpertParallelTesterMixin
 from .test_modeling_common import (
-    GenerationTesterMixin,
     ModelTesterMixin,
     ids_tensor,
     is_torch_available,

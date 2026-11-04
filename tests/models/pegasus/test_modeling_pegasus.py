@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch PEGASUS model."""
 
+import copy
 import tempfile
 import unittest
 from functools import cached_property
@@ -232,8 +233,6 @@ class PegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         if is_torch_available()
         else {}
     )
-    is_encoder_decoder = True
-    test_resize_position_embeddings = True
 
     test_missing_keys = False
 
@@ -261,6 +260,63 @@ class PegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_encoder_decoder_model_standalone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
+
+    def test_resize_position_vector_embeddings(self):
+        (
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            config = copy.deepcopy(original_config)
+            model = model_class(config)
+            model.to(torch_device)
+
+            if self.model_tester.is_training is False:
+                model.eval()
+
+            max_position_embeddings = config.max_position_embeddings
+
+            # Retrieve the embeddings and clone theme
+            encoder_model_embed, decoder_model_embed = model.get_position_embeddings()
+            encoder_cloned_embeddings = encoder_model_embed.weight.clone()
+            decoder_cloned_embeddings = decoder_model_embed.weight.clone()
+
+            # Check that resizing the position embeddings with a larger max_position_embeddings increases
+            # the model's position embeddings size
+            model.resize_position_embeddings(max_position_embeddings + 10)
+            self.assertEqual(model.config.max_position_embeddings, max_position_embeddings + 10)
+
+            # Check that it actually resizes the embeddings matrix
+            encoder_model_embed, decoder_model_embed = model.get_position_embeddings()
+            self.assertEqual(encoder_model_embed.weight.shape[0], encoder_cloned_embeddings.shape[0] + 10)
+            self.assertEqual(decoder_model_embed.weight.shape[0], decoder_cloned_embeddings.shape[0] + 10)
+
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that resizing the position embeddings with a smaller max_position_embeddings decreases
+            # the model's max_position_embeddings
+            model.resize_position_embeddings(max_position_embeddings - 5)
+            self.assertEqual(model.config.max_position_embeddings, max_position_embeddings - 5)
+
+            # Check that it actually resizes the embeddings matrix
+            encoder_model_embed, decoder_model_embed = model.get_position_embeddings()
+            self.assertEqual(encoder_model_embed.weight.shape[0], encoder_cloned_embeddings.shape[0] - 5)
+            self.assertEqual(decoder_model_embed.weight.shape[0], decoder_cloned_embeddings.shape[0] - 5)
+
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that adding and removing tokens has not modified the first part of the embedding matrix.
+            models_equal = True
+            for p1, p2 in zip(encoder_cloned_embeddings, encoder_model_embed.weight):
+                if p1.data.ne(p2.data).sum() > 0:
+                    models_equal = False
+            for p1, p2 in zip(decoder_cloned_embeddings, decoder_model_embed.weight):
+                if p1.data.ne(p2.data).sum() > 0:
+                    models_equal = False
+            self.assertTrue(models_equal)
 
     @require_torch_fp16
     def test_generate_fp16(self):
@@ -428,7 +484,11 @@ class PegasusStandaloneDecoderModelTester:
         if self.use_labels:
             lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
 
-        config = PegasusConfig(
+        config = self.get_config()
+        return config, input_ids, attention_mask, lm_labels
+
+    def get_config(self):
+        return PegasusConfig(
             vocab_size=self.vocab_size,
             d_model=self.d_model,
             decoder_layers=self.decoder_layers,
@@ -443,13 +503,6 @@ class PegasusStandaloneDecoderModelTester:
             decoder_start_token_id=self.decoder_start_token_id,
             max_position_embeddings=self.max_position_embeddings,
             is_encoder_decoder=self.is_encoder_decoder,
-        )
-
-        return (
-            config,
-            input_ids,
-            attention_mask,
-            lm_labels,
         )
 
     def create_and_check_decoder_model_past(
@@ -555,8 +608,6 @@ class PegasusStandaloneDecoderModelTester:
 class PegasusStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (PegasusDecoder, PegasusForCausalLM) if is_torch_available() else ()
     test_resize_position_embeddings = True
-
-    is_encoder_decoder = False
 
     def setUp(
         self,

@@ -130,7 +130,6 @@ class MuseGlimmerAssistantModelTest(ModelTesterMixin, unittest.TestCase):
 
     # model has no embedding table of its own
     test_resize_embeddings = False
-    test_resize_position_embeddings = False
 
     def setUp(self):
         self.model_tester = MuseGlimmerAssistantModelTester(self)

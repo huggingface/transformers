@@ -110,7 +110,11 @@ class RemBertModelTester:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-        config = RemBertConfig(
+        config = self.get_config()
+        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+
+    def get_config(self):
+        return RemBertConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             input_embedding_size=self.input_embedding_size,
@@ -126,8 +130,6 @@ class RemBertModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
         )
-
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def prepare_config_and_inputs_for_decoder(self):
         (

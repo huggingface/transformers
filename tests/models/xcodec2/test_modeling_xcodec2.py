@@ -142,7 +142,7 @@ class Xcodec2ModelTester:
 @require_torch
 class Xcodec2ModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Xcodec2Model,) if is_torch_available() else ()
-    is_encoder_decoder = True
+
     test_resize_embeddings = False
     test_torch_exportable = False
     pipeline_model_mapping = {"feature-extraction": Xcodec2Model} if is_torch_available() else {}

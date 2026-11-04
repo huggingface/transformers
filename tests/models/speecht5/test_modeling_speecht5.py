@@ -158,7 +158,6 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else {}
     )
-    is_encoder_decoder = True
 
     test_resize_embeddings = False
 
@@ -337,7 +336,6 @@ class SpeechT5ForSpeechToTextTester:
 @require_torch
 class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, GenerationTesterMixin):
     all_model_classes = (SpeechT5ForSpeechToText,) if is_torch_available() else ()
-    is_encoder_decoder = True
 
     def setUp(self):
         self.model_tester = SpeechT5ForSpeechToTextTester(self)
@@ -820,7 +818,6 @@ class SpeechT5ForTextToSpeechTester:
 class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5ForTextToSpeech,) if is_torch_available() else ()
     all_generative_model_classes = ()
-    is_encoder_decoder = True
 
     def setUp(self):
         self.model_tester = SpeechT5ForTextToSpeechTester(self)
@@ -1311,7 +1308,6 @@ class SpeechT5ForSpeechToSpeechTester:
 @require_torch
 class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5ForSpeechToSpeech,) if is_torch_available() else ()
-    is_encoder_decoder = True
 
     test_resize_embeddings = False
 
@@ -1650,10 +1646,9 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5HifiGan,) if is_torch_available() else ()
 
     test_resize_embeddings = False
-    test_resize_position_embeddings = False
-    test_mismatched_shapes = False
+    test_mismatched_shapes = True
     test_missing_keys = False
-    is_encoder_decoder = False
+
     has_attentions = False
 
     def setUp(self):

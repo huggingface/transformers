@@ -36,7 +36,6 @@ from transformers.trainer_utils import set_seed
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    global_rng,
     ids_tensor,
     random_attention_mask,
 )
@@ -160,7 +159,6 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = (
         {"feature-extraction": VitsModel, "text-to-audio": VitsModel} if is_torch_available() else {}
     )
-    is_encoder_decoder = False
 
     test_resize_embeddings = False
     test_torch_exportable = False  # data-dependent guard in duration predictor
@@ -184,7 +182,6 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_model_forward(self):
         set_seed(12345)
-        global_rng.seed(12345)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
 

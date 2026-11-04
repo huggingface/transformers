@@ -728,7 +728,6 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     )
 
     _is_stateful = True
-    is_encoder_decoder = True
 
     # MP works but offload doesn't work when the SigLIP MultiheadAttention is offloaded
     test_cpu_offload = False

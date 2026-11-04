@@ -412,7 +412,6 @@ class Pop2PianoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     )
 
     test_resize_embeddings = True
-    is_encoder_decoder = True
 
     def setUp(self):
         self.model_tester = Pop2PianoModelTester(self)

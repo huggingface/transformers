@@ -260,7 +260,7 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         if is_torch_available()
         else {}
     )
-    is_encoder_decoder = True
+
     test_missing_keys = False
 
     # TODO: Fix the failed tests
@@ -653,7 +653,11 @@ class BigBirdPegasusStandaloneDecoderModelTester:
         if self.use_labels:
             lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
 
-        config = BigBirdPegasusConfig(
+        config = self.get_config()
+        return config, input_ids, attention_mask, lm_labels
+
+    def get_config(self):
+        return BigBirdPegasusConfig(
             vocab_size=self.vocab_size,
             d_model=self.d_model,
             decoder_layers=self.decoder_layers,
@@ -672,13 +676,6 @@ class BigBirdPegasusStandaloneDecoderModelTester:
             use_bias=self.use_bias,
             block_size=self.block_size,
             num_random_blocks=self.num_random_blocks,
-        )
-
-        return (
-            config,
-            input_ids,
-            attention_mask,
-            lm_labels,
         )
 
     def create_and_check_decoder_model_past(
@@ -775,8 +772,6 @@ class BigBirdPegasusStandaloneDecoderModelTester:
 @require_torch
 class BigBirdPegasusStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BigBirdPegasusDecoder, BigBirdPegasusForCausalLM) if is_torch_available() else ()
-
-    is_encoder_decoder = False
 
     def setUp(
         self,

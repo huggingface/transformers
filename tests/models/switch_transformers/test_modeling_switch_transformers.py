@@ -487,7 +487,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     )
 
     test_resize_embeddings = True
-    is_encoder_decoder = True
+
     # The small SWITCH_TRANSFORMERS model needs higher percentages for CPU/MP tests
     model_split_percents = [0.5, 0.8, 0.9]
     # `SwitchTransformers` is a MOE in which not all experts will get gradients because they are not all used in a single forward pass
@@ -712,7 +712,11 @@ class SwitchTransformersEncoderOnlyModelTester:
         if self.use_attention_mask:
             attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
 
-        config = SwitchTransformersConfig(
+        config = self.get_config()
+        return config, input_ids, attention_mask
+
+    def get_config(self):
+        return SwitchTransformersConfig(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
             d_ff=self.d_ff,
@@ -727,8 +731,6 @@ class SwitchTransformersEncoderOnlyModelTester:
             pad_token_id=self.pad_token_id,
             is_encoder_decoder=self.is_encoder_decoder,
         )
-
-        return config, input_ids, attention_mask
 
     def create_and_check_model(self, config, input_ids, attention_mask):
         model = SwitchTransformersEncoderModel(config=config)

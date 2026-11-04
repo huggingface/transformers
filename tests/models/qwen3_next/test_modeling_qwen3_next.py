@@ -46,7 +46,6 @@ if is_torch_available():
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
-    _test_eager_matches_sdpa_inference,
     ids_tensor,
 )
 
@@ -240,8 +239,7 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
         """
         if dtype == "fp16":
             self.skipTest("Not robust in fp16")
-        _test_eager_matches_sdpa_inference(
-            self,
+        super().test_eager_matches_sdpa_inference(
             name,
             dtype,
             padding_side,

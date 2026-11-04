@@ -165,7 +165,7 @@ class EsmFoldModelTester:
 
 @require_torch
 class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    test_mismatched_shapes = False
+    test_mismatched_shapes = True
 
     all_model_classes = (EsmForProteinFolding,) if is_torch_available() else ()
     pipeline_model_mapping = {} if is_torch_available() else {}

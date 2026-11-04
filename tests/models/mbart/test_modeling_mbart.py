@@ -226,7 +226,6 @@ class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         if is_torch_available()
         else {}
     )
-    is_encoder_decoder = True
 
     test_missing_keys = False
 
@@ -581,7 +580,11 @@ class MBartStandaloneDecoderModelTester:
         if self.use_labels:
             lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
 
-        config = MBartConfig(
+        config = self.get_config()
+        return config, input_ids, attention_mask, lm_labels
+
+    def get_config(self):
+        return MBartConfig(
             vocab_size=self.vocab_size,
             d_model=self.d_model,
             decoder_layers=self.decoder_layers,
@@ -596,13 +599,6 @@ class MBartStandaloneDecoderModelTester:
             decoder_start_token_id=self.decoder_start_token_id,
             max_position_embeddings=self.max_position_embeddings,
             is_encoder_decoder=self.is_encoder_decoder,
-        )
-
-        return (
-            config,
-            input_ids,
-            attention_mask,
-            lm_labels,
         )
 
     def create_and_check_decoder_model_past(
@@ -707,8 +703,6 @@ class MBartStandaloneDecoderModelTester:
 @require_torch
 class MBartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (MBartDecoder, MBartForCausalLM) if is_torch_available() else ()
-
-    is_encoder_decoder = False
 
     def setUp(
         self,

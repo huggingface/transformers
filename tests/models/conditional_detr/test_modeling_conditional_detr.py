@@ -187,7 +187,6 @@ class ConditionalDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         if is_torch_available()
         else {}
     )
-    is_encoder_decoder = True
 
     test_missing_keys = False
     zero_init_hidden_state = True

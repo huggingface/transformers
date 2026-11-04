@@ -107,7 +107,7 @@ class EomtDinov3ForUniversalSegmentationTester:
 class EomtDinov3ForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (EomtDinov3ForUniversalSegmentation,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-segmentation": EomtDinov3ForUniversalSegmentation} if is_torch_available() else {}
-    is_encoder_decoder = False
+
     test_missing_keys = False
     test_torch_exportable = False  # data-dependent control flow in segmentation head
 

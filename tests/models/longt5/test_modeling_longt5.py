@@ -427,7 +427,6 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     )
 
     test_resize_embeddings = True
-    is_encoder_decoder = True
 
     def setUp(self):
         self.model_tester = LongT5ModelTester(self)
@@ -886,7 +885,11 @@ class LongT5EncoderOnlyModelTester:
         if self.use_attention_mask:
             attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
 
-        config = LongT5Config(
+        config = self.get_config()
+        return config, input_ids, attention_mask
+
+    def get_config(self):
+        return LongT5Config(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
             d_ff=self.d_ff,
@@ -903,12 +906,6 @@ class LongT5EncoderOnlyModelTester:
             local_radius=self.local_radius,
             encoder_attention_type=self.encoder_attention_type,
             global_block_size=self.global_block_size,
-        )
-
-        return (
-            config,
-            input_ids,
-            attention_mask,
         )
 
     def create_and_check_model(

@@ -272,7 +272,6 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         if is_torch_available()
         else {}
     )
-    is_encoder_decoder = True
 
     test_missing_keys = False
     test_torch_exportable = False  # chunked sliding-window attention is fundamentally data-dependent

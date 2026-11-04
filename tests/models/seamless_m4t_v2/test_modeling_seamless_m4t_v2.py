@@ -30,7 +30,6 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
-    _test_eager_matches_sdpa_inference,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -368,7 +367,6 @@ class SeamlessM4Tv2ModelTester:
 
 @require_torch
 class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
-    is_encoder_decoder = True
     test_missing_keys = False
 
     test_resize_embeddings = False
@@ -403,8 +401,8 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
         # `SeamlessM4Tv2Model` defaults to text and switches its `main_input_name` to `input_features` only at
         # generation. Pin it to speech so the generic helper feeds the speech encoder for every model class here.
         with patch.object(SeamlessM4Tv2Model, "main_input_name", "input_features"):
-            _test_eager_matches_sdpa_inference(
-                self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+            super().test_eager_matches_sdpa_inference(
+                name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
             )
 
     def test_flex_attention_with_grads(self):
@@ -574,7 +572,6 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
 
 @require_torch
 class SeamlessM4Tv2ModelWithTextInputTest(ModelTesterMixin, unittest.TestCase):
-    is_encoder_decoder = True
     test_missing_keys = False
 
     test_resize_embeddings = True

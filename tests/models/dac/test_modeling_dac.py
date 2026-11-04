@@ -126,7 +126,6 @@ class DacModelTester:
 # Copied from transformers.tests.encodec.test_modeling_encodec.EncodecModelTest with Encodec->Dac
 class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DacModel,) if is_torch_available() else ()
-    is_encoder_decoder = True
 
     test_resize_embeddings = False
     pipeline_model_mapping = {"feature-extraction": DacModel} if is_torch_available() else {}

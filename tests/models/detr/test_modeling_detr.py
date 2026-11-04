@@ -28,7 +28,6 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
-    _test_eager_matches_sdpa_inference,
     floats_tensor,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -194,7 +193,6 @@ class DetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    is_encoder_decoder = True
 
     test_missing_keys = False
     zero_init_hidden_state = True
@@ -518,7 +516,7 @@ class DetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.skipTest(
                 "This test uses attention masks which are not compatible with DETR. Skipping when use_attention_mask is True."
             )
-        _test_eager_matches_sdpa_inference(self, name, dtype, padding_side, False, output_attentions, enable_kernels)
+        super().test_eager_matches_sdpa_inference(name, dtype, padding_side, False, output_attentions, enable_kernels)
 
 
 TOLERANCE = 1e-4

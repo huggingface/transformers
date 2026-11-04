@@ -105,7 +105,7 @@ class VibeVoiceAcousticTokenizerModelTester:
 @require_torch
 class VibeVoiceAcousticTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (VibeVoiceAcousticTokenizerModel,) if is_torch_available() else ()
-    is_encoder_decoder = False
+
     test_resize_embeddings = False
     test_cpu_offload = False
     test_disk_offload_safetensors = False

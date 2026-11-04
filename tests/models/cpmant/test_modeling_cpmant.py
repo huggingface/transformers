@@ -142,7 +142,7 @@ class CpmAntModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
 
     test_missing_keys = False
-    test_mismatched_shapes = False
+    test_mismatched_shapes = True
     test_resize_embeddings = False
 
     def setUp(self):

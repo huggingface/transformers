@@ -239,7 +239,6 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         if is_torch_available()
         else {}
     )
-    is_encoder_decoder = True
 
     test_missing_keys = True
     # The small UMT5 model needs higher percentages for CPU/MP tests
@@ -429,7 +428,15 @@ class UMT5EncoderOnlyModelTester:
         if self.use_attention_mask:
             attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
 
-        config = UMT5Config(
+        config = self.get_config()
+        return (
+            config,
+            input_ids,
+            attention_mask,
+        )
+
+    def get_config(self):
+        return UMT5Config(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
             d_ff=self.d_ff,
@@ -443,12 +450,6 @@ class UMT5EncoderOnlyModelTester:
             bos_token_id=self.pad_token_id,
             pad_token_id=self.pad_token_id,
             is_encoder_decoder=self.is_encoder_decoder,
-        )
-
-        return (
-            config,
-            input_ids,
-            attention_mask,
         )
 
     def create_and_check_model(

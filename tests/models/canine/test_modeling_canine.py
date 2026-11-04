@@ -233,7 +233,7 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
-    test_mismatched_shapes = False
+    test_mismatched_shapes = True
     test_resize_embeddings = False
 
     def setUp(self):

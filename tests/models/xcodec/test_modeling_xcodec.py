@@ -109,7 +109,6 @@ class XcodecModelTester:
 @require_torch
 class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (XcodecModel,) if is_torch_available() else ()
-    is_encoder_decoder = True
 
     test_resize_embeddings = False
 

@@ -232,8 +232,6 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     all_model_classes = (OneFormerModel, OneFormerForUniversalSegmentation) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": OneFormerModel} if is_torch_available() else {}
 
-    is_encoder_decoder = False
-
     test_missing_keys = False
 
     # TODO: Fix the failed tests when this model gets more usage

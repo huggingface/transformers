@@ -151,7 +151,6 @@ class CanaryModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available()
         else {}
     )
-    is_encoder_decoder = True
 
     def setUp(self):
         self.model_tester = CanaryModelTester(self)
