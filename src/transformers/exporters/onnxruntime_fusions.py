@@ -553,19 +553,33 @@ def _same_value(a: ir.Value | None, b: ir.Value | None, depth: int = 12) -> bool
     return all(_same_value(p, q, depth - 1) for p, q in zip(x.inputs, y.inputs))
 
 
-def _shared_rotation(query: ir.Value, new_key, head_size: int, prefill: bool):
+def _query_states(query: ir.Value, kv_heads: int, num_heads: int):
+    """`(states, groups)`: the attention's query heads, `[batch, heads, length, head_dim]`, behind its merge into
+    `[batch, length, heads * head_dim]`; `groups` set when, for one new token, they were folded onto their key-value
+    heads (`[batch, kv_heads, groups, head_dim]`, how transformers decodes grouped-query attention without repeating
+    the key-value heads), the attention then running over the key-value heads."""
+    reshape = _producer(query, "Reshape")
+    transpose = _producer(reshape.inputs[0], "Transpose") if reshape is not None else None
+    if transpose is None or _perm(transpose) != [0, 2, 1, 3]:
+        return None
+    states, fold = transpose.inputs[0], _producer(transpose.inputs[0], "Reshape")
+    if num_heads != kv_heads or fold is None:
+        return states, None
+    groups, heads = _static_dim(states, 2), _static_dim(fold.inputs[0], 1)
+    if groups is None or heads != kv_heads * groups or _static_dim(fold.inputs[0], 2) != 1:
+        return None
+    return fold.inputs[0], groups
+
+
+def _shared_rotation(query_states: ir.Value, new_key, head_size: int, prefill: bool):
     """`((query, key, (positions, cos_cache, sin_cache)), interleaved)`, the attention's query and new key before
     ONNX Runtime's `RotaryEmbedding` rotated them (`[batch, heads, length, head_dim]`), if one cache and the same
     positions rotate both whole; the positions None when they're the cache's default (0 on, no past)."""
-    reshape = _producer(query, "Reshape")
-    transpose = _producer(reshape.inputs[0], "Transpose") if reshape is not None else None
     rotations = (
-        _producer(transpose.inputs[0], "RotaryEmbedding") if transpose is not None else None,
+        _producer(query_states, "RotaryEmbedding"),
         _producer(new_key, "RotaryEmbedding") if isinstance(new_key, ir.Value) else None,
     )
     if None in rotations or any(node.domain != "com.microsoft" for node in rotations):
-        return None
-    if transpose is None or _perm(transpose) != [0, 2, 1, 3]:
         return None
     (query_rotation, key_rotation) = rotations
     if len(query_rotation.inputs) != 4 or len(key_rotation.inputs) != 4:
@@ -622,11 +636,22 @@ def _fuse_group_query_attention(model: ir.Model, prefill: bool = True) -> int:
         new_length = states.shape[length_axis] if states.shape is not None else None
         if kv_heads is None or head_size is None or head_size % 8 or query.shape is None:
             continue
-        if new_length != query.shape[1]:
+        num_heads = attention.attributes.get_int("num_heads")
+        if (found := _query_states(query, kv_heads, num_heads)) is None:
             continue
-        # After a past, it takes several new tokens for one sequence only (ONNX Runtime 1.29): a decode graph that
+        query_states, groups = found
+        query_length = 1 if groups is not None else query.shape[1]
+        if groups is not None:
+            # The bias, expanded over the folded rows: its own `[batch, 1, 1, total]`.
+            expand = _producer(bias, "Expand") if bias is not None else None
+            if expand is None or _static_dim(expand.inputs[0], 2) != 1 or _static_dim(expand.inputs[0], 1) != 1:
+                continue
+            bias, num_heads = expand.inputs[0], kv_heads * groups
+        if new_length != query_length:
+            continue
+        # After a past, it takes several new tokens for one sequence only (part of its contract): a decode graph that
         # takes any number of tokens is fused only for a batch of one.
-        if past_key is not None and _static_dim(query, 1) != 1 and _static_dim(query, 0) != 1:
+        if past_key is not None and query_length != 1 and _static_dim(query, 0) != 1:
             continue
         if past_key is None and not prefill:
             continue
@@ -650,14 +675,16 @@ def _fuse_group_query_attention(model: ir.Model, prefill: bool = True) -> int:
         known_total = None
         if start is not None:
             known_total = past_length
-        elif isinstance(query.shape[1], int) and past_length is not None:
-            known_total = query.shape[1] + past_length
+        elif isinstance(query_length, int) and past_length is not None:
+            known_total = query_length + past_length
         rotary, dtype, rotary_attributes = [None, None, None], query.dtype, {}
-        if (rotation := _shared_rotation(query, new_key, head_size, past_key is None)) is not None:
+        if (rotation := _shared_rotation(query_states, new_key, head_size, past_key is None)) is not None:
             # Rotated by the attention itself, which stores the key rotated.
             (query_states, key_states, (positions, cos_cache, sin_cache)), interleaved = rotation
-            query, new_key, rotary = merged(query_states), key_states, [cos_cache, sin_cache, positions]
+            new_key, rotary = key_states, [cos_cache, sin_cache, positions]
             rotary_attributes = {"do_rotary": 1, "rotary_interleaved": interleaved}
+        if rotation is not None or groups is not None:
+            query = merged(query_states)
         batch = tape.op("Shape", [query], attributes={"start": 0, "end": 1})
         new_length = tape.op("Shape", [query], attributes={"start": 1, "end": 2})
         if past_key is None:
@@ -684,7 +711,7 @@ def _fuse_group_query_attention(model: ir.Model, prefill: bool = True) -> int:
             missing = tape.op("Max", [tape.op("Sub", [total, rows]), constant([0])])
             pads = tape.op("Concat", [constant([0, 0]), missing, constant([0])], attributes={"axis": 0})
             rotary[:2] = (tape.op("Pad", [cache, pads]) for cache in rotary[:2])
-        attributes = {"num_heads": attention.attributes.get_int("num_heads"), "kv_num_heads": kv_heads}
+        attributes = {"num_heads": num_heads, "kv_num_heads": kv_heads}
         if "scale" in attention.attributes:
             attributes["scale"] = attention.attributes["scale"].as_float()
         attributes.update(rotary_attributes)
@@ -696,9 +723,14 @@ def _fuse_group_query_attention(model: ir.Model, prefill: bool = True) -> int:
             domain="com.microsoft",
             num_outputs=3,
         )
+        output, present_key, present_value = outputs
+        if groups is not None:
+            # Back to the folded attention's layout: each key-value head's query heads as its rows.
+            folded = tape.op("Reshape", [output, constant([0, kv_heads, groups, head_size])])
+            folded = tape.op("Transpose", [folded], attributes={"perm": [0, 2, 1, 3]})
+            output = tape.op("Reshape", [folded, constant([0, groups, kv_heads * head_size])])
         for node in tape.nodes:
             graph.insert_before(attention, node)
-        output, present_key, present_value = outputs
         output.dtype, output.shape = dtype, attention.outputs[0].shape
         _replace(attention.outputs[0], output)
         for new, old in ((present_key, key_present), (present_value, value_present)):
