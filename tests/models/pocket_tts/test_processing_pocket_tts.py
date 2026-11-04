@@ -430,5 +430,5 @@ class PocketTTSProcessingIntegrationTest(unittest.TestCase):
             )
 
     @unittest.skip("model is extremely custom!")
-    def test_if_input_has_mismatching_tokens_and_visuals(self):
+    def test_if_input_has_mismatching_tokens_and_mm_data(self):
         pass

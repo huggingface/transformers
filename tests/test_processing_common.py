@@ -872,7 +872,7 @@ class ProcessorTesterMixin:
             )
             self.assertTrue(self.text_input_name in inputs_chat_template)
 
-    def test_if_input_has_mismatching_tokens_and_visuals(self):
+    def test_if_input_has_mismatching_tokens_and_mm_data(self):
         """
         Tests that vision models raise an error when number of data doesn't match number
         of special token in input text.
@@ -917,7 +917,7 @@ class ProcessorTesterMixin:
             audio_inputs = self.prepare_audio_inputs(batch_size=4)
             text = self.prepare_text_inputs(batch_size=3, modalities=["audio"])
 
-            with self.assertRaisesRegex(ValueError, "Got 4 waveforms for 3 audio placeholders."):
+            with self.assertRaisesRegex(ValueError, " tokens in the prompts should be the same as the number of "):
                 processor(audio=audio_inputs, text=text, **processing_kwargs)
 
     # These kwargs-related tests ensure that processors are correctly instantiated.

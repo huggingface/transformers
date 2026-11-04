@@ -93,7 +93,7 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             inputs[self.text_input_name][1:].tolist(), inputs_nested[self.text_input_name][1:].tolist()
         )
 
-    def test_if_input_has_mismatching_tokens_and_visuals(self):
+    def test_if_input_has_mismatching_tokens_and_mm_data(self):
         """
         Tests that vision models raise an error when number of data doesn't match number
         of special token in input text.
