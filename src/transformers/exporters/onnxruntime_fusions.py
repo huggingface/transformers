@@ -34,6 +34,8 @@ Every rewrite matches exactly what it replaces: the fused graph's outputs are th
 
 from __future__ import annotations
 
+from functools import partial
+
 import numpy as np
 import onnx_ir as ir
 from onnx_ir.passes import common as common_passes
@@ -588,11 +590,12 @@ def _shared_rotation(query: ir.Value, new_key, head_size: int, prefill: bool):
     return (query_rotation.inputs[0], key_rotation.inputs[0], (positions, cos_cache, sin_cache)), interleaved
 
 
-def _fuse_group_query_attention(model: ir.Model) -> int:
+def _fuse_group_query_attention(model: ir.Model, prefill: bool = True, static_cache: bool = True) -> int:
     """Turn each fused `MultiHeadAttention` reading a key-value cache's update into ONNX Runtime's
     `GroupQueryAttention`, which updates the cache itself (or, for a prefill, starts it) and reads its key-value heads
     without repeating them. Its mask stays the attention's own bias, so every row's `seqlens_k` is the whole length:
-    exact whatever the padding. Returns how many."""
+    exact whatever the padding. `prefill` and `static_cache` set whether a prefill, and a cache written in place, are
+    fused too. Returns how many."""
     graph, count = model.graph, 0
     # A cache update several attentions read (layers sharing another layer's cache, Gemma 4's): its own layer's,
     # fused once; the others, reading it, stay as they are.
@@ -625,6 +628,8 @@ def _fuse_group_query_attention(model: ir.Model) -> int:
         # After a past, it takes several new tokens for one sequence only (ONNX Runtime 1.29): a decode graph that
         # takes any number of tokens is fused only for a batch of one.
         if past_key is not None and _static_dim(query, 1) != 1 and _static_dim(query, 0) != 1:
+            continue
+        if (past_key is None and not prefill) or (start is not None and not static_cache):
             continue
         tape = ir.tape.Tape(graph)
 
@@ -1028,9 +1033,10 @@ _STEPS = (
     ("narrowed_norms", _narrow_norms, _ANY),
     # Narrowed, the norms whose skip fusion was undone take their residual's dtype: fused again.
     ("narrowed_skip_norms", fuse_skip_rms_normalization, _ANY),
-    # CUDA's `GroupQueryAttention` masks by `seqlens_k` only: it rejects the bias every masked attention has, or
-    # falls back to a kernel slower than `MultiHeadAttention`'s.
+    # CUDA's `GroupQueryAttention`, decode only: its `MultiHeadAttention` runs a prefill faster, and a static cache's
+    # total length, computed on the GPU, is read as 0 (microsoft/onnxruntime#33867).
     ("group_query_attention", _fuse_group_query_attention, _CPU),
+    ("group_query_attention_decode", partial(_fuse_group_query_attention, prefill=False, static_cache=False), _CUDA),
     ("mixture_of_experts", _fuse_mixture_of_experts, _CUDA),
     # ONNX Runtime's CPU `MultiHeadAttention` runs slower than the ops it fused: the ones left, unfused.
     ("unfused_attentions", _unfuse_attentions, _CPU),
