@@ -103,8 +103,6 @@ class BarkSemanticModelTester:
         self.n_codes_total = n_codes_total
         self.n_codes_given = n_codes_given
 
-        self.is_encoder_decoder = False
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -236,8 +234,6 @@ class BarkCoarseModelTester:
         self.n_codes_total = n_codes_total
         self.n_codes_given = n_codes_given
 
-        self.is_encoder_decoder = False
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -368,8 +364,6 @@ class BarkFineModelTester:
 
         self.n_codes_total = n_codes_total
         self.n_codes_given = n_codes_given
-
-        self.is_encoder_decoder = False
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length, self.n_codes_total], self.vocab_size)
