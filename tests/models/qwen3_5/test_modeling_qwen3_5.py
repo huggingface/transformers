@@ -198,11 +198,30 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
                     use_cache=False,
                 )
                 res_padfree = model(**padding_free_batch, use_cache=False)
+                # Also verify packed forward when only cu_seq_lens_q is provided without explicit seq_idx (#50185)
+                no_seq_idx_batch = {k: v for k, v in padding_free_batch.items() if k != "seq_idx"}
+                res_no_seq_idx = model(**no_seq_idx_batch, use_cache=False)
 
             logits_padded = res_padded.logits[attention_mask.bool()]
             logits_padfree = res_padfree.logits[0]
 
             torch.testing.assert_close(logits_padded, logits_padfree, atol=1e-5, rtol=1e-5)
+            torch.testing.assert_close(logits_padded, res_no_seq_idx.logits[0], atol=1e-5, rtol=1e-5)
+
+        # Verify multi-row (B > 1) batch with cu_seq_lens_q (#50185)
+        multirow_ids = torch.tensor([[1, 2, 3], [4, 5, 6]], device=torch_device)
+        multirow_cu_seqlens = torch.tensor([0, 3, 6], dtype=torch.int32, device=torch_device)
+        with torch.no_grad():
+            res_multirow = model(
+                input_ids=multirow_ids,
+                cu_seq_lens_q=multirow_cu_seqlens,
+                cu_seq_lens_k=multirow_cu_seqlens,
+                max_length_q=3,
+                max_length_k=3,
+                use_cache=False,
+            )
+            res_unpacked = model(input_ids=multirow_ids, use_cache=False)
+        torch.testing.assert_close(res_multirow.logits, res_unpacked.logits, atol=1e-5, rtol=1e-5)
 
     def test_linear_attention_multi_token_cached_forward_matches_single_token(self):
         """

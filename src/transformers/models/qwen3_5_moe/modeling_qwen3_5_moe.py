@@ -538,6 +538,10 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
 
         # Set up dimensions for reshapes later
+        orig_batch_size, orig_seq_len, _ = hidden_states.shape
+        cu_seqlens = kwargs.pop("cu_seq_lens_q", None)
+        if cu_seqlens is not None and orig_batch_size > 1:
+            hidden_states = hidden_states.reshape(1, orig_batch_size * orig_seq_len, -1)
         batch_size, seq_len, _ = hidden_states.shape
         # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
         if cache_params is not None:
@@ -570,6 +574,11 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
                     mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size
                 )
 
+            if cu_seqlens is not None and kwargs.get("seq_idx") is None:
+                kwargs["seq_idx"] = torch.repeat_interleave(
+                    torch.arange(len(cu_seqlens) - 1, device=cu_seqlens.device, dtype=torch.int32),
+                    cu_seqlens.diff(),
+                ).unsqueeze(0)
             mixed_qkv = causal_conv1d_fn(
                 mixed_qkv,
                 self.conv1d.weight.squeeze(1),
@@ -614,7 +623,7 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
                 initial_state=recurrent_state,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
-                cu_seqlens=kwargs.pop("cu_seq_lens_q", None),
+                cu_seqlens=cu_seqlens,
                 **kwargs,
             )
         else:
@@ -627,7 +636,7 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
                 initial_state=recurrent_state,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
-                cu_seqlens=kwargs.pop("cu_seq_lens_q", None),
+                cu_seqlens=cu_seqlens,
                 **kwargs,
             )
 
@@ -639,7 +648,7 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
         core_attn_out = core_attn_out.reshape(-1, self.head_v_dim)
         z = z.reshape(-1, self.head_v_dim)
         core_attn_out = self.norm(core_attn_out, z)
-        core_attn_out = core_attn_out.reshape(batch_size, seq_len, -1)
+        core_attn_out = core_attn_out.reshape(orig_batch_size, orig_seq_len, -1)
 
         output = self.out_proj(core_attn_out)
         return output
