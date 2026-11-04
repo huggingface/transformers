@@ -104,7 +104,7 @@ class MyModelProcessorKwargs(ProcessingKwargs, total=False):
     use_image_id: bool
 
 
-class MyModelProcessor(ProcessingMixin):
+class MyModelProcessor(ProcessorMixin):
     valid_processor_kwargs = MyModelProcessorKwargs
     use_image_id = False
 

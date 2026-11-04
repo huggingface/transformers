@@ -2776,7 +2776,7 @@ class DeprecatedQwen3OmniMoeVideosKwargs(VideosKwargs, total=False):
         Maximum number of frames to extract from the video. Longer videos will be truncated or sampled to fit
         within this limit.
     use_audio_in_video (`bool`, *optional*, defaults to `False`):
-        Deprecated, use [`Qwen3OmniMoeProcessorKwargs.use_audio_in_video`] instead.
+        Deprecated, use [`Qwen3OmniMoeProcessorKwargs.load_audio_from_video`] instead.
         Whether to incorporate audio information when processing videos. When enabled, audio tokens are
         interleaved with video tokens based on temporal alignment, creating a unified multimodal representation.
     seconds_per_chunk (`float`, *optional*, defaults to `2.0`):
