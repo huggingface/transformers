@@ -471,6 +471,11 @@ class PagedAttentionCache:
         kwargs["cu_seq_lens_k"] = kwargs["cu_seq_lens_k"][allocator.layer_type].to(torch.int32)
         kwargs["max_length_k"] = kwargs["max_length_k"][allocator.layer_type]
 
+        # A layer caching other rows, like the latents of multi-head latent attention, writes and reads them itself and
+        # rebuilds its keys and values from them: they already span all the tokens the batch attends to
+        if "key" not in allocator.rows:  # type: ignore
+            return key_states, value_states
+
         # Block table "update": no real update, just prepare the kwargs for the flash call, which will update the cache
         block_table = kwargs.get("block_table")
         if block_table is not None:

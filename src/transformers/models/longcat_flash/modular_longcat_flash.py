@@ -165,6 +165,11 @@ class LongcatFlashMLA(DeepseekV32Attention):
         self.mla_scale_q_lora = (config.hidden_size / self.q_lora_rank) ** 0.5
         self.mla_scale_kv_lora = (config.hidden_size / self.kv_lora_rank) ** 0.5
 
+    def cache_rows(self) -> dict[str, tuple[tuple[int, ...], torch.dtype | None]]:
+        """The shape and dtype (None for the cache dtype) of the rows continuous batching caches per token for this
+        layer: the compressed latent of its keys and values, and its shared rotary key."""
+        return {"latent": ((self.kv_lora_rank,), None), "rope_key": ((self.qk_rope_head_dim,), None)}
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -197,7 +202,11 @@ class LongcatFlashMLA(DeepseekV32Attention):
         q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
 
         # Cache read / write is performed while the latent KV is still compressed
-        if past_key_values is not None:
+        paged_cache = kwargs.get("cache")
+        if paged_cache is not None:  # continuous batching
+            rows = paged_cache.update_rows(self.layer_idx, {"latent": k_pass[0, 0], "rope_key": k_rot[0, 0]}, kwargs)
+            k_pass, k_rot = rows["latent"][None, None], rows["rope_key"][None, None]
+        elif past_key_values is not None:
             k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)

@@ -216,6 +216,7 @@ class HYV4Indexer(DeepseekV32Indexer):
         attention_mask: torch.Tensor,
         position_ids: torch.Tensor,  # Kept for BC
         past_key_values: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         batch_size, seq_len, _ = hidden_states.shape
         cos, sin = position_embeddings
@@ -234,7 +235,10 @@ class HYV4Indexer(DeepseekV32Indexer):
         q = torch.cat([q_pass, q_rot], dim=-1)  # [B, S, H, D]
         k = torch.cat([k_pass, k_rot], dim=-1).squeeze(2)  # [B, S, D]
 
-        if past_key_values is not None:
+        paged_cache = kwargs.get("cache")
+        if paged_cache is not None:  # continuous batching
+            k = paged_cache.update_rows(self.layer_idx, {"index_key": k[0]}, kwargs)["index_key"][None]
+        elif past_key_values is not None:
             k = past_key_values.update_indexer(k, self.layer_idx)
 
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1))
@@ -297,7 +301,11 @@ class HYV4Attention(GlmMoeDsaAttention):
         q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
 
         # Cache read / write is performed while latent KV is still compressed
-        if past_key_values is not None:
+        paged_cache = kwargs.get("cache")
+        if paged_cache is not None:  # continuous batching
+            rows = paged_cache.update_rows(self.layer_idx, {"latent": k_pass[0, 0], "rope_key": k_rot[0, 0]}, kwargs)
+            k_pass, k_rot = rows["latent"][None, None], rows["rope_key"][None, None]
+        elif past_key_values is not None:
             k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
@@ -313,6 +321,7 @@ class HYV4Attention(GlmMoeDsaAttention):
                 attention_mask[:, 0, :, :],
                 position_ids,  # Kept for BC
                 past_key_values=past_key_values,
+                **kwargs,
             )  # [B, S, topk]
         else:
             if prev_topk_indices is None:

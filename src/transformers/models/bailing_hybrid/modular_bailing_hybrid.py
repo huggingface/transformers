@@ -245,7 +245,11 @@ class BailingHybridAttention(DeepseekV3Attention):
         cos, sin = position_embeddings
         q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
 
-        if past_key_values is not None:
+        paged_cache = kwargs.get("cache")
+        if paged_cache is not None:  # continuous batching
+            rows = paged_cache.update_rows(self.layer_idx, {"latent": kv_nope[0, 0], "rope_key": k_rot[0, 0]}, kwargs)
+            kv_nope, k_rot = rows["latent"][None, None], rows["rope_key"][None, None]
+        elif past_key_values is not None:
             kv_nope, k_rot = past_key_values.update(kv_nope, k_rot, self.layer_idx)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)

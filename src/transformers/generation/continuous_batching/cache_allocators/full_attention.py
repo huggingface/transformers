@@ -61,8 +61,9 @@ class FullAttentionCacheAllocator(CacheAllocator):
             bytes_per_block=self.bytes_per_token * page_size * len(layer_indices),
             allow_block_sharing=allow_block_sharing,
         )
-        # The block table kernels read one uniform array of pages per row, which needs every row to have the same size
-        self.supports_block_table = len(set(self.row_bytes)) == 1
+        # The block table kernels read the keys and values in place, as one uniform array of pages per row: they need
+        # the layers to cache exactly a key and a value of the same size
+        self.supports_block_table = set(rows) == {"key", "value"} and len(set(self.row_bytes)) == 1
 
     def register_cache_tensor(
         self, bytes_per_sector: int, non_trash_bytes: int, cache_tensor: torch.Tensor, pool: CachePool

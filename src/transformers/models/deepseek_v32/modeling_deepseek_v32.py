@@ -184,6 +184,7 @@ class DeepseekV32Indexer(nn.Module):
         attention_mask: torch.Tensor,
         position_ids: torch.Tensor,  # Kept for BC
         past_key_values: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         """
         Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA).
@@ -221,7 +222,10 @@ class DeepseekV32Indexer(nn.Module):
         q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
         k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
 
-        if past_key_values is not None:
+        paged_cache = kwargs.get("cache")
+        if paged_cache is not None:  # continuous batching
+            k = paged_cache.update_rows(self.layer_idx, {"index_key": k[0]}, kwargs)["index_key"][None]
+        elif past_key_values is not None:
             k = past_key_values.update_indexer(k, self.layer_idx)
 
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
@@ -380,6 +384,15 @@ class DeepseekV32Attention(nn.Module):
         self.scaling = yarn_apply_mscale(config.rope_parameters, self.qk_head_dim ** (-0.5))
         self.indexer = DeepseekV32Indexer(config, layer_idx)
 
+    def cache_rows(self) -> dict[str, tuple[tuple[int, ...], torch.dtype | None]]:
+        """The shape and dtype (None for the cache dtype) of the rows continuous batching caches per token for this
+        layer: the compressed latent of its keys and values, its shared rotary key, and its indexer's keys."""
+        return {
+            "latent": ((self.kv_lora_rank,), None),
+            "rope_key": ((self.qk_rope_head_dim,), None),
+            "index_key": ((self.config.index_head_dim,), None),
+        }
+
     def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Expands the compressed latents into key and value states. Args:
             - kv_nope: key + value without positional encoding, shape [batch_size, 1, seqlen, self.kv_lora_rank]
@@ -424,7 +437,11 @@ class DeepseekV32Attention(nn.Module):
         q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
 
         # Cache read / write is performed while latent KV is still compressed
-        if past_key_values is not None:
+        paged_cache = kwargs.get("cache")
+        if paged_cache is not None:  # continuous batching
+            rows = paged_cache.update_rows(self.layer_idx, {"latent": k_pass[0, 0], "rope_key": k_rot[0, 0]}, kwargs)
+            k_pass, k_rot = rows["latent"][None, None], rows["rope_key"][None, None]
+        elif past_key_values is not None:
             k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
@@ -439,6 +456,7 @@ class DeepseekV32Attention(nn.Module):
             attention_mask[:, 0, :, :],
             position_ids,  # Kept for BC
             past_key_values=past_key_values,
+            **kwargs,
         )  # [B, S, topk]
 
         sparse_indices = None
