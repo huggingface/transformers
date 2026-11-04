@@ -1344,9 +1344,11 @@ class ProcessorTesterMixin:
         for key in outputs:
             self.assertTrue(outputs[key].equal(expected_outputs[key]))
 
-        # each target transcription is in the labels of its audio
+        # the prompt is masked out of the loss: only each target transcription and its end-of-turn token are kept
         for labels, transcription in zip(outputs["labels"], transcriptions):
-            self.assertIn(transcription, processor.tokenizer.decode(labels[labels != -100]))
+            self.assertEqual(
+                processor.tokenizer.decode(labels[labels != -100]), transcription + processor.assistant_end
+            )
 
         # user `processor_kwargs` are merged with the labels request
         merged_outputs = processor.apply_transcription_request(
