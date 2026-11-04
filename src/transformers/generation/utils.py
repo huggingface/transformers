@@ -4315,10 +4315,6 @@ class GenerationMixin(ContinuousMixin):
             if cache is None:
                 raise ValueError("Cannot use prefill chunking without a cache")
 
-            # Even if we are not compiling the forward, flex is always compiled when used. With chunked prefill, we may
-            # end up needing just a bit more graphs than the default (which is 8). Doing this avoids very cryptic warnings
-            getattr(torch, "_dynamo").config.cache_size_limit = 64
-
             chunk_size = generation_config.prefill_chunk_size
             # In case we are restarting from non-empty Cache and the input_ids also contain the old ones, we need to slice
             next_sequence_length = 0 if next_sequence_length is None else next_sequence_length
