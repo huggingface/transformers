@@ -211,13 +211,7 @@ class Mistral3Model(LlavaModel):
             **kwargs,
         )
 
-        return Mistral3ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-        )
+        return Mistral3ModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
 
 
 class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
@@ -309,7 +303,7 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            mm_encoder_outputs=outputs.mm_encoder_outputs,
         )
 
 

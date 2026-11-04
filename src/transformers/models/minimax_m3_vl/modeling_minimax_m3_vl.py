@@ -1424,15 +1424,7 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
             **kwargs,
         )
 
-        return MiniMaxM3VLModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=getattr(outputs, "hidden_states", None),
-            attentions=getattr(outputs, "attentions", None),
-            image_hidden_states=mm_encoder_outputs["image"].pooler_output if mm_encoder_outputs.get("image") else None,
-            video_hidden_states=mm_encoder_outputs["video"].pooler_output if mm_encoder_outputs.get("video") else None,
-            router_logits=getattr(outputs, "router_logits", None),
-        )
+        return MiniMaxM3VLModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
 
     @merge_with_config_defaults
     @can_return_tuple
@@ -1559,8 +1551,7 @@ class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Genera
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
-            video_hidden_states=outputs.video_hidden_states,
+            mm_encoder_outputs=outputs.mm_encoder_outputs,
         )
 
     @auto_docstring

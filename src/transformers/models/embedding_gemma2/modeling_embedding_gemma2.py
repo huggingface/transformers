@@ -775,6 +775,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
 
         image_mask, video_mask, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds)
         multimodal_mask = image_mask | video_mask | audio_mask
+        mm_encoder_outputs = {}
 
         # Replace image id with PAD if the image token if OOV, to avoid index-errors
         if inputs_embeds is None:
@@ -783,8 +784,11 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
 
         # Merge text and images
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, image_position_ids, return_dict=True).pooler_output
-            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_outputs = self.get_image_features(pixel_values, image_position_ids, return_dict=True)
+            mm_encoder_outputs["image"] = image_outputs
+            image_features = torch.cat(image_outputs.pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_image_tokens = image_mask.sum()
@@ -800,10 +804,13 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
             )
 
         if pixel_values_videos is not None:
-            video_features = self.get_video_features(
+            video_outputs = self.get_video_features(
                 pixel_values_videos, video_position_ids, num_frames_per_video, return_dict=True
-            ).pooler_output
-            video_features = torch.cat(video_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            )
+            mm_encoder_outputs["video"] = video_outputs
+            video_features = torch.cat(video_outputs.pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_video_tokens = video_mask.sum()
@@ -821,6 +828,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
         # Merge text and audio
         if input_features is not None and input_features_mask is not None:
             audio_output = self.get_audio_features(input_features, input_features_mask, return_dict=True)
+            mm_encoder_outputs["audio"] = audio_output
             audio_features = audio_output.pooler_output
             audio_mask_from_encoder = audio_output.attention_mask  # True = valid
 
@@ -847,13 +855,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
             **kwargs,
         )
 
-        return EmbeddingGemma2ModelOutput(
-            last_hidden_state=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
-            audio_hidden_states=audio_features if input_features is not None else None,
-        )
+        return EmbeddingGemma2ModelOutput(**outputs, mm_encoder_outputs=mm_encoder_outputs)
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the audio encoder into language model space.")
