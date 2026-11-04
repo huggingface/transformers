@@ -96,10 +96,10 @@ def eager_attention_forward(
 @dataclass
 class BaseModelOutputWithAttentionMask(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the model. If `past_key_values` is used only
         the last hidden-state of the sequences of shape `(batch_size, 1, hidden_size)` is output.
-    attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+    attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
         Attention mask used in the model's forward pass to avoid performing attention on padding token indices.
         Mask values selected in `[0, 1]`:
         - 1 for tokens that are **not masked**,
@@ -110,26 +110,26 @@ class BaseModelOutputWithAttentionMask(ModelOutput):
         Contains pre-computed hidden-states (key and values in the
         self-attention blocks and optionally if `config.is_encoder_decoder=True` in the cross-attention blocks)
         that can be used (see `past_key_values` input) to speed up sequential decoding.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+    hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
         one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
         the model at the output of each layer plus the optional initial embedding outputs.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
         the self-attention heads.
-    cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    cross_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
         used to compute the weighted average in the cross-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    attention_mask: torch.FloatTensor | None = None
+    last_hidden_state: torch.Tensor | None = None
+    attention_mask: torch.Tensor | None = None
     past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    cross_attentions: tuple[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    cross_attentions: tuple[torch.Tensor] | None = None
 
 
 def get_visual_bbox(image_size=224, patch_size=16):

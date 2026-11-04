@@ -466,7 +466,7 @@ class HubertAttnAdapterLayer(nn.Module):
         self.act_fn = nn.ReLU()
         self.linear_2 = nn.Linear(self.input_dim, self.hidden_dim)
 
-    def forward(self, hidden_states: torch.FloatTensor):
+    def forward(self, hidden_states: torch.Tensor):
         hidden_states = self.norm(hidden_states)
 
         hidden_states = self.linear_1(hidden_states)
@@ -776,8 +776,8 @@ class HubertModel(HubertPreTrainedModel):
 
     def _mask_hidden_states(
         self,
-        hidden_states: torch.FloatTensor,
-        mask_time_indices: torch.FloatTensor | None = None,
+        hidden_states: torch.Tensor,
+        mask_time_indices: torch.Tensor | None = None,
         attention_mask: torch.LongTensor | None = None,
     ):
         """
@@ -827,7 +827,7 @@ class HubertModel(HubertPreTrainedModel):
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        mask_time_indices: torch.FloatTensor | None = None,
+        mask_time_indices: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
@@ -1071,12 +1071,12 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutput:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
             into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library
             (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
             To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and conversion
-            into a tensor of type `torch.FloatTensor`. See [`HubertProcessor.__call__`] for details.
+            into a tensor of type `torch.Tensor`. See [`HubertProcessor.__call__`] for details.
         """
         if self.config.use_weighted_layer_sum:
             kwargs["output_hidden_states"] = True

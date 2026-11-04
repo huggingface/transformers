@@ -81,7 +81,7 @@ class KyutaiSpeechToTextFlexibleLinear(nn.Module):
 
 
         Args:
-            x (`torch.FloatTensor): input to the layer of shape `(batch, num_layers, embed_dim)` or of shape `(batch, seq_length, embed_dim)`
+            x (`torch.Tensor): input to the layer of shape `(batch, num_layers, embed_dim)` or of shape `(batch, seq_length, embed_dim)`
             layer_idx (`torch.Tensor`, *optional*):
                 Can be used to specify which codebook's layers(s) to use.
                 If it's a tensor of shape `(seq_length,)`, will matmul each element of the sequence to the corresponding weights.
@@ -578,7 +578,7 @@ class KyutaiSpeechToTextModel(KyutaiSpeechToTextPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -649,7 +649,7 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -799,7 +799,7 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
         self,
         *args,
         audio_tokens: torch.LongTensor | None = None,
-        input_values: torch.FloatTensor | None = None,
+        input_values: torch.Tensor | None = None,
         padding_mask: torch.Tensor | None = None,
         audio_window_size: int | None = None,
         current_window: tuple[int, int] | None = None,
