@@ -11,19 +11,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fuses an exported ONNX graph into ONNX Runtime's own ops (`OnnxConfig(ort_fusions="cpu" | "cuda")`): `fuse_for_onnxruntime`.
+"""Fuses an exported ONNX graph into ONNX Runtime's own ops for one of its providers (`OnnxConfig(ort_fusions="cpu" |
+"cuda")`): `fuse_for_onnxruntime`.
 
 onnxscript's ORT fusions (`optimize_for_ort`) do most of it: RMS / layer norms and their skip variants, attention,
-GELU. Around them, in order:
+GELU. Around them, in order (`_STEPS`, which also says which provider each step is for):
 
 1. **Prepare**: write the graph in the forms those fusions match (Gemma's `Pow(x, -0.5)` norms, grouped-query keys).
 2. **Rotary embeddings**: fuse the ones onnxscript leaves (cos / sin folded to constants, or computed with a
    broadcast, or the `[batch, length, heads, head_dim]` layout), and attentions sharing a key (Gemma 4's).
 3. **onnxscript's ORT fusions.**
-4. **Repair**: undo the fusions of theirs ONNX Runtime rejects or miscomputes.
-5. **More fusions**: norms without a scale, norms a float16 model computes in float32, `GroupQueryAttention` over a
-   key-value cache, `MoE` (CUDA's only), the projections reading one input as one `MatMul`.
-6. **CUDA provider** (`"cuda"`): rewrite the ops its kernels lack, which would run on the CPU (and keep CUDA graphs from
+4. **Repair**: undo the fusions of theirs ONNX Runtime rejects.
+5. **More fusions**: norms without a scale, norms a float16 model computes in float32, the projections reading one
+   input as one `MatMul`; on the CPU, `GroupQueryAttention` over a key-value cache, and the attentions left back to
+   plain ops (its `MultiHeadAttention` is slower); on CUDA, `MoE`.
+6. **CUDA provider**: rewrite the ops its kernels lack, which would run on the CPU (and keep CUDA graphs from
    capturing the graph).
 7. **Clean up**: what every layer computes alike, computed once.
 
@@ -40,6 +42,13 @@ from onnxscript.rewriter.ort_fusions import optimize_for_ort
 from onnxscript.rewriter.ort_fusions.rotary_embedding import RotaryEmbeddingFusion, fuse_rotary_embedding
 from onnxscript.rewriter.ort_fusions.sdpa import fuse_sdpa
 from onnxscript.rewriter.ort_fusions.skip_normalization import fuse_skip_rms_normalization
+from packaging import version
+
+from ..utils import logging
+from ..utils.import_utils import _is_package_available
+
+
+logger = logging.get_logger(__name__)
 
 
 # ── Graph helpers ─────────────────────────────────────────────────────────────
@@ -327,18 +336,16 @@ def _fuse_shared_key_attentions(model: ir.Model) -> int:
 # ── 4. Repair ─────────────────────────────────────────────────────────────────
 
 
-def _unfuse_skip_norms(model: ir.Model, device: str) -> int:
-    """Turn each `SkipSimplifiedLayerNormalization` ONNX Runtime rejects or miscomputes back into the `Add` and
-    `SimplifiedLayerNormalization` it fused: one whose input, skip and scale dtypes differ (a norm computed in float32
-    on a float16 residual), and, for `"cuda"`, a float16 one, whose mean square CUDA's kernel accumulates in float16
-    (infinite past 65504: a large activation, Qwen3's first token's, then normalizes to zeros). Returns how many."""
+def _unfuse_mixed_dtype_skip_norms(model: ir.Model) -> int:
+    """Turn each `SkipSimplifiedLayerNormalization` whose input, skip and scale dtypes differ (a norm computed in
+    float32 on a float16 residual), which ONNX Runtime rejects, back into the `Add` and `SimplifiedLayerNormalization`
+    it fused. Returns how many."""
     count = 0
     for node in list(model.graph.all_nodes()):
         if node.op_type != "SkipSimplifiedLayerNormalization":
             continue
         input, skip, scale = node.inputs[:3]
-        mixed = len({input.dtype, skip.dtype, scale.dtype}) > 1
-        if not mixed and not (device == "cuda" and input.dtype == ir.DataType.FLOAT16):
+        if len({input.dtype, skip.dtype, scale.dtype}) == 1:
             continue
         total = ir.node("Add", [input, skip])
         total.outputs[0].dtype, total.outputs[0].shape = input.dtype, input.shape
@@ -591,7 +598,7 @@ def _shared_rotation(query: ir.Value, new_key, head_size: int, prefill: bool):
     return (query_rotation.inputs[0], key_rotation.inputs[0], (positions, cos_cache, sin_cache)), interleaved
 
 
-def _fuse_group_query_attention(model: ir.Model, device: str) -> int:
+def _fuse_group_query_attention(model: ir.Model) -> int:
     """Turn each fused `MultiHeadAttention` reading a key-value cache's update into ONNX Runtime's
     `GroupQueryAttention`, which updates the cache itself (or, for a prefill, starts it) and reads its key-value heads
     without repeating them. Its mask stays the attention's own bias, so every row's `seqlens_k` is the whole length:
@@ -612,10 +619,6 @@ def _fuse_group_query_attention(model: ir.Model, device: str) -> int:
         updates = _cache_update(key), _cache_update(value)
         if projection_bias is not None or padding_mask is not None or None in updates:
             continue
-        # CUDA's masks by `seqlens_k` only (exact for right padding alone): its kernels reject a bias, or fall back
-        # to an unfused one, slower than `MultiHeadAttention`'s.
-        if device == "cuda" and bias is not None:
-            continue
         if any(readers[update[3]] > 1 for update in updates):
             continue
         (past_key, new_key, start, key_present), (past_value, new_value, _, value_present) = updates
@@ -629,6 +632,10 @@ def _fuse_group_query_attention(model: ir.Model, device: str) -> int:
             continue
         if new_length != query.shape[1]:
             continue
+        # After a past, it takes several new tokens for one sequence only (ONNX Runtime 1.29): a decode graph that
+        # takes any number of tokens is fused only for a batch of one.
+        if past_key is not None and _static_dim(query, 1) != 1 and _static_dim(query, 0) != 1:
+            continue
         tape = ir.tape.Tape(graph)
 
         def constant(values, dtype=np.int64, tape=tape, count=count):
@@ -641,6 +648,12 @@ def _fuse_group_query_attention(model: ir.Model, device: str) -> int:
                 return tape.op("Reshape", [states.value, merge])
             return tape.op("Reshape", [tape.op("Transpose", [states], attributes={"perm": [0, 2, 1, 3]}), merge])
 
+        # The total length when the shapes are static and the cache isn't written in place: ONNX Runtime's shape
+        # inference reads one computed from shapes as int64, so it goes in as a constant.
+        past_length = 0 if past_key is None else _static_dim(past_key, 2)
+        known_total = None
+        if start is None and isinstance(query.shape[1], int) and past_length is not None:
+            known_total = query.shape[1] + past_length
         rotary, dtype, rotary_attributes = [None, None, None], query.dtype, {}
         if (rotation := _shared_rotation(query, new_key, head_size, past_key is None)) is not None:
             # Rotated by the attention itself, which stores the key rotated.
@@ -660,7 +673,11 @@ def _fuse_group_query_attention(model: ir.Model, device: str) -> int:
             length = tape.op("Add", [offset, new_length])
         if start is not None:
             bias = tape.op("Slice", [bias, constant([0]), length, constant([3])])
-        total = tape.op("Cast", [length], attributes={"to": ir.DataType.INT32})
+        if known_total is not None:
+            total, total_length = constant([known_total], np.int32), constant(known_total, np.int32)
+        else:
+            total = tape.op("Cast", [length], attributes={"to": ir.DataType.INT32})
+            total_length = tape.op("Squeeze", [total])
         seqlens_k = tape.op("Expand", [tape.op("Sub", [total, constant([1], np.int32)]), batch])
         if rotary[2] is not None:
             # It takes a cache of at least `total` rows; a per-token cache (`b * length + s`) has
@@ -675,7 +692,7 @@ def _fuse_group_query_attention(model: ir.Model, device: str) -> int:
         attributes.update(rotary_attributes)
         outputs = tape.op_multi_out(
             "GroupQueryAttention",
-            [query, merged(new_key), merged(new_value), past_key, past_value, seqlens_k, tape.op("Squeeze", [total])]
+            [query, merged(new_key), merged(new_value), past_key, past_value, seqlens_k, total_length]
             + [*rotary, bias],
             attributes=attributes,
             domain="com.microsoft",
@@ -725,49 +742,34 @@ def _grouped_matmul(value: ir.Value):
 
 
 def _gate(value: ir.Value):
-    """`(projected, activation, gate_first)` if `value` is `act(gate) * up` of `projected`'s two halves (its
-    `Split`), `act` SiLU (`gate * Sigmoid(gate)`) or tanh GELU."""
+    """`(projected, gate_first)` if `value` is `silu(gate) * up` (`gate * Sigmoid(gate)`) of `projected`'s two halves
+    (its `Split`). Not a GELU gate (Gemma 4's): ONNX Runtime 1.29's CUDA `MoE` miscomputes gated GELU experts."""
     mul = _producer(value, "Mul")
     if mul is None:
         return None
     for activated, up in (mul.inputs, mul.inputs[::-1]):
-        if (silu := _producer(activated, "Mul")) is not None:
-            gate = next((item for item in silu.inputs if _producer(item, "Split") is not None), None)
-            sigmoid = next((_producer(item, "Sigmoid") for item in silu.inputs if _producer(item, "Sigmoid")), None)
-            if gate is None or sigmoid is None or sigmoid.inputs[0] is not gate:
-                continue
-            activation = "silu"
-        elif (gelu := _producer(activated, "Gelu")) is not None and gelu.attributes.get_string(
-            "approximate"
-        ) == "tanh":
-            gate, activation = gelu.inputs[0], "gelu"
-        else:
+        silu = _producer(activated, "Mul")
+        if silu is None:
+            continue
+        gate = next((item for item in silu.inputs if _producer(item, "Split") is not None), None)
+        sigmoid = next((_producer(item, "Sigmoid") for item in silu.inputs if _producer(item, "Sigmoid")), None)
+        if gate is None or sigmoid is None or sigmoid.inputs[0] is not gate:
             continue
         split = _producer(gate, "Split")
         if split is None or len(split.outputs) != 2 or up not in split.outputs:
             continue
         if split.attributes.get_int("axis") in (1, -1):
-            return split.inputs[0], activation, split.outputs[0] is gate
+            return split.inputs[0], split.outputs[0] is gate
     return None
 
 
 def _router(weights: ir.Value):
-    """`(logits, k, normalize, scales)` if the routing `weights` are `TopK(Softmax(logits))`'s values,
-    renormalized (`Div` by their `ReduceSum`) or not, or `Softmax(TopK(logits))` (Granite's: the same experts and
-    weights as the renormalized), and scaled by a constant per expert (Gemma 4's: `Mul(weights, GatherND(scale,
-    ids))`) or not. A float16 model's router computes in float32: the casts around it are stepped over, the
-    logits returned in the model's dtype."""
-    scales = ids = None
+    """`(logits, k, normalize)` if the routing `weights` are `TopK(Softmax(logits))`'s values, renormalized (`Div`
+    by their `ReduceSum`) or not, or `Softmax(TopK(logits))` (Granite's: the same experts and weights as the
+    renormalized). A float16 model's router computes in float32: the casts around it are stepped over, the logits
+    returned in the model's dtype."""
     if (downcast := _producer(weights, "Cast")) is not None:
         weights = downcast.inputs[0]
-    if (scaling := _producer(weights, "Mul")) is not None:
-        for kept, scaled in (scaling.inputs, scaling.inputs[::-1]):
-            lookup = _producer(scaled, "GatherND")
-            if lookup is not None and _constant(lookup.inputs[0]) is not None:
-                scales, ids, weights = _constant(lookup.inputs[0]), lookup.inputs[1], kept
-                break
-        else:
-            return None
     normalize = 0
     division = _producer(weights, "Div")
     total = _producer(division.inputs[1], "ReduceSum") if division is not None else None
@@ -789,13 +791,9 @@ def _router(weights: ir.Value):
         logits = softmax.inputs[0]
     if total is not None and total.inputs[0] is not top_k.outputs[0]:
         return None
-    if scales is not None and (
-        _producer(ids, "Unsqueeze") is None or ids.producer().inputs[0] is not top_k.outputs[1]
-    ):
-        return None
     if (upcast := _producer(logits, "Cast")) is not None:
         logits = upcast.inputs[0]
-    return logits, int(_constant(top_k.inputs[1]).reshape(())), normalize, scales
+    return logits, int(_constant(top_k.inputs[1]).reshape(())), normalize
 
 
 def _fuse_mixture_of_experts(model: ir.Model) -> int:
@@ -828,18 +826,14 @@ def _fuse_mixture_of_experts(model: ir.Model) -> int:
         router = _router(flat.inputs[0]) if flat is not None else None
         if tokens is None or router is None:
             continue
-        logits, k, normalize, scales = router
-        (_, up_weights, up_biases), (_, down_weights, down_biases), (_, activation, gate_first) = up, down, gate
+        logits, k, normalize = router
+        (_, up_weights, up_biases), (_, down_weights, down_biases), (_, gate_first) = up, down, gate
         if logits.shape is None or _static_dim(logits, len(logits.shape) - 1) != up_weights.shape[0]:
             continue
         if logits.dtype != tokens.inputs[0].dtype:
             continue
-        # `[experts, in, out]` to ONNX Runtime's `[experts, out, in]`; each expert's scale, a constant on its output,
-        # into its last projection.
+        # `[experts, in, out]` to ONNX Runtime's `[experts, out, in]`.
         fc1, fc2 = up_weights.transpose(0, 2, 1), down_weights.transpose(0, 2, 1)
-        if scales is not None:
-            fc2 = fc2 * scales[:, None, None].astype(fc2.dtype)
-            down_biases = down_biases * scales[:, None].astype(down_biases.dtype) if down_biases is not None else None
         half = fc1.shape[1] // 2
         gate_rows, up_rows = (slice(0, half), slice(half, None)) if gate_first else (slice(half, None), slice(0, half))
         biases = (up_biases[:, gate_rows], up_biases[:, up_rows]) if up_biases is not None else (None, None)
@@ -851,7 +845,7 @@ def _fuse_mixture_of_experts(model: ir.Model) -> int:
         moe = ir.node(
             "MoE",
             [tokens.inputs[0], logits, *weights],
-            attributes={"k": k, "normalize_routing_weights": normalize, "activation_type": activation},
+            attributes={"k": k, "normalize_routing_weights": normalize, "activation_type": "silu"},
             domain="com.microsoft",
         )
         moe.outputs[0].dtype, moe.outputs[0].shape = tokens.inputs[0].dtype, combine.outputs[0].shape
@@ -1006,36 +1000,36 @@ def _ort_fusions(model: ir.Model) -> int:
     return sum(fused.values())
 
 
-# The pipeline, step by step: `(name, step(model, device) -> how many times it applied)`.
+_ANY, _CPU, _CUDA = frozenset({"cpu", "cuda"}), frozenset({"cpu"}), frozenset({"cuda"})
+
+# The pipeline, step by step: `(name, step(model) -> how many times it applied, the providers it's for)`.
 _STEPS = (
     # 1. Prepare.
-    ("rsqrt_from_pow", lambda model, device: _RSQRT_FROM_POW.apply_to_model(model)),
-    ("key_transposes", lambda model, device: _KEY_TRANSPOSE.apply_to_model(model)),
+    ("rsqrt_from_pow", _RSQRT_FROM_POW.apply_to_model, _ANY),
+    ("key_transposes", _KEY_TRANSPOSE.apply_to_model, _ANY),
     # 2. Rotary embeddings, and attentions sharing a key.
-    ("rotary_embeddings", lambda model, device: _fuse_rotary_embeddings(model)),
-    ("shared_key_attentions", lambda model, device: _fuse_shared_key_attentions(model)),
+    ("rotary_embeddings", _fuse_rotary_embeddings, _ANY),
+    ("shared_key_attentions", _fuse_shared_key_attentions, _ANY),
     # 3. onnxscript's ORT fusions: norms, skip norms, attention, GELU.
-    ("ort_fusions", lambda model, device: _ort_fusions(model)),
+    ("ort_fusions", _ort_fusions, _ANY),
     # 4. Repair.
-    ("unfused_skip_norms", _unfuse_skip_norms),
-    ("untransposed_batch_matmuls", lambda model, device: _untranspose_batch_matmuls(model)),
+    ("unfused_mixed_dtype_skip_norms", _unfuse_mixed_dtype_skip_norms, _ANY),
+    ("untransposed_batch_matmuls", _untranspose_batch_matmuls, _ANY),
     # 5. More fusions.
-    ("weightless_rms_norms", lambda model, device: _WEIGHTLESS_RMS_NORMS.apply_to_model(model)),
-    ("narrowed_norms", lambda model, device: _narrow_norms(model)),
-    # Narrowed, the norms whose skip fusion was undone take their residual's dtype: fused again, but for CUDA,
-    # which miscomputes them in that (float16) dtype.
-    ("narrowed_skip_norms", lambda model, device: fuse_skip_rms_normalization(model) if device != "cuda" else 0),
-    ("group_query_attention", _fuse_group_query_attention),
-    ("mixture_of_experts", lambda model, device: _fuse_mixture_of_experts(model) if device == "cuda" else 0),
-    # On the CPU, the attentions left as `MultiHeadAttention`, back to the ops it fused.
-    ("unfused_attentions", lambda model, device: _unfuse_attentions(model) if device == "cpu" else 0),
-    ("packed_matmuls", lambda model, device: _pack_sibling_matmuls(model)),
+    ("weightless_rms_norms", _WEIGHTLESS_RMS_NORMS.apply_to_model, _ANY),
+    ("narrowed_norms", _narrow_norms, _ANY),
+    # Narrowed, the norms whose skip fusion was undone take their residual's dtype: fused again.
+    ("narrowed_skip_norms", fuse_skip_rms_normalization, _ANY),
+    # CUDA's `GroupQueryAttention` masks by `seqlens_k` only: it rejects the bias every masked attention has, or
+    # falls back to a kernel slower than `MultiHeadAttention`'s.
+    ("group_query_attention", _fuse_group_query_attention, _CPU),
+    ("mixture_of_experts", _fuse_mixture_of_experts, _CUDA),
+    # ONNX Runtime's CPU `MultiHeadAttention` runs slower than the ops it fused: the ones left, unfused.
+    ("unfused_attentions", _unfuse_attentions, _CPU),
+    ("packed_matmuls", _pack_sibling_matmuls, _ANY),
     # 6. CUDA provider.
-    ("integer_equals", lambda model, device: _INTEGER_EQUAL.apply_to_model(model) if device == "cuda" else 0),
-    (
-        "constant_gather_nds",
-        lambda model, device: _CONSTANT_GATHER_ND.apply_to_model(model) if device == "cuda" else 0,
-    ),
+    ("integer_equals", _INTEGER_EQUAL.apply_to_model, _CUDA),
+    ("constant_gather_nds", _CONSTANT_GATHER_ND.apply_to_model, _CUDA),
 )
 
 
@@ -1043,7 +1037,14 @@ def fuse_for_onnxruntime(model: ir.Model, device: str = "cpu", steps: int | None
     """Fuse `model` in place into ONNX Runtime's own ops, for its `"cpu"` or `"cuda"` provider (with the ops only
     the latter has, `MoE`). Returns how many times each step applied. `steps` runs only the first ones (to measure
     each step's share)."""
-    counts = {name: step(model, device) for name, step in _STEPS[:steps]}
+    if device == "cuda":
+        installed, installed_version = _is_package_available("onnxruntime", return_version=True)
+        if installed and version.parse(installed_version) < version.parse("1.27.0"):
+            logger.warning(
+                f"Graphs fused for ONNX Runtime's CUDA provider need onnxruntime>=1.27.0 (installed: "
+                f"{installed_version}): before it, its float16 skip norms overflow on large activations."
+            )
+    counts = {name: step(model) if device in providers else 0 for name, step, providers in _STEPS[:steps]}
     # 7. What every layer computes alike (its mask's unattended rows), computed once.
     _merge_equal_computations(model)
     return counts
