@@ -334,6 +334,10 @@ class PocketTTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         torch.testing.assert_close(single, audio[1], atol=1e-5, rtol=0)
         self.assertEqual(single[0].item(), 0.0)
 
+    @unittest.skip("model is extremely custom!")
+    def test_if_input_has_mismatching_tokens_and_mm_data(self):
+        pass
+
 
 @slow
 @require_torch
@@ -428,7 +432,3 @@ class PocketTTSProcessingIntegrationTest(unittest.TestCase):
                 rtol=0,
                 atol=self.VOICE_ATOL,
             )
-
-    @unittest.skip("model is extremely custom!")
-    def test_if_input_has_mismatching_tokens_and_mm_data(self):
-        pass
