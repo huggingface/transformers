@@ -628,12 +628,6 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         return False
 
-    @staticmethod
-    def _prepare_config_headdim(config, requested_dim):
-        config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
-        config.decoder.cross_attention_hidden_size = config.encoder.hidden_size
-        return config
-
     def test_config(self):
         # Skip `create_and_test_config_from_and_save_pretrained_composite` because the config has twice the same subconfig
         self.config_tester.create_and_test_config_from_and_save_pretrained_composite = lambda: None

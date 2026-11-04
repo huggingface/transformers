@@ -554,12 +554,6 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             )
         return inputs_dict
 
-    @staticmethod
-    def _prepare_config_headdim(config, requested_dim):
-        config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
-        config.depth_decoder_config.input_size = config.hidden_size
-        return config
-
     def _get_input_ids_and_config(self, batch_size=2):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common(batch_size)
         input_ids = inputs_dict.pop("input_ids").to(torch_device)
