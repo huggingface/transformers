@@ -125,7 +125,7 @@ def sdpa_attention_forward(
         )
 
     sdpa_kwargs = {}
-    _, num_heads, q_length, _ = query.shape
+    q_length = query.shape[2]
     if hasattr(module, "num_key_value_groups") and module.num_key_value_groups > 1:
         if use_gqa_in_sdpa(attention_mask, key, value):
             sdpa_kwargs["enable_gqa"] = True
@@ -202,7 +202,7 @@ def sdpa_attention_forward(
     )
     # Undoes `pack_gqa`, a no-op otherwise. The batch comes from the output, as SDPA broadcasts it (e.g. learned
     # queries with batch 1)
-    attn_output = attn_output.reshape(attn_output.shape[0], num_heads, q_length, value.shape[-1])
+    attn_output = attn_output.reshape(attn_output.shape[0], -1, q_length, value.shape[-1])
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, None
