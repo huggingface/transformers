@@ -154,13 +154,13 @@ class Sam3LiteTextConfig(PreTrainedConfig):
 @dataclass
 class Sam3LiteTextTextEncoderOutput(BaseModelOutputWithPooling):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Full sequence of hidden states from the text encoder.
-    pooler_output (`torch.FloatTensor` of shape `(batch_size, projection_dim)`):
+    pooler_output (`torch.Tensor` of shape `(batch_size, projection_dim)`):
         EOT-pooled output projected to `projection_dim` via the internal CLIP-style projection.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+    hidden_states (`tuple(torch.Tensor)`, *optional*):
         Tuple of hidden states at each layer, returned when `output_hidden_states=True`.
-    attentions (`tuple(torch.FloatTensor)`, *optional*):
+    attentions (`tuple(torch.Tensor)`, *optional*):
         Tuple of attention weights at each transformer layer, returned when `output_attentions=True`.
     """
 

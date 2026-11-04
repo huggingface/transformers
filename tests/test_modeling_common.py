@@ -103,6 +103,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import (
     ModelOutput,
+    is_rocm_platform,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
@@ -384,7 +385,7 @@ class ModelTesterMixin(
                 continue
 
             model.zero_grad(set_to_none=True)
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable()
             model.enable_input_require_grads()
 
             set_seed(42)
@@ -648,7 +649,7 @@ class ModelTesterMixin(
                 optimizer.zero_grad()
 
                 # now enable gradient checkpointing and compare the gradients
-                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+                model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
 
                 checkpointing_layer = next(m for m in model.modules() if isinstance(m, GradientCheckpointingLayer))
 
@@ -1247,8 +1248,9 @@ class ModelTesterMixin(
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             if is_deepspeed_zero3_enabled():
-                with deepspeed.zero.Init():
-                    model = model_class(config)
+                # `_from_config` properly handles the ZeRO-3 init, i.e. it defers the weight initialization until
+                # the params can be gathered (they are empty shards during `__init__`)
+                model = model_class._from_config(config)
             else:
                 model = model_class(config)
                 model.to(torch_device)
@@ -1324,8 +1326,7 @@ class ModelTesterMixin(
             # Copy again. config changed with embedding resizing (`vocab_size` changed)
             config = copy.deepcopy(original_config)
             if is_deepspeed_zero3_enabled():
-                with deepspeed.zero.Init():
-                    model = model_class(config)
+                model = model_class._from_config(config)
             else:
                 model = model_class(config)
                 model.to(torch_device)
@@ -1364,8 +1365,7 @@ class ModelTesterMixin(
             config.vocab_size = 4
             config.pad_token_id = 3
             if is_deepspeed_zero3_enabled():
-                with deepspeed.zero.Init():
-                    model = model_class(config)
+                model = model_class._from_config(config)
             else:
                 model = model_class(config)
                 model.to(torch_device)
@@ -1441,8 +1441,7 @@ class ModelTesterMixin(
             with self.subTest(model_class):
                 config = copy.deepcopy(original_config)
                 if is_deepspeed_zero3_enabled():
-                    with deepspeed.zero.Init():
-                        model = model_class(config)
+                    model = model_class._from_config(config)
                 else:
                     model = model_class(config).to(torch_device)
                 model.eval()
@@ -2043,6 +2042,9 @@ class ModelTesterMixin(
             set_seed(42)
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
+            # disable flakiness via norms as much as possible
+            set_config_for_less_flaky_test(config)
+
             # flash attention variants does not always support arbitrary headim
             config = prepare_config_headdim(config, 16)
 
@@ -2132,6 +2134,8 @@ class ModelTesterMixin(
                 model = model_class.from_pretrained(
                     tmpdirname, dtype=dtype, attn_implementation="eager", device_map=torch_device
                 )
+                # disable flakiness via norms as much as possible
+                set_model_for_less_flaky_test(model)
 
                 def _get_output_logits(outputs):
                     if "hidden_states" in outputs:
@@ -2157,18 +2161,23 @@ class ModelTesterMixin(
                 model = model_class.from_pretrained(
                     tmpdirname, dtype=dtype, attn_implementation=attn_implementation, device_map=torch_device
                 )
+                set_model_for_less_flaky_test(model)
+
                 outputs = model(**first_inputs)
                 logits_1_fa = _get_output_logits(outputs)
-                # Second run with attention mask and padding
                 outputs = model(**second_inputs)
                 logits_2_fa = _get_output_logits(outputs)
 
                 # Check the results
+                # No mask
                 torch.testing.assert_close(logits_1_eager, logits_1_fa, atol=atol, rtol=rtol)
-                if padding_side == "left":
-                    torch.testing.assert_close(logits_2_eager[1:], logits_2_fa[1:], atol=atol, rtol=rtol)
-                else:
-                    torch.testing.assert_close(logits_2_eager[:-1], logits_2_fa[:-1], atol=atol, rtol=rtol)
+
+                # With mask
+                if dummy_attention_mask is not None:
+                    attention_mask = slice(1, None) if padding_side == "left" else slice(None, -1)
+                    logits_2_fa = logits_2_fa[:, attention_mask]
+                    logits_2_eager = logits_2_eager[:, attention_mask]
+                torch.testing.assert_close(logits_2_eager, logits_2_fa, atol=atol, rtol=rtol)
 
         # In this case, the test should appear as skipped, not successful
         if not _has_run_at_least_one_model:
@@ -2182,7 +2191,11 @@ class ModelTesterMixin(
     @slow
     @is_flaky()
     def test_flash_attn_kernels_inference_equivalence(self):
-        self.flash_attn_inference_equivalence(attn_implementation="kernels-community/flash-attn3", padding_side="left")
+        # flash-attn3 is CUDA-only; on ROCm use aiter-flash-attn, which serves FA3 there.
+        attn_implementation = (
+            "kernels-community/aiter-flash-attn" if is_rocm_platform() else "kernels-community/flash-attn3"
+        )
+        self.flash_attn_inference_equivalence(attn_implementation=attn_implementation, padding_side="left")
 
     @require_torch_mps
     @require_kernels

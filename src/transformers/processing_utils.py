@@ -57,7 +57,6 @@ from .utils import (
     direct_transformers_import,
     hf_api,
     is_torch_available,
-    is_torchcodec_available,
     is_torchcodec_greater_or_equal,
     list_repo_templates,
     logging,
@@ -77,9 +76,6 @@ from .utils.type_validators import (
 )
 from .video_utils import VideoInput, VideoMetadataType, make_batched_videos
 
-
-if is_torchcodec_available():
-    import torchcodec
 
 if is_torch_available():
     import torch
@@ -2204,7 +2200,7 @@ class ProcessorMixin(PushToHubMixin):
         continue_final_message: bool | str = False,
         return_assistant_tokens_mask: bool = False,
         tokenize: bool = False,
-        return_tensors: str | TensorType | None = None,
+        return_tensors: str | TensorType | None = "auto",
         return_dict: bool = False,
         load_audio_from_video: bool = False,
         processor_kwargs: dict | None = None,
@@ -2287,9 +2283,13 @@ class ProcessorMixin(PushToHubMixin):
             ):
                 processor_kwargs["do_sample_frames"] = True
 
-            # Set only if user passes a non-None value. Otherwise we want to use each processor's own defaults
-            if return_tensors:
+            # We want to use each processor's own defaults by default when users don't pass anything
+            # NOTE: in `elif` branch we need to use processor default for `assistant_masks` to be
+            # same type as other keys but fine for now as it has been broken for a while
+            if return_tensors != "auto":
                 processor_kwargs["return_tensors"] = return_tensors
+            else:
+                return_tensors = None
 
             # Audio was loaded/resampled by us above, so let the audio processor know at which rate.
             # (we additionally preserve the location of the kwarg in the nested structure kwargs -> processor -> audio)
@@ -2567,7 +2567,10 @@ class OmniModalProcessorMixin(ProcessorMixin):
             )
 
         if not is_torchcodec_greater_or_equal("0.17"):
-            raise ValueError("Loading audio track from video file requires torchcodec>=0.17 installed!")
+            raise ImportError(
+                "`load_audio_from_video=True` requires torchcodec>=0.17. Install it with `pip install -U torchcodec`."
+            )
+        from torchcodec.decoders import get_container_metadata
 
         standalone_audio = iter(audio)
         audio_resolved = []
@@ -2580,7 +2583,7 @@ class OmniModalProcessorMixin(ProcessorMixin):
 
             # Only `torchcodec` can decode audio track from all types of video file formats
             # Don't raise a load-error if video is silent and instead skip it
-            cont_metadata = torchcodec.decoders.get_container_metadata(videos[video_idx])
+            cont_metadata = get_container_metadata(videos[video_idx])
             if not any(stream.media_type == "audio" for stream in cont_metadata.streams):
                 continue
 

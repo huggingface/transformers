@@ -176,11 +176,11 @@ class VibeVoiceAsrModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance.
-    audio_hidden_states (`torch.FloatTensor`, *optional*):
+    audio_hidden_states (`torch.Tensor`, *optional*):
         Projected audio hidden states.
     """
 
-    audio_hidden_states: torch.FloatTensor | None = None
+    audio_hidden_states: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -191,22 +191,22 @@ class VibeVoiceAsrModelOutputWithPast(BaseModelOutputWithPast):
 @dataclass
 class VibeVoiceAsrCausalLMOutputWithPast(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss.
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores.
     past_key_values (`Cache`, *optional*):
         Cache instance.
-    audio_hidden_states (`torch.FloatTensor`, *optional*):
+    audio_hidden_states (`torch.Tensor`, *optional*):
         Projected audio hidden states.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
     past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    audio_hidden_states: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    audio_hidden_states: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -234,15 +234,20 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
     @auto_docstring(custom_intro="Encode audio into embeddings that can be used by the language model.")
     def get_audio_features(
         self,
-        input_values: torch.FloatTensor,
+        input_values: torch.Tensor,
         padding_mask: torch.BoolTensor | None = None,
+        sample: bool = True,
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, num_samples)`):
+        input_values (`torch.Tensor` of shape `(batch_size, num_samples)`):
             Input audio tensor sampled at 24kHz.
         padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing operations on padding feature indices.
+        sample (`bool`, *optional*, defaults to `True`):
+            Whether to add Gaussian noise to the acoustic latents, as in the original model (σ-VAE: the noise
+            scale is drawn per batch item from N(0, `vae_std`)). If False, the encoder output is used as is, so the
+            output is deterministic.
         """
         with torch.no_grad():
             acoustic_encoder_cache, semantic_encoder_cache = None, None
@@ -268,11 +273,11 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
             acoustic_latents = torch.cat(acoustic_latents, dim=1)
             semantic_latents = torch.cat(semantic_latents, dim=1)
 
-            # Sample acoustic tokens
-            noise_std = self.config.acoustic_tokenizer_encoder_config.vae_std * torch.randn(
-                acoustic_latents.shape[0], device=acoustic_latents.device, dtype=acoustic_latents.dtype
-            )
-            acoustic_latents = acoustic_latents + noise_std[:, None, None] * torch.randn_like(acoustic_latents)
+            if sample:
+                noise_std = self.config.acoustic_tokenizer_encoder_config.vae_std * torch.randn(
+                    acoustic_latents.shape[0], device=acoustic_latents.device, dtype=acoustic_latents.dtype
+                )
+                acoustic_latents = acoustic_latents + noise_std[:, None, None] * torch.randn_like(acoustic_latents)
 
         combined_features = self.multi_modal_projector(acoustic_latents, semantic_latents)
         if padding_mask is not None:
@@ -292,21 +297,28 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        input_values: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        input_values: torch.Tensor | None = None,
         padding_mask: torch.BoolTensor | None = None,
+        sample: bool = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VibeVoiceAsrModelOutputWithPast:
         r"""
         padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing operations on padding feature indices.
+        sample (`bool`, *optional*, defaults to `True`):
+            Whether to add Gaussian noise to the acoustic latents, as in the original model (σ-VAE: the noise
+            scale is drawn per batch item from N(0, `vae_std`)). If False, the encoder output is used as is, so the
+            output is deterministic.
         """
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         audio_embeds = None
         if input_values is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(input_values=input_values, padding_mask=padding_mask).pooler_output
+            audio_embeds = self.get_audio_features(
+                input_values=input_values, padding_mask=padding_mask, sample=sample
+            ).pooler_output
 
             audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)
             inputs_embeds = inputs_embeds.masked_scatter(
@@ -351,16 +363,21 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        input_values: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        input_values: torch.Tensor | None = None,
         padding_mask: torch.BoolTensor | None = None,
         labels: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        sample: bool = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VibeVoiceAsrCausalLMOutputWithPast:
         r"""
         padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing operations on padding feature indices.
+        sample (`bool`, *optional*, defaults to `True`):
+            Whether to add Gaussian noise to the acoustic latents, as in the original model (σ-VAE: the noise
+            scale is drawn per batch item from N(0, `vae_std`)). If False, the encoder output is used as is, so the
+            output is deterministic.
 
         Example:
 
@@ -378,6 +395,7 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
             inputs_embeds=inputs_embeds,
             input_values=input_values,
             padding_mask=padding_mask,
+            sample=sample,
             **kwargs,
         )
 

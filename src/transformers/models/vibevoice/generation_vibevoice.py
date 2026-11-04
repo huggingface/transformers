@@ -49,11 +49,11 @@ class VibeVoiceGenerateOutput(GenerateDecoderOnlyOutput):
     Outputs of VibeVoiceForConditionalGeneration.generate.
 
     Args:
-        audio (`list(torch.FloatTensor)` of length `batch_size`):
+        audio (`list(torch.Tensor)` of length `batch_size`):
             The generated audio.
     """
 
-    audio: list[torch.FloatTensor] | None = None
+    audio: list[torch.Tensor] | None = None
 
 
 class VibeVoiceTokenConstraintProcessor(LogitsProcessor):
@@ -72,7 +72,7 @@ class VibeVoiceTokenConstraintProcessor(LogitsProcessor):
         self.logits_mask = logits_mask.to(device)
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         return scores + self.logits_mask
 
 
@@ -414,7 +414,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         self,
         diffusion_mask: torch.Tensor,
         next_tokens: torch.LongTensor,
-        inputs_embeds: torch.FloatTensor | None,
+        inputs_embeds: torch.Tensor | None,
         negative_input_ids: torch.LongTensor,
         negative_model_kwargs: dict,
         negative_forward: Callable,
@@ -450,12 +450,12 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
     def _sample_audio_latent(
         self,
-        positive_condition: torch.FloatTensor,
-        negative_condition: torch.FloatTensor,
+        positive_condition: torch.Tensor,
+        negative_condition: torch.Tensor,
         noise_scheduler: Any,
         num_diffusion_steps: int,
         guidance_scale: float,
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         """
         Run the diffusion denoising loop with classifier-free guidance. Adapted from `sample_speech_tokens` in the
         original implementation: https://github.com/vibevoice-community/VibeVoice/blob/07cb79feadd2d3fd7f47530d4c964a12857936a0/vibevoice/modular/modeling_vibevoice_inference.py#L700
@@ -481,7 +481,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
     def _decode_audio_latent(
         self,
-        audio_latent: torch.FloatTensor,
+        audio_latent: torch.Tensor,
         diffusion_mask: torch.Tensor,
         batch_size: int,
         acoustic_cache: VibeVoiceAcousticTokenizerConv1dPaddingCache | None,

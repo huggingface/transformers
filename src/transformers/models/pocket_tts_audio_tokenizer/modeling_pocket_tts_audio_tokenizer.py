@@ -145,7 +145,7 @@ class PocketTTSAudioTokenizerConv1dPaddingCache:
 @dataclass
 class PocketTTSAudioTokenizerEncoderOutput(ModelOutput):
     r"""
-    latents (`torch.FloatTensor` of shape `(batch_size, num_frames, latent_dim)`):
+    latents (`torch.Tensor` of shape `(batch_size, num_frames, latent_dim)`):
         Continuous latents of the audio, one frame per `config.frame_size` audio samples.
     latents_mask (`torch.LongTensor` of shape `(batch_size, num_frames)`, *optional*):
         Mask of the latent frames computed from audio samples (`1`) rather than padding (`0`).
@@ -153,25 +153,25 @@ class PocketTTSAudioTokenizerEncoderOutput(ModelOutput):
         Key-value cache of the encoder transformer, returned when streaming.
     padding_cache (`PocketTTSAudioTokenizerConv1dPaddingCache`, *optional*):
         Padding cache of the encoder's causal convolutions, returned when streaming.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
+    hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True`):
         Hidden states of the encoder transformer at the output of each layer plus its input, at the SEANet frame rate.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
+    attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True`):
         Attention weights of each encoder transformer layer.
     """
 
-    latents: torch.FloatTensor | None = None
+    latents: torch.Tensor | None = None
     latents_mask: torch.LongTensor | None = None
     encoder_past_key_values: Cache | None = None
     padding_cache: PocketTTSAudioTokenizerConv1dPaddingCache | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring
 @dataclass
 class PocketTTSAudioTokenizerDecoderOutput(ModelOutput):
     r"""
-    audio_values (`torch.FloatTensor` of shape `(batch_size, audio_channels, num_samples)`, *optional*):
+    audio_values (`torch.Tensor` of shape `(batch_size, audio_channels, num_samples)`, *optional*):
         Decoded audio values, obtained using the decoder part of PocketTTSAudioTokenizer.
     decoder_past_key_values (`Cache`, *optional*):
         Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the decoder transformer.
@@ -181,39 +181,39 @@ class PocketTTSAudioTokenizerDecoderOutput(ModelOutput):
 
         If `past_key_values` are used, the user can optionally input only the last `audio_values` or `audio_codes (those that don't
         have their past key value states given to this model).
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
+    hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True`):
         Hidden states of the decoder transformer at the output of each layer plus its input.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
+    attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True`):
         Attention weights of each decoder transformer layer.
     """
 
-    audio_values: torch.FloatTensor | None = None
+    audio_values: torch.Tensor | None = None
     decoder_past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring
 @dataclass
 class PocketTTSAudioTokenizerOutput(ModelOutput):
     r"""
-    latents (`torch.FloatTensor` of shape `(batch_size, num_frames, latent_dim)`):
+    latents (`torch.Tensor` of shape `(batch_size, num_frames, latent_dim)`):
         Continuous latents of the audio.
     latents_mask (`torch.LongTensor` of shape `(batch_size, num_frames)`, *optional*):
         Mask of the latent frames computed from audio samples (`1`) rather than padding (`0`).
-    audio_values (`torch.FloatTensor` of shape `(batch_size, audio_channels, num_samples)`):
+    audio_values (`torch.Tensor` of shape `(batch_size, audio_channels, num_samples)`):
         Audio waveform reconstructed from the latents.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
+    hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True`):
         Hidden states of the encoder transformer at the output of each layer plus its input.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
+    attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True`):
         Attention weights of each encoder transformer layer.
     """
 
-    latents: torch.FloatTensor | None = None
+    latents: torch.Tensor | None = None
     latents_mask: torch.LongTensor | None = None
-    audio_values: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    audio_values: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 class PocketTTSAudioTokenizerConv1d(nn.Module):
@@ -616,24 +616,24 @@ class PocketTTSAudioTokenizerPreTrainedModel(PreTrainedModel):
 @dataclass
 class PocketTTSAudioTokenizerEncoderModelOutput(ModelOutput):
     r"""
-    latents (`torch.FloatTensor` of shape `(batch_size, latent_dim, frames)`):
+    latents (`torch.Tensor` of shape `(batch_size, latent_dim, frames)`):
         Continuous latents of the audio, one frame per `config.frame_size` audio samples.
     past_key_values (`Cache`, *optional*):
         Pre-computed hidden-states (key and values in the self-attention blocks) of the encoder transformer, returned
         when streaming.
     padding_cache (`PocketTTSAudioTokenizerConv1dPaddingCache`, *optional*):
         Padding cache for PocketTTSAudioTokenizerConv1d causal convolutions in order to support streaming via cache padding.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
+    hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True`):
         Hidden states of the encoder transformer at the output of each layer plus its input.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
+    attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True`):
         Attention weights of each encoder transformer layer.
     """
 
-    latents: torch.FloatTensor | None = None
+    latents: torch.Tensor | None = None
     past_key_values: Cache | None = None
     padding_cache: PocketTTSAudioTokenizerConv1dPaddingCache | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 class PocketTTSAudioTokenizerResnetBlock(nn.Module):
@@ -813,7 +813,7 @@ class PocketTTSAudioTokenizerTransformerModel(nn.Module):
     ) -> BaseModelOutputWithPast:
         """
         Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Embedded representation that will be contextualized by the model
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -1143,7 +1143,7 @@ class PocketTTSAudioTokenizerDecoderModel(PocketTTSAudioTokenizerPreTrainedModel
         **kwargs: Unpack[TransformersKwargs],
     ) -> PocketTTSAudioTokenizerDecoderOutput:
         r"""
-        latents (`torch.FloatTensor` of shape `(batch_size, hidden_size, frames)`):
+        latents (`torch.Tensor` of shape `(batch_size, hidden_size, frames)`):
             Continuous latents to decode, as computed by [`PocketTTSAudioTokenizerModel.decode`].
         padding_mask (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
             Indicates which inputs are to be ignored due to padding, where elements are either 1 for *not masked* or 0
@@ -1189,7 +1189,7 @@ class PocketTTSAudioTokenizerModel(PocketTTSAudioTokenizerPreTrainedModel, PreTr
     @can_return_tuple
     def encode(
         self,
-        input_values: torch.FloatTensor,
+        input_values: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
         encoder_past_key_values: Cache | None = None,
         padding_cache: PocketTTSAudioTokenizerConv1dPaddingCache | None = None,
@@ -1201,7 +1201,7 @@ class PocketTTSAudioTokenizerModel(PocketTTSAudioTokenizerPreTrainedModel, PreTr
         [`PocketTTSAudioTokenizerEncoderModel.forward`], frames first.
 
         Args:
-            input_values (`torch.FloatTensor` of shape `(batch_size, audio_channels, num_samples)`):
+            input_values (`torch.Tensor` of shape `(batch_size, audio_channels, num_samples)`):
                 Audio waveform, as returned by [`EncodecFeatureExtractor`], which zero-pads it to a multiple of
                 `config.frame_size` samples as the original does.
             padding_mask (`torch.Tensor` of shape `(batch_size, num_samples)`, *optional*):
@@ -1244,7 +1244,7 @@ class PocketTTSAudioTokenizerModel(PocketTTSAudioTokenizerPreTrainedModel, PreTr
     @can_return_tuple
     def decode(
         self,
-        latents: torch.FloatTensor,
+        latents: torch.Tensor,
         decoder_past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> PocketTTSAudioTokenizerDecoderOutput:
@@ -1253,7 +1253,7 @@ class PocketTTSAudioTokenizerModel(PocketTTSAudioTokenizerPreTrainedModel, PreTr
         [`PocketTTSAudioTokenizerDecoderModel.forward`].
 
         Args:
-            latents (`torch.FloatTensor` of shape `(batch_size, num_frames, latent_dim)`):
+            latents (`torch.Tensor` of shape `(batch_size, num_frames, latent_dim)`):
                 Continuous latents to decode, one frame per `config.frame_size` audio samples.
             decoder_past_key_values (`Cache`, *optional*):
                 Key-value cache of the decoder transformer, returned by the previous call when decoding in chunks.
@@ -1273,12 +1273,12 @@ class PocketTTSAudioTokenizerModel(PocketTTSAudioTokenizerPreTrainedModel, PreTr
     @auto_docstring
     def forward(
         self,
-        input_values: torch.FloatTensor,
+        input_values: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> PocketTTSAudioTokenizerOutput:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, audio_channels, num_samples)`):
+        input_values (`torch.Tensor` of shape `(batch_size, audio_channels, num_samples)`):
             Audio waveform, as returned by [`EncodecFeatureExtractor`].
         padding_mask (`torch.Tensor` of shape `(batch_size, num_samples)`, *optional*):
             Mask of the audio samples (`1`) as opposed to padding (`0`).
