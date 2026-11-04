@@ -590,12 +590,11 @@ def _shared_rotation(query: ir.Value, new_key, head_size: int, prefill: bool):
     return (query_rotation.inputs[0], key_rotation.inputs[0], (positions, cos_cache, sin_cache)), interleaved
 
 
-def _fuse_group_query_attention(model: ir.Model, prefill: bool = True, static_cache: bool = True) -> int:
+def _fuse_group_query_attention(model: ir.Model, prefill: bool = True) -> int:
     """Turn each fused `MultiHeadAttention` reading a key-value cache's update into ONNX Runtime's
     `GroupQueryAttention`, which updates the cache itself (or, for a prefill, starts it) and reads its key-value heads
     without repeating them. Its mask stays the attention's own bias, so every row's `seqlens_k` is the whole length:
-    exact whatever the padding. `prefill` and `static_cache` set whether a prefill, and a cache written in place, are
-    fused too. Returns how many."""
+    exact whatever the padding. `prefill` sets whether a prefill, starting the cache, is fused too. Returns how many."""
     graph, count = model.graph, 0
     # A cache update several attentions read (layers sharing another layer's cache, Gemma 4's): its own layer's,
     # fused once; the others, reading it, stay as they are.
@@ -629,7 +628,7 @@ def _fuse_group_query_attention(model: ir.Model, prefill: bool = True, static_ca
         # takes any number of tokens is fused only for a batch of one.
         if past_key is not None and _static_dim(query, 1) != 1 and _static_dim(query, 0) != 1:
             continue
-        if (past_key is None and not prefill) or (start is not None and not static_cache):
+        if past_key is None and not prefill:
             continue
         tape = ir.tape.Tape(graph)
 
@@ -643,11 +642,15 @@ def _fuse_group_query_attention(model: ir.Model, prefill: bool = True, static_ca
                 return tape.op("Reshape", [states.value, merge])
             return tape.op("Reshape", [tape.op("Transpose", [states], attributes={"perm": [0, 2, 1, 3]}), merge])
 
-        # The total length when the shapes are static and the cache isn't written in place: ONNX Runtime's shape
-        # inference reads one computed from shapes as int64, so it goes in as a constant.
+        # The total length as a constant when it's known: ONNX Runtime's shape inference reads one computed from shapes
+        # as int64 (microsoft/onnxruntime#33865), and its CUDA kernel reads one computed on the GPU as 0
+        # (microsoft/onnxruntime#33867). A static cache attends over its whole buffer, the bias masking the slots not
+        # written yet; appended to a past, it's the past and the new tokens.
         past_length = 0 if past_key is None else _static_dim(past_key, 2)
         known_total = None
-        if start is None and isinstance(query.shape[1], int) and past_length is not None:
+        if start is not None:
+            known_total = past_length
+        elif isinstance(query.shape[1], int) and past_length is not None:
             known_total = query.shape[1] + past_length
         rotary, dtype, rotary_attributes = [None, None, None], query.dtype, {}
         if (rotation := _shared_rotation(query, new_key, head_size, past_key is None)) is not None:
@@ -666,19 +669,19 @@ def _fuse_group_query_attention(model: ir.Model, prefill: bool = True, static_ca
             # Written in place from the first index on, and the mask, spanning the whole buffer, read up to there.
             offset = tape.op("Gather", [tape.op("Reshape", [start, constant([-1])]), constant([0])])
             length = tape.op("Add", [offset, new_length])
-        if start is not None:
-            bias = tape.op("Slice", [bias, constant([0]), length, constant([3])])
+        # Each sequence's length after this step, the last key it attends to: where the new keys and values go.
+        written = tape.op("Cast", [length], attributes={"to": ir.DataType.INT32})
+        seqlens_k = tape.op("Expand", [tape.op("Sub", [written, constant([1], np.int32)]), batch])
         if known_total is not None:
-            total, total_length = constant([known_total], np.int32), constant(known_total, np.int32)
+            total_length = constant(known_total, np.int32)
         else:
-            total = tape.op("Cast", [length], attributes={"to": ir.DataType.INT32})
-            total_length = tape.op("Squeeze", [total])
-        seqlens_k = tape.op("Expand", [tape.op("Sub", [total, constant([1], np.int32)]), batch])
+            total_length = tape.op("Squeeze", [written])
         if rotary[2] is not None:
-            # It takes a cache of at least `total` rows; a per-token cache (`b * length + s`) has
+            # It takes a cache of at least the total rows; a per-token cache (`b * length + s`) has
             # `batch * length`, so zero rows, never read, pad it up to that.
+            total = constant([known_total]) if known_total is not None else length
             rows = tape.op("Shape", [rotary[0]], attributes={"start": 0, "end": 1})
-            missing = tape.op("Max", [tape.op("Sub", [length, rows]), constant([0])])
+            missing = tape.op("Max", [tape.op("Sub", [total, rows]), constant([0])])
             pads = tape.op("Concat", [constant([0, 0]), missing, constant([0])], attributes={"axis": 0})
             rotary[:2] = (tape.op("Pad", [cache, pads]) for cache in rotary[:2])
         attributes = {"num_heads": attention.attributes.get_int("num_heads"), "kv_num_heads": kv_heads}
@@ -1033,10 +1036,10 @@ _STEPS = (
     ("narrowed_norms", _narrow_norms, _ANY),
     # Narrowed, the norms whose skip fusion was undone take their residual's dtype: fused again.
     ("narrowed_skip_norms", fuse_skip_rms_normalization, _ANY),
-    # CUDA's `GroupQueryAttention`, decode only: its `MultiHeadAttention` runs a prefill faster, and a static cache's
-    # total length, computed on the GPU, is read as 0 (microsoft/onnxruntime#33867).
+    # CUDA's `GroupQueryAttention`, decode only: with a bias, it runs an unfused kernel, slower for a prefill than
+    # `MultiHeadAttention`'s.
     ("group_query_attention", _fuse_group_query_attention, _CPU),
-    ("group_query_attention_decode", partial(_fuse_group_query_attention, prefill=False, static_cache=False), _CUDA),
+    ("group_query_attention_decode", partial(_fuse_group_query_attention, prefill=False), _CUDA),
     ("mixture_of_experts", _fuse_mixture_of_experts, _CUDA),
     # ONNX Runtime's CPU `MultiHeadAttention` runs slower than the ops it fused: the ones left, unfused.
     ("unfused_attentions", _unfuse_attentions, _CPU),
