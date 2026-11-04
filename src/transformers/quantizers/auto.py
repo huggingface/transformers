@@ -394,6 +394,10 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
     def preprocess_model(self, model, **kwargs):
         for quantizer in self.quantizers.values():
             quantizer.preprocess_model(model, **kwargs)
+        self.replace_modules(model)
+        for quantizer in self.quantizers.values():
+            quantizer.update_parallel_plan(model, model.tp_plan)
+            quantizer.update_parallel_plan(model, model.ep_plan)
 
     def is_serializable(self):
         return all(quantizer.is_serializable() for quantizer in self.quantizers.values())

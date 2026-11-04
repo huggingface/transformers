@@ -161,7 +161,8 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
         Simple test that checks if the quantized model has been converted properly
         """
 
-        from transformers.integrations import FP8Linear, replace_with_fp8_linear
+        from transformers.integrations import FP8Linear
+        from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 
         model_id = "facebook/opt-350m"
         config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
@@ -174,7 +175,7 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
         for module in model.modules():
             if isinstance(module, torch.nn.Linear):
                 nb_linears += 1
-        model = replace_with_fp8_linear(model, quantization_config=quantization_config)
+        FineGrainedFP8HfQuantizer(quantization_config).replace_modules(model)
         nb_fp8_linear = 0
         for module in model.modules():
             if isinstance(module, FP8Linear):
@@ -183,7 +184,9 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
         with torch.device("meta"):
             model = OPTForCausalLM(config)
         quantization_config = FineGrainedFP8Config()
-        model = replace_with_fp8_linear(model, modules_to_not_convert=["fc1"], quantization_config=quantization_config)
+        quantizer = FineGrainedFP8HfQuantizer(quantization_config)
+        quantizer.modules_to_not_convert = ["fc1"]
+        quantizer.replace_modules(model)
         nb_fp8_linear = 0
         for module in model.modules():
             if isinstance(module, FP8Linear):
@@ -549,13 +552,16 @@ class FP8EmbeddingTest(unittest.TestCase):
 
     def test_patterns_match_by_suffix_and_honour_the_skip_list(self):
         """Suffixes match whether or not the text model is nested under a multimodal wrapper."""
-        from transformers.integrations import FP8Embedding, replace_with_fp8_embedding
+        from transformers.integrations import FP8Embedding
+        from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 
         model = torch.nn.ModuleDict(
             {n: torch.nn.ModuleDict({"table": torch.nn.Embedding(8, 4)}) for n in ("layers", "language_model")}
         )
         model.other = torch.nn.Embedding(8, 4)
-        replace_with_fp8_embedding(model, ["table"], modules_to_not_convert=["language_model.table"])
+        quantizer = FineGrainedFP8HfQuantizer(FineGrainedFP8Config(modules_to_convert=["table"]), pre_quantized=True)
+        quantizer.modules_to_not_convert = ["language_model.table"]
+        quantizer.replace_modules(model)
 
         self.assertIsInstance(model["layers"]["table"], FP8Embedding)  # matched by suffix
         self.assertIs(type(model["language_model"]["table"]), torch.nn.Embedding)  # skip-listed

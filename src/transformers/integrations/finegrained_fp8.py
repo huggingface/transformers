@@ -24,7 +24,7 @@ from torch.nn import functional as F
 
 from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps
-from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
+from ..quantizers.quantizers_utils import get_module_from_name
 from ..utils import logging
 from ..utils.import_utils import is_kernels_available
 from .deepgemm import (
@@ -915,106 +915,38 @@ def _disable_deepgemm_on_multi_device(model: nn.Module) -> None:
     )
 
 
-def replace_with_fp8_embedding(model, patterns: list[str], modules_to_not_convert: list[str] | None = None):
-    """Swap every `nn.Embedding` whose name ends with one of `patterns` for `FP8Embedding`.
+def build_fp8_experts(experts, quantization_config, text_config):
+    "Builds the `FP8Experts` replacing `experts`"
+    has_gate = getattr(experts, "has_gate", True)
+    has_bias = getattr(experts, "has_bias", False)
+    new_class = use_experts_implementation(
+        experts_class=FP8Experts, experts_interface=ALL_FP8_EXPERTS_FUNCTIONS, has_bias=has_bias, has_gate=has_gate
+    )
+    return new_class(
+        config=getattr(experts, "config", text_config),
+        block_size=quantization_config.weight_block_size,
+        activation_scheme=quantization_config.activation_scheme,
+        scale_fmt=quantization_config.scale_fmt,
+        has_bias=has_bias,
+        has_gate=has_gate,
+        expert_dtype=quantization_config.expert_dtype,
+    )
 
-    Also runs under `dequantize=True`: a table worth quantizing is one we cannot afford to expand.
-    """
-    for name, module in list(model.named_modules()):
-        if type(module) is nn.Embedding and any(name.endswith(p) for p in patterns):
-            if not should_convert_module(name, modules_to_not_convert):
-                continue
-            with torch.device("meta"):
-                new_module = FP8Embedding(module.num_embeddings, module.embedding_dim, module.padding_idx)
-            new_module._hf_quantized_needs_local_tp = True
-            model.set_submodule(name, new_module)
-    return model
 
-
-def replace_with_fp8_linear(
-    model, modules_to_not_convert: list[str] | None = None, quantization_config=None, pre_quantized=False
-):
-    """
-    A helper function to replace all `torch.nn.Linear` modules by `FP8Linear` modules.
-
-    Parameters:
-        model (`torch.nn.Module`):
-            Input model or `torch.nn.Module` as the function is run recursively.
-        modules_to_not_convert (`list[`str`]`, *optional*, defaults to `None`):
-            Names of the modules to not convert. In practice we keep the `lm_head` in full precision for numerical stability reasons.
-        quantization_config (`FineGrainedFP8Config`):
-            The quantization config object that contains the quantization parameters.
-        pre_quantized (`bool`, defaults to `False`):
-            Whether the model is pre-quantized or not
-    """
-
-    if quantization_config.dequantize:
-        return model
-
-    has_been_replaced = False
-    for module_name, module in model.named_modules():
-        if not should_convert_module(module_name, modules_to_not_convert):
-            continue
-
-        new_module = None
-        with torch.device("meta"):
-            if module_name.endswith(".experts"):
-                has_gate = getattr(module, "has_gate", True)
-                has_bias = getattr(module, "has_bias", False)
-                config = getattr(module, "config", model.config.get_text_config())
-                new_class = use_experts_implementation(
-                    experts_class=FP8Experts,
-                    experts_interface=ALL_FP8_EXPERTS_FUNCTIONS,
-                    has_bias=has_bias,
-                    has_gate=has_gate,
-                )
-                new_module = new_class(
-                    config=config,
-                    block_size=quantization_config.weight_block_size,
-                    activation_scheme=quantization_config.activation_scheme,
-                    scale_fmt=quantization_config.scale_fmt,
-                    has_bias=has_bias,
-                    has_gate=has_gate,
-                    expert_dtype=quantization_config.expert_dtype,
-                )
-            elif type(module) is nn.Linear:
-                # Vanilla `nn.Linear` → standard FP8Linear swap.
-                new_module = FP8Linear(
-                    in_features=module.in_features,
-                    out_features=module.out_features,
-                    block_size=quantization_config.weight_block_size,
-                    activation_scheme=quantization_config.activation_scheme,
-                    scale_fmt=quantization_config.scale_fmt,
-                    has_bias=module.bias is not None,
-                )
-            elif isinstance(module, nn.Linear) and "GroupedLinear" in type(module).__name__:
-                # Block-diagonal grouped linear (e.g. DSv4's `DeepseekV4GroupedLinear`):
-                # one underlying weight conceptually split into `n_groups` independent
-                # sub-matmuls fed by disjoint input slices. Vanilla `FP8Linear` would
-                # collapse those groups into one giant linear and yield the wrong
-                # output dim, so swap to `FP8GroupedLinear` which keeps the per-group
-                # bmm contract and runs each block as its own FP8 matmul.
-                new_module = FP8GroupedLinear(
-                    in_features_per_group=module.in_features,
-                    out_features=module.out_features,
-                    n_groups=module.n_groups,
-                    block_size=quantization_config.weight_block_size,
-                    activation_scheme=quantization_config.activation_scheme,
-                    scale_fmt=quantization_config.scale_fmt,
-                    has_bias=module.bias is not None,
-                )
-            if new_module is not None:
-                # TP must use local tensors because this quantization path does not support DTensor inputs or weights.
-                new_module._hf_quantized_needs_local_tp = True
-                model.set_submodule(module_name, new_module)
-                has_been_replaced = True
-
-    if not has_been_replaced:
-        logger.warning(
-            "You are loading your model using fp8 but no linear modules were found in your model."
-            " Please double check your model architecture."
-        )
-    return model
+def build_fp8_linear(linear, quantization_config):
+    "Builds the `FP8Linear` (or `FP8GroupedLinear`) replacing `linear`, `None` for other `nn.Linear` subclasses"
+    kwargs = {
+        "out_features": linear.out_features,
+        "block_size": quantization_config.weight_block_size,
+        "activation_scheme": quantization_config.activation_scheme,
+        "scale_fmt": quantization_config.scale_fmt,
+        "has_bias": linear.bias is not None,
+    }
+    if type(linear) is nn.Linear:
+        return FP8Linear(in_features=linear.in_features, **kwargs)
+    if "GroupedLinear" in type(linear).__name__:
+        return FP8GroupedLinear(in_features_per_group=linear.in_features, n_groups=linear.n_groups, **kwargs)
+    return None
 
 
 class Fp8Quantize(ConversionOps):

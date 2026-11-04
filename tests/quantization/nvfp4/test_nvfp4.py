@@ -16,7 +16,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from transformers import NVFP4Config
-from transformers.integrations.nvfp4 import NVFP4Linear, NVFP4Quantize, replace_with_nvfp4_linear
+from transformers.integrations.nvfp4 import NVFP4Linear, NVFP4Quantize
 from transformers.quantizers.quantizer_nvfp4 import NVFP4HfQuantizer
 from transformers.utils import is_torch_available
 from transformers.utils.quantization_config import QuantizationMethod
@@ -72,7 +72,9 @@ class NVFP4IntegrationTest(unittest.TestCase):
             }
         )
 
-        replace_with_nvfp4_linear(model, modules_to_not_convert=["skip"])
+        quantizer = NVFP4HfQuantizer(NVFP4Config(), pre_quantized=False)
+        quantizer.modules_to_not_convert = ["skip"]
+        quantizer.replace_modules(model)
 
         self.assertIsInstance(model["convert"], NVFP4Linear)
         self.assertIsInstance(model["skip"], nn.Linear)

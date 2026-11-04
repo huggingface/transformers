@@ -188,8 +188,6 @@ class SinqHfQuantizer(HfQuantizer):
         For SINQ, we replace nn.Linear modules with empty SINQLinear modules here.
         The actual quantization happens later in SinqQuantize.convert() when weights are loaded.
         """
-        from ..integrations.sinq import replace_with_sinq_linear
-
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, (self.quantization_config.modules_to_not_convert or []), keep_in_fp32_modules
         )
@@ -197,25 +195,31 @@ class SinqHfQuantizer(HfQuantizer):
         # Enable param-level quantization for SINQ method
         self._do_param_level_sinq = self.quantization_config.method == "sinq" and not self.pre_quantized
 
-        sinq_quant_dict = None if self.pre_quantized else self._build_sinq_quant_dict(self.quantization_config)
+        self._sinq_quant_dict = None if self.pre_quantized else self._build_sinq_quant_dict(self.quantization_config)
 
         # Extract device from device_map (guaranteed to be set by update_device_map)
         if isinstance(device_map, dict):
             first_device = next(iter(device_map.values()), 0)
             if isinstance(first_device, int):
-                device_str = f"cuda:{first_device}"
+                self._sinq_device = f"cuda:{first_device}"
             else:
-                device_str = str(first_device)
+                self._sinq_device = str(first_device)
         else:
-            device_str = "cuda:0" if torch.cuda.is_available() else "cpu"
+            self._sinq_device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
-        model = replace_with_sinq_linear(
-            model,
-            modules_to_not_convert=self.modules_to_not_convert,
-            quant_config=sinq_quant_dict,
+    def quantized_module(self, name, module):
+        from sinq.sinqlinear_hf import SINQLinear
+
+        if not isinstance(module, torch.nn.Linear):
+            return None
+        return SINQLinear(
+            in_features=module.in_features if not self.pre_quantized else None,
+            out_features=module.out_features if not self.pre_quantized else None,
+            bias=(module.bias is not None) if not self.pre_quantized else False,
+            quant_config=self._sinq_quant_dict,
             compute_dtype=self.dtype,
-            device=device_str,
-            pre_quantized=self.pre_quantized,
+            device=self._sinq_device,
+            use_unpack_kernel=True,
         )
 
     def _process_model_after_weight_loading(

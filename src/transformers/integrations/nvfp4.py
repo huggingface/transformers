@@ -18,7 +18,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from ..core_model_loading import ConversionOps
-from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import is_torch_available
 from ..utils.import_utils import (
     KERNELS_MAX_VERSION,
@@ -224,22 +223,10 @@ class NVFP4Dequantize(ConversionOps):
         return (weight * scales / global_scale).flatten(1)
 
 
-def _is_nvfp4_compatible(module: nn.Module) -> bool:
+def is_nvfp4_compatible(module: nn.Module) -> bool:
     return (
         isinstance(module, nn.Linear)
         and module.bias is None
         and module.in_features % SF_VEC_SIZE == 0
         and module.out_features % 16 == 0
     )
-
-
-def replace_with_nvfp4_linear(model: nn.Module, modules_to_not_convert: list[str] | None = None) -> nn.Module:
-    """Replace eligible bias-free linear layers with `NVFP4Linear`."""
-
-    for name, module in list(model.named_modules()):
-        if not should_convert_module(name, modules_to_not_convert) or not _is_nvfp4_compatible(module):
-            continue
-        parent_name, _, child_name = name.rpartition(".")
-        parent = model.get_submodule(parent_name) if parent_name else model
-        setattr(parent, child_name, NVFP4Linear(module.in_features, module.out_features))
-    return model
