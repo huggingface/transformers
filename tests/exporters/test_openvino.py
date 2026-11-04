@@ -54,25 +54,37 @@ if is_torch_available():
 
 NUM_LAYERS = 2
 
+# The fused kernels the CPU plugin must compile each layer of a decode graph into. `MatMul` counts the matmuls left
+# decomposed (an unfused attention or expert), so it must stay at 0.
+DENSE_FUSIONS = {"ScaledDotProductAttention": 1, "RoPE": 2, "MatMul": 0}  # RoPE for the queries and the keys
+MOE_FUSIONS = {**DENSE_FUSIONS, "GatherMatmul": 3}  # gate, up and down, computing only the routed experts
+
+# model type: (config class, model class, config overrides, fused kernels per layer)
 MODELS = {
-    "llama": (LlamaConfig, LlamaForCausalLM, {}),
-    "qwen2": (Qwen2Config, Qwen2ForCausalLM, {}),
-    "qwen3": (Qwen3Config, Qwen3ForCausalLM, {"head_dim": 16}),
-    "phi3": (Phi3Config, Phi3ForCausalLM, {"pad_token_id": 0}),
-    "olmo2": (Olmo2Config, Olmo2ForCausalLM, {}),
-    "granite": (GraniteConfig, GraniteForCausalLM, {}),
-    "mixtral": (MixtralConfig, MixtralForCausalLM, {"num_local_experts": 4, "num_experts_per_tok": 2}),
+    "llama": (LlamaConfig, LlamaForCausalLM, {}, DENSE_FUSIONS),
+    "qwen2": (Qwen2Config, Qwen2ForCausalLM, {}, DENSE_FUSIONS),
+    "qwen3": (Qwen3Config, Qwen3ForCausalLM, {"head_dim": 16}, DENSE_FUSIONS),
+    "phi3": (Phi3Config, Phi3ForCausalLM, {"pad_token_id": 0}, DENSE_FUSIONS),
+    "olmo2": (Olmo2Config, Olmo2ForCausalLM, {}, DENSE_FUSIONS),
+    "granite": (GraniteConfig, GraniteForCausalLM, {}, DENSE_FUSIONS),
+    "mixtral": (
+        MixtralConfig,
+        MixtralForCausalLM,
+        {"num_local_experts": 4, "num_experts_per_tok": 2},
+        MOE_FUSIONS,
+    ),
     "qwen3_moe": (
         Qwen3MoeConfig,
         Qwen3MoeForCausalLM,
         {"head_dim": 16, "num_experts": 4, "num_experts_per_tok": 2, "moe_intermediate_size": 64},
+        MOE_FUSIONS,
     ),
 }
 
 
 def _model(model_type, dtype=None):
     """A tiny GQA decoder of `model_type`."""
-    config_class, model_class, overrides = MODELS[model_type]
+    config_class, model_class, overrides, _ = MODELS[model_type]
     set_seed(0)
     config = config_class(
         vocab_size=128,
@@ -114,7 +126,7 @@ def _compiled_ops(ov_model):
 @require_torch
 @require_openvino
 class OpenVINOFusionTest(unittest.TestCase):
-    def assert_decode_fused(self, decode):
+    def assert_decode_fused(self, decode, fusions):
         # The cache update feeds its state as is: anything between them keeps the plugin from fusing the cache into
         # its attention.
         assign_sources = [
@@ -124,27 +136,18 @@ class OpenVINOFusionTest(unittest.TestCase):
         ]
         self.assertEqual(assign_sources, ["Concat"] * 2 * NUM_LAYERS)
         layers = collections.Counter(layer for layer, _ in _compiled_ops(decode))
-        self.assertEqual(layers["ScaledDotProductAttention"], NUM_LAYERS)
-        self.assertEqual(layers["RoPE"], 2 * NUM_LAYERS)  # queries and keys
-        self.assertEqual(layers["MatMul"], 0, "attention left decomposed")
+        self.assertEqual({op: layers[op] for op in fusions}, {op: n * NUM_LAYERS for op, n in fusions.items()})
 
+    # bf16, as checkpoints ship: MoE experts only fuse with 16-bit weights
     @parameterized.expand(list(MODELS))
-    def test_decode_fuses_attention_rope_and_kv_cache(self, model_type):
-        self.assert_decode_fused(_decode(_model(model_type)))
+    def test_decode_fuses(self, model_type):
+        self.assert_decode_fused(_decode(_model(model_type, torch.bfloat16)), MODELS[model_type][3])
 
-    @parameterized.expand(["mixtral", "qwen3_moe"])
-    def test_moe_experts_fuse_into_gather_matmuls(self, model_type):
-        decode = _decode(_model(model_type, torch.bfloat16))
-        layers = collections.Counter(layer for layer, _ in _compiled_ops(decode))
-        # gate, up and down per layer only compute the routed experts
-        self.assertEqual(layers["GatherMatmul"], 3 * NUM_LAYERS)
-        self.assertEqual(layers["MatMul"], 0)
+    def test_float32_decode_fuses(self):
+        self.assert_decode_fused(_decode(_model("llama")), DENSE_FUSIONS)
 
-    def test_single_token_decode_fuses_attention_rope_and_kv_cache(self):
-        self.assert_decode_fused(_decode(_model("llama"), multi_token_decode=False))
-
-    def test_16bit_model_fuses_attention_rope_and_kv_cache(self):
-        self.assert_decode_fused(_decode(_model("llama", torch.bfloat16)))
+    def test_single_token_decode_fuses(self):
+        self.assert_decode_fused(_decode(_model("llama", torch.bfloat16), multi_token_decode=False), DENSE_FUSIONS)
 
     def test_16bit_model_exports_float32_graph_with_16bit_weights(self):
         import openvino
