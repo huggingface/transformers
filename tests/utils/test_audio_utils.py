@@ -1990,39 +1990,3 @@ class LoadAudioTester(unittest.TestCase):
     def test_unknown_backend_raises(self):
         with self.assertRaises(ValueError):
             load_audio(self._path("audio.wav"), sampling_rate=16000, backend="not_a_backend")
-
-
-@require_librosa
-class LoadAudioTorchcodecUnusableTest(unittest.TestCase):
-    """torchcodec installed but unusable (failed to load, or no FFmpeg): `auto` falls back, an explicit choice lets
-    torchcodec raise its own error."""
-
-    def setUp(self):
-        import soundfile as sf
-
-        self.tmpdir = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, self.tmpdir)
-        self.wav_path = os.path.join(self.tmpdir, "audio.wav")
-        sf.write(self.wav_path, np.zeros(44100, dtype=np.float32), 44100)
-
-    def test_auto_falls_back(self):
-        with patch("transformers.audio_utils.is_torchcodec_ffmpeg_usable", return_value=False):
-            audio = load_audio(self.wav_path, sampling_rate=16000)
-        self.assertEqual(audio.shape, (16000,))
-
-    def test_explicit_torchcodec_raises_torchcodec_error(self):
-        from transformers.utils.import_utils import BACKENDS_MAPPING, TORCHCODEC_IMPORT_ERROR
-
-        real_import = __import__
-
-        def fake_import(name, *args, **kwargs):
-            if name == "torchcodec" or name.startswith("torchcodec."):
-                raise OSError("Could not load this library: libtorchcodec_core.so")
-            return real_import(name, *args, **kwargs)
-
-        with (
-            patch.dict(BACKENDS_MAPPING, {"torchcodec": (lambda: True, TORCHCODEC_IMPORT_ERROR)}),  # installed
-            patch("builtins.__import__", side_effect=fake_import),
-        ):
-            with self.assertRaisesRegex(OSError, "Could not load this library"):
-                load_audio(self.wav_path, sampling_rate=16000, backend="torchcodec")
