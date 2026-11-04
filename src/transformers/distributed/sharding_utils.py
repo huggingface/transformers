@@ -27,6 +27,7 @@ if is_torch_available():
     import torch
 
 if is_torch_distributed_available():
+    import torch.distributed as dist
     from torch.distributed.tensor import DTensor
     from torch.distributed.tensor._utils import compute_local_shape_and_global_offset
     from torch.distributed.tensor.placement_types import Shard
@@ -337,3 +338,21 @@ def _dtensor_from_local_like(local_tensor: torch.Tensor, ref: DTensor) -> DTenso
         shape=ref.shape,
         stride=tuple(ref.stride()),
     )
+
+
+def _tied_params_are_equal(source: torch.Tensor, target: torch.Tensor) -> bool:
+    """`torch.equal`, but two DTensors sharded alike agree across ranks with a SUM all-reduce: DTensor's own `equal`
+    uses a MIN all-reduce, which some backends (e.g. TPU) cannot lower."""
+    if (
+        not is_torch_distributed_available()
+        or not isinstance(source, DTensor)
+        or not isinstance(target, DTensor)
+        or source.device_mesh != target.device_mesh
+        or source.placements != target.placements
+    ):
+        return torch.equal(source, target)
+    local_source = source.to_local()
+    mismatches = torch.tensor(int(not torch.equal(local_source, target.to_local())), device=local_source.device)
+    for mesh_dim in range(source.device_mesh.ndim):
+        dist.all_reduce(mismatches, group=source.device_mesh.get_group(mesh_dim))
+    return mismatches.item() == 0
