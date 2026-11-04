@@ -19,9 +19,16 @@ from a word-level vocabulary carrying the placeholder tokens the processor expan
 
 import unittest
 
+from transformers import PreTrainedTokenizerFast
 from transformers.testing_utils import require_tokenizers, require_torch, require_vision
-from transformers.utils import is_vision_available
+from transformers.utils import is_tokenizers_available, is_torch_available, is_vision_available
 
+
+if is_tokenizers_available():
+    from tokenizers import Tokenizer, models, pre_tokenizers
+
+if is_torch_available():
+    import torch
 
 if is_vision_available():
     from PIL import Image
@@ -44,10 +51,6 @@ class NemotronH_Omni_Reasoning_V3ProcessorTest(unittest.TestCase):
     patch_size = 16
 
     def _tokenizer(self):
-        from tokenizers import Tokenizer, models, pre_tokenizers
-
-        from transformers import PreTrainedTokenizerFast
-
         vocab = {token: index for index, token in enumerate(SPECIAL_TOKENS + ["describe", "this", "picture"])}
         backend = Tokenizer(models.WordLevel(vocab, unk_token="<unk>"))
         backend.pre_tokenizer = pre_tokenizers.WhitespaceSplit()
@@ -108,8 +111,6 @@ class NemotronH_Omni_Reasoning_V3ProcessorTest(unittest.TestCase):
         self.assertGreater(num_placeholders, 1)
 
     def test_video_token_is_expanded(self):
-        import torch
-
         processor = self._processor()
         video = torch.randint(0, 256, (3, 3, 64, 96), dtype=torch.uint8)
         out = processor(text="<video> describe this picture", videos=[video], return_tensors="pt")
@@ -124,6 +125,38 @@ class NemotronH_Omni_Reasoning_V3ProcessorTest(unittest.TestCase):
             num_placeholders, num_tubelets * (height // self.patch_size) * (width // self.patch_size) // 4
         )
 
+    def test_video_frames_are_labeled_from_returned_metadata(self):
+        processor = self._processor()
+        video = torch.randint(0, 256, (6, 3, 64, 96), dtype=torch.uint8)
+        # the processor asks the video processor for its metadata, whose `frames_indices` follow the sampling
+        videos_inputs = processor.video_processor(
+            videos=[video],
+            video_metadata=[{"total_num_frames": 6, "fps": 2.0}],
+            do_sample_frames=True,
+            num_frames=4,
+            return_metadata=True,
+        )
+        frames_indices = list(videos_inputs["video_metadata"][0].frames_indices)
+        self.assertNotEqual(frames_indices, [0, 1, 2, 3])
+
+        replacement = processor.replace_video_token(videos_inputs, 0)
+        timestamps = [f"{index / 2.0:.2f}" for index in frames_indices]
+        self.assertIn(
+            f"Frame 1 sampled at {timestamps[0]} seconds and frame 2 sampled at {timestamps[1]} seconds: ", replacement
+        )
+        self.assertIn(
+            f"Frame 3 sampled at {timestamps[2]} seconds and frame 4 sampled at {timestamps[3]} seconds: ", replacement
+        )
+
+        out = processor(text="<video> describe this picture", videos=[video], return_tensors="pt")
+        self.assertNotIn("video_metadata", out)
+
+    def test_videos_with_several_prompts_are_rejected(self):
+        processor = self._processor()
+        video = torch.randint(0, 256, (2, 3, 64, 96), dtype=torch.uint8)
+        with self.assertRaises(ValueError):
+            processor(text=["<video> describe", "describe this picture"], videos=[video], return_tensors="pt")
+
     def test_only_model_inputs_are_returned(self):
         processor = self._processor()
         image = Image.new("RGB", (128, 96))
@@ -132,4 +165,5 @@ class NemotronH_Omni_Reasoning_V3ProcessorTest(unittest.TestCase):
 
     def test_model_input_names_are_exposed(self):
         processor = self._processor()
-        self.assertIn("input_ids", processor.model_input_names)
+        for name in ("input_ids", "pixel_values", "pixel_values_videos", "input_features"):
+            self.assertIn(name, processor.model_input_names)

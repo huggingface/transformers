@@ -15,8 +15,11 @@
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
+
+if is_torch_available():
+    import torch
 
 if is_vision_available() and is_torchvision_available():
     from transformers import NemotronH_Omni_Reasoning_V3VideoProcessor
@@ -70,8 +73,6 @@ class NemotronHOmniVideoProcessingTest(unittest.TestCase):
         self.assertEqual(wp, hp)
 
     def test_call_returns_normalized_tubelets(self):
-        import torch
-
         processor = self._processor()
         num_frames = 3
         video = torch.randint(0, 256, (num_frames, 3, 64, 64), dtype=torch.uint8)
@@ -88,8 +89,6 @@ class NemotronHOmniVideoProcessingTest(unittest.TestCase):
         self.assertLess(out["pixel_values_videos"].abs().max().item(), 10.0)
 
     def test_frames_are_resized_to_the_patch_grid(self):
-        import torch
-
         processor = self._processor()
         num_frames = 4
         videos = [torch.randint(0, 256, (num_frames, 3, 72, 128), dtype=torch.uint8) for _ in range(2)]
@@ -102,8 +101,6 @@ class NemotronHOmniVideoProcessingTest(unittest.TestCase):
         self.assertEqual(tuple(out["pixel_values_videos"].shape), (2, num_frames // 2, 2 * 3, *expected_size))
 
     def test_videos_that_cannot_be_stacked_are_rejected(self):
-        import torch
-
         processor = self._processor()
         for videos in (
             # different frame sizes after resizing

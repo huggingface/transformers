@@ -37,7 +37,7 @@ AudioInput = Union[str, "np.ndarray", "torch.Tensor", list]
 class NemotronH_Omni_Reasoning_V3ProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: ImagesKwargs
     videos_kwargs: VideosKwargs
-    _defaults = {}
+    _defaults = {"videos_kwargs": {"return_metadata": True}}
 
 
 @auto_docstring
@@ -126,16 +126,10 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
                 self.replace_image_token(image_inputs, idx) for idx in range(len(image_inputs["image_grid_hw"]))
             ]
         if videos is not None:
-            assert len(text) == 1, "Video is not supported for batch size > 1"
-            video_metadata = output_kwargs.get("videos_kwargs", {}).get("video_metadata", None)
+            if len(text) != 1:
+                raise ValueError(f"Videos are only supported with a single prompt, but got {len(text)} prompts.")
             videos_replacements = [
-                self.replace_video_token(
-                    videos_inputs,
-                    idx,
-                    video_metadata=video_metadata[idx]
-                    if isinstance(video_metadata, (list, tuple))
-                    else video_metadata,
-                )
+                self.replace_video_token(videos_inputs, idx)
                 for idx in range(len(videos_inputs["pixel_values_videos"]))
             ]
         if audio is not None:
@@ -172,12 +166,13 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
         """Expand `<video>` into one `<img>...</img>` chunk per temporal patch (tubelet).
 
         Each chunk is labeled with the timestamps of the frames it packs, joined by " and "
-        ("Frame" for the first frame in the tubelet, "frame" for the rest). The tokenizer has no
-        real `<video>` token, so the chunks use the image token; the model tells image from video
-        by which `pixel_values_*` argument was passed.
+        ("Frame" for the first frame in the tubelet, "frame" for the rest), taken from the
+        `video_metadata` the video processor returns. The tokenizer has no real `<video>` token, so
+        the chunks use the image token; the model tells image from video by which `pixel_values_*`
+        argument was passed.
         """
         num_frames = int(video_inputs["num_frames"][video_idx])
-        video_metadata = kwargs.get("video_metadata")
+        video_metadata = video_inputs["video_metadata"][video_idx]
         n_groups = video_inputs["pixel_values_videos"].shape[1]
         height, width = video_inputs["pixel_values_videos"].shape[-2:]
         patch_size, merge_size = self.video_processor.patch_size, round(1 / self.video_processor.downsample_ratio)
@@ -186,8 +181,8 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
 
         temporal_patch_dim = self.video_temporal_patch_dim
 
-        source_fps = video_metadata.fps if (video_metadata is not None and video_metadata.fps) else None
-        frames_indices = video_metadata.frames_indices if video_metadata is not None else None
+        source_fps = video_metadata.fps or None
+        frames_indices = video_metadata.frames_indices
         if source_fps is not None:
             frame_duration_ms = int(1000.0 / source_fps)
 
@@ -306,13 +301,6 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        video_processor_input_names = self.video_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names + video_processor_input_names))
 
 
 __all__ = ["NemotronH_Omni_Reasoning_V3Processor"]

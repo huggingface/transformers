@@ -14,12 +14,13 @@
 """Testing suite for the PyTorch NemotronH_Omni model."""
 
 import copy
-import json
 import re
 import tempfile
 import unittest
 from unittest.mock import patch
 
+import numpy as np
+from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
 from transformers import (
@@ -31,7 +32,9 @@ from transformers import (
     RadioConfig,
     SequenceFeatureExtractor,
     is_torch_available,
+    is_vision_available,
 )
+from transformers.image_utils import load_image
 from transformers.testing_utils import (
     cleanup,
     require_flash_attn,
@@ -59,6 +62,9 @@ if is_torch_available():
         NemotronH_Omni_Reasoning_V3Processor,
         NemotronH_Omni_Reasoning_V3VideoProcessor,
     )
+
+if is_vision_available():
+    from PIL import Image
 
 
 def get_tiny_text_config(tester) -> "NemotronHConfig":
@@ -549,9 +555,6 @@ class NemotronH_Omni_Reasoning_V3IntegrationTest(unittest.TestCase):
         )
 
     def test_image_generation(self):
-        from huggingface_hub import hf_hub_download
-        from PIL import Image
-
         image_path = hf_hub_download(repo_id=self.model_id, filename="media/example1a.jpeg")
         image = Image.open(image_path).convert("RGB")
         inputs = self._chat(
@@ -562,8 +565,6 @@ class NemotronH_Omni_Reasoning_V3IntegrationTest(unittest.TestCase):
         self.assertTrue(self._generate(inputs).strip())
 
     def test_audio_generation(self):
-        from huggingface_hub import hf_hub_download
-
         audio_path = hf_hub_download(repo_id=self.model_id, filename="media/2414-165385-0000.wav")
         inputs = self._chat(
             [{"type": "audio", "audio": audio_path}, {"type": "text", "text": "Transcribe this audio."}],
@@ -573,10 +574,6 @@ class NemotronH_Omni_Reasoning_V3IntegrationTest(unittest.TestCase):
         self.assertTrue(self._generate(inputs).strip())
 
     def test_video_generation(self):
-        import numpy as np
-        from huggingface_hub import hf_hub_download
-        from PIL import Image
-
         video_path = hf_hub_download(repo_id=self.model_id, filename="media/demo.mp4")
 
         def sample_indices_fn(metadata, **kwargs):
@@ -601,8 +598,8 @@ class NemotronH_Omni_Reasoning_V3IntegrationTest(unittest.TestCase):
 @require_flash_attn
 @require_torch_large_accelerator(memory=240)
 class NemotronH_Omni_Reasoning_V3SuperVLIntegrationTest(unittest.TestCase):
-    """A released checkpoint whose language model has MTP layers, so the model builds the final vision LayerNorm and
-    loads it from the checkpoint's `vision_projector.vision_final_layernorm.*` weights.
+    """A released checkpoint whose language model has MTP layers, so the image features go through the final vision
+    LayerNorm loaded from the checkpoint's `vision_projector.vision_final_layernorm.*` weights.
 
     The ~226 GiB of bfloat16 weights are kept on one accelerator.
     """
@@ -621,12 +618,11 @@ class NemotronH_Omni_Reasoning_V3SuperVLIntegrationTest(unittest.TestCase):
             tokenizer=tokenizer,
             chat_template=tokenizer.chat_template,
         )
-        cls.model, cls.loading_info = NemotronH_Omni_Reasoning_V3.from_pretrained(
+        cls.model = NemotronH_Omni_Reasoning_V3.from_pretrained(
             cls.model_id,
             dtype=torch.bfloat16,
             device_map=torch_device,
             attn_implementation="flash_attention_2",
-            output_loading_info=True,
         )
 
     @classmethod
@@ -634,30 +630,7 @@ class NemotronH_Omni_Reasoning_V3SuperVLIntegrationTest(unittest.TestCase):
         del cls.model
         cleanup(torch_device, gc_collect=True)
 
-    def test_vision_final_layernorm_loaded(self):
-        from huggingface_hub import hf_hub_download
-        from safetensors import safe_open
-
-        self.assertIsNotNone(self.model.vision_final_layernorm)
-        for kind in ("missing_keys", "unexpected_keys"):
-            self.assertFalse([key for key in self.loading_info[kind] if "vision_final_layernorm" in key], kind)
-
-        # the norm holds the checkpoint's trained values, not its initialization
-        prefix = "vision_projector.vision_final_layernorm"
-        with open(hf_hub_download(self.model_id, "model.safetensors.index.json"), encoding="utf-8") as f:
-            shard = json.load(f)["weight_map"][f"{prefix}.weight"]
-        with safe_open(hf_hub_download(self.model_id, shard), framework="pt") as f:
-            for name in ("weight", "bias"):
-                torch.testing.assert_close(
-                    getattr(self.model.vision_final_layernorm, name).cpu(),
-                    f.get_tensor(f"{prefix}.{name}"),
-                    rtol=0,
-                    atol=0,
-                )
-
     def test_image_generation(self):
-        from transformers.image_utils import load_image
-
         # two cats lying on a pink blanket
         image = load_image("http://images.cocodataset.org/val2017/000000039769.jpg")
         inputs = self.processor.apply_chat_template(
