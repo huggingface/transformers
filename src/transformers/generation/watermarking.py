@@ -284,14 +284,14 @@ class BayesianWatermarkDetectorModelOutput(ModelOutput):
     Base class for outputs of models predicting if the text is watermarked.
 
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
             Language modeling loss.
-        posterior_probabilities (`torch.FloatTensor` of shape `(1,)`):
+        posterior_probabilities (`torch.Tensor` of shape `(1,)`):
             Multiple choice classification loss.
     """
 
-    loss: torch.FloatTensor | None = None
-    posterior_probabilities: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    posterior_probabilities: torch.Tensor | None = None
 
 
 class BayesianDetectorWatermarkedLikelihood(nn.Module):

@@ -294,7 +294,7 @@ class Cosmos3EdgeVisionEmbeddings(Siglip2VisionEmbeddings):
 
         return torch.cat(position_chunks, dim=0)
 
-    def forward(self, pixel_values: torch.FloatTensor, grid_thw: torch.LongTensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, grid_thw: torch.LongTensor) -> torch.Tensor:
         # Apply patch embeddings to already patchified pixel values.
         target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
@@ -464,7 +464,7 @@ class Cosmos3EdgeTextModel(LlamaModel, Cosmos3EdgePreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPast:
@@ -530,9 +530,7 @@ class Cosmos3EdgeVisionModel(Cosmos3EdgePreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
-    def forward(
-        self, pixel_values: torch.FloatTensor, grid_thw: torch.LongTensor, **kwargs
-    ) -> BaseModelOutputWithPooling:
+    def forward(self, pixel_values: torch.Tensor, grid_thw: torch.LongTensor, **kwargs) -> BaseModelOutputWithPooling:
         r"""
         grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
             The temporal, height, and width patch-grid dimensions for each packed image or video.
@@ -571,7 +569,7 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
 
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -585,7 +583,7 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
 
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:

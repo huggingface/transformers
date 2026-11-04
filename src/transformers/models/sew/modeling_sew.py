@@ -681,8 +681,8 @@ class SEWModel(SEWPreTrainedModel):
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
     def _mask_hidden_states(
         self,
-        hidden_states: torch.FloatTensor,
-        mask_time_indices: torch.FloatTensor | None = None,
+        hidden_states: torch.Tensor,
+        mask_time_indices: torch.Tensor | None = None,
         attention_mask: torch.LongTensor | None = None,
     ):
         """
@@ -732,7 +732,7 @@ class SEWModel(SEWPreTrainedModel):
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        mask_time_indices: torch.FloatTensor | None = None,
+        mask_time_indices: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutput:
         r"""
@@ -941,12 +941,12 @@ class SEWForSequenceClassification(SEWPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutput:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        input_values (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
             into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library
             (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
             To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and conversion
-            into a tensor of type `torch.FloatTensor`. See [`SEWProcessor.__call__`] for details.
+            into a tensor of type `torch.Tensor`. See [`SEWProcessor.__call__`] for details.
         """
         if self.config.use_weighted_layer_sum:
             kwargs["output_hidden_states"] = True

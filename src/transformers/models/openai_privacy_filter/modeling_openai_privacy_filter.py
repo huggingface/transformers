@@ -449,7 +449,7 @@ class OpenAIPrivacyFilterModel(OpenAIPrivacyFilterPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         if (input_ids is None) ^ (inputs_embeds is not None):
