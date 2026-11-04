@@ -17,7 +17,6 @@ import inspect
 import json
 import os
 import random
-import re
 import shutil
 import sys
 import tempfile
@@ -1337,28 +1336,23 @@ class ProcessorTesterMixin:
         transcriptions = ["Hello world.", "A longer transcription so that padding is applied."]
         outputs = processor.apply_transcription_request(audio=audio, transcription=transcriptions)
 
-        # the same as processing the untokenized prompts
+        # the same as processing the untokenized prompts, except that the labels only keep the assistant turn
         prompts = processor.apply_transcription_request(audio=audio, transcription=transcriptions, tokenize=False)
         expected_outputs = processor(text=prompts, audio=audio, output_labels=True)
         self.assertIn("labels", outputs)
+        self.assertIn("assistant_masks", outputs)
         self.assertEqual(set(outputs.keys()) - {"assistant_masks"}, set(expected_outputs.keys()))
         for key in expected_outputs.keys() - {"labels"}:
             self.assertTrue(outputs[key].equal(expected_outputs[key]))
+        kept_positions = outputs["labels"] != -100
+        self.assertTrue(outputs["labels"][kept_positions].equal(expected_outputs["labels"][kept_positions]))
 
-        if re.search(r"\{%-?\s*generation\s*-?%\}", processor.chat_template):
-            # the prompt is masked out of the loss: each row only keeps its transcription and the end of the turn
-            kept_positions = outputs["labels"] != -100
-            self.assertTrue(outputs["labels"][kept_positions].equal(expected_outputs["labels"][kept_positions]))
-            for labels, transcription in zip(outputs["labels"], transcriptions):
-                kept_text = processor.tokenizer.decode(labels[labels != -100])
-                self.assertTrue(kept_text.startswith(transcription), f"{kept_text!r} doesn't start with it")
-                # the end-of-turn token is kept for the model to learn when to stop
-                self.assertNotEqual(kept_text.strip(), transcription)
-        else:
-            # without `{% generation %}` blocks, the assistant turn can't be located and the prompt is kept
-            self.assertTrue(outputs["labels"].equal(expected_outputs["labels"]))
-            for labels, transcription in zip(outputs["labels"], transcriptions):
-                self.assertIn(transcription, processor.tokenizer.decode(labels[labels != -100]))
+        # the prompt is masked out of the loss: each row only keeps its transcription and the end of the turn
+        for labels, transcription in zip(outputs["labels"], transcriptions):
+            kept_text = processor.tokenizer.decode(labels[labels != -100])
+            self.assertTrue(kept_text.startswith(transcription), f"{kept_text!r} doesn't start with the transcription")
+            # the end-of-turn token is kept for the model to learn when to stop
+            self.assertNotEqual(kept_text.strip(), transcription)
 
         # user `processor_kwargs` are merged with the labels request
         merged_outputs = processor.apply_transcription_request(
@@ -1368,15 +1362,13 @@ class ProcessorTesterMixin:
 
     @require_torch
     def test_apply_transcription_request_with_transcription_quoted_role_header(self):
-        # the assistant turn comes from the `{% generation %}` blocks of the chat template, so a prompt quoting the
-        # header that opens it (e.g. `<|im_start|>assistant\n`) doesn't add the following prompt text to the labels
+        # the assistant turn comes from the chat template (its `{% generation %}` blocks or the conversation structure),
+        # so a prompt quoting the header that opens it (e.g. `<|im_start|>assistant\n`) doesn't add text to the labels
         processor = self._get_transcription_training_processor()
         if "prompt" not in inspect.signature(processor.apply_transcription_request).parameters:
             self.skipTest(
                 f"{self.processor_class.__name__} does not accept a `prompt` in `apply_transcription_request`."
             )
-        if not re.search(r"\{%-?\s*generation\s*-?%\}", processor.chat_template):
-            self.skipTest("The chat template has no `{% generation %}` blocks to mask the prompt out of the labels.")
         user_turn = [{"role": "user", "content": [{"type": "text", "text": "Hi."}]}]
         assistant_header = processor.apply_chat_template(user_turn, add_generation_prompt=True)[
             len(processor.apply_chat_template(user_turn)) :

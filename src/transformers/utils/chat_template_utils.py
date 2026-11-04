@@ -525,6 +525,30 @@ def _render_with_assistant_indices(
     return rendered_chat, generation_indices
 
 
+def _assistant_indices_from_turns(compiled_template, messages, rendered_chat, **template_kwargs):
+    """
+    Character spans of the assistant turns, for chat templates without `{% generation %}` blocks: what the template
+    renders after the generation prompt preceding each turn, without trailing whitespace.
+    """
+    generation_indices = []
+    for idx, message in enumerate(messages):
+        if message.get("role") != "assistant":
+            continue
+        prompt = compiled_template.render(messages=messages[:idx], add_generation_prompt=True, **template_kwargs)
+        with_turn = compiled_template.render(
+            messages=messages[: idx + 1], add_generation_prompt=False, **template_kwargs
+        )
+        # the offsets are only valid if each render extends the previous one
+        if not (with_turn.startswith(prompt) and rendered_chat.startswith(with_turn)):
+            raise ValueError(
+                "`return_assistant_tokens_mask=True` can't locate the assistant turns of this chat template. Wrap them "
+                "in `{% generation %}` and `{% endgeneration %}`."
+            )
+        turn = with_turn[len(prompt) :].rstrip()
+        generation_indices.append((len(prompt), len(prompt) + len(turn)))
+    return generation_indices
+
+
 @lru_cache
 def _compile_jinja_template(chat_template):
     return _cached_compile_jinja_template(chat_template)
@@ -630,10 +654,8 @@ def render_jinja_template(
     add_generation_prompt: bool = False,
     **kwargs,
 ) -> str:
-    if return_assistant_tokens_mask and not re.search(r"\{\%-?\s*generation\s*-?\%\}", chat_template):
-        logger.warning_once(
-            "return_assistant_tokens_mask==True but chat template does not contain `{% generation %}` keyword."
-        )
+    # Without `{% generation %}` blocks, the assistant turns are located from the conversation structure instead
+    has_generation_blocks = bool(re.search(r"\{\%-?\s*generation\s*-?\%\}", chat_template))
 
     # Compilation function uses a cache to avoid recompiling the same template
     compiled_template = _compile_jinja_template(chat_template)
@@ -698,7 +720,7 @@ def render_jinja_template(
             else:
                 for field in continue_fields:
                     chat[-1][field] = chat[-1][field] + continue_final_message_tag
-        if return_assistant_tokens_mask:
+        if return_assistant_tokens_mask and has_generation_blocks:
             rendered_chat, generation_indices = _render_with_assistant_indices(
                 compiled_template=compiled_template,
                 messages=chat,
@@ -716,6 +738,12 @@ def render_jinja_template(
                 add_generation_prompt=add_generation_prompt,
                 **kwargs,
             )
+            if return_assistant_tokens_mask:
+                all_generation_indices.append(
+                    _assistant_indices_from_turns(
+                        compiled_template, chat, rendered_chat, tools=tool_schemas, documents=documents, **kwargs
+                    )
+                )
         if continue_final_message:
             if (final_message.strip() not in rendered_chat) or (
                 continue_final_message_tag.strip() not in rendered_chat

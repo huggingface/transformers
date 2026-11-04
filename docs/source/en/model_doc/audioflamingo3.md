@@ -278,7 +278,8 @@ loss.backward()
 </hfoption>
 <hfoption id="chat template">
 
-For other tasks, put the target in the assistant turn and pass `processor_kwargs={"output_labels": True}`.
+For other tasks, put the target in the assistant turn and pass `processor_kwargs={"output_labels": True}`, with
+`return_assistant_tokens_mask=True` for only the assistant turns to contribute to the loss.
 
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
@@ -307,6 +308,7 @@ inputs = processor.apply_chat_template(
     conversation,
     tokenize=True,
     return_dict=True,
+    return_assistant_tokens_mask=True,
     processor_kwargs={"output_labels": True},
 ).to(model.device, dtype=model.dtype)
 
