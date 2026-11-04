@@ -187,7 +187,11 @@ class KimiLinearAttention(DeepseekV3Attention):
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         # Cache read / write is performed while latent KV is still compressed
-        if past_key_values is not None:
+        paged_cache = kwargs.get("cache")
+        if paged_cache is not None:  # continuous batching
+            rows = paged_cache.update_rows(self.layer_idx, {"latent": kv_nope[0, 0], "rope_key": k_rot[0, 0]}, kwargs)
+            kv_nope, k_rot = rows["latent"][None, None], rows["rope_key"][None, None]
+        elif past_key_values is not None:
             kv_nope, k_rot = past_key_values.update(kv_nope, k_rot, self.layer_idx)
 
         key_states, value_states = self.expand_kv(kv_nope, k_rot)

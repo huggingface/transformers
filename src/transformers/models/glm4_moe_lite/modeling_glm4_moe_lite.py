@@ -277,6 +277,11 @@ class Glm4MoeLiteAttention(nn.Module):
 
         self.scaling = yarn_apply_mscale(config.rope_parameters, self.qk_head_dim ** (-0.5))
 
+    def cache_rows(self) -> dict[str, tuple[tuple[int, ...], torch.dtype | None]]:
+        """The shape and dtype (None for the cache dtype) of the rows continuous batching caches per token for this
+        layer: the compressed latent of its keys and values, and its shared rotary key."""
+        return {"latent": ((self.kv_lora_rank,), None), "rope_key": ((self.qk_rope_head_dim,), None)}
+
     def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Expands the compressed latents into key and value states. Args:
             - kv_nope: key + value without positional encoding, shape [batch_size, 1, seqlen, self.kv_lora_rank]
@@ -328,7 +333,11 @@ class Glm4MoeLiteAttention(nn.Module):
             q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
 
         # Cache read / write is performed while latent KV is still compressed
-        if past_key_values is not None:
+        paged_cache = kwargs.get("cache")
+        if paged_cache is not None:  # continuous batching
+            rows = paged_cache.update_rows(self.layer_idx, {"latent": kv_nope[0, 0], "rope_key": k_rot[0, 0]}, kwargs)
+            kv_nope, k_rot = rows["latent"][None, None], rows["rope_key"][None, None]
+        elif past_key_values is not None:
             kv_nope, k_rot = past_key_values.update(kv_nope, k_rot, self.layer_idx)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
