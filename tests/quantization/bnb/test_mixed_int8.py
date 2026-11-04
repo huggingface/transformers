@@ -268,6 +268,24 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
+    def test_generate_quality_dequantize(self):
+        r"""
+        Test that loading an 8-bit checkpoint with `dequantize=True` produce correct results
+        """
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            self.model_8bit.save_pretrained(tmpdirname)
+            model = AutoModelForCausalLM.from_pretrained(
+                tmpdirname,
+                quantization_config=BitsAndBytesConfig(load_in_8bit=True, dequantize=True),
+                device_map="auto",
+            )
+
+        self.assertFalse(model.is_quantized)
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
+        output_sequences = model.generate(input_ids=encoded_input["input_ids"].to(model.device), max_new_tokens=10)
+
+        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+
     def test_device_and_dtype_assignment(self):
         r"""
         Test whether attempting to change the device or cast the dtype of a model
