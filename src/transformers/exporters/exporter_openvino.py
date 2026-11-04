@@ -73,6 +73,7 @@ if is_torch_available():
     from torch.export import ExportedProgram
     from torch.export.decomp_utils import CustomDecompTable
 
+    from ..cache_utils import DynamicLayer
     from ..integrations.moe import _default_apply_gate
 
 
@@ -1316,6 +1317,22 @@ def _patch_embedding_forward(original):
         )
 
     return patch
+
+
+@register_patch(
+    "openvino",
+    "transformers.cache_utils.DynamicSlidingWindowLayer.update",
+    "transformers.cache_utils.DynamicSlidingWindowLayer.get_mask_sizes",
+    "transformers.cache_utils.DynamicSlidingWindowLayer.get_seq_length",
+)
+def _patch_sliding_window_layer(original):
+    """Give sliding-window cache layers the full cache of a `DynamicLayer`; the sliding mask still applies the window.
+
+    Slicing the cache to the window puts a `Slice` between the KV-cache concat and its state, which keeps OV's CPU
+    plugin from fusing the cache into its attention. The stateful model then keeps every token of the sliding layers,
+    so their cache grows with the sequence instead of stopping at the window.
+    """
+    return getattr(DynamicLayer, original.__name__)
 
 
 @register_patch("openvino", "transformers.integrations.moe.ExpertsInterface.get_interface")

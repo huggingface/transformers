@@ -23,8 +23,10 @@ import unittest
 
 from parameterized import parameterized
 
+from tests.models.gemma3.test_modeling_gemma3 import Gemma3TextModelTester
 from tests.models.granite.test_modeling_granite import GraniteModelTester
 from tests.models.llama.test_modeling_llama import LlamaModelTester
+from tests.models.mistral.test_modeling_mistral import MistralModelTester
 from tests.models.mixtral.test_modeling_mixtral import MixtralModelTester
 from tests.models.olmo2.test_modeling_olmo2 import Olmo2ModelTester
 from tests.models.phi3.test_modeling_phi3 import Phi3ModelTester
@@ -54,6 +56,8 @@ MODELS = {
     "phi3": (Phi3ModelTester, DENSE_FUSIONS),
     "olmo2": (Olmo2ModelTester, DENSE_FUSIONS),
     "granite": (GraniteModelTester, DENSE_FUSIONS),
+    "mistral": (MistralModelTester, DENSE_FUSIONS),  # sliding-window attention
+    "gemma3": (Gemma3TextModelTester, DENSE_FUSIONS),  # sliding-window and full attention layers
     "mixtral": (MixtralModelTester, MOE_FUSIONS),
     "qwen3_moe": (Qwen3MoeModelTester, MOE_FUSIONS),
 }
