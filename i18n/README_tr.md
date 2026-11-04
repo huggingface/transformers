@@ -43,6 +43,7 @@ limitations under the License.
         <a href="README_es.md">Español</a> |
         <a href="README_ja.md">日本語</a> |
         <a href="README_hd.md">हिन्दी</a> |
+        <a href="README_mr.md">मराठी</a> |
         <a href="README_ru.md">Русский</a> |
         <a href="README_pt-br.md">Português</a> |
         <a href="README_te.md">తెలుగు</a> |
@@ -79,7 +80,7 @@ Bir model bulmak ve hemen kullanmaya başlamak için bugün [Hub](https://huggin
 
 ## Kurulum
 
-Transformers, Python 3.10+ ve [PyTorch](https://pytorch.org/get-started/locally/) 2.4+ ile çalışır.
+Transformers, Python 3.11+ ve [PyTorch](https://pytorch.org/get-started/locally/) 2.6+ ile çalışır.
 
 [venv](https://docs.python.org/3/library/venv.html) veya hızlı, Rust tabanlı bir Python paket ve proje yöneticisi olan [uv](https://docs.astral.sh/uv/) ile bir sanal ortam (virtual environment) oluşturup etkinleştirin.
 
@@ -243,7 +244,7 @@ pipeline(
 
 ## Transformers kullanan 100 proje
 
-Transformers, önceden eğitilmiş modelleri kullanmak için bir araç takımından çok daha fazlasıdır; etrafında ve Hugging Face Hub üzerinde kurulan bir proje topluluğudur. Transformers'ın; geliştiricilerin, araştırmacıların, öğrencilerin, profesörlerin, mühendislerin ve diğer herkesin hayalindeki projeleri hayata geçirmesine olanak tanımasını istiyoruz.
+Transformers, önceden eğitilmiş modelleri kullanmak için bir araç takımından çok daha fazlasıdır; etrafında ve Hugging Face Hub üzerinde kurulan bir proje topluluğudur. Transformers'ın geliştiricilerin, araştırmacıların, öğrencilerin, profesörlerin, mühendislerin ve diğer herkesin hayalindeki projeleri hayata geçirmesine olanak tanımasını istiyoruz.
 
 Transformers'ın 100.000 yıldızını kutlamak için, Transformers ile inşa edilmiş 100 inanılmaz projeyi listeleyen [awesome-transformers](https://github.com/huggingface/transformers/blob/main/awesome-transformers.md) sayfasıyla topluluğu ön plana çıkarmak istedik.
 
