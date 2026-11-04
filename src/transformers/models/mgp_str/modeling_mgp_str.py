@@ -35,25 +35,25 @@ from .configuration_mgp_str import MgpstrConfig
 @dataclass
 class MgpstrModelOutput(ModelOutput):
     r"""
-    logits (`tuple(torch.FloatTensor)` of shape `(batch_size, config.num_character_labels)`):
-        Tuple of `torch.FloatTensor` (one for the output of character of shape `(batch_size,
+    logits (`tuple(torch.Tensor)` of shape `(batch_size, config.num_character_labels)`):
+        Tuple of `torch.Tensor` (one for the output of character of shape `(batch_size,
         config.max_token_length, config.num_character_labels)`, + one for the output of bpe of shape `(batch_size,
         config.max_token_length, config.num_bpe_labels)`, + one for the output of wordpiece of shape `(batch_size,
         config.max_token_length, config.num_wordpiece_labels)`) .
 
         Classification scores (before SoftMax) of character, bpe and wordpiece.
-    a3_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_a3_attentions=True` is passed or when `config.output_a3_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for the attention of character, + one for the attention of bpe`, + one
+    a3_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_a3_attentions=True` is passed or when `config.output_a3_attentions=True`):
+        Tuple of `torch.Tensor` (one for the attention of character, + one for the attention of bpe`, + one
         for the attention of wordpiece) of shape `(batch_size, config.max_token_length, sequence_length)`.
 
         Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
         heads.
     """
 
-    logits: tuple[torch.FloatTensor] | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    a3_attentions: tuple[torch.FloatTensor] | None = None
+    logits: tuple[torch.Tensor] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    a3_attentions: tuple[torch.Tensor] | None = None
 
 
 class MgpstrEmbeddings(nn.Module):
@@ -305,12 +305,12 @@ class MgpstrModel(MgpstrPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor] | BaseModelOutput:
+    ) -> tuple[torch.Tensor] | BaseModelOutput:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -368,13 +368,13 @@ class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         output_attentions: bool | None = None,
         output_a3_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor] | MgpstrModelOutput:
+    ) -> tuple[torch.Tensor] | MgpstrModelOutput:
         r"""
         output_a3_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of a3 modules. See `a3_attentions` under returned tensors

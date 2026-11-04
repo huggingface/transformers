@@ -726,16 +726,16 @@ class FunnelClassificationHead(nn.Module):
 @dataclass
 class FunnelForPreTrainingOutput(ModelOutput):
     r"""
-    loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+    loss (*optional*, returned when `labels` is provided, `torch.Tensor` of shape `(1,)`):
         Total loss of the ELECTRA-style objective.
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length)`):
         Prediction scores of the head (scores for each token before SoftMax).
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(

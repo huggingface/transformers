@@ -50,29 +50,29 @@ from .configuration_x_clip import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfi
 
 class XCLIPOutput(CLIPOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
         Contrastive loss for video-text similarity.
-    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, video_batch_size)`):
+    logits_per_text (`torch.Tensor` of shape `(text_batch_size, video_batch_size)`):
         The scaled dot product scores between `text_embeds` and `video_embeds`. This represents the text-video
         similarity scores.
-    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+    text_embeds (`torch.Tensor` of shape `(batch_size, output_dim`):
         The text embeddings obtained by applying the projection layer to the pooled output of [`XCLIPTextModel`].
     text_model_output (`BaseModelOutputWithPooling`):
         The output of the [`XCLIPTextModel`].
     vision_model_output (`BaseModelOutputWithPooling`):
         The output of the [`XCLIPVisionModel`].
-    logits_per_video (`torch.FloatTensor` of shape `(video_batch_size, text_batch_size)`):
+    logits_per_video (`torch.Tensor` of shape `(video_batch_size, text_batch_size)`):
         The scaled dot product scores between `video_embeds` and `text_embeds`. This represents the video-text
         similarity scores.
-    video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+    video_embeds (`torch.Tensor` of shape `(batch_size, output_dim`):
         The video embeddings obtained by applying the projection layer to the pooled output of
         [`XCLIPVisionModel`].
     mit_output (`BaseModelOutputWithPooling`):
         The output of `XCLIPMultiframeIntegrationTransformer` (MIT for short).
     """
 
-    logits_per_video: torch.FloatTensor | None = None
-    video_embeds: torch.FloatTensor | None = None
+    logits_per_video: torch.Tensor | None = None
+    video_embeds: torch.Tensor | None = None
     mit_output: BaseModelOutputWithPooling = None
     logits_per_image = AttributeError()
     image_embeds = AttributeError()
@@ -137,7 +137,7 @@ class XCLIPVisionEncoderLayer(CLIPEncoderLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor, torch.Tensor | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch_time, seq_length, hidden_size = hidden_states.size()
         batch_size = batch_time // self.num_frames
         msg_token = self.message_fc(hidden_states[:, 0, :])
@@ -280,7 +280,7 @@ class XCLIPVisionModel(CLIPVisionModel, XCLIPPreTrainedModel):
 
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None,
+        pixel_values: torch.Tensor | None,
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -645,7 +645,7 @@ class XCLIPModel(CLIPModel, XCLIPPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         return_loss: bool | None = None,

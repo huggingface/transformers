@@ -68,14 +68,14 @@ class T5GemmaModelTester:
         vocab_size=99,
         # decoder-specific
         seq_length=7,
-        hidden_size=32,
+        hidden_size=64,
         num_hidden_layers=2,
         num_attention_heads=4,
         num_key_value_heads=2,
         intermediate_size=37,
         # encoder-specific
         encoder_seq_length=7,
-        encoder_hidden_size=32,
+        encoder_hidden_size=64,
         encoder_num_hidden_layers=2,
         encoder_num_attention_heads=4,
         encoder_num_key_value_heads=2,
