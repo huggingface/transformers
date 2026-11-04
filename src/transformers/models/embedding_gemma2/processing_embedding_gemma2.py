@@ -29,7 +29,6 @@ from ...processing_utils import (
     MultiModalData,
     OmniModalProcessorMixin,
     ProcessingKwargs,
-    ProcessorMixin,
     Unpack,
     VideosKwargs,
 )
@@ -96,7 +95,7 @@ def get_aspect_ratio_preserving_size(
 
 
 @auto_docstring
-class EmbeddingGemma2Processor(ProcessorMixin):
+class EmbeddingGemma2Processor(OmniModalProcessorMixin):
     text_kwargs = {
         "padding": True,
     }
@@ -186,8 +185,8 @@ class EmbeddingGemma2Processor(ProcessorMixin):
                 else None
             )
 
-        images, text, videos, audio = OmniModalProcessorMixin.prepare_inputs_layout(
-            self, images=images, text=text, videos=videos, audio=audio, **kwargs
+        images, text, videos, audio = super().prepare_inputs_layout(
+            images=images, text=text, videos=videos, audio=audio, **kwargs
         )
 
         # Model requires nested struct
@@ -230,7 +229,7 @@ class EmbeddingGemma2Processor(ProcessorMixin):
         audio: AudioInput = None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
-        OmniModalProcessorMixin.validate_inputs(self, images=images, text=text, **kwargs)
+        super().validate_inputs(images=images, text=text, **kwargs)
 
         # Unlike Gemma 4, any single modality on its own is a valid embedding input.
         if text is None and images is None and videos is None and audio is None:

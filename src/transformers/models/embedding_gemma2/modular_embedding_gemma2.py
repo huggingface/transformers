@@ -844,7 +844,7 @@ class EmbeddingGemma2VideoProcessor(Gemma4VideoProcessor):
         return indices
 
 
-class EmbeddingGemma2Processor(Gemma4Processor):
+class EmbeddingGemma2Processor(OmniModalProcessorMixin, Gemma4Processor):
     return_mm_token_type_ids = AttributeError()
 
     def model_input_names(self):
