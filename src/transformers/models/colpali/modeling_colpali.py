@@ -21,11 +21,14 @@ from torch import nn
 from transformers import AutoModel
 
 from ...backbone_utils import filter_output_hidden_states
-from ...cache_utils import Cache
+from ...modeling_outputs import MultimodalBaseModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from .configuration_colpali import ColPaliConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring
@@ -49,28 +52,21 @@ class ColPaliPreTrainedModel(PreTrainedModel):
     """
 )
 @dataclass
-class ColPaliForRetrievalOutput(ModelOutput):
+class ColPaliForRetrievalOutput(MultimodalBaseModelOutputWithPast):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
     embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
         The embeddings of the model.
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
     """
 
-    loss: torch.FloatTensor | None = None
     embeddings: torch.Tensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    image_hidden_states: torch.FloatTensor | None = None
+
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+        )
+        return self.image_pooler_output
 
 
 @auto_docstring(
@@ -120,8 +116,6 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
             pixel_values=pixel_values,
             **kwargs,
         )
-        vlm_hidden_states = vlm_output.hidden_states
-        vlm_image_hidden_states = vlm_output.image_hidden_states if pixel_values is not None else None
 
         last_hidden_states = vlm_output[0]  # (batch_size, sequence_length, hidden_size)
         proj_dtype = self.embedding_proj_layer.weight.dtype
@@ -133,13 +127,7 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         if attention_mask is not None:
             embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
 
-        return ColPaliForRetrievalOutput(
-            embeddings=embeddings,
-            past_key_values=vlm_output.past_key_values,
-            hidden_states=vlm_hidden_states,
-            attentions=vlm_output.attentions,
-            image_hidden_states=vlm_image_hidden_states,
-        )
+        return ColPaliForRetrievalOutput(embeddings=embeddings, **vlm_output)
 
 
 __all__ = [

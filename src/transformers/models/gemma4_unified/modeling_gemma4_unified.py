@@ -40,7 +40,13 @@ from ...masking_utils import (
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    ModelOutput,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -48,6 +54,7 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    logging,
     torch_compilable_check,
 )
 from ...utils.generic import merge_with_config_defaults
@@ -59,6 +66,9 @@ from .configuration_gemma4_unified import (
     Gemma4UnifiedTextConfig,
     Gemma4UnifiedVisionConfig,
 )
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring
@@ -89,13 +99,9 @@ class Gemma4UnifiedTextModelOutputWithPast(BaseModelOutputWithPast):
     shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Gemma4Unified causal language model (or autoregressive) outputs.
-    """
-)
+@auto_docstring
 @dataclass
-class Gemma4UnifiedCausalLMOutputWithPast(ModelOutput):
+class Gemma4UnifiedCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
@@ -117,25 +123,22 @@ class Gemma4UnifiedCausalLMOutputWithPast(ModelOutput):
         Used to pass shared KV states between layers during KV sharing.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    image_hidden_states: torch.FloatTensor | None = None
-
     audio_hidden_states: torch.FloatTensor | None = None
 
     shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
 
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+        )
+        return self.image_pooler_output
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Gemma4Unified outputs, with hidden states and attentions.
-    """
-)
+
+@auto_docstring
 @dataclass
-class Gemma4UnifiedModelOutputWithPast(BaseModelOutputWithPast):
+class Gemma4UnifiedModelOutputWithPast(MultimodalBaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
@@ -153,11 +156,17 @@ class Gemma4UnifiedModelOutputWithPast(BaseModelOutputWithPast):
         Used to pass shared KV states between layers during KV sharing.
     """
 
-    image_hidden_states: torch.FloatTensor | None = None
-
     audio_hidden_states: torch.FloatTensor | None = None
 
     shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
+
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+        )
+        return self.image_pooler_output
 
 
 class Gemma4UnifiedRMSNorm(nn.Module):

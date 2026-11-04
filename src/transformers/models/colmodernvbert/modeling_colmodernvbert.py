@@ -18,17 +18,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from dataclasses import dataclass
 
 import torch
 from torch import nn
 
+from ...modeling_outputs import MultimodalBaseModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
 from ..auto.modeling_auto import AutoModel
 from .configuration_colmodernvbert import ColModernVBertConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring
@@ -52,23 +57,21 @@ class ColModernVBertPreTrainedModel(PreTrainedModel):
     """
 )
 @dataclass
-class ColModernVBertForRetrievalOutput(ModelOutput):
+class ColModernVBertForRetrievalOutput(MultimodalBaseModelOutputWithPast):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
     embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
         The embeddings of the model.
-    image_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True` and `pixel_values` are provided):
-        Tuple of `torch.FloatTensor` (one for the output of the image modality projection + one for the output of each layer) of shape
-        `(batch_size, num_channels, image_size, image_size)`.
-        Hidden-states of the image encoder at the output of each layer plus the initial modality projection outputs.
     """
 
-    loss: torch.FloatTensor | None = None
     embeddings: torch.Tensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    image_hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+        )
+        return self.image_pooler_output
 
 
 @auto_docstring(
@@ -129,12 +132,7 @@ class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
             attention_mask = attention_mask.to(dtype=embeddings.dtype, device=embeddings.device)
             embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
 
-        return ColModernVBertForRetrievalOutput(
-            embeddings=embeddings,
-            hidden_states=vlm_output.hidden_states,
-            attentions=vlm_output.attentions,
-            image_hidden_states=vlm_output.image_hidden_states,
-        )
+        return ColModernVBertForRetrievalOutput(embeddings=embeddings, **vlm_output)
 
 
 __all__ = ["ColModernVBertForRetrieval", "ColModernVBertPreTrainedModel"]
