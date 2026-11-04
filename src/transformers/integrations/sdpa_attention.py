@@ -31,13 +31,13 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 def pack_gqa(hidden_states: torch.Tensor | None, n_rep: int) -> torch.Tensor | None:
     """
-    For a single query token: (..., num_attention_heads, 1, dim) -> (..., num_key_value_heads, n_rep, dim), so that
-    attention runs on the key/value heads without `repeat_kv`. Masks shared by all heads are returned as is.
+    For a single query token: (batch, num_attention_heads, 1, dim) -> (batch, num_key_value_heads, n_rep, dim), so
+    that attention runs on the key/value heads without `repeat_kv`. Masks shared by all heads are returned as is.
     """
-    if hidden_states is None or hidden_states.ndim < 3 or hidden_states.shape[-3] == 1:
+    if hidden_states is None or hidden_states.shape[1] == 1:
         return hidden_states
-    *leading_dims, num_attention_heads, _, dim = hidden_states.shape
-    return hidden_states.reshape(*leading_dims, num_attention_heads // n_rep, n_rep, dim)
+    batch, num_attention_heads, _, dim = hidden_states.shape
+    return hidden_states.reshape(batch, num_attention_heads // n_rep, n_rep, dim)
 
 
 def use_gqa_in_sdpa(attention_mask: torch.Tensor | None, key: torch.Tensor, value: torch.Tensor) -> bool:
@@ -125,7 +125,7 @@ def sdpa_attention_forward(
         )
 
     sdpa_kwargs = {}
-    batch_size, num_heads, q_length, _ = query.shape
+    _, num_heads, q_length, _ = query.shape
     if hasattr(module, "num_key_value_groups") and module.num_key_value_groups > 1:
         if use_gqa_in_sdpa(attention_mask, key, value):
             sdpa_kwargs["enable_gqa"] = True
@@ -200,8 +200,9 @@ def sdpa_attention_forward(
         is_causal=is_causal,
         **sdpa_kwargs,
     )
-    # Undoes `pack_gqa`, a no-op otherwise
-    attn_output = attn_output.reshape(batch_size, num_heads, q_length, value.shape[-1])
+    # Undoes `pack_gqa`, a no-op otherwise. The batch comes from the output, as SDPA broadcasts it (e.g. learned
+    # queries with batch 1)
+    attn_output = attn_output.reshape(attn_output.shape[0], num_heads, q_length, value.shape[-1])
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, None
