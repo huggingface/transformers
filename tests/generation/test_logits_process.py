@@ -475,6 +475,8 @@ class LogitsProcessorTest(unittest.TestCase):
             ("uniform_50", lambda: torch.zeros(50), 0.4),
             # long-tailed vocabulary: the entropy budget must come from the full distribution, not the top 100
             ("zipf_49152", lambda: -1.1 * torch.arange(1, 49153, dtype=torch.float).log(), 0.4),
+            # exponentially decaying probabilities: second long-tailed distribution catching the bug
+            ("exponential_decay", lambda: -0.1 * torch.arange(150, dtype=torch.float), 0.4),
         ]
     )
     def test_top_h_dist_warper_matches_reference(self, name, make_logits, top_h):
@@ -489,6 +491,70 @@ class LogitsProcessorTest(unittest.TestCase):
         self.assertEqual(kept.sum().item(), top_h_reference_num_kept(logits, top_h))
         if (~kept).any():
             self.assertGreaterEqual(logits[kept].min().item(), logits[~kept].max().item())
+
+    def test_top_h_monotonicity(self):
+        """
+        Increasing the entropy budget alpha must never reduce the number of retained tokens:
+        if alpha_1 < alpha_2, then k(alpha_1) <= k(alpha_2).
+
+        Uses alpha values strictly between 0 and 1 with safe margins away from exact
+        float32 rounding ties.
+        """
+        alpha_grid = [0.05, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9]
+        generator = torch.Generator(device=torch_device).manual_seed(42)
+        distributions = [
+            ("uniform", torch.zeros(50, device=torch_device)),
+            ("exponential", -0.1 * torch.arange(80, dtype=torch.float, device=torch_device)),
+            ("zipf", -1.1 * torch.arange(1, 500, dtype=torch.float, device=torch_device).log()),
+            ("normal", torch.randn(60, generator=generator, device=torch_device)),
+        ]
+
+        for dist_name, logits in distributions:
+            counts = []
+            for alpha in alpha_grid:
+                warper = TopHLogitsWarper(top_h=alpha)
+                filtered = warper(None, logits[None].clone())[0]
+                kept_count = torch.isfinite(filtered).sum().item()
+                counts.append(kept_count)
+            for i in range(len(counts) - 1):
+                self.assertLessEqual(
+                    counts[i],
+                    counts[i + 1],
+                    f"Monotonicity violated for {dist_name}: alpha={alpha_grid[i]} kept {counts[i]} > alpha={alpha_grid[i + 1]} kept {counts[i + 1]}",
+                )
+
+    def test_top_h_validation_and_filter_value(self):
+        """
+        Validates constructor input validation and custom filter_value handling:
+        - Constructor rejects alpha <= 0.0 or alpha > 1.0 with ValueError.
+        - Custom filter_value is applied to filtered tokens without modifying input logits in-place.
+        - Retained logits preserve their exact values.
+        - Works properly inside LogitsProcessorList.
+        """
+        # Constructor validation
+        for invalid_h in [0.0, -0.5, 1.001, 2.0]:
+            with self.assertRaises(ValueError):
+                TopHLogitsWarper(top_h=invalid_h)
+
+        # In-place preservation and custom filter_value
+        logits = torch.tensor([[3.0, 2.0, 1.0, 0.0]], device=torch_device)
+        logits_clone = logits.clone()
+        custom_filter = -9999.0
+        warper = TopHLogitsWarper(top_h=0.3, filter_value=custom_filter)
+        out = warper(None, logits)
+
+        # Input tensor unchanged
+        self.assertTrue(torch.equal(logits, logits_clone))
+        # Kept tokens identical to input
+        kept = out != custom_filter
+        self.assertTrue(torch.equal(out[kept], logits[kept]))
+        # Filtered tokens set to custom_filter
+        self.assertTrue((out[~kept] == custom_filter).all())
+
+        # Integration with LogitsProcessorList
+        processors = LogitsProcessorList([warper])
+        processed = processors(None, logits.clone())
+        self.assertTrue(torch.equal(processed, out))
 
     def test_min_p_dist_warper(self):
         input_ids = None
