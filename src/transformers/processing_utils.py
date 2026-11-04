@@ -601,7 +601,7 @@ class ProcessorMixin(PushToHubMixin):
 
     # Default values for ProcessingKwargs.
     # Only override subprocessor kwargs if the subprocessor has a different default.
-    # For example, to set `videos_kwargs = {"return_metadata" = True}` to always request
+    # For example, to set `videos_kwargs = {"return_metadata": True}` to always request
     # metadata from the video processor.
     text_kwargs: TextKwargs
     images_kwargs: ImagesKwargs
@@ -1668,7 +1668,7 @@ class ProcessorMixin(PushToHubMixin):
                 # 2) key is modality-specific kwarg, e.g. "text_kwargs"
                 modality = key
                 for subkey, subvalue in value.items():
-                    if subkey in kwargs and subkey not in ModelProcessorKwargs.__annotations__:
+                    if subkey in kwargs and subkey in modality_valid_kwargs[modality]:
                         raise ValueError(
                             f"Keyword argument {subkey} was passed two times:\n"
                             f"in a dictionary for {modality} and as a **kwarg."

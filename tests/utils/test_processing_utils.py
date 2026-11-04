@@ -53,16 +53,11 @@ class ProcessorMixinTest(unittest.TestCase):
         # return_mm_token_type_ids must not be propagated as it is in ProcessingKwargs
         self.assertNotIn("return_mm_token_type_ids", merged_kwargs["text_kwargs"])
 
-    def test_merge_kwargs_flat_and_nested(self):
-        """Check that flat and nested kwargs do not raise an error if they are defined on
-        ProcessingKwargs and the subprocessor kwargs
-        """
+    def test_merge_kwargs_flat_and_nested_raises(self):
+        """Check that flat and nested kwargs with the same name raise if passed twice."""
         processor = DummyProcessor()
-        merged_kwargs = processor._merge_kwargs(
-            return_mm_token_type_ids=True, text_kwargs={"return_mm_token_type_ids": False}
-        )
-        self.assertEqual(merged_kwargs["return_mm_token_type_ids"], True)
-        self.assertEqual(merged_kwargs["text_kwargs"]["return_mm_token_type_ids"], False)
+        with self.assertRaises(ValueError):
+            processor._merge_kwargs(return_mm_token_type_ids=True, text_kwargs={"return_mm_token_type_ids": False})
 
     def test_merge_kwargs_flat_and_nested_error(self):
         """Check that flat and nested kwargs only defined on the subprocessor raise if passed twice"""
