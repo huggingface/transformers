@@ -38,6 +38,7 @@ from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ...vision_utils import get_vision_interpolation_indices_and_weights, get_vision_position_ids
 from ..clip.modeling_clip import CLIPMLP
 from ..inkling.configuration_inkling import InklingConfig, InklingTextConfig
 from ..inkling.modeling_inkling import (
@@ -308,10 +309,11 @@ class Inkling2ShortConvolution(InklingShortConvolution):
         seq_len = hidden_states.shape[1]
         hidden_states = hidden_states.transpose(1, 2)
 
-        if past_key_values is not None:
-            conv_state = past_key_values.get_conv_state(self.layer_idx, state_idx=self.conv_idx)
-        else:
-            conv_state = None
+        conv_state = (
+            None
+            if past_key_values is None
+            else past_key_values.get_conv_state(self.layer_idx, state_idx=self.conv_idx)
+        )
 
         if conv_state is not None and seq_len == 1 and not past_key_values.is_recording_past(self.layer_idx):
             hidden_states = causal_conv1d_update(
@@ -651,50 +653,42 @@ class Inkling2MoE(InklingMoE):
         return hidden_states
 
 
-def block_attention_residual(
-    block_states: list[torch.Tensor],
-    partial_state: torch.Tensor,
-    queries: torch.Tensor,
-    normalize_values: bool,
-    partial_addend: torch.Tensor | None = None,
-) -> tuple[torch.Tensor, ...]:
+class Inkling2BlockAttentionResidual(nn.Module):
     """
-    Attention over depth: each query in `queries` mixes the completed blocks and the current partial block with a
-    softmax over RMS-normalized sources, independently at each position. Returns one float32 mixture per query.
+    Block attention residual: attention over depth that mixes the completed blocks and the current partial block into
+    the input of the next sublayer. At each position, every learned pseudo-query attends to that position's block
+    states. Keys are the RMS-normalized block states, values are the raw or normalized block states.
     """
-    # with a device map, earlier blocks live on the devices of the layers that produced them
-    device = partial_state.device
-    values = torch.stack([*(state.to(device) for state in block_states), partial_state]).float()
-    if partial_addend is not None:
-        values[-1] = values[-1] + partial_addend.float()
-    inv_rms = torch.rsqrt(values.square().mean(dim=-1) + 1e-6)
-    queries = queries.to(device).float().view(-1, values.shape[-1]) * values.shape[-1] ** -0.5
-    logits = torch.einsum("nbld,qd,nbl->qbln", values, queries, inv_rms)
-    probabilities = torch.softmax(logits, dim=-1)
-    if normalize_values:
-        values = values * inv_rms.unsqueeze(-1)
-    return torch.einsum("qbln,nbld->qbld", probabilities, values).unbind(0)
 
-
-class Inkling2AttnRes(nn.Module):
-    """Pseudo-queries of the block attention residuals: one per sublayer input, three for full-attention inputs."""
-
-    def __init__(self, config: Inkling2TextConfig):
+    def __init__(self, config: Inkling2TextConfig, num_queries: int = 1):
         super().__init__()
-        self.attn_queries = nn.ParameterList(
-            [
-                nn.Parameter(
-                    torch.zeros(config.hidden_size)
-                    if config.layer_types[layer_idx] == "hybrid_sliding"
-                    else torch.zeros(3, config.hidden_size)
-                )
-                for layer_idx in range(1, config.num_hidden_layers)
-            ]
+        self.normalize_values = config.attn_res_normalize_values
+        self.query = nn.Parameter(
+            torch.zeros(config.hidden_size) if num_queries == 1 else torch.zeros(num_queries, config.hidden_size)
         )
-        self.mlp_queries = nn.ParameterList(
-            [nn.Parameter(torch.zeros(config.hidden_size)) for _ in range(config.num_hidden_layers)]
-        )
-        self.output_query = nn.Parameter(torch.zeros(config.hidden_size))
+
+    def forward(
+        self, block_states: list[torch.Tensor], partial_block_states: torch.Tensor
+    ) -> tuple[torch.Tensor, ...]:
+        """
+        Returns one `(batch_size, seq_len, hidden_size)` float32 tensor per query: the block states (completed blocks
+        and the partial block) weighted by that query's attention. Full-attention layers use three queries for separate
+        query, key and value inputs, all other sublayers use one.
+        """
+        # with a device map, earlier blocks live on the devices of the layers that produced them
+        device = partial_block_states.device
+        value_states = torch.stack(
+            [*(state.to(device) for state in block_states), partial_block_states], dim=-2
+        ).float()
+        key_states = value_states * torch.rsqrt(value_states.square().mean(dim=-1, keepdim=True) + 1e-6)
+        if self.normalize_values:
+            value_states = key_states
+
+        hidden_size = value_states.shape[-1]
+        # (batch, seq_len, num_queries, hidden_size), the same queries at every position
+        query_states = self.query.to(device).float().view(-1, hidden_size).expand(*value_states.shape[:-2], -1, -1)
+        attn_output = F.scaled_dot_product_attention(query_states, key_states, value_states, scale=hidden_size**-0.5)
+        return attn_output.unbind(-2)
 
 
 class Inkling2DecoderLayer(GradientCheckpointingLayer):
@@ -703,7 +697,8 @@ class Inkling2DecoderLayer(GradientCheckpointingLayer):
         self.is_sliding = config.layer_types[layer_idx] == "hybrid_sliding"
         self.attention_type = "sliding_attention" if self.is_sliding else "full_attention"
         self.is_block_boundary = layer_idx % config.n_layers_per_attnres_block == 0
-        self.normalize_values = config.attn_res_normalize_values
+        self.attn_res = Inkling2BlockAttentionResidual(config, 1 if self.is_sliding else 3) if layer_idx > 0 else None
+        self.mlp_res = Inkling2BlockAttentionResidual(config)
         self.self_attn = Inkling2Attention(config, layer_idx)
         self.mlp = Inkling2MoE(config)
         if self.is_sliding:
@@ -724,52 +719,49 @@ class Inkling2DecoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         block_states: list[torch.Tensor],
-        attn_res_query: torch.Tensor | None,
-        mlp_res_query: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         conv_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         dtype = hidden_states.dtype
-        if block_states:
-            attention_sources = block_attention_residual(
-                block_states, hidden_states, attn_res_query, self.normalize_values
-            )
+        block_residual = hidden_states
+        if self.attn_res is None:
+            qkv_hidden_states = (hidden_states,) * (1 if self.is_sliding else 3)
         else:
-            attention_sources = (hidden_states,) * (1 if self.is_sliding else 3)
+            qkv_hidden_states = self.attn_res(block_states, hidden_states)
 
         if self.is_sliding:
-            attention_inputs = {"hidden_states": self.input_layernorm(attention_sources[0]).to(dtype)}
+            attention_inputs = {"hidden_states": self.input_layernorm(qkv_hidden_states[0]).to(dtype)}
         else:
             attention_inputs = {
-                "hidden_states": self.q_input_layernorm(attention_sources[0]).to(dtype),
-                "key_hidden_states": self.k_input_layernorm(attention_sources[1]).to(dtype),
-                "value_hidden_states": self.v_input_layernorm(attention_sources[2]).to(dtype),
+                "hidden_states": self.q_input_layernorm(qkv_hidden_states[0]).to(dtype),
+                "key_hidden_states": self.k_input_layernorm(qkv_hidden_states[1]).to(dtype),
+                "value_hidden_states": self.v_input_layernorm(qkv_hidden_states[2]).to(dtype),
             }
-        attention_output, _ = self.self_attn(
+        hidden_states, _ = self.self_attn(
             **attention_inputs,
             attention_mask=attention_mask,
             conv_mask=conv_mask,
             past_key_values=past_key_values,
             **kwargs,
         )
-        attention_output = self.attn_sconv(attention_output, past_key_values=past_key_values, conv_mask=conv_mask)
+        hidden_states = self.attn_sconv(hidden_states, past_key_values=past_key_values, conv_mask=conv_mask)
+        residual = hidden_states
 
         if self.is_block_boundary:
-            mlp_input = block_attention_residual(
-                [*block_states, hidden_states], attention_output, mlp_res_query, self.normalize_values
-            )[0]
+            block_states = [*block_states, block_residual]
         else:
-            mlp_input = block_attention_residual(
-                block_states, hidden_states, mlp_res_query, self.normalize_values, partial_addend=attention_output
-            )[0]
-        mlp_output = self.mlp(self.post_attention_layernorm(mlp_input).to(dtype))
-        mlp_output = self.mlp_sconv(mlp_output, past_key_values=past_key_values, conv_mask=conv_mask)
+            hidden_states = block_residual.float() + hidden_states.float()
 
-        if self.is_block_boundary:
-            return attention_output + mlp_output
-        return hidden_states + attention_output + mlp_output
+        hidden_states = self.mlp_res(block_states, hidden_states)[0]
+        hidden_states = self.mlp(self.post_attention_layernorm(hidden_states).to(dtype))
+        hidden_states = self.mlp_sconv(hidden_states, past_key_values=past_key_values, conv_mask=conv_mask)
+
+        if not self.is_block_boundary:
+            residual = block_residual + residual
+        hidden_states = residual + hidden_states
+        return hidden_states
 
 
 class Inkling2VisionRotaryEmbedding(Sam3ViTRotaryEmbedding):
@@ -854,25 +846,33 @@ class Inkling2VisionEmbeddings(nn.Module):
         self.class_embedding = nn.Parameter(torch.zeros(config.hidden_size))
         self.cls_position_embedding = nn.Parameter(torch.zeros(config.hidden_size))
 
-    def interpolate_pos_encoding(self, height: int, width: int) -> torch.Tensor:
-        position_embedding = self.position_embedding.weight
-        grid = position_embedding.view(self.grid_size, self.grid_size, -1).permute(2, 0, 1).unsqueeze(0)
-        grid = F.interpolate(grid.float(), size=(height, width), mode="bilinear", align_corners=False)
-        return grid[0].permute(1, 2, 0).reshape(height * width, -1).to(position_embedding.dtype)
-
-    def forward(self, pixel_values: torch.Tensor, image_grid_thw: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        patch_grid_thw: torch.Tensor,
+        patch_index: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         merge, patch = self.merge_size, self.patch_size
-        cls_embedding = (self.class_embedding + self.cls_position_embedding).unsqueeze(0)
-        embeddings = []
-        for image, (_, height, width) in zip(
-            torch.split(pixel_values, (image_grid_thw[:, 1] * image_grid_thw[:, 2]).tolist()), image_grid_thw
-        ):
-            # native patches in raster order over the (height * merge, width * merge) grid, channels last
-            patches = image.reshape(height, width, merge, patch, merge, patch, -1).permute(0, 2, 1, 4, 3, 5, 6)
-            patch_embeddings = self.patch_embedding(patches.reshape(height * width * merge * merge, -1))
-            patch_embeddings = patch_embeddings + self.interpolate_pos_encoding(height * merge, width * merge)
-            embeddings.extend((cls_embedding.to(patch_embeddings.dtype), patch_embeddings))
-        return torch.cat(embeddings)
+        patches = pixel_values.reshape(-1, merge, patch, merge, patch, pixel_values.shape[-1]).transpose(2, 3)
+        patch_embeddings = self.patch_embedding(patches.reshape(-1, self.patch_embedding.in_features))
+
+        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+            patch_grid_thw,
+            num_grid_per_side=self.grid_size,
+            mode="bilinear",
+            align_corners=False,
+            spatial_merge_size=merge,
+            kwargs=kwargs,
+        )
+        position_embeddings = (self.position_embedding(interp_indices) * interp_weights[:, :, None]).sum(1)
+        patch_embeddings = patch_embeddings + position_embeddings.to(patch_embeddings.dtype)
+
+        # each image starts with a class token, followed by its patches
+        cls_embedding = (self.class_embedding + self.cls_position_embedding).to(patch_embeddings.dtype)
+        embeddings = cls_embedding.repeat(patch_embeddings.shape[0] + patch_grid_thw.shape[0], 1)
+        embeddings[patch_index] = patch_embeddings
+        return embeddings
 
 
 class Inkling2VisionMerger(VoxtralMultiModalProjector):
@@ -893,7 +893,15 @@ class Inkling2PreTrainedModel(InklingPreTrainedModel):
     _no_split_modules = ["Inkling2DecoderLayer", "Inkling2VisionEncoderLayer"]
     _supports_sdpa = False
     _supports_flex_attn = False
-    _keep_in_fp32_modules_strict = ["attn_sconv", "mlp_sconv", "k_sconv", "v_sconv", "attn_res"]
+    _keep_in_fp32_modules_strict = [
+        "attn_sconv",
+        "mlp_sconv",
+        "k_sconv",
+        "v_sconv",
+        "attn_res",
+        "mlp_res",
+        "output_res",
+    ]
     _keys_to_ignore_on_load_unexpected = AttributeError()
 
     @torch.no_grad()
@@ -917,9 +925,8 @@ class Inkling2PreTrainedModel(InklingPreTrainedModel):
         elif isinstance(module, Inkling2DynamicShortConvolution):
             init.zeros_(module.static_w)
             init.normal_(module.weight_proj, mean=0.0, std=std)
-        elif isinstance(module, Inkling2AttnRes):
-            for query in [*module.attn_queries, *module.mlp_queries, module.output_query]:
-                init.zeros_(query)
+        elif isinstance(module, Inkling2BlockAttentionResidual):
+            init.zeros_(module.query)
         elif isinstance(module, Inkling2VisionEmbeddings):
             init.normal_(module.class_embedding, mean=0.0, std=std)
             init.normal_(module.cls_position_embedding, mean=0.0, std=std)
@@ -934,7 +941,7 @@ class Inkling2TextModel(InklingTextModel):
 
     def __init__(self, config: Inkling2TextConfig):
         super().__init__(config)
-        self.attn_res = Inkling2AttnRes(config)
+        self.output_res = Inkling2BlockAttentionResidual(config)
 
     @merge_with_config_defaults
     @capture_outputs
@@ -979,12 +986,10 @@ class Inkling2TextModel(InklingTextModel):
 
         hidden_states = inputs_embeds
         block_states = []
-        for layer_idx, decoder_layer in enumerate(self.layers):
+        for decoder_layer in self.layers:
             new_hidden_states = decoder_layer(
                 hidden_states,
                 block_states=block_states,
-                attn_res_query=self.attn_res.attn_queries[layer_idx - 1] if layer_idx > 0 else None,
-                mlp_res_query=self.attn_res.mlp_queries[layer_idx],
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 conv_mask=causal_mask_mapping["linear_attention"],
                 past_key_values=past_key_values,
@@ -994,9 +999,7 @@ class Inkling2TextModel(InklingTextModel):
                 block_states = [*block_states, hidden_states]
             hidden_states = new_hidden_states
 
-        hidden_states = block_attention_residual(
-            block_states, hidden_states, self.attn_res.output_query, self.config.attn_res_normalize_values
-        )[0]
+        hidden_states = self.output_res(block_states, hidden_states)[0]
         hidden_states = self.norm(hidden_states).to(inputs_embeds.dtype)
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
@@ -1095,29 +1098,34 @@ class Inkling2VisionModel(Inkling2PreTrainedModel):
             Temporal, height and width of each image, counted in language model image tokens.
         """
         merge = self.config.spatial_merge_size
+        patch_grid_thw = (image_grid_thw * image_grid_thw.new_tensor([1, merge, merge])).to(pixel_values.device)
+        patches_per_image = patch_grid_thw.prod(-1)
+        num_patches = pixel_values.shape[0] * merge**2
+        if (cu_seqlens := kwargs.pop("cu_seqlens", None)) is None:
+            cu_seqlens = F.pad((patches_per_image + 1).cumsum(0), (1, 0)).to(torch.int32)
+        # sequence index of every patch, skipping the class token in front of each image
+        image_ids = torch.arange(1, patch_grid_thw.shape[0] + 1, device=pixel_values.device)
+        patch_index = torch.arange(num_patches, device=pixel_values.device) + torch.repeat_interleave(
+            image_ids, patches_per_image, output_size=num_patches
+        )
+
         pixel_values = pixel_values.to(self.embeddings.patch_embedding.weight.dtype)
-        hidden_states = self.embeddings(pixel_values, image_grid_thw)
+        hidden_states = self.embeddings(pixel_values, patch_grid_thw, patch_index, **kwargs)
         hidden_states = self.pre_layernorm(hidden_states)
 
-        lengths = image_grid_thw[:, 1] * image_grid_thw[:, 2] * merge**2 + 1
-        position_ids = []
-        for _, height, width in image_grid_thw:
-            rows = torch.arange(height * merge * width * merge, device=hidden_states.device)
-            positions = torch.stack((rows // (width * merge), rows % (width * merge)), dim=-1) + 1
-            position_ids.extend((positions.new_zeros(1, 2), positions))
-        position_embeddings = self.rotary_emb(hidden_states, torch.cat(position_ids))
-        cu_seqlens = F.pad(lengths.cumsum(0), (1, 0)).to(device=hidden_states.device, dtype=torch.int32)
+        # patches are 1-indexed (row, col) and class tokens sit at (0, 0)
+        position_ids = get_vision_position_ids(patch_grid_thw, merge, kwargs=kwargs)
+        position_ids = position_ids.new_zeros(hidden_states.shape[0], 2).index_copy(0, patch_index, position_ids + 1)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for layer in self.layers:
             hidden_states = layer(
                 hidden_states, cu_seqlens=cu_seqlens, position_embeddings=position_embeddings, **kwargs
             )
 
-        merged_features = [
-            image[1:].reshape(height, merge, width, merge, -1).permute(0, 2, 1, 3, 4).reshape(height * width, -1)
-            for image, (_, height, width) in zip(torch.split(hidden_states, lengths.tolist()), image_grid_thw)
-        ]
-        pooler_output = self.merger(torch.cat(merged_features))
+        # with a device map, the last layers can live on another device than the embeddings
+        patch_states = hidden_states[patch_index.to(hidden_states.device)]
+        pooler_output = self.merger(patch_states.reshape(-1, merge**2 * hidden_states.shape[-1]))
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=pooler_output)
 
 
