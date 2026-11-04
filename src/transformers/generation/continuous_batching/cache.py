@@ -258,7 +258,9 @@ class PagedAttentionCache:
             return 0
         acc = float("inf")
         for allocator in self.cache_allocators.values():
-            acc = min(acc, allocator.tokens_per_page * self.max_blocks_per_request)
+            # An allocator indexing by sequence holds one block per request whatever its length
+            if not allocator.indexes_by_sequence:
+                acc = min(acc, allocator.tokens_per_page * self.max_blocks_per_request)
         return int(acc)
 
     def can_store_request_tokens(self, state: RequestState, request_len: int, dry_run: bool = False) -> bool:
