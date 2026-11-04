@@ -63,7 +63,7 @@ class OutputRecorder:
         layer_name (Optional[str]): Name of the submodule to target (if needed), e.g., "transformer.layer.3.attn".
         class_name (Optional[str]): Name of the class to which the hook will be attached. Could be the suffix of class name in some cases.
         capture_initial_hidden_state  (bool): Whether to prepend the first module's input as the initial hidden state.
-        num_layers_key (str): The config attribute holding the number of layers captured, used to resolve negative
+        num_hidden_layers_key (str): The config attribute holding the number of layers captured, used to resolve negative
             `output_hidden_states` indices.
     """
 
@@ -72,7 +72,7 @@ class OutputRecorder:
     layer_name: str | None = None
     class_name: str | None = None
     capture_initial_hidden_state: bool = True
-    num_layers_key: str = "num_hidden_layers"
+    num_hidden_layers_key: str = "num_hidden_layers"
 
 
 class CompileableContextVar:
@@ -256,17 +256,17 @@ def _selected_hidden_states(output_hidden_states: bool | int | list[int] | None)
 def resolve_hidden_states_indices(model: PreTrainedModel, selected: list[int]) -> set[int]:
     """
     Resolve the negative indices in `selected` using the number of hidden states `model` returns. That is
-    `config.num_hidden_layers` (or the recorder's `num_layers_key`), plus one if the initial hidden state is captured.
+    `config.num_hidden_layers` (or the recorder's `num_hidden_layers_key`), plus one if the initial hidden state is captured.
     Indices out of range are dropped, as they select nothing.
     """
     specs = _CAN_RECORD_REGISTRY.get(model).get("hidden_states")
-    num_layers_key = getattr(specs, "num_layers_key", "num_hidden_layers")
-    num_layers = getattr(model.config, num_layers_key, None)
+    num_hidden_layers_key = getattr(specs, "num_hidden_layers_key", "num_hidden_layers")
+    num_layers = getattr(model.config, num_hidden_layers_key, None)
     if num_layers is None:
         if any(i < 0 for i in selected):
             raise ValueError(
                 f"{model.__class__.__name__} cannot select hidden states with negative indices {selected} because "
-                f"its config does not define `{num_layers_key}`."
+                f"its config does not define `{num_hidden_layers_key}`."
             )
         return set(selected)
     num_hidden_states = num_layers + int(getattr(specs, "capture_initial_hidden_state", True))
