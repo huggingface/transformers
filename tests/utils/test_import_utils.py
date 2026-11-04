@@ -493,18 +493,19 @@ def test_legacy_fast_image_processor_module_alias():
 
 
 @contextmanager
-def mock_torchcodec_env(import_error=None, ffmpeg_major_version=7):
+def mock_torchcodec_env(load_error=None, ffmpeg_major_version=7):
     """
-    Mocks an installed torchcodec whose import raises `import_error`, or that loaded FFmpeg `ffmpeg_major_version`
-    (`None`: FFmpeg not found).
+    Mocks an installed torchcodec that fails to load its native library because of `load_error`, or that loaded
+    FFmpeg `ffmpeg_major_version` (`None`: FFmpeg not found).
     """
     fake_torchcodec = ModuleType("torchcodec")
     fake_torchcodec.ffmpeg_major_version = ffmpeg_major_version
     real_import = __import__
 
     def fake_import(name, *args, **kwargs):
-        if name == "torchcodec" and import_error is not None:
-            raise import_error
+        if name == "torchcodec" and load_error is not None:
+            # Like torchcodec: a generic error wrapping the real cause
+            raise OSError("Could not load this library: libtorchcodec_core.so") from OSError(load_error)
         return real_import(name, *args, **kwargs)
 
     helpers = (is_torchcodec_available, is_torchcodec_usable, is_torchcodec_ffmpeg_usable)
@@ -523,17 +524,16 @@ def mock_torchcodec_env(import_error=None, ffmpeg_major_version=7):
             helper.cache_clear()
 
 
-def _build_mismatch_error():
-    # What torchcodec raises when its build doesn't match torch: a generic error wrapping the real cause
-    error = OSError("Could not load this library: libtorchcodec_core.so")
-    error.__cause__ = OSError("libnvrtc.so.13: cannot open shared object file")
-    return error
-
-
 @parameterized.expand(
     [
         # (case, mock_torchcodec_env kwargs, expected usable, expected ffmpeg_usable, expected warning)
-        ("build_mismatch", {"import_error": _build_mismatch_error()}, False, False, "libnvrtc.so.13"),
+        (
+            "build_mismatch",
+            {"load_error": "libnvrtc.so.13: cannot open shared object file"},
+            False,
+            False,
+            "libnvrtc.so.13",
+        ),
         ("no_ffmpeg", {"ffmpeg_major_version": None}, True, False, "could not load FFmpeg"),
         ("with_ffmpeg", {"ffmpeg_major_version": 7}, True, True, None),
     ]
