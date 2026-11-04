@@ -653,11 +653,25 @@ def _shared_rotation(query_states: ir.Value, new_key, head_size: int, prefill: b
     return (query_rotation.inputs[0], key_rotation.inputs[0], (positions, cos_cache, sin_cache)), interleaved
 
 
-def _fuse_group_query_attention(model: ir.Model, prefill: bool = True) -> int:
+def _head_norm(states: ir.Value):
+    """`(x, weight, epsilon)` if `states`, `[batch, heads, length, head_dim]`, are the heads of `x`, `[batch, length,
+    heads * head_dim]`, each RMS-normalized with `weight` (Qwen3's query and key norms)."""
+    norm = _producer(_swapped_heads(states), "SimplifiedLayerNormalization")
+    if norm is None or len(norm.inputs) != 2 or _constant(norm.inputs[1]) is None:
+        return None
+    reshape = _producer(norm.inputs[0], "Reshape")
+    x = reshape.inputs[0] if reshape is not None else None
+    if x is None or x.shape is None or len(x.shape) != 3 or norm.attributes.get_int("axis", -1) not in (-1, 3):
+        return None
+    return x, norm.inputs[1], norm.attributes.get_float("epsilon", 1e-5)
+
+
+def _fuse_group_query_attention(model: ir.Model, prefill: bool = True, head_norms: bool = False) -> int:
     """Turn each fused `MultiHeadAttention` reading a key-value cache's update into ONNX Runtime's
     `GroupQueryAttention`, which updates the cache itself (or, for a prefill, starts it) and reads its key-value heads
     without repeating them. Its mask stays the attention's own bias, so every row's `seqlens_k` is the whole length:
-    exact whatever the padding. `prefill` sets whether a prefill, starting the cache, is fused too. Returns how many."""
+    exact whatever the padding. `prefill` sets whether a prefill, starting the cache, is fused too; `head_norms`
+    whether per-head query and key norms are folded in too (CUDA only). Returns how many."""
     graph, count = model.graph, 0
     # A cache update several attentions read (layers sharing another layer's cache, Gemma 4's): its own layer's,
     # fused once; the others, reading it, stay as they are.
@@ -735,8 +749,20 @@ def _fuse_group_query_attention(model: ir.Model, prefill: bool = True) -> int:
         if rotation is not None or groups is not None:
             query = merged(query_states)
         # Read off the query's heads, which keep their shape, rather than off their merge built here.
-        batch = tape.op("Shape", [query_states], attributes={"start": 0, "end": 1})
-        new_length = tape.op("Shape", [query_states], attributes={"start": 2, "end": 3})
+        heads, length_axis = query_states, 2
+        key_states, norms = merged(new_key), []
+        # CUDA's kernel takes half precision only: a float32 one runs on the CPU, which has no norms.
+        half = dtype in (ir.DataType.FLOAT16, ir.DataType.BFLOAT16)
+        found = (_head_norm(query_states), _head_norm(new_key)) if head_norms and half else (None,)
+        if isinstance(new_key, ir.Value) and None not in found and found[0][2] == found[1][2]:
+            # Normalized by the attention itself, before its rotary.
+            (query, query_norm, epsilon), (key_states, key_norm, _) = found
+            weights = (constant(_constant(w).astype(dtype.numpy()), dtype.numpy()) for w in (query_norm, key_norm))
+            norms = [None, None, None, *weights]
+            rotary_attributes["qk_norm_epsilon"] = epsilon
+            heads, length_axis = query, 1
+        batch = tape.op("Shape", [heads], attributes={"start": 0, "end": 1})
+        new_length = tape.op("Shape", [heads], attributes={"start": length_axis, "end": length_axis + 1})
         if past_key is None:
             length = new_length
         elif start is None:
@@ -771,8 +797,8 @@ def _fuse_group_query_attention(model: ir.Model, prefill: bool = True) -> int:
         attributes.update(rotary_attributes)
         outputs = tape.op_multi_out(
             "GroupQueryAttention",
-            [query, merged(new_key), merged(new_value), past_key, past_value, seqlens_k, total_length]
-            + [*rotary, bias],
+            [query, key_states, merged(new_value), past_key, past_value, seqlens_k, total_length]
+            + [*rotary, bias, *norms],
             attributes=attributes,
             domain="com.microsoft",
             num_outputs=3,
@@ -1006,6 +1032,117 @@ def _unfuse_attentions(model: ir.Model) -> int:
     return count
 
 
+def _swapped_heads(value: ir.Value | None) -> ir.Value | None:
+    """`x` if `value` is `Transpose(x, perm=[0, 2, 1, 3])`: `[batch, length, heads, head_dim]` and
+    `[batch, heads, length, head_dim]` swapped."""
+    transpose = _producer(value, "Transpose")
+    return transpose.inputs[0] if transpose is not None and _perm(transpose) == [0, 2, 1, 3] else None
+
+
+def _add_node(graph: ir.Graph, before: ir.Node, op_type: str, inputs, shape, dtype, domain: str = "", **attributes):
+    node = ir.node(op_type, inputs, attributes=attributes, domain=domain)
+    node.outputs[0].shape, node.outputs[0].dtype = (ir.Shape(shape) if shape is not None else None), dtype
+    graph.insert_before(before, node)
+    return node.outputs[0]
+
+
+def _swap_heads(graph: ir.Graph, before: ir.Node, x: ir.Value, replacing: ir.Value | None = None) -> ir.Value:
+    """`x` transposed to the other layout; in place of `replacing`, its shape."""
+    shape = [x.shape[0], x.shape[2], x.shape[1], x.shape[3]] if x.shape is not None else None
+    dtype = x.dtype
+    if replacing is not None:
+        shape, dtype = replacing.shape, replacing.dtype
+    return _add_node(graph, before, "Transpose", [x], shape, dtype, perm=[0, 2, 1, 3])
+
+
+def _sink_head_transposes(model: ir.Model) -> int:
+    """Move the transposes between `[batch, length, heads, head_dim]` and `[batch, heads, length, head_dim]` past the
+    ops that read either layout alike, the rotary embeddings, the repeat of the key-value heads and the zeroing of
+    unattended rows, until they meet the transpose back and cancel: `MultiHeadAttention` reads and writes the first
+    layout, so each attention copied its query, keys, values and output there and back. Returns how many pairs
+    cancel."""
+    graph = model.graph
+    for index, node in enumerate(list(graph)):
+        name = f"head_transposes_{index}"
+        if node.op_type == "RotaryEmbedding" and node.domain == "com.microsoft":
+            # Rotated in `[batch, length, heads * head_dim]`, which it takes given the heads.
+            x = _swapped_heads(node.inputs[0])
+            heads, head_size = (_static_dim(x, 2), _static_dim(x, 3)) if x is not None else (None, None)
+            if heads is None or head_size is None:
+                continue
+            flat_shape = [x.shape[0], x.shape[1], heads * head_size]
+            flat = _add_node(
+                graph,
+                node,
+                "Reshape",
+                [x, _initializer(graph, f"{name}_flat", np.array([0, 0, -1]))],
+                flat_shape,
+                x.dtype,
+            )
+            attributes = {key: attribute.value for key, attribute in node.attributes.items()} | {"num_heads": heads}
+            rotated = _add_node(
+                graph,
+                node,
+                "RotaryEmbedding",
+                [flat, *node.inputs[1:]],
+                flat_shape,
+                x.dtype,
+                "com.microsoft",
+                **attributes,
+            )
+            split = _initializer(graph, f"{name}_heads", np.array([0, 0, heads, head_size]))
+            rotated = _add_node(graph, node, "Reshape", [rotated, split], x.shape, x.dtype)
+            _replace(node.outputs[0], _swap_heads(graph, node, rotated, node.outputs[0]))
+        elif node.op_type == "Reshape" and (expand := _producer(node.inputs[0], "Expand")) is not None:
+            # The key-value heads repeated, `[batch, kv_heads, groups, length, head_dim]` flattened: as
+            # `[batch, length, kv_heads, groups, head_dim]` instead.
+            unsqueeze = _producer(expand.inputs[0], "Unsqueeze")
+            axes = _constant(unsqueeze.inputs[1]) if unsqueeze is not None and len(unsqueeze.inputs) == 2 else None
+            x = _swapped_heads(unsqueeze.inputs[0]) if axes is not None and axes.tolist() == [2] else None
+            if x is None or node.outputs[0].shape is None or expand.outputs[0].shape is None:
+                continue
+            kv_heads, groups, head_size = _static_dim(x, 2), _static_dim(expand.outputs[0], 2), _static_dim(x, 3)
+            if None in (kv_heads, groups, head_size) or _static_dim(node.outputs[0], 1) != kv_heads * groups:
+                continue
+            batch, length = x.shape[0], x.shape[1]
+            single = _initializer(graph, f"{name}_single", np.array([0, 0, kv_heads, 1, head_size]))
+            states = _add_node(graph, node, "Reshape", [x, single], [batch, length, kv_heads, 1, head_size], x.dtype)
+            leading = _add_node(graph, node, "Shape", [x], [2], ir.DataType.INT64, start=0, end=2)
+            trailing = _initializer(graph, f"{name}_groups", np.array([kv_heads, groups, head_size]))
+            target = _add_node(graph, node, "Concat", [leading, trailing], [5], ir.DataType.INT64, axis=0)
+            states = _add_node(
+                graph, node, "Expand", [states, target], [batch, length, kv_heads, groups, head_size], x.dtype
+            )
+            heads = _initializer(graph, f"{name}_all_heads", np.array([0, 0, kv_heads * groups, head_size]))
+            states = _add_node(
+                graph, node, "Reshape", [states, heads], [batch, length, kv_heads * groups, head_size], x.dtype
+            )
+            _replace(node.outputs[0], _swap_heads(graph, node, states, node.outputs[0]))
+        elif node.op_type == "Where" and (x := _swapped_heads(node.inputs[2])) is not None:
+            # Rows zeroed by a condition over the batch and the queries, `[batch, 1, length, 1]`.
+            condition, zero = node.inputs[0], _constant(node.inputs[1])
+            if condition.shape is None or len(condition.shape) != 4 or zero is None or zero.size != 1:
+                continue
+            if _static_dim(condition, 1) != 1 or _static_dim(condition, 3) != 1:
+                continue
+            condition = _swap_heads(graph, node, condition)
+            dtype = node.outputs[0].dtype
+            zeroed = _add_node(graph, node, "Where", [condition, node.inputs[1], x], x.shape, dtype)
+            _replace(node.outputs[0], _swap_heads(graph, node, zeroed, node.outputs[0]))
+    count = 0
+    for node in list(graph):
+        # A swap back, read through a reshape to the same shape or not, is the states before the first.
+        inner = node.inputs[0] if node.op_type == "Transpose" and _perm(node) == [0, 2, 1, 3] else None
+        reshape = _producer(inner, "Reshape")
+        if reshape is not None and inner.shape is not None and reshape.inputs[0].shape == inner.shape:
+            inner = reshape.inputs[0]
+        if (x := _swapped_heads(inner)) is not None:
+            _replace(node.outputs[0], x)
+            count += 1
+    common_passes.RemoveUnusedNodesPass()(model)
+    return count
+
+
 def _pack_sibling_matmuls(model: ir.Model) -> int:
     """Turn the `MatMul`s reading one input with constant `[in, out]` weights (an attention's query, key and value
     projections; an MLP's gate and up ones) into one, their weights concatenated, its output split back: one kernel
@@ -1125,10 +1262,11 @@ _STEPS = (
     # CUDA's `GroupQueryAttention`, decode only: with a bias, it runs an unfused kernel, slower for a prefill than
     # `MultiHeadAttention`'s.
     ("group_query_attention", _fuse_group_query_attention, _CPU),
-    ("group_query_attention_decode", partial(_fuse_group_query_attention, prefill=False), _CUDA),
+    ("group_query_attention_decode", partial(_fuse_group_query_attention, prefill=False, head_norms=True), _CUDA),
     ("mixture_of_experts", _fuse_mixture_of_experts, _CUDA),
     # ONNX Runtime's CPU `MultiHeadAttention` runs slower than the ops it fused: the ones left, unfused.
     ("unfused_attentions", _unfuse_attentions, _CPU),
+    ("head_transposes", _sink_head_transposes, _ANY),
     ("packed_matmuls", _pack_sibling_matmuls, _ANY),
     # 6. CUDA provider.
     ("constant_gather_nds", _CONSTANT_GATHER_ND.apply_to_model, _CUDA),
@@ -1141,9 +1279,9 @@ def fuse_for_onnxruntime(model: ir.Model, device: str = "cpu", steps: int | None
     each step's share)."""
     if device == "cuda":
         installed, installed_version = _is_package_available("onnxruntime", return_version=True)
-        if installed and version.parse(installed_version) < version.parse("1.27.0"):
+        if installed and version.parse(installed_version) < version.parse("1.28.0"):
             logger.warning(
-                f"Graphs fused for ONNX Runtime's CUDA provider need onnxruntime>=1.27.0 (installed: "
+                f"Graphs fused for ONNX Runtime's CUDA provider need onnxruntime>=1.28.0 (installed: "
                 f"{installed_version}): before it, its float16 skip norms overflow on large activations."
             )
     counts = {name: step(model) if device in providers else 0 for name, step, providers in _STEPS[:steps]}
