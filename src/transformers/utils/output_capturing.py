@@ -244,7 +244,7 @@ def maybe_install_capturing_hooks(model: PreTrainedModel) -> None:
         install_all_output_capturing_hooks(model)
 
 
-def _selected_hidden_states(output_hidden_states: bool | int | list[int] | None) -> list[int] | None:
+def selected_hidden_states(output_hidden_states: bool | int | list[int] | None) -> list[int] | None:
     """The hidden state indices `output_hidden_states` selects, or `None` if it is a flag."""
     if isinstance(output_hidden_states, bool) or output_hidden_states is None:
         return None
@@ -313,7 +313,7 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
             collected_outputs = {k.replace("output_", ""): [] for k, v in recordable_keys.items() if v}
             # `output_hidden_states` may select hidden states by index (or indices), in which case only those are kept. The
             # indices are the ones that would select them from all the hidden states, so they may be negative
-            selected = _selected_hidden_states(recordable_keys.get("output_hidden_states"))
+            selected = selected_hidden_states(recordable_keys.get("output_hidden_states"))
             if selected is not None:
                 collected_outputs["_hidden_states_layers"] = resolve_hidden_states_indices(self, selected)
             # Make sure hooks are installed if we need to collect outputs

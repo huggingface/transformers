@@ -20,9 +20,9 @@ import inspect
 
 from .utils import hf_api, logging
 from .utils.output_capturing import (
-    _selected_hidden_states,
     maybe_install_capturing_hooks,
     resolve_hidden_states_indices,
+    selected_hidden_states,
 )
 
 
@@ -177,7 +177,7 @@ def filter_output_hidden_states(forward_function):
         if not output_hidden_states:
             filtered_output_data = {k: v for k, v in output.items() if k != "hidden_states"}
             output = type(output)(**filtered_output_data)
-        elif (selected := _selected_hidden_states(output_hidden_states)) is not None:
+        elif (selected := selected_hidden_states(output_hidden_states)) is not None:
             # Only return the selected hidden states, as `capture_outputs` would
             selected = resolve_hidden_states_indices(self, selected)
             output["hidden_states"] = [h if i in selected else None for i, h in enumerate(output["hidden_states"])]
