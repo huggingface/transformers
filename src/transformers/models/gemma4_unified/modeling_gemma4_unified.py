@@ -64,13 +64,13 @@ from .configuration_gemma4_unified import (
 @dataclass
 class Gemma4UnifiedAudioModelOutput(ModelOutput):
     r"""
-    pooler_output (`torch.FloatTensor` of shape `(batch_size, ..., hidden_size)`):
+    pooler_output (`torch.Tensor` of shape `(batch_size, ..., hidden_size)`):
         Last hidden state that went through the audio specific multimodal projectors.
     attention_mask (`torch.BoolTensor`, *optional*):
         A torch.BoolTensor of shape `(batch_size, num_frames)`. True for valid positions, False for padding.
     """
 
-    pooler_output: torch.FloatTensor | None = None
+    pooler_output: torch.Tensor | None = None
     attention_mask: torch.BoolTensor | None = None
 
 
@@ -96,34 +96,34 @@ class Gemma4UnifiedTextModelOutputWithPast(BaseModelOutputWithPast):
 @dataclass
 class Gemma4UnifiedCausalLMOutputWithPast(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.text_config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.text_config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+    image_hidden_states (`torch.Tensor`, *optional*):
+        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
-    audio_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+    audio_hidden_states (`torch.Tensor`, *optional*):
+        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
     shared_kv_states (`dict`, *optional*):
         Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
         Used to pass shared KV states between layers during KV sharing.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
     past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    image_hidden_states: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    image_hidden_states: torch.Tensor | None = None
 
-    audio_hidden_states: torch.FloatTensor | None = None
+    audio_hidden_states: torch.Tensor | None = None
 
     shared_kv_states: KVSharingDict | None = None
 
@@ -141,20 +141,20 @@ class Gemma4UnifiedModelOutputWithPast(BaseModelOutputWithPast):
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+    image_hidden_states (`torch.Tensor`, *optional*):
+        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    audio_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+    audio_hidden_states (`torch.Tensor`, *optional*):
+        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
     shared_kv_states (`dict`, *optional*):
         Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
         Used to pass shared KV states between layers during KV sharing.
     """
 
-    image_hidden_states: torch.FloatTensor | None = None
+    image_hidden_states: torch.Tensor | None = None
 
-    audio_hidden_states: torch.FloatTensor | None = None
+    audio_hidden_states: torch.Tensor | None = None
 
     shared_kv_states: KVSharingDict | None = None
 
@@ -594,7 +594,7 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4UnifiedTextModelOutputWithPast:
@@ -686,7 +686,7 @@ class Gemma4UnifiedForCausalLM(Gemma4UnifiedPreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -894,7 +894,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
     @auto_docstring(custom_intro="Projects raw pixel patches into language model space via the unified pipeline.")
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_position_ids: torch.LongTensor | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
@@ -919,7 +919,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
     ) -> tuple[torch.BoolTensor, torch.BoolTensor, torch.BoolTensor]:
         """
         Obtains mask for multimodal placeholders (replaced by soft tokens) and hard text tokens.
@@ -967,15 +967,15 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
+        input_features: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         mm_token_type_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         image_position_ids: torch.LongTensor | None = None,
         video_position_ids: torch.LongTensor | None = None,
@@ -984,7 +984,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4UnifiedModelOutputWithPast:
         r"""
-        input_features_mask (`torch.FloatTensor` of shape `(num_images, seq_length)`):
+        input_features_mask (`torch.Tensor` of shape `(num_images, seq_length)`):
             The attention mask for the input audio.
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             2D patch position coordinates from the image processor, with `(-1, -1)` indicating padding.
@@ -1141,7 +1141,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
         **kwargs,
     ) -> Gemma4UnifiedAudioModelOutput:
         r"""
-        input_features (`torch.FloatTensor` of shape `(num_audios, num_tokens, audio_embed_dim)`):
+        input_features (`torch.Tensor` of shape `(num_audios, num_tokens, audio_embed_dim)`):
             Raw waveform features. Each token is a frame of `audio_samples_per_token` (640)
             raw audio samples. For unified models this replaces the mel spectrogram + conformer pipeline.
         input_features_mask (`torch.BoolTensor` of shape `(num_audios, num_tokens)`, *optional*):
@@ -1164,13 +1164,13 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
     @auto_docstring(custom_intro="Projects video frames into language model space via the unified pipeline.")
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         video_position_ids: torch.LongTensor | None = None,
         num_frames_per_video: torch.LongTensor | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(total_num_frames, max_patches, patch_pixels)`):
+        pixel_values_videos (`torch.Tensor` of shape `(total_num_frames, max_patches, patch_pixels)`):
             The frames of every video in the batch, concatenated along the frame axis rather than stacked
             on a separate video axis, so that videos of different lengths can be batched together.
         video_position_ids (`torch.LongTensor` of shape `(total_num_frames, max_patches, 2)`, *optional*):
@@ -1286,7 +1286,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
@@ -1302,9 +1302,9 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
+        input_features: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -1313,7 +1313,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
         num_frames_per_video: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         mm_token_type_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -1321,7 +1321,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
         **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma4UnifiedCausalLMOutputWithPast:
         r"""
-        input_features_mask (`torch.FloatTensor` of shape `(num_images, seq_length)`):
+        input_features_mask (`torch.Tensor` of shape `(num_images, seq_length)`):
             The attention mask for the input audio.
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             2D patch position coordinates from the image processor, with `(-1, -1)` indicating padding.
@@ -1413,7 +1413,10 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
         model_inputs = super().prepare_inputs_for_generation(
             input_ids, use_cache=use_cache, is_first_iteration=is_first_iteration, **kwargs
         )
-        if not (is_first_iteration or not use_cache):
+        if is_first_iteration or not use_cache:
+            # The bidirectional mask reads them by position, so a prefill chunk needs them from the start of the sequence
+            model_inputs["mm_token_type_ids"] = kwargs.get("mm_token_type_ids")
+        else:
             # Don't pass to not apply bidirectional mask on top
             model_inputs["mm_token_type_ids"] = None
 

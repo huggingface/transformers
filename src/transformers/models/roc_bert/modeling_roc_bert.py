@@ -228,7 +228,7 @@ class RoCBertSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
@@ -295,8 +295,8 @@ class RoCBertCrossAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         past_key_values: EncoderDecoderCache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
@@ -371,9 +371,9 @@ class RoCBertAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
@@ -444,9 +444,9 @@ class RoCBertLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -496,9 +496,9 @@ class RoCBertEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -855,7 +855,7 @@ class RoCBertForPreTraining(RoCBertPreTrainedModel):
             attack sample pronunciation ids for computing the contrastive loss. Indices should be in `[-100, 0,
             ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        attack_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        attack_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices for the attack sample. Mask values selected in
             `[0, 1]`: `1` for tokens that are NOT MASKED, `0` for MASKED tokens.
         attack_token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -874,7 +874,7 @@ class RoCBertForPreTraining(RoCBertPreTrainedModel):
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
             ignored (masked), the loss is only computed for the tokens with labels in `[0, ...,
             config.vocab_size]`
-        labels_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        labels_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices for the label sample. Mask values selected in
             `[0, 1]`: `1` for tokens that are NOT MASKED, `0` for MASKED tokens.
         labels_token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1407,7 +1407,7 @@ class RoCBertForMultipleChoice(RoCBertPreTrainedModel):
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.

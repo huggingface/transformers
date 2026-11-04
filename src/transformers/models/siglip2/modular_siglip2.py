@@ -214,10 +214,10 @@ class Siglip2VisionEmbeddings(nn.Module):
 
         return resulted_positional_embeddings
 
-    def forward(self, pixel_values: torch.FloatTensor, spatial_shapes: torch.LongTensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, spatial_shapes: torch.LongTensor) -> torch.Tensor:
         """
         Args:
-            pixel_values (`torch.FloatTensor`):
+            pixel_values (`torch.Tensor`):
                 Pixel values of shape (batch_size, max_num_patches, num_channels * patch_size * patch_size)
             spatial_shapes (`list[tuple[int, int]]`):
                 Spatial shapes of shape (batch_size, 2) to resize the positional embeddings to
@@ -255,7 +255,7 @@ class Siglip2VisionModel(SiglipVisionModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         pixel_attention_mask: torch.Tensor,
         spatial_shapes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
@@ -363,7 +363,7 @@ class Siglip2Model(SiglipModel):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         pixel_attention_mask: torch.Tensor | None = None,
         spatial_shapes: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -406,7 +406,7 @@ class Siglip2Model(SiglipModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         pixel_attention_mask: torch.Tensor | None = None,
         spatial_shapes: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
