@@ -806,7 +806,7 @@ class Sam3ViTLayer(GradientCheckpointingLayer):
 @auto_docstring
 @requires(backends=("torch", "torchvision"))
 class Sam3PreTrainedModel(PreTrainedModel):
-    config_class = Sam3Config
+    config: Sam3Config
     base_model_prefix = "sam3"
     main_input_name = "pixel_values"
     input_modalities = ["image", "text"]
@@ -1086,7 +1086,7 @@ class Sam3VisionNeck(nn.Module):
     """
 )
 class Sam3VisionModel(Sam3PreTrainedModel):
-    config_class = Sam3VisionConfig
+    config: Sam3VisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: Sam3VisionConfig):
@@ -1412,6 +1412,7 @@ class Sam3DetrEncoder(Sam3PreTrainedModel):
     resolutions) and fuses them with text prompts through a stack of transformer encoder layers.
     """
 
+    config: Sam3DETREncoderConfig
     _can_record_outputs = {
         "hidden_states": Sam3DetrEncoderLayer,
         "attentions": Sam3Attention,
@@ -1672,6 +1673,7 @@ class Sam3DetrDecoder(Sam3PreTrainedModel):
     - Presence token is used
     """
 
+    config: Sam3DETRDecoderConfig
     _can_record_outputs = {
         "hidden_states": Sam3DetrDecoderLayer,
         "attentions": Sam3Attention,
@@ -2056,6 +2058,7 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
     Also produces a semantic segmentation output and supports cross-attention to prompts.
     """
 
+    config: Sam3MaskDecoderConfig
     _can_record_outputs = {
         "attentions": Sam3Attention,
     }

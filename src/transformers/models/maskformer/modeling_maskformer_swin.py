@@ -692,7 +692,7 @@ class MaskFormerSwinPreTrainedModel(PreTrainedModel):
 
 
 class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: MaskFormerSwinConfig, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
         self.num_layers = len(config.depths)

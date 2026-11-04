@@ -2140,8 +2140,7 @@ class GenerationMixin(ContinuousMixin):
             # The model layers are on different devices
             return None
         text_config = self.config.get_text_config(decoder=True)
-        num_cache_layers = text_config.num_hidden_layers - getattr(text_config, "num_kv_shared_layers", 0)
-        layer_configs = text_config.per_layer_config[:num_cache_layers]
+        layer_configs = text_config.per_layer_config
         if any(getattr(layer_config, "qk_head_dim", None) is not None for layer_config in layer_configs):
             # MLA models have distinct key (`qk_head_dim`) and value (`v_head_dim`) sizes.
             return None
@@ -2883,9 +2882,14 @@ class GenerationMixin(ContinuousMixin):
         # We can drop the mask altogether if it's all 1s, i.e. no padding, to make downstream attention mask creation and inference
         # faster (we will never have padding). Note that we cannot drop it earlier, as position_ids creation absolutely needs to check
         # the mask even if it's only 1s, in case we restart from an existing cache and only new sequence input_ids
+        # NOTE: The only exception is FA under static caches: it needs this information to unpad out invalid kv entries
+        using_static_cache = generation_config.cache_implementation == "static" or isinstance(
+            model_kwargs.get("past_key_values"), StaticCache
+        )
         if (
             not self.config.is_encoder_decoder
             and accepts_attention_mask
+            and not (is_flash_attention_requested(self.config) and using_static_cache)
             and (model_kwargs["attention_mask"] == 1).all()
         ):
             # Record the length to slice correctly in `_prefill` if restarting from existing Cache

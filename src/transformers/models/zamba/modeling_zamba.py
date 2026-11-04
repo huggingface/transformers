@@ -1029,7 +1029,7 @@ class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
     """
 )
 class ZambaForSequenceClassification(ZambaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ZambaConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = ZambaModel(config)

@@ -175,7 +175,7 @@ class QianfanOCRVisionModelOutputWithPooling(BaseModelOutputWithPooling):
 
 @auto_docstring
 class QianfanOCRVisionPreTrainedModel(InternVLVisionPreTrainedModel):
-    config_class = QianfanOCRVisionConfig
+    config: QianfanOCRVisionConfig
     base_model_prefix = "vision_model"
     _no_split_modules = ["QianfanOCRVisionLayer"]
     _can_record_outputs = {
@@ -222,7 +222,7 @@ class QianfanOCRMultiModalProjector(InternVLMultiModalProjector):
 
 
 class QianfanOCRPreTrainedModel(InternVLPreTrainedModel):
-    config_class = QianfanOCRConfig
+    config: QianfanOCRConfig
     input_modalities = ("image", "text")
 
 

@@ -32,8 +32,10 @@ from transformers.testing_utils import (
     require_vision,
 )
 from transformers.video_utils import (
+    VideoMetadata,
     group_videos_by_shape,
     is_torchvision_video_decoding_available,
+    make_batched_metadata,
     make_batched_videos,
     reorder_videos,
 )
@@ -46,7 +48,7 @@ if is_vision_available():
     import PIL
 
     from transformers import BaseVideoProcessor
-    from transformers.video_utils import VideoMetadata, load_video
+    from transformers.video_utils import load_video
 
 
 def get_random_video(height, width, num_frames=8, return_torch=False):
@@ -169,6 +171,19 @@ class BaseVideoProcessorTester(unittest.TestCase):
         self.assertIsInstance(videos_list[0], torch.Tensor)
         self.assertEqual(videos_list[0].shape, (8, 16, 32, 3))
         self.assertTrue(np.array_equal(videos_list[0], video))
+
+    def test_make_batched_metadata_needs_one_entry_per_video(self):
+        videos = [get_random_video(16, 32), get_random_video(16, 32)]
+        metadata = {"total_num_frames": 8, "fps": 2.0}
+        batched = make_batched_metadata(videos, [metadata, metadata])
+        self.assertEqual([entry.fps for entry in batched], [2.0, 2.0])
+        self.assertEqual([entry.fps for entry in make_batched_metadata(videos, None)], [None, None])
+        for video_metadata in ([metadata], metadata, [[metadata]], [metadata] * 3):
+            with (
+                self.subTest(video_metadata=video_metadata),
+                self.assertRaisesRegex(ValueError, "Received 2 videos but"),
+            ):
+                make_batched_metadata(videos, video_metadata)
 
     def test_resize(self):
         video_processor = BaseVideoProcessor(model_init_kwargs=VideosKwargs)
@@ -404,6 +419,13 @@ class LoadVideoTester(unittest.TestCase):
             num_frames=22,
         )
         self.assertEqual(video.shape, (22, 360, 640, 3))
+
+    def test_fps_sampling_short_video_keeps_one_frame(self):
+        video, _ = load_video(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tiny_video.mp4",
+            fps=0.25,
+        )
+        self.assertEqual(video.shape, (1, 2160, 3840, 3))
 
     def test_load_video_num_frames_exceeds_total(self):
         video_file_path = hf_hub_download(

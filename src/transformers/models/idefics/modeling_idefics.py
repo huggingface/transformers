@@ -1085,7 +1085,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
 class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
-    def __init__(self, config, vision_model=None):
+    def __init__(self, config: IdeficsConfig, vision_model=None):
         super().__init__(config)
         self.model = IdeficsModel(config)
 

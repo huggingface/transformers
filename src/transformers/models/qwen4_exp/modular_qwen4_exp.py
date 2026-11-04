@@ -26,7 +26,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -53,7 +53,6 @@ from ..qwen3_5_moe.modeling_qwen3_5_moe import (
     Qwen3_5MoeForCausalLM,
     Qwen3_5MoeForConditionalGeneration,
     Qwen3_5MoeModel,
-    Qwen3_5MoeModelOutputWithPast,
     Qwen3_5MoePreTrainedModel,
     Qwen3_5MoeTextModel,
     Qwen3_5MoeVisionModel,
@@ -458,7 +457,7 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
                 selected_tokens = torch.cat([selected_tokens, tail]).to(torch.int32)
                 selected_token_indices[batch_idx, query_idx, : selected_tokens.numel()] = selected_tokens
 
-        # Create the additive mask to be added to the main causal mask
+        # Create the selection mask to combine with the main causal mask
         kv_length = attention_mask.shape[-1]
         selected_token_mask = torch.zeros(
             (*selected_token_indices.shape[:-1], kv_length + 1), device=attention_mask.device, dtype=torch.bool
@@ -466,10 +465,6 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         # We absorb all the -1 by scaterring them to the last index that we will drop
         scatter_indices = torch.where(selected_token_indices >= 0, selected_token_indices, kv_length)
         selected_token_mask = selected_token_mask.scatter(-1, scatter_indices, True)[..., :kv_length].unsqueeze(1)
-        # if using eager, convert to float mask
-        if attention_mask.is_floating_point():
-            min_dtype = torch.finfo(attention_mask.dtype).min
-            selected_token_mask = torch.where(selected_token_mask, attention_mask.new_zeros(()), min_dtype)
 
         return selected_token_mask
 
@@ -490,11 +485,12 @@ class Qwen4ExpTextAttention(Qwen3_5Attention):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         selected_token_mask = self.indexer(hidden_states, position_embeddings, attention_mask, past_key_values)
-        # Combine both masks (they are never None, and are always 4D with either bool for sdpa, or float for eager)
-        if attention_mask.is_floating_point():
-            attention_mask = attention_mask + selected_token_mask
-        else:
+        # Combine the boolean selection mask with the causal mask (bool for sdpa, float for eager).
+        if attention_mask.dtype == torch.bool:
             attention_mask = attention_mask & selected_token_mask
+        else:
+            # Adding minimum-finite values overflows to -inf and yields NaNs for fully masked queries.
+            attention_mask = attention_mask.masked_fill(~selected_token_mask, torch.finfo(attention_mask.dtype).min)
 
         # The cos/sin are the full positions here due to the indexer, so we need to slice to get current positions
         position_embeddings = (x[:, -hidden_states.shape[1] :, :] for x in position_embeddings)
@@ -884,10 +880,6 @@ class Qwen4ExpPreTrainedModel(Qwen3_5MoePreTrainedModel):
             init.zeros_(module.conv1d.weight)
 
 
-class Qwen4ExpModelOutputWithPast(Qwen3_5MoeModelOutputWithPast):
-    pass
-
-
 @auto_docstring
 class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
     config: Qwen4ExpTextConfig
@@ -1028,7 +1020,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
 
         hidden_states = self.hyper_connection_mixer(hidden_states)
 
-        return Qwen4ExpModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
@@ -1045,6 +1037,9 @@ class Qwen4ExpVisionModel(Qwen3_5MoeVisionModel):
 
 
 class Qwen4ExpModel(Qwen3_5MoeModel):
+    # Qwen4ExpDecoderLayer, inherited from Qwen3_5MoeModel and renamed by prefix, does not exist
+    _no_split_modules = ["Qwen4ExpTextDecoderLayer", "Qwen4ExpVisionBlock"]
+
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1059,7 +1054,7 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Qwen4ExpModelOutputWithPast:
+    ) -> tuple | MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1129,10 +1124,7 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
             **kwargs,
         )
 
-        return Qwen4ExpModelOutputWithPast(
-            **outputs,
-            rope_deltas=self.rope_deltas,
-        )
+        return outputs
 
 
 @auto_docstring

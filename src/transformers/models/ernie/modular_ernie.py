@@ -149,7 +149,7 @@ class ErnieEncoder(BertEncoder):
 
 @auto_docstring
 class ErniePreTrainedModel(PreTrainedModel):
-    config_class = ErnieConfig
+    config: ErnieConfig
     base_model_prefix = "ernie"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
@@ -176,7 +176,7 @@ class ErniePreTrainedModel(PreTrainedModel):
 class ErnieModel(BertModel):
     _no_split_modules = ["ErnieLayer"]
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: ErnieConfig, add_pooling_layer=True):
         super().__init__(self, config)
         self.config = config
         self.gradient_checkpointing = False

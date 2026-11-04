@@ -26,7 +26,7 @@ from .image_utils import (
     get_image_size,
     infer_channel_dimension_format,
 )
-from .utils import ExplicitEnum, TensorType, is_torch_tensor
+from .utils import ExplicitEnum, TensorType, is_torch_tensor, logging
 from .utils.import_utils import (
     is_torch_available,
     is_vision_available,
@@ -41,6 +41,8 @@ if is_vision_available():
 
 if is_torch_available():
     import torch
+
+logger = logging.get_logger(__name__)
 
 
 def to_channel_dimension_format(
@@ -754,25 +756,59 @@ def pad(
     return image
 
 
-# TODO (Amy): Accept 1/3/4 channel numpy array as input and return np.array as default
-def convert_to_rgb(image: ImageInput) -> ImageInput:
+def convert_to_rgb(
+    image: Union["PIL.Image.Image", np.ndarray],
+    return_numpy: bool = False,
+    input_data_format: str | ChannelDimension | None = None,
+) -> ImageInput:
     """
-    Converts an image to RGB format. Only converts if the image is of type PIL.Image.Image, otherwise returns the image
-    as is.
+    Converts an image to RGB, compositing any transparency onto a white background.
+
     Args:
-        image (Image):
-            The image to convert.
+        image (`PIL.Image.Image` or `np.ndarray`):
+            The image to convert. Arrays are expected in channels-last (H, W, C) uint8 layout.
+        return_numpy (`bool`, *optional*, defaults to `False`):
+            Whether to return a `np.ndarray` (H, W, 3) instead of a `PIL.Image.Image`.
+            Returning a PIL image is deprecated and will be removed in future versions.
     """
     requires_backends(convert_to_rgb, ["vision"])
+    if not return_numpy:
+        logger.warning_once("Please pass `return_numpy=True`, returning a PIL.Image.Image is deprecated.")
 
-    if not isinstance(image, PIL.Image.Image):
-        return image
+    if isinstance(image, PIL.Image.Image):
+        has_alpha = "A" in image.getbands() or image.info.get("transparency") is not None
+        if has_alpha:
+            image = image.convert("RGBA")
+            background = PIL.Image.new("RGBA", image.size, (255, 255, 255, 255))
+            image_rgb = PIL.Image.alpha_composite(background, image).convert("RGB")
+        else:
+            image_rgb = image.convert("RGB")
+        return np.array(image_rgb) if return_numpy else image_rgb
 
-    if image.mode == "RGB":
-        return image
+    if isinstance(image, np.ndarray):
+        if input_data_format is None:
+            input_data_format = infer_channel_dimension_format(image, num_channels=(1, 3, 4))
+        channel_axis = -1 if input_data_format == ChannelDimension.LAST else 0
 
-    image = image.convert("RGB")
-    return image
+        # work in channels-last and permute back before returning
+        image = np.moveaxis(image, channel_axis, -1)
+        num_channels = image.shape[-1]
+
+        if num_channels == 1:
+            image_rgb = np.repeat(image, 3, axis=-1)
+        elif num_channels == 4:
+            white = 255 if np.issubdtype(image.dtype, np.integer) else 1.0
+            alpha = image[..., 3:4] / white
+            composite = alpha * image[..., :3] + (1 - alpha) * white  # blend onto white
+            image_rgb = np.round(composite).astype(image.dtype) if white == 255 else composite.astype(image.dtype)
+        else:
+            image_rgb = image
+
+        if not return_numpy:
+            return PIL.Image.fromarray(image_rgb)
+        return np.moveaxis(image_rgb, -1, channel_axis)
+
+    raise ValueError(f"Input image must be either in PIL or numpy format but got {type(image)}")
 
 
 def flip_channel_order(

@@ -20,7 +20,6 @@
 
 import itertools
 from collections.abc import Callable
-from dataclasses import dataclass
 from itertools import accumulate
 
 import torch
@@ -318,18 +317,6 @@ class GlmOcrPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"model\.language_model\.layers\.16.*"]
 
 
-@auto_docstring
-@dataclass
-class GlmOcrModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
-
-
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -574,7 +561,7 @@ class GlmOcrVisionModel(GlmOcrPreTrainedModel):
         "attentions": GlmOcrVisionAttention,
     }
 
-    def __init__(self, config) -> None:
+    def __init__(self, config: GlmOcrVisionConfig) -> None:
         super().__init__(config)
         self.spatial_merge_size = config.spatial_merge_size
         self.patch_size = config.patch_size
@@ -780,15 +767,14 @@ class GlmOcrTextModel(GlmOcrPreTrainedModel):
             # If inputs are not packed (usual 3D positions), do not prepare mask from position_ids
             text_position_ids = None
 
-        mask_kwargs = {
-            "config": self.config,
-            "inputs_embeds": inputs_embeds,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "position_ids": text_position_ids,
-        }
-        # Create the masks
-        causal_mask = create_causal_mask(**mask_kwargs)
+        # Create the mask
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            position_ids=text_position_ids,
+        )
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
@@ -819,7 +805,7 @@ class GlmOcrModel(GlmOcrPreTrainedModel):
     accepts_loss_kwargs = False
     _no_split_modules = ["GlmOcrTextDecoderLayer", "GlmOcrVisionBlock"]
 
-    def __init__(self, config):
+    def __init__(self, config: GlmOcrConfig):
         super().__init__(config)
         self.visual = GlmOcrVisionModel._from_config(config.vision_config)
         self.language_model = GlmOcrTextModel._from_config(config.text_config)
@@ -1120,7 +1106,7 @@ class GlmOcrModel(GlmOcrPreTrainedModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | GlmOcrModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1175,22 +1161,7 @@ class GlmOcrModel(GlmOcrPreTrainedModel):
             **kwargs,
         )
 
-        return GlmOcrModelOutputWithPast(
-            **outputs,
-            rope_deltas=self.rope_deltas,
-        )
-
-
-@auto_docstring
-@dataclass
-class GlmOcrCausalLMOutputWithPast(CausalLMOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
+        return outputs
 
 
 class GlmOcrForConditionalGeneration(GlmOcrPreTrainedModel, GenerationMixin):
@@ -1199,7 +1170,7 @@ class GlmOcrForConditionalGeneration(GlmOcrPreTrainedModel, GenerationMixin):
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
 
-    def __init__(self, config):
+    def __init__(self, config: GlmOcrConfig):
         super().__init__(config)
         self.model = GlmOcrModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
@@ -1250,7 +1221,7 @@ class GlmOcrForConditionalGeneration(GlmOcrPreTrainedModel, GenerationMixin):
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | GlmOcrCausalLMOutputWithPast:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
         Example:
 
@@ -1310,13 +1281,12 @@ class GlmOcrForConditionalGeneration(GlmOcrPreTrainedModel, GenerationMixin):
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return GlmOcrCausalLMOutputWithPast(
+        return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=outputs.rope_deltas,
         )
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
