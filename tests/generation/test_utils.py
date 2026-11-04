@@ -2820,11 +2820,15 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             if has_static_cache:
                 # Sliding prefill returns the prompt itself; decode returns the bounded window.
                 # Linear/recurrent layers do not return attention weights.
+                # Layers reusing an earlier layer's cache (`kv_source_layers`) attend over their source's.
+                layers = decoder_past_key_values.layers
+                sources = getattr(config, "kv_source_layers", None) or range(len(layers))
+                layers = [layers[source] for source in sources]
                 key_lengths = [
                     prompt_length
                     if generated_length == 0 and isinstance(layer, StaticSlidingWindowLayer) and prompt_length > 1
                     else layer.get_max_length()
-                    for layer in decoder_past_key_values.layers
+                    for layer in layers
                     if layer.get_max_length() != -1
                 ]
                 # KV-sharing layers return attentions but reuse the last cache of the same type.
