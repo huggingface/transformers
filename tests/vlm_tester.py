@@ -136,6 +136,19 @@ class VLMModelTest(MultiModalModelTest):
     - `pipeline_model_mapping`: Override if not using default from model_tester
     """
 
+    # MIGRATION NOTE: prevents pytest from collecting this base class as a standalone test class.
+    # After adding python_classes = ["Test*", "*Test"] to pyproject.toml (needed so that
+    # pure-pytest classes like BertModelTest are collected once unittest.TestCase is removed),
+    # pytest also collects any class whose name ends in "Test" — including this base class,
+    # from every model file that imports it. pytest is doing the right thing; we simply need
+    # to explicitly opt this base class out since it is not meant to run standalone.
+    # Concrete subclasses (e.g. Gemma3ModelTest) do NOT inherit __test__ = False — pytest
+    # only checks it on the class's own __dict__, so subclasses are collected normally.
+    # TODO: remove __test__ = False once all subclasses have had unittest.TestCase removed,
+    # at which point the *Test suffix pattern is the only collection mechanism and this
+    # class would still need __test__ = False (it ends in "Test" but is a base class).
+    __test__ = False
+
     def test_mismatching_num_image_tokens(self):
         """
         Tests that VLMs throw an error with explicit message saying what is wrong

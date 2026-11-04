@@ -488,7 +488,7 @@ class T5ModelTester:
 
 
 @require_torch
-class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin):
     all_model_classes = (
         (T5Model, T5ForConditionalGeneration, T5ForSequenceClassification, T5ForQuestionAnswering)
         if is_torch_available()
@@ -509,7 +509,7 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
     # The small T5 model needs higher percentages for CPU/MP tests
     model_split_percents = [0.5, 0.8, 0.9]
 
-    def setUp(self):
+    def setup_method(self):
         self.model_tester = T5ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=T5Config, d_model=37)
 
@@ -831,7 +831,7 @@ class T5EncoderOnlyModelTester:
         return config, inputs_dict
 
 
-class T5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class T5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin):
     all_model_classes = (T5EncoderModel, T5ForTokenClassification) if is_torch_available() else ()
 
     test_resize_embeddings = False
@@ -843,7 +843,7 @@ class T5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         else {}
     )
 
-    def setUp(self):
+    def setup_method(self):
         self.model_tester = T5EncoderOnlyModelTester(self)
         self.config_tester = ConfigTester(self, config_class=T5Config, d_model=37)
 

@@ -167,6 +167,10 @@ class ALMModelTest(MultiModalModelTest):
     - `pipeline_model_mapping`: Override if not using default from model_tester
     """
 
+    # MIGRATION NOTE: same reason as VLMModelTest.__test__ = False above.
+    # See vlm_tester.py for full explanation.
+    __test__ = False
+
     def test_sdpa_can_dispatch_on_flash(self):
         # `test_sdpa_can_dispatch_on_flash` already pops the attention mask, but we cannot simply pop the
         # audio mask here since it will raise an error in `get_audio_features` (cf. `test_mismatching_num_audio_tokens`).
