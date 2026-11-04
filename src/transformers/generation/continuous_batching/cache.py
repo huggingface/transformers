@@ -473,7 +473,7 @@ class PagedAttentionCache:
         """Reads the states of the batch's sequences for a linear attention layer, in batch order and in the order the
         layer declares them, each of shape [num_sequences, *shape]. A sequence with no past reads zeros, from the
         read trash block."""
-        allocator = self.layer_to_allocator[layer_idx]
+        allocator: LinearAttentionCacheAllocator = self.layer_to_allocator[layer_idx]  # type: ignore
         index = self._linear_attention_state_index(allocator, kwargs, write=False)
         return tuple(view[index] for view in allocator.state_views(layer_idx))
 
@@ -483,7 +483,7 @@ class PagedAttentionCache:
     ) -> None:
         """Writes the states of the batch's sequences for a linear attention layer, given in batch order and in the
         order the layer declares them. Padding sequences write to the write trash block."""
-        allocator = self.layer_to_allocator[layer_idx]
+        allocator: LinearAttentionCacheAllocator = self.layer_to_allocator[layer_idx]  # type: ignore
         index = self._linear_attention_state_index(allocator, kwargs, write=True)
         for view, state in zip(allocator.state_views(layer_idx), states):
             view.index_copy_(0, index, state.to(view.dtype))
