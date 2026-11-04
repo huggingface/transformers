@@ -90,6 +90,23 @@ class Bnb4bitDeserialize(ConversionOps):
         return {key_weight: new_value}
 
 
+def _to_dense_layout(weights, key, model, full_layer_name):
+    """Undo the `Conv1D` transpose done at quantization time and cast to the dtype of the dense param."""
+    if model is None:
+        return weights
+    name = next(iter(expand_target_names({key: None}, full_layer_name)))
+    try:
+        module, param_name = get_module_from_name(model, name)
+    except AttributeError:
+        return weights  # e.g. a source of a fused param: the converter ops that follow handle it
+    param = getattr(module, param_name, None)
+    transpose = isinstance(module, Conv1D)
+    return [
+        (weight.T if transpose else weight).to(param.dtype if param is not None else weight.dtype)
+        for weight in weights
+    ]
+
+
 class Bnb4bitDequantize(ConversionOps):
     """Dense weights from the serialized `weight` and its quant state, saved under `weight.*`."""
 
@@ -114,6 +131,7 @@ class Bnb4bitDequantize(ConversionOps):
                     )
                     for i, weight in enumerate(weights)
                 ]
+                weights = _to_dense_layout(weights, key, model, full_layer_name)
             output[key] = weights
         return output
 
@@ -134,6 +152,7 @@ class Bnb8bitDequantize(ConversionOps):
             if scales is not None:
                 scales = scales if isinstance(scales, list) else [scales]
                 weights = [weight.float() * scale.view(-1, 1) / 127 for weight, scale in zip(weights, scales)]
+                weights = _to_dense_layout(weights, key, model, full_layer_name)
             output[key] = weights
         return output
 
