@@ -299,24 +299,19 @@ def _make_allocator(
 def _make_linear_allocator(
     layer_indices: list[int] | None = None, index: int = 0, block_alignment: int = 1
 ) -> LinearAttentionCacheAllocator:
-    """Builds a linear attention allocator on a minimal namespace config holding the shape of the states: 2 key heads
-    and 4 value heads of dimension 4, and a convolution of width 3."""
-    config = SimpleNamespace(
-        linear_key_head_dim=4,
-        linear_value_head_dim=4,
-        linear_num_key_heads=2,
-        linear_num_value_heads=4,
-        linear_conv_kernel_dim=3,
-    )
-    config.get_text_config = lambda: config
+    """Builds a linear attention allocator holding, per layer, a conv state of shape [32, 2] in float16 and a
+    recurrent state of shape [4, 4, 4] in float32, as a gated delta net with 2 key heads and 4 value heads of
+    dimension 4 and a convolution of width 3 would declare."""
+    states = [((32, 2), torch.float16), ((4, 4, 4), torch.float32)]
     return LinearAttentionCacheAllocator(
         index=index,
-        config=config,  # type: ignore
+        config=None,  # type: ignore
         num_key_value_heads=1,
         cache_dtype=torch.float16,
         page_size=4,
         layer_indices=layer_indices if layer_indices is not None else [0],
         allow_block_sharing=False,
+        states=states,
         block_alignment=block_alignment,
     )
 
@@ -495,15 +490,27 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         allocator.free_blocks("req")
         self.assertEqual(pool.count_free_blocks(allocator.index), free_blocks + 1)
 
+    def test_linear_attention_states_are_declared_by_the_layers(self) -> None:
+        """The paged cache sizes the states from what the linear attention layers declare: a layer that declares none
+        is refused with a readable error, and all layers of the group have to declare the same states."""
+        states = [((32, 2), torch.float16), ((4, 4, 4), torch.float32)]
+        self.assertEqual(PagedAttentionCache._get_linear_attention_states([0, 2], {0: states, 2: states}), states)
+        with self.assertRaisesRegex(ValueError, "Layer 2 is a linear attention layer that declares no states"):
+            PagedAttentionCache._get_linear_attention_states([0, 2], {0: states})
+        other_states = [((32, 2), torch.float16)]
+        with self.assertRaisesRegex(ValueError, "declare different states"):
+            PagedAttentionCache._get_linear_attention_states([0, 2], {0: states, 2: other_states})
+
     def test_linear_attention_block_alignment(self) -> None:
         """The block is sized to a multiple of the alignment, which the paged cache sets to the other allocators'
         block sizes so the sectors stay small, with pages of equal size."""
         allocator = _make_linear_allocator(layer_indices=[0, 1, 2], block_alignment=1000)
         self.assertEqual(allocator.bytes_per_block % 1000, 0)
         self.assertEqual(allocator.bytes_per_block, 3 * allocator.bytes_per_page)
-        # The recurrent state is read as float32 from a 128-byte boundary
-        self.assertEqual(allocator.recurrent_offset % 128, 0)
-        self.assertGreaterEqual(allocator.recurrent_offset, allocator.conv_bytes)
+        # Each state starts on a 128-byte boundary, after the previous one
+        self.assertEqual(allocator.state_offsets[0], 0)
+        self.assertEqual(allocator.state_offsets[1] % 128, 0)
+        self.assertGreaterEqual(allocator.state_offsets[1], 32 * 2 * torch.float16.itemsize)
 
     def test_linear_attention_states_round_trip(self) -> None:
         """The paged cache reads and writes the states of the batch's sequences through the allocator's views, from
@@ -523,8 +530,8 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         blocks = [allocator.block_table["a"][0], allocator.block_table["b"][0]]
 
         torch.manual_seed(0)
-        conv_states = torch.randn(2, allocator.conv_dim, allocator.conv_state_len)
-        recurrent_states = torch.randn(2, *allocator.recurrent_shape)
+        conv_states = torch.randn(2, 32, 2)
+        recurrent_states = torch.randn(2, 4, 4, 4)
 
         # Varlen path: the requests have no past, so they read zeros and write their block
         kwargs = {"read_index": [torch.tensor([0, 0])], "write_index": [torch.tensor(blocks)], "block_table": None}
@@ -532,7 +539,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         self.assertEqual(read_conv.shape, conv_states.shape)
         self.assertEqual(read_recurrent.shape, recurrent_states.shape)
         self.assertTrue((read_conv == 0).all() and (read_recurrent == 0).all())
-        cache.write_linear_attention_states(0, conv_states, recurrent_states, kwargs)
+        cache.write_linear_attention_states(0, (conv_states, recurrent_states), kwargs)
 
         # Then they read what they wrote, in the cache dtypes, and the other layer is untouched
         kwargs["read_index"] = [torch.tensor(blocks)]
@@ -549,7 +556,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         torch.testing.assert_close(read_conv[[0, 2]], conv_states[[1, 0]].to(torch.float16))
         torch.testing.assert_close(read_recurrent[[0, 2]], recurrent_states[[1, 0]])
         self.assertTrue((read_conv[1] == 0).all() and (read_recurrent[1] == 0).all())
-        cache.write_linear_attention_states(0, read_conv + 1, read_recurrent + 1, kwargs)
+        cache.write_linear_attention_states(0, (read_conv + 1, read_recurrent + 1), kwargs)
         read_conv, read_recurrent = cache.read_linear_attention_states(0, kwargs)
         torch.testing.assert_close(read_conv[[0, 2]], conv_states[[1, 0]].to(torch.float16) + 1)
         torch.testing.assert_close(read_recurrent[[0, 2]], recurrent_states[[1, 0]] + 1)
