@@ -216,7 +216,7 @@ class CohereAsrDecoderLayer(GradientCheckpointingLayer):
         encoder_position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 
@@ -259,7 +259,7 @@ class CohereAsrDecoder(MoonshineDecoder):
         "cross_attentions": OutputRecorder(CohereAsrCrossAttention, index=1, layer_name="encoder_attn"),
     }
 
-    def __init__(self, config):
+    def __init__(self, config: CohereAsrConfig):
         super().__init__(config)
         del self.rotary_emb
         self.norm = nn.LayerNorm(config.hidden_size)
@@ -274,14 +274,14 @@ class CohereAsrDecoder(MoonshineDecoder):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         r"""
-        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+        encoder_hidden_states (`torch.Tensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
             of the decoder.
         encoder_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -345,7 +345,7 @@ class CohereAsrDecoder(MoonshineDecoder):
 
 
 class CohereAsrModel(MoonshineModel):
-    def __init__(self, config):
+    def __init__(self, config: CohereAsrConfig):
         super().__init__(config)
         self.encoder = AutoModel.from_config(config.encoder_config)
 
@@ -353,25 +353,25 @@ class CohereAsrModel(MoonshineModel):
     @auto_docstring
     def forward(
         self,
-        input_features: torch.FloatTensor | None = None,
+        input_features: torch.Tensor | None = None,
         attention_mask: torch.LongTensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
         past_key_values: EncoderDecoderCache | None = None,
-        decoder_inputs_embeds: tuple[torch.FloatTensor] | None = None,
+        decoder_inputs_embeds: tuple[torch.Tensor] | None = None,
         decoder_position_ids: tuple[torch.LongTensor] | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqModelOutput:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
+        input_features (`torch.Tensor` of shape `(batch_size, audio_length)`):
             Float values of the raw speech waveform. Raw speech waveform can be
             obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
             `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
             the soundfile library (`pip install soundfile`). To prepare the array into
             `input_features`, the [`AutoFeatureExtractor`] should be used for padding
-            and conversion into a tensor of type `torch.FloatTensor`.
+            and conversion into a tensor of type `torch.Tensor`.
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Used to calculate the position embeddings up to `config.decoder_config.max_position_embeddings`
@@ -423,7 +423,7 @@ class CohereAsrModel(MoonshineModel):
 
 
 class CohereAsrForConditionalGeneration(MoonshineForConditionalGeneration):
-    def __init__(self, config):
+    def __init__(self, config: CohereAsrConfig):
         super().__init__(config)
         self.proj_out = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
         self.post_init()
@@ -432,26 +432,26 @@ class CohereAsrForConditionalGeneration(MoonshineForConditionalGeneration):
     @auto_docstring
     def forward(
         self,
-        input_features: torch.FloatTensor | None = None,
+        input_features: torch.Tensor | None = None,
         attention_mask: torch.LongTensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
         past_key_values: EncoderDecoderCache | None = None,
-        decoder_inputs_embeds: tuple[torch.FloatTensor] | None = None,
+        decoder_inputs_embeds: tuple[torch.Tensor] | None = None,
         decoder_position_ids: tuple[torch.LongTensor] | None = None,
         use_cache: bool | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqLMOutput:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
+        input_features (`torch.Tensor` of shape `(batch_size, audio_length)`):
             Float values of the raw speech waveform. Raw speech waveform can be
             obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
             `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
             the soundfile library (`pip install soundfile`). To prepare the array into
             `input_features`, the [`AutoFeatureExtractor`] should be used for padding
-            and conversion into a tensor of type `torch.FloatTensor`.
+            and conversion into a tensor of type `torch.Tensor`.
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Used to calculate the position embeddings up to `config.decoder_config.max_position_embeddings`

@@ -26,7 +26,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -53,7 +53,6 @@ from ..qwen3_5_moe.modeling_qwen3_5_moe import (
     Qwen3_5MoeForCausalLM,
     Qwen3_5MoeForConditionalGeneration,
     Qwen3_5MoeModel,
-    Qwen3_5MoeModelOutputWithPast,
     Qwen3_5MoePreTrainedModel,
     Qwen3_5MoeTextModel,
     Qwen3_5MoeVisionModel,
@@ -458,7 +457,7 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
                 selected_tokens = torch.cat([selected_tokens, tail]).to(torch.int32)
                 selected_token_indices[batch_idx, query_idx, : selected_tokens.numel()] = selected_tokens
 
-        # Create the additive mask to be added to the main causal mask
+        # Create the selection mask to combine with the main causal mask
         kv_length = attention_mask.shape[-1]
         selected_token_mask = torch.zeros(
             (*selected_token_indices.shape[:-1], kv_length + 1), device=attention_mask.device, dtype=torch.bool
@@ -466,10 +465,6 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         # We absorb all the -1 by scaterring them to the last index that we will drop
         scatter_indices = torch.where(selected_token_indices >= 0, selected_token_indices, kv_length)
         selected_token_mask = selected_token_mask.scatter(-1, scatter_indices, True)[..., :kv_length].unsqueeze(1)
-        # if using eager, convert to float mask
-        if attention_mask.is_floating_point():
-            min_dtype = torch.finfo(attention_mask.dtype).min
-            selected_token_mask = torch.where(selected_token_mask, attention_mask.new_zeros(()), min_dtype)
 
         return selected_token_mask
 
@@ -490,11 +485,12 @@ class Qwen4ExpTextAttention(Qwen3_5Attention):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         selected_token_mask = self.indexer(hidden_states, position_embeddings, attention_mask, past_key_values)
-        # Combine both masks (they are never None, and are always 4D with either bool for sdpa, or float for eager)
-        if attention_mask.is_floating_point():
-            attention_mask = attention_mask + selected_token_mask
-        else:
+        # Combine the boolean selection mask with the causal mask (bool for sdpa, float for eager).
+        if attention_mask.dtype == torch.bool:
             attention_mask = attention_mask & selected_token_mask
+        else:
+            # Adding minimum-finite values overflows to -inf and yields NaNs for fully masked queries.
+            attention_mask = attention_mask.masked_fill(~selected_token_mask, torch.finfo(attention_mask.dtype).min)
 
         # The cos/sin are the full positions here due to the indexer, so we need to slice to get current positions
         position_embeddings = (x[:, -hidden_states.shape[1] :, :] for x in position_embeddings)
@@ -660,19 +656,21 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
         input_ids = input_ids.long()
         # This is a trick to store the previous N=self.context_len `input_ids` - indeed the manipulations are identical to storing
         # a past conv_state, so we can use an additional conv_states inside the Cache for it
-        if past_key_values is not None and past_key_values.has_previous_state(self.layer_idx, state_idx=2):
-            previous_context = past_key_values.layers[self.layer_idx].conv_states[2].clone()
+        cached_ctx = (
+            past_key_values.get_conv_state(self.layer_idx, state_idx=2) if past_key_values is not None else None
+        )
+
+        if cached_ctx is not None:
+            previous_context = cached_ctx.clone()
         else:
             previous_context = input_ids.new_full((input_ids.shape[0], self.context_len), self.eos_token_id)
+
         # Store the current input_ids for the next forward
         if past_key_values is not None:
             input_ids_to_cache = input_ids
             # In the case where `input_ids` would be smaller than `self.context_len`, the `update_conv_state` will pad with zeros, whereas
             # here we want to pad with eos, so we do it explicitly
-            if (
-                not past_key_values.has_previous_state(self.layer_idx, state_idx=2)
-                and input_ids.shape[1] < self.context_len
-            ):
+            if cached_ctx is None and input_ids.shape[1] < self.context_len:
                 input_ids_to_cache = torch.nn.functional.pad(
                     input_ids_to_cache, (self.context_len - input_ids.shape[1], 0), value=self.eos_token_id
                 )
@@ -807,7 +805,7 @@ class Qwen4ExpTextDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Cache | None = None,
         ple_input_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         if self.ple is not None:
             hidden_states = hidden_states + self.ple(
                 hidden_states, ple_input_ids, past_key_values, conv_mask=conv_mask
@@ -882,10 +880,6 @@ class Qwen4ExpPreTrainedModel(Qwen3_5MoePreTrainedModel):
             init.zeros_(module.conv1d.weight)
 
 
-class Qwen4ExpModelOutputWithPast(Qwen3_5MoeModelOutputWithPast):
-    pass
-
-
 @auto_docstring
 class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
     config: Qwen4ExpTextConfig
@@ -937,7 +931,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         ple_input_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -978,13 +972,13 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
         else:
             text_position_ids = None
 
-        # We need the full position_ids in the indexer, not just the current ones, so bind them to the cache if any (as they
-        # are 3D, it's otherwise not easy to compute them back from only current positions)
-        if past_key_values is not None:
-            if hasattr(past_key_values, "position_ids"):
-                previous_positions = past_key_values.position_ids
-                position_ids = torch.cat([previous_positions, position_ids], dim=-1)
-            past_key_values.position_ids = position_ids
+        # All indexers share the full 3D positions. Store them on the first indexed layer so cache operations
+        # such as reset, crop and beam reordering also update the position history.
+        if past_key_values is not None and "indexed_attention" in self.config.layer_types:
+            indexer_cache = past_key_values.layers[self.config.layer_types.index("indexed_attention")]
+            if indexer_cache.indexer_position_ids is not None:
+                position_ids = torch.cat([indexer_cache.indexer_position_ids, position_ids], dim=-1)
+            indexer_cache.indexer_position_ids = position_ids
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             mask_kwargs = {
@@ -1026,7 +1020,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
 
         hidden_states = self.hyper_connection_mixer(hidden_states)
 
-        return Qwen4ExpModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
@@ -1043,21 +1037,24 @@ class Qwen4ExpVisionModel(Qwen3_5MoeVisionModel):
 
 
 class Qwen4ExpModel(Qwen3_5MoeModel):
+    # Qwen4ExpDecoderLayer, inherited from Qwen3_5MoeModel and renamed by prefix, does not exist
+    _no_split_modules = ["Qwen4ExpTextDecoderLayer", "Qwen4ExpVisionBlock"]
+
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Qwen4ExpModelOutputWithPast:
+    ) -> tuple | MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1127,10 +1124,7 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
             **kwargs,
         )
 
-        return Qwen4ExpModelOutputWithPast(
-            **outputs,
-            rope_deltas=self.rope_deltas,
-        )
+        return outputs
 
 
 @auto_docstring

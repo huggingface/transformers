@@ -25,7 +25,7 @@ from torchvision.transforms.v2 import functional as tvF
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -50,7 +50,7 @@ from ...modeling_outputs import (
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
@@ -290,8 +290,8 @@ class Glm5NextConfig(PreTrainedConfig):
 
     model_type = "glm5_next"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Glm5NextVisionConfig),
-        "text_config": SubConfigSpec(config_class=Glm5NextTextConfig),
+        "vision_config": Glm5NextVisionConfig,
+        "text_config": Glm5NextTextConfig,
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 
@@ -425,7 +425,7 @@ class Glm5NextTextRMSNormGated(Qwen3_5RMSNormGated):
         return hidden_states.to(input_dtype)
 
 
-def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
+def l2norm(x: torch.Tensor, dim: int = -1, eps: float = 1e-6):
     """
     This function is intended to align with the l2norm implementation in the FLA library.
 
@@ -662,13 +662,14 @@ class Glm5NextTextLinearAttention(nn.Module):
         ).transpose(1, 2)
 
         # Acts for normal prefill but also for multi-token prefill continue
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
-        if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
-            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
+        if cache_params is not None:
+            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
+        else:
+            conv_state, recurrent_state = None, None
 
         # Single token decode path
-        if use_precomputed_states and seq_len == 1:
+        if conv_state is not None and seq_len == 1:
             mixed_qkv = causal_conv1d_update(
                 mixed_qkv,
                 conv_state,
@@ -710,7 +711,7 @@ class Glm5NextTextLinearAttention(nn.Module):
         beta = torch.sigmoid(self.b_proj(hidden_states))
 
         # KDA
-        if use_precomputed_states and seq_len == 1:
+        if recurrent_state is not None and seq_len == 1:
             core_attn_out, last_recurrent_state = recurrent_kimi_delta_attention(
                 query,
                 key,
@@ -729,7 +730,7 @@ class Glm5NextTextLinearAttention(nn.Module):
                 value,
                 g=g,
                 beta=beta,
-                initial_state=recurrent_state if use_precomputed_states else None,
+                initial_state=recurrent_state,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
                 **kwargs,
@@ -1280,7 +1281,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
 class Glm5NextTextModel(Glm5NextPreTrainedModel):
     config: Glm5NextTextConfig
 
-    def __init__(self, config):
+    def __init__(self, config: Glm5NextTextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -1305,7 +1306,7 @@ class Glm5NextTextModel(Glm5NextPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
@@ -1403,7 +1404,7 @@ class Glm5NextVisionBlock(GlmOcrVisionBlock):
 
 @auto_docstring
 class Glm5NextVisionModel(GlmOcrVisionModel):
-    def __init__(self, config) -> None:
+    def __init__(self, config: Glm5NextVisionConfig) -> None:
         super().__init__(config)
         self.blocks = nn.ModuleList([Glm5NextVisionBlock(config) for _ in range(config.depth)])
         self.merger = Glm5NextVisionPatchMerger(
@@ -1417,7 +1418,7 @@ class Glm5NextVisionModel(GlmOcrVisionModel):
 class Glm5NextModel(Exaone4_5_Model, Glm5NextPreTrainedModel):
     config: Glm5NextConfig
 
-    def __init__(self, config):
+    def __init__(self, config: Glm5NextConfig):
         super().__init__(config)
         self.visual = Glm5NextVisionModel._from_config(config.vision_config)
         self.language_model = Glm5NextTextModel._from_config(config.text_config)
@@ -1425,7 +1426,7 @@ class Glm5NextModel(Exaone4_5_Model, Glm5NextPreTrainedModel):
 
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
@@ -1447,9 +1448,9 @@ class Glm5NextModel(Exaone4_5_Model, Glm5NextPreTrainedModel):
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor,
-        inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor | None = None,
-        video_features: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor,
+        image_features: torch.Tensor | None = None,
+        video_features: torch.Tensor | None = None,
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -1504,10 +1505,10 @@ class Glm5NextModel(Exaone4_5_Model, Glm5NextPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
@@ -1581,7 +1582,7 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
 
     input_modalities = ("image", "video", "text")
 
-    def __init__(self, config):
+    def __init__(self, config: Glm5NextConfig):
         super().__init__(config)
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
         self.num_experts = config.text_config.num_local_experts
@@ -1595,11 +1596,11 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         output_router_logits: bool | None = None,
@@ -1661,8 +1662,8 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

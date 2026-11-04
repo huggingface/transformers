@@ -658,8 +658,8 @@ class InformerEncoderLayer(GradientCheckpointingLayer):
 
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
-        attention_mask: torch.FloatTensor,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -823,7 +823,7 @@ class InformerEncoder(InformerPreTrainedModel):
     def forward(
         self,
         attention_mask: torch.Tensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutput:
         hidden_states = self.value_embedding(inputs_embeds)
@@ -898,10 +898,10 @@ class InformerDecoder(InformerPreTrainedModel):
     def forward(
         self,
         attention_mask: torch.Tensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
@@ -914,7 +914,7 @@ class InformerDecoder(InformerPreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+            encoder_hidden_states (`torch.Tensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
             encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
@@ -934,7 +934,7 @@ class InformerDecoder(InformerPreTrainedModel):
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
                 all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
                 This is useful if you want more control over how to convert `input_ids` indices into associated vectors
                 than the model's internal embedding lookup matrix.
@@ -1142,13 +1142,13 @@ class InformerModel(InformerPreTrainedModel):
         future_values: torch.Tensor | None = None,
         future_time_features: torch.Tensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        encoder_outputs: list[torch.FloatTensor] | None = None,
+        encoder_outputs: list[torch.Tensor] | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqTSModelOutput | tuple:
         r"""
-        past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`):
+        past_values (`torch.Tensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`):
             Past values of the time series, that serve as context in order to predict the future. The sequence size of
             this tensor must be larger than the `context_length` of the model, since the model will use the larger size
             to construct lag features, i.e. additional values from the past which are added in order to serve as "extra
@@ -1166,7 +1166,7 @@ class InformerModel(InformerPreTrainedModel):
 
             For multivariate time series, the `input_size` > 1 dimension is required and corresponds to the number of
             variates in the time series per time step.
-        past_time_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_features)`):
+        past_time_features (`torch.Tensor` of shape `(batch_size, sequence_length, num_features)`):
             Required time features, which the model internally will add to `past_values`. These could be things like
             "month of year", "day of the month", etc. encoded as vectors (for instance as Fourier features). These
             could also be so-called "age" features, which basically help the model know "at which point in life" a
@@ -1195,13 +1195,13 @@ class InformerModel(InformerPreTrainedModel):
             Static categorical features are features which have the same value for all time steps (static over time).
 
             A typical example of a static categorical feature is a time series ID.
-        static_real_features (`torch.FloatTensor` of shape `(batch_size, number of static real features)`, *optional*):
+        static_real_features (`torch.Tensor` of shape `(batch_size, number of static real features)`, *optional*):
             Optional static real features which the model will add to the values of the time series.
 
             Static real features are features which have the same value for all time steps (static over time).
 
             A typical example of a static real feature is promotion information.
-        future_values (`torch.FloatTensor` of shape `(batch_size, prediction_length)` or `(batch_size, prediction_length, input_size)`, *optional*):
+        future_values (`torch.Tensor` of shape `(batch_size, prediction_length)` or `(batch_size, prediction_length, input_size)`, *optional*):
             Future values of the time series, that serve as labels for the model. The `future_values` is what the
             Transformer needs during training to learn to output, given the `past_values`.
 
@@ -1214,7 +1214,7 @@ class InformerModel(InformerPreTrainedModel):
 
             For multivariate time series, the `input_size` > 1 dimension is required and corresponds to the number of
             variates in the time series per time step.
-        future_time_features (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_features)`):
+        future_time_features (`torch.Tensor` of shape `(batch_size, prediction_length, num_features)`):
             Required time features for the prediction window, which the model internally will add to `future_values`.
             These could be things like "month of year", "day of the month", etc. encoded as vectors (for instance as
             Fourier features). These could also be so-called "age" features, which basically help the model know "at
@@ -1231,7 +1231,7 @@ class InformerModel(InformerPreTrainedModel):
             must but known at prediction time.
 
             The `num_features` here is equal to `config.num_time_features` + `config.num_dynamic_real_features`.
-        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
+        encoder_outputs (`tuple(tuple(torch.Tensor)`, *optional*):
             Tuple consists of `last_hidden_state`, `hidden_states` (*optional*) and `attentions` (*optional*)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` (*optional*) is a sequence of
             hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
@@ -1328,15 +1328,15 @@ def weighted_average(input_tensor: torch.Tensor, weights: torch.Tensor | None = 
     meaning instead of `nan * 0 = nan` you will get `0 * 0 = 0`.
 
     Args:
-        input_tensor (`torch.FloatTensor`):
+        input_tensor (`torch.Tensor`):
             Input tensor, of which the average must be computed.
-        weights (`torch.FloatTensor`, *optional*):
+        weights (`torch.Tensor`, *optional*):
             Weights tensor, of the same shape as `input_tensor`.
         dim (`int`, *optional*):
             The dim along which to average `input_tensor`.
 
     Returns:
-        `torch.FloatTensor`: The tensor with values averaged along the specified `dim`.
+        `torch.Tensor`: The tensor with values averaged along the specified `dim`.
     """
     if weights is not None:
         weighted_tensor = torch.where(weights != 0, input_tensor * weights, torch.zeros_like(input_tensor))
@@ -1403,13 +1403,13 @@ class InformerForPrediction(InformerPreTrainedModel):
         future_time_features: torch.Tensor | None = None,
         future_observed_mask: torch.Tensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
-        encoder_outputs: list[torch.FloatTensor] | None = None,
+        encoder_outputs: list[torch.Tensor] | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqTSModelOutput | tuple:
         r"""
-        past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`):
+        past_values (`torch.Tensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`):
             Past values of the time series, that serve as context in order to predict the future. The sequence size of
             this tensor must be larger than the `context_length` of the model, since the model will use the larger size
             to construct lag features, i.e. additional values from the past which are added in order to serve as "extra
@@ -1427,7 +1427,7 @@ class InformerForPrediction(InformerPreTrainedModel):
 
             For multivariate time series, the `input_size` > 1 dimension is required and corresponds to the number of
             variates in the time series per time step.
-        past_time_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_features)`):
+        past_time_features (`torch.Tensor` of shape `(batch_size, sequence_length, num_features)`):
             Required time features, which the model internally will add to `past_values`. These could be things like
             "month of year", "day of the month", etc. encoded as vectors (for instance as Fourier features). These
             could also be so-called "age" features, which basically help the model know "at which point in life" a
@@ -1456,13 +1456,13 @@ class InformerForPrediction(InformerPreTrainedModel):
             Static categorical features are features which have the same value for all time steps (static over time).
 
             A typical example of a static categorical feature is a time series ID.
-        static_real_features (`torch.FloatTensor` of shape `(batch_size, number of static real features)`, *optional*):
+        static_real_features (`torch.Tensor` of shape `(batch_size, number of static real features)`, *optional*):
             Optional static real features which the model will add to the values of the time series.
 
             Static real features are features which have the same value for all time steps (static over time).
 
             A typical example of a static real feature is promotion information.
-        future_values (`torch.FloatTensor` of shape `(batch_size, prediction_length)` or `(batch_size, prediction_length, input_size)`, *optional*):
+        future_values (`torch.Tensor` of shape `(batch_size, prediction_length)` or `(batch_size, prediction_length, input_size)`, *optional*):
             Future values of the time series, that serve as labels for the model. The `future_values` is what the
             Transformer needs during training to learn to output, given the `past_values`.
 
@@ -1475,7 +1475,7 @@ class InformerForPrediction(InformerPreTrainedModel):
 
             For multivariate time series, the `input_size` > 1 dimension is required and corresponds to the number of
             variates in the time series per time step.
-        future_time_features (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_features)`):
+        future_time_features (`torch.Tensor` of shape `(batch_size, prediction_length, num_features)`):
             Required time features for the prediction window, which the model internally will add to `future_values`.
             These could be things like "month of year", "day of the month", etc. encoded as vectors (for instance as
             Fourier features). These could also be so-called "age" features, which basically help the model know "at
@@ -1500,7 +1500,7 @@ class InformerForPrediction(InformerPreTrainedModel):
             - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
 
             This mask is used to filter out missing values for the final loss calculation.
-        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
+        encoder_outputs (`tuple(tuple(torch.Tensor)`, *optional*):
             Tuple consists of `last_hidden_state`, `hidden_states` (*optional*) and `attentions` (*optional*)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` (*optional*) is a sequence of
             hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
@@ -1617,7 +1617,7 @@ class InformerForPrediction(InformerPreTrainedModel):
         Greedily generate sequences of sample predictions from a model with a probability distribution head.
 
         Parameters:
-            past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`):
+            past_values (`torch.Tensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`):
                 Past values of the time series, that serve as context in order to predict the future. The sequence size
                 of this tensor must be larger than the `context_length` of the model, since the model will use the
                 larger size to construct lag features, i.e. additional values from the past which are added in order to
@@ -1635,7 +1635,7 @@ class InformerForPrediction(InformerPreTrainedModel):
 
                 For multivariate time series, the `input_size` > 1 dimension is required and corresponds to the number
                 of variates in the time series per time step.
-            past_time_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_features)`):
+            past_time_features (`torch.Tensor` of shape `(batch_size, sequence_length, num_features)`):
                 Required time features, which the model internally will add to `past_values`. These could be things
                 like "month of year", "day of the month", etc. encoded as vectors (for instance as Fourier features).
                 These could also be so-called "age" features, which basically help the model know "at which point in
@@ -1652,7 +1652,7 @@ class InformerForPrediction(InformerPreTrainedModel):
                 features must but known at prediction time.
 
                 The `num_features` here is equal to `config.`num_time_features` + `config.num_dynamic_real_features`.
-            future_time_features (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_features)`):
+            future_time_features (`torch.Tensor` of shape `(batch_size, prediction_length, num_features)`):
                 Required time features for the prediction window, which the model internally will add to sampled
                 predictions. These could be things like "month of year", "day of the month", etc. encoded as vectors
                 (for instance as Fourier features). These could also be so-called "age" features, which basically help
@@ -1684,7 +1684,7 @@ class InformerForPrediction(InformerPreTrainedModel):
                 time).
 
                 A typical example of a static categorical feature is a time series ID.
-            static_real_features (`torch.FloatTensor` of shape `(batch_size, number of static real features)`, *optional*):
+            static_real_features (`torch.Tensor` of shape `(batch_size, number of static real features)`, *optional*):
                 Optional static real features which the model will add to the values of the time series.
 
                 Static real features are features which have the same value for all time steps (static over time).

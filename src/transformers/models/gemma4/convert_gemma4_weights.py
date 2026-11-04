@@ -82,7 +82,7 @@ _RESPONSE_TEMPLATE = {
     # model continues from there, so we accept either anchor and truncate past the latest one.
     "start_anchor": ["<|turn>model\n", "<tool_response|>"],
     "fields": {
-        "thinking": {
+        "reasoning_content": {
             "open": "<|channel>thought\n",
             "close": "<channel|>",
             "content": "text",

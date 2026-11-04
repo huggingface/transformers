@@ -26,7 +26,7 @@ from torch.nn import functional as F
 from ... import initialization as init
 from ...backbone_utils import filter_output_hidden_states
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
@@ -42,7 +42,7 @@ from ...masking_utils import create_bidirectional_mask, create_causal_mask, crea
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import (
     ImagesKwargs,
     MultiModalData,
@@ -258,9 +258,9 @@ class Molmo2Config(PreTrainedConfig):
     model_type = "molmo2"
     attribute_map = {"image_token_id": "image_patch_id", "video_token_id": "image_patch_id"}
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Molmo2TextConfig),
-        "vision_config": SubConfigSpec(config_class=Molmo2VisionConfig),
-        "adapter_config": SubConfigSpec(config_class=Molmo2AdapterConfig),
+        "text_config": Molmo2TextConfig,
+        "vision_config": Molmo2VisionConfig,
+        "adapter_config": Molmo2AdapterConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -1315,7 +1315,7 @@ class Molmo2VisionEncoderLayer(Siglip2EncoderLayer):
 
 @auto_docstring
 class Molmo2VisionModel(Molmo2PreTrainedModel):
-    config_class = Molmo2VisionConfig
+    config: Molmo2VisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = ["Molmo2VisionEncoderLayer"]
@@ -1340,7 +1340,7 @@ class Molmo2VisionModel(Molmo2PreTrainedModel):
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
         hidden_states = self.patch_embedding(pixel_values.to(dtype=self.dtype))
         # patch count == num_position_embeddings, locked by config; only retraining with a different grid breaks this.
-        hidden_states = hidden_states + self.positional_embedding[None, :, :].to(hidden_states.dtype)
+        hidden_states = hidden_states + self.positional_embedding[None, :, :].to(hidden_states)
 
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(hidden_states, None, **kwargs)
@@ -1364,7 +1364,7 @@ class Molmo2ImageProjectorMLP(LlamaMLP):
     """
 )
 class Molmo2Adapter(Molmo2PreTrainedModel):
-    config_class = Molmo2AdapterConfig
+    config: Molmo2AdapterConfig
     input_modalities = ("image",)
     _no_split_modules = ["Molmo2VisionAttention"]
     _can_record_outputs = {"attentions": Molmo2VisionAttention}
@@ -1446,7 +1446,7 @@ class Molmo2TextModel(LlamaModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -1520,7 +1520,7 @@ class Molmo2Model(LlavaModel):
     )
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_token_pooling: torch.Tensor,
         image_grids: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
@@ -1553,7 +1553,7 @@ class Molmo2Model(LlavaModel):
     )
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         video_token_pooling: torch.Tensor,
         video_grids: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
@@ -1568,7 +1568,7 @@ class Molmo2Model(LlavaModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         image_token_pooling: torch.Tensor | None = None,
         image_grids: torch.Tensor | None = None,
         image_num_crops: torch.Tensor | None = None,
@@ -1579,7 +1579,7 @@ class Molmo2Model(LlavaModel):
         position_ids: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         mm_token_type_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1606,7 +1606,7 @@ class Molmo2Model(LlavaModel):
                 pixel_values_videos, video_token_pooling, video_grids
             )
 
-        image_features: torch.FloatTensor | None = None
+        image_features: torch.Tensor | None = None
         if mm_encoder_outputs.get("image") is not None:
             image_features = mm_encoder_outputs["image"].pooler_output
         elif mm_encoder_outputs.get("video") is not None:
@@ -1679,7 +1679,7 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_token_pooling: torch.Tensor,
         image_grids: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
@@ -1689,7 +1689,7 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
     @auto_docstring
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         video_token_pooling: torch.Tensor,
         video_grids: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
@@ -1710,9 +1710,9 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         video_grids: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: list[torch.FloatTensor] | None = None,
+        past_key_values: list[torch.Tensor] | None = None,
         mm_token_type_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -1765,8 +1765,8 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
 
         hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -1780,6 +1780,23 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
+
+    def prepare_inputs_for_generation(
+        self, input_ids, inputs_embeds=None, use_cache=True, is_first_iteration=False, **kwargs
+    ):
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            is_first_iteration=is_first_iteration,
+            **kwargs,
+        )
+        if is_first_iteration or not use_cache:
+            # The block mask reads them by position, so a prefill chunk needs them from the start of the sequence
+            model_inputs["mm_token_type_ids"] = kwargs.get("mm_token_type_ids")
+        else:
+            model_inputs["mm_token_type_ids"] = None
+        return model_inputs
 
     @staticmethod
     def create_masks_for_generate(

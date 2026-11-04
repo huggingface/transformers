@@ -282,7 +282,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
             "defaults": {"role": "assistant"},
             "start_anchor": "<|im_start|>assistant\n",
             "fields": {
-                "thinking": {"open": "<think>", "close": "</think>", "content": "text"},
+                "reasoning_content": {"open": "<think>", "close": "</think>", "content": "text"},
                 "content": {"close": "<|im_end|>", "content": "text"},
             },
         }
@@ -293,14 +293,14 @@ class TextGenerationPipelineTests(unittest.TestCase):
         outputs = text_generator(chat, do_sample=False, max_new_tokens=10)
         parsed_message = outputs[0]["generated_text"][-1]
         # The tiny model never emits </think>, so everything it generates stays inside the
-        # `thinking` region opened by the chat template in the prompt. Without `prefix=`,
+        # `reasoning_content` region opened by the chat template in the prompt. Without `prefix=`,
         # the parser would never see the opening <think> and would mis-route the generated
         # text into `content` instead.
         self.assertEqual(parsed_message["role"], "assistant")
-        self.assertIn("thinking", parsed_message)
+        self.assertIn("reasoning_content", parsed_message)
         self.assertNotIn("content", parsed_message)
-        self.assertIsInstance(parsed_message["thinking"], str)
-        self.assertGreater(len(parsed_message["thinking"]), 0)
+        self.assertIsInstance(parsed_message["reasoning_content"], str)
+        self.assertGreater(len(parsed_message["reasoning_content"]), 0)
 
     @require_torch
     def test_return_full_text_false_with_chat_template(self):
@@ -663,6 +663,42 @@ class TextGenerationPipelineTests(unittest.TestCase):
                 ],
             ],
         )
+
+    def test_return_dict_in_generate_batched_metadata(self):
+        generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2", max_new_tokens=2)
+        generator.tokenizer.pad_token = generator.tokenizer.eos_token
+        generator.tokenizer.padding_side = "left"
+        texts = ["Artificial intelligence is", "Hello world"]
+        args = {"return_dict_in_generate": True, "output_scores": True, "do_sample": False}
+
+        greedy = generator(texts, batch_size=2, **args)
+        self.assertTrue(all("scores" in group[0] for group in greedy))
+
+        beam_args = dict(args, num_beams=3, num_return_sequences=2)
+        inputs = generator.tokenizer(texts, padding=True, return_tensors="pt").to(generator.model.device)
+        direct = generator.model.generate(**inputs, max_new_tokens=2, **beam_args)
+        outputs = generator(texts, batch_size=2, **beam_args)
+        for i, group in enumerate(outputs):
+            self.assertEqual(len(group), 2)
+            for j, candidate in enumerate(group):
+                self.assertIn("beam_indices", candidate)
+                self.assertAlmostEqual(
+                    candidate["sequences_scores"], direct.sequences_scores[i * 2 + j].item(), places=4
+                )
+
+        single = generator(texts, batch_size=2, **dict(args, num_beams=3, num_return_sequences=1))
+        self.assertTrue(all(isinstance(group[0]["sequences_scores"], float) for group in single))
+        self.assertTrue(all(isinstance(group[0]["beam_indices"], list) for group in single))
+
+        sampled = generator(
+            texts,
+            batch_size=2,
+            num_return_sequences=2,
+            return_dict_in_generate=True,
+            output_scores=True,
+            do_sample=True,
+        )
+        self.assertTrue(all("scores" in record for group in sampled for record in group))
 
     @require_torch
     def test_pipeline_assisted_generation(self):

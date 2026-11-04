@@ -28,7 +28,7 @@ from ...masking_utils import create_causal_mask, create_sliding_window_causal_ma
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.output_capturing import OutputRecorder
@@ -73,16 +73,15 @@ class BeamConfig(Qwen3MoeConfig):
     attribute_map = AttributeError()
 
     base_model_tp_plan = {
-        # trf-ignore: TRF035
-        # TODO: the attn gate bias needs to be local -> new colwise local style  # noqa: NC001
-        # "layers.*.self_attn.q_proj": "colwise",
-        # "layers.*.self_attn.k_proj": "colwise",
-        # "layers.*.self_attn.v_proj": "colwise",
-        # "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
-        # "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
-        # "layers.*.self_attn.gate_proj": "colwise",
-        # "layers.*.self_attn.gate_bias": "colwise",
-        # "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.gate_proj": "colwise",
+        "layers.*.self_attn.gate_bias": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn": "local_params",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
@@ -378,7 +377,7 @@ class BeamModel(Qwen3MoeModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
@@ -447,7 +446,7 @@ class BeamForCausalLM(DeepseekV3ForCausalLM):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -470,8 +469,8 @@ class BeamForCausalLM(DeepseekV3ForCausalLM):
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         if self.config.final_logit_softcapping is not None:
             # Softcap in float32, as bf16 tanh quantizes badly near saturation.
             logits = logits.float() / self.config.final_logit_softcapping
