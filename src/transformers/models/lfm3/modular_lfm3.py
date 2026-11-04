@@ -26,7 +26,6 @@ from ...masking_utils import (
     create_recurrent_attention_mask,
     create_sliding_window_causal_mask,
 )
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -41,6 +40,7 @@ from ..lfm2.modeling_lfm2 import (
     Lfm2Model,
     Lfm2PreTrainedModel,
     Lfm2RMSNorm,
+    Lfm2ShortConv,
 )
 from ..lfm2_moe.modeling_lfm2_moe import Lfm2MoeMLP
 from ..llama.modeling_llama import eager_attention_forward
@@ -54,22 +54,10 @@ from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states
 @strict
 class Lfm3Config(Lfm2Config):
     r"""
-    rope_parameters (`dict[str, RopeParameters]`, *optional*):
-        RoPE parameters keyed by attention layer type, for example `{"full_attention": {"rope_type": "proportional",
-        "rope_theta": 1000000.0, "partial_rotary_factor": 0.5}, "sliding_attention": {"rope_type": "default",
-        "rope_theta": 10000.0}}`. `conv` layers do not use RoPE and have no entry. Full-attention layers use the
-        `proportional` RoPE type, which rotates the first `partial_rotary_factor * head_dim` dimensions with the
-        frequency progression of the full head dimension and leaves the rest unrotated.
     conv_bias (`bool`, *optional*, defaults to `False`):
         Whether to use bias in the conv layers.
     conv_L_cache (`int`, *optional*, defaults to 7):
         L_cache dim in the conv layers.
-    layer_types (`list[str]`, *optional*):
-        Per-layer operator type, each one of `"full_attention"`, `"sliding_attention"` or `"conv"`. Defaults to the
-        LFM3 pattern of a full-attention layer every fourth layer starting from the third, a sliding-attention layer
-        in between, and gated short convolutions elsewhere.
-    sliding_window (`int`, *optional*, defaults to 256):
-        Sliding-window size of the `sliding_attention` layers.
     use_sandwich_norm (`bool`, *optional*, defaults to `True`):
         Whether to apply an RMSNorm to the operator and feed-forward outputs before they enter the residual stream.
     use_attention_gate (`bool`, *optional*, defaults to `True`):
@@ -91,7 +79,7 @@ class Lfm3Config(Lfm2Config):
 
     model_type = "lfm3"
     attribute_map = {"rms_norm_eps": "norm_eps"}
-    _attention_layer_types = ("full_attention", "sliding_attention")
+    _rope_type_labels = ("full_attention", "sliding_attention")
 
     vocab_size: int = 128_000
     hidden_size: int = 2048
@@ -99,7 +87,7 @@ class Lfm3Config(Lfm2Config):
     num_hidden_layers: int = 24
     num_attention_heads: int = 16
     num_key_value_heads: int = 4
-    head_dim: int | None = None
+    head_dim: int = 128
     pad_token_id: int | None = 124_893
     bos_token_id: int | None = 124_894
     eos_token_id: int | list[int] | None = 124_900
@@ -118,16 +106,14 @@ class Lfm3Config(Lfm2Config):
     full_attn_idxs = AttributeError()
 
     def __post_init__(self, **kwargs):
-        if self.head_dim is None:
-            self.head_dim = self.hidden_size // self.num_attention_heads
         if self.rope_parameters is None:
             self.rope_parameters = {
+                "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0},
                 "full_attention": {
                     "rope_type": "proportional",
                     "rope_theta": 1_000_000.0,
                     "partial_rotary_factor": 0.5,
                 },
-                "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0},
             }
         if self.layer_types is None:
             self.layer_types = [
@@ -137,39 +123,18 @@ class Lfm3Config(Lfm2Config):
 
         PreTrainedConfig.__post_init__(self, **kwargs)
 
-    def validate_architecture(self):
-        """Part of ``@strict``-powered validation."""
-        if len(self.layer_types) != self.num_hidden_layers:
-            raise ValueError(
-                f"`layer_types` has {len(self.layer_types)} entries but `num_hidden_layers` is {self.num_hidden_layers}."
-            )
-        allowed_layer_types = (*self._attention_layer_types, "conv")
-        invalid_layer_types = [layer_type for layer_type in self.layer_types if layer_type not in allowed_layer_types]
-        if invalid_layer_types:
-            raise ValueError(f"`layer_types` entries must be one of {allowed_layer_types}; got {invalid_layer_types}.")
-        if "sliding_attention" in self.layer_types and self.sliding_window is None:
-            raise ValueError("`layer_types` has `sliding_attention` layers but `sliding_window` is None.")
-        missing_rope = [
-            layer_type
-            for layer_type in self._attention_layer_types
-            if layer_type in self.layer_types and layer_type not in self.rope_parameters
-        ]
-        if missing_rope:
-            raise ValueError(f"`rope_parameters` has no entry for the {missing_rope} layers in `layer_types`.")
-
 
 class Lfm3RMSNorm(Lfm2RMSNorm):
     pass
 
 
 class Lfm3RotaryEmbedding(Olmo3RotaryEmbedding):
-    """OLMo 3 rotary embedding per attention layer type, float32 `cos`/`sin`; `conv` layers have no RoPE entry."""
-
     def __init__(self, config: Lfm3Config, device=None):
         nn.Module.__init__(self)
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
         self.config = config
+        # diff -> only the attention layer types have a RoPE entry, `conv` layers have none
         self.layer_types = sorted(set(config.layer_types) & set(config.rope_parameters))
         self.rope_type = {}
         for layer_type in self.layer_types:
@@ -187,24 +152,17 @@ class Lfm3MLP(Lfm2MoeMLP):
     pass
 
 
-class Lfm3AttentionHeadGate(nn.Module):
-    """One sigmoid gate per attention head, applied to the attention output (as `BailingHybridAttention.g_proj`)."""
-
-    def __init__(self, config: Lfm3Config):
-        super().__init__()
-        self.g_proj = nn.Linear(config.hidden_size, config.num_attention_heads, bias=False)
-
-    def forward(self, hidden_states: torch.Tensor, attn_output: torch.Tensor) -> torch.Tensor:
-        return attn_output * torch.sigmoid(self.g_proj(hidden_states)).unsqueeze(-1)
-
-
 @no_inherit_decorator
 class Lfm3Attention(Qwen3Attention):
     """Qwen3 attention with RoPE in float32 and a sigmoid output gate per head."""
 
     def __init__(self, config: Lfm3Config, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.head_gate = Lfm3AttentionHeadGate(config) if config.use_attention_gate else None
+        self.g_proj = (
+            nn.Linear(config.hidden_size, config.num_attention_heads, bias=False)
+            if config.use_attention_gate
+            else None
+        )
 
     def forward(
         self,
@@ -242,30 +200,16 @@ class Lfm3Attention(Qwen3Attention):
             sliding_window=self.sliding_window,
             **kwargs,
         )
-        if self.head_gate is not None:
-            attn_output = self.head_gate(hidden_states, attn_output)
+        if self.g_proj is not None:
+            attn_output = attn_output * torch.sigmoid(self.g_proj(hidden_states)).unsqueeze(-1)
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
 
-class Lfm3ShortConv(nn.Module):
+@no_inherit_decorator
+class Lfm3ShortConv(Lfm2ShortConv):
     # torch only: the hub causal_conv1d kernels serve widths 2-4, LFM3 uses 7
-    def __init__(self, config: Lfm3Config, layer_idx: int):
-        super().__init__()
-        self.layer_idx = layer_idx
-        self.conv_kernel_size = config.conv_L_cache
-        self.conv = nn.Conv1d(
-            in_channels=config.hidden_size,
-            out_channels=config.hidden_size,
-            kernel_size=self.conv_kernel_size,
-            groups=config.hidden_size,
-            bias=config.conv_bias,
-            padding=self.conv_kernel_size - 1,
-        )
-        self.in_proj = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=config.conv_bias)
-        self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.conv_bias)
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -301,19 +245,13 @@ class Lfm3ShortConv(nn.Module):
 
 class Lfm3DecoderLayer(Lfm2DecoderLayer):
     def __init__(self, config: Lfm3Config, layer_idx: int):
-        GradientCheckpointingLayer.__init__(self)
-        self.is_attention_layer = config.layer_types[layer_idx] != "conv"
-        if self.is_attention_layer:
-            self.self_attn = Lfm3Attention(config, layer_idx)
-        else:
-            self.conv = Lfm3ShortConv(config, layer_idx)
-        self.feed_forward = Lfm3MLP(config)
-        self.operator_norm = Lfm3RMSNorm(config.hidden_size, eps=config.norm_eps)
-        self.ffn_norm = Lfm3RMSNorm(config.hidden_size, eps=config.norm_eps)
-        self.use_sandwich_norm = config.use_sandwich_norm
-        if self.use_sandwich_norm:
-            self.post_operator_norm = Lfm3RMSNorm(config.hidden_size, eps=config.norm_eps)
-            self.post_ffn_norm = Lfm3RMSNorm(config.hidden_size, eps=config.norm_eps)
+        super().__init__(config, layer_idx)
+        self.post_operator_norm = (
+            Lfm3RMSNorm(config.hidden_size, eps=config.norm_eps) if config.use_sandwich_norm else nn.Identity()
+        )
+        self.post_ffn_norm = (
+            Lfm3RMSNorm(config.hidden_size, eps=config.norm_eps) if config.use_sandwich_norm else nn.Identity()
+        )
 
     def forward(
         self,
@@ -341,14 +279,8 @@ class Lfm3DecoderLayer(Lfm2DecoderLayer):
                 attention_mask=attention_mask,
                 **kwargs,
             )
-        if self.use_sandwich_norm:
-            hidden_states = self.post_operator_norm(hidden_states)
-        hidden_states = hidden_states + residual
-
-        ffn_out = self.feed_forward(self.ffn_norm(hidden_states))
-        if self.use_sandwich_norm:
-            ffn_out = self.post_ffn_norm(ffn_out)
-        hidden_states = hidden_states + ffn_out
+        hidden_states = self.post_operator_norm(hidden_states) + residual
+        hidden_states = hidden_states + self.post_ffn_norm(self.feed_forward(self.ffn_norm(hidden_states)))
 
         return hidden_states
 
@@ -405,10 +337,14 @@ class Lfm3Model(Lfm2Model):
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
-            causal_mask_mapping = {"full_attention": create_causal_mask(**mask_kwargs)}
-            if "sliding_attention" in self.config.layer_types:
-                causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
-            causal_mask_mapping["conv"] = create_recurrent_attention_mask(**mask_kwargs)
+            mask_creation_functions = {
+                "full_attention": lambda: create_causal_mask(**mask_kwargs),
+                "sliding_attention": lambda: create_sliding_window_causal_mask(**mask_kwargs),
+                "conv": lambda: create_recurrent_attention_mask(**mask_kwargs),
+            }
+            causal_mask_mapping = {}
+            for layer_type in set(self.config.layer_types):
+                causal_mask_mapping[layer_type] = mask_creation_functions[layer_type]()
 
         hidden_states = inputs_embeds
         position_embeddings = {

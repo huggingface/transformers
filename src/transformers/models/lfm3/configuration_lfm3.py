@@ -27,22 +27,10 @@ from ...utils import auto_docstring
 @strict
 class Lfm3Config(PreTrainedConfig):
     r"""
-    rope_parameters (`dict[str, RopeParameters]`, *optional*):
-        RoPE parameters keyed by attention layer type, for example `{"full_attention": {"rope_type": "proportional",
-        "rope_theta": 1000000.0, "partial_rotary_factor": 0.5}, "sliding_attention": {"rope_type": "default",
-        "rope_theta": 10000.0}}`. `conv` layers do not use RoPE and have no entry. Full-attention layers use the
-        `proportional` RoPE type, which rotates the first `partial_rotary_factor * head_dim` dimensions with the
-        frequency progression of the full head dimension and leaves the rest unrotated.
     conv_bias (`bool`, *optional*, defaults to `False`):
         Whether to use bias in the conv layers.
     conv_L_cache (`int`, *optional*, defaults to 7):
         L_cache dim in the conv layers.
-    layer_types (`list[str]`, *optional*):
-        Per-layer operator type, each one of `"full_attention"`, `"sliding_attention"` or `"conv"`. Defaults to the
-        LFM3 pattern of a full-attention layer every fourth layer starting from the third, a sliding-attention layer
-        in between, and gated short convolutions elsewhere.
-    sliding_window (`int`, *optional*, defaults to 256):
-        Sliding-window size of the `sliding_attention` layers.
     use_sandwich_norm (`bool`, *optional*, defaults to `True`):
         Whether to apply an RMSNorm to the operator and feed-forward outputs before they enter the residual stream.
     use_attention_gate (`bool`, *optional*, defaults to `True`):
@@ -85,8 +73,8 @@ class Lfm3Config(PreTrainedConfig):
     conv_L_cache: int = 7
     layer_types: list[str] | None = None
     attribute_map = {"rms_norm_eps": "norm_eps"}
-    _attention_layer_types = ("full_attention", "sliding_attention")
-    head_dim: int | None = None
+    _rope_type_labels = ("full_attention", "sliding_attention")
+    head_dim: int = 128
     sliding_window: int | None = 256
     use_sandwich_norm: bool = True
     use_attention_gate: bool = True
@@ -94,16 +82,14 @@ class Lfm3Config(PreTrainedConfig):
     attention_dropout: float = 0.0
 
     def __post_init__(self, **kwargs):
-        if self.head_dim is None:
-            self.head_dim = self.hidden_size // self.num_attention_heads
         if self.rope_parameters is None:
             self.rope_parameters = {
+                "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0},
                 "full_attention": {
                     "rope_type": "proportional",
                     "rope_theta": 1_000_000.0,
                     "partial_rotary_factor": 0.5,
                 },
-                "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0},
             }
         if self.layer_types is None:
             self.layer_types = [
@@ -112,26 +98,6 @@ class Lfm3Config(PreTrainedConfig):
             ]
 
         super().__post_init__(**kwargs)
-
-    def validate_architecture(self):
-        """Part of ``@strict``-powered validation."""
-        if len(self.layer_types) != self.num_hidden_layers:
-            raise ValueError(
-                f"`layer_types` has {len(self.layer_types)} entries but `num_hidden_layers` is {self.num_hidden_layers}."
-            )
-        allowed_layer_types = (*self._attention_layer_types, "conv")
-        invalid_layer_types = [layer_type for layer_type in self.layer_types if layer_type not in allowed_layer_types]
-        if invalid_layer_types:
-            raise ValueError(f"`layer_types` entries must be one of {allowed_layer_types}; got {invalid_layer_types}.")
-        if "sliding_attention" in self.layer_types and self.sliding_window is None:
-            raise ValueError("`layer_types` has `sliding_attention` layers but `sliding_window` is None.")
-        missing_rope = [
-            layer_type
-            for layer_type in self._attention_layer_types
-            if layer_type in self.layer_types and layer_type not in self.rope_parameters
-        ]
-        if missing_rope:
-            raise ValueError(f"`rope_parameters` has no entry for the {missing_rope} layers in `layer_types`.")
 
 
 __all__ = ["Lfm3Config"]
