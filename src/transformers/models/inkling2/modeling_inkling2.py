@@ -471,9 +471,9 @@ class Inkling2Attention(nn.Module):
         tau = None
         if not self.is_sliding and self.config.log_scaling_n_floor is not None:
             tau = 1.0 + self.config.log_scaling_alpha * torch.log(
-                ((q_positions + 1).float() / self.config.log_scaling_n_floor).clamp(min=1.0)
+                ((kwargs["position_ids"] + 1).float() / self.config.log_scaling_n_floor).clamp(min=1.0)
             )
-            tau = tau.view(1, -1, 1, 1)
+            tau = tau[..., None, None]
 
         query_states = self.q_l2_clip(query_states.view(hidden_shape), tau).transpose(1, 2)
         key_states = self.k_l2_clip(key_states.view(hidden_shape)).transpose(1, 2)
@@ -558,7 +558,7 @@ class Inkling2Experts(nn.Module):
         return final_hidden_states.to(hidden_states.dtype)
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
-        gate, up = gate_up.chunk(2, dim=-1)
+        gate, up = gate_up[..., 0::2], gate_up[..., 1::2]
         return softcapped_swiglu(gate, up, self.gate_softcap, self.up_softcap)
 
 
@@ -1044,6 +1044,7 @@ class Inkling2PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_attention_backend = False
     _keep_in_fp32_modules_strict = [
+        "e_score_correction_bias",
         "attn_sconv",
         "mlp_sconv",
         "k_sconv",
@@ -1170,6 +1171,7 @@ class Inkling2TextModel(Inkling2PreTrainedModel):
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 conv_mask=causal_mask_mapping["linear_attention"],
                 past_key_values=past_key_values,
+                position_ids=position_ids,
                 **kwargs,
             )
             if decoder_layer.is_block_boundary:

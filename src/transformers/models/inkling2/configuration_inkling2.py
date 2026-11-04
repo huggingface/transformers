@@ -71,6 +71,7 @@ class Inkling2TextConfig(PreTrainedConfig):
     model_type = "inkling2_text"
     base_config_key = "text_config"
     base_model_tp_plan = {
+        "embed_tokens": "replicate",
         "layers.*.mlp.experts.gate_up_proj": "colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
@@ -79,16 +80,10 @@ class Inkling2TextConfig(PreTrainedConfig):
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
         "layers.*.mlp.shared_experts": "all_reduce",
     }
-    base_model_pp_plan = {
-        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
-        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
-        "norm": (["hidden_states"], ["hidden_states"]),
-    }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
     attribute_map = {
         "sliding_window": "sliding_window_size",

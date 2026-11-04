@@ -323,7 +323,7 @@ def _build_checkpoint_conversion_mapping():
                     "mlp.experts.w13_weight_outer_scale_denominator",
                 ],
                 target_patterns=["mlp.experts.gate_up_proj"],
-                operations=[DequantizeInkling2Experts(), Interleave(dim=1)],
+                operations=[DequantizeInkling2Experts()],
                 force_cpu=True,
             ),
             WeightConverter(

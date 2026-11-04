@@ -112,6 +112,7 @@ class Inkling2TextConfig(InklingTextConfig):
 
     model_type = "inkling2_text"
     base_model_tp_plan = {
+        "embed_tokens": "replicate",
         "layers.*.mlp.experts.gate_up_proj": "colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
@@ -119,6 +120,12 @@ class Inkling2TextConfig(InklingTextConfig):
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
         "layers.*.mlp.shared_experts": "all_reduce",
+    }
+    base_model_pp_plan = AttributeError()
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
     attribute_map = {
         "sliding_window": "sliding_window_size",
@@ -510,9 +517,9 @@ class Inkling2Attention(InklingAttention):
         tau = None
         if not self.is_sliding and self.config.log_scaling_n_floor is not None:
             tau = 1.0 + self.config.log_scaling_alpha * torch.log(
-                ((q_positions + 1).float() / self.config.log_scaling_n_floor).clamp(min=1.0)
+                ((kwargs["position_ids"] + 1).float() / self.config.log_scaling_n_floor).clamp(min=1.0)
             )
-            tau = tau.view(1, -1, 1, 1)
+            tau = tau[..., None, None]
 
         query_states = self.q_l2_clip(query_states.view(hidden_shape), tau).transpose(1, 2)
         key_states = self.k_l2_clip(key_states.view(hidden_shape)).transpose(1, 2)
@@ -567,7 +574,7 @@ class Inkling2Experts(InklingExperts):
         self.up_softcap = config.mlp_up_softcap
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
-        gate, up = gate_up.chunk(2, dim=-1)
+        gate, up = gate_up[..., 0::2], gate_up[..., 1::2]
         return softcapped_swiglu(gate, up, self.gate_softcap, self.up_softcap)
 
     def forward(
@@ -894,6 +901,7 @@ class Inkling2PreTrainedModel(InklingPreTrainedModel):
     _supports_sdpa = False
     _supports_flex_attn = False
     _keep_in_fp32_modules_strict = [
+        "e_score_correction_bias",
         "attn_sconv",
         "mlp_sconv",
         "k_sconv",
@@ -993,6 +1001,7 @@ class Inkling2TextModel(InklingTextModel):
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 conv_mask=causal_mask_mapping["linear_attention"],
                 past_key_values=past_key_values,
+                position_ids=position_ids,
                 **kwargs,
             )
             if decoder_layer.is_block_boundary:
