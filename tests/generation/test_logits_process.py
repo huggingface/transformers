@@ -221,8 +221,7 @@ class LogitsProcessorTest(unittest.TestCase):
         processor_with_length = RepetitionPenaltyLogitsProcessor(2.0, prompt_ignore_length=torch.tensor([3, 1, 2]))
         processor_without_length = RepetitionPenaltyLogitsProcessor(2.0)
         # Using the processor with ignore length on padded inputs should be the same as processor without on un-padded inputs
-        torch.testing.assert_close(processor_with_length(full_ids, scores), processor_without_length(ids, scores))
-        # torch.testing.assert_close(result[3:, 0], scores[3:, 0] / 2)
+        self.assertTrue((processor_with_length(full_ids, scores) == processor_without_length(ids, scores)).all())
 
     def test_repetition_penalty_dist_process_exclusion_no_new_input_ids(self):
         input_ids = torch.tensor([[0, 1], [5, 0]], device=torch_device, dtype=torch.long)
