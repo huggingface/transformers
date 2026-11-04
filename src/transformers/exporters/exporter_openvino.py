@@ -75,7 +75,11 @@ if is_openvino_available():
     from openvino._offline_transformations import apply_make_stateful_transformation
     from openvino.frontend.pytorch import ConversionExtension
     from openvino.frontend.pytorch.fx_decoder import TorchFXPythonDecoder
-    from openvino.frontend.pytorch.torchdynamo.export_decompositions import ops_to_not_decompose
+
+    try:  # OpenVINO < 2026.5 decomposes exported programs with its own table before converting them
+        from openvino.frontend.pytorch.torchdynamo.export_decompositions import ops_to_not_decompose
+    except ImportError:  # OpenVINO >= 2026.5 converts them without decomposing
+        ops_to_not_decompose = None
 
 
 if TYPE_CHECKING:
@@ -636,8 +640,11 @@ def _run_openvino_decompositions(exported_program: ExportedProgram) -> ExportedP
 
     Decomposing up front lets the FX node fixes and the bare-name renames below operate on the
     graph OV actually decodes — ``convert_model(exported_program)`` would re-run decompositions
-    internally, regenerating node names and silently discarding those fixes.
+    internally, regenerating node names and silently discarding those fixes. Since OpenVINO 2026.5
+    the frontend converts exported programs without decomposing them, and so does this.
     """
+    if ops_to_not_decompose is None:
+        return exported_program
     decomp_table = CustomDecompTable()
     for op in ops_to_not_decompose():
         decomp_table.pop(op, None)
