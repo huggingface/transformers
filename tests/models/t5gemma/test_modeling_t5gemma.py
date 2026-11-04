@@ -68,14 +68,14 @@ class T5GemmaModelTester:
         vocab_size=99,
         # decoder-specific
         seq_length=7,
-        hidden_size=32,
+        hidden_size=64,
         num_hidden_layers=2,
         num_attention_heads=4,
         num_key_value_heads=2,
         intermediate_size=37,
         # encoder-specific
         encoder_seq_length=7,
-        encoder_hidden_size=32,
+        encoder_hidden_size=64,
         encoder_num_hidden_layers=2,
         encoder_num_attention_heads=4,
         encoder_num_key_value_heads=2,
@@ -627,12 +627,6 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             return True
 
         return False
-
-    @staticmethod
-    def _prepare_config_headdim(config, requested_dim):
-        config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
-        config.decoder.cross_attention_hidden_size = config.encoder.hidden_size
-        return config
 
     def test_config(self):
         # Skip `create_and_test_config_from_and_save_pretrained_composite` because the config has twice the same subconfig

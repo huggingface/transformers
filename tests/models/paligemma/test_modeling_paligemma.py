@@ -58,7 +58,7 @@ class PaliGemmaVisionText2TextModelTester:
         seq_length=25,
         vision_feature_select_strategy="default",
         vision_feature_layer=-1,
-        projection_dim=32,
+        projection_dim=64,
         text_config={
             "model_type": "gemma",
             "seq_length": 128,
@@ -67,11 +67,11 @@ class PaliGemmaVisionText2TextModelTester:
             "use_token_type_ids": False,
             "use_labels": True,
             "vocab_size": 99,
-            "hidden_size": 32,
+            "hidden_size": 64,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
             "num_key_value_heads": 1,
-            "head_dim": 8,
+            "head_dim": 16,
             "intermediate_size": 37,
             "hidden_activation": "gelu_pytorch_tanh",
             "hidden_dropout_prob": 0.1,
@@ -92,8 +92,8 @@ class PaliGemmaVisionText2TextModelTester:
             "num_image_tokens": 4,
             "num_channels": 3,
             "is_training": True,
-            "hidden_size": 32,
-            "projection_dim": 32,
+            "hidden_size": 64,
+            "projection_dim": 64,
             "num_key_value_heads": 1,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
@@ -199,13 +199,6 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     def setUp(self):
         self.model_tester = PaliGemmaVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=PaliGemmaConfig, has_text_modality=False)
-
-    @staticmethod
-    def _prepare_config_headdim(config, requested_dim):
-        config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
-        config.projection_dim = config.text_config.hidden_size
-        config.vision_config.projection_dim = config.text_config.hidden_size
-        return config
 
     # Copied from tests.models.llava.test_modeling_llava.LlavaForConditionalGenerationModelTest.test_mismatching_num_image_tokens
     def test_mismatching_num_image_tokens(self):

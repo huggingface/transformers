@@ -57,8 +57,8 @@ class Sam2VisionModelTester:
     def __init__(
         self,
         parent,
-        hidden_size=12,
-        embed_dim_per_stage=[12, 24, 48, 96],
+        hidden_size=24,
+        embed_dim_per_stage=[24, 48, 96, 192],
         num_attention_heads_per_stage=[1, 2, 4, 8],
         num_channels=3,
         image_size=128,
@@ -67,7 +67,7 @@ class Sam2VisionModelTester:
         patch_padding=3,
         batch_size=2,
         blocks_per_stage=[1, 2, 7, 2],
-        backbone_channel_list=[96, 48, 24, 12],
+        backbone_channel_list=[192, 96, 48, 24],
         backbone_feature_sizes=[[32, 32], [16, 16], [8, 8]],
         fpn_hidden_size=32,
         is_training=True,
@@ -154,20 +154,6 @@ class Sam2VisionModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.create_and_test_config_with_num_labels()
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
-
-    @staticmethod
-    def _prepare_config_headdim(config, requested_dim):
-        original_hidden_size = config.backbone_config.hidden_size
-        config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
-
-        # Keep backbone dimensions and FPN channels consistent
-        scale = config.backbone_config.hidden_size // original_hidden_size
-        config.backbone_config.embed_dim_per_stage = [
-            dim * scale for dim in config.backbone_config.embed_dim_per_stage
-        ]
-        config.backbone_channel_list = [dim * scale for dim in config.backbone_channel_list]
-
-        return config
 
     @unittest.skip(reason="SAM's vision encoder does not use inputs_embeds")
     def test_inputs_embeds(self):

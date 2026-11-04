@@ -52,7 +52,7 @@ class ColPaliForRetrievalModelTester:
         seq_length=25,
         vision_feature_select_strategy="default",
         vision_feature_layer=-1,
-        projection_dim=32,
+        projection_dim=64,
         text_config={
             "model_type": "gemma",
             "seq_length": 128,
@@ -60,11 +60,11 @@ class ColPaliForRetrievalModelTester:
             "use_token_type_ids": False,
             "use_labels": True,
             "vocab_size": 99,
-            "hidden_size": 32,
+            "hidden_size": 64,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
             "num_key_value_heads": 1,
-            "head_dim": 8,
+            "head_dim": 16,
             "intermediate_size": 37,
             "hidden_activation": "gelu_pytorch_tanh",
             "hidden_dropout_prob": 0.1,
@@ -85,8 +85,8 @@ class ColPaliForRetrievalModelTester:
             "num_image_tokens": 4,
             "num_channels": 3,
             "is_training": True,
-            "hidden_size": 32,
-            "projection_dim": 32,
+            "hidden_size": 64,
+            "projection_dim": 64,
             "num_key_value_heads": 1,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
@@ -188,16 +188,6 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = ColPaliForRetrievalModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ColPaliConfig, has_text_modality=False)
-
-    @staticmethod
-    def _prepare_config_headdim(config, requested_dim):
-        config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
-
-        vlm_config = config.vlm_config
-        vlm_config.projection_dim = vlm_config.text_config.hidden_size
-        vlm_config.vision_config.projection_dim = vlm_config.projection_dim
-
-        return config
 
     @slow
     @require_vision
