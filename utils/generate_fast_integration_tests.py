@@ -123,7 +123,7 @@ def main():
         params_repr += f"    {item!r},\n"
     params_repr += "]"
 
-    output_path.write_text(TEMPLATE.format(params=params_repr))
+    output_path.write_text(TEMPLATE.replace("{params}", params_repr), encoding="utf-8")
     print(f"Written: {output_path}")
 
 
