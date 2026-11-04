@@ -148,7 +148,6 @@ class CacheAllocator(ABC):
     indexes_by_sequence: bool = False
     # These attributes are only known once the cache tensor is registered
     blocks_per_sector: int
-    num_pages: int
     num_blocks: int
     _copy_view: torch.Tensor  # cache tensor viewed as [num_blocks, bytes_per_block] for copying
 
@@ -159,7 +158,7 @@ class CacheAllocator(ABC):
         index: int,
         layer_indices: list[int],
         tokens_per_page: int,
-        bytes_per_page: int,
+        bytes_per_block: int,
         allow_block_sharing: bool,
     ) -> None:
         """Initializes the cache allocator before the cache tensor is registered. Since cache allocators can differ
@@ -170,9 +169,7 @@ class CacheAllocator(ABC):
         self.pages_per_block = len(layer_indices)
         # Cache dimensions attributes
         self.tokens_per_page = tokens_per_page
-        self.tokens_per_block = tokens_per_page * self.pages_per_block
-        self.bytes_per_page = bytes_per_page
-        self.bytes_per_block = bytes_per_page * self.pages_per_block
+        self.bytes_per_block = bytes_per_block
         # Bookkeeping attributes
         self.block_table: dict[str, list[int]] = {}
         # Ledger of the logical block states: reference counts, content hashes and cached blocks
@@ -191,10 +188,8 @@ class CacheAllocator(ABC):
         """Initializes the cache allocator after the cache tensor is registered. It consitutes the second part of the
         initialization. Afterwards, the cache allocator is ready to be used."""
         # Cache dimensions attributes
-        self.num_pages = exact_div(non_trash_bytes, self.bytes_per_page)
-        self.num_blocks = exact_div(self.num_pages, self.pages_per_block)
+        self.num_blocks = exact_div(non_trash_bytes, self.bytes_per_block)
         self.blocks_per_sector = exact_div(bytes_per_sector, self.bytes_per_block)
-        # Cache is a static tensor with shape [num_pages * tokens_per_page, ...]
         self.cache_tensor = cache_tensor
         torch._dynamo.mark_static_address(self.cache_tensor)
         # Cache pool to keep track of the free blocks
@@ -356,14 +351,14 @@ class CacheAllocator(ABC):
     @abstractmethod
     def update(
         self,
-        rows: tuple[torch.Tensor, ...],
+        rows: dict[str, torch.Tensor],
         layer_idx: int,
         read_index: torch.Tensor,
         write_index: torch.Tensor,
-    ) -> tuple[torch.Tensor, ...]:
-        """Writes the new rows (for an attention layer, its key and value states) in the cache for the given layer and
-        retrieves the rows needed for the computation, as indicated by the read and write indices."""
+    ) -> dict[str, torch.Tensor]:
+        """Writes the new rows, by name (for an attention layer, its key and value states), in the cache for the given
+        layer and retrieves the rows needed for the computation, as indicated by the read and write indices."""
 
     @abstractmethod
-    def get_cache_for_block_table(self, layer_idx: int) -> tuple[torch.Tensor, ...]:
-        """Returns the cache views of the layer's rows for a block table update."""
+    def get_cache_for_block_table(self, layer_idx: int) -> dict[str, torch.Tensor]:
+        """Returns the cache views of the layer's rows, by name, for a block table update."""

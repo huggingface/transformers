@@ -14,7 +14,7 @@
 
 import torch
 
-from .full_attention import FullAttentionCacheAllocator, RowSpec
+from .full_attention import FullAttentionCacheAllocator
 
 
 class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
@@ -31,7 +31,7 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
     def __init__(
         self,
         index: int,
-        rows: list[RowSpec],
+        rows: dict[str, tuple[tuple[int, ...], torch.dtype]],
         page_size: int,
         layer_indices: list[int],
         allow_block_sharing: bool,
@@ -40,8 +40,7 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
         """Initializes the cache allocator for a group of sliding attention layers.
 
         Args:
-            - rows: the shape and dtype of each row a layer caches per token, in the order the layer reads and writes
-              them
+            - rows: the shape and dtype of each row a layer caches per token, by name
             - page_size: the number of tokens per page
             - layer_indices: the indices of the layers which cache is handled by this allocator
             - allow_block_sharing: whether to allow block sharing or not. Can be disabled for diagnostics or perfs.
@@ -131,11 +130,11 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
 
     def update(
         self,
-        rows: tuple[torch.Tensor, ...],  # shapes [seqlen_q, *shape]
+        rows: dict[str, torch.Tensor],  # shapes [seqlen_q, *shape]
         layer_idx: int,
         read_index: torch.Tensor,  # shape [seqlen_q + past_length]
         write_index: torch.Tensor,  # shape [seqlen_q]
-    ) -> tuple[torch.Tensor, ...]:  # shapes [seqlen_q + past_length, *shape]
+    ) -> dict[str, torch.Tensor]:  # shapes [seqlen_q + past_length, *shape]
         """Update the cache with the new rows for a specific layer, and retrieves the rows needed for the computation.
         For sliding attention layers, old rows are read from cache along with extra spaces for the new rows, then the
         new rows are written to cache. This is because new rows might overwrite the old ones, so we need to read the
@@ -151,26 +150,23 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
 
         # Case: write-only, no cache read. The input rows already contain everything the computation needs.
         if read_index.numel() == 0:
-            for view, row in zip(views, rows):
-                view[write_block, write_slot] = row
+            for name, row in rows.items():
+                views[name][write_block, write_slot] = row
             return rows
 
-        # Sentinel positions in read_index mark new-token slots: the read returns garbage there, which
-        # masked_scatter_ overwrites with the actual new rows. The sentinel lives in slot 1 of block 0.
+        # Sentinel positions in read_index mark new-token slots: the read returns garbage there, which masked_scatter_
+        # overwrites with the actual new rows. Then the new rows are written (padding slots go to the write trash).
         read_block, read_slot = read_index // self.tokens_per_page, read_index % self.tokens_per_page
         is_sentinel = read_index == self.sentinel_index
-        rows_with_cache = []
-        for view, row in zip(views, rows):
-            row_with_cache = view[read_block, read_slot]
-            mask = is_sentinel.view(-1, *([1] * (row.dim() - 1)))
-            row_with_cache.masked_scatter_(mask, row)
-            rows_with_cache.append(row_with_cache)
-        # Write new rows to the cache (padding slots in write_index point to the trash position)
-        for view, row in zip(views, rows):
-            view[write_block, write_slot] = row
+        rows_with_cache = {}
+        for name, row in rows.items():
+            row_with_cache = views[name][read_block, read_slot]
+            row_with_cache.masked_scatter_(is_sentinel.view(-1, *([1] * (row.dim() - 1))), row)
+            rows_with_cache[name] = row_with_cache
+        for name, row in rows.items():
+            views[name][write_block, write_slot] = row
+        return rows_with_cache
 
-        return tuple(rows_with_cache)
-
-    def get_cache_for_block_table(self, layer_idx: int) -> tuple[torch.Tensor, ...]:
+    def get_cache_for_block_table(self, layer_idx: int) -> dict[str, torch.Tensor]:
         """Returns the cache views for a block table update."""
         raise NotImplementedError("Not implemented for sliding attention cache allocator")

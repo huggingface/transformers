@@ -28,9 +28,9 @@ from .cache_allocators import (
     CacheAllocator,
     CachePool,
     FullAttentionCacheAllocator,
-    LinearAttentionCacheAllocator,
     RowSpec,
     SlidingAttentionCacheAllocator,
+    StateCacheAllocator,
     StateSpec,
 )
 from .distributed import DistributedHelper
@@ -42,7 +42,7 @@ from .utils import find_head_dim, find_num_key_value_heads, get_device_and_memor
 ATTN_TYPE_TO_ALLOCATOR = {
     FULL_ATTENTION: FullAttentionCacheAllocator,
     SLIDING_ATTENTION: SlidingAttentionCacheAllocator,
-    LINEAR_ATTENTION: LinearAttentionCacheAllocator,
+    LINEAR_ATTENTION: StateCacheAllocator,
 }
 
 
@@ -128,8 +128,8 @@ class PagedAttentionCache:
         distributed_helper: DistributedHelper,
         dtype: torch.dtype = torch.float16,
         model_supports_logits_to_keep: bool = False,
-        cache_rows: dict[int, list[RowSpec]] | None = None,
-        cache_states: dict[int, list[StateSpec]] | None = None,
+        cache_rows: dict[int, dict[str, RowSpec]] | None = None,
+        cache_states: dict[int, dict[str, tuple]] | None = None,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage. Also turns in prefix sharing if the model has
         only full attention layers.
@@ -142,11 +142,11 @@ class PagedAttentionCache:
             dtype: Data type of the activation and the cache (for now, these are the same)
             model_supports_logits_to_keep: When True, memory sizing charges the LM head peak per request instead of
                 per batch token, since the model slices hidden states before the LM head
-            cache_rows: The shape and dtype of the rows each layer caches per token, by layer index, as the layers
-                declare them through `cache_rows`. An attention layer that declares none caches its keys and values,
-                `num_key_value_heads` by `head_dim` each, in the cache dtype.
-            cache_states: The shape and dtype of the per-request states of each linear attention layer,
-                by layer index, as the layers declare them through `cache_states`
+            cache_rows: The rows each layer caches per token, by layer index then by name, as `(shape, dtype)`, as the
+                layers declare them through `cache_rows`. An attention layer that declares none caches its `"key"` and
+                `"value"`, `num_key_value_heads` by `head_dim` each. A dtype of None stands for the cache dtype.
+            cache_states: The states each layer keeps per request, by layer index then by name, as `(shape, dtype)` or
+                `(shape, dtype, fill)` (see [`StateSpec`]), as the layers declare them through `cache_states`.
         """
         self.config = config
         self.dtype = dtype
@@ -164,30 +164,52 @@ class PagedAttentionCache:
                 )
             num_key_value_heads //= distributed_helper.tp_size
 
-        # Construct the necessary cache allocator for each attention type. The layers caching rows per token share
-        # the same kwargs, with the rows they declare or, for an attention layer, its keys and values
-        default_rows = [((num_key_value_heads, find_head_dim(config)), self.dtype)] * 2
-        ca_kwargs = {
-            "page_size": continuous_batching_config.page_size,
-            "allow_block_sharing": continuous_batching_config.allow_block_sharing,
+        # Construct the necessary cache allocator for each attention type caching rows per token, with the rows its
+        # layers declare or, for attention layers that declare none, their keys and values
+        default_rows = {"key": ((num_key_value_heads, find_head_dim(config)), self.dtype)} | {
+            "value": ((num_key_value_heads, find_head_dim(config)), self.dtype)
+        }
+        cache_rows = {
+            layer_idx: {name: (shape, self.dtype if dtype is None else dtype) for name, (shape, dtype) in rows.items()}
+            for layer_idx, rows in (cache_rows or {}).items()
         }
         self.cache_allocators: dict[str, CacheAllocator] = {}
         self.layer_to_allocator: dict[int, CacheAllocator] = {}
-        # The linear attention allocator comes last: its blocks are sized to a multiple of the other allocators'
-        # blocks, which keeps the sectors (the LCM of all block sizes) small
-        layer_groups = group_layers_by_attn_type(config)
-        linear_layers = layer_groups.pop(LINEAR_ATTENTION, None)
-        for attn_type, layer_indices in layer_groups.items():
-            rows = self._get_declared(layer_indices, cache_rows or {}, "rows", default_rows)
-            type_kwargs = ca_kwargs | {"rows": rows}
+        self.layer_groups = group_layers_by_attn_type(config)
+        for attn_type, layer_indices in self.layer_groups.items():
+            if attn_type == LINEAR_ATTENTION:
+                continue
+            ca_kwargs = {
+                "layer_indices": layer_indices,
+                "rows": self._get_declared_rows(layer_indices, cache_rows, default_rows),
+                "page_size": continuous_batching_config.page_size,
+                "allow_block_sharing": continuous_batching_config.allow_block_sharing,
+            }
             if attn_type == SLIDING_ATTENTION:
-                type_kwargs["sliding_window"] = getattr(config, "sliding_window", None)
-            self._add_cache_allocator(attn_type, layer_indices, type_kwargs)
-        if linear_layers is not None:
-            states = self._get_declared(linear_layers, cache_states or {}, "states")
+                ca_kwargs["sliding_window"] = getattr(config, "sliding_window", None)
+            self._add_cache_allocator(attn_type, ca_kwargs)
+            self.layer_to_allocator |= dict.fromkeys(layer_indices, self.cache_allocators[attn_type])
+
+        # The states the layers keep per request go to one allocator, which comes last: its blocks are sized to a
+        # multiple of the other allocators' blocks, which keeps the sectors (the LCM of all block sizes) small
+        states: dict[int, dict[str, tuple[tuple[int, ...], torch.dtype, int | float]]] = {}
+        for layer_idx, layer_states in sorted((cache_states or {}).items()):
+            states[layer_idx] = {}
+            for name, spec in layer_states.items():
+                shape, dtype, fill = StateSpec(*spec)
+                states[layer_idx][name] = (shape, self.dtype if dtype is None else dtype, fill)
+        for layer_idx in self.layer_groups.get(LINEAR_ATTENTION, []):
+            if layer_idx not in states:
+                raise ValueError(
+                    f"Layer {layer_idx} is a linear attention layer that declares no cache states: continuous batching "
+                    "supports the layers that declare what they keep per request through `cache_states`, like the "
+                    "gated delta net of Qwen3-Next."
+                )
+        self.state_allocator: StateCacheAllocator | None = None
+        if states:
             block_alignment = lcm(*(ca.bytes_per_block for ca in self.cache_allocators.values()), 128)
-            linear_kwargs = {"states": states, "block_alignment": block_alignment}
-            self._add_cache_allocator(LINEAR_ATTENTION, linear_layers, linear_kwargs)
+            self._add_cache_allocator(LINEAR_ATTENTION, {"states": states, "block_alignment": block_alignment})
+            self.state_allocator = self.cache_allocators[LINEAR_ATTENTION]  # type: ignore
 
         # To have the maximal granularity while ensuring alignment for all cache allocators, we compute the LCM of all
         # cache allocator block sizes AND a default alignment of 128 bytes
@@ -249,32 +271,20 @@ class PagedAttentionCache:
         self.max_tokens_read = max(ca.tokens_per_page * ca.num_blocks for ca in self.cache_allocators.values())
 
     @staticmethod
-    def _get_declared(
-        layer_indices: list[int], declarations: dict[int, list], kind: str, default: list | None = None
-    ) -> list:
-        """The rows or states the layers of a group declare, which have to be the same for all of them since the
-        allocator gives every layer the same page. Layers that declare nothing get the default, when there is one."""
-        declared = []
-        for layer_idx in layer_indices:
-            if layer_idx in declarations:
-                declared.append(declarations[layer_idx])
-            elif default is not None:
-                declared.append(default)
-            else:
-                raise ValueError(
-                    f"Layer {layer_idx} declares no cache {kind}: continuous batching supports the layers that "
-                    f"declare what they cache through `cache_{kind}`, like the gated delta net of Qwen3-Next."
-                )
-        if any(layer_declared != declared[0] for layer_declared in declared):
-            raise ValueError(f"The layers of a group declare different cache {kind}: {declared}")
+    def _get_declared_rows(
+        layer_indices: list[int], cache_rows: dict[int, dict[str, tuple]], default_rows: dict[str, tuple]
+    ) -> dict[str, tuple]:
+        """The rows the layers of a group cache per token, which have to be the same for all of them since the
+        allocator gives every layer the same page. Layers that declare none cache their keys and values."""
+        declared = [cache_rows.get(layer_idx, default_rows) for layer_idx in layer_indices]
+        if any(rows != declared[0] for rows in declared):
+            raise ValueError(f"The layers of a group declare different cache rows: {declared}")
         return declared[0]
 
-    def _add_cache_allocator(self, attn_type: str, layer_indices: list[int], ca_kwargs: dict[str, Any]) -> None:
-        """Creates the allocator of an attention type and registers it by name and layer indices."""
+    def _add_cache_allocator(self, attn_type: str, ca_kwargs: dict[str, Any]) -> None:
+        """Creates the allocator of an attention type and registers it by name."""
         index = len(self.cache_allocators)
-        allocator = ATTN_TYPE_TO_ALLOCATOR[attn_type](index=index, layer_indices=layer_indices, **ca_kwargs)
-        self.cache_allocators[attn_type] = allocator
-        self.layer_to_allocator = self.layer_to_allocator | dict.fromkeys(layer_indices, allocator)
+        self.cache_allocators[attn_type] = ATTN_TYPE_TO_ALLOCATOR[attn_type](index=index, **ca_kwargs)
 
     def _infer_read_cache_limit(self) -> int | None:
         """The maximum number of tokens that can be read from the cache for a single request."""
@@ -461,10 +471,10 @@ class PagedAttentionCache:
         # Block table "update": no real update, just prepare the kwargs for the flash call, which will update the cache
         block_table = kwargs.get("block_table")
         if block_table is not None:
-            k_cache, v_cache = allocator.get_cache_for_block_table(layer_idx)
+            page_views = allocator.get_cache_for_block_table(layer_idx)
             kwargs["block_table"] = block_table[allocator.index]
-            kwargs["k_cache"] = k_cache
-            kwargs["v_cache"] = v_cache
+            kwargs["k_cache"] = page_views["key"]
+            kwargs["v_cache"] = page_views["value"]
 
         # Index-based update: actually update the cache and return full KV
         else:
@@ -472,32 +482,40 @@ class PagedAttentionCache:
             write_index = kwargs["write_index"][allocator.index]
             # Allocator update is done with the KV cache shape: [seqlen_q, num_kv_heads, head_dim]. We also return the
             # KV states in the same shape they were passed. It will help when we unify with regular Cache.
-            rows = tuple(x.squeeze(0).transpose(0, 1) for x in (key_states, value_states))
-            key_states, value_states = allocator.update(rows, layer_idx, read_index, write_index)
-            key_states, value_states = (x.transpose(0, 1).unsqueeze(0) for x in (key_states, value_states))
+            rows = {"key": key_states.squeeze(0).transpose(0, 1), "value": value_states.squeeze(0).transpose(0, 1)}
+            rows = allocator.update(rows, layer_idx, read_index, write_index)
+            key_states, value_states = (rows[name].transpose(0, 1).unsqueeze(0) for name in ("key", "value"))
 
         return key_states, value_states
 
     @torch.compiler.disable  # does not play well with the views of the cache tensor
-    def read_cache_states(self, layer_idx: int, kwargs: dict[str, Any]) -> tuple[torch.Tensor, ...]:
-        """Reads the states of the batch's sequences for a linear attention layer, in batch order and in the order the
-        layer declares them, each of shape [num_sequences, *shape]. A sequence with no past reads zeros, from the
-        read trash block."""
-        allocator: LinearAttentionCacheAllocator = self.layer_to_allocator[layer_idx]  # type: ignore
-        index = self._linear_attention_state_index(allocator, kwargs, write=False)
-        return tuple(view[index] for view in allocator.state_views(layer_idx))
+    def read_cache_states(
+        self, layer_idx: int, names: tuple[str, ...], kwargs: dict[str, Any]
+    ) -> tuple[torch.Tensor, ...]:
+        """Reads the given states of a layer for the batch's sequences, in batch order, each of shape
+        [num_sequences, *shape]. A sequence with no past reads the state's fill value."""
+        allocator: StateCacheAllocator = self.state_allocator  # type: ignore
+        index = self._state_index(allocator, kwargs, write=False)
+        has_past = index != allocator.read_trash_index
+        states = []
+        for name in names:
+            state = allocator.state_views(layer_idx)[name][index]
+            fill = allocator.states[layer_idx][name][2]
+            states.append(torch.where(has_past.view(-1, *([1] * (state.dim() - 1))), state, fill))
+        return tuple(states)
 
     @torch.compiler.disable  # does not play well with the views of the cache tensor
-    def write_cache_states(self, layer_idx: int, states: tuple[torch.Tensor, ...], kwargs: dict[str, Any]) -> None:
-        """Writes the states of the batch's sequences for a linear attention layer, given in batch order and in the
-        order the layer declares them. Padding sequences write to the write trash block."""
-        allocator: LinearAttentionCacheAllocator = self.layer_to_allocator[layer_idx]  # type: ignore
-        index = self._linear_attention_state_index(allocator, kwargs, write=True)
-        for view, state in zip(allocator.state_views(layer_idx), states):
-            view.index_copy_(0, index, state.to(view.dtype))
+    def write_cache_states(self, layer_idx: int, states: dict[str, torch.Tensor], kwargs: dict[str, Any]) -> None:
+        """Writes the given states of a layer, by name, for the batch's sequences, given in batch order. Padding
+        sequences write to the write trash block."""
+        allocator: StateCacheAllocator = self.state_allocator  # type: ignore
+        index = self._state_index(allocator, kwargs, write=True)
+        views = allocator.state_views(layer_idx)
+        for name, state in states.items():
+            views[name].index_copy_(0, index, state.to(views[name].dtype))
 
     @staticmethod
-    def _linear_attention_state_index(allocator: CacheAllocator, kwargs: dict[str, Any], write: bool) -> torch.Tensor:
+    def _state_index(allocator: CacheAllocator, kwargs: dict[str, Any], write: bool) -> torch.Tensor:
         """The block holding each sequence's states. On the decode fast path it comes from the block table, whose
         padding rows hold -1 and are sent to the trash blocks; otherwise it is the allocator's read or write index."""
         block_table = kwargs.get("block_table")
