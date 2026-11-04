@@ -45,15 +45,15 @@ logger = logging.get_logger(__name__)
 @dataclass
 class DPRContextEncoderOutput(ModelOutput):
     r"""
-    pooler_output (`torch.FloatTensor` of shape `(batch_size, embeddings_size)`):
+    pooler_output (`torch.Tensor` of shape `(batch_size, embeddings_size)`):
         The DPR encoder outputs the *pooler_output* that corresponds to the context representation. Last layer
         hidden-state of the first token of the sequence (classification token) further processed by a Linear layer.
         This output is to be used to embed contexts for nearest neighbors queries with questions embeddings.
     """
 
-    pooler_output: torch.FloatTensor
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    pooler_output: torch.Tensor
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring(
@@ -64,15 +64,15 @@ class DPRContextEncoderOutput(ModelOutput):
 @dataclass
 class DPRQuestionEncoderOutput(ModelOutput):
     r"""
-    pooler_output (`torch.FloatTensor` of shape `(batch_size, embeddings_size)`):
+    pooler_output (`torch.Tensor` of shape `(batch_size, embeddings_size)`):
         The DPR encoder outputs the *pooler_output* that corresponds to the question representation. Last layer
         hidden-state of the first token of the sequence (classification token) further processed by a Linear layer.
         This output is to be used to embed questions for nearest neighbors queries with context embeddings.
     """
 
-    pooler_output: torch.FloatTensor
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    pooler_output: torch.Tensor
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring(
@@ -83,20 +83,20 @@ class DPRQuestionEncoderOutput(ModelOutput):
 @dataclass
 class DPRReaderOutput(ModelOutput):
     r"""
-    start_logits (`torch.FloatTensor` of shape `(n_passages, sequence_length)`):
+    start_logits (`torch.Tensor` of shape `(n_passages, sequence_length)`):
         Logits of the start index of the span for each passage.
-    end_logits (`torch.FloatTensor` of shape `(n_passages, sequence_length)`):
+    end_logits (`torch.Tensor` of shape `(n_passages, sequence_length)`):
         Logits of the end index of the span for each passage.
-    relevance_logits (`torch.FloatTensor` of shape `(n_passages, )`):
+    relevance_logits (`torch.Tensor` of shape `(n_passages, )`):
         Outputs of the QA classifier of the DPRReader that corresponds to the scores of each passage to answer the
         question, compared to all the other passages.
     """
 
-    start_logits: torch.FloatTensor
-    end_logits: torch.FloatTensor | None = None
-    relevance_logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    start_logits: torch.Tensor
+    end_logits: torch.Tensor | None = None
+    relevance_logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring
@@ -508,7 +508,7 @@ class DPRReader(DPRPretrainedReader):
             Indices can be obtained using [`DPRReaderTokenizer`]. See this class documentation for more details.
 
             [What are input IDs?](../glossary#input-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(n_passages, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(n_passages, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.

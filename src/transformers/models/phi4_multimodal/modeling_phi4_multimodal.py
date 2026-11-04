@@ -151,7 +151,7 @@ class Phi4MultimodalVisionEncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
@@ -315,7 +315,7 @@ class Phi4MultimodalVisionEmbeddings(nn.Module):
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return patch_pos_embed
 
-    def forward(self, pixel_values: torch.FloatTensor, patch_attention_mask: torch.BoolTensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, patch_attention_mask: torch.BoolTensor) -> torch.Tensor:
         batch_size, _, max_im_h, max_im_w = pixel_values.shape
 
         patch_embeds = self.patch_embedding(pixel_values)
@@ -476,7 +476,7 @@ class Phi4MultimodalImageEmbedding(nn.Module):
         self.global_img_feature_extensor = nn.Parameter(torch.zeros([1, 1, self.image_dim_out]))
         self.sub_img_feature_extensor = nn.Parameter(torch.zeros([1, 1, 1, self.image_dim_out]))
 
-    def get_img_features(self, img_embeds: torch.FloatTensor, attention_mask=None) -> torch.FloatTensor:
+    def get_img_features(self, img_embeds: torch.Tensor, attention_mask=None) -> torch.Tensor:
         img_processor_output = self.img_processor(
             img_embeds, patch_attention_mask=attention_mask, output_hidden_states=True
         )
@@ -500,10 +500,10 @@ class Phi4MultimodalImageEmbedding(nn.Module):
         self,
         input_ids: torch.LongTensor,
         inputs_embeds: torch.Tensor,
-        image_pixel_values: torch.FloatTensor,
+        image_pixel_values: torch.Tensor,
         image_sizes: torch.Tensor | None = None,
         image_attention_mask: torch.Tensor | None = None,
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         image_pixel_values = image_pixel_values.to(self.img_processor.embeddings.patch_embedding.weight.dtype)
 
         target_device = self.img_projection_up.bias.device
@@ -1063,11 +1063,11 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
         self,
         input_ids: torch.LongTensor,
         inputs_embeds: torch.Tensor,
-        audio_input_features: torch.FloatTensor,
+        audio_input_features: torch.Tensor,
         audio_embed_sizes=None,
         audio_attention_mask=None,
         audio_projection_mode="speech",
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         with torch.no_grad():
             positions_tuple = torch.nonzero(input_ids == self.config.audio_config.audio_token_id, as_tuple=True)
 
@@ -1132,7 +1132,7 @@ class Phi4MultimodalMLP(nn.Module):
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
         self.activation_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         up_states = self.gate_up_proj(hidden_states)
 
         gate, up_states = up_states.chunk(2, dim=-1)
@@ -1339,13 +1339,13 @@ class Phi4MultimodalFeatureEmbedding(nn.Module):
         self,
         input_ids: torch.LongTensor,
         inputs_embeds: torch.Tensor,
-        image_pixel_values: torch.FloatTensor | None = None,
-        audio_input_features: torch.FloatTensor | None = None,
+        image_pixel_values: torch.Tensor | None = None,
+        audio_input_features: torch.Tensor | None = None,
         image_sizes=None,
         image_attention_mask=None,
         audio_embed_sizes=None,
         audio_attention_mask=None,
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         with torch.no_grad():
             image_position_mask = (input_ids == self.config.vision_config.image_token_id).unsqueeze(-1)
             non_image_position_mask = ~image_position_mask
@@ -1492,25 +1492,25 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        image_pixel_values: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        image_pixel_values: torch.Tensor | None = None,
         image_sizes: torch.LongTensor | None = None,
         image_attention_mask=None,
-        audio_input_features: torch.FloatTensor | None = None,
+        audio_input_features: torch.Tensor | None = None,
         audio_embed_sizes=None,
         audio_attention_mask=None,
         use_cache: bool | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPast:
         r"""
-        image_pixel_values (`torch.FloatTensor`, *optional*):
+        image_pixel_values (`torch.Tensor`, *optional*):
             If the input contains images, these correspond to the pixel values after transformations (as returned by
             the Processor)
         image_sizes (`torch.LongTensor`, *optional*):
             If the input contains images, these correspond to size of each image.
         image_attention_mask (`torch.LongTensor`, *optional*):
             Attention mask for the images.
-        audio_input_features (`torch.FloatTensor`, *optional*):
+        audio_input_features (`torch.Tensor`, *optional*):
             If the input contains audio samples, these correspond to the values after transformation (as returned by
             the Processor).
         audio_embed_sizes (`torch.Tensor`, *optional*):
@@ -1595,11 +1595,11 @@ class Phi4MultimodalForCausalLM(Phi4MultimodalPreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        image_pixel_values: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        image_pixel_values: torch.Tensor | None = None,
         image_sizes: torch.LongTensor | None = None,
         image_attention_mask=None,
-        audio_input_features: torch.FloatTensor | None = None,
+        audio_input_features: torch.Tensor | None = None,
         audio_embed_sizes=None,
         audio_attention_mask=None,
         labels: torch.LongTensor | None = None,
@@ -1608,14 +1608,14 @@ class Phi4MultimodalForCausalLM(Phi4MultimodalPreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> CausalLMOutputWithPast:
         r"""
-        image_pixel_values (`torch.FloatTensor`, *optional*):
+        image_pixel_values (`torch.Tensor`, *optional*):
             If the input contains images, these correspond to the pixel values after transformations (as returned by
             the Processor)
         image_sizes (`torch.LongTensor`, *optional*):
             If the input contains images, these correspond to size of each image.
         image_attention_mask (`torch.LongTensor`, *optional*):
             Attention mask for the images.
-        audio_input_features (`torch.FloatTensor`, *optional*):
+        audio_input_features (`torch.Tensor`, *optional*):
             If the input contains audio samples, these correspond to the values after transformation (as returned by
             the Processor).
         audio_embed_sizes (`torch.Tensor`, *optional*):

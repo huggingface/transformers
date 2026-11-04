@@ -639,7 +639,7 @@ class MossTranscribeDiarizeAudioModel(Qwen2AudioEncoder):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
+        input_features (`torch.Tensor` of shape `(batch_size, feature_size, sequence_length)`):
             Log-mel features extracted from the raw speech waveform, one row per 30s Whisper window. See
             [`~MossTranscribeDiarizeFeatureExtractor.__call__`].
         attention_mask (`torch.Tensor`, *optional*):
@@ -736,10 +736,10 @@ class MossTranscribeDiarizeModel(AudioFlamingo3Model):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
+        input_features: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         padding_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MossTranscribeDiarizeModelOutputWithPast:
@@ -749,7 +749,7 @@ class MossTranscribeDiarizeModel(AudioFlamingo3Model):
             `input_features`. Used to compute each chunk's valid encoder-output length.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Forwarded as-is to the language model.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Precomputed embeddings, in place of passing `input_ids`. When `input_features` is also given,
             `input_ids` is still required so the audio placeholder positions in `inputs_embeds` can be located
             and filled with the audio embeddings.
@@ -803,11 +803,11 @@ class MossTranscribeDiarizeForConditionalGeneration(AudioFlamingo3ForConditional
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
+        input_features: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         padding_mask: torch.Tensor | None = None,
@@ -819,7 +819,7 @@ class MossTranscribeDiarizeForConditionalGeneration(AudioFlamingo3ForConditional
             `input_features`. Used to compute each chunk's valid encoder-output length.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Forwarded as-is to the language model.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Precomputed embeddings, in place of passing `input_ids`. When `input_features` is also given,
             `input_ids` is still required so the audio placeholder positions in `inputs_embeds` can be located
             and filled with the audio embeddings.
