@@ -14,7 +14,7 @@
 
 from typing import TYPE_CHECKING
 
-from ..utils import is_hqq_available, is_torch_available, logging
+from ..utils import is_hqq_available, logging
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
 
@@ -23,9 +23,6 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
     from ..utils.quantization_config import HqqConfig
 
-
-if is_torch_available():
-    import torch
 
 logger = logging.get_logger(__name__)
 
@@ -79,13 +76,11 @@ class HqqHfQuantizer(HfQuantizer):
                 )
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
+        from ..integrations.hqq import HqqLinear
+
         module, tensor_name = get_module_from_name(model, param_name)
-        # `prepare_for_hqq_linear` tags the linears to quantize with their `quant_config`
-        return (
-            isinstance(module, torch.nn.Linear)
-            and tensor_name == "weight"
-            and getattr(module, "quant_config", None) is not None
-        )
+        # `prepare_for_hqq_linear` swaps the linears to quantize for empty `HqqLinear`s
+        return isinstance(module, HqqLinear) and tensor_name == "weight"
 
     def _process_model_before_weight_loading(
         self,
