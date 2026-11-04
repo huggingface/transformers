@@ -19,6 +19,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
+from ...integrations.latent_attention_paged import paged_latent_attention
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GenericForSequenceClassification, GenericForTokenClassification
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -135,7 +136,7 @@ class Mistral4Attention(DeepseekV3Attention):
 
         # Cache read / write is performed while the latent KV is still compressed
         paged_cache = kwargs.get("cache")
-        if paged_cache is not None:  # continuous batching
+        if paged_cache is not None and kwargs.get("block_table") is None:  # continuous batching
             latent = torch.cat((k_pass, k_rot), dim=-1)[0, 0]
             latent = paged_cache.update_rows(self.layer_idx, {"latent": latent}, kwargs)["latent"]
             k_pass, k_rot = latent[None, None].split([self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
@@ -150,22 +151,23 @@ class Mistral4Attention(DeepseekV3Attention):
             self.config.rope_parameters.get("original_max_position_embeddings"),
         ).to(query_states.dtype)
 
-        key_states, value_states = self.expand_kv(k_pass, k_rot)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
+        if kwargs.get("block_table") is not None:  # decode fast path of continuous batching
+            attn_output, attn_weights = paged_latent_attention(self, query_states, k_pass, k_rot, **kwargs)
+        else:
+            key_states, value_states = self.expand_kv(k_pass, k_rot)
+            attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+                self.config._attn_implementation, eager_attention_forward
+            )
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                scaling=self.scaling,
+                **kwargs,
+            )
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)

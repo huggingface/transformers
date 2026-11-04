@@ -510,6 +510,31 @@ class PagedAttentionCache:
         return allocator.update(rows, layer_idx, read_index, write_index)
 
     @torch.compiler.disable  # does not play well with the views of the cache tensor
+    def update_paged_rows(
+        self,
+        layer_idx: int,
+        rows: dict[str, torch.Tensor],  # shapes [num_sequences, *shape], one new token per sequence
+        kwargs: dict[str, Any],
+    ) -> tuple[dict[str, torch.Tensor], torch.Tensor, torch.Tensor]:
+        """On the decode fast path, for a layer whose kernel reads its rows where they sit in the cache pages: writes
+        the rows of each sequence's new token at its slot, and returns the layer's pages by name, each of shape
+        [num_pages, tokens_per_page, *shape], the block table indexing them and the key length of each sequence."""
+        allocator = self.layer_to_allocator[layer_idx]
+        block_table = kwargs["block_table"][allocator.index]
+        seqlens_k = kwargs["cu_seq_lens_k"][allocator.layer_type].diff().to(torch.int32)
+        # The new token is the last of its sequence. Padding sequences have a key length of 0 and a block table row of
+        # -1, so they write to the trash
+        position = seqlens_k.to(torch.int64) - 1
+        entry = block_table.gather(1, (position // allocator.tokens_per_page).clamp(min=0)[:, None])[:, 0].to(
+            torch.int64
+        )
+        block = entry // (len(allocator.rows) * allocator.pages_per_block)
+        write_index = block * allocator.tokens_per_page + position % allocator.tokens_per_page
+        write_index = torch.where(entry < 0, allocator.write_trash_index, write_index)
+        allocator.update(rows, layer_idx, write_index[:0], write_index)
+        return allocator.get_cache_for_block_table(layer_idx), block_table, seqlens_k
+
+    @torch.compiler.disable  # does not play well with the views of the cache tensor
     def read_cache_states(
         self, layer_idx: int, names: tuple[str, ...], kwargs: dict[str, Any]
     ) -> tuple[torch.Tensor, ...]:

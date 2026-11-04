@@ -36,6 +36,8 @@ from transformers import (
     AutoTokenizer,
     CompileConfig,
     ContinuousBatchingConfig,
+    DeepseekV3Config,
+    DeepseekV3ForCausalLM,
     GenerationConfig,
     GenerationMixin,
     StaticCache,
@@ -82,6 +84,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_flash_attn_3,
     require_flash_linear_attention,
+    require_kernels,
     require_torch_accelerator,
     require_torch_multi_accelerator,
     slow,
@@ -1673,7 +1676,8 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             for name, parameter in model.named_parameters():
                 if "ple.conv1d" in name:
                     parameter.normal_(mean=0.0, std=0.5)
-        self._assert_logprobs_match_a_full_forward(tokenizer, model)
+        input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES, tokenizer, for_continuous_batching=True)
+        self._assert_logprobs_match_a_full_forward(model, input_ids)
 
     @parameterized.expand(
         [
@@ -1691,19 +1695,74 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         sparse attention caches its indexer's keys: the logprobs match those of a plain forward."""
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32, **config_kwargs)
-        self._assert_logprobs_match_a_full_forward(tokenizer, model.to(torch_device).eval())
+        input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES, tokenizer, for_continuous_batching=True)
+        self._assert_logprobs_match_a_full_forward(model.to(torch_device).eval(), input_ids)
 
-    def _assert_logprobs_match_a_full_forward(self, tokenizer: AutoTokenizer, model: GenerationMixin) -> None:
+    @require_flash_attn
+    @require_kernels
+    @slow
+    def test_continuous_batching_latent_attention_decodes_from_the_pages(self) -> None:
+        """On the decode fast path, multi-head latent attention attends to its cached latents where they sit in the
+        pages, with FlashMLA: the logprobs match those of a plain forward that rebuilds keys and values. FlashMLA needs
+        DeepSeek V3's latent width (576) in 16-bit pages of 64 tokens."""
+        config = DeepseekV3Config(
+            vocab_size=1024,
+            hidden_size=512,
+            intermediate_size=1024,
+            num_hidden_layers=2,
+            first_k_dense_replace=2,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            q_lora_rank=None,
+            kv_lora_rank=512,
+            qk_nope_head_dim=128,
+            qk_rope_head_dim=64,
+            v_head_dim=128,
+        )
+        torch.manual_seed(0)
+        model = DeepseekV3ForCausalLM(config).to(torch_device, torch.bfloat16).eval()
+        model.set_attn_implementation("flash_attention_2")
+        # Prompts on both sides of the 64-token page boundaries
+        input_ids = [torch.randint(10, 1000, (length,)).tolist() for length in (5, 63, 64, 65, 200)]
+        continuous_batching_config = ContinuousBatchingConfig(
+            page_size=64, max_blocks_per_request=8, return_logprobs=True
+        )
+
+        self._assert_logprobs_match_a_full_forward(model, input_ids, continuous_batching_config, atol=5e-2)
+
+    @require_kernels
+    @require_torch_accelerator
+    def test_latent_rows_are_read_in_place_by_flash_mla(self) -> None:
+        """Layers caching one 576-wide 16-bit latent row per token, the layout of DeepSeek V3's multi-head latent
+        attention, get the decode fast path's block table when their pages hold 64 tokens, which FlashMLA reads."""
+
+        def supports_block_table(width: int, dtype: torch.dtype, page_size: int) -> bool:
+            rows = {"latent": ((width,), dtype)}
+            return FullAttentionCacheAllocator(0, rows, page_size, [0, 1], True).supports_block_table
+
+        self.assertTrue(supports_block_table(576, torch.bfloat16, 64))
+        self.assertFalse(supports_block_table(576, torch.bfloat16, 256))
+        self.assertFalse(supports_block_table(576, torch.float32, 64))
+        self.assertFalse(supports_block_table(32, torch.bfloat16, 64))
+
+    def _assert_logprobs_match_a_full_forward(
+        self,
+        model: GenerationMixin,
+        input_ids: list[list[int]],
+        continuous_batching_config: ContinuousBatchingConfig | None = None,
+        atol: float = 1e-4,
+    ) -> None:
         """Checks the logprobs the engine samples with match those of a plain forward over each whole sequence. Greedy
         tokens alone tell little on a tiny random model: a missing mask or a lost state can leave the argmax unchanged."""
         model.generation_config.max_new_tokens = 20
         model.generation_config.do_sample = False
-        input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES, tokenizer, for_continuous_batching=True)
+        if continuous_batching_config is None:
+            continuous_batching_config = ContinuousBatchingConfig(auto_switch_to_flash=False, return_logprobs=True)
 
         outputs = model.generate_batch(
             inputs=input_ids,
             generation_config=model.generation_config,
-            continuous_batching_config=ContinuousBatchingConfig(auto_switch_to_flash=False, return_logprobs=True),
+            continuous_batching_config=continuous_batching_config,
         )
 
         self.assertEqual(len(outputs), len(input_ids))
@@ -1714,7 +1773,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
                 logprobs = model(sequence).logits[0].float().log_softmax(dim=-1)
             generated = torch.tensor(output.generated_tokens, device=torch_device)
             expected = logprobs[len(output.prompt_ids) - 1 : -1].gather(-1, generated[:, None])[:, 0]
-            torch.testing.assert_close(torch.tensor(output.logprobs, device=torch_device), expected, rtol=0, atol=1e-4)
+            torch.testing.assert_close(torch.tensor(output.logprobs, device=torch_device), expected, rtol=0, atol=atol)
 
     @parameterized.expand(
         [
