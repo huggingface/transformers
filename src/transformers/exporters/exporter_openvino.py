@@ -31,8 +31,8 @@ Extends [`DynamoExporter`] with the stages that turn an ``ExportedProgram`` into
 4. **Conversion**: the prepared module is decoded via ``TorchFXPythonDecoder`` and handed to
    ``openvino.convert_model`` together with the custom ``ConversionExtension``\\ s for ops
    without a built-in OV lowering. Ports are then renamed to their dotted leaf paths and
-   non-tensor inputs repaired. A bf16/fp16 model is traced and converted in f32, and its
-   weights get their 16-bit type back afterwards (see "16-bit models" below).
+   non-tensor inputs repaired. A bf16/fp16 model is traced with f32 activations and 16-bit
+   weights (see "16-bit models" below).
 5. **Stateful transformation** (``OpenVINOConfig.stateful``, on by default): fold
    round-tripped state tensors (KV cache, SSM states, …) into internal OV variables with a
    fused ``beam_idx`` reorder. Optionally written to disk via ``openvino.save_model`` when
@@ -135,7 +135,6 @@ class OpenVINOExporter(DynamoExporter):
         quantizer = config.quantizer
         if quantizer is not None and not quantizer.quantizes_fx_graph:
             ov_model = quantizer.quantize(ov_model, sample_inputs, config.export_format)
-        _restore_16bit_weights(ov_model, model)
 
         if config.stateful:
             _make_stateful(ov_model, exported_program, graph_module, sample_inputs, inputs_names, outputs_names)
@@ -200,7 +199,6 @@ def _convert_to_openvino(graph_module) -> openvino.Model:
     decoder._input_signature = [node.name for node in graph_module.graph.nodes if node.op == "placeholder"]
     ov_model = openvino.convert_model(decoder, extension=_OV_CONVERSION_EXTENSIONS)
     _fix_non_tensor_inputs(ov_model, graph_module)
-    _fold_scalar_converts(ov_model)
     return ov_model
 
 
@@ -302,111 +300,81 @@ def _fix_non_tensor_inputs(ov_model: openvino.Model, graph_module) -> None:
         ov_model.validate_nodes_and_infer_types()
 
 
-def _fold_scalar_converts(ov_model: openvino.Model) -> None:
-    """Fold the frontend's marked scalar casts into plain constants, so the CPU plugin's fusions match them.
-
-    The PyTorch frontend translates `aten.neg` as a multiply by a `Convert`ed `-1`, marking the `Convert`
-    `DisableConstantFolding` and the multiply a dequantization node. While the marks stay, the `Convert` never folds
-    and the plugin's RoPE fusion, which matches `rotate_half`'s negation as a multiply by a constant, doesn't fire: the
-    model this exporter returns would run RoPE decomposed. Serializing drops the marks, so only an IR read back from
-    disk fused. Quantized weights' dequantization subgraphs are never scalar and are left alone.
-    """
-    for op in ov_model.get_ordered_ops():
-        if op.get_type_name() != "Convert" or not any(
-            key.startswith("DisableConstantFolding") for key in op.get_rt_info().keys()
-        ):
-            continue
-        source = op.input_value(0).get_node()
-        if source.get_type_name() != "Constant" or math.prod(source.get_output_shape(0)) != 1:
-            continue
-        value = source.get_data().astype(op.get_output_element_type(0).to_dtype())
-        folded = openvino.op.Constant(value.reshape(list(source.get_output_shape(0))), shared_memory=False)
-        for target in op.output(0).get_target_inputs():
-            rt_info = target.get_node().get_rt_info()
-            for key in [key for key in rt_info.keys() if key.startswith("dequantization_node")]:
-                del rt_info[key]
-        op.output(0).replace(folded.output(0))
-
-
 # ── 16-bit models ──────────────────────────────────────────────────────────
 # OV's CPU plugin fuses its kernels on f32-typed graphs and picks the inference precision itself
 # (bf16 on CPUs with AMX or AVX-512 BF16): a bf16-typed graph misses some of them, notably the
-# compressed-weight matmuls of an NNCF int8/int4 graph. A bf16/fp16 model is therefore traced in
-# f32, and its weights get their 16-bit type back in the OV model as a 16-bit constant and a
-# `Convert`, which the plugin decompresses inside its matmuls.
+# compressed-weight matmuls of an NNCF int8/int4 graph. So, as OV's own `__make_16bit_traceable`
+# does, a bf16/fp16 model is traced with f32 activations while its linear and embedding weights stay
+# 16-bit: the patched `nn.Linear` / `nn.Embedding` forwards cast them to f32 inside the graph, so they
+# land in the OV model as a 16-bit constant and a `Convert`, which the plugin decompresses inside its
+# matmuls, without the weights ever being copied.
 
 
 @contextlib.contextmanager
 def _traced_in_float32(model: PreTrainedModel, sample_inputs: MutableMapping[str, Any]):
-    """Upcast a bf16/fp16 model to f32 for the trace and conversion, yielding f32 copies of the inputs.
+    """Trace a bf16/fp16 model with f32 activations, yielding f32 copies of the inputs.
 
-    Each parameter, buffer and config gets its own dtype back afterwards, so modules a model keeps in fp32 stay fp32.
+    Each linear and embedding weight moves to a `_16bit_<name>` parameter, and an f32 placeholder that broadcasts a
+    single zero takes its place: model code that reads `weight.dtype` (or `model.dtype`) sees f32, at no memory cost.
+    The remaining 16-bit parameters, buffers and configs (norms, ...) are small and upcast for the trace. Everything
+    gets its own dtype back afterwards, so modules a model keeps in fp32 stay fp32.
     """
     half = (torch.bfloat16, torch.float16)
-    tensors = [*model.parameters(), *model.buffers()]
-    dtypes = [tensor.dtype for tensor in tensors]
-    if not any(dtype in half for dtype in dtypes):
+    set_aside = [
+        (module, name, getattr(module, name))
+        for module in model.modules()
+        if isinstance(module, (torch.nn.Linear, torch.nn.Embedding))
+        for name in ("weight", "bias")
+        if getattr(module, name, None) is not None and getattr(module, name).dtype in half
+    ]
+    set_aside_ids = {id(weight) for _, _, weight in set_aside}
+    upcast = [
+        (tensor, tensor.dtype)
+        for tensor in [*model.parameters(), *model.buffers()]
+        if tensor.dtype in half and id(tensor) not in set_aside_ids
+    ]
+    # The configs too: masks and caches the forward builds take their dtype from them.
+    configs = [(config, config.dtype) for config in _configs(model) if getattr(config, "dtype", None) in half]
+    if not set_aside and not upcast:
         yield sample_inputs
         return
-    # The configs too: masks and caches the forward builds take their dtype from them.
-    configs = {id(config): config for config in _configs(model) if getattr(config, "dtype", None) in half}
-    config_dtypes = {key: config.dtype for key, config in configs.items()}
-    for tensor in tensors:
-        if tensor.dtype in half:
-            tensor.data = tensor.data.float()
-    for config in configs.values():
+    for module, name, weight in set_aside:
+        module.register_parameter(f"_16bit_{name}", weight)
+        placeholder = torch.zeros((), device=weight.device).expand(weight.shape)
+        setattr(module, name, torch.nn.Parameter(placeholder, requires_grad=False))
+    for tensor, _ in upcast:
+        tensor.data = tensor.data.float()
+    for config, _ in configs:
         config.dtype = torch.float32
     try:
         # A copy: casting rewrites dicts and caches in place, and the caller's inputs stay theirs.
         yield cast_leaf_tensors(copy.deepcopy(sample_inputs), torch.float32, module_device(model))
     finally:
-        for tensor, dtype in zip(tensors, dtypes):
+        for module, name, weight in set_aside:
+            setattr(module, name, weight)
+            del module._parameters[f"_16bit_{name}"]
+        for tensor, dtype in upcast:
             tensor.data = tensor.data.to(dtype)
-        for key, config in configs.items():
-            config.dtype = config_dtypes[key]
+        for config, dtype in configs:
+            config.dtype = dtype
 
 
 def _configs(model):
-    """Every config `model` holds: its modules' and their sub-configs (a multimodal model's text and vision ones)."""
+    """Every config `model` holds, once: its modules' and their sub-configs (a multimodal model's text and vision
+    ones)."""
     pending = [module.config for module in model.modules() if hasattr(module, "config")]
+    seen = set()
     while pending:
         config = pending.pop()
+        if id(config) in seen:
+            continue
+        seen.add(id(config))
         yield config
         pending.extend(
             getattr(config, name)
             for name in getattr(config, "sub_configs", {})
             if getattr(config, name, None) is not None
         )
-
-
-def _restore_16bit_weights(ov_model: openvino.Model, model: PreTrainedModel) -> None:
-    """Store the f32 weight constants of a model traced with [`_traced_in_float32`] in the model's 16-bit dtype.
-
-    A constant is restored only when every value is exactly a 16-bit one, which holds for every upcast weight, so this
-    is lossless. Weights an NNCF quantizer compressed are no longer f32 and are left alone.
-    """
-    dtype = next((p.dtype for p in model.parameters() if p.dtype in (torch.bfloat16, torch.float16)), None)
-    if dtype is None:
-        return
-    for op in ov_model.get_ordered_ops():
-        if op.get_type_name() != "Constant" or op.get_element_type() != openvino.Type.f32:
-            continue
-        data = op.get_data()
-        if data.size < 1024:  # scalars and shapes the graph computes with stay f32
-            continue
-        if dtype == torch.bfloat16:
-            # bf16 is the top half of an f32: a value is a bf16 one when its low 16 bits are zero
-            bits = data.view(np.uint32)
-            if (bits & 0xFFFF).any():
-                continue
-            values = openvino.Tensor((bits >> 16).astype(np.uint16), list(data.shape), openvino.Type.bf16)
-        else:
-            half = data.astype(np.float16)
-            if not np.array_equal(half.astype(np.float32), data):
-                continue
-            values = openvino.Tensor(half)
-        constant = openvino.op.Constant(values, shared_memory=False)
-        op.output(0).replace(ov_ops.convert(constant, openvino.Type.f32).output(0))
 
 
 # ── Stateful transformation ─────────────────────────────────────────────────
@@ -1280,6 +1248,59 @@ def _fix_index_put_bool_mask(gm, node):
 # equivalent. Reverted on exit by `apply_patches("openvino")`.
 #
 # To add a new patch: define a `_patch_*` factory and decorate it.
+
+
+@register_patch("openvino", "torch.Tensor.__neg__", "torch.neg", "torch.Tensor.neg")
+def _patch_neg(original):
+    """Negate as a multiply by ``-1``, the form OV's CPU plugin fuses ``rotate_half`` (so RoPE) from.
+
+    The frontend lowers ``aten.neg`` to a multiply by a ``Convert``ed ``-1`` that it marks
+    ``DisableConstantFolding``, which keeps the plugin's RoPE fusion from matching until the IR is
+    serialized and read back: the model this exporter returns would run RoPE decomposed.
+    """
+
+    def patch(input):
+        return input * -1
+
+    return patch
+
+
+@register_patch("openvino", "torch.nn.Linear.forward")
+def _patch_linear_forward(original):
+    """Cast the 16-bit weight [`_traced_in_float32`] set aside to the f32 activations, inside the graph."""
+
+    def patch(self, input):
+        if "_16bit_weight" not in self._parameters:
+            return original(self, input)
+        bias = self._parameters.get("_16bit_bias", self.bias)
+        bias = bias.to(input.dtype) if bias is not None else None
+        return torch.nn.functional.linear(input, self._16bit_weight.to(input.dtype), bias)
+
+    return patch
+
+
+@register_patch("openvino", "torch.nn.Embedding.forward")
+def _patch_embedding_forward(original):
+    """Look up the 16-bit embedding [`_traced_in_float32`] set aside, cast to f32 inside the graph.
+
+    The cast comes before the lookup, as in the linear patch: a tied `lm_head` then reads the same `Convert`, and
+    stays a compressed-weight matmul once NNCF quantizes the shared weight.
+    """
+
+    def patch(self, input):
+        if "_16bit_weight" not in self._parameters:
+            return original(self, input)
+        return torch.nn.functional.embedding(
+            input,
+            self._16bit_weight.float(),
+            self.padding_idx,
+            self.max_norm,
+            self.norm_type,
+            self.scale_grad_by_freq,
+            self.sparse,
+        )
+
+    return patch
 
 
 @register_patch("openvino", "torch.nn.functional.layer_norm")
