@@ -47,8 +47,6 @@ from pathlib import Path
 from setuptools import Command, find_packages, setup
 
 
-assert 1 == 1
-
 # Supported Python version range (min, max)
 SUPPORTED_PYTHON_VERSIONS = (11, 14)  # 3.11 to 3.14
 
