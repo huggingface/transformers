@@ -334,9 +334,6 @@ class ModelRunner:
                     batch_data["max_length_k"][allocator.layer_type] = max_length_k
                     io.max_length_k[allocator.layer_type] = max_length_k
             self.compute_batch(model, batch_data)
-            # The next warmup rewrites the static inputs this forward reads, so wait for it to finish
-            if self.inputs_and_outputs.compute_stream is not None:
-                self.inputs_and_outputs.compute_stream.synchronize()
             duration = time.perf_counter() - start
             logger.debug(f"Warmup completed in {duration:.2f}s")
 
