@@ -49,12 +49,12 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils.import_utils import is_kernels_available
+from transformers.utils.import_utils import get_device_type, is_kernels_available
 from transformers.utils.kernel_config import add_to_mapping_local
 
 
 if is_kernels_available():
-    from kernels import Device, LayerRepository, LocalLayerRepository, Mode, kernelize, use_kernel_mapping
+    from kernels import LayerRepository, LocalLayerRepository, Mode, kernelize, use_kernel_mapping
 
     import transformers.integrations.hub_kernels as hub_kernels_pkg
 
@@ -183,7 +183,7 @@ class TestHubKernels(MemoryCleanupTestCase):
 
     def test_kernelize(self):
         model = copy.deepcopy(self.model_not_kernelized)
-        kernelize(model, mode=Mode.INFERENCE, device=Device(type=model.device.type))  # type: ignore[arg-type]
+        kernelize(model, mode=Mode.INFERENCE, device=get_device_type(model.device))
         self.assert_kernelized_forward_is_different(model, self.model_not_kernelized)
         self.assert_kernelized_forward_is_the_same(model, self.model_kernelized)
         del model
