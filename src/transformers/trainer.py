@@ -1515,7 +1515,7 @@ class Trainer:
                 )
             else:
                 # Models outside `PreTrainedModel` that only define the deprecated `gradient_checkpointing_enable`
-                # (e.g. sentence-transformers) keep working until v6
+                # (e.g. sentence-transformers) keep working until v6. Remove the fallback in v6.
                 self.model.gradient_checkpointing_enable(
                     gradient_checkpointing_kwargs=gc_kwargs or None,
                     every_n_layers=every_n_layers,
