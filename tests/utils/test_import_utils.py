@@ -502,6 +502,13 @@ def fake_torchcodec(import_error=None, ffmpeg_major_version=7):
             raise import_error
         return real_import(name, *args, **kwargs)
 
+    real_is_package_available = _is_package_available
+
+    def fake_is_package_available(name, *args, **kwargs):
+        if name == "torchcodec":
+            return True, "0.17.0"
+        return real_is_package_available(name, *args, **kwargs)
+
     module = ModuleType("torchcodec")
     module.ffmpeg_major_version = ffmpeg_major_version
     for helper in (is_torchcodec_available, is_torchcodec_usable, is_torchcodec_ffmpeg_usable):
@@ -509,7 +516,7 @@ def fake_torchcodec(import_error=None, ffmpeg_major_version=7):
     logging.warning_once.cache_clear()
     try:
         with (
-            patch("transformers.utils.import_utils._is_package_available", return_value=(True, "0.17.0")),
+            patch("transformers.utils.import_utils._is_package_available", side_effect=fake_is_package_available),
             patch.dict(sys.modules, {"torchcodec": module}),
             patch("builtins.__import__", side_effect=fake_import),
         ):

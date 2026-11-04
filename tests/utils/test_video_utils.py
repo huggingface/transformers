@@ -461,11 +461,11 @@ class LoadVideoTester(unittest.TestCase):
 class VideoTorchcodecSelectionTest(unittest.TestCase):
     """`fetch_videos` picks torchcodec by default only if it can decode video."""
 
-    def _fetch(self, torchcodec_usable, torchvision_decoding):
+    def _fetch(self, ffmpeg_usable, torchvision_decoding):
         from transformers.video_processing_utils import BaseVideoProcessor
 
         with (
-            patch("transformers.video_processing_utils.is_torchcodec_ffmpeg_usable", return_value=torchcodec_usable),
+            patch("transformers.video_processing_utils.is_torchcodec_ffmpeg_usable", return_value=ffmpeg_usable),
             patch(
                 "transformers.video_processing_utils.is_torchvision_video_decoding_available",
                 return_value=torchvision_decoding,
@@ -476,8 +476,8 @@ class VideoTorchcodecSelectionTest(unittest.TestCase):
         return load_video.call_args.kwargs["backend"]
 
     def test_default_backend(self):
-        self.assertEqual(self._fetch(torchcodec_usable=True, torchvision_decoding=True), "torchcodec")
+        self.assertEqual(self._fetch(ffmpeg_usable=True, torchvision_decoding=True), "torchcodec")
         with self.assertWarns(UserWarning):
-            self.assertEqual(self._fetch(torchcodec_usable=False, torchvision_decoding=True), "torchvision")
+            self.assertEqual(self._fetch(ffmpeg_usable=False, torchvision_decoding=True), "torchvision")
         with self.assertRaisesRegex(ImportError, "can't be loaded"):
-            self._fetch(torchcodec_usable=False, torchvision_decoding=False)
+            self._fetch(ffmpeg_usable=False, torchvision_decoding=False)

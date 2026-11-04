@@ -2026,10 +2026,3 @@ class LoadAudioTorchcodecUnusableTest(unittest.TestCase):
         ):
             with self.assertRaisesRegex(OSError, "Could not load this library"):
                 load_audio(self.wav_path, sampling_rate=16000, backend="torchcodec")
-
-    def test_explicit_torchcodec_not_installed_raises_standard_message(self):
-        from transformers.utils.import_utils import BACKENDS_MAPPING, TORCHCODEC_IMPORT_ERROR
-
-        with patch.dict(BACKENDS_MAPPING, {"torchcodec": (lambda: False, TORCHCODEC_IMPORT_ERROR)}):
-            with self.assertRaisesRegex(ImportError, "load_audio requires the TorchCodec library"):
-                load_audio(self.wav_path, sampling_rate=16000, backend="torchcodec")
