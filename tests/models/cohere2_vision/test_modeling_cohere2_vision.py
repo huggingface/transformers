@@ -22,7 +22,9 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
+    backend_device_count,
     cleanup,
+    get_cpu_ram_total_gib,
     get_device_properties,
     require_deterministic_for_xpu,
     require_torch,
@@ -187,11 +189,24 @@ class Cohere2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             config.text_config.num_hidden_layers = 4
             config.text_config.layer_types = config.text_config.layer_types[:4]
 
+        # `device_map="auto"` budgets each device to full capacity, leaving no room for
+        # the transient copy `from_pretrained` makes while materializing a weight, which
+        # OOMs on multi-GPU runners; a 70% per-GPU cap reserves that headroom.
+        n = backend_device_count(torch_device)
+        if n > 0 and torch_device != "cpu":
+            torch_accel = getattr(torch, torch_device)
+            per_device = int(min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3)
+            max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
+            max_memory["cpu"] = f"{int(get_cpu_ram_total_gib())}GiB"
+        else:
+            max_memory = None
+
         model = Cohere2VisionForConditionalGeneration.from_pretrained(
             self.model_checkpoint,
             config=config,
             dtype=dtype,
             device_map="auto",
+            max_memory=max_memory,
         )
         return model
 
