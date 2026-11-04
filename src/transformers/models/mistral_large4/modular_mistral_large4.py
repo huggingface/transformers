@@ -417,12 +417,11 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
 
     def cache_rows(self) -> dict[str, tuple[tuple[int, ...], torch.dtype | None]]:
         """The shape and dtype (None for the cache dtype) of the rows continuous batching caches per token for this
-        layer: the compressed latent of its keys and values, its shared rotary key, and its indexer's keys. All layers
-        declare the same rows, as they share one allocator: the layers without RoPE, without an indexer, or reusing the
-        keys of another layer leave some unused."""
+        layer: the compressed latent of its keys and values followed by its shared rotary key, in one row, and its
+        indexer's keys. All layers declare the same rows, as they share one allocator: the layers without RoPE, without
+        an indexer, or reusing the keys of another layer leave part of them unused."""
         return {
-            "latent": ((self.config.kv_lora_rank,), None),
-            "rope_key": ((self.config.qk_rope_head_dim,), None),
+            "latent": ((self.config.kv_lora_rank + self.config.qk_rope_head_dim,), None),
             "index_key": ((self.config.index_head_dim,), None),
         }
 
@@ -466,11 +465,13 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
         # Update the cache while latent KV is still compressed
         paged_cache = kwargs.get("cache")
         if paged_cache is not None and not self.is_kv_shared_layer:  # continuous batching
-            # The layers without RoPE have no rotary key, and leave that row of their cache unused
-            rows = {"latent": k_pass[0, 0], "rope_key": k_rot[0, 0]} if self.use_rope else {"latent": k_pass[0, 0]}
-            rows = paged_cache.update_rows(self.layer_idx, rows, kwargs)
-            k_pass = rows["latent"][None, None]
-            k_rot = rows["rope_key"][None, None] if self.use_rope else k_pass[..., :0]
+            # The layers without RoPE have no rotary key, and leave the end of their latent row unused
+            latent = F.pad(
+                torch.cat((k_pass, k_rot), dim=-1)[0, 0], (0, self.config.qk_rope_head_dim - k_rot.shape[-1])
+            )
+            latent = paged_cache.update_rows(self.layer_idx, {"latent": latent}, kwargs)["latent"]
+            k_pass, k_rot = latent[None, None, :, : self.kv_lora_rank], latent[None, None, :, self.kv_lora_rank :]
+            k_rot = k_rot[..., : self.qk_rope_head_dim]
         elif past_key_values is not None and not self.is_kv_shared_layer:
             k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
         # If the layer takes part in cache sharing and computes its own cache, store a copy in shared_kv_states
