@@ -368,6 +368,37 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         match = self.alternation.search(name)
         return self.quantizers[self.group_to_pattern[match.lastgroup]] if match else None
 
+    def update_weight_conversions(self, weight_conversions, model):
+        from ..core_model_loading import WeightConverter
+
+        general = {}
+        for quantizer in self.quantizers.values():
+            own = quantizer.get_weight_conversions()
+            # `update_weight_conversions` ends with the general converters of `get_weight_conversions`
+            weight_conversions = quantizer.update_weight_conversions(weight_conversions, model)[: -len(own) or None]
+            for converter in own:
+                general.setdefault(converter._original_target_patterns[0], []).append(converter)
+        # One general converter per param collects the names of every quantizer, before the own-name ones take them
+        # (`down_proj` would take `shared_experts.down_proj.weight_sf_rowmajor`). Its quantizer gives a param its own
+        # ops in `update_weight_transform`; the others pass through the params without companions
+        return weight_conversions + [
+            WeightConverter(
+                list(dict.fromkeys(name for c in converters for name in c._original_source_patterns)),
+                target,
+                converters[0].operations,
+            )
+            for target, converters in general.items()
+        ]
+
+    def update_weight_transform(self, transform, model, name):
+        quantizer = self.quantizer_for(name)
+        if quantizer is None:
+            return transform
+        # A general converter of another quantizer may have matched the first key of `name`: swap in its quantizer's
+        targets = getattr(transform, "_original_target_patterns", None)
+        own = next((c for c in quantizer.get_weight_conversions() if c._original_target_patterns == targets), None)
+        return quantizer.update_weight_transform(own or transform, model, name)
+
     def param_element_size(self, model, param_name, param):
         quantizer = self.quantizer_for(param_name)
         return param.element_size() if quantizer is None else quantizer.param_element_size(model, param_name, param)

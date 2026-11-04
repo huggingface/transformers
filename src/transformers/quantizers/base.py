@@ -434,37 +434,13 @@ class HfQuantizer(ABC):
                 updated[-1] = converter.copy(
                     all_sources, targets, operations=[dequantize(self)] + converter.operations
                 )
-        if dequantize is not None:
-            updated += self._dequantize_own_name_params(model, dequantize)
         return updated + self.get_weight_conversions()
 
-    def _dequantize_own_name_params(self, model, dequantize):
-        """
-        Dense params stored under their own name, e.g. fused experts `gate_up_proj` with `gate_up_proj_scale_inv`:
-        their companions are the suffixes of the `weight` ones, and the dequantize op gets them together.
-        """
-        from ..core_model_loading import WeightConverter
-
-        serialized = self.serialized_names.get("weight", [])
-        suffixes = [
-            name.removeprefix("weight") for name in serialized if name.startswith("weight") and name != "weight"
-        ]
-        if not suffixes:
-            return []
-        keys = set(model.state_dict())
-        # With their parents, e.g. `mlp.experts.down_proj`: not part of `mlp.shared_experts.down_proj.weight`
-        names = {
-            ".".join(name.split(".")[-3:])
-            for name, param in model.named_parameters()
-            if param.ndim > 1
-            and name.rpartition(".")[2] not in self.serialized_names
-            and not name.endswith(tuple(suffixes))  # a companion itself
-            and not any(name + suffix in keys for suffix in suffixes)  # the module keeps them
-        }
-        return [
-            WeightConverter([name] + [name + suffix for suffix in suffixes], name, [dequantize(self)])
-            for name in sorted(names)
-        ]
+    def update_weight_transform(self, transform, model, name):
+        "The transform loading the param `name`, once matched in the checkpoint: quantizes it if it needs to"
+        if not self.pre_quantized and self.param_needs_quantization(model, name):
+            transform.quantization_operation = self.get_quantize_ops()
+        return transform
 
 
 class SequentialLlama4TextExperts(ModuleList):

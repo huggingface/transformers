@@ -1689,36 +1689,21 @@ def convert_and_load_state_dict_in_model(
     else:
         thread_pool = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
 
-    def split_conversions(conversions):
-        renamings = [entry for entry in conversions if isinstance(entry, WeightRenaming)]
-        converters = [entry for entry in conversions if isinstance(entry, WeightConverter)]
-        return renamings, converters, {k: converter for converter in converters for k in converter.source_patterns}
-
-    model_conversions = split_conversions(weight_mapping)
-    # A quantization plan loads a param with the converters of the quantizer of its pattern
-    plan_conversions = {
-        quantizer: split_conversions(quantizer.update_weight_conversions(weight_mapping, model))
-        for quantizer in getattr(hf_quantizer, "quantizers", {}).values()
-    }
+    renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
+    converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
     param_name_to_load: dict[str, WeightRenaming | WeightConverter] = {}
 
     if dtype_plan != {}:
         dtype_policy_alt, dtype_policy_by_group_name, _ = build_glob_alternation(list(dtype_plan.keys()))
 
+    pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
+
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
-        renamings, converters, pattern_to_converter = model_conversions
         # 1. Rename the key according to all renaming and weight conversion patterns.
         renamed_key, source_pattern = rename_source_key(
             original_key, renamings, converters, base_model_prefix, meta_model_state_dict
         )
-        # Like the dtype plan, the pattern of a quantization plan matching the key picks its quantizer
-        quantizer = hf_quantizer.quantizer_for(renamed_key) if hf_quantizer is not None else None
-        if quantizer is not None and quantizer is not hf_quantizer:
-            renamings, converters, pattern_to_converter = plan_conversions[quantizer]
-            renamed_key, source_pattern = rename_source_key(
-                original_key, renamings, converters, base_model_prefix, meta_model_state_dict
-            )
         if renamed_key not in meta_model_state_dict and original_key in meta_model_state_dict:
             # Key should probably not have been renamed but we might need the `prefix` to be added.
             renamed_key, source_pattern = rename_source_key(
@@ -1728,23 +1713,21 @@ def convert_and_load_state_dict_in_model(
         # 2. finally, collect the tensor into the proper converter
         if renamed_key in meta_model_state_dict:
             empty_param = meta_model_state_dict.get(renamed_key)
-            # If we enter here, we have a WeightConverter operation to perform
-            if source_pattern is not None:
-                new_converter = deepcopy(pattern_to_converter[source_pattern])
-                # each target key gets its own converter instance
-                mapping = param_name_to_load.setdefault(renamed_key, new_converter)
-            # Otherwise, only potential renaming
-            else:
-                mapping = param_name_to_load.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
-                source_pattern = original_key
+            if renamed_key not in param_name_to_load:
+                # If we enter here, we have a WeightConverter operation to perform: each target key gets its own
+                # converter instance. Otherwise, only potential renaming
+                mapping = (
+                    deepcopy(pattern_to_converter[source_pattern])
+                    if source_pattern is not None
+                    else WeightRenaming(original_key, renamed_key)
+                )
+                if hf_quantizer is not None:
+                    mapping = hf_quantizer.update_weight_transform(mapping, model, renamed_key)
+                param_name_to_load[renamed_key] = mapping
+            mapping = param_name_to_load[renamed_key]
+            source_pattern = source_pattern if source_pattern is not None else original_key
 
             # 3. Handle dtype casting
-            needs_quantization = (
-                quantizer and not quantizer.pre_quantized and quantizer.param_needs_quantization(model, renamed_key)
-            )
-            if needs_quantization:
-                mapping.quantization_operation = quantizer.get_quantize_ops()
-
             _dtype = dtype
             if dtype_plan != {} and dtype_policy_alt.search(renamed_key):
                 matched_dtype_pattern = dtype_policy_alt.search(renamed_key)
