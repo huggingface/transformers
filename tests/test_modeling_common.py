@@ -120,6 +120,7 @@ from transformers.utils import (
     GENERATION_CONFIG_NAME,
     SAFE_WEIGHTS_NAME,
     ModelOutput,
+    is_rocm_platform,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
@@ -3736,7 +3737,11 @@ class ModelTesterMixin(ExportTesterMixin):
     @slow
     @is_flaky()
     def test_flash_attn_kernels_inference_equivalence(self):
-        self.flash_attn_inference_equivalence(attn_implementation="kernels-community/flash-attn3", padding_side="left")
+        # flash-attn3 is CUDA-only; on ROCm use aiter-flash-attn, which serves FA3 there.
+        attn_implementation = (
+            "kernels-community/aiter-flash-attn" if is_rocm_platform() else "kernels-community/flash-attn3"
+        )
+        self.flash_attn_inference_equivalence(attn_implementation=attn_implementation, padding_side="left")
 
     @require_torch_mps
     @require_kernels

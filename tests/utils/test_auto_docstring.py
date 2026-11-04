@@ -250,10 +250,10 @@ class DummyForTestModel(PreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         temperature: float = 1.0,
         custom_dict: dict[str, int | float] | None = None,
         output_attentions: bool | None = None,
@@ -491,7 +491,7 @@ Parameters:
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
-            attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
                 - 1 for tokens that are **not masked**,
@@ -506,7 +506,7 @@ Parameters:
                 Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0, config.n_positions - 1]`.
 
                 [What are position IDs?](../glossary#position-ids)
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
                 is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
                 model's internal embedding lookup matrix.
@@ -524,21 +524,21 @@ Parameters:
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         Returns:
-            [`~modeling_outputs.CausalLMOutputWithPast`] or `tuple(torch.FloatTensor)`: A [`~modeling_outputs.CausalLMOutputWithPast`] or a tuple of
-            `torch.FloatTensor` (if `return_dict=False` is passed or when `config.return_dict=False`) comprising various
+            [`~modeling_outputs.CausalLMOutputWithPast`] or `tuple(torch.Tensor)`: A [`~modeling_outputs.CausalLMOutputWithPast`] or a tuple of
+            `torch.Tensor` (if `return_dict=False` is passed or when `config.return_dict=False`) comprising various
             elements depending on the configuration ([`None`]) and inputs.
 
-        - **loss** (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided) -- Language modeling loss (for next-token prediction).
-        - **logits** (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`) -- Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        - **loss** (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided) -- Language modeling loss (for next-token prediction).
+        - **logits** (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`) -- Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         - **past_key_values** (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`) -- It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
           Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
           `past_key_values` input) to speed up sequential decoding.
-        - **hidden_states** (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`) -- Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        - **hidden_states** (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`) -- Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
           one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
           Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        - **attentions** (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`) -- Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        - **attentions** (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`) -- Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
           sequence_length)`.
 
           Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
