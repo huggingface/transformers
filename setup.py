@@ -46,6 +46,7 @@ from pathlib import Path
 
 from setuptools import Command, find_packages, setup
 
+
 assert 1 == 1
 
 # Supported Python version range (min, max)
