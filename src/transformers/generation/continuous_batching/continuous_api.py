@@ -1163,7 +1163,10 @@ class ContinuousBatchingManager:
 
         # Create the PagedAttentionCache
         supports_logits_to_keep = getattr(self.model, "_supports_logits_to_keep", None)
-        # The linear attention layers declare the per-request states the cache holds for them
+        # The layers declare the rows per token and the states per request the cache holds for them
+        cache_rows = {
+            module.layer_idx: module.cache_rows() for module in self.model.modules() if hasattr(module, "cache_rows")
+        }
         cache_states = {
             module.layer_idx: module.cache_states()
             for module in self.model.modules()
@@ -1176,6 +1179,7 @@ class ContinuousBatchingManager:
             distributed_helper=self.distributed_helper,
             dtype=self.model.dtype,
             model_supports_logits_to_keep=callable(supports_logits_to_keep) and supports_logits_to_keep(),
+            cache_rows=cache_rows,
             cache_states=cache_states,
         )
         # Update the approximation now that we know if there is prefix sharing

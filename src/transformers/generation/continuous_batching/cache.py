@@ -29,6 +29,7 @@ from .cache_allocators import (
     CachePool,
     FullAttentionCacheAllocator,
     LinearAttentionCacheAllocator,
+    RowSpec,
     SlidingAttentionCacheAllocator,
     StateSpec,
 )
@@ -127,6 +128,7 @@ class PagedAttentionCache:
         distributed_helper: DistributedHelper,
         dtype: torch.dtype = torch.float16,
         model_supports_logits_to_keep: bool = False,
+        cache_rows: dict[int, list[RowSpec]] | None = None,
         cache_states: dict[int, list[StateSpec]] | None = None,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage. Also turns in prefix sharing if the model has
@@ -140,6 +142,9 @@ class PagedAttentionCache:
             dtype: Data type of the activation and the cache (for now, these are the same)
             model_supports_logits_to_keep: When True, memory sizing charges the LM head peak per request instead of
                 per batch token, since the model slices hidden states before the LM head
+            cache_rows: The shape and dtype of the rows each layer caches per token, by layer index, as the layers
+                declare them through `cache_rows`. An attention layer that declares none caches its keys and values,
+                `num_key_value_heads` by `head_dim` each, in the cache dtype.
             cache_states: The shape and dtype of the per-request states of each linear attention layer,
                 by layer index, as the layers declare them through `cache_states`
         """
@@ -159,11 +164,10 @@ class PagedAttentionCache:
                 )
             num_key_value_heads //= distributed_helper.tp_size
 
-        # Construct the necessary cache allocator for each attention type
+        # Construct the necessary cache allocator for each attention type. The layers caching rows per token share
+        # the same kwargs, with the rows they declare or, for an attention layer, its keys and values
+        default_rows = [((num_key_value_heads, find_head_dim(config)), self.dtype)] * 2
         ca_kwargs = {
-            "num_key_value_heads": num_key_value_heads,
-            "config": config,
-            "cache_dtype": self.dtype,
             "page_size": continuous_batching_config.page_size,
             "allow_block_sharing": continuous_batching_config.allow_block_sharing,
         }
@@ -174,11 +178,15 @@ class PagedAttentionCache:
         layer_groups = group_layers_by_attn_type(config)
         linear_layers = layer_groups.pop(LINEAR_ATTENTION, None)
         for attn_type, layer_indices in layer_groups.items():
-            self._add_cache_allocator(attn_type, layer_indices, ca_kwargs)
+            rows = self._get_declared(layer_indices, cache_rows or {}, "rows", default_rows)
+            type_kwargs = ca_kwargs | {"rows": rows}
+            if attn_type == SLIDING_ATTENTION:
+                type_kwargs["sliding_window"] = getattr(config, "sliding_window", None)
+            self._add_cache_allocator(attn_type, layer_indices, type_kwargs)
         if linear_layers is not None:
-            states = self._get_cache_states(linear_layers, cache_states or {})
+            states = self._get_declared(linear_layers, cache_states or {}, "states")
             block_alignment = lcm(*(ca.bytes_per_block for ca in self.cache_allocators.values()), 128)
-            linear_kwargs = ca_kwargs | {"states": states, "block_alignment": block_alignment}
+            linear_kwargs = {"states": states, "block_alignment": block_alignment}
             self._add_cache_allocator(LINEAR_ATTENTION, linear_layers, linear_kwargs)
 
         # To have the maximal granularity while ensuring alignment for all cache allocators, we compute the LCM of all
@@ -189,10 +197,10 @@ class PagedAttentionCache:
         self.tokens_per_sector = max(
             (self.bytes_per_sector // ca.bytes_per_block) * ca.tokens_per_page for ca in self.cache_allocators.values()
         )
-        # Bytes of one cache block (page_size tokens of KV for every layer of the model), used to convert the num_blocks
-        # config attribute to and from bytes
-        bytes_per_block = config.num_hidden_layers * FullAttentionCacheAllocator.get_bytes_per_page(
-            num_key_value_heads, find_head_dim(config), self.dtype, continuous_batching_config.page_size
+        # Bytes of one cache block (page_size tokens of every layer caching rows per token), used to convert the
+        # num_blocks config attribute to and from bytes
+        bytes_per_block = sum(
+            ca.bytes_per_block for ca in self.cache_allocators.values() if isinstance(ca, FullAttentionCacheAllocator)
         )
 
         max_batch_tokens, num_sectors = PagedAttentionMemoryHandler(
@@ -241,21 +249,25 @@ class PagedAttentionCache:
         self.max_tokens_read = max(ca.tokens_per_page * ca.num_blocks for ca in self.cache_allocators.values())
 
     @staticmethod
-    def _get_cache_states(layer_indices: list[int], cache_states: dict[int, list[StateSpec]]) -> list[StateSpec]:
-        """The states the linear attention layers declare, which have to be the same for all of them since the
-        allocator gives every layer the same page."""
-        states = []
+    def _get_declared(
+        layer_indices: list[int], declarations: dict[int, list], kind: str, default: list | None = None
+    ) -> list:
+        """The rows or states the layers of a group declare, which have to be the same for all of them since the
+        allocator gives every layer the same page. Layers that declare nothing get the default, when there is one."""
+        declared = []
         for layer_idx in layer_indices:
-            if layer_idx not in cache_states:
+            if layer_idx in declarations:
+                declared.append(declarations[layer_idx])
+            elif default is not None:
+                declared.append(default)
+            else:
                 raise ValueError(
-                    f"Layer {layer_idx} is a linear attention layer that declares no states: continuous batching "
-                    "supports the linear attention layers that declare their per-request states through "
-                    "`cache_states`, like the gated delta net of Qwen3-Next."
+                    f"Layer {layer_idx} declares no cache {kind}: continuous batching supports the layers that "
+                    f"declare what they cache through `cache_{kind}`, like the gated delta net of Qwen3-Next."
                 )
-            states.append(cache_states[layer_idx])
-        if any(layer_states != states[0] for layer_states in states):
-            raise ValueError(f"The linear attention layers declare different states: {states}")
-        return states[0]
+        if any(layer_declared != declared[0] for layer_declared in declared):
+            raise ValueError(f"The layers of a group declare different cache {kind}: {declared}")
+        return declared[0]
 
     def _add_cache_allocator(self, attn_type: str, layer_indices: list[int], ca_kwargs: dict[str, Any]) -> None:
         """Creates the allocator of an attention type and registers it by name and layer indices."""
@@ -460,8 +472,8 @@ class PagedAttentionCache:
             write_index = kwargs["write_index"][allocator.index]
             # Allocator update is done with the KV cache shape: [seqlen_q, num_kv_heads, head_dim]. We also return the
             # KV states in the same shape they were passed. It will help when we unify with regular Cache.
-            key_states, value_states = (x.squeeze(0).transpose(0, 1) for x in (key_states, value_states))
-            key_states, value_states = allocator.update(key_states, value_states, layer_idx, read_index, write_index)
+            rows = tuple(x.squeeze(0).transpose(0, 1) for x in (key_states, value_states))
+            key_states, value_states = allocator.update(rows, layer_idx, read_index, write_index)
             key_states, value_states = (x.transpose(0, 1).unsqueeze(0) for x in (key_states, value_states))
 
         return key_states, value_states

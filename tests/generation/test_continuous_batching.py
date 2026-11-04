@@ -282,17 +282,17 @@ def _make_allocator(
     sliding_window: int | None = None,
     allow_block_sharing: bool = True,
 ) -> FullAttentionCacheAllocator | SlidingAttentionCacheAllocator:
-    """Builds an allocator on a minimal namespace config: allocators only read head_dim, num_key_value_heads and
-    sliding_window from the model config, so tests do not need a full PreTrainedConfig."""
-    config = SimpleNamespace(head_dim=head_dim, num_key_value_heads=num_kv_heads, sliding_window=sliding_window)
+    """Builds an allocator caching float16 keys and values of `num_kv_heads` heads of `head_dim`, as an attention
+    layer declares by default."""
+    rows = [((num_kv_heads, head_dim), torch.float16)] * 2
+    kwargs = {} if sliding_window is None else {"sliding_window": sliding_window}
     return cls(
         index=index,
-        config=config,  # type: ignore
-        num_key_value_heads=num_kv_heads,
-        cache_dtype=torch.float16,
+        rows=rows,
         page_size=page_size,
         layer_indices=layer_indices if layer_indices is not None else [0],
         allow_block_sharing=allow_block_sharing,
+        **kwargs,
     )
 
 
@@ -305,13 +305,8 @@ def _make_linear_allocator(
     states = [((32, 2), torch.float16), ((4, 4, 4), torch.float32)]
     return LinearAttentionCacheAllocator(
         index=index,
-        config=None,  # type: ignore
-        num_key_value_heads=1,
-        cache_dtype=torch.float16,
-        page_size=4,
-        layer_indices=layer_indices if layer_indices is not None else [0],
-        allow_block_sharing=False,
         states=states,
+        layer_indices=layer_indices if layer_indices is not None else [0],
         block_alignment=block_alignment,
     )
 
@@ -490,16 +485,22 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         allocator.free_blocks("req")
         self.assertEqual(pool.count_free_blocks(allocator.index), free_blocks + 1)
 
-    def test_cache_states_are_declared_by_the_layers(self) -> None:
-        """The paged cache sizes the states from what the linear attention layers declare: a layer that declares none
-        is refused with a readable error, and all layers of the group have to declare the same states."""
+    def test_cache_layout_is_declared_by_the_layers(self) -> None:
+        """The paged cache sizes the rows and states from what the layers declare: all layers of a group have to
+        declare the same, an attention layer that declares no rows gets the default keys and values, and a linear
+        attention layer that declares no states is refused with a readable error."""
         states = [((32, 2), torch.float16), ((4, 4, 4), torch.float32)]
-        self.assertEqual(PagedAttentionCache._get_cache_states([0, 2], {0: states, 2: states}), states)
-        with self.assertRaisesRegex(ValueError, "Layer 2 is a linear attention layer that declares no states"):
-            PagedAttentionCache._get_cache_states([0, 2], {0: states})
-        other_states = [((32, 2), torch.float16)]
-        with self.assertRaisesRegex(ValueError, "declare different states"):
-            PagedAttentionCache._get_cache_states([0, 2], {0: states, 2: other_states})
+        self.assertEqual(PagedAttentionCache._get_declared([0, 2], {0: states, 2: states}, "states"), states)
+        with self.assertRaisesRegex(ValueError, "Layer 2 declares no cache states"):
+            PagedAttentionCache._get_declared([0, 2], {0: states}, "states")
+        with self.assertRaisesRegex(ValueError, "declare different cache states"):
+            PagedAttentionCache._get_declared([0, 2], {0: states, 2: states[:1]}, "states")
+        default_rows = [((2, 8), torch.float16)] * 2
+        self.assertEqual(PagedAttentionCache._get_declared([1, 3], {}, "rows", default_rows), default_rows)
+        mla_rows = [((1, 512), torch.float16), ((1, 64), torch.float16)]
+        self.assertEqual(PagedAttentionCache._get_declared([1], {1: mla_rows}, "rows", default_rows), mla_rows)
+        with self.assertRaisesRegex(ValueError, "declare different cache rows"):
+            PagedAttentionCache._get_declared([1, 3], {1: mla_rows}, "rows", default_rows)
 
     def test_linear_attention_block_alignment(self) -> None:
         """The block is sized to a multiple of the alignment, which the paged cache sets to the other allocators'
@@ -677,12 +678,9 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         allocator.block_table["req"] = block_table
 
         def reference_indices(start: int, end: int) -> list[int]:
-            """Reference implementation: converts logical indices to physical row indices. The token slot t of block b
-            lives at row b * block_physical_stride + t."""
-            return [
-                block_table[i // block_size] * allocator.block_physical_stride + i % block_size
-                for i in range(start, end)
-            ]
+            """Reference implementation: converts logical indices to physical indices. The token slot t of block b
+            is addressed as b * block_size + t."""
+            return [block_table[i // block_size] * block_size + i % block_size for i in range(start, end)]
 
         # Test read indices (from 0 to past_length + query_length)
         expected_read = reference_indices(0, past_length + query_length)
@@ -691,6 +689,35 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         # Test write indices (from past_length to past_length + query_length)
         expected_write = reference_indices(past_length, past_length + query_length)
         self.assertEqual(allocator.get_write_indices("req", past_length, query_length), expected_write)
+
+    def test_full_attention_block_table_views_match_index_views(self) -> None:
+        """The decode fast path reads the cache through page arrays and a kernel block table, the varlen path through
+        indices: for every layer and row, both have to address the same memory, and the page arrays of a layer have
+        to hold the same number of pages, as the flash kernel requires."""
+        allocator = _make_allocator(
+            FullAttentionCacheAllocator, head_dim=4, num_kv_heads=2, page_size=4, layer_indices=[1, 3]
+        )
+        _setup_cache_pool([allocator], num_sectors=4)
+        allocator.block_table["req"] = [5, 2]
+        past_length, query_length = 0, 7
+
+        # Write distinct keys and values for every layer through the index path
+        write_index = torch.tensor(allocator.get_write_indices("req", past_length, query_length))
+        written = {}
+        for layer_idx in (1, 3):
+            rows = tuple(torch.randn(query_length, 2, 4).half() for _ in range(2))
+            allocator.update(rows, layer_idx, torch.tensor([]), write_index)
+            written[layer_idx] = rows
+
+        # Read them back through the page arrays and the block table entries the kernel would receive
+        block_table = torch.full((4,), -1, dtype=torch.int32)
+        allocator.fill_block_table("req", past_length, query_length, block_table)
+        for layer_idx in (1, 3):
+            page_views = allocator.get_cache_for_block_table(layer_idx)
+            self.assertEqual(len({view.shape[0] for view in page_views}), 1)
+            for view, row in zip(page_views, written[layer_idx]):
+                pages = view[block_table[:2].long()].reshape(-1, 2, 4)[:query_length]
+                torch.testing.assert_close(pages, row)
 
     @parameterized.expand(
         [
@@ -737,14 +764,14 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         # num_blocks larger than any block id used here so they never collide with real cache positions.
         num_blocks = 64
         self.assertTrue(all(b < num_blocks for b in block_table))
-        allocator.read_trash_index = num_blocks * allocator.block_physical_stride
-        allocator.sentinel_index = sentinel_index = num_blocks * allocator.block_physical_stride + 1
-        allocator.write_trash_index = write_trash_index = (num_blocks + 1) * allocator.block_physical_stride
+        allocator.read_trash_index = num_blocks * block_size
+        allocator.sentinel_index = sentinel_index = num_blocks * block_size + 1
+        allocator.write_trash_index = write_trash_index = (num_blocks + 1) * block_size
 
         def to_physical(position: int) -> int:
-            """Reference position-to-physical-row mapping inside the rolling buffer."""
+            """Reference position-to-physical mapping inside the rolling buffer: block * block_size + slot."""
             slot = position % sliding_window
-            return block_table[slot // block_size] * allocator.block_physical_stride + slot % block_size
+            return block_table[slot // block_size] * block_size + slot % block_size
 
         # Read indices: the last min(past_length, sliding_window - 1) positions, then one sentinel per query token
         read_cache_length = min(past_length, sliding_window - 1)
@@ -759,7 +786,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         self.assertNotIn(sentinel_index, read[:read_cache_length])
         # Cache reads land in allocated blocks
         for idx in read[:read_cache_length]:
-            self.assertIn(idx // allocator.block_physical_stride, block_table)
+            self.assertIn(idx // block_size, block_table)
 
         # Write indices: the last min(query_length, sliding_window) positions are stored in their slots, left-padded
         # with the write trash index when the query overflows the window
@@ -776,7 +803,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         self.assertNotIn(write_trash_index, write[padding_length:])
         # Cache writes land in allocated blocks
         for idx in write[padding_length:]:
-            self.assertIn(idx // allocator.block_physical_stride, block_table)
+            self.assertIn(idx // block_size, block_table)
 
     def test_fork_blocks_sharing_and_copy(self) -> None:
         """Tests forking at the allocator level: fully-written blocks are shared through a reference count, the others

@@ -14,8 +14,7 @@
 
 import torch
 
-from ....configuration_utils import PreTrainedConfig
-from .full_attention import FullAttentionCacheAllocator
+from .full_attention import FullAttentionCacheAllocator, RowSpec
 
 
 class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
@@ -32,37 +31,34 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
     def __init__(
         self,
         index: int,
-        config: PreTrainedConfig,
-        num_key_value_heads: int,
-        cache_dtype: torch.dtype,
+        rows: list[RowSpec],
         page_size: int,
         layer_indices: list[int],
         allow_block_sharing: bool,
+        sliding_window: int,
     ) -> None:
         """Initializes the cache allocator for a group of sliding attention layers.
 
         Args:
-            - config: the configuration of the model, used to determine the number of bytes per token
-            - num_key_value_heads: the number of key value heads, accounting for TP if enabled
-            - cache_dtype: the dtype of the cache, also used to determine the number of bytes per token
+            - rows: the shape and dtype of each row a layer caches per token, in the order the layer reads and writes
+              them
             - page_size: the number of tokens per page
             - layer_indices: the indices of the layers which cache is handled by this allocator
             - allow_block_sharing: whether to allow block sharing or not. Can be disabled for diagnostics or perfs.
+            - sliding_window: the number of most recent tokens the layers attend to
         """
-        # Retrieve the sliding window from the config
-        sliding_window = getattr(config, "sliding_window", None)
         if not isinstance(sliding_window, int) or sliding_window <= 0:
             raise ValueError(f"Sliding window must be a positive integer, but got {sliding_window = }")
         self.sliding_window = sliding_window
         super().__init__(
             index=index,
-            config=config,
-            num_key_value_heads=num_key_value_heads,
-            cache_dtype=cache_dtype,
+            rows=rows,
             page_size=page_size,
             layer_indices=layer_indices,
             allow_block_sharing=allow_block_sharing,
         )
+        # The ring buffer has no block table kernel, whatever the rows
+        self.supports_block_table = False
 
     # _________________________________________________ BLOCK LEVEL __________________________________________________ #
 
@@ -88,7 +84,7 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
         for token_idx in range(start_index, start_index + length):
             ring_idx = token_idx % self.sliding_window
             page_idx, page_offset = divmod(ring_idx, self.tokens_per_page)
-            physical_indices.append(block_table[page_idx] * self.block_physical_stride + page_offset)
+            physical_indices.append(block_table[page_idx] * self.tokens_per_page + page_offset)
         return physical_indices
 
     def get_read_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
@@ -135,45 +131,46 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
 
     def update(
         self,
-        key_states: torch.Tensor,  # shape [seqlen_q, num_kv_heads, head_dim]
-        value_states: torch.Tensor,  # shape [seqlen_q, num_kv_heads, head_dim]
+        rows: tuple[torch.Tensor, ...],  # shapes [seqlen_q, *shape]
         layer_idx: int,
         read_index: torch.Tensor,  # shape [seqlen_q + past_length]
         write_index: torch.Tensor,  # shape [seqlen_q]
-    ) -> tuple[torch.Tensor, torch.Tensor]:  # shape [seqlen_q + past_length, num_kv_heads, head_dim]
-        """Update the cache with new key-value states for a specific layer, and retrieves the relevant KV states from
-        the cache for attention computation. For sliding attention layers, old KV is read from cache along with extra
-        spaces for the new KV, then new KV is written to cache. This is because new KV might overwrite the old KV, so we
-        need to read the old KV first.
+    ) -> tuple[torch.Tensor, ...]:  # shapes [seqlen_q + past_length, *shape]
+        """Update the cache with the new rows for a specific layer, and retrieves the rows needed for the computation.
+        For sliding attention layers, old rows are read from cache along with extra spaces for the new rows, then the
+        new rows are written to cache. This is because new rows might overwrite the old ones, so we need to read the
+        old ones first.
 
         When the layer's read index is empty, the batch has no cache reads (all requests are non-chunked prefills): we
-        only write to the cache and return the input KV states directly, skipping the index_select read-back.
+        only write to the cache and return the input rows directly, skipping the read-back.
 
-        Returns the complete KV states (cached + new) for attention computation.
+        Returns the complete rows (cached + new) for the computation.
         """
-        # Select the shifted views of this layer's keys and values
-        k_cache, v_cache = self._kv_token_views[layer_idx]
+        views = self._row_views_for_layer(layer_idx)
+        write_block, write_slot = write_index // self.tokens_per_page, write_index % self.tokens_per_page
 
-        # Case: write-only, no cache read. The input KV states already contain everything the attention needs.
+        # Case: write-only, no cache read. The input rows already contain everything the computation needs.
         if read_index.numel() == 0:
-            k_cache.index_copy_(0, write_index, key_states)
-            v_cache.index_copy_(0, write_index, value_states)
-            return key_states, value_states
+            for view, row in zip(views, rows):
+                view[write_block, write_slot] = row
+            return rows
 
-        # Sentinel positions in read_index mark new-token slots; index_select reads garbage there,
-        # then masked_scatter_ overwrites them with the actual new key/value states.
-        mask = (read_index == self.sentinel_index).unsqueeze(-1).unsqueeze(-1)
-        key_states_with_cache = torch.index_select(k_cache, 0, read_index)
-        key_states_with_cache.masked_scatter_(mask, key_states)
-        value_states_with_cache = torch.index_select(v_cache, 0, read_index)
-        value_states_with_cache.masked_scatter_(mask, value_states)
-        # Write new KV values to the cache (padding slots in write_index point to the trash position)
-        k_cache.index_copy_(0, write_index, key_states)
-        v_cache.index_copy_(0, write_index, value_states)
+        # Sentinel positions in read_index mark new-token slots: the read returns garbage there, which
+        # masked_scatter_ overwrites with the actual new rows. The sentinel lives in slot 1 of block 0.
+        read_block, read_slot = read_index // self.tokens_per_page, read_index % self.tokens_per_page
+        is_sentinel = read_index == self.sentinel_index
+        rows_with_cache = []
+        for view, row in zip(views, rows):
+            row_with_cache = view[read_block, read_slot]
+            mask = is_sentinel.view(-1, *([1] * (row.dim() - 1)))
+            row_with_cache.masked_scatter_(mask, row)
+            rows_with_cache.append(row_with_cache)
+        # Write new rows to the cache (padding slots in write_index point to the trash position)
+        for view, row in zip(views, rows):
+            view[write_block, write_slot] = row
 
-        # Return the new KV values
-        return key_states_with_cache, value_states_with_cache
+        return tuple(rows_with_cache)
 
-    def get_cache_for_block_table(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-        """Returns the K and V cache views for a block table update."""
+    def get_cache_for_block_table(self, layer_idx: int) -> tuple[torch.Tensor, ...]:
+        """Returns the cache views for a block table update."""
         raise NotImplementedError("Not implemented for sliding attention cache allocator")
