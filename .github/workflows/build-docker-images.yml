@@ -235,7 +235,7 @@ jobs:
         with:
           context: ./docker/transformers-pytorch-amd-gpu
           build-args: |
-            REF=main
+            REF=${{ github.sha }}
           push: true
           tags: huggingface/transformers-pytorch-amd-gpu${{ inputs.image_postfix }}
 

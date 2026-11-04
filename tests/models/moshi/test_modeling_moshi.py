@@ -381,7 +381,7 @@ class MoshiTester:
         vocab_size=99,
         hidden_size=32,
         num_hidden_layers=2,
-        num_attention_heads=8,
+        num_attention_heads=2,
         intermediate_size=4,
         hidden_act="silu",
         rms_norm_eps=0.001,
@@ -394,10 +394,10 @@ class MoshiTester:
         num_codebooks=4,
         audio_encoder_type="mimi",
         attn_implementation="eager",
-        depth_hidden_size=16,
+        depth_hidden_size=32,
         depth_num_hidden_layers=2,
         depth_max_position_embeddings=5,
-        depth_num_attention_heads=8,
+        depth_num_attention_heads=2,
         depth_ffn_dim=16,
         depth_sliding_window=4,
         mimi_intermediate_size=40,
@@ -819,6 +819,31 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Moshi has no separate base model without a head.")
     def test_model_base_model_prefix(self):
         pass
+
+    def flash_attn_from_config(self, attn_implementation, test_fwd_in_train=True):
+        """Overriden for additional input that is needed"""
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config = self._prepare_config_headdim(config, 16)
+
+            model = model_class._from_config(
+                config,
+                attn_implementation=attn_implementation,
+                dtype=torch.bfloat16,
+            ).to(torch_device)
+
+            model.train(test_fwd_in_train)
+
+            # Moshi requires audio codes
+            model(**inputs_dict)
+
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.save_pretrained(tmp_dir)
+                reloaded = model_class.from_pretrained(tmp_dir)
+                self.assertNotEqual(
+                    reloaded.config._attn_implementation,
+                    attn_implementation,
+                )
 
 
 def place_dict_on_device(dict_to_place, device):

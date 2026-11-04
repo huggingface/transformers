@@ -1044,8 +1044,8 @@ class NemotronAsrStreamingRNNTOutput(BaseModelOutputWithPooling):
         encoding audio with `use_cache=True`. Pass it to the next chunk's forward.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
     decoder_cache: NemotronAsrStreamingRNNTDecoderCache | None = None
 
     encoder_past_key_values: Cache | None = None
