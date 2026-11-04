@@ -99,7 +99,7 @@ class QuantizationConfigMixin:
     """
 
     quant_method: QuantizationMethod
-    # Load a pre-quantized checkpoint dense: the `dequantize` load operation runs on every quantized weight
+    # Dequantize a pre-quantized checkpoint while loading: the `dequantize` load operation runs on every quantized weight
     dequantize = False
 
     def get_loading_attributes(self) -> dict[str, Any]:

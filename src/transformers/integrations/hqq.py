@@ -188,7 +188,7 @@ def _swap_in(model, full_layer_name, layer, missing_keys):
 
 
 class HqqDequantize(ConversionOps):
-    """Dense weights from the serialized `HQQLinear` states, dequantized by hqq itself."""
+    """Dequantized weights from the serialized `HQQLinear` states, dequantized by hqq itself."""
 
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer

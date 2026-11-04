@@ -59,7 +59,7 @@ class FourOverSixQuantize(ConversionOps):
 
 class FourOverSixDequantize(ConversionOps):
     """
-    Dense weights from the buffers of `FourOverSixLinear`: `quantized_weight_values`, `quantized_weight_scale_factors`,
+    Dequantized weights from the buffers of `FourOverSixLinear`: `quantized_weight_values`, `quantized_weight_scale_factors`,
     `quantized_weight_amax` and `quantized_weight_metadata` (original and padded shapes, packing and scale layout).
     The value and scale formats (`nvfp4`, `mxfp4`, `if4`, ...) come from the config of the module, so fouroversix
     dequantizes them.

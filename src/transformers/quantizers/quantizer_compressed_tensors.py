@@ -90,7 +90,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
     def _process_model_before_weight_loading(self, model, **kwargs):
         if self.quantization_config.dequantize:
-            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
+            # The model stays unquantized: the `dequantize` load operation runs on every checkpoint weight
             return
         from compressed_tensors.quantization import apply_quantization_config
 

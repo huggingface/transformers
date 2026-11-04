@@ -62,7 +62,7 @@ class SpQRHfQuantizer(HfQuantizer):
         **kwargs,
     ):
         if self.dequantizing:
-            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
+            # The model stays unquantized: the `dequantize` load operation runs on every checkpoint weight
             return
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules

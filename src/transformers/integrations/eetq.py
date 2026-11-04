@@ -45,7 +45,7 @@ class EetqQuantize(ConversionOps):
 
 
 class EetqDequantize(ConversionOps):
-    """Dense weights from the serialized int8 `weight` and its `weight_scales`. The int8 weight is stored in the
+    """Dequantized weights from the serialized int8 `weight` and its `weight_scales`. The int8 weight is stored in the
     arch-specific layout of the CUTLASS mixed gemm, so the kernel dequantizes it: a gemm with the identity."""
 
     def __init__(self, hf_quantizer):
@@ -68,7 +68,7 @@ class EetqDequantize(ConversionOps):
         return output
 
     def _dequantize(self, weight, scales):
-        # `weight` is (in_features, out_features): `identity @ weight` is the transposed dense weight
+        # `weight` is (in_features, out_features): `identity @ weight` is the transposed dequantized weight
         identity = torch.eye(weight.shape[0], dtype=scales.dtype, device="cuda")
         return self.kernel.w8_a16_gemm(identity, weight.cuda(), scales.cuda()).t().to(weight.device)
 

@@ -68,7 +68,7 @@ def _unpack_int2(packed: torch.Tensor, original_width: int) -> torch.Tensor:
 
 
 class GemmaDequantize(ConversionOps):
-    """Dense weights from the int2/4/8 `weight` (or `embedding_quantized`) and its per-row block scales."""
+    """Dequantized weights from the int2/4/8 `weight` (or `embedding_quantized`) and its per-row block scales."""
 
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
@@ -85,7 +85,7 @@ class GemmaDequantize(ConversionOps):
             packed = (_unpack_int4 if packed.shape[-1] == (width + 1) // 2 else _unpack_int2)(packed, width)
         weight = getattr(module, "weight", None)
         dtype = weight.dtype if weight is not None and weight.is_floating_point() else torch.float32
-        # The activation scales are dropped: a dense model doesn't round its activations
+        # The activation scales are dropped: an unquantized model doesn't round its activations
         return {"weight": packed.to(dtype) * scale.repeat_interleave(width // scale.shape[-1], dim=-1).to(dtype)}
 
 

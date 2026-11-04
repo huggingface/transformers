@@ -61,7 +61,7 @@ class QuantoQuantize(ConversionOps):
 
 class QuantoDequantize(ConversionOps):
     """
-    Dense weights from the flattened quanto weight: `weight._data` (int8 / fp8, or `weight._data._data` for int4 / int2
+    Dequantized weights from the flattened quanto weight: `weight._data` (int8 / fp8, or `weight._data._data` for int4 / int2
     values packed along the rows), its `weight._scale` and, for int4 / int2, its `weight._shift`. int4 / int2 weights
     are grouped along the input features, as `(out_features * in_features // group_size, group_size)`.
     """

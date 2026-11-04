@@ -215,7 +215,7 @@ class SinqDeserialize(ConversionOps):
 
 class SinqDequantize(ConversionOps):
     """
-    Dense weights from the `SINQLinear` state: `W_q`, its `meta` dict (scales, zeros, shape, packing...) and `bias`,
+    Dequantized weights from the `SINQLinear` state: `W_q`, its `meta` dict (scales, zeros, shape, packing...) and `bias`,
     dequantized by sinq itself as the format has many variants (NF codebooks, tiling, dual scales).
     """
 

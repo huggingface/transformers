@@ -93,7 +93,7 @@ class HqqHfQuantizer(HfQuantizer):
         **kwargs,
     ):
         if self.dequantizing:
-            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
+            # The model stays unquantized: the `dequantize` load operation runs on every checkpoint weight
             return
         # Add the corresponding quant_config to each valid module. The `quantize` load operation then swaps each one for an `HQQLinear`.
         # prepare_for_hqq_linear() also sets the right quantization config inside the model (model.config.quantization_config) and the layers (hqq_layer.quant_config)

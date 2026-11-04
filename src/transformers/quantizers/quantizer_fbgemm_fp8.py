@@ -119,7 +119,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
         **kwargs,
     ):
         if self.dequantizing:
-            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
+            # The model stays unquantized: the `dequantize` load operation runs on every checkpoint weight
             return
         from ..integrations import replace_with_fbgemm_fp8_linear
 

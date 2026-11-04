@@ -94,10 +94,10 @@ class FpQuantDeserialize(ConversionOps):
 
 class FpQuantDequantize(ConversionOps):
     """
-    Dense weights from the forward-quantized ones: `dqweight` (pseudo-quantization), or the FP4 `qweight` with its
+    Dequantized weights from the forward-quantized ones: `dqweight` (pseudo-quantization), or the FP4 `qweight` with its
     per-block `scales` (E8M0 for MXFP4, E4M3 for NVFP4) divided by `weight_global_scale` (the GEMM scales its output by
     `1 / (weight_global_scale * act_global_scale)`). Both are rotated by `forward_hadamard_matrix` per group along the
-    input dim, so the dense weight is rotated back by its transpose.
+    input dim, so the dequantized weight is rotated back by its transpose.
     """
 
     def __init__(self, hf_quantizer):

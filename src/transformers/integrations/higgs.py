@@ -633,7 +633,7 @@ class HiggsDeserialize(ConversionOps):
 
 class HiggsDequantize(HiggsDeserialize):
     """
-    Dense weights from the FLUTE-packed `weight`, its `scales` and lookup `tables` / `tables2`. The packing is specific
+    Dequantized weights from the FLUTE-packed `weight`, its `scales` and lookup `tables` / `tables2`. The packing is specific
     to the FLUTE kernels (tiles, number of SMs), so the weights are repacked as when deserializing, then the HIGGS
     matmul runs on the identity, as in `HiggsLinear.forward`, which also undoes the Hadamard rotation.
     """
@@ -661,7 +661,7 @@ class HiggsDequantize(HiggsDeserialize):
         config = self.hf_quantizer.quantization_config
         weight, tune_metadata = self.repack(weight, scales, module_name)
         identity = torch.eye(scales.shape[1] * config.group_size, dtype=scales.dtype, device=scales.device)
-        dense = qgemm_v2(
+        dequantized = qgemm_v2(
             pad_to_block(identity, [-1], config.hadamard_size),
             weight,
             scales,
@@ -671,4 +671,4 @@ class HiggsDequantize(HiggsDeserialize):
             tune_metadata,
             hadamard_size=config.hadamard_size,
         )
-        return dense.T.contiguous()
+        return dequantized.T.contiguous()

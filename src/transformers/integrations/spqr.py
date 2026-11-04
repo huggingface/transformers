@@ -61,7 +61,7 @@ def dequantize_spqr(dense_weights, row_offsets, col_vals, in_perm, rows, cols, b
 
 
 class SpQRDequantize(ConversionOps):
-    """Dense weights from the SpQR `dense_weights` tiles, the outliers of `row_offsets` / `col_vals` and `in_perm`."""
+    """Dequantized weights from the SpQR `dense_weights` tiles, the outliers of `row_offsets` / `col_vals` and `in_perm`."""
 
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer

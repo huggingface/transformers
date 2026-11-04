@@ -361,7 +361,7 @@ class BitNetDeserialize(ConversionOps):
 
 
 class BitNetDequantize(ConversionOps):
-    """Dense weights from the ternary `weight` (packed in uint8 or not) and its `weight_scale`."""
+    """Dequantized weights from the ternary `weight` (packed in uint8 or not) and its `weight_scale`."""
 
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer

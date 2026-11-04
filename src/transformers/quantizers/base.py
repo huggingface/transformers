@@ -204,7 +204,7 @@ class HfQuantizer(ABC):
 
     @property
     def dequantizing(self) -> bool:
-        "Whether a pre-quantized checkpoint loads dense, through the `dequantize` load operations"
+        "Whether a pre-quantized checkpoint is dequantized while loading, through the `dequantize` load operations"
         return self.pre_quantized and getattr(self.quantization_config, "dequantize", False)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):

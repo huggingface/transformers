@@ -28,7 +28,7 @@ logger = logging.get_logger(__name__)
 
 class AqlmDequantize(ConversionOps):
     """
-    Dense weights from the AQLM `codes` (one per codebook for each `(out_group_size, in_group_size)` block), summed
+    Dequantized weights from the AQLM `codes` (one per codebook for each `(out_group_size, in_group_size)` block), summed
     `codebooks` entries, times the `scales` of each output group. Same as `aqlm.utils._dequantize_weight`.
     """
 

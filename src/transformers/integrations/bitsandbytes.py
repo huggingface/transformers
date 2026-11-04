@@ -90,8 +90,8 @@ class Bnb4bitDeserialize(ConversionOps):
         return {key_weight: new_value}
 
 
-def _to_dense_layout(weights, key, model, full_layer_name):
-    """Undo the `Conv1D` transpose done at quantization time and cast to the dtype of the dense param."""
+def _to_model_layout(weights, key, model, full_layer_name):
+    """Undo the `Conv1D` transpose done at quantization time and cast to the dtype of the model param."""
     if model is None:
         return weights
     name = next(iter(expand_target_names({key: None}, full_layer_name)))
@@ -108,7 +108,7 @@ def _to_dense_layout(weights, key, model, full_layer_name):
 
 
 class Bnb4bitDequantize(ConversionOps):
-    """Dense weights from the serialized `weight` and its quant state, saved under `weight.*`."""
+    """Dequantized weights from the serialized `weight` and its quant state, saved under `weight.*`."""
 
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
@@ -131,13 +131,13 @@ class Bnb4bitDequantize(ConversionOps):
                     )
                     for i, weight in enumerate(weights)
                 ]
-                weights = _to_dense_layout(weights, key, model, full_layer_name)
+                weights = _to_model_layout(weights, key, model, full_layer_name)
             output[key] = weights
         return output
 
 
 class Bnb8bitDequantize(ConversionOps):
-    """Dense weights from the serialized int8 `weight` and its row-wise scales `SCB`."""
+    """Dequantized weights from the serialized int8 `weight` and its row-wise scales `SCB`."""
 
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
@@ -152,7 +152,7 @@ class Bnb8bitDequantize(ConversionOps):
             if scales is not None:
                 scales = scales if isinstance(scales, list) else [scales]
                 weights = [weight.float() * scale.view(-1, 1) / 127 for weight, scale in zip(weights, scales)]
-                weights = _to_dense_layout(weights, key, model, full_layer_name)
+                weights = _to_model_layout(weights, key, model, full_layer_name)
             output[key] = weights
         return output
 
