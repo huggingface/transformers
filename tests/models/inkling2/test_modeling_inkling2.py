@@ -57,7 +57,6 @@ class Inkling2TextModelTester(CausalLMModelTester):
         self.swa_num_key_value_heads = self.num_key_value_heads
         self.swa_head_dim = self.head_dim
         self.n_routed_experts = 8
-        self.n_shared_experts = 1
 
 
 @require_torch
@@ -107,7 +106,6 @@ class Inkling2VisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("layer_types", ["hybrid_sliding", "hybrid"])
         kwargs.setdefault("moe_intermediate_size", 16)
         kwargs.setdefault("n_routed_experts", 8)
-        kwargs.setdefault("n_shared_experts", 1)
         kwargs.setdefault("swa_num_attention_heads", 2)
         kwargs.setdefault("swa_num_key_value_heads", 2)
         kwargs.setdefault("swa_head_dim", 16)

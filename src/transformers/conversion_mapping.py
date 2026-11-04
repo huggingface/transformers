@@ -308,14 +308,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"embed\.weight", target_patterns=r"embed_tokens.weight"),
             WeightRenaming(source_patterns=r"embed_norm\.", target_patterns=r"embed_tokens.embed_norm."),
             WeightConverter(
-                source_patterns="shared_experts.shared_w13_weight",
-                target_patterns=["shared_experts.gate_proj", "shared_experts.up_proj"],
-                operations=[Interleave(dim=1), Chunk(dim=1)],
-            ),
-            WeightRenaming(
-                source_patterns=r"shared_experts\.shared_w2_weight", target_patterns=r"shared_experts.down_proj"
-            ),
-            WeightConverter(
                 source_patterns=[
                     "mlp.experts.w13_weight",
                     "mlp.experts.w13_weight_scale",

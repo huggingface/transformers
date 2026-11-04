@@ -44,7 +44,6 @@ class Inkling2TextConfig(PreTrainedConfig):
         Backward distance, in tokens, over which the relative position bias is applied in the full-attention layers.
     log_scaling_n_floor (`int`, *optional*, defaults to 8192):
         Position from which queries and relative states are scaled up logarithmically in the full-attention layers.
-        If `None`, the scaling is disabled.
     log_scaling_alpha (`float`, *optional*, defaults to 0.1):
         Strength of the logarithmic scaling controlled by `log_scaling_n_floor`.
     local_layer_ids (`list[int]`, *optional*, defaults to `None`):
@@ -54,12 +53,8 @@ class Inkling2TextConfig(PreTrainedConfig):
         Maximum L2 norm of each query and key head vector. Longer vectors are scaled down to this norm.
     rel_l2_clip_threshold (`float`, *optional*, defaults to 8.0):
         Maximum L2 norm of each relative-state head vector.
-    use_value_norm_no_gamma (`bool`, *optional*, defaults to `True`):
-        Whether value head vectors are RMS-normalized, without a learned scale.
     n_layers_per_attnres_block (`int`, *optional*, defaults to 6):
         Number of decoder layers summed into one block before the block becomes a source of the attention residuals.
-    attn_res_normalize_values (`bool`, *optional*, defaults to `True`):
-        Whether the attention residuals mix RMS-normalized sources instead of the raw ones.
     mlp_gate_softcap (`float`, *optional*, defaults to 4.0):
         Softcap applied to the linear part of the experts' gate projection.
     mlp_up_softcap (`float`, *optional*, defaults to 25.0):
@@ -75,10 +70,6 @@ class Inkling2TextConfig(PreTrainedConfig):
         "layers.*.mlp.experts.gate_up_proj": "colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
-        "layers.*.mlp.shared_experts.gate_proj": "colwise",
-        "layers.*.mlp.shared_experts.up_proj": "colwise",
-        "layers.*.mlp.shared_experts.down_proj": "rowwise",
-        "layers.*.mlp.shared_experts": "all_reduce",
     }
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
@@ -95,7 +86,7 @@ class Inkling2TextConfig(PreTrainedConfig):
 
     vocab_size: int = 201024
 
-    unpadded_vocab_size: int | None = 200058
+    unpadded_vocab_size: int = 200058
     hidden_size: int = 4608
     num_hidden_layers: int = 48
     num_attention_heads: int = 48
@@ -107,7 +98,7 @@ class Inkling2TextConfig(PreTrainedConfig):
     sliding_window_size: int = 1024
     d_rel: int = 16
     rel_extent: int = 1024
-    log_scaling_n_floor: int | None = 8192
+    log_scaling_n_floor: int = 8192
     log_scaling_alpha: float = 0.1
     local_layer_ids: list[int] | None = None
     layer_types: list[str] | None = None
@@ -127,12 +118,10 @@ class Inkling2TextConfig(PreTrainedConfig):
     eos_token_id: int | None = 200006
     qk_l2_clip_threshold: float = 22.627416997969522
     rel_l2_clip_threshold: float = 8.0
-    use_value_norm_no_gamma: bool = True
     n_layers_per_attnres_block: int = 6
-    attn_res_normalize_values: bool = True
     mlp_gate_softcap: float = 4.0
     mlp_up_softcap: float = 25.0
-    final_logit_softcapping: float | None = 30.0
+    final_logit_softcapping: float = 30.0
     use_cache: bool = True
 
     def __post_init__(self, **kwargs):
@@ -203,8 +192,8 @@ class Inkling2VisionConfig(PreTrainedConfig):
 @strict
 class Inkling2Config(PreTrainedConfig):
     r"""
-    image_bos_token_id (`int`, *optional*, defaults to 200005):
-        The token index that begins an image span.
+    image_token_id (`int`, *optional*, defaults to 200054):
+        Token index of the image placeholders, each replaced by one image feature.
     """
 
     model_type = "inkling2_mm_model"
@@ -213,7 +202,6 @@ class Inkling2Config(PreTrainedConfig):
     text_config: Inkling2TextConfig | dict | None = None
     vision_config: Inkling2VisionConfig | dict | None = None
     image_token_id: int = 200054
-    image_bos_token_id: int = 200005
 
     def __post_init__(self, **kwargs):
         super().__post_init__(**kwargs)

@@ -53,7 +53,6 @@ from ..inkling.modeling_inkling import (
     InklingPreTrainedModel,
     InklingRelativeLogits,
     InklingRMSNorm,
-    InklingSharedExperts,
     InklingShortConvolution,
     InklingTextModel,
     InklingTopkRouter,
@@ -86,7 +85,6 @@ class Inkling2TextConfig(InklingTextConfig):
         Backward distance, in tokens, over which the relative position bias is applied in the full-attention layers.
     log_scaling_n_floor (`int`, *optional*, defaults to 8192):
         Position from which queries and relative states are scaled up logarithmically in the full-attention layers.
-        If `None`, the scaling is disabled.
     log_scaling_alpha (`float`, *optional*, defaults to 0.1):
         Strength of the logarithmic scaling controlled by `log_scaling_n_floor`.
     local_layer_ids (`list[int]`, *optional*, defaults to `None`):
@@ -96,12 +94,8 @@ class Inkling2TextConfig(InklingTextConfig):
         Maximum L2 norm of each query and key head vector. Longer vectors are scaled down to this norm.
     rel_l2_clip_threshold (`float`, *optional*, defaults to 8.0):
         Maximum L2 norm of each relative-state head vector.
-    use_value_norm_no_gamma (`bool`, *optional*, defaults to `True`):
-        Whether value head vectors are RMS-normalized, without a learned scale.
     n_layers_per_attnres_block (`int`, *optional*, defaults to 6):
         Number of decoder layers summed into one block before the block becomes a source of the attention residuals.
-    attn_res_normalize_values (`bool`, *optional*, defaults to `True`):
-        Whether the attention residuals mix RMS-normalized sources instead of the raw ones.
     mlp_gate_softcap (`float`, *optional*, defaults to 4.0):
         Softcap applied to the linear part of the experts' gate projection.
     mlp_up_softcap (`float`, *optional*, defaults to 25.0):
@@ -116,10 +110,6 @@ class Inkling2TextConfig(InklingTextConfig):
         "layers.*.mlp.experts.gate_up_proj": "colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
-        "layers.*.mlp.shared_experts.gate_proj": "colwise",
-        "layers.*.mlp.shared_experts.up_proj": "colwise",
-        "layers.*.mlp.shared_experts.down_proj": "rowwise",
-        "layers.*.mlp.shared_experts": "all_reduce",
     }
     base_model_pp_plan = AttributeError()
     base_model_ep_plan = {
@@ -135,14 +125,14 @@ class Inkling2TextConfig(InklingTextConfig):
         "intermediate_size": "moe_intermediate_size",
     }
 
-    unpadded_vocab_size: int | None = 200058
+    unpadded_vocab_size: int = 200058
     hidden_size: int = 4608
     num_hidden_layers: int = 48
     num_attention_heads: int = 48
     swa_num_attention_heads: int = 48
     swa_num_key_value_heads: int = 8
     sliding_window_size: int = 1024
-    log_scaling_n_floor: int | None = 8192
+    log_scaling_n_floor: int = 8192
     max_position_embeddings: int = 1048576
     moe_intermediate_size: int = 2304
     n_routed_experts: int = 384
@@ -151,12 +141,10 @@ class Inkling2TextConfig(InklingTextConfig):
     eos_token_id: int | None = 200006
     qk_l2_clip_threshold: float = 22.627416997969522
     rel_l2_clip_threshold: float = 8.0
-    use_value_norm_no_gamma: bool = True
     n_layers_per_attnres_block: int = 6
-    attn_res_normalize_values: bool = True
     mlp_gate_softcap: float = 4.0
     mlp_up_softcap: float = 25.0
-    final_logit_softcapping: float | None = 30.0
+    final_logit_softcapping: float = 30.0
     use_cache: bool = True
 
     intermediate_size = AttributeError()
@@ -243,19 +231,17 @@ class Inkling2VisionConfig(PreTrainedConfig):
 @strict
 class Inkling2Config(InklingConfig):
     r"""
-    image_bos_token_id (`int`, *optional*, defaults to 200005):
-        The token index that begins an image span.
+    image_token_id (`int`, *optional*, defaults to 200054):
+        Token index of the image placeholders, each replaced by one image feature.
     """
 
     model_type = "inkling2_mm_model"
     sub_configs_defaults = {"text_config": Inkling2TextConfig, "vision_config": Inkling2VisionConfig}
 
-    text_config: Inkling2TextConfig | dict | None = None
-    vision_config: Inkling2VisionConfig | dict | None = None
-
     audio_config = AttributeError()
     audio_token_id = AttributeError()
     audio_bos_token_id = AttributeError()
+    image_bos_token_id = AttributeError()
 
     def __post_init__(self, **kwargs):
         PreTrainedConfig.__post_init__(self, **kwargs)
@@ -515,7 +501,7 @@ class Inkling2Attention(InklingAttention):
         q_positions = torch.arange(q_length, device=hidden_states.device) + q_offset
 
         tau = None
-        if not self.is_sliding and self.config.log_scaling_n_floor is not None:
+        if not self.is_sliding:
             tau = 1.0 + self.config.log_scaling_alpha * torch.log(
                 ((kwargs["position_ids"] + 1).float() / self.config.log_scaling_n_floor).clamp(min=1.0)
             )
@@ -523,9 +509,7 @@ class Inkling2Attention(InklingAttention):
 
         query_states = self.q_l2_clip(query_states.view(hidden_shape), tau).transpose(1, 2)
         key_states = self.k_l2_clip(key_states.view(hidden_shape)).transpose(1, 2)
-        value_states = value_states.view(hidden_shape)
-        if self.config.use_value_norm_no_gamma:
-            value_states = F.rms_norm(value_states, (self.head_dim,), eps=self.config.rms_norm_eps)
+        value_states = F.rms_norm(value_states.view(hidden_shape), (self.head_dim,), eps=self.config.rms_norm_eps)
         value_states = value_states.transpose(1, 2)
         relative_states = self.rel_l2_clip(relative_states.view(*input_shape, self.num_heads, -1), tau)
 
@@ -604,72 +588,36 @@ class Inkling2TopkRouter(InklingTopkRouter):
         super().__init__(config)
         del self.global_scale
 
-    def forward(self, hidden_states) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        flat = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = F.linear(flat.float(), self.weight.float())
-
-        routed_logits = router_logits[..., : self.num_experts]
-        scores_for_choice = routed_logits.sigmoid() + self.e_score_correction_bias
-        topk_indices = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)[1]
-
-        topk_logits = torch.cat(
-            [routed_logits.gather(-1, topk_indices), router_logits[..., self.num_experts :]], dim=-1
-        )
-        topk_log_probs = F.logsigmoid(topk_logits)
-        topk_weights = torch.exp(topk_log_probs - torch.logsumexp(topk_log_probs, dim=-1, keepdim=True))
-        topk_weights = topk_weights * self.route_scale
-
-        shared_gammas = topk_weights[..., self.top_k :].contiguous()
-        topk_weights = topk_weights[..., : self.top_k].contiguous()
-        return routed_logits, topk_weights, topk_indices, shared_gammas
-
-
-class Inkling2SharedExperts(InklingSharedExperts):
-    def __init__(self, config: Inkling2TextConfig):
-        super().__init__(config)
-        self.gate_softcap = config.mlp_gate_softcap
-        self.up_softcap = config.mlp_up_softcap
-
-    def forward(self, hidden_states, gammas):
-        input_shape = hidden_states.shape
-        hidden_states = hidden_states.reshape(1, -1, input_shape[-1]).expand(self.n_shared_experts, -1, -1)
-        gammas = gammas.reshape(-1, self.n_shared_experts, 1).transpose(0, 1)
-
-        gate = torch.bmm(hidden_states, self.gate_proj.transpose(1, 2))
-        up = torch.bmm(hidden_states, self.up_proj.transpose(1, 2))
-        activated = softcapped_swiglu(gate, up, self.gate_softcap, self.up_softcap) * gammas
-        down = torch.bmm(activated.to(hidden_states.dtype), self.down_proj.transpose(1, 2))
-
-        out = down.float().sum(dim=0).to(hidden_states.dtype)
-        return out.view(input_shape)
+    def forward(self, hidden_states) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        router_logits = F.linear(hidden_states.reshape(-1, self.hidden_dim).float(), self.weight.float())
+        scores = router_logits.sigmoid()
+        topk_indices = torch.topk(scores + self.e_score_correction_bias, self.top_k, dim=-1, sorted=False)[1]
+        topk_weights = scores.gather(-1, topk_indices)
+        topk_weights = topk_weights / topk_weights.sum(dim=-1, keepdim=True) * self.route_scale
+        return router_logits, topk_weights, topk_indices
 
 
 class Inkling2MoE(InklingMoE):
     def __init__(self, config):
         super().__init__(config)
-        self.shared_experts = Inkling2SharedExperts(config) if config.n_shared_experts else None
+        del self.shared_experts
 
     def forward(self, hidden_states) -> torch.Tensor:
-        residuals = hidden_states
         input_shape = hidden_states.shape
-        _, topk_weights, topk_indices, shared_gammas = self.gate(hidden_states)
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*input_shape)
-        if self.shared_experts is not None:
-            hidden_states = hidden_states + self.shared_experts(residuals, gammas=shared_gammas)
-        return hidden_states
+        _, topk_weights, topk_indices = self.gate(hidden_states)
+        hidden_states = self.experts(hidden_states.view(-1, input_shape[-1]), topk_indices, topk_weights)
+        return hidden_states.view(*input_shape)
 
 
 class Inkling2BlockAttentionResidual(nn.Module):
     """
     Block attention residual: attention over depth that mixes the completed blocks and the current partial block into
     the input of the next sublayer. At each position, every learned pseudo-query attends to that position's block
-    states. Keys are the RMS-normalized block states, values are the raw or normalized block states.
+    states. Keys and values are the RMS-normalized block states.
     """
 
     def __init__(self, config: Inkling2TextConfig, num_queries: int = 1):
         super().__init__()
-        self.normalize_values = config.attn_res_normalize_values
         self.query = nn.Parameter(
             torch.zeros(config.hidden_size) if num_queries == 1 else torch.zeros(num_queries, config.hidden_size)
         )
@@ -684,17 +632,17 @@ class Inkling2BlockAttentionResidual(nn.Module):
         """
         # with a device map, earlier blocks live on the devices of the layers that produced them
         device = partial_block_states.device
-        value_states = torch.stack(
+        stacked_states = torch.stack(
             [*(state.to(device) for state in block_states), partial_block_states], dim=-2
         ).float()
-        key_states = value_states * torch.rsqrt(value_states.square().mean(dim=-1, keepdim=True) + 1e-6)
-        if self.normalize_values:
-            value_states = key_states
+        stacked_states = stacked_states * torch.rsqrt(stacked_states.square().mean(dim=-1, keepdim=True) + 1e-6)
 
-        hidden_size = value_states.shape[-1]
+        hidden_size = stacked_states.shape[-1]
         # (batch, seq_len, num_queries, hidden_size), the same queries at every position
-        query_states = self.query.to(device).float().view(-1, hidden_size).expand(*value_states.shape[:-2], -1, -1)
-        attn_output = F.scaled_dot_product_attention(query_states, key_states, value_states, scale=hidden_size**-0.5)
+        query_states = self.query.to(device).float().view(-1, hidden_size).expand(*stacked_states.shape[:-2], -1, -1)
+        attn_output = F.scaled_dot_product_attention(
+            query_states, stacked_states, stacked_states, scale=hidden_size**-0.5
+        )
         return attn_output.unbind(-2)
 
 
@@ -924,10 +872,6 @@ class Inkling2PreTrainedModel(InklingPreTrainedModel):
         elif isinstance(module, Inkling2TopkRouter):
             init.normal_(module.weight, mean=0.0, std=std)
             init.zeros_(module.e_score_correction_bias)
-        elif isinstance(module, Inkling2SharedExperts):
-            init.normal_(module.gate_proj, mean=0.0, std=std)
-            init.normal_(module.up_proj, mean=0.0, std=std)
-            init.normal_(module.down_proj, mean=0.0, std=std)
         elif isinstance(module, Inkling2L2Clip) and module.scale is not None:
             init.ones_(module.scale)
         elif isinstance(module, Inkling2DynamicShortConvolution):
@@ -945,8 +889,6 @@ class Inkling2PreTrainedModel(InklingPreTrainedModel):
 
 @auto_docstring
 class Inkling2TextModel(InklingTextModel):
-    config: Inkling2TextConfig
-
     def __init__(self, config: Inkling2TextConfig):
         super().__init__(config)
         self.output_res = Inkling2BlockAttentionResidual(config)
@@ -1056,11 +998,9 @@ class Inkling2ForCausalLM(InklingForCausalLM):
 
         hidden_states = slice_logits_to_keep(outputs.last_hidden_state, logits_to_keep)
         logits = self.lm_head(hidden_states).float()
-        if (softcap := self.config.final_logit_softcapping) is not None:
-            logits = torch.tanh(logits / softcap) * softcap
-        unpadded_vocab_size = self.config.unpadded_vocab_size
-        if unpadded_vocab_size is not None and unpadded_vocab_size < logits.shape[-1]:
-            logits = logits[..., :unpadded_vocab_size]
+        softcap = self.config.final_logit_softcapping
+        logits = torch.tanh(logits / softcap) * softcap
+        logits = logits[..., : self.config.unpadded_vocab_size]
 
         loss = None
         if labels is not None:
@@ -1095,7 +1035,7 @@ class Inkling2VisionModel(Inkling2PreTrainedModel):
         self.merger = Inkling2VisionMerger(config)
         self.post_init()
 
-    @capture_outputs(tie_last_hidden_states=False)
+    @capture_outputs
     @auto_docstring
     def forward(
         self, pixel_values: torch.Tensor, image_grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
@@ -1144,6 +1084,7 @@ class Inkling2Model(InklingModel):
     def __init__(self, config: Inkling2Config):
         super().__init__(config)
         del self.audio_tower
+        del self.vocab_size
 
     @can_return_tuple
     @auto_docstring(custom_intro="Encodes images into language model embeddings, one per image token.")
@@ -1262,10 +1203,9 @@ class Inkling2ForConditionalGeneration(InklingForConditionalGeneration):
         text_config = self.config.text_config
         hidden_states = slice_logits_to_keep(outputs.last_hidden_state, logits_to_keep)
         logits = self.lm_head(hidden_states).float()
-        if (softcap := text_config.final_logit_softcapping) is not None:
-            logits = torch.tanh(logits / softcap) * softcap
-        if text_config.unpadded_vocab_size is not None and text_config.unpadded_vocab_size < logits.shape[-1]:
-            logits = logits[..., : text_config.unpadded_vocab_size]
+        softcap = text_config.final_logit_softcapping
+        logits = torch.tanh(logits / softcap) * softcap
+        logits = logits[..., : text_config.unpadded_vocab_size]
 
         loss = None
         if labels is not None:
