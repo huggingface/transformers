@@ -4318,6 +4318,19 @@ class GradientCheckpointingDeprecatedAliasTest(unittest.TestCase):
         self.assertTrue(OldStyleModel.supports_activation_checkpointing)
         self.assertTrue(LlamaModel.supports_gradient_checkpointing)
 
+        # The old flag set after class creation (e.g. on a wrapper that inherits support from its submodules) still
+        # enables checkpointing
+        class NoSupportModel(LlamaModel):
+            supports_activation_checkpointing = False
+
+        config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=64, num_attention_heads=4)
+        model = NoSupportModel(config)
+        with self.assertRaises(ValueError):
+            model.activation_checkpointing_enable()
+        model.supports_gradient_checkpointing = True
+        model.activation_checkpointing_enable()
+        self.assertTrue(model.is_activation_checkpointing)
+
 
 @require_torch_accelerator
 class GradientCheckpointingOffloadTest(unittest.TestCase):

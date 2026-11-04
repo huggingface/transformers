@@ -3151,7 +3151,9 @@ class PreTrainedModel(
     def _activation_checkpointing_enable(
         self, activation_checkpointing_kwargs=None, every_n_layers: int = 1, offload: bool = False
     ):
-        if not self.supports_activation_checkpointing:
+        # `supports_gradient_checkpointing` set after class creation (e.g. on a wrapper that inherits support from its
+        # submodules) still counts until v6
+        if not (self.supports_activation_checkpointing or self.supports_gradient_checkpointing):
             raise ValueError(f"{self.__class__.__name__} does not support activation checkpointing.")
 
         if activation_checkpointing_kwargs is None:
