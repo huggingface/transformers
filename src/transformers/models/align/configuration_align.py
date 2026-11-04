@@ -13,6 +13,8 @@
 # limitations under the License.
 """ALIGN model configuration"""
 
+import math
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
@@ -137,7 +139,8 @@ class AlignVisionConfig(PreTrainedConfig):
     drop_connect_rate: float | int = 0.2
 
     def __post_init__(self, **kwargs):
-        self.num_hidden_layers = sum(self.num_block_repeats) * 4
+        # The encoder repeats each base block `ceil(depth_coefficient * repeats)` times
+        self.num_hidden_layers = sum(math.ceil(self.depth_coefficient * n) for n in self.num_block_repeats)
         for attr in [
             "kernel_sizes",
             "in_channels",

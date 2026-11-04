@@ -6081,11 +6081,19 @@ class ModelTesterMixin(ExportTesterMixin):
                         f"{model_class.__name__} does not propagate hidden states correctly or uses another name"
                     )
 
-                # Indices select hidden states as they appear in the full output, so negative indices count from the end
+                # Indices select hidden states as they appear in the full output, so negative indices count from the end.
+                # They are resolved with `config.num_hidden_layers`, so models whose config doesn't define it reject them
                 num_hidden_states = len(hidden_states)
                 indices_to_capture = [*range(0, num_hidden_states, 2), -1]
-                torch.manual_seed(0)
-                out = model(**inputs, output_hidden_states=indices_to_capture)
+                try:
+                    torch.manual_seed(0)
+                    out = model(**inputs, output_hidden_states=indices_to_capture)
+                except ValueError as e:
+                    if "cannot select hidden states with negative indices" not in str(e):
+                        raise
+                    indices_to_capture = indices_to_capture[:-1]
+                    torch.manual_seed(0)
+                    out = model(**inputs, output_hidden_states=indices_to_capture)
                 captured = out.hidden_states if "hidden_states" in out else out.text_model_output.hidden_states
                 self.assertEqual(len(captured), num_hidden_states)
                 kept = {i % num_hidden_states for i in indices_to_capture}

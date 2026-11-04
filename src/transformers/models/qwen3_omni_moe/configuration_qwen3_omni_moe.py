@@ -86,7 +86,7 @@ class Qwen3OmniMoeVisionEncoderConfig(PreTrainedConfig):
     model_type = "qwen3_omni_moe_vision_encoder"
     base_config_key = "vision_config"
     default_rope_type = "axial"
-    attribute_map = {"num_attention_heads": "num_heads"}
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 27
     hidden_size: int = 1152
