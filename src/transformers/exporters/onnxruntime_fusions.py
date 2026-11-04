@@ -135,9 +135,58 @@ def _key_transpose(op, key, flat_shape, shape):
     return op.Transpose(op.Reshape(key, op.Constant(value_ints=[batch, heads, length, depth])), perm=[0, 1, 3, 2])
 
 
-# A grouped-query key, repeated over its heads, is 5D: torchlib's transpose of it (through 3D) folds into the
-# repeat's reshape, and the attention fusion, which looks for a 4D key, no longer matches. Rewritten as a 4D one.
-_KEY_TRANSPOSE = pattern.RewriteRule(_flattened_key_transpose, _key_transpose, _is_flattened_5d_key)
+def _shape_slice(value: ir.Value, source: ir.Value) -> tuple[int, int] | None:
+    """`(start, end)` if `value` is `Slice(Shape(source), start, end)`, constant bounds on its only axis."""
+    sliced = _producer(value, "Slice")
+    shape = _producer(sliced.inputs[0], "Shape") if sliced is not None else None
+    if shape is None or shape.inputs[0] is not source or shape.attributes.get_int("start", 0) != 0:
+        return None
+    if "end" in shape.attributes or len(sliced.inputs) > 4:
+        return None
+    bounds = [_constant(item) for item in sliced.inputs[1:3]]
+    if None in bounds or any(bound.size != 1 for bound in bounds):
+        return None
+    return int(bounds[0].reshape(())), int(bounds[1].reshape(()))
+
+
+def _is_dynamic_4d_key(context, key, flat_shape, shape, **_) -> bool:
+    # Under dynamic shapes, both shapes are the key's own sizes: `[..., length, head_dim]` flattened to 3D, then
+    # `[..., head_dim, length]` (the last two swapped).
+    if key.shape is None or len(key.shape) != 4:
+        return False
+    target, flat = _producer(shape, "Concat"), _producer(flat_shape, "Concat")
+    if target is None or flat is None or len(target.inputs) != 3 or len(flat.inputs) < 2:
+        return False
+    leading, last, second_last = (_shape_slice(value, key) for value in target.inputs)
+    flat_tail = [_shape_slice(value, key) for value in flat.inputs[-2:]]
+    return (
+        leading is not None
+        and leading[0] <= 0
+        and leading[1] == -2
+        and last is not None
+        and last[0] == -1
+        and last[1] >= 4
+        and second_last == (-2, -1)
+        and flat_tail[0] == (-2, -1)
+        and flat_tail[1] is not None
+        and flat_tail[1][0] == -1
+        and flat_tail[1][1] >= 4
+    )
+
+
+def _transposed_key(op, key, flat_shape, shape):
+    return op.Transpose(key, perm=[0, 1, 3, 2])
+
+
+# torchlib transposes a key through 3D: a grouped-query key, repeated over its heads, is 5D, and its transpose folds
+# into the repeat's reshape; under dynamic shapes, a 4D one's shapes are computed from its own. The attention fusion,
+# which looks for a 4D transpose, matches neither: both are rewritten as one.
+_KEY_TRANSPOSE = pattern.RewriteRuleSet(
+    [
+        pattern.RewriteRule(_flattened_key_transpose, _key_transpose, _is_flattened_5d_key),
+        pattern.RewriteRule(_flattened_key_transpose, _transposed_key, _is_dynamic_4d_key),
+    ]
+)
 
 
 # ── 2. Rotary embeddings ──────────────────────────────────────────────────────
@@ -685,8 +734,9 @@ def _fuse_group_query_attention(model: ir.Model, prefill: bool = True) -> int:
             rotary_attributes = {"do_rotary": 1, "rotary_interleaved": interleaved}
         if rotation is not None or groups is not None:
             query = merged(query_states)
-        batch = tape.op("Shape", [query], attributes={"start": 0, "end": 1})
-        new_length = tape.op("Shape", [query], attributes={"start": 1, "end": 2})
+        # Read off the query's heads, which keep their shape, rather than off their merge built here.
+        batch = tape.op("Shape", [query_states], attributes={"start": 0, "end": 1})
+        new_length = tape.op("Shape", [query_states], attributes={"start": 2, "end": 3})
         if past_key is None:
             length = new_length
         elif start is None:
@@ -705,8 +755,8 @@ def _fuse_group_query_attention(model: ir.Model, prefill: bool = True) -> int:
             total_length = tape.op("Squeeze", [written])
         if rotary[2] is not None:
             # It takes a cache of at least the total rows; a per-token cache (`b * length + s`) has
-            # `batch * length`, so zero rows, never read, are appended up to that (a `Concat`: the CUDA provider has
-            # no bfloat16 `Pad`).
+            # `batch * length`, so zero rows, never read, are appended up to that (a `Concat`: there's no bfloat16
+            # `Pad`, microsoft/onnxruntime#33874).
             total = constant([known_total]) if known_total is not None else length
             rows = tape.op("Shape", [rotary[0]], attributes={"start": 0, "end": 1})
             missing = tape.op("Max", [tape.op("Sub", [total, rows]), constant([0])])
@@ -915,7 +965,7 @@ def _fuse_mixture_of_experts(model: ir.Model) -> int:
 def _unfuse_attentions(model: ir.Model) -> int:
     """Turn each `MultiHeadAttention` over `[batch, length, heads * head_dim]` queries, keys and values with an
     attention bias and no cache (an encoder's, or one `GroupQueryAttention` didn't take) back into `MatMul`s and a
-    `Softmax`: ONNX Runtime's CPU kernel for it runs slower than the ops it fused (2.5x on Qwen3's decode).
+    `Softmax`: ONNX Runtime's CPU kernel for it runs slower than the ops it fused (microsoft/onnxruntime#33873).
     Returns how many."""
     count = 0
     for node in list(model.graph.all_nodes()):
@@ -990,24 +1040,6 @@ def _pack_sibling_matmuls(model: ir.Model) -> int:
 
 
 # ── 6. CUDA provider ──────────────────────────────────────────────────────────
-# ONNX Runtime's CUDA provider runs an op its kernels lack on the CPU, copying its inputs over and waiting each call;
-# with any, CUDA graphs can't capture the graph.
-
-
-def _equal(op, a, b):
-    return op.Equal(a, b)
-
-
-def _compares_integers(context, a, b, **_) -> bool:
-    return a.dtype is not None and a.dtype.is_integer() and b.dtype == a.dtype
-
-
-def _neither_less_nor_greater(op, a, b):
-    return op.Not(op.Or(op.Less(a, b), op.Greater(a, b)))
-
-
-# It has no `Equal` past opset 18; exact for integers (not for floats, where NaN compares false both ways).
-_INTEGER_EQUAL = pattern.RewriteRule(_equal, _neither_less_nor_greater, _compares_integers)
 
 
 def _gather_nd(op, data, indices):
@@ -1032,16 +1064,34 @@ def _flat_gather(op, data, indices, gathered):
 
 
 # A mask indexed by constant grids (`attention_mask[batch_idx, kv_idx]`) exports as a `GatherND`, whose kernel
-# copies its index metadata over each call: a CUDA graph can't replay it. A `Gather` reads the same elements.
+# fails CUDA graph replay (microsoft/onnxruntime#33875). A `Gather` reads the same elements.
 _CONSTANT_GATHER_ND = pattern.RewriteRule(_gather_nd, _flat_gather, _gathers_constant_indices)
 
 
 # ── Pipeline ──────────────────────────────────────────────────────────────────
 
 
+def _merge_equal_shapes(model: ir.Model) -> None:
+    """Read each run of dims (known, or the same symbol) once: the `Shape` nodes reading it off different values all
+    read it off the first."""
+    first = {}
+    for node in model.graph:
+        if node.op_type != "Shape" or node.domain != "" or (shape := node.inputs[0].shape) is None:
+            continue
+        dims = shape[node.attributes.get_int("start", 0) : node.attributes.get_int("end", len(shape))]
+        if not all(isinstance(dim, int) or dim.value is not None for dim in dims):
+            continue
+        key = tuple(dim if isinstance(dim, int) else dim.value for dim in dims)
+        if key in first:
+            _replace(node.outputs[0], first[key])
+        else:
+            first[key] = node.outputs[0]
+
+
 def _merge_equal_computations(model: ir.Model) -> None:
-    """Compute once what's computed alike: equal constants first become one, so the nodes reading them compare
-    equal."""
+    """Compute once what's computed alike: equal constants and shapes first become one, so the nodes reading them
+    compare equal."""
+    _merge_equal_shapes(model)
     common_passes.DeduplicateInitializersPass()(model)
     common_passes.CommonSubexpressionEliminationPass()(model)
     common_passes.RemoveUnusedNodesPass()(model)
@@ -1081,7 +1131,6 @@ _STEPS = (
     ("unfused_attentions", _unfuse_attentions, _CPU),
     ("packed_matmuls", _pack_sibling_matmuls, _ANY),
     # 6. CUDA provider.
-    ("integer_equals", _INTEGER_EQUAL.apply_to_model, _CUDA),
     ("constant_gather_nds", _CONSTANT_GATHER_ND.apply_to_model, _CUDA),
 )
 

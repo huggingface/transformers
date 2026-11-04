@@ -299,11 +299,18 @@ def _patch_sdpa(original):
 
     A boolean mask goes in as an additive one: torchlib guards its boolean softmax with an `IsNaN`/`Where`
     over the whole `(query, key)` weight matrix, which the zeroing here already makes redundant. Its unattended
-    rows are counted with a sum: `any`/`amax` export as `ReduceMax`, which ONNX Runtime's CUDA provider runs on
-    the CPU at recent opsets, copying the mask over and waiting every call.
+    rows are counted with a sum: `any` exports as a bool `ReduceMax`, which ONNX Runtime's CUDA provider runs on the
+    CPU (microsoft/onnxruntime#33876), copying the mask over and waiting every call.
+
+    The key, value and mask lengths are checked equal, which SDPA requires but doesn't check under export: a dynamic
+    export otherwise gives each cache's keys and values their own length symbols, and onnxscript's attention fusion,
+    matching on shapes, skips every layer.
     """
 
     def patch(query, key, value, attn_mask=None, *args, **kwargs):
+        torch._check(key.shape[-2] == value.shape[-2])
+        if attn_mask is not None and attn_mask.shape[-1] != 1:
+            torch._check(attn_mask.shape[-1] == key.shape[-2])
         if attn_mask is None:
             return original(query, key, value, attn_mask, *args, **kwargs)
         # Built from scalars only, so every layer's copy of this, reading the same mask, is one after CSE.
@@ -312,7 +319,6 @@ def _patch_sdpa(original):
             attn_mask = (~attn_mask).to(query.dtype) * torch.finfo(query.dtype).min
         else:
             attended = (attn_mask > torch.finfo(attn_mask.dtype).min).to(query.dtype)
-        # `< 1` rather than `== 0`: the provider runs `Equal` on the CPU too.
         unattended = attended.sum(dim=-1, keepdim=True) < 1
         attn_output = original(query, key, value, attn_mask, *args, **kwargs)
         zero = torch.zeros((), dtype=attn_output.dtype, device=attn_output.device)
