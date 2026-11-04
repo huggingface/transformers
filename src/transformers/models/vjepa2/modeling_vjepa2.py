@@ -40,17 +40,17 @@ logger = logging.get_logger(__name__)
 @dataclass
 class VJEPA2WithMaskedInputPredictorOutput(ModelOutput):
     r"""
-    masked_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*, returned when `context_mask` is provided which is applied on VJEPA2Encoder outputs):
+    masked_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*, returned when `context_mask` is provided which is applied on VJEPA2Encoder outputs):
         The masked hidden state of the model.
-    target_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*, returned when `target_mask` is provided which is applied on VJEPA2Encoder outputs):
+    target_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*, returned when `target_mask` is provided which is applied on VJEPA2Encoder outputs):
         The target hidden state of the model.
     """
 
-    last_hidden_state: torch.FloatTensor
-    masked_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
-    target_hidden_state: torch.FloatTensor | None = None
+    last_hidden_state: torch.Tensor
+    masked_hidden_state: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
+    target_hidden_state: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -62,16 +62,16 @@ class VJEPA2WithMaskedInputPredictorOutput(ModelOutput):
 @dataclass
 class VJEPA2WithMaskedInputModelOutput(ModelOutput):
     r"""
-    masked_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*, returned when `context_mask` is provided which is applied on VJEPA2Encoder outputs):
+    masked_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*, returned when `context_mask` is provided which is applied on VJEPA2Encoder outputs):
         The masked hidden state of the model.
     predictor_output (`VJEPA2WithMaskedInputPredictorOutput`, *optional*):
         The output from the Predictor module.
     """
 
-    last_hidden_state: torch.FloatTensor
-    masked_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    last_hidden_state: torch.Tensor
+    masked_hidden_state: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
     predictor_output: VJEPA2WithMaskedInputPredictorOutput | None = None
 
     def to_tuple(self):
@@ -765,9 +765,9 @@ class VJEPA2PoolerSelfAttentionLayer(GradientCheckpointingLayer):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Args:
-            hidden_states (`torch.FloatTensor`):
+            hidden_states (`torch.Tensor`):
                 Input to the layer of shape `(batch, seq_len, embed_dim)`.
-            attention_mask (`torch.FloatTensor`):
+            attention_mask (`torch.Tensor`):
                 Attention mask of shape `(batch, 1, q_len, k_v_seq_len)` where padding elements are indicated by very large negative values.
         """
         residual = hidden_states
