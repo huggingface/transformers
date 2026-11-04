@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
-"""Generate tests/test_fast_integration.py from the pinned fleet manifest.
+"""Generate tests/test_fast_integration.py from the latest fleet manifest.
 
 Usage (inside the CI container after `uv pip install -e .` and transformers-ci):
     python utils/generate_fast_integration_tests.py
 
-Reads tests/contracts.lock for the fleet revision, downloads the control and
-prototypes fleet lock files, enumerates all (fleet, contract, target, variant)
+Calls resolve_revision() to get the current fleet revision, downloads the control
+and prototypes fleet lock files, enumerates all (fleet, contract, target, variant)
 tuples, and writes tests/test_fast_integration.py.
 """
 
 import json
-import sys
 from pathlib import Path
 
 
@@ -41,10 +40,6 @@ def load_lock(fleet_name: str, revision: str) -> dict:
 
     path, _ = lock_path(fleet_name, revision)
     return json.loads(Path(path).read_text(encoding="utf-8"))
-
-
-def read_revision(contracts_lock: Path) -> str:
-    return contracts_lock.read_text(encoding="utf-8").strip()
 
 
 TEMPLATE = '''\
@@ -96,15 +91,12 @@ def test_contract(fleet, contract, target, variant, capsys):
 
 
 def main():
+    from transformersci.contracts.fleet import resolve_revision
+
     repo_root = Path(__file__).parent.parent
-    contracts_lock = repo_root / "tests" / "contracts.lock"
     output_path = repo_root / "tests" / "test_fast_integration.py"
 
-    if not contracts_lock.exists():
-        print(f"ERROR: {contracts_lock} not found", file=sys.stderr)
-        sys.exit(1)
-
-    revision = read_revision(contracts_lock)
+    revision = resolve_revision()
     print(f"Fleet revision: {revision}")
 
     all_params = []
