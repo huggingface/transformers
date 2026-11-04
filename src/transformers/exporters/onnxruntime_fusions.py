@@ -76,20 +76,10 @@ def _static_dim(value: ir.Value, axis: int) -> int | None:
 
 
 def _constant(value: ir.Value | None) -> np.ndarray | None:
-    """`value` as an array if it's a constant, or a `Squeeze(Split(constant))` row of one (a grouped matmul's
-    per-expert weight)."""
-    if value is None:
+    """`value` as an array if it's a constant."""
+    if value is None or value.const_value is None:
         return None
-    if value.const_value is not None:
-        return value.const_value.numpy()
-    squeeze = _producer(value, "Squeeze")
-    split = _producer(squeeze.inputs[0], "Split") if squeeze is not None else None
-    if split is None or split.inputs[0].const_value is None or split.attributes.get_int("axis", 0) != 0:
-        return None
-    stacked = split.inputs[0].const_value.numpy()
-    if len(split.outputs) != stacked.shape[0]:
-        return None
-    return stacked[squeeze.inputs[0].index()]
+    return value.const_value.numpy()
 
 
 def _initializer(graph: ir.Graph, name: str, array: np.ndarray) -> ir.Value:
@@ -717,28 +707,39 @@ def _fuse_group_query_attention(model: ir.Model) -> int:
     return count
 
 
-def _grouped_matmul(value: ir.Value):
-    """`(rows, weights, biases)` if `value` is our `grouped_mm` translation's output: a `Concat` of each expert's
-    `MatMul(Gather(rows, Range(...)), weight)` (`+ bias`), the experts' weights `[in, out]` stacked."""
-    concat = _producer(value, "Concat")
-    if concat is None or concat.attributes.get_int("axis") not in (0, -2):
-        return None
-    rows, weights, biases = None, [], []
-    for part in concat.inputs:
-        add = _producer(part, "Add")
-        matmul = _producer(add.inputs[0] if add is not None else part, "MatMul")
-        gathered = _producer(matmul.inputs[0], "Gather") if matmul is not None else None
-        weight = _constant(matmul.inputs[1]) if matmul is not None else None
-        if gathered is None or _producer(gathered.inputs[1], "Range") is None or weight is None:
+def _uncast(value: ir.Value) -> ir.Value:
+    """`value` before a `Cast`, if a `Cast` makes it."""
+    cast = _producer(value, "Cast")
+    return cast.inputs[0] if cast is not None else value
+
+
+def _batched_matmul(value: ir.Value):
+    """`(rows, weights, biases, ids)` if `value` is the `batched_mm` experts' projection of `rows`: each routed row
+    times its expert's weight, `GatherND(weights, ids)`, plus its expert's bias, `GatherND(biases, ids)`, or not. The
+    weights come back `[experts, out, in]`, ONNX Runtime's layout."""
+    biases = bias_ids = None
+    if (add := _producer(value, "Add")) is not None:
+        for product, added in (add.inputs, add.inputs[::-1]):
+            lookup = _producer(added, "GatherND")
+            if lookup is not None and _constant(lookup.inputs[0]) is not None:
+                value, biases, bias_ids = product, _constant(lookup.inputs[0]), lookup.inputs[1]
+                break
+        else:
             return None
-        if rows is not None and gathered.inputs[0] is not rows:
-            return None
-        rows = gathered.inputs[0]
-        weights.append(weight)
-        biases.append(_constant(add.inputs[1]) if add is not None else None)
-    if len({bias is None for bias in biases}) > 1:
+    squeeze = _producer(value, "Squeeze")
+    matmul = _producer(squeeze.inputs[0], "MatMul") if squeeze is not None else None
+    if matmul is None:
         return None
-    return rows, np.stack(weights), np.stack(biases) if biases[0] is not None else None
+    # `W[ids] @ x[..., None]` (`[experts, out, in]` weights) or `x[:, None] @ W[ids]` (`[experts, in, out]`).
+    for gathered, vector, transposed in ((*matmul.inputs, False), (*matmul.inputs[::-1], True)):
+        lookup, unsqueeze = _producer(gathered, "GatherND"), _producer(vector, "Unsqueeze")
+        weights = _constant(lookup.inputs[0]) if lookup is not None else None
+        if unsqueeze is None or weights is None or weights.ndim != 3:
+            continue
+        if bias_ids is not None and bias_ids is not lookup.inputs[1]:
+            return None
+        return unsqueeze.inputs[0], weights.transpose(0, 2, 1) if transposed else weights, biases, lookup.inputs[1]
+    return None
 
 
 def _gate(value: ir.Value):
@@ -764,7 +765,7 @@ def _gate(value: ir.Value):
 
 
 def _router(weights: ir.Value):
-    """`(logits, k, normalize)` if the routing `weights` are `TopK(Softmax(logits))`'s values, renormalized (`Div`
+    """`(logits, k, normalize, indices)` if the routing `weights` are `TopK(Softmax(logits))`'s values, renormalized (`Div`
     by their `ReduceSum`) or not, or `Softmax(TopK(logits))` (Granite's: the same experts and weights as the
     renormalized). A float16 model's router computes in float32: the casts around it are stepped over, the logits
     returned in the model's dtype."""
@@ -793,47 +794,54 @@ def _router(weights: ir.Value):
         return None
     if (upcast := _producer(logits, "Cast")) is not None:
         logits = upcast.inputs[0]
-    return logits, int(_constant(top_k.inputs[1]).reshape(())), normalize
+    return logits, int(_constant(top_k.inputs[1]).reshape(())), normalize, top_k.outputs[1]
 
 
 def _fuse_mixture_of_experts(model: ir.Model) -> int:
-    """Turn each mixture-of-experts block (a `grouped_mm` experts implementation behind a softmax / top-k router)
+    """Turn each mixture-of-experts block (the `batched_mm` experts implementation behind a softmax / top-k router)
     into ONNX Runtime's CUDA `MoE`, which routes the tokens itself from the router's logits. Returns how many.
 
-    Not for the CPU: ONNX Runtime's CPU `MoE` (SwiGLU, gate and up interleaved) returns wrong values inside some
-    graphs (a two-layer Qwen3-MoE, up to ONNX Runtime 1.31), though exact on its own."""
+    Not for the CPU: ONNX Runtime's CPU `MoE` returns wrong values when its input comes from another node and its
+    output feeds one (microsoft/onnxruntime#33866)."""
     graph, count = model.graph, 0
     for combine in list(graph.all_nodes()):
-        # The experts' outputs summed per token, `ReduceSum(Reshape(unsorted), axes=[1])`, back to the router; a
-        # float16 model sums them in float32.
+        # The routed rows' outputs summed per token, `ReduceSum(Reshape(weighted), axes=[1])`; a float16 model sums
+        # them in float32.
         if combine.op_type != "ReduceSum" or combine.attributes.get_int("keepdims", 1) != 0 or len(combine.inputs) < 2:
             continue
         axes = _constant(combine.inputs[1])
         upcast = _producer(combine.inputs[0], "Cast")
         reshape = _producer(upcast.inputs[0] if upcast is not None else combine.inputs[0], "Reshape")
-        unsort = _producer(reshape.inputs[0], "GatherND") if reshape is not None else None
-        weighted = _producer(unsort.inputs[0], "Mul") if unsort is not None else None
+        weighted = _producer(reshape.inputs[0], "Mul") if reshape is not None else None
         if axes is None or axes.tolist() != [1] or weighted is None:
             continue
-        down = _grouped_matmul(weighted.inputs[0])
+        for projected, scale in (weighted.inputs, weighted.inputs[::-1]):
+            down = _batched_matmul(projected)
+            if down is not None:
+                break
         gate = _gate(down[0]) if down is not None else None
-        up = _grouped_matmul(gate[0]) if gate is not None else None
-        tokens = _producer(up[0], "GatherND") if up is not None else None
-        # The weight each sorted row is scaled by: the routing weights, gathered in sorted order.
-        unsqueeze = _producer(weighted.inputs[1], "Unsqueeze")
-        picked = _producer(unsqueeze.inputs[0], "GatherND") if unsqueeze is not None else None
-        flat = _producer(picked.inputs[0], "Reshape") if picked is not None else None
+        up = _batched_matmul(gate[0]) if gate is not None else None
+        # Each token repeated once per routed expert, `Reshape(Tile(Unsqueeze(tokens, 1)))`.
+        repeated = _producer(up[0], "Reshape") if up is not None else None
+        tile = _producer(repeated.inputs[0], "Tile") if repeated is not None else None
+        tokens = _producer(tile.inputs[0], "Unsqueeze") if tile is not None else None
+        # Each routed row's weight, the flattened routing weights.
+        unsqueeze = _producer(_uncast(scale), "Unsqueeze") if down is not None else None
+        flat = _producer(_uncast(unsqueeze.inputs[0]), "Reshape") if unsqueeze is not None else None
         router = _router(flat.inputs[0]) if flat is not None else None
-        if tokens is None or router is None:
+        if tokens is None or router is None or up[3] is not down[3]:
             continue
-        logits, k, normalize = router
-        (_, up_weights, up_biases), (_, down_weights, down_biases), (_, gate_first) = up, down, gate
-        if logits.shape is None or _static_dim(logits, len(logits.shape) - 1) != up_weights.shape[0]:
+        logits, k, normalize, indices = router
+        ids = _producer(up[3], "Unsqueeze")
+        flat_ids = _producer(ids.inputs[0], "Reshape") if ids is not None else None
+        if flat_ids is None or flat_ids.inputs[0] is not indices:
             continue
-        if logits.dtype != tokens.inputs[0].dtype:
+        (_, fc1, up_biases, _), (_, fc2, down_biases, _), (_, gate_first) = up, down, gate
+        tokens = tokens.inputs[0]
+        if logits.shape is None or _static_dim(logits, len(logits.shape) - 1) != fc1.shape[0]:
             continue
-        # `[experts, in, out]` to ONNX Runtime's `[experts, out, in]`.
-        fc1, fc2 = up_weights.transpose(0, 2, 1), down_weights.transpose(0, 2, 1)
+        if logits.dtype != tokens.dtype:
+            continue
         half = fc1.shape[1] // 2
         gate_rows, up_rows = (slice(0, half), slice(half, None)) if gate_first else (slice(half, None), slice(0, half))
         biases = (up_biases[:, gate_rows], up_biases[:, up_rows]) if up_biases is not None else (None, None)
@@ -844,11 +852,11 @@ def _fuse_mixture_of_experts(model: ir.Model) -> int:
         ]
         moe = ir.node(
             "MoE",
-            [tokens.inputs[0], logits, *weights],
+            [tokens, logits, *weights],
             attributes={"k": k, "normalize_routing_weights": normalize, "activation_type": "silu"},
             domain="com.microsoft",
         )
-        moe.outputs[0].dtype, moe.outputs[0].shape = tokens.inputs[0].dtype, combine.outputs[0].shape
+        moe.outputs[0].dtype, moe.outputs[0].shape = tokens.dtype, combine.outputs[0].shape
         nodes, output = [moe], moe.outputs[0]
         if upcast is not None:
             cast = ir.node("Cast", [output], attributes={"to": combine.outputs[0].dtype})

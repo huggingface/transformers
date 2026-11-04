@@ -107,6 +107,20 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__file__)
 
 
+@contextmanager
+def _experts_implementation(model, implementation: str | None):
+    """Run `model`'s mixture-of-experts layers with `implementation` (if it's set and the model can), then restore."""
+    if implementation is None or not getattr(model, "_can_set_experts_implementation", lambda: False)():
+        yield
+        return
+    previous = model.config._experts_implementation
+    model.set_experts_implementation(implementation)
+    try:
+        yield
+    finally:
+        model.set_experts_implementation(previous)
+
+
 class OnnxExporter(DynamoExporter):
     """Exporter that converts a [`PreTrainedModel`] to an ONNX `ONNXProgram`.
 
@@ -136,7 +150,15 @@ class OnnxExporter(DynamoExporter):
         elif type(config) is not OnnxConfig:
             raise TypeError(f"Expected config to be an OnnxConfig or dict, got {type(config)}")
 
-        with patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("onnx"):
+        # For CUDA, the experts are traced as `batched_mm`, which fuses into `MoE`: a graph a fraction of the size of
+        # `grouped_mm`'s per-expert one, so faster to export and to fuse. Elsewhere `MoE` doesn't fuse, and
+        # `grouped_mm` keeps the prefill fast.
+        experts = "batched_mm" if config.ort_fusions == "cuda" and config.optimize else None
+        with (
+            _experts_implementation(model, experts),
+            patch_model_outputs(model) as (inputs_names, outputs_names),
+            apply_patches("onnx"),
+        ):
             exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
             inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
             apply_fx_node_fixes("onnx", exported_program.graph_module)
@@ -157,7 +179,17 @@ class OnnxExporter(DynamoExporter):
         fusions = config.ort_fusions and config.optimize and (quantizer is None or not quantizer.quantizes_fx_graph)
 
         if fusions:
-            fuse_for_onnxruntime(onnx_program.model, device=config.ort_fusions)
+            counts = fuse_for_onnxruntime(onnx_program.model, device=config.ort_fusions)
+            blocks = sum(
+                hasattr(module, "has_gate") and hasattr(module, "is_concatenated") for module in model.modules()
+            )
+            if experts is not None and counts["mixture_of_experts"] < blocks:
+                logger.warning(
+                    f"Only {counts['mixture_of_experts']} of {blocks} mixture-of-experts blocks fused into ONNX "
+                    "Runtime's `MoE` (it takes SiLU-gated experts behind a softmax / top-k router): the others run as "
+                    "`batched_mm`, whose prefill is slow. Export with `ort_fusions='cpu'` or `None` to keep them as "
+                    "`grouped_mm`."
+                )
 
         if quantizer is not None and not quantizer.quantizes_fx_graph:
             onnx_program.model = quantizer.quantize(onnx_program.model, sample_inputs, config.export_format)
