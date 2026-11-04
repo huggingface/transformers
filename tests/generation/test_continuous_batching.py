@@ -73,7 +73,7 @@ from transformers.generation.continuous_batching.utils import (
     get_device_and_memory_breakdown,
 )
 from transformers.integrations.eager_paged import eager_paged_attention_forward
-from transformers.integrations.linear_attention_paged import causal_conv1d_varlen
+from transformers.integrations.linear_attention_paged import causal_conv1d_varlen, sliding_windows_varlen
 from transformers.testing_utils import (
     Expectations,
     backend_empty_cache,
@@ -580,25 +580,26 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
 
     @parameterized.expand(
         [
-            # (sequence lengths, convolution width)
-            ([3, 1, 5], 2),
-            ([3, 1, 5], 4),
-            ([1, 1, 1], 4),  # all decode tokens
-            ([0, 4, 2, 0], 3),  # empty padding sequences
-            ([6], 7),  # a sequence shorter than the window
+            # (sequence lengths, convolution width, dilation)
+            ([3, 1, 5], 2, 1),
+            ([3, 1, 5], 4, 1),
+            ([1, 1, 1], 4, 1),  # all decode tokens
+            ([0, 4, 2, 0], 3, 1),  # empty padding sequences
+            ([6], 7, 1),  # a sequence shorter than the window
+            ([3, 1, 12], 4, 3),  # dilated, as the per-layer embeddings of Qwen4-Exp
         ]
     )
-    def test_causal_conv1d_varlen(self, lengths: list[int], width: int) -> None:
+    def test_causal_conv1d_varlen(self, lengths: list[int], width: int, dilation: int) -> None:
         """Each packed sequence is convolved from its own conv state and leaves its next state behind, as if it had
         been convolved alone after that state."""
         torch.manual_seed(0)
-        dim, state_len = 6, width - 1
+        dim, state_len = 6, (width - 1) * dilation
         weight, bias = torch.randn(dim, width), torch.randn(dim)
         conv_states = torch.randn(len(lengths), dim, state_len)
         inputs = torch.randn(1, dim, sum(lengths))
         cu_seqlens = torch.tensor([0] + list(itertools.accumulate(lengths)), dtype=torch.int32)
 
-        output, next_states = causal_conv1d_varlen(inputs, conv_states, cu_seqlens, weight, bias, "silu")
+        output, next_states = causal_conv1d_varlen(inputs, conv_states, cu_seqlens, weight, bias, "silu", dilation)
 
         self.assertEqual(output.shape, inputs.shape)
         self.assertEqual(next_states.shape, conv_states.shape)
@@ -607,9 +608,24 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
             # and keeps its state.
             state_and_inputs = torch.cat([conv_states[i], inputs[0, :, start:end]], dim=-1).unsqueeze(0)
             if end > start:
-                expected = torch.nn.functional.conv1d(state_and_inputs, weight.unsqueeze(1), bias, groups=dim)
+                expected = torch.nn.functional.conv1d(
+                    state_and_inputs, weight.unsqueeze(1), bias, groups=dim, dilation=dilation
+                )
                 torch.testing.assert_close(output[:, :, start:end], torch.nn.functional.silu(expected))
             torch.testing.assert_close(next_states[i], state_and_inputs[0, :, -state_len:])
+
+    def test_sliding_windows_varlen(self) -> None:
+        """The window of a packed token holds its previous tokens in its sequence, taken from the sequence's state
+        before its start, then itself, and the next state of a sequence is its last tokens, or its state when empty."""
+        states = torch.tensor([[-1, -2], [-3, -4], [-5, -6]])
+        inputs = torch.tensor([10, 11, 12, 20])
+        cu_seqlens = torch.tensor([0, 3, 3, 4], dtype=torch.int32)
+
+        windows, next_states = sliding_windows_varlen(inputs, states, cu_seqlens)
+
+        expected_windows = [[-1, -2, 10], [-2, 10, 11], [10, 11, 12], [-5, -6, 20]]
+        self.assertEqual(windows.tolist(), expected_windows)
+        self.assertEqual(next_states.tolist(), [[11, 12], [-3, -4], [-6, 20]])
 
     def test_continuous_batching_can_store_request_tokens(self) -> None:
         """Tests the allocation check on a hybrid full + sliding cache: the sliding allocator caps its need at the
@@ -1640,6 +1656,42 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         for attention_mask, num_queries, num_keys in seen:
             self.assertIsInstance(attention_mask, torch.Tensor)
             self.assertEqual(tuple(attention_mask.shape[-2:]), (num_queries, num_keys))
+
+    @parameterized.expand(
+        [("hf-tiny-v2/tiny-random-Qwen3_5ForCausalLM",), ("hf-tiny-v2/tiny-random-Qwen4ExpForCausalLM",)]
+    )
+    @require_flash_linear_attention
+    @slow
+    def test_continuous_batching_hybrid_logprobs_match_a_full_forward(self, model_id: str) -> None:
+        """The logprobs the engine samples with match those of a plain forward over each whole sequence. Greedy tokens
+        alone tell little on a tiny random model: a missing mask or a lost state can leave the argmax unchanged."""
+        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device, torch.float32)
+        # Qwen4-Exp's checkpoint has zero weights in the convolutions of its per-layer embeddings, which would hide
+        # their state
+        torch.manual_seed(0)
+        with torch.no_grad():
+            for name, parameter in model.named_parameters():
+                if "ple.conv1d" in name:
+                    parameter.normal_(mean=0.0, std=0.5)
+        model.generation_config.max_new_tokens = 20
+        model.generation_config.do_sample = False
+        input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES, tokenizer, for_continuous_batching=True)
+
+        outputs = model.generate_batch(
+            inputs=input_ids,
+            generation_config=model.generation_config,
+            continuous_batching_config=ContinuousBatchingConfig(auto_switch_to_flash=False, return_logprobs=True),
+        )
+
+        self.assertEqual(len(outputs), len(input_ids))
+        for output in outputs.values():
+            self.assertIsNone(output.error)
+            sequence = torch.tensor([output.prompt_ids + output.generated_tokens], device=torch_device)
+            with torch.no_grad():
+                logprobs = model(sequence).logits[0].float().log_softmax(dim=-1)
+            generated = torch.tensor(output.generated_tokens, device=torch_device)
+            expected = logprobs[len(output.prompt_ids) - 1 : -1].gather(-1, generated[:, None])[:, 0]
+            torch.testing.assert_close(torch.tensor(output.logprobs, device=torch_device), expected, rtol=0, atol=1e-4)
 
     @parameterized.expand(
         [
