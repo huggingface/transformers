@@ -495,18 +495,6 @@ class GlmImagePreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
 
-@auto_docstring
-@dataclass
-class GlmImageModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
-
-
 class GlmImageVQVAEVectorQuantizer(nn.Module):
     """
     A module for vector quantization using learned embedding vectors.
@@ -839,15 +827,14 @@ class GlmImageTextModel(GlmImagePreTrainedModel):
             # If inputs are not packed (usual 3D positions), do not prepare mask from position_ids
             text_position_ids = None
 
-        mask_kwargs = {
-            "config": self.config,
-            "inputs_embeds": inputs_embeds,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "position_ids": text_position_ids,
-        }
-        # Create the masks
-        causal_mask = create_causal_mask(**mask_kwargs)
+        # Create the mask
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            position_ids=text_position_ids,
+        )
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
@@ -878,7 +865,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
     accepts_loss_kwargs = False
     _no_split_modules = ["GlmImageTextDecoderLayer", "GlmImageVisionBlock"]
 
-    def __init__(self, config):
+    def __init__(self, config: GlmImageConfig):
         super().__init__(config)
         self.visual = GlmImageVisionModel._from_config(config.vision_config)
         self.language_model = GlmImageTextModel._from_config(config.text_config)
@@ -1236,7 +1223,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
         images_per_sample: torch.LongTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | GlmImageModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         r"""
         images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Number of images (including target grids) for each sample in the batch.
@@ -1282,13 +1269,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
             **kwargs,
         )
 
-        return GlmImageModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            rope_deltas=self.rope_deltas,
-        )
+        return outputs
 
     def get_image_tokens(
         self,
@@ -1331,18 +1312,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
         return source_grids
 
 
-@auto_docstring
-@dataclass
-class GlmImageCausalLMOutputWithPast(CausalLMOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
-
-
 class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {}
     _tp_plan = {"lm_head": "colwise_gather_output"}
@@ -1351,7 +1320,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
     base_model_prefix = "model"
     config: GlmImageConfig
 
-    def __init__(self, config):
+    def __init__(self, config: GlmImageConfig):
         super().__init__(config)
         self.model = GlmImageModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vision_vocab_size, bias=False)
@@ -1390,7 +1359,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | GlmImageCausalLMOutputWithPast:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
         images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Number of images (including target grids) for each sample in the batch.
@@ -1451,13 +1420,12 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return GlmImageCausalLMOutputWithPast(
+        return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=outputs.rope_deltas,
         )
 
     def prepare_inputs_for_generation(self, input_ids, **kwargs):

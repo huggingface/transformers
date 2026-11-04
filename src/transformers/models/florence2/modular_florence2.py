@@ -1191,7 +1191,7 @@ class Florence2VisionBlock(nn.Module):
 
 @auto_docstring
 class Florence2VisionPreTrainedModel(PreTrainedModel):
-    config_class = Florence2VisionConfig
+    config: Florence2VisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _supports_sdpa = True
@@ -1335,7 +1335,7 @@ class Florence2Seq2SeqLMOutput(Seq2SeqLMOutput):
 
 @auto_docstring
 class Florence2PreTrainedModel(LlavaPreTrainedModel):
-    config_class = Florence2Config
+    config: Florence2Config
     base_model_prefix = "model"
 
     _supports_attention_backend = False

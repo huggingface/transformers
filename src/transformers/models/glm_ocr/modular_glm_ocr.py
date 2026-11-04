@@ -28,7 +28,6 @@ from ..glm4v.modeling_glm4v import (
     Glm4vForConditionalGeneration,
     Glm4VisionMlp,
     Glm4vModel,
-    Glm4vModelOutputWithPast,
     Glm4vPreTrainedModel,
     Glm4vRMSNorm,
     Glm4vTextAttention,
@@ -142,10 +141,6 @@ class GlmOcrPreTrainedModel(Glm4vPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"model\.language_model\.layers\.16.*"]
 
 
-class GlmOcrModelOutputWithPast(Glm4vModelOutputWithPast):
-    pass
-
-
 class GlmOcrVisionAttention(Glm4vVisionAttention):
     def __init__(self, config: GlmOcrVisionConfig) -> None:
         super().__init__()
@@ -237,7 +232,7 @@ class GlmOcrVisionPatchMerger(Glm4vVisionPatchMerger):
 
 
 class GlmOcrVisionModel(Glm4vVisionModel):
-    def __init__(self, config) -> None:
+    def __init__(self, config: GlmOcrVisionConfig) -> None:
         super().__init__(config)
         del self.embeddings
         del self.post_conv_layernorm

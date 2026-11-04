@@ -25,7 +25,6 @@
 
 import itertools
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import torch
 from torch import nn
@@ -483,6 +482,8 @@ class PaddleOCRVLPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel):
+    config: PaddleOCRTextConfig
+
     def __init__(self, config: PaddleOCRTextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -947,30 +948,6 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
 
 
 @auto_docstring
-@dataclass
-class PaddleOCRVLModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
-
-
-@auto_docstring
-@dataclass
-class PaddleOCRVLCausalLMOutputWithPast(CausalLMOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
-
-
-@auto_docstring
 class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
@@ -1249,7 +1226,7 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
-    ) -> tuple | PaddleOCRVLModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         if pixel_values is not None and mm_encoder_outputs is not None:
             raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
@@ -1288,15 +1265,7 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
             **kwargs,
         )
 
-        output = PaddleOCRVLModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            rope_deltas=self.rope_deltas,
-        )
-
-        return output
+        return outputs
 
 
 class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, GenerationMixin):
@@ -1304,7 +1273,7 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]
 
-    def __init__(self, config):
+    def __init__(self, config: PaddleOCRVLConfig):
         super().__init__(config)
         self.model = PaddleOCRVLModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
@@ -1341,7 +1310,7 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | PaddleOCRVLCausalLMOutputWithPast:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
         Example:
 
@@ -1379,7 +1348,7 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
         >>> print(output_text)
         ```
         """
-        outputs: PaddleOCRVLModelOutputWithPast = self.model(
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1403,13 +1372,12 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return PaddleOCRVLCausalLMOutputWithPast(
+        return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=outputs.rope_deltas,
         )
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):

@@ -27,7 +27,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
 if is_vision_available():
-    from transformers import GemmaTokenizer, SiglipImageProcessor
+    from transformers import GemmaTokenizer, PI0ImageProcessor, SiglipImageProcessor
 
 
 @require_vision
@@ -51,6 +51,10 @@ class PI0ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_test_attributes(cls, processor):
         cls.image_token = processor.image_token
+
+    @staticmethod
+    def prepare_processor_dict():
+        return {"state_mean": [1.0] * 8, "state_std": [2.0] * 8, "chunk_size": 10}
 
     @require_vision
     def prepare_images_inputs(self, batch_size: int | None = None, nested: bool = True):
@@ -103,6 +107,21 @@ class PI0ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         out_with_newline = processor(images=image, text="pick object\n", return_tensors="pt")
         self.assertTrue(torch.equal(out_no_newline["input_ids"], out_with_newline["input_ids"]))
         self.assertTrue(torch.equal(out_no_newline["attention_mask"], out_with_newline["attention_mask"]))
+
+    @require_torch
+    def test_processor_with_pi0_image_processor(self):
+        processor = self.processor_class(
+            image_processor=PI0ImageProcessor(), tokenizer=self.get_component("tokenizer")
+        )
+        outputs = processor(images=self.prepare_images_inputs(), text="pick", padding="longest")
+        self.assertEqual(outputs["pixel_values"].shape, torch.Size([1, 1, 3, 224, 224]))
+        self.assertEqual((outputs["input_ids"] == processor.image_token_id).sum().item(), 256)
+
+    @require_torch
+    def test_state_without_statistics_raises(self):
+        processor = self.processor_class(**self.prepare_components())
+        with self.assertRaisesRegex(ValueError, "state_mean"):
+            processor(images=self.prepare_images_inputs(), text="pick", state=[0.0] * 8)
 
     @unittest.skip("PI0 doesn't need vLLM integration")
     def test_get_num_multimodal_tokens_matches_processor_call(self):

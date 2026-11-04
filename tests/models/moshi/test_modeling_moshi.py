@@ -890,6 +890,7 @@ class MoshiIntegrationTests(MemoryCleanupMixin, unittest.TestCase):
         self.assertTrue(expected_text_token == model_outputs.sequences[0, -2].item())
         self.assertTrue(expected_audio_tokens == model_outputs.audio_codes[0, :, -1].tolist())
 
+    @unittest.skip(reason="`kmhf/hf-moshiko` is no longer on the Hub, see #50016")
     @slow
     def test_moshiko_greedy_unconditional_fp16_eager(self):
         model = MoshiForConditionalGeneration.from_pretrained(
@@ -904,6 +905,7 @@ class MoshiIntegrationTests(MemoryCleanupMixin, unittest.TestCase):
         # eager equivalence is not as strict as sdpa.
         self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].tolist())
 
+    @unittest.skip(reason="`kmhf/hf-moshiko` is no longer on the Hub, see #50016")
     @slow
     def test_moshiko_greedy_unconditional_fp32(self):
         model = MoshiForConditionalGeneration.from_pretrained(
@@ -925,6 +927,7 @@ class MoshiIntegrationTests(MemoryCleanupMixin, unittest.TestCase):
         self.assertTrue(expected_text_tokens == model_outputs.sequences[0, 1:].tolist())
         self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].tolist())
 
+    @unittest.skip(reason="`kmhf/hf-moshiko` is no longer on the Hub, see #50016")
     @slow
     @require_torch_fp16
     def test_moshiko_greedy_unconditional_fp16(self):

@@ -16,6 +16,7 @@
 import unittest
 
 from transformers import AutoTokenizer, DogeConfig, is_torch_available, set_seed
+from transformers.models.doge.modeling_doge import load_balancing_loss_func
 from transformers.testing_utils import (
     Expectations,
     require_torch,
@@ -366,6 +367,20 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             side_effect=prepare_with_moe,
         ):
             super().test_output_router_logits_from_config()
+
+    def test_load_balancing_loss_is_invariant_to_expert_relabeling(self):
+        r"""
+        Permuting the x-keys only renames the experts, so the load balancing loss must not change.
+        """
+        torch.manual_seed(0)
+        num_keys, top_k = 4, 2
+        router_logits = torch.randn(2, 64, num_keys)
+        shuffled = router_logits.clone()
+        shuffled[0] = router_logits[0][:, [2, 0, 3, 1]]
+
+        loss = load_balancing_loss_func((router_logits,), num_experts=num_keys**2, num_keys=num_keys, top_k=top_k)
+        loss_shuffled = load_balancing_loss_func((shuffled,), num_experts=num_keys**2, num_keys=num_keys, top_k=top_k)
+        torch.testing.assert_close(loss, loss_shuffled)
 
     def test_sdpa_decoder_is_causal(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

@@ -595,18 +595,6 @@ class Qwen3VLTextDecoderLayer(GradientCheckpointingLayer):
 
 
 @auto_docstring
-@dataclass
-class Qwen3VLModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
-
-
-@auto_docstring
 class Qwen3VLPreTrainedModel(PreTrainedModel):
     config: Qwen3VLConfig
     base_model_prefix = "model"
@@ -633,7 +621,7 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         "attentions": Qwen3VLVisionAttention,
     }
 
-    def __init__(self, config, *inputs, **kwargs) -> None:
+    def __init__(self, config: Qwen3VLVisionConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         self.spatial_merge_size = config.spatial_merge_size
         self.patch_size = config.patch_size
@@ -861,7 +849,7 @@ class Qwen3VLModel(Qwen3VLPreTrainedModel):
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen3VLConfig):
         super().__init__(config)
         self.visual = AutoModel.from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
@@ -1154,7 +1142,7 @@ class Qwen3VLModel(Qwen3VLPreTrainedModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Qwen3VLModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1247,22 +1235,7 @@ class Qwen3VLModel(Qwen3VLPreTrainedModel):
             **kwargs,
         )
 
-        return Qwen3VLModelOutputWithPast(
-            **outputs,
-            rope_deltas=self.rope_deltas,
-        )
-
-
-@auto_docstring
-@dataclass
-class Qwen3VLCausalLMOutputWithPast(CausalLMOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
+        return outputs
 
 
 class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
@@ -1271,7 +1244,7 @@ class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen3VLConfig):
         super().__init__(config)
         self.model = Qwen3VLModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
@@ -1322,7 +1295,7 @@ class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Qwen3VLCausalLMOutputWithPast:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
         Example:
 
@@ -1387,13 +1360,12 @@ class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return Qwen3VLCausalLMOutputWithPast(
+        return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=outputs.rope_deltas,
         )
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
