@@ -118,7 +118,7 @@ _active_collector = CompileableContextVar("output_collector")
 def _append_hidden_state(collected_outputs: dict, hidden_state: torch.Tensor) -> None:
     """Append to the captured `hidden_states`, or append `None` if a requested subset of indices does not select it."""
     hidden_states = collected_outputs["hidden_states"]
-    selection = collected_outputs.get("_hidden_states_selection")
+    selection = collected_outputs.get("_hidden_states_layers")
     hidden_states.append(hidden_state if selection is None or len(hidden_states) in selection else None)
 
 
@@ -315,7 +315,7 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
             # indices are the ones that would select them from all the hidden states, so they may be negative
             selected = _selected_hidden_states(recordable_keys.get("output_hidden_states"))
             if selected is not None:
-                collected_outputs["_hidden_states_selection"] = resolve_hidden_states_indices(self, selected)
+                collected_outputs["_hidden_states_layers"] = resolve_hidden_states_indices(self, selected)
             # Make sure hooks are installed if we need to collect outputs
             if len(collected_outputs) > 0:
                 maybe_install_capturing_hooks(self)
@@ -329,7 +329,7 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
             finally:
                 _active_collector.reset(output_token)
 
-            collected_outputs.pop("_hidden_states_selection", None)
+            collected_outputs.pop("_hidden_states_layers", None)
             # Inject collected outputs into model output (return everything as tuples for BC)
             for key in collected_outputs:
                 if key == "hidden_states":
