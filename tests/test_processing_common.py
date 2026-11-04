@@ -13,6 +13,7 @@
 # limitations under the License.
 
 
+import copy
 import inspect
 import json
 import os
@@ -1138,6 +1139,41 @@ class ProcessorTesterMixin:
             processor_first.save_pretrained(tmpdirname)
             processor_second = self.processor_class.from_pretrained(tmpdirname, image_processor=image_processor)
             self.assertTrue(processor_second.image_processor.is_override)
+
+    def test_from_pretrained_uses_passed_sub_processors(self):
+        """
+        Tests that a sub-processor passed to from_pretrained is used as it is: it is neither loaded nor copied.
+        """
+        processor_first = self.get_processor()
+        original_deepcopy = copy.deepcopy
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor_first.save_pretrained(tmpdirname)
+            for attribute in self.processor_class.get_attributes():
+                with self.subTest(attribute=attribute):
+                    sub_processor = getattr(processor_first, attribute)
+                    sub_processor_class = type(sub_processor)
+
+                    def load_counting_sub_processor_loads(**kwargs):
+                        with patch.object(
+                            sub_processor_class, "from_pretrained", wraps=sub_processor_class.from_pretrained
+                        ) as from_pretrained:
+                            processor = self.processor_class.from_pretrained(tmpdirname, **kwargs)
+                        return processor, from_pretrained.call_count
+
+                    _, loads_without_passing = load_counting_sub_processor_loads()
+
+                    def deepcopy_rejecting_sub_processor(x, memo=None):
+                        if x is sub_processor:
+                            raise AssertionError(f"`{attribute}` was deep-copied")
+                        return original_deepcopy(x, memo)
+
+                    with patch.object(copy, "deepcopy", deepcopy_rejecting_sub_processor):
+                        processor_second, loads_with_passing = load_counting_sub_processor_loads(
+                            **{attribute: sub_processor}
+                        )
+
+                    self.assertIs(getattr(processor_second, attribute), sub_processor)
+                    self.assertEqual(loads_with_passing, max(loads_without_passing - 1, 0))
 
     def test_chat_template_save_loading(self):
         processor = self.processor_class.from_pretrained(self.tmpdirname)

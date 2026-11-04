@@ -1844,6 +1844,8 @@ class ProcessorMixin(PushToHubMixin):
         Auto class. Additional ones are instantiated from the config stored in processor_config.json
         (passed as processor_dict).
 
+        Sub-processors passed in `kwargs` under their attribute name are returned as they are, without loading them.
+
         Args:
             pretrained_model_name_or_path: Path or model id to load from.
             processor_dict: Optional dict containing processor config (from processor_config.json).
@@ -1856,7 +1858,15 @@ class ProcessorMixin(PushToHubMixin):
 
         # get args from processor init signature
         sub_processors = cls.get_attributes()
+        # Sub-processors passed by the caller (e.g. `tokenizer=my_tokenizer`) are used as they are. They are not loaded
+        # from the checkpoint, and are kept out of the kwargs forwarded to the other sub-processors' `from_pretrained`,
+        # which deep-copy their kwargs.
+        passed_sub_processors = {name: kwargs.pop(name) for name in sub_processors if name in kwargs}
         for sub_processor_type in sub_processors:
+            if sub_processor_type in passed_sub_processors:
+                args.append(passed_sub_processors[sub_processor_type])
+                continue
+
             modality = _get_modality_for_attribute(sub_processor_type)
             is_primary = sub_processor_type == modality
 
