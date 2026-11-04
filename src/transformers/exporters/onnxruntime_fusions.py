@@ -705,12 +705,16 @@ def _fuse_group_query_attention(model: ir.Model, prefill: bool = True) -> int:
             total_length = tape.op("Squeeze", [written])
         if rotary[2] is not None:
             # It takes a cache of at least the total rows; a per-token cache (`b * length + s`) has
-            # `batch * length`, so zero rows, never read, pad it up to that.
+            # `batch * length`, so zero rows, never read, are appended up to that (a `Concat`: the CUDA provider has
+            # no bfloat16 `Pad`).
             total = constant([known_total]) if known_total is not None else length
             rows = tape.op("Shape", [rotary[0]], attributes={"start": 0, "end": 1})
             missing = tape.op("Max", [tape.op("Sub", [total, rows]), constant([0])])
-            pads = tape.op("Concat", [constant([0, 0]), missing, constant([0])], attributes={"axis": 0})
-            rotary[:2] = (tape.op("Pad", [cache, pads]) for cache in rotary[:2])
+            shape = tape.op(
+                "Concat", [missing, tape.op("Shape", [rotary[0]], attributes={"start": 1})], attributes={"axis": 0}
+            )
+            zeros = tape.op("Expand", [constant(0, dtype.numpy()), shape])
+            rotary[:2] = (tape.op("Concat", [cache, zeros], attributes={"axis": 0}) for cache in rotary[:2])
         attributes = {"num_heads": num_heads, "kv_num_heads": kv_heads}
         if "scale" in attention.attributes:
             attributes["scale"] = attention.attributes["scale"].as_float()
