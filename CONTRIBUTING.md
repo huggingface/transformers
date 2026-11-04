@@ -63,9 +63,9 @@ report too much leads to bad solutions, sometimes for problems that do not exist
 fixing a bug, it's valuable to see if the bug exists in other models. If your PR says
 "fixed by using the same approach as (other model)", with a link to the relevant code, that is very helpful for maintainers,
 because it tells us that the fix is likely to be correct and compatible with the rest of the codebase.
-- Avoid "busywork" PRs. We don't have time for small style changes or typo fixes in comments, or for
-"theoretical bugs" found by code analysis that rarely if ever cause problems in practice. These are generally not worth
-fixing unless they can be exploited by an attacker.
+- Avoid "busywork" PRs. We don't have time for small style changes or typo fixes in comments, and we don't accept
+fixes for "theoretical bugs" found by code analysis that rarely if ever cause problems in practice, unless they can
+be exploited by an attacker.
 - Verify tests locally and in the CI. Before opening a PR, run `make fix-repo` and use `utils/tests_fetcher.py` to 
 see a list of tests that cover the files you have changed in your PR branch. Run those tests locally, and make sure 
 they pass before you open a PR. After you open your PR, please verify that the CI is green and fix any issues before 
@@ -131,7 +131,7 @@ You can now use `make` from any terminal (PowerShell, cmd.exe, etc.).
 
 ## Opening issues
 
-Use the issue [templates](https://github.com/huggingface/transformers/tree/main/.github/ISSUE_TEMPLATE), and make sure the issue wasn't already reported (use the search bar on GitHub under Issues). A bug report should be about a bug in Transformers, not in your own code, and it should affect real use and real checkpoints; a "theoretical bug" found by reading the code that requires a very nonstandard config to trigger is very low priority to fix. Include a short, self-contained script that reproduces the bug on the latest release or `main`, using a published checkpoint or default config. Bug reports without a runnable reproducer won't be triaged.
+Use the issue [templates](https://github.com/huggingface/transformers/tree/main/.github/ISSUE_TEMPLATE), and make sure the issue wasn't already reported (use the search bar on GitHub under Issues). A bug report should be about a bug in Transformers, not in your own code, and it should affect real use and real checkpoints; a "theoretical bug" found by reading the code that requires a very nonstandard config to trigger won't be triaged unless it's a security issue. Include a short, self-contained script that reproduces the bug on the latest release or `main`, using a published checkpoint or default config. Bug reports without a runnable reproducer won't be triaged.
 
 If you're unsure whether the bug is in your code or the library, ask in the [forum](https://discuss.huggingface.co/) or on [Discord](https://discord.com/invite/hugging-face-879548962464493619) first. That helps keep GitHub focused on actionable library issues.
 

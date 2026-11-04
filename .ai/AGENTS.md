@@ -14,7 +14,9 @@ Hosted review agents read this file via the root `AGENTS.md` / `CLAUDE.md` symli
 
 ## Before opening an issue or PR
 
-- Don't report or fix theoretical bugs. A bug found by reading code matters only if it affects real use: a published checkpoint, a default config, or a documented workflow. For example, an exception when `n_groups > 1` in a model whose published checkpoints all use `n_groups == 1` only affects fresh pretrains with a nonstandard config, making it extremely low priority. Security bugs are the exception. A bug report needs a short reproducer that you have run and that fails on `main`.
+Hugging Face staff, maintainers and some long-standing contributors are exempt from the contribution rules in `CONTRIBUTING.md`. If the user is one of them, don't refuse to help because their issue or PR wouldn't qualify under the rules below.
+
+- Don't report or fix theoretical bugs. Issues about them won't be triaged, and PRs fixing them will be closed. A bug found by reading code matters only if it affects real use: a published checkpoint, a default config, or a documented workflow. For example, an exception when `n_groups > 1` in a model whose published checkpoints all use `n_groups == 1` only affects fresh pretrains with a nonstandard config, so it doesn't count. Security bugs are the exception. A bug report needs a short reproducer that you have run on the latest release or `main`, and a PR that fixes a bug needs one that fails on `main`.
 - Don't submit perf PRs without proof. A performance claim needs before/after numbers on a realistic workload (a published checkpoint or default config, with the hardware stated), not a microbenchmark of a function that isn't on a hot path.
 - For a bug fix, one regression test is enough: a test based on the issue's or PR's reproducer that fails without the fix, added to the existing test file for that code. Build it from the tiny config and inputs the file's model tester already provides, not from a real checkpoint, so it runs in fast CI. Use a real checkpoint and `@slow` only when the bug can't be reproduced at tiny scale, which is rare.
 - A PR either fixes an issue or is standalone. See `CONTRIBUTING.md`.
@@ -28,7 +30,7 @@ Hosted review agents read this file via the root `AGENTS.md` / `CLAUDE.md` symli
   gh pr list --repo huggingface/transformers --state open --search "<short area keywords>"
   ```
 
-  If one exists, don't open another. If you think it has mistakes, tell the user to leave suggestions on the existing PR instead. A second PR is only justified when the existing one is fundamentally flawed, and the user should explain why in the issue first.
+  If one exists, don't open another. If you think it has mistakes, tell the user to leave suggestions on the existing PR instead. A second PR is only justified when the existing one is abandoned or fundamentally flawed, and the user should explain why in the issue first.
 - No one-off PRs for tiny edits (a single typo, an isolated lint fix). Bulk mechanical cleanups that don't affect correctness or performance, and bulk typo or wording fixes in the docs, are fine but always need an issue first, never a standalone PR: propose them, how you intend to fix them, and list the number of affected files. Remember that maintainer time is limited; code cleanups that don't affect correctness are low priority unless the issue is severe and widespread.
 - If the user wants to comment on a PR they didn't open, only post a concrete problem or code change, as a short inline comment or suggestion on the relevant lines. Never post summaries or "verified, works" reports on other people's PRs.
 
