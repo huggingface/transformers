@@ -40,12 +40,8 @@ an optional `attentions` attribute. Here we have the `loss` since we passed alon
 `hidden_states` and `attentions` because we didn't pass `output_hidden_states=True` or
 `output_attentions=True`.
 
-<Tip>
-
-When passing `output_hidden_states=True` you may expect the `outputs.hidden_states[-1]` to match `outputs.last_hidden_state` exactly.
-However, this is not always the case. Some models apply normalization or subsequent process to the last hidden state when it's returned.
-
-</Tip>
+> [!TIP]
+> With `output_hidden_states=True`, `outputs.hidden_states[-1]` isn't always the same tensor as `outputs.last_hidden_state`. Many vision and audio encoders, such as ViT, DINOv2, CLIP, and Wav2Vec2, return the last layer's output *before* the final layernorm in `hidden_states[-1]`, and the normalized output in `last_hidden_state`. Use `last_hidden_state` for the model's final features. To make `hidden_states[-1]` match `last_hidden_state`, set `tie_last_hidden_states=True` in the model config.
 
 You can access each attribute as you would usually do, and if that attribute has not been returned by the model, you
 will get `None`. Here for instance `outputs.loss` is the loss computed by the model, and `outputs.attentions` is

@@ -55,6 +55,7 @@ class Cosmos3EdgeImageProcessingTester(ImageProcessingTester):
 @require_vision
 class Cosmos3EdgeImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processor_tester_class = Cosmos3EdgeImageProcessingTester
+    backend_equivalence_atol = 0.5  # Pillow 13.x changed bicubic resize pass order (see #50105)
 
     def assert_packed_output(self, output, batch_size):
         """Check Edge's flattened patch matrix against its per-image THW grids."""
