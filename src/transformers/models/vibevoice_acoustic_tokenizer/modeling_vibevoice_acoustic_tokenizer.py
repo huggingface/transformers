@@ -109,12 +109,13 @@ class VibeVoiceAcousticTokenizerRMSNorm(nn.Module):
 class VibeVoiceAcousticTokenizerFeedForward(nn.Module):
     def __init__(self, config, hidden_size):
         super().__init__()
-        self.linear1 = nn.Linear(hidden_size, config.ffn_expansion * hidden_size)
-        self.activation = ACT2FN[config.hidden_act]
-        self.linear2 = nn.Linear(config.ffn_expansion * hidden_size, hidden_size)
+        self.up_proj = nn.Linear(hidden_size, config.ffn_expansion * hidden_size)
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.down_proj = nn.Linear(config.ffn_expansion * hidden_size, hidden_size)
 
-    def forward(self, hidden_states):
-        return self.linear2(self.activation(self.linear1(hidden_states)))
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 class VibeVoiceAcousticTokenizerConv1dCacheLayer:

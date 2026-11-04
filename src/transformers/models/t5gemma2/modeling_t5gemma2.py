@@ -72,7 +72,7 @@ class T5Gemma2RMSNorm(nn.Module):
 
 
 class T5Gemma2MLP(nn.Module):
-    def __init__(self, config: T5Gemma2TextConfig):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -80,13 +80,11 @@ class T5Gemma2MLP(nn.Module):
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_activation]
+        self.act_fn = ACT2FN[config.hidden_act]
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, x):
-        hidden_states = self.act_fn(self.gate_proj(x)) * self.up_proj(x)
-        hidden_states = self.dropout(hidden_states)
-        down_proj = self.down_proj(hidden_states)
+        down_proj = self.down_proj(self.dropout(self.act_fn(self.gate_proj(x)) * self.up_proj(x)))
         return down_proj
 
 

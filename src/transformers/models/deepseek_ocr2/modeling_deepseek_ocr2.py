@@ -298,17 +298,17 @@ class DeepseekOcr2SamVisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class DeepseekOcr2SamMLPBlock(nn.Module):
+class DeepseekOcr2SamMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.lin1 = nn.Linear(config.hidden_size, config.mlp_dim)
-        self.lin2 = nn.Linear(config.mlp_dim, config.hidden_size)
-        self.act = ACT2FN[config.hidden_act]
+        self.up_proj = nn.Linear(config.hidden_size, config.mlp_dim)
+        self.down_proj = nn.Linear(config.mlp_dim, config.hidden_size)
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.lin1(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.lin2(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 
@@ -375,7 +375,7 @@ class DeepseekOcr2SamVisionLayer(GradientCheckpointingLayer):
         self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attn = DEEPSEEK_OCR2_SAM_VISION_ATTENTION_CLASSES[config._attn_implementation](config, window_size)
         self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = DeepseekOcr2SamMLPBlock(config)
+        self.mlp = DeepseekOcr2SamMLP(config)
         self.window_size = window_size
 
     def window_partition(self, hidden_states: torch.Tensor, window_size: int) -> tuple[torch.Tensor, tuple[int, int]]:
@@ -1108,10 +1108,10 @@ class DeepseekOcr2TextAttention(nn.Module):
 
 
 class DeepseekOcr2TextMLP(nn.Module):
-    def __init__(self, config: DeepseekOcr2TextConfig, hidden_size=None, intermediate_size=None):
+    def __init__(self, config: DeepseekOcr2TextConfig, intermediate_size=None):
         super().__init__()
         self.config = config
-        self.hidden_size = config.hidden_size if hidden_size is None else hidden_size
+        self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)

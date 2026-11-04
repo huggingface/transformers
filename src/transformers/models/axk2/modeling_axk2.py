@@ -72,15 +72,15 @@ class AXK2GateMLP(nn.Module):
     def __init__(self, config: AXK2Config):
         super().__init__()
         self.config = config
-        self.activation_fn = nn.SiLU()
-        self.fc1 = nn.Linear(config.hidden_size, config.gated_norm_rank, bias=False)
-        self.fc2 = nn.Linear(config.gated_norm_rank, config.hidden_size, bias=False)
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.gated_norm_rank
+        self.act_fn = nn.SiLU()
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 class AXK2GatedRMSNorm(nn.Module):
@@ -93,11 +93,11 @@ class AXK2GatedRMSNorm(nn.Module):
     def __init__(self, config: AXK2Config):
         super().__init__()
         self.norm = AXK2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.mlp = AXK2GateMLP(config)
+        self.gate_mlp = AXK2GateMLP(config)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         y = self.norm(x)
-        return (y * torch.sigmoid(self.mlp(y).float())).to(y.dtype)
+        return (y * torch.sigmoid(self.gate_mlp(y).float())).to(y.dtype)
 
 
 class AXK2RotaryEmbedding(nn.Module):

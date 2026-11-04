@@ -14,10 +14,12 @@
 """Testing suite for the PyTorch VidEoMT model."""
 
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
 from transformers import VideomtConfig, VideomtForUniversalSegmentation
+from transformers.conversion_mapping import get_model_conversion_mapping
 from transformers.testing_utils import (
     Expectations,
     require_torch,
@@ -27,6 +29,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
+from ... import test_modeling_common
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -109,6 +112,17 @@ class VideomtForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMixin,
     pipeline_model_mapping = {}
     is_encoder_decoder = False
     test_missing_keys = False
+
+    def test_reverse_loading_mapping(self):
+        def mapping_without_swiglu_ffn(*args, **kwargs):
+            return [
+                conversion
+                for conversion in get_model_conversion_mapping(*args, **kwargs)
+                if not any("swiglu_ffn" in target for target in conversion._original_target_patterns)
+            ]
+
+        with patch.object(test_modeling_common, "get_model_conversion_mapping", mapping_without_swiglu_ffn):
+            super().test_reverse_loading_mapping()
 
     def setUp(self):
         self.model_tester = VideomtForUniversalSegmentationTester(self)

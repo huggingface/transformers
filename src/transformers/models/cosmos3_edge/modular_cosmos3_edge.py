@@ -49,7 +49,6 @@ from ...utils.generic import (
 from ...utils.output_capturing import capture_outputs
 from ...video_utils import VideoMetadata
 from ...vision_utils import get_vision_attention_seqlens
-from ..clip.modeling_clip import CLIPMLP
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
 from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
@@ -61,6 +60,7 @@ from ..llama.modeling_llama import (
     LlamaRMSNorm,
     eager_attention_forward,
 )
+from ..nemotron.modeling_nemotron import NemotronMLP
 from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLForConditionalGeneration,
     Qwen2VLModel,
@@ -93,8 +93,8 @@ class Cosmos3EdgeTextConfig(LlamaConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.fc1": "colwise",
-        "layers.*.mlp.fc2": "rowwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
     }
 
     vocab_size: int = 131072
@@ -206,14 +206,8 @@ class Cosmos3EdgeTextAttention(LlamaAttention):
     """Dense GQA attention with Cosmos3 Edge M-RoPE."""
 
 
-class Cosmos3EdgeTextMLP(CLIPMLP):
-    """The dense two-projection ReLU-squared MLP used by Cosmos3 Edge."""
-
-    def __init__(self, config: Cosmos3EdgeTextConfig):
-        super().__init__(config)
-        # CLIPMLP has the same fc1 -> activation -> fc2 structure, but Edge checkpoints omit MLP biases.
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.mlp_bias)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
+class Cosmos3EdgeTextMLP(NemotronMLP):
+    pass
 
 
 class Cosmos3EdgeTextRMSNorm(LlamaRMSNorm):

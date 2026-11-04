@@ -50,8 +50,8 @@ class PhiConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.dense": "rowwise",
-        "layers.*.mlp.fc1": "colwise",
-        "layers.*.mlp.fc2": "rowwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

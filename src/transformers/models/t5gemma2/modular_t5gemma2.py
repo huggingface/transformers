@@ -51,7 +51,6 @@ from ..auto import AutoModel
 from ..gemma3.configuration_gemma3 import Gemma3Config, Gemma3TextConfig
 from ..gemma3.modeling_gemma3 import (
     Gemma3Attention,
-    Gemma3MLP,
     Gemma3MultiModalProjector,
     Gemma3PreTrainedModel,
     Gemma3RMSNorm,
@@ -66,6 +65,7 @@ from ..t5gemma.modeling_t5gemma import (
     T5GemmaClassificationHead,
     T5GemmaEncoderLayer,
     T5GemmaLMHead,
+    T5GemmaMLP,
 )
 
 
@@ -211,16 +211,8 @@ class T5Gemma2RMSNorm(Gemma3RMSNorm):
     pass
 
 
-class T5Gemma2MLP(Gemma3MLP):
-    def __init__(self, config: T5Gemma2TextConfig):
-        super().__init__(config)
-        self.dropout = nn.Dropout(config.dropout_rate)
-
-    def forward(self, x):
-        hidden_states = self.act_fn(self.gate_proj(x)) * self.up_proj(x)
-        hidden_states = self.dropout(hidden_states)
-        down_proj = self.down_proj(hidden_states)
-        return down_proj
+class T5Gemma2MLP(T5GemmaMLP):
+    pass
 
 
 class T5Gemma2RotaryEmbedding(Gemma3RotaryEmbedding):

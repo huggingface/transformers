@@ -120,12 +120,17 @@ class Lfm2MLP(nn.Module):
                 intermediate_size = config.block_multiple_of * (
                     (intermediate_size + config.block_multiple_of - 1) // config.block_multiple_of
                 )
-        self.w1 = nn.Linear(config.hidden_size, intermediate_size, bias=False)
-        self.w3 = nn.Linear(config.hidden_size, intermediate_size, bias=False)
-        self.w2 = nn.Linear(intermediate_size, config.hidden_size, bias=False)
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN["silu"]
 
     def forward(self, x):
-        return self.w2(F.silu(self.w1(x)) * self.w3(x))
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 def rotate_half(x):

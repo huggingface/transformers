@@ -160,9 +160,9 @@ class MiniMaxM3VLRMSNorm(nn.Module):
 
 
 class MiniMaxM3VLDenseMLP(nn.Module):
-    def __init__(self, config: MiniMaxM3VLTextConfig, intermediate_size: int | None = None):
+    def __init__(self, config: MiniMaxM3VLTextConfig, intermediate_size=None):
         super().__init__()
-        inter = intermediate_size if intermediate_size is not None else config.dense_intermediate_size
+        inter = config.dense_intermediate_size if intermediate_size is None else intermediate_size
         self.swiglu_alpha = config.swiglu_alpha
         self.swiglu_limit = config.swiglu_limit
         self.gate_up_proj = nn.Linear(config.hidden_size, 2 * inter, bias=False)
@@ -1107,15 +1107,15 @@ class MiniMaxM3VLVisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 class MiniMaxM3VLVisionEncoderLayer(GradientCheckpointingLayer):

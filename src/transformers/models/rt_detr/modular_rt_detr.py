@@ -56,7 +56,13 @@ from ..conditional_detr.modeling_conditional_detr import inverse_sigmoid
 from ..deformable_detr.modeling_deformable_detr import DeformableDetrMultiscaleDeformableAttention
 from ..detr.image_processing_detr import DetrImageProcessor
 from ..detr.image_processing_pil_detr import DetrImageProcessorPil
-from ..detr.modeling_detr import DetrFrozenBatchNorm2d, DetrMLPPredictionHead, DetrSelfAttention, replace_batch_norm
+from ..detr.modeling_detr import (
+    DetrFrozenBatchNorm2d,
+    DetrMLP,
+    DetrMLPPredictionHead,
+    DetrSelfAttention,
+    replace_batch_norm,
+)
 from ..vit_mae.modeling_vit_mae import build_2d_sinusoidal_position_embedding
 from .configuration_rt_detr import RTDetrConfig
 
@@ -728,21 +734,12 @@ class RTDetrObjectDetectionOutput(ModelOutput):
     denoising_meta_values: dict | None = None
 
 
-class RTDetrMLP(nn.Module):
+class RTDetrMLP(DetrMLP):
     def __init__(self, config: RTDetrConfig, hidden_size: int, intermediate_size: int, activation_function: str):
         super().__init__()
-        self.fc1 = nn.Linear(hidden_size, intermediate_size)
-        self.fc2 = nn.Linear(intermediate_size, hidden_size)
-        self.activation_fn = ACT2FN[activation_function]
+        self.act_fn = ACT2FN[activation_function]
         self.activation_dropout = config.activation_dropout
         self.dropout = config.dropout
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        return hidden_states
 
 
 class RTDetrFrozenBatchNorm2d(DetrFrozenBatchNorm2d):

@@ -35,7 +35,7 @@ from ..llava.modeling_llava import (
     LlavaPreTrainedModel,
 )
 from ..sam.modeling_sam import (
-    SamMLPBlock,
+    SamMLP,
     SamPreTrainedModel,
     SamVisionAttention,
     SamVisionEncoder,
@@ -158,7 +158,7 @@ class GotOcr2VisionEncoderOutput(BaseModelOutputWithPooling):
     image_embeds: torch.FloatTensor | None = None
 
 
-class GotOcr2MLPBlock(SamMLPBlock):
+class GotOcr2MLP(SamMLP):
     pass
 
 
@@ -172,7 +172,7 @@ class GotOcr2VisionLayer(SamVisionLayer):
         self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attn = GotOcr2VisionAttention(config, window_size)
         self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = GotOcr2MLPBlock(config)
+        self.mlp = GotOcr2MLP(config)
         self.window_size = window_size
 
 

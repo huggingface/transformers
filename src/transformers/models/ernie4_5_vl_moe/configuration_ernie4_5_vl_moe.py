@@ -52,8 +52,8 @@ class Ernie4_5_VLMoeVisionConfig(PreTrainedConfig):
     rope_parameters: dict | None = None
 
     base_model_tp_plan = {
-        "blocks.*.mlp.fc1": "colwise",
-        "blocks.*.mlp.fc2": "rowwise",
+        "blocks.*.mlp.up_proj": "colwise",
+        "blocks.*.mlp.down_proj": "rowwise",
     }
     intermediate_size: int = 4 * 1280
     temporal_merge_size: int = 2
@@ -80,7 +80,13 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
 
     model_type = "ernie4_5_vl_moe_text"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"num_experts": "moe_num_experts", "num_experts_per_tok": "moe_k"}
+    attribute_map = {
+        "num_experts": "moe_num_experts",
+        "num_experts_per_tok": "moe_k",
+        "num_local_experts": "moe_num_experts",
+        "moe_num_shared_experts": "n_shared_experts",
+        "mlp_bias": "use_bias",
+    }
     default_theta = 500000.0
 
     base_model_tp_plan = {
@@ -135,7 +141,7 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
     moe_intermediate_size: list[int] | None = None
     moe_k: int | None = 6
     moe_num_experts: int | None = 64
-    moe_num_shared_experts: int | None = 2
+    n_shared_experts: int | None = 2
     moe_norm_min: float | None = 1e-12
     output_router_logits: bool | None = False
     router_aux_loss_coef: float | None = 0.001

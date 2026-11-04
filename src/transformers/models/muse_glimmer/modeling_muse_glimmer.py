@@ -148,7 +148,7 @@ class MuseGlimmerTextMLP(nn.Module):
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_activation]
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
@@ -625,14 +625,18 @@ class MuseGlimmerVisionAttention(nn.Module):
 
 
 class MuseGlimmerVisionMLP(nn.Module):
-    def __init__(self, dim: int, hidden_dim: int, hidden_act: str) -> None:
+    def __init__(self, config):
         super().__init__()
-        self.fc1 = nn.Linear(dim, hidden_dim)
-        self.act = ACT2FN[hidden_act]
-        self.fc2 = nn.Linear(hidden_dim, dim)
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size)
 
-    def forward(self, x) -> torch.Tensor:
-        return self.fc2(self.act(self.fc1(x)))
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 class MuseGlimmerVisionEncoderLayer(GradientCheckpointingLayer):
@@ -641,7 +645,7 @@ class MuseGlimmerVisionEncoderLayer(GradientCheckpointingLayer):
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=1e-5)
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=1e-5)
         self.attn = MuseGlimmerVisionAttention(config=config)
-        self.mlp = MuseGlimmerVisionMLP(config.hidden_size, config.intermediate_size, config.hidden_act)
+        self.mlp = MuseGlimmerVisionMLP(config)
 
     def forward(
         self,

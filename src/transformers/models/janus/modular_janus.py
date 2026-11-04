@@ -46,6 +46,7 @@ from ..chameleon.modeling_chameleon import (
     ChameleonVQVAEEncoderResnetBlock,
     ChameleonVQVAEVectorQuantizer,
 )
+from ..dinov2.modeling_dinov2 import Dinov2MLP
 from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCausalLMOutputWithPast
 from ..llama.modeling_llama import eager_attention_forward
 from ..siglip.configuration_siglip import SiglipVisionConfig
@@ -309,24 +310,16 @@ class JanusVisionAttention(nn.Module):
         return output, attn_weights
 
 
-class JanusVisionMLP(nn.Module):
+class JanusVisionMLP(Dinov2MLP):
     def __init__(self, config: JanusVisionConfig):
-        super().__init__()
-        self.config = config
-        self.intermediate_size = int(config.hidden_size * config.mlp_ratio)
-        self.activation_fn = ACT2FN[config.hidden_act]  # Gelu act
-        self.fc1 = nn.Linear(config.hidden_size, self.intermediate_size)
-        self.fc2 = nn.Linear(self.intermediate_size, config.hidden_size)
+        super().__init__(config)
         self.dropout1 = nn.Dropout(config.hidden_dropout_rate)
         self.dropout2 = nn.Dropout(config.hidden_dropout_rate)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.dropout1(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = self.dropout2(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.dropout1(self.act_fn(self.up_proj(hidden_states))))
+        down_proj = self.dropout2(down_proj)
+        return down_proj
 
 
 class JanusVisionEncoderLayer(SiglipEncoderLayer):
@@ -392,12 +385,12 @@ class JanusVisionAlignerMLP(nn.Module):
         self.hidden_layers = nn.ModuleList(
             [nn.Linear(config.projection_dim, config.projection_dim) for _ in range(1, config.depth)]
         )
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states):
         hidden_states = self.fc1(hidden_states)
         for layer in self.hidden_layers:
-            hidden_states = self.activation_fn(hidden_states)
+            hidden_states = self.act_fn(hidden_states)
             hidden_states = layer(hidden_states)
         return hidden_states
 
@@ -674,12 +667,12 @@ class JanusVQVAEAlignerMLP(nn.Module):
         self.hidden_layers = nn.ModuleList(
             [nn.Linear(config.projection_dim, config.projection_dim) for _ in range(1, config.num_hidden_layers)]
         )
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states):
         hidden_states = self.fc1(hidden_states)
         for layer in self.hidden_layers:
-            hidden_states = self.activation_fn(hidden_states)
+            hidden_states = self.act_fn(hidden_states)
             hidden_states = layer(hidden_states)
         return hidden_states
 

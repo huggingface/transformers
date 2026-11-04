@@ -117,7 +117,7 @@ class Gemma3TextScaledWordEmbedding(nn.Embedding):
 
 
 class Gemma3MLP(nn.Module):
-    def __init__(self, config: Gemma3TextConfig):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -125,7 +125,7 @@ class Gemma3MLP(nn.Module):
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_activation]
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))

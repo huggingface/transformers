@@ -325,17 +325,17 @@ class VitDetResBottleneckBlock(nn.Module):
 class VitDetMlp(nn.Module):
     def __init__(self, config, in_features: int, hidden_features: int) -> None:
         super().__init__()
-        self.fc1 = nn.Linear(in_features, hidden_features)
-        self.act = ACT2FN[config.hidden_act]
-        self.fc2 = nn.Linear(hidden_features, in_features)
-        self.drop = nn.Dropout(config.dropout_prob)
+        self.up_proj = nn.Linear(in_features, hidden_features)
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.down_proj = nn.Linear(hidden_features, in_features)
+        self.dropout = nn.Dropout(config.dropout_prob)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.fc1(x)
-        x = self.act(x)
-        x = self.drop(x)
-        x = self.fc2(x)
-        x = self.drop(x)
+        x = self.up_proj(x)
+        x = self.act_fn(x)
+        x = self.dropout(x)
+        x = self.down_proj(x)
+        x = self.dropout(x)
 
         return x
 

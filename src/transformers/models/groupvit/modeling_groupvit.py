@@ -564,13 +564,13 @@ class GroupViTMLP(nn.Module):
         hidden_size = hidden_size if hidden_size is not None else config.hidden_size
         intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
         output_size = output_size if output_size is not None else hidden_size
-        self.fc1 = nn.Linear(hidden_size, intermediate_size)
-        self.fc2 = nn.Linear(intermediate_size, output_size)
+        self.up_proj = nn.Linear(hidden_size, intermediate_size)
+        self.down_proj = nn.Linear(intermediate_size, output_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 
@@ -743,8 +743,8 @@ class GroupViTPreTrainedModel(PreTrainedModel):
             factor = self.config.initializer_factor
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            init.normal_(module.fc1.weight, std=fc_std)
-            init.normal_(module.fc2.weight, std=in_proj_std)
+            init.normal_(module.up_proj.weight, std=fc_std)
+            init.normal_(module.down_proj.weight, std=in_proj_std)
 
 
 class GroupViTVisionEncoder(nn.Module):

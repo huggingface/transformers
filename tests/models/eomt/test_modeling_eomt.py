@@ -14,11 +14,14 @@
 """Testing suite for the PyTorch EoMT model."""
 
 import unittest
+from unittest.mock import patch
 
 from transformers import AutoImageProcessor, EomtConfig, EomtForUniversalSegmentation, pipeline
+from transformers.conversion_mapping import get_model_conversion_mapping
 from transformers.testing_utils import require_torch, require_torch_accelerator, require_torch_fp16, slow, torch_device
 from transformers.utils import is_torch_available
 
+from ... import test_modeling_common
 from ...test_configuration_common import ConfigTester
 from ...test_image_processing_common import load_coco_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
@@ -103,6 +106,17 @@ class EomtForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMixin, un
 
     test_missing_keys = False
     test_torch_exportable = False  # data-dependent control flow in segmentation head
+
+    def test_reverse_loading_mapping(self):
+        def mapping_without_swiglu_ffn(*args, **kwargs):
+            return [
+                conversion
+                for conversion in get_model_conversion_mapping(*args, **kwargs)
+                if not any("swiglu_ffn" in target for target in conversion._original_target_patterns)
+            ]
+
+        with patch.object(test_modeling_common, "get_model_conversion_mapping", mapping_without_swiglu_ffn):
+            super().test_reverse_loading_mapping()
 
     def setUp(self):
         self.model_tester = EomtForUniversalSegmentationTester(self)

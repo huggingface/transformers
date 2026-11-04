@@ -30,6 +30,7 @@ from ...utils import auto_docstring
 from ...utils.generic import TransformersKwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig, AutoModel
+from ..clip.modeling_clip import CLIPMLP
 from ..sam3.configuration_sam3 import (
     Sam3DETRDecoderConfig,
     Sam3DETREncoderConfig,
@@ -37,7 +38,7 @@ from ..sam3.configuration_sam3 import (
     Sam3MaskDecoderConfig,
 )
 from ..sam3.modeling_sam3 import Sam3Model, Sam3PreTrainedModel
-from ..siglip.modeling_siglip import SiglipAttention, SiglipEncoderLayer, SiglipMLP
+from ..siglip.modeling_siglip import SiglipAttention, SiglipEncoderLayer
 
 
 @auto_docstring(checkpoint="yonigozlan/sam3-litetext-s0")
@@ -207,14 +208,14 @@ class Sam3LiteTextMobileOneBlock(nn.Module):
         return hidden_states
 
 
-class Sam3LiteTextConvMLP(SiglipMLP):
+class Sam3LiteTextConvMLP(CLIPMLP):
     """Pointwise MLP using 1×1 convolutions, compatible with 4-D (B, C, H, W) feature maps."""
 
     def __init__(self, config: Sam3LiteTextTextConfig):
         nn.Module.__init__(self)
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Conv2d(config.hidden_size, config.intermediate_size, kernel_size=1)
-        self.fc2 = nn.Conv2d(config.intermediate_size, config.hidden_size, kernel_size=1)
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.up_proj = nn.Conv2d(config.hidden_size, config.intermediate_size, kernel_size=1)
+        self.down_proj = nn.Conv2d(config.intermediate_size, config.hidden_size, kernel_size=1)
 
 
 class Sam3LiteTextConvolutionalFeedForward(nn.Module):
@@ -287,7 +288,7 @@ class Sam3LiteTextTextAttention(SiglipAttention):
     pass
 
 
-class Sam3LiteTextTextMLP(SiglipMLP):
+class Sam3LiteTextTextMLP(CLIPMLP):
     pass
 
 

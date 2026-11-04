@@ -102,15 +102,15 @@ class MiniCPMV4_7VisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -503,16 +503,14 @@ class MiniCPMV4_7DownsampleMLP(nn.Module):
         merged_hidden_size = hidden_size * 4
 
         self.pre_norm = nn.LayerNorm(merged_hidden_size, eps=1e-6)
-        self.linear_1 = nn.Linear(merged_hidden_size, merged_hidden_size, bias=True)
-        self.act = nn.GELU()
-        self.linear_2 = nn.Linear(merged_hidden_size, llm_embed_dim, bias=True)
+        self.up_proj = nn.Linear(merged_hidden_size, merged_hidden_size, bias=True)
+        self.act_fn = nn.GELU()
+        self.down_proj = nn.Linear(merged_hidden_size, llm_embed_dim, bias=True)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.pre_norm(hidden_states).view(-1, self.linear_1.in_features)
-        hidden_states = self.linear_1(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.linear_2(hidden_states)
-        return hidden_states
+        hidden_states = self.pre_norm(hidden_states).view(-1, self.up_proj.in_features)
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 class MiniCPMV4_7Merger(nn.Module):

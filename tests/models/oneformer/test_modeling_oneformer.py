@@ -237,6 +237,17 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     test_missing_keys = False
 
     # TODO: Fix the failed tests when this model gets more usage
+    def test_reverse_loading_mapping(self):
+        prepare = self.model_tester.prepare_config_and_inputs_for_common
+
+        def prepare_with_text_encoder():
+            config, inputs = prepare()
+            config.is_training = True
+            return config, inputs
+
+        self.model_tester.prepare_config_and_inputs_for_common = prepare_with_text_encoder
+        super().test_reverse_loading_mapping()
+
     def is_pipeline_test_to_skip(
         self,
         pipeline_test_case_name,

@@ -3,7 +3,6 @@ from collections.abc import Callable
 import torch
 from torch import nn
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
@@ -21,6 +20,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..clip.modeling_clip import CLIPMLP
 from ..llama.modeling_llama import LlamaModel, LlamaPreTrainedModel, LlamaRotaryEmbedding, rotate_half
 from .configuration_gpt_neox import GPTNeoXConfig
 
@@ -28,18 +28,8 @@ from .configuration_gpt_neox import GPTNeoXConfig
 logger = logging.get_logger(__name__)
 
 
-class GPTNeoXMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense_h_to_4h = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.dense_4h_to_h = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.act = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_states):
-        hidden_states = self.dense_h_to_4h(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.dense_4h_to_h(hidden_states)
-        return hidden_states
+class GPTNeoXMLP(CLIPMLP):
+    pass
 
 
 class GPTNeoXRotaryEmbedding(LlamaRotaryEmbedding):

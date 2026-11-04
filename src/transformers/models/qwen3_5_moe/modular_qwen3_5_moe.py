@@ -24,10 +24,10 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, no_inherit_decorator
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from ..qwen3_5.configuration_qwen3_5 import Qwen3_5VisionConfig
 from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5GatedDeltaNet,
-    Qwen3_5MLP,
     Qwen3_5Model,
     Qwen3_5TextModel,
     Qwen3_5TextRotaryEmbedding,
@@ -180,7 +180,7 @@ class Qwen3_5MoeAttention(Qwen3NextAttention):
     pass
 
 
-class Qwen3_5MoeMLP(Qwen3_5MLP):
+class Qwen3_5MoeMLP(Qwen2MoeMLP):
     pass
 
 

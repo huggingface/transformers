@@ -54,6 +54,7 @@ from ...utils.generic import (
 )
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...video_utils import VideoInput
+from ..clip.modeling_clip import CLIPMLP
 from ..mimi.modeling_mimi import MimiLayerScale
 from ..qwen2_5_omni.configuration_qwen2_5_omni import (
     Qwen2_5OmniAudioEncoderConfig,
@@ -73,7 +74,7 @@ from ..qwen2_5_omni.processing_qwen2_5_omni import (
     Qwen2_5OmniProcessorKwargs,
     SinusoidsPositionEmbedding,
 )
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeSparseMoeBlock, Qwen2MoeTopKRouter
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP, Qwen2MoeSparseMoeBlock, Qwen2MoeTopKRouter
 from ..qwen3.configuration_qwen3 import Qwen3Config
 from ..qwen3.modeling_qwen3 import (
     Qwen3Attention,
@@ -90,7 +91,6 @@ from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeDecoderLayer,
     Qwen3MoeExperts,
     Qwen3MoeForCausalLM,
-    Qwen3MoeMLP,
     Qwen3MoePreTrainedModel,
     Qwen3MoeSparseMoeBlock,
     Qwen3MoeTopKRouter,
@@ -1471,15 +1471,12 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         )
 
 
-class Qwen3OmniMoeTalkerResizeMLP(nn.Module):
+class Qwen3OmniMoeTalkerResizeMLP(CLIPMLP):
     def __init__(self, config: Qwen3OmniMoeTalkerConfig):
-        super().__init__()
-        self.linear_fc1 = nn.Linear(config.thinker_hidden_size, config.text_config.intermediate_size, bias=True)
-        self.linear_fc2 = nn.Linear(config.text_config.intermediate_size, config.text_config.hidden_size, bias=True)
+        nn.Module.__init__(self)
+        self.up_proj = nn.Linear(config.thinker_hidden_size, config.text_config.intermediate_size, bias=True)
+        self.down_proj = nn.Linear(config.text_config.intermediate_size, config.text_config.hidden_size, bias=True)
         self.act_fn = ACT2FN[config.text_config.hidden_act]
-
-    def forward(self, hidden_state):
-        return self.linear_fc2(self.act_fn(self.linear_fc1(hidden_state)))
 
 
 @dataclass
@@ -1677,7 +1674,7 @@ class Qwen3OmniMoeTalkerRotaryEmbedding(Qwen3OmniMoeThinkerTextRotaryEmbedding):
     pass
 
 
-class Qwen3OmniMoeTalkerTextMLP(Qwen3MoeMLP):
+class Qwen3OmniMoeTalkerTextMLP(Qwen2MoeMLP):
     pass
 
 
@@ -1723,7 +1720,6 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
     _tied_weights_keys = {"codec_head": "model.codec_embedding.weight"}
     _tp_plan = {"codec_head": "colwise_gather_output"}
     _pp_plan = {"codec_head": (["hidden_states"], ["logits"])}
-    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     config: Qwen3OmniMoeTalkerConfig
     base_model_prefix = "talker"

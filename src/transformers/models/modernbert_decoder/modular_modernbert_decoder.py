@@ -85,6 +85,7 @@ class ModernBertDecoderConfig(PreTrainedConfig):
     ```"""
 
     model_type = "modernbert-decoder"
+    attribute_map = {"hidden_activation": "hidden_act"}
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = {"global": 160_000.0, "local": 10_000.0}
 
@@ -93,7 +94,7 @@ class ModernBertDecoderConfig(PreTrainedConfig):
     intermediate_size: int = 1152
     num_hidden_layers: int = 22
     num_attention_heads: int = 12
-    hidden_activation: str = "gelu"
+    hidden_act: str = "gelu"
     max_position_embeddings: int = 8192
     initializer_range: float = 0.02
     initializer_cutoff_factor: float = 2.0
@@ -374,8 +375,8 @@ class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
         if isinstance(module, ModernBertDecoderEmbeddings):
             init_weight(module.tok_embeddings, stds["embedding"])
         elif isinstance(module, ModernBertDecoderMLP):
-            init_weight(module.Wi, stds["in"])
-            init_weight(module.Wo, stds["out"])
+            init_weight(module.gate_up_proj, stds["in"])
+            init_weight(module.down_proj, stds["out"])
         elif isinstance(module, ModernBertDecoderAttention):
             init_weight(module.q_proj, stds["in"])
             init_weight(module.k_proj, stds["in"])

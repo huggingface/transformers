@@ -163,7 +163,7 @@ class MuseSparkTextInputScaledRMSNorm(nn.Module):
 
 
 class MuseSparkTextMLP(nn.Module):
-    def __init__(self, config: MuseSparkTextConfig):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -823,14 +823,18 @@ class MuseSparkVisionAttention(nn.Module):
 
 
 class MuseSparkVisionMLP(nn.Module):
-    def __init__(self, dim: int, hidden_dim: int, hidden_act: str) -> None:
+    def __init__(self, config):
         super().__init__()
-        self.fc1 = nn.Linear(dim, hidden_dim)
-        self.act = ACT2FN[hidden_act]
-        self.fc2 = nn.Linear(hidden_dim, dim)
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size)
 
-    def forward(self, x) -> torch.Tensor:
-        return self.fc2(self.act(self.fc1(x)))
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 class MuseSparkVisionEncoderLayer(GradientCheckpointingLayer):
@@ -839,7 +843,7 @@ class MuseSparkVisionEncoderLayer(GradientCheckpointingLayer):
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=1e-5)
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=1e-5)
         self.attn = MuseSparkVisionAttention(config=config)
-        self.mlp = MuseSparkVisionMLP(config.hidden_size, config.intermediate_size, config.hidden_act)
+        self.mlp = MuseSparkVisionMLP(config)
 
     def forward(
         self,
@@ -1149,13 +1153,11 @@ class MuseSparkAudioMLP(nn.Module):
         self.intermediate_size = int(self.hidden_size * config.mlp_ratio)
         self.fc1 = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
         self.fc2 = nn.Linear(self.intermediate_size, self.hidden_size, bias=True)
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 class MuseSparkAudioConvBlock(nn.Module):

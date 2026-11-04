@@ -186,12 +186,12 @@ class Tipsv2VisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         return getattr(ModelTesterMixin, self._testMethodName)(self)
 
     def test_reverse_loading_mapping(self, check_keys_were_modified=True, skip_base_model=False):
-        # The MLP is mlp.fc1/mlp.fc2 or mlp.gate_proj/mlp.up_proj/mlp.down_proj depending on config.use_swiglu_ffn,
+        # The MLP is mlp.up_proj/mlp.down_proj or swiglu_ffn.gate_proj/swiglu_ffn.up_proj/swiglu_ffn.down_proj depending on config.use_swiglu_ffn,
         # so only one of the two conversion sets can match, while the test expects every converter to match.
         # The tests run with use_swiglu_ffn=False, so the swiglu-only conversions are dropped from the mapping.
 
         def get_model_conversion_mapping_without_swiglu_ffn(*args, **kwargs):
-            dropped_targets = {".mlp.gate_proj.weight", ".mlp.gate_proj.bias", ".mlp.down_proj."}
+            dropped_targets = {".swiglu_ffn.gate_proj.weight", ".swiglu_ffn.gate_proj.bias", ".swiglu_ffn.down_proj."}
             return [
                 conversion
                 for conversion in get_model_conversion_mapping(*args, **kwargs)

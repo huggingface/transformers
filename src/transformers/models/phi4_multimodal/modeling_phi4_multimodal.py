@@ -53,15 +53,15 @@ class Phi4MultimodalVisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 def simple_eager_attention_forward(
@@ -247,10 +247,10 @@ class Phi4MultimodalVisionPreTrainedModel(PreTrainedModel):
             init.zeros_(module.v_proj.bias)
             init.zeros_(module.out_proj.bias)
         elif isinstance(module, Phi4MultimodalVisionMLP):
-            init.normal_(module.fc1.weight)
-            init.normal_(module.fc2.weight)
-            init.normal_(module.fc1.bias, std=1e-6)
-            init.normal_(module.fc2.bias, std=1e-6)
+            init.normal_(module.up_proj.weight)
+            init.normal_(module.down_proj.weight)
+            init.normal_(module.up_proj.bias, std=1e-6)
+            init.normal_(module.down_proj.bias, std=1e-6)
         elif isinstance(module, Phi4MultimodalVisionMultiheadAttentionPoolingHead):
             init.normal_(module.probe)
             init.normal_(module.attention.in_proj_weight)
@@ -604,9 +604,9 @@ class Phi4MultimodalAudioMLP(nn.Module):
         up_states = up_states * self.act_fn(gate)
         up_states = self.dropout(up_states)
         hidden_states = self.down_proj(up_states)
-        out = self.dropout(hidden_states)
+        hidden_states = self.dropout(hidden_states)
 
-        return out
+        return hidden_states
 
 
 class Phi4MultimodalAudioAttention(nn.Module):
@@ -1130,13 +1130,13 @@ class Phi4MultimodalMLP(nn.Module):
         self.config = config
         self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=False)
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
         up_states = self.gate_up_proj(hidden_states)
 
         gate, up_states = up_states.chunk(2, dim=-1)
-        up_states = up_states * self.activation_fn(gate)
+        up_states = up_states * self.act_fn(gate)
 
         return self.down_proj(up_states)
 

@@ -97,6 +97,7 @@ class MuseSparkTextConfig(PreTrainedConfig):
     """
 
     model_type = "muse_spark_text"
+    attribute_map = {"hidden_activation": "hidden_act"}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     base_model_tp_plan = {
@@ -120,6 +121,7 @@ class MuseSparkTextConfig(PreTrainedConfig):
     num_attention_heads: int = 128
     num_key_value_heads: int = 16
     head_dim: int = 64
+    hidden_act: str = "silu"
     max_position_embeddings: int = 1048576
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-5
@@ -145,7 +147,6 @@ class MuseSparkTextConfig(PreTrainedConfig):
         "layers.*.mlp.experts.post_expert_norm": "replicated_with_grad_allreduce",
         "layers.*.mlp.experts": "ep_dispatch_experts",
     }
-    hidden_act: str = "silu"
 
     moe_intermediate_size: int = 4096
     num_local_experts: int = 256

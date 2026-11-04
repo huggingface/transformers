@@ -37,9 +37,10 @@ from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWit
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from ...utils.generic import (
     accepts_precomputed_kwargs,
+    can_return_tuple,
     get_max_seqlen,
     is_flash_attention_requested,
     maybe_autocast,
@@ -281,15 +282,14 @@ class Ernie4_5_VLMoeRMSNorm(nn.Module):
 
 
 class Ernie4_5_VLMoeMLP(nn.Module):
-    def __init__(self, config, intermediate_size=None):
+    def __init__(self, config: Ernie4_5_VLMoeConfig, intermediate_size=None):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
-
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
@@ -638,11 +638,7 @@ class Ernie4_5_VLMoeVisionBlock(GradientCheckpointingLayer):
         self.norm1 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
         self.norm2 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
         self.attn = Ernie4_5_VLMoeVisionAttention(config=config)
-        self.mlp = Ernie4_5VLVisionMLP(
-            dim=config.hidden_size,
-            hidden_dim=config.intermediate_size,
-            hidden_act=config.hidden_act,
-        )
+        self.mlp = Ernie4_5VLVisionMLP(config)
 
     @auto_docstring
     def forward(
@@ -797,14 +793,18 @@ class Ernie4_5_VLMoeTextModel(Ernie4_5_VLMoePreTrainedModel):
 
 
 class Ernie4_5VLVisionMLP(nn.Module):
-    def __init__(self, dim: int, hidden_dim: int, hidden_act: str) -> None:
+    def __init__(self, config):
         super().__init__()
-        self.fc1 = nn.Linear(dim, hidden_dim)
-        self.act = ACT2FN[hidden_act]
-        self.fc2 = nn.Linear(hidden_dim, dim)
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size)
 
-    def forward(self, x) -> torch.Tensor:
-        return self.fc2(self.act(self.fc1(x)))
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 class Ernie4_5_VLMoePatchEmbed(nn.Module):
@@ -947,17 +947,15 @@ class Ernie4_5_VLMoeVisionMLP(nn.Module):
     def __init__(self, config, in_dim, out_dim):
         super().__init__()
 
-        self.fc1 = nn.Linear(in_dim, out_dim)
+        self.up_proj = nn.Linear(in_dim, out_dim)
         self.act_fn = nn.GELU()
-        self.fc2 = nn.Linear(out_dim, out_dim)
-        self.ln = nn.LayerNorm(out_dim, eps=config.vision_config.rms_norm_eps)
+        self.down_proj = nn.Linear(out_dim, out_dim)
+        self.layer_norm = nn.LayerNorm(out_dim, eps=config.vision_config.rms_norm_eps)
 
     def forward(self, hidden_states):
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.act_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = self.ln(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        down_proj = self.layer_norm(down_proj)
+        return down_proj
 
 
 class Ernie4_5_VLMoeVariableResolutionResamplerModel(nn.Module):

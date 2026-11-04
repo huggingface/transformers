@@ -42,8 +42,8 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import merge_with_config_defaults
+from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_moonshine_streaming import MoonshineStreamingConfig, MoonshineStreamingEncoderConfig
 
@@ -131,18 +131,18 @@ class MoonshineStreamingLayerNorm(nn.Module):
 
 
 class MoonshineStreamingEncoderMLP(nn.Module):
-    def __init__(self, config, hidden_act):
+    def __init__(self, config):
         super().__init__()
         self.config = config
-        self.activation_fn = ACT2FN[hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -244,7 +244,7 @@ class MoonshineStreamingEncoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = MoonshineStreamingEncoderAttention(config, layer_idx)
-        self.mlp = MoonshineStreamingEncoderMLP(config, config.hidden_act)
+        self.mlp = MoonshineStreamingEncoderMLP(config)
         self.input_layernorm = MoonshineStreamingLayerNorm(config.hidden_size)
         self.post_attention_layernorm = MoonshineStreamingLayerNorm(config.hidden_size)
 
@@ -448,19 +448,21 @@ class MoonshinMoonshineStreamingDecoderMLP(nn.Module):
 
 
 class MoonshineStreamingDecoderMLP(nn.Module):
-    def __init__(self, config, hidden_act):
+    def __init__(self, config):
         super().__init__()
-        self.config = config
-        self.activation_fn = ACT2FN[hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size * 2)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states, gate = hidden_states.chunk(2, dim=-1)
-        hidden_states = self.activation_fn(gate) * hidden_states
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
+        self.config = config
+        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
+        up_states = self.gate_up_proj(hidden_states)
+
+        gate, up_states = up_states.chunk(2, dim=-1)
+        up_states = up_states * self.act_fn(gate)
+
+        return self.down_proj(up_states)
 
 
 class MoonshineStreamingRotaryEmbedding(nn.Module):
@@ -703,7 +705,7 @@ class MoonshineStreamingDecoderLayer(GradientCheckpointingLayer):
             num_key_value_heads=config.num_key_value_heads,
         )
 
-        self.mlp = MoonshineStreamingDecoderMLP(config, config.hidden_act)
+        self.mlp = MoonshineStreamingDecoderMLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
         self.final_layernorm = nn.LayerNorm(config.hidden_size, bias=False)

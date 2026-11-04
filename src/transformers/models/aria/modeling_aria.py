@@ -35,14 +35,13 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    ModelOutput,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
@@ -85,14 +84,13 @@ class AriaProjectorMLP(nn.Module):
 
     def __init__(self, in_features, hidden_features, output_dim):
         super().__init__()
-        self.linear_in = nn.Linear(in_features, hidden_features, bias=False)
-        self.linear_out = nn.Linear(hidden_features, output_dim, bias=False)
-        self.act = ACT2FN["gelu_new"]
+        self.up_proj = nn.Linear(in_features, hidden_features, bias=False)
+        self.down_proj = nn.Linear(hidden_features, output_dim, bias=False)
+        self.act_fn = ACT2FN["gelu_new"]
 
-    def forward(self, hidden_states):
-        hidden_states = self.act(self.linear_in(hidden_states))
-        hidden_states = self.linear_out(hidden_states)
-        return hidden_states
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 class AriaCrossAttention(nn.Module):

@@ -92,16 +92,16 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, Kosmos2VisionMLP):
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            init.normal_(module.fc1.weight, std=fc_std)
-            init.normal_(module.fc2.weight, std=in_proj_std)
+            init.normal_(module.up_proj.weight, std=fc_std)
+            init.normal_(module.down_proj.weight, std=in_proj_std)
         elif isinstance(module, KosmosTextAttention):
             init.normal_(module.q_proj.weight, std=std)
             init.normal_(module.k_proj.weight, std=std)
             init.normal_(module.v_proj.weight, std=std)
             init.normal_(module.out_proj.weight, std=std)
         elif isinstance(module, Kosmos2TextFFN):
-            init.normal_(module.fc1.weight, std=std)
-            init.normal_(module.fc2.weight, std=std)
+            init.normal_(module.up_proj.weight, std=std)
+            init.normal_(module.down_proj.weight, std=std)
         elif isinstance(module, Kosmos2TextForCausalLM):
             init.normal_(module.lm_head.weight, std=std)
         elif isinstance(module, Kosmos2ImageToTextProjection):
@@ -410,15 +410,15 @@ class Kosmos2VisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 # Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIPVisionConfig->Kosmos2VisionConfig,AltCLIP->Kosmos2Vision
@@ -788,16 +788,16 @@ class Kosmos2TextFFN(nn.Module):
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
-        self.fc1 = nn.Linear(config.embed_dim, config.ffn_dim)
-        self.fc2 = nn.Linear(config.ffn_dim, config.embed_dim)
+        self.up_proj = nn.Linear(config.embed_dim, config.ffn_dim)
+        self.down_proj = nn.Linear(config.ffn_dim, config.embed_dim)
 
         self.ffn_layernorm = nn.LayerNorm(config.ffn_dim, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states):
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = self.activation_fn(self.up_proj(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.ffn_layernorm(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         return hidden_states

@@ -28,12 +28,12 @@ from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..beit.modeling_beit import BeitEmbeddings
 from ..bert.modeling_bert import eager_attention_forward  # noqa: F401
+from ..clip.modeling_clip import CLIPMLP
 from ..llama.modeling_llama import LlamaMLP
 from ..swin.modeling_swin import SwinDropPath
 from ..vit.modeling_vit import (
     ViTAttention,
     ViTForImageClassification,
-    ViTMLP,
     ViTPatchEmbeddings,
     ViTPreTrainedModel,
 )
@@ -116,12 +116,11 @@ class Dinov2LayerScale(nn.Module):
         return hidden_state * self.lambda1
 
 
-class Dinov2MLP(ViTMLP):
+class Dinov2MLP(CLIPMLP):
     def __init__(self, config) -> None:
         super().__init__(config)
         # the hidden size comes from mlp_ratio; the config has no intermediate_size
-        self.fc1 = nn.Linear(config.hidden_size, int(config.hidden_size * config.mlp_ratio))
-        self.fc2 = nn.Linear(int(config.hidden_size * config.mlp_ratio), config.hidden_size)
+        self.intermediate_size = int(config.hidden_size * config.mlp_ratio)
 
 
 class Dinov2SwiGLUFFN(LlamaMLP):
@@ -150,7 +149,11 @@ class Dinov2Layer(GradientCheckpointingLayer):
         self.layer_scale1 = Dinov2LayerScale(config)
         self.drop_path = Dinov2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = Dinov2SwiGLUFFN(config) if config.use_swiglu_ffn else Dinov2MLP(config)
+        self.use_swiglu_ffn = config.use_swiglu_ffn
+        if config.use_swiglu_ffn:
+            self.swiglu_ffn = Dinov2SwiGLUFFN(config)
+        else:
+            self.mlp = Dinov2MLP(config)
         self.layer_scale2 = Dinov2LayerScale(config)
 
     def forward(
@@ -169,7 +172,7 @@ class Dinov2Layer(GradientCheckpointingLayer):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.swiglu_ffn(hidden_states) if self.use_swiglu_ffn else self.mlp(hidden_states)
         hidden_states = self.layer_scale2(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual
         return hidden_states

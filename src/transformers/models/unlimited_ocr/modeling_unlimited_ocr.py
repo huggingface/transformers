@@ -321,17 +321,17 @@ class UnlimitedOcrPreTrainedModel(PreTrainedModel):
             init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
 
 
-class UnlimitedOcrSamMLPBlock(nn.Module):
+class UnlimitedOcrSamMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.lin1 = nn.Linear(config.hidden_size, config.mlp_dim)
-        self.lin2 = nn.Linear(config.mlp_dim, config.hidden_size)
-        self.act = ACT2FN[config.hidden_act]
+        self.up_proj = nn.Linear(config.hidden_size, config.mlp_dim)
+        self.down_proj = nn.Linear(config.mlp_dim, config.hidden_size)
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.lin1(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.lin2(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 
@@ -398,7 +398,7 @@ class UnlimitedOcrSamVisionLayer(GradientCheckpointingLayer):
         self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attn = UNLIMITED_OCR_SAM_VISION_ATTENTION_CLASSES[config._attn_implementation](config, window_size)
         self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = UnlimitedOcrSamMLPBlock(config)
+        self.mlp = UnlimitedOcrSamMLP(config)
         self.window_size = window_size
 
     def window_partition(self, hidden_states: torch.Tensor, window_size: int) -> tuple[torch.Tensor, tuple[int, int]]:
@@ -733,15 +733,15 @@ class UnlimitedOcrMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 class UnlimitedOcrEncoderLayer(GradientCheckpointingLayer):
@@ -1089,10 +1089,10 @@ class UnlimitedOcrTextAttention(nn.Module):
 
 
 class UnlimitedOcrTextMLP(nn.Module):
-    def __init__(self, config: UnlimitedOcrTextConfig, hidden_size=None, intermediate_size=None):
+    def __init__(self, config: UnlimitedOcrTextConfig, intermediate_size=None):
         super().__init__()
         self.config = config
-        self.hidden_size = config.hidden_size if hidden_size is None else hidden_size
+        self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)

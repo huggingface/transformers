@@ -42,6 +42,7 @@ from ...utils.generic import (
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
+from ..clip.modeling_clip import CLIPMLP
 from ..phi3.configuration_phi3 import Phi3Config
 from ..phi3.modeling_phi3 import (
     Phi3DecoderLayer,
@@ -54,7 +55,6 @@ from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
     SiglipEncoder,
     SiglipEncoderLayer,
-    SiglipMLP,
     SiglipMultiheadAttentionPoolingHead,
     SiglipPreTrainedModel,
     SiglipVisionEmbeddings,
@@ -230,7 +230,7 @@ class Phi4MultimodalConfig(Phi3Config):
         self.eos_token_id = self.eos_token_id or [199999, 200020]
 
 
-class Phi4MultimodalVisionMLP(SiglipMLP):
+class Phi4MultimodalVisionMLP(CLIPMLP):
     pass
 
 
@@ -360,10 +360,10 @@ class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
             init.zeros_(module.v_proj.bias)
             init.zeros_(module.out_proj.bias)
         elif isinstance(module, Phi4MultimodalVisionMLP):
-            init.normal_(module.fc1.weight)
-            init.normal_(module.fc2.weight)
-            init.normal_(module.fc1.bias, std=1e-6)
-            init.normal_(module.fc2.bias, std=1e-6)
+            init.normal_(module.up_proj.weight)
+            init.normal_(module.down_proj.weight)
+            init.normal_(module.up_proj.bias, std=1e-6)
+            init.normal_(module.down_proj.bias, std=1e-6)
         elif isinstance(module, Phi4MultimodalVisionMultiheadAttentionPoolingHead):
             init.normal_(module.probe)
             init.normal_(module.attention.in_proj_weight)
@@ -673,9 +673,9 @@ class Phi4MultimodalAudioMLP(nn.Module):
         up_states = up_states * self.act_fn(gate)
         up_states = self.dropout(up_states)
         hidden_states = self.down_proj(up_states)
-        out = self.dropout(hidden_states)
+        hidden_states = self.dropout(hidden_states)
 
-        return out
+        return hidden_states
 
 
 class Phi4MultimodalAudioAttention(nn.Module):
