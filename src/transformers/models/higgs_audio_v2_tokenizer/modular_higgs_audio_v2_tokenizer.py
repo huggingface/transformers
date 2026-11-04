@@ -134,7 +134,7 @@ class HiggsAudioV2TokenizerVectorQuantization(nn.Module):
 @requires(backends=("torchaudio",))
 @auto_docstring(custom_intro="""The HiggsAudioV2Tokenizer neural audio codec model.""")
 class HiggsAudioV2TokenizerModel(XcodecModel):
-    def _extract_semantic_features(self, input_values: torch.FloatTensor) -> torch.FloatTensor:
+    def _extract_semantic_features(self, input_values: torch.Tensor) -> torch.Tensor:
         if self.config.sample_rate != self.config.semantic_sample_rate:
             input_values = torchaudio.functional.resample(
                 input_values, self.config.sample_rate, self.config.semantic_sample_rate
