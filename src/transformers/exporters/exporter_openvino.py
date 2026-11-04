@@ -31,7 +31,8 @@ Extends [`DynamoExporter`] with the stages that turn an ``ExportedProgram`` into
 4. **Conversion**: the prepared module is decoded via ``TorchFXPythonDecoder`` and handed to
    ``openvino.convert_model`` together with the custom ``ConversionExtension``\\ s for ops
    without a built-in OV lowering. Ports are then renamed to their dotted leaf paths and
-   non-tensor inputs repaired.
+   non-tensor inputs repaired. A bf16/fp16 model is traced and converted in f32, and its
+   weights get their 16-bit type back afterwards (see "16-bit models" below).
 5. **Stateful transformation** (``OpenVINOConfig.stateful``, on by default): fold
    round-tripped state tensors (KV cache, SSM states, …) into internal OV variables with a
    fused ``beam_idx`` reorder. Optionally written to disk via ``openvino.save_model`` when
@@ -118,7 +119,6 @@ class OpenVINOExporter(DynamoExporter):
         elif type(config) is not OpenVINOConfig:
             raise TypeError(f"Expected config to be an OpenVINOConfig or dict, got {type(config)}")
 
-        weight_dtype = next((p.dtype for p in model.parameters() if p.dtype in (torch.bfloat16, torch.float16)), None)
         # From here on the inputs match the graph's dtypes: calibration and the state folding read them too.
         with _traced_in_float32(model, sample_inputs) as sample_inputs:
             with patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("openvino"):
@@ -126,7 +126,6 @@ class OpenVINOExporter(DynamoExporter):
             # Converted before the model gets its dtypes back: the program's constants are its own tensors.
             exported_program, graph_module = _fix_exported_program(exported_program)
             ov_model = _convert_to_openvino(graph_module)
-        _fold_scalar_converts(ov_model)
 
         inputs_names = [name for name in inputs_names if name in get_leaf_tensors(sample_inputs)]
         inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
@@ -136,8 +135,7 @@ class OpenVINOExporter(DynamoExporter):
         quantizer = config.quantizer
         if quantizer is not None and not quantizer.quantizes_fx_graph:
             ov_model = quantizer.quantize(ov_model, sample_inputs, config.export_format)
-        if weight_dtype is not None:
-            _restore_16bit_weights(ov_model, weight_dtype)
+        _restore_16bit_weights(ov_model, model)
 
         if config.stateful:
             _make_stateful(ov_model, exported_program, graph_module, sample_inputs, inputs_names, outputs_names)
@@ -146,111 +144,6 @@ class OpenVINOExporter(DynamoExporter):
             openvino.save_model(ov_model, config.output_path, compress_to_fp16=config.compress_to_fp16)
 
         return ov_model
-
-
-@contextlib.contextmanager
-def _traced_in_float32(model: PreTrainedModel, sample_inputs: MutableMapping[str, Any]):
-    """Trace a bf16 or fp16 model as an f32 graph and restore its own dtypes afterwards.
-
-    OV's CPU plugin fuses its kernels on f32-typed graphs and picks the inference precision itself (bf16 on CPUs with
-    AMX or AVX-512 BF16): a bf16-typed graph misses some of them, notably the compressed-weight matmuls of an NNCF
-    int8/int4 graph, which then decompress every weight on each call. The file keeps its size: the weights get their
-    16-bit type back afterwards ([`_restore_16bit_weights`]), or are quantized. Each parameter, buffer and config gets
-    its own dtype back, so modules a model keeps in fp32 stay fp32.
-    """
-    half = (torch.bfloat16, torch.float16)
-    tensors = [*model.parameters(), *model.buffers()]
-    dtypes = [tensor.dtype for tensor in tensors]
-    if not any(dtype in half for dtype in dtypes):
-        yield sample_inputs
-        return
-    # The configs too: masks and caches the forward builds take their dtype from them.
-    configs = {id(config): config for config in _configs(model) if getattr(config, "dtype", None) in half}
-    config_dtypes = {key: config.dtype for key, config in configs.items()}
-    for tensor in tensors:
-        if tensor.dtype in half:
-            tensor.data = tensor.data.float()
-    for config in configs.values():
-        config.dtype = torch.float32
-    try:
-        # A copy: casting rewrites dicts and caches in place, and the caller's inputs stay theirs.
-        yield cast_leaf_tensors(copy.deepcopy(sample_inputs), torch.float32, module_device(model))
-    finally:
-        for tensor, dtype in zip(tensors, dtypes):
-            tensor.data = tensor.data.to(dtype)
-        for key, config in configs.items():
-            config.dtype = config_dtypes[key]
-
-
-def _configs(model):
-    """Every config `model` holds: its modules' and their sub-configs (a multimodal model's text and vision ones)."""
-    pending = [module.config for module in model.modules() if hasattr(module, "config")]
-    while pending:
-        config = pending.pop()
-        yield config
-        pending.extend(
-            getattr(config, name)
-            for name in getattr(config, "sub_configs", {})
-            if getattr(config, name, None) is not None
-        )
-
-
-def _restore_16bit_weights(ov_model: openvino.Model, dtype: torch.dtype) -> None:
-    """Give the weights of a model traced in f32 ([`_traced_in_float32`]) their 16-bit type back, as a 16-bit
-    constant and a `Convert` to f32: OV's CPU plugin decompresses that pattern
-    inside its matmuls, and the file keeps the checkpoint's own values. A constant is restored when every value is
-    exactly a `dtype` value, which holds for every upcast weight and is lossless by construction; weights an NNCF
-    quantizer compressed are no longer f32 and are left alone.
-    """
-    for op in ov_model.get_ordered_ops():
-        if op.get_type_name() != "Constant" or op.get_element_type() != openvino.Type.f32:
-            continue
-        data = op.get_data()
-        if data.size < 1024:  # scalars and shapes the graph computes with stay f32
-            continue
-        if dtype == torch.bfloat16:
-            # bf16 is the top half of an f32: a value is a bf16 one when its low 16 bits are zero
-            bits = data.view(np.uint32)
-            if (bits & 0xFFFF).any():
-                continue
-            values = openvino.Tensor((bits >> 16).astype(np.uint16), list(data.shape), openvino.Type.bf16)
-        else:
-            half = data.astype(np.float16)
-            if not np.array_equal(half.astype(np.float32), data):
-                continue
-            values = openvino.Tensor(half)
-        constant = openvino.op.Constant(values, shared_memory=False)
-        op.output(0).replace(ov_ops.convert(constant, openvino.Type.f32).output(0))
-
-
-def _fold_scalar_converts(ov_model: openvino.Model) -> None:
-    """Fold the frontend's marked scalar casts into plain constants, so the CPU plugin's fusions match them.
-
-    The PyTorch frontend translates `aten.neg` as a multiply by a `Convert`ed `-1`, marking the `Convert`
-    `DisableConstantFolding` and the multiply a dequantization node. While the marks stay, the `Convert` never folds
-    and the plugin's RoPE fusion, which matches `rotate_half`'s negation as a multiply by a constant, doesn't fire: the
-    model this exporter returns would run RoPE decomposed. Serializing drops the marks, so only an IR read back from
-    disk fused. Quantized weights' dequantization subgraphs are never scalar and are left alone.
-    """
-    for op in ov_model.get_ordered_ops():
-        if op.get_type_name() != "Convert" or not any(
-            key.startswith("DisableConstantFolding") for key in op.get_rt_info().keys()
-        ):
-            continue
-        source = op.input_value(0).get_node()
-        if (
-            source.get_type_name() != "Constant"
-            or source.get_output_shape(0)
-            and math.prod(source.get_output_shape(0)) != 1
-        ):
-            continue
-        value = source.get_data().astype(op.get_output_element_type(0).to_dtype())
-        folded = openvino.op.Constant(value.reshape(list(source.get_output_shape(0))), shared_memory=False)
-        for target in op.output(0).get_target_inputs():
-            rt_info = target.get_node().get_rt_info()
-            for key in [key for key in rt_info.keys() if key.startswith("dequantization_node")]:
-                del rt_info[key]
-        op.output(0).replace(folded.output(0))
 
 
 # ── Conversion helpers ──────────────────────────────────────────────────────
@@ -307,6 +200,7 @@ def _convert_to_openvino(graph_module) -> openvino.Model:
     decoder._input_signature = [node.name for node in graph_module.graph.nodes if node.op == "placeholder"]
     ov_model = openvino.convert_model(decoder, extension=_OV_CONVERSION_EXTENSIONS)
     _fix_non_tensor_inputs(ov_model, graph_module)
+    _fold_scalar_converts(ov_model)
     return ov_model
 
 
@@ -406,6 +300,113 @@ def _fix_non_tensor_inputs(ov_model: openvino.Model, graph_module) -> None:
         ov_model.remove_parameter(parameter)
     if changed:
         ov_model.validate_nodes_and_infer_types()
+
+
+def _fold_scalar_converts(ov_model: openvino.Model) -> None:
+    """Fold the frontend's marked scalar casts into plain constants, so the CPU plugin's fusions match them.
+
+    The PyTorch frontend translates `aten.neg` as a multiply by a `Convert`ed `-1`, marking the `Convert`
+    `DisableConstantFolding` and the multiply a dequantization node. While the marks stay, the `Convert` never folds
+    and the plugin's RoPE fusion, which matches `rotate_half`'s negation as a multiply by a constant, doesn't fire: the
+    model this exporter returns would run RoPE decomposed. Serializing drops the marks, so only an IR read back from
+    disk fused. Quantized weights' dequantization subgraphs are never scalar and are left alone.
+    """
+    for op in ov_model.get_ordered_ops():
+        if op.get_type_name() != "Convert" or not any(
+            key.startswith("DisableConstantFolding") for key in op.get_rt_info().keys()
+        ):
+            continue
+        source = op.input_value(0).get_node()
+        if source.get_type_name() != "Constant" or math.prod(source.get_output_shape(0)) != 1:
+            continue
+        value = source.get_data().astype(op.get_output_element_type(0).to_dtype())
+        folded = openvino.op.Constant(value.reshape(list(source.get_output_shape(0))), shared_memory=False)
+        for target in op.output(0).get_target_inputs():
+            rt_info = target.get_node().get_rt_info()
+            for key in [key for key in rt_info.keys() if key.startswith("dequantization_node")]:
+                del rt_info[key]
+        op.output(0).replace(folded.output(0))
+
+
+# ── 16-bit models ──────────────────────────────────────────────────────────
+# OV's CPU plugin fuses its kernels on f32-typed graphs and picks the inference precision itself
+# (bf16 on CPUs with AMX or AVX-512 BF16): a bf16-typed graph misses some of them, notably the
+# compressed-weight matmuls of an NNCF int8/int4 graph. A bf16/fp16 model is therefore traced in
+# f32, and its weights get their 16-bit type back in the OV model as a 16-bit constant and a
+# `Convert`, which the plugin decompresses inside its matmuls.
+
+
+@contextlib.contextmanager
+def _traced_in_float32(model: PreTrainedModel, sample_inputs: MutableMapping[str, Any]):
+    """Upcast a bf16/fp16 model to f32 for the trace and conversion, yielding f32 copies of the inputs.
+
+    Each parameter, buffer and config gets its own dtype back afterwards, so modules a model keeps in fp32 stay fp32.
+    """
+    half = (torch.bfloat16, torch.float16)
+    tensors = [*model.parameters(), *model.buffers()]
+    dtypes = [tensor.dtype for tensor in tensors]
+    if not any(dtype in half for dtype in dtypes):
+        yield sample_inputs
+        return
+    # The configs too: masks and caches the forward builds take their dtype from them.
+    configs = {id(config): config for config in _configs(model) if getattr(config, "dtype", None) in half}
+    config_dtypes = {key: config.dtype for key, config in configs.items()}
+    for tensor in tensors:
+        if tensor.dtype in half:
+            tensor.data = tensor.data.float()
+    for config in configs.values():
+        config.dtype = torch.float32
+    try:
+        # A copy: casting rewrites dicts and caches in place, and the caller's inputs stay theirs.
+        yield cast_leaf_tensors(copy.deepcopy(sample_inputs), torch.float32, module_device(model))
+    finally:
+        for tensor, dtype in zip(tensors, dtypes):
+            tensor.data = tensor.data.to(dtype)
+        for key, config in configs.items():
+            config.dtype = config_dtypes[key]
+
+
+def _configs(model):
+    """Every config `model` holds: its modules' and their sub-configs (a multimodal model's text and vision ones)."""
+    pending = [module.config for module in model.modules() if hasattr(module, "config")]
+    while pending:
+        config = pending.pop()
+        yield config
+        pending.extend(
+            getattr(config, name)
+            for name in getattr(config, "sub_configs", {})
+            if getattr(config, name, None) is not None
+        )
+
+
+def _restore_16bit_weights(ov_model: openvino.Model, model: PreTrainedModel) -> None:
+    """Store the f32 weight constants of a model traced with [`_traced_in_float32`] in the model's 16-bit dtype.
+
+    A constant is restored only when every value is exactly a 16-bit one, which holds for every upcast weight, so this
+    is lossless. Weights an NNCF quantizer compressed are no longer f32 and are left alone.
+    """
+    dtype = next((p.dtype for p in model.parameters() if p.dtype in (torch.bfloat16, torch.float16)), None)
+    if dtype is None:
+        return
+    for op in ov_model.get_ordered_ops():
+        if op.get_type_name() != "Constant" or op.get_element_type() != openvino.Type.f32:
+            continue
+        data = op.get_data()
+        if data.size < 1024:  # scalars and shapes the graph computes with stay f32
+            continue
+        if dtype == torch.bfloat16:
+            # bf16 is the top half of an f32: a value is a bf16 one when its low 16 bits are zero
+            bits = data.view(np.uint32)
+            if (bits & 0xFFFF).any():
+                continue
+            values = openvino.Tensor((bits >> 16).astype(np.uint16), list(data.shape), openvino.Type.bf16)
+        else:
+            half = data.astype(np.float16)
+            if not np.array_equal(half.astype(np.float32), data):
+                continue
+            values = openvino.Tensor(half)
+        constant = openvino.op.Constant(values, shared_memory=False)
+        op.output(0).replace(ov_ops.convert(constant, openvino.Type.f32).output(0))
 
 
 # ── Stateful transformation ─────────────────────────────────────────────────
@@ -663,31 +664,18 @@ def _make_stateful(
     _pin_state_update_shapes(ov_model)
 
 
-def _refined_state_shape(variable_shape, update_shape):
-    """`variable_shape` with the dims `update_shape` fixes and it leaves dynamic, or `None` when the two disagree
-    on a static dim or on rank."""
-    if variable_shape.rank.is_dynamic or update_shape.rank.is_dynamic or len(variable_shape) != len(update_shape):
-        return None
-    dims = []
-    for variable_dim, update_dim in zip(variable_shape, update_shape):
-        if variable_dim.is_static and update_dim.is_static and variable_dim.get_length() != update_dim.get_length():
-            return None
-        dims.append(variable_dim if variable_dim.is_static or update_dim.is_dynamic else update_dim)
-    return openvino.PartialShape(dims)
-
-
 def _pin_state_update_shapes(ov_model: openvino.Model) -> None:
     """Reconcile each ``Assign``'s update shape with its variable's shape.
 
     The CPU plugin refuses to reorder dynamic descriptors into the state memory, so the two
     sides must agree. When the update fixes dims the variable leaves dynamic (a static trace bakes
     the batch into the update, or a batch-1 sample's size-1 batch gets specialized), the variable
-    takes those dims. Conversely, when shape inference leaves the update under-specified against a
-    static variable dim (olmo_hybrid's rolled conv state comes out ``[?,32,2..]`` against a
-    ``[?,32,3]`` variable), a ``special_zero`` Reshape pins the statically-known dims and copies the
-    dynamic ones from the input. Nothing else gets a Reshape: one between the KV-cache concat and its
-    ``Assign`` keeps the CPU plugin from fusing the cache into its attention. Pinning a variable
-    refines shapes downstream (other updates read from it), so this iterates to a fixpoint.
+    takes those dims: a Reshape between the KV-cache concat and its ``Assign`` would keep the CPU
+    plugin from fusing the cache into its attention. Conversely, when shape inference leaves the
+    update under-specified against a static variable dim (olmo_hybrid's rolled conv state comes out
+    ``[?,32,2..]`` against a ``[?,32,3]`` variable), a ``special_zero`` Reshape pins the
+    statically-known dims and copies the dynamic ones from the input. Pinning a variable refines
+    shapes downstream (other updates read from it), so this iterates to a fixpoint.
     """
     variables = {variable.get_info().variable_id: variable for variable in ov_model.get_variables()}
     read_values = {op.get_variable_id(): op for op in ov_model.get_ordered_ops() if op.get_type_name() == "ReadValue"}
@@ -700,36 +688,33 @@ def _pin_state_update_shapes(ov_model: openvino.Model) -> None:
             variable_shape = variable.get_info().data_shape
             update = op.input_value(0)
             update_shape = update.get_partial_shape()
-            if update_shape == variable_shape:
+            if (
+                update_shape == variable_shape
+                or variable_shape.rank.is_dynamic
+                or update_shape.rank.is_dynamic
+                or len(update_shape) != len(variable_shape)
+            ):
                 continue
-            refined = _refined_state_shape(variable_shape, update_shape)
-            if refined is not None and refined != variable_shape:
-                # The update fixes dims the variable left dynamic (a static trace bakes the batch, or a
-                # batch-1 sample's size-1 axis gets specialized): give the variable those dims, so the
-                # update feeds its `Assign` as is. A `Reshape` between them would keep the CPU plugin
-                # from fusing the KV-cache concat into its attention.
+            dims = list(zip(variable_shape, update_shape))
+            if any(v.is_dynamic and u.is_static for v, u in dims):
                 info = variable.get_info()
-                info.data_shape = refined
+                info.data_shape = openvino.PartialShape([u if v.is_dynamic and u.is_static else v for v, u in dims])
                 variable.update(info)
                 # The variable's shape must relax its init expression's, so the init gets the
                 # same dims (they were runtime-derived but numerically identical).
                 read_value = read_values.get(op.get_variable_id())
                 if read_value is not None and read_value.get_input_size() > 0:
-                    target = np.array([dim.get_length() if dim.is_static else 0 for dim in refined], dtype=np.int64)
-                    pinned_init = ov_ops.reshape(read_value.input_value(0), ov_ops.constant(target), special_zero=True)
+                    target = [dim.get_length() if dim.is_static else 0 for dim in info.data_shape]
+                    pinned_init = ov_ops.reshape(
+                        read_value.input_value(0), ov_ops.constant(np.array(target, dtype=np.int64)), special_zero=True
+                    )
                     read_value.set_arguments([pinned_init])
                 changed = True
-                continue
-            if variable_shape.rank.is_dynamic or len(variable_shape) != len(update_shape):
-                continue
-            # Only a dim the variable fixes and the update leaves dynamic needs the update pinned; an
-            # update narrower than a dynamic variable dim (a decode step's `1..` cache length) already fits.
-            if not any(v.is_static and u.is_dynamic for v, u in zip(variable_shape, update_shape)):
-                continue
-            target = [dim.get_length() if dim.is_static else 0 for dim in variable_shape]
-            pinned = ov_ops.reshape(update, ov_ops.constant(np.array(target, dtype=np.int64)), special_zero=True)
-            op.input(0).replace_source_output(pinned.output(0))
-            changed = True
+            elif any(v.is_static and u.is_dynamic for v, u in dims):
+                target = [dim.get_length() if dim.is_static else 0 for dim in variable_shape]
+                pinned = ov_ops.reshape(update, ov_ops.constant(np.array(target, dtype=np.int64)), special_zero=True)
+                op.input(0).replace_source_output(pinned.output(0))
+                changed = True
         if not changed:
             break
         ov_model.validate_nodes_and_infer_types()
