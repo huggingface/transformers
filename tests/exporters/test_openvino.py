@@ -59,32 +59,22 @@ NUM_LAYERS = 2
 DENSE_FUSIONS = {"ScaledDotProductAttention": 1, "RoPE": 2, "MatMul": 0}  # RoPE for the queries and the keys
 MOE_FUSIONS = {**DENSE_FUSIONS, "GatherMatmul": 3}  # gate, up and down, computing only the routed experts
 
-# model type: (config class, model class, config overrides, fused kernels per layer)
+# model type: (config class, model class, fused kernels per layer)
 MODELS = {
-    "llama": (LlamaConfig, LlamaForCausalLM, {}, DENSE_FUSIONS),
-    "qwen2": (Qwen2Config, Qwen2ForCausalLM, {}, DENSE_FUSIONS),
-    "qwen3": (Qwen3Config, Qwen3ForCausalLM, {"head_dim": 16}, DENSE_FUSIONS),
-    "phi3": (Phi3Config, Phi3ForCausalLM, {"pad_token_id": 0}, DENSE_FUSIONS),
-    "olmo2": (Olmo2Config, Olmo2ForCausalLM, {}, DENSE_FUSIONS),
-    "granite": (GraniteConfig, GraniteForCausalLM, {}, DENSE_FUSIONS),
-    "mixtral": (
-        MixtralConfig,
-        MixtralForCausalLM,
-        {"num_local_experts": 4, "num_experts_per_tok": 2},
-        MOE_FUSIONS,
-    ),
-    "qwen3_moe": (
-        Qwen3MoeConfig,
-        Qwen3MoeForCausalLM,
-        {"head_dim": 16, "num_experts": 4, "num_experts_per_tok": 2, "moe_intermediate_size": 64},
-        MOE_FUSIONS,
-    ),
+    "llama": (LlamaConfig, LlamaForCausalLM, DENSE_FUSIONS),
+    "qwen2": (Qwen2Config, Qwen2ForCausalLM, DENSE_FUSIONS),
+    "qwen3": (Qwen3Config, Qwen3ForCausalLM, DENSE_FUSIONS),
+    "phi3": (Phi3Config, Phi3ForCausalLM, DENSE_FUSIONS),
+    "olmo2": (Olmo2Config, Olmo2ForCausalLM, DENSE_FUSIONS),
+    "granite": (GraniteConfig, GraniteForCausalLM, DENSE_FUSIONS),
+    "mixtral": (MixtralConfig, MixtralForCausalLM, MOE_FUSIONS),
+    "qwen3_moe": (Qwen3MoeConfig, Qwen3MoeForCausalLM, MOE_FUSIONS),
 }
 
 
 def _model(model_type, dtype=None):
     """A tiny GQA decoder of `model_type`."""
-    config_class, model_class, overrides, _ = MODELS[model_type]
+    config_class, model_class, _ = MODELS[model_type]
     set_seed(0)
     config = config_class(
         vocab_size=128,
@@ -93,7 +83,7 @@ def _model(model_type, dtype=None):
         num_hidden_layers=NUM_LAYERS,
         num_attention_heads=4,
         num_key_value_heads=2,
-        **overrides,
+        pad_token_id=0,  # inside the tiny vocabulary (Phi-3's default, 32000, isn't)
     )
     return model_class(config).to(dtype or torch.float32).eval()
 
@@ -141,7 +131,7 @@ class OpenVINOFusionTest(unittest.TestCase):
     # bf16, as checkpoints ship: MoE experts only fuse with 16-bit weights
     @parameterized.expand(list(MODELS))
     def test_decode_fuses(self, model_type):
-        self.assert_decode_fused(_decode(_model(model_type, torch.bfloat16)), MODELS[model_type][3])
+        self.assert_decode_fused(_decode(_model(model_type, torch.bfloat16)), MODELS[model_type][2])
 
     def test_float32_decode_fuses(self):
         self.assert_decode_fused(_decode(_model("llama")), DENSE_FUSIONS)
