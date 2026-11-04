@@ -333,7 +333,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 use_qk_l2norm_in_kernel=True,
                 cu_seqlens=kwargs["cu_seq_lens_q"],
             )
-            paged_cache.write_linear_attention_states(self.layer_idx, conv_state, last_recurrent_state, kwargs)
+            paged_cache.write_linear_attention_states(self.layer_idx, (conv_state, last_recurrent_state), kwargs)
         elif recurrent_state is not None and seq_len == 1:
             core_attn_out, last_recurrent_state = torch_recurrent_gated_delta_rule(
                 query,

@@ -1,7 +1,7 @@
 from .cache_allocator import CacheAllocator
 from .cache_pool import CachePool
 from .full_attention import FullAttentionCacheAllocator
-from .linear_attention import LinearAttentionCacheAllocator
+from .linear_attention import LinearAttentionCacheAllocator, StateSpec
 from .sliding_attention import SlidingAttentionCacheAllocator
 
 
@@ -14,6 +14,7 @@ LINEAR_ATTENTION = LinearAttentionCacheAllocator.layer_type
 __all__ = [
     "FullAttentionCacheAllocator",
     "LinearAttentionCacheAllocator",
+    "StateSpec",
     "SlidingAttentionCacheAllocator",
     "CacheAllocator",
     "CachePool",

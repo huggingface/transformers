@@ -498,6 +498,14 @@ class Qwen4ExpTextGatedDeltaNet(nn.Module):
         self.in_proj_b = nn.Linear(self.hidden_size, self.num_v_heads, bias=False)
         self.in_proj_a = nn.Linear(self.hidden_size, self.num_v_heads, bias=False)
 
+    def linear_attention_states(self) -> list[tuple[tuple[int, ...], torch.dtype]]:
+        """The shape and dtype of the states continuous batching keeps per request for this layer: the last inputs of
+        the causal convolution, then the recurrent state."""
+        return [
+            ((self.conv_dim, self.conv_kernel_size - 1), self.conv1d.weight.dtype),
+            ((self.num_v_heads, self.head_k_dim, self.head_v_dim), torch.float32),
+        ]
+
     @force_accelerate_hooks("conv1d")
     def forward(
         self,
@@ -606,7 +614,7 @@ class Qwen4ExpTextGatedDeltaNet(nn.Module):
                 use_qk_l2norm_in_kernel=True,
                 cu_seqlens=kwargs["cu_seq_lens_q"],
             )
-            paged_cache.write_linear_attention_states(self.layer_idx, conv_state, last_recurrent_state, kwargs)
+            paged_cache.write_linear_attention_states(self.layer_idx, (conv_state, last_recurrent_state), kwargs)
         elif recurrent_state is not None and seq_len == 1:
             core_attn_out, last_recurrent_state = torch_recurrent_gated_delta_rule(
                 query,
