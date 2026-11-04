@@ -59,7 +59,7 @@ class ColModernVBertConfig(ColQwen2Config):
 class DeprecatedColModernVBertProcessorKwargs(ProcessingKwargs, total=False):
     """
     suffix (`str`, *optional*):
-        Deprecated, pass directly to [`ColModernVBertProcessor.__call__`] instead.
+        Deprecated, pass directly to [`ColModernVBertProcessor.process_queries`] instead.
         Suffix appended to queries.
     """
 
@@ -116,21 +116,18 @@ class ColModernVBertProcessor(Idefics3Processor):
     def process_images(
         self,
         images: ImageInput | None = None,
-        suffix: str | None = None,
         **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         """
         Prepare for the model one or several image(s). Handles input validation, RGB conversion,
         and prepends the `visual_prompt_prefix` to each image. Optionally computes labels from
-        `token_type_ids` when a `suffix` is provided.
+        `token_type_ids` when a `suffix` is provided in `text_kwargs`.
 
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
-            suffix (`str`, *optional*):
-                Suffix appended to queries.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
@@ -146,20 +143,12 @@ class ColModernVBertProcessor(Idefics3Processor):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
-        # text_kwargs has priority for backwards compatibility
-        text_kwargs = kwargs.get("text_kwargs", {}).copy()
-        if "suffix" in text_kwargs:
-            logger.warning_once(
-                "Passing `suffix` in `text_kwargs` is deprecated "
-                "and will be removed in v5.29.0. Pass it directly to the processor instead."
-            )
-            suffix = text_kwargs.pop("suffix")
-            kwargs["text_kwargs"] = text_kwargs
-
         output_kwargs = self._merge_kwargs(
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+
+        suffix = output_kwargs["text_kwargs"].pop("suffix", None)
 
         return_token_type_ids = suffix is not None
 
