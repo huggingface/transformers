@@ -64,13 +64,13 @@ The expert forward rule in `ep_plan` selects how tokens reach the experts:
 
 ### Adding an implementation
 
-An implementation subclasses `EPImplementation` and registers under the name `ep_implementation` selects. It is built once per experts module, so it can keep state such as communication buffers. Its `forward` takes the batch this rank holds, with global expert ids, and returns the weighted expert output for each of its tokens. It runs this rank's experts with `run_experts`, on the rows, local expert ids and weights it brought them.
+An implementation subclasses `EPImplementation` and registers under the name `ep_implementation` selects. It is built once per experts module, so it can keep state such as communication buffers. Calling it with the batch this rank holds, with global expert ids, returns the weighted expert output for each of its tokens. It runs this rank's experts with `run_experts`, on the rows, local expert ids and weights it brought them.
 
 ```py
 from transformers.distributed.expert_parallel import ALL_EP_IMPLEMENTATIONS, EPImplementation
 
 class MyEP(EPImplementation):
-    def forward(self, hidden_states, top_k_index, top_k_weights):
+    def __call__(self, hidden_states, top_k_index, top_k_weights):
         tokens, expert_ids, weights = ...  # bring this rank's experts the rows routed to them
         expert_output = self.run_experts(tokens, expert_ids, weights)
         return ...  # the weighted expert output for each token of the batch this rank holds

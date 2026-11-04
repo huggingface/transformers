@@ -105,7 +105,7 @@ class TestExpertParallelLayer(TestCasePlus):
             def __init__(self, experts, ep_mesh, tp_mesh=None):
                 self.experts = experts
 
-            def forward(self, hidden_states, top_k_index, top_k_weights):
+            def __call__(self, hidden_states, top_k_index, top_k_weights):
                 return hidden_states + 1
 
         with patch.dict(EPImplementationInterface._global_mapping, {"custom": Custom}):
@@ -175,7 +175,7 @@ def _ep_implementations_match_one_process(rank):
         raise AssertionError("AllReduceEP accepted an EP group without a shared batch")
 
     exchanged = []
-    all_to_all_forward = AllToAllEP.forward
+    all_to_all_call = AllToAllEP.__call__
     for ep_implementation, training, exchanges in (
         ("auto", True, True),
         ("auto", False, False),
@@ -183,7 +183,7 @@ def _ep_implementations_match_one_process(rank):
         ("all_to_all", False, True),
     ):
         exchanged.clear()
-        with patch.object(AllToAllEP, "forward", lambda *args: exchanged.append(True) or all_to_all_forward(*args)):
+        with patch.object(AllToAllEP, "__call__", lambda *args: exchanged.append(True) or all_to_all_call(*args)):
             module = _ep_experts(rank, ep_implementation)
             h, w = _HIDDEN_STATES.clone().requires_grad_(), _TOP_K_WEIGHTS.clone().requires_grad_()
             with torch.set_grad_enabled(training):
@@ -204,19 +204,19 @@ def _ep_gradient_checkpointing_matches_reference(rank, use_reentrant):
     reference_output.backward(_GRAD_OUTPUT)
 
     all_to_all_calls, all_reduce_calls = [], []
-    all_to_all_forward, all_reduce_forward = AllToAllEP.forward, AllReduceEP.forward
+    all_to_all_call, all_reduce_call = AllToAllEP.__call__, AllReduceEP.__call__
 
     def record_all_to_all(self, *args):
         all_to_all_calls.append(True)
-        return all_to_all_forward(self, *args)
+        return all_to_all_call(self, *args)
 
     def record_all_reduce(self, *args):
         all_reduce_calls.append(True)
-        return all_reduce_forward(self, *args)
+        return all_reduce_call(self, *args)
 
     with (
-        patch.object(AllToAllEP, "forward", record_all_to_all),
-        patch.object(AllReduceEP, "forward", record_all_reduce),
+        patch.object(AllToAllEP, "__call__", record_all_to_all),
+        patch.object(AllReduceEP, "__call__", record_all_reduce),
     ):
         module = _ep_experts(rank, "auto")
         h, w = _HIDDEN_STATES.clone().requires_grad_(), _TOP_K_WEIGHTS.clone().requires_grad_()
