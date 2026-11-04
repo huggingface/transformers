@@ -955,18 +955,6 @@ class CohereCompassVisionModel(CohereCompassPreTrainedModel):
 
 
 @auto_docstring
-@dataclass
-class CohereCompassModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
-
-
-@auto_docstring
 class CohereCompassModel(CohereCompassPreTrainedModel):
     """Vision-language base model that fuses the vision tower into the decoder and applies DeepStack residuals."""
 
@@ -1267,7 +1255,7 @@ class CohereCompassModel(CohereCompassPreTrainedModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CohereCompassModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1360,10 +1348,7 @@ class CohereCompassModel(CohereCompassPreTrainedModel):
             **kwargs,
         )
 
-        return CohereCompassModelOutputWithPast(
-            **outputs,
-            rope_deltas=self.rope_deltas,
-        )
+        return outputs
 
 
 @auto_docstring(
