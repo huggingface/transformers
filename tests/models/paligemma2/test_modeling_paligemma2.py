@@ -47,7 +47,7 @@ class PaliGemma2VisionText2TextModelTester:
         seq_length=25,
         vision_feature_select_strategy="default",
         vision_feature_layer=-1,
-        projection_dim=32,
+        projection_dim=64,
         text_config={
             "model_type": "gemma2",
             "seq_length": 128,
@@ -56,11 +56,11 @@ class PaliGemma2VisionText2TextModelTester:
             "use_token_type_ids": False,
             "use_labels": True,
             "vocab_size": 99,
-            "hidden_size": 32,
+            "hidden_size": 64,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
             "num_key_value_heads": 1,
-            "head_dim": 8,
+            "head_dim": 16,
             "intermediate_size": 37,
             "hidden_activation": "gelu_pytorch_tanh",
             "hidden_dropout_prob": 0.1,
@@ -81,8 +81,8 @@ class PaliGemma2VisionText2TextModelTester:
             "num_image_tokens": 4,
             "num_channels": 3,
             "is_training": True,
-            "hidden_size": 32,
-            "projection_dim": 32,
+            "hidden_size": 64,
+            "projection_dim": 64,
             "num_key_value_heads": 1,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
@@ -210,6 +210,20 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             # two images and two image tokens don't raise an error
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             _ = model(input_ids=input_ids, pixel_values=pixel_values)
+
+    def test_final_logit_softcapping(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.text_config.final_logit_softcapping = 0.1
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**input_dict)
+
+            cap = outputs.logits.new_tensor(config.text_config.final_logit_softcapping).item()
+            self.assertLessEqual(outputs.logits.abs().max().item(), cap)
 
     @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):

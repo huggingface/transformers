@@ -241,9 +241,9 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
     @capture_outputs
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
+        hidden_states: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+    ) -> tuple[torch.Tensor] | BaseModelOutputWithNoAttention:
         outputs = self.backbone(hidden_states, **kwargs)
         feature_maps = outputs.feature_maps
         processed_features = []

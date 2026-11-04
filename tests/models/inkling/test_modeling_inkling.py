@@ -193,6 +193,10 @@ class InklingAudio2TextModelTest(ALMModelTest, unittest.TestCase):
     def test_get_video_features_output(self, return_dict: bool | None):
         pass
 
+    @unittest.skip("The tester has no image in input dict")
+    def test_generate_from_multimodal_encoder_outputs_and_raw_data(self):
+        pass
+
     @unittest.skip("We need 4 layers to correctly test cache sharing.")
     def test_num_layers_is_small(self):
         pass

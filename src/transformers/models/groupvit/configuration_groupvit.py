@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 
 
@@ -132,8 +132,8 @@ class GroupViTConfig(PreTrainedConfig):
 
     model_type = "groupvit"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=GroupViTTextConfig),
-        "vision_config": SubConfigSpec(config_class=GroupViTVisionConfig),
+        "text_config": GroupViTTextConfig,
+        "vision_config": GroupViTVisionConfig,
     }
 
     text_config: dict | PreTrainedConfig | None = None

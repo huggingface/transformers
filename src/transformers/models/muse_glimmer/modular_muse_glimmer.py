@@ -24,14 +24,14 @@ from torchvision.transforms.v2 import functional as tvF
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, TransformersKwargs, auto_docstring, logging
 from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
@@ -585,7 +585,6 @@ class MuseGlimmerTextConfig(Gemma2Config, PreTrainedConfig):
 
     model_type = "muse_glimmer_text"
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
@@ -668,8 +667,8 @@ class MuseGlimmerConfig(PreTrainedConfig):
 
     model_type = "muse_glimmer"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=MuseGlimmerTextConfig),
-        "vision_config": SubConfigSpec(config_class=MuseGlimmerVisionConfig),
+        "text_config": MuseGlimmerTextConfig,
+        "vision_config": MuseGlimmerVisionConfig,
     }
     base_model_tp_plan = {
         "vision_adapter.fc1": "colwise",
@@ -772,6 +771,7 @@ class MuseGlimmerTextDecoderLayer(Gemma2DecoderLayer):
 
 class MuseGlimmerPreTrainedModel(Gemma2PreTrainedModel):
     _no_split_modules = ["MuseGlimmerTextDecoderLayer", "MuseGlimmerVisionEncoderLayer"]
+    _supports_sdpa = True
     _can_record_outputs = None  # set on children directly as they are different for text and vision
 
     def _init_weights(self, module):  # trf-ignore: TRF018  @Tarek this ignore of the rule should not be needed!!
@@ -820,7 +820,7 @@ class MuseGlimmerTextModel(Gemma2Model):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -904,13 +904,13 @@ class MuseGlimmerVisionPatchEmbedder(PaddleOCRVisionEmbeddings):
 
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         """
         Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, image_channels, patch_size, patch_size)`):
+            pixel_values (`torch.Tensor` of shape `(batch_size, sequence_length, image_channels, patch_size, patch_size)`):
                 The tensors corresponding to the input images.
             grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
@@ -1008,7 +1008,7 @@ class MuseGlimmerVisionModel(MuseGlimmerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
@@ -1067,6 +1067,8 @@ class MuseGlimmerVisionAdapter(nn.Module):
 
 
 class MuseGlimmerModel(Kimi_K25Model):
+    input_modalities = ("image", "video", "text")
+
     def __init__(self, config: MuseGlimmerConfig):
         super().__init__(config)
         del self.mm_projector
@@ -1076,7 +1078,7 @@ class MuseGlimmerModel(Kimi_K25Model):
 
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
@@ -1094,19 +1096,20 @@ class MuseGlimmerModel(Kimi_K25Model):
 
 
 class MuseGlimmerForConditionalGeneration(Kimi_K25ForConditionalGeneration):
+    input_modalities = ("image", "video", "text")
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -1129,8 +1132,8 @@ class MuseGlimmerForConditionalGeneration(Kimi_K25ForConditionalGeneration):
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         # MuseGlimmer pre-scales logits by `output_multiplier` before the Gemma-style tanh softcap.
         # Together with `final_logit_softcapping = T`, this gives `T * tanh(logits * mult / T)`.

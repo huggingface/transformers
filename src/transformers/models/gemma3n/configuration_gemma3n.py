@@ -23,7 +23,7 @@ from typing import Any
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, is_timm_available, requires_backends
 
 
@@ -202,6 +202,34 @@ class Gemma3nTextConfig(PreTrainedConfig):
         # Standardize and validate the correctness of rotary position embeddings parameters
         self.standardize_rope_params()
         return kwargs
+
+    @property
+    def kv_sharing_modes(self) -> list[str | None]:
+        # In this case there are no shared layers
+        if self.num_kv_shared_layers == 0:
+            return [None] * self.num_hidden_layers
+
+        # After this index, all layers are consumers
+        first_shared_layer = self.num_hidden_layers - self.num_kv_shared_layers
+        kv_sharing_modes = [None if i < first_shared_layer else "reuse" for i in range(self.num_hidden_layers)]
+
+        # Compute the last index of the layers that will not be shared, for each unique `layer_types`
+        reversed_unshared_layer_types = self.layer_types[0:first_shared_layer][::-1]
+        # Just a quick check to make sure any layer type that will be shared also has one layer of the same type producing the cache
+        if sorted(set(reversed_unshared_layer_types)) != sorted(set(self.layer_types)):
+            raise ValueError(
+                "The set of layer types producing a cache is different than the set of layer types using them"
+            )
+        last_non_consumer_indices = [
+            first_shared_layer - 1 - reversed_unshared_layer_types.index(k) for k in set(self.layer_types)
+        ]
+
+        # The last non-consumer layer of each type stores its KV states, even if no layer reuses them: assistant
+        # models (e.g. Gemma4Assistant) read them from the `shared_kv_states` returned by the target model
+        for producer_index in last_non_consumer_indices:
+            kv_sharing_modes[producer_index] = "store"
+
+        return kv_sharing_modes
 
 
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
@@ -440,9 +468,9 @@ class Gemma3nConfig(PreTrainedConfig):
 
     model_type = "gemma3n"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Gemma3nTextConfig),
-        "vision_config": SubConfigSpec(config_class=Gemma3nVisionConfig),
-        "audio_config": SubConfigSpec(config_class=Gemma3nAudioConfig),
+        "text_config": Gemma3nTextConfig,
+        "vision_config": Gemma3nVisionConfig,
+        "audio_config": Gemma3nAudioConfig,
     }
 
     text_config: Gemma3nTextConfig | dict[str, Any] | None = None

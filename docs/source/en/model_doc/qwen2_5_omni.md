@@ -443,6 +443,11 @@ model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
 
 [[autodoc]] Qwen2_5OmniThinkerConfig
 
+## Qwen2_5OmniThinkerModel
+
+[[autodoc]] Qwen2_5OmniThinkerModel
+    - forward
+
 ## Qwen2_5OmniThinkerForConditionalGeneration
 
 [[autodoc]] Qwen2_5OmniThinkerForConditionalGeneration

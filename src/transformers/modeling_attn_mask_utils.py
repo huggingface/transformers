@@ -212,7 +212,7 @@ class AttentionMaskConverter:
 
     @staticmethod
     def _unmask_unattended(
-        expanded_mask: torch.FloatTensor,
+        expanded_mask: torch.Tensor,
         min_dtype: float,
     ):
         # fmt: off

@@ -390,9 +390,9 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
             scale_attn_by_inverse_layer_idx=scale_attn_by_inverse_layer_idx,
         )
         if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable()
         else:
-            model.gradient_checkpointing_disable()
+            model.activation_checkpointing_disable()
         model.to(torch_device)
 
         # The dog
@@ -491,7 +491,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
                     "Hello this is a very long sentence. I'm sorry. I'm sorry. I'm sorry. I'm sorry. I'm sorry",
                 ],
                 ("rocm", (9, 4)): [
-                    '<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>hi, who was also a member of the group, said: "We are very happy to have been',
+                    "<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>hi, who was born in the city of Kolkata, was a member of the Kolkata",
                     "Hello this is a very long sentence. I'm sorry. I'm sorry. I'm sorry. I'm sorry. I'm sorry",
                 ],
             }

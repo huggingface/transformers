@@ -107,7 +107,7 @@ class JinaEmbeddingsV3Embeddings(XLMRobertaEmbeddings):
         input_ids: torch.LongTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor:
         embeddings = inputs_embeds
         if inputs_embeds is None:
@@ -206,7 +206,7 @@ class JinaEmbeddingsV3Layer(GPTNeoXLayer):
         attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states
         attention_output, _ = self.self_attn(
             hidden_states,
@@ -312,7 +312,7 @@ class JinaEmbeddingsV3LMHead(XLMRobertaLMHead):
 
 
 class JinaEmbeddingsV3ForMaskedLM(XLMRobertaForMaskedLM):
-    def __init__(self, config):
+    def __init__(self, config: JinaEmbeddingsV3Config):
         JinaEmbeddingsV3PreTrainedModel.__init__(self, config=config)
 
         self.lm_head = JinaEmbeddingsV3LMHead(config)
@@ -326,10 +326,10 @@ class JinaEmbeddingsV3ForMaskedLM(XLMRobertaForMaskedLM):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | MaskedLMOutput:

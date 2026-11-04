@@ -34,6 +34,7 @@ from transformers.utils.import_utils import is_causal_conv1d_available, is_mamba
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
@@ -43,6 +44,7 @@ if is_torch_available():
     import torch
 
     from transformers import DynamicCache, NemotronHForCausalLM, NemotronHModel, StaticCache
+    from transformers.cache_utils import DummyLayer
 
 
 class NemotronHModelTester:
@@ -403,7 +405,12 @@ class NemotronHModelTester:
 
 @require_torch
 class NemotronHModelTest(
-    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, TensorParallelTesterMixin, unittest.TestCase
+    ModelTesterMixin,
+    GenerationTesterMixin,
+    PipelineTesterMixin,
+    TensorParallelTesterMixin,
+    ExpertParallelTesterMixin,
+    unittest.TestCase,
 ):
     all_model_classes = (
         (
@@ -457,10 +464,9 @@ class NemotronHModelTest(
 
         # Check each layer has the correct shape
         for layer, layer_type in zip(past_key_values.layers, config.layer_types):
-            # Moe layers have a default mamba cache instantiated, but it stays empty as the layer does not use it
+            # Moe layers use a DummyLayer
             if layer_type == "moe":
-                self.assertEqual(layer.conv_states[0], None)
-                self.assertEqual(layer.recurrent_states[0], None)
+                self.assertTrue(isinstance(layer, DummyLayer))
             # Attention layer cache
             elif layer_type == "full_attention":
                 self.assertEqual(layer.keys.shape, attention_shape)

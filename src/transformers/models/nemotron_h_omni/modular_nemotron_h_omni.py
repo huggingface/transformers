@@ -41,13 +41,13 @@ class NemotronH_Omni_RMSNorm(NemotronHRMSNorm):
     pass
 
 
-def compute_retention_mask(video_embeds: torch.FloatTensor, num_tubelets: int, q: float) -> torch.BoolTensor:
+def compute_retention_mask(video_embeds: torch.Tensor, num_tubelets: int, q: float) -> torch.BoolTensor:
     """
     Computes the Efficient Video Sampling retention mask of one video: every token of the first tubelet is kept, and
     of the others, the ones least similar to the same position in the previous tubelet.
 
     Args:
-        video_embeds (`torch.FloatTensor` of shape `(num_tubelets * tokens_per_tubelet, hidden_size)`):
+        video_embeds (`torch.Tensor` of shape `(num_tubelets * tokens_per_tubelet, hidden_size)`):
             The embeddings of one video, as returned in `pooler_output` by `get_video_features`.
         num_tubelets (`int`):
             The number of tubelets in the video.
@@ -164,12 +164,12 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_grid_hw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(total_patches, num_channels * patch_size**2)`):
+        pixel_values (`torch.Tensor` of shape `(total_patches, num_channels * patch_size**2)`):
             Flattened patches of all images, concatenated.
         image_grid_hw (`torch.LongTensor` of shape `(num_images, 2)`):
             Patch grid `(height, width)` of each image.
@@ -207,10 +207,10 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
     @can_return_tuple
     @auto_docstring
     def get_video_features(
-        self, pixel_values_videos: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+        self, pixel_values_videos: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> BaseModelOutputWithPooling:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(num_videos, num_tubelets, video_temporal_patch_size * num_channels, height, width)`):
+        pixel_values_videos (`torch.Tensor` of shape `(num_videos, num_tubelets, video_temporal_patch_size * num_channels, height, width)`):
             Videos packed by the video processor into tubelets of `video_temporal_patch_size` consecutive frames
             stacked along the channel dimension. The `(num_frames, num_channels, height, width)` frames of a single
             video are also accepted and packed here.
@@ -244,12 +244,12 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
     )
     def get_audio_features(
         self,
-        input_features: torch.FloatTensor,
+        input_features: torch.Tensor,
         input_features_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
-        input_features (`torch.FloatTensor` of shape `(num_clips, num_frames, num_mel_bins)`):
+        input_features (`torch.Tensor` of shape `(num_clips, num_frames, num_mel_bins)`):
             Mel features produced by the processor.
         input_features_mask (`torch.Tensor` of shape `(num_clips, num_frames)`, *optional*):
             Mask marking the real mel frames of each padded clip.
@@ -283,8 +283,8 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor,
-        inputs_embeds: torch.FloatTensor,
-        features: torch.FloatTensor,
+        inputs_embeds: torch.Tensor,
+        features: torch.Tensor,
         token_id: int,
     ) -> torch.BoolTensor:
         """Locates the placeholder tokens of one modality and checks that each receives one feature vector."""
@@ -352,28 +352,28 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         image_grid_hw: torch.LongTensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
+        input_features: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         labels: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(total_patches, num_channels * patch_size**2)`, *optional*):
+        pixel_values (`torch.Tensor` of shape `(total_patches, num_channels * patch_size**2)`, *optional*):
             Flattened patches of all images, concatenated, as returned by the image processor.
         image_grid_hw (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
             Patch grid `(height, width)` of each image in `pixel_values`.
-        pixel_values_videos (`torch.FloatTensor` of shape `(num_videos, num_tubelets, video_temporal_patch_size * num_channels, height, width)`, *optional*):
+        pixel_values_videos (`torch.Tensor` of shape `(num_videos, num_tubelets, video_temporal_patch_size * num_channels, height, width)`, *optional*):
             Videos packed into tubelets by the video processor.
-        input_features (`torch.FloatTensor` of shape `(batch_size, num_frames, num_mel_bins)`, *optional*):
+        input_features (`torch.Tensor` of shape `(batch_size, num_frames, num_mel_bins)`, *optional*):
             Mel features produced by the processor, encoded and scattered onto the audio
             placeholder tokens.
         input_features_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
