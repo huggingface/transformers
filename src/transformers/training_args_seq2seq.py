@@ -92,3 +92,13 @@ class Seq2SeqTrainingArguments(TrainingArguments):
             if isinstance(v, GenerationConfig):
                 d[k] = v.to_dict()
         return d
+
+    @classmethod
+    def from_dict(cls, args_dict):
+        """
+        Instantiates a [`Seq2SeqTrainingArguments`] from a dictionary produced by
+        [`~Seq2SeqTrainingArguments.to_dict`], rebuilding `generation_config` if it was serialized as a dictionary.
+        """
+        if isinstance(args_dict.get("generation_config"), dict):
+            args_dict = {**args_dict, "generation_config": GenerationConfig.from_dict(args_dict["generation_config"])}
+        return super().from_dict(args_dict)
