@@ -2568,7 +2568,8 @@ class OmniModalProcessorMixin(ProcessorMixin):
 
         if not is_torchcodec_greater_or_equal("0.17"):
             raise ImportError(
-                "`load_audio_from_video=True` requires torchcodec>=0.17. Install it with `pip install -U torchcodec`."
+                "`load_audio_from_video=True` requires torchcodec>=0.17. See "
+                "https://github.com/meta-pytorch/torchcodec#installing-torchcodec."
             )
         from torchcodec.decoders import get_container_metadata
 

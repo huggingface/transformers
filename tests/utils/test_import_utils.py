@@ -22,6 +22,9 @@ from transformers.utils.import_utils import (
     clear_import_cache,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_torchcodec_available,
+    is_torchcodec_ffmpeg_usable,
+    is_torchcodec_usable,
 )
 
 
@@ -487,3 +490,64 @@ def test_legacy_fast_image_processor_module_alias():
     # Only paths that actually existed are aliased.
     with pytest.raises(ModuleNotFoundError):
         import transformers.models.aria.image_processing_pil_aria_fast  # noqa: F401
+
+
+@contextmanager
+def fake_torchcodec(import_error=None, ffmpeg_major_version=7):
+    """torchcodec installed, failing to import with `import_error`, or importing with the given FFmpeg major version."""
+    real_import = __import__
+
+    def fake_import(name, *args, **kwargs):
+        if import_error is not None and (name == "torchcodec" or name.startswith("torchcodec.")):
+            raise import_error
+        return real_import(name, *args, **kwargs)
+
+    module = ModuleType("torchcodec")
+    module.ffmpeg_major_version = ffmpeg_major_version
+    for helper in (is_torchcodec_available, is_torchcodec_usable, is_torchcodec_ffmpeg_usable):
+        helper.cache_clear()
+    logging.warning_once.cache_clear()
+    try:
+        with (
+            patch("transformers.utils.import_utils._is_package_available", return_value=(True, "0.17.0")),
+            patch.dict(sys.modules, {"torchcodec": module}),
+            patch("builtins.__import__", side_effect=fake_import),
+        ):
+            yield
+    finally:
+        for helper in (is_torchcodec_available, is_torchcodec_usable, is_torchcodec_ffmpeg_usable):
+            helper.cache_clear()
+
+
+def test_torchcodec_that_fails_to_load_is_not_usable():
+    cause = OSError("libnvrtc.so.13: cannot open shared object file")
+    error = OSError("Could not load this library: libtorchcodec_core.so")
+    error.__cause__ = cause
+    logger = logging.get_logger("transformers.utils.import_utils")
+    with fake_torchcodec(import_error=error), CaptureLogger(logger) as captured_logs:
+        assert is_torchcodec_available()  # installed: explicit uses still go through and raise torchcodec's own error
+        assert not is_torchcodec_usable()
+        assert not is_torchcodec_usable()
+        assert not is_torchcodec_ffmpeg_usable()
+
+    logs = captured_logs.out
+    assert logs.count("torchcodec is installed but failed to load") == 1
+    assert "libnvrtc.so.13" in logs  # the innermost cause, not the generic wrapper
+    assert "torchcodec#installing-torchcodec" in logs
+
+
+def test_torchcodec_without_ffmpeg_is_usable_for_images_only():
+    logger = logging.get_logger("transformers.utils.import_utils")
+    with fake_torchcodec(ffmpeg_major_version=None), CaptureLogger(logger) as captured_logs:
+        assert is_torchcodec_usable()  # its image decoders don't need FFmpeg
+        assert not is_torchcodec_ffmpeg_usable()
+        assert not is_torchcodec_ffmpeg_usable()
+
+    assert captured_logs.out.count("torchcodec loaded but could not load FFmpeg") == 1
+    assert "torchcodec#installing-torchcodec" in captured_logs.out
+
+
+def test_torchcodec_with_ffmpeg_is_usable():
+    with fake_torchcodec(ffmpeg_major_version=7):
+        assert is_torchcodec_usable()
+        assert is_torchcodec_ffmpeg_usable()

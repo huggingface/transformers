@@ -1897,7 +1897,7 @@ class LoadAudioTester(unittest.TestCase):
     @require_librosa
     def test_load_audio_from_every_source_form(self):
         # a single sync gives us the file as a local path, a public URL, raw base64 and a data: URI
-        with patch("transformers.audio_utils.is_torchcodec_available", return_value=False):
+        with patch("transformers.audio_utils.is_torchcodec_ffmpeg_usable", return_value=False):
             for form, source in self._sources("audio.flac").items():
                 audio = load_audio(source, sampling_rate=16000)
                 self.assertIsInstance(audio, np.ndarray, form)
@@ -1906,7 +1906,7 @@ class LoadAudioTester(unittest.TestCase):
     @require_librosa
     def test_invalid_base64_raises_value_error(self):
         # a non-URL, non-path string is treated as base64 and must fail cleanly
-        with patch("transformers.audio_utils.is_torchcodec_available", return_value=False):
+        with patch("transformers.audio_utils.is_torchcodec_ffmpeg_usable", return_value=False):
             with self.assertRaises(ValueError) as cm:
                 load_audio("clearly_not_valid_base64_@@@")
         self.assertIn("base64", str(cm.exception))
@@ -1915,7 +1915,7 @@ class LoadAudioTester(unittest.TestCase):
 
     @require_librosa
     def test_librosa_decodes_soundfile_formats(self):
-        with patch("transformers.audio_utils.is_torchcodec_available", return_value=False):
+        with patch("transformers.audio_utils.is_torchcodec_ffmpeg_usable", return_value=False):
             for name, filetype in self._BUCKET_FILETYPES.items():
                 if filetype in TORCHCODEC_ONLY_FILETYPES:
                     continue
@@ -1925,7 +1925,7 @@ class LoadAudioTester(unittest.TestCase):
 
     @require_librosa
     def test_librosa_rejects_torchcodec_only_formats_with_helpful_error(self):
-        with patch("transformers.audio_utils.is_torchcodec_available", return_value=False):
+        with patch("transformers.audio_utils.is_torchcodec_ffmpeg_usable", return_value=False):
             for name, filetype in self._BUCKET_FILETYPES.items():
                 if filetype not in TORCHCODEC_ONLY_FILETYPES:
                     continue
@@ -1937,7 +1937,7 @@ class LoadAudioTester(unittest.TestCase):
     def test_video_url_rejected_up_front_without_download(self):
         # the format is read from the URL extension alone -> clear error, no bytes fetched
         with (
-            patch("transformers.audio_utils.is_torchcodec_available", return_value=False),
+            patch("transformers.audio_utils.is_torchcodec_ffmpeg_usable", return_value=False),
             patch("transformers.audio_utils._fetch_audio_bytes") as fetch,
         ):
             with self.assertRaises(RuntimeError) as cm:
@@ -1950,7 +1950,7 @@ class LoadAudioTester(unittest.TestCase):
     @require_librosa
     def test_deprecated_load_audio_librosa_warns_and_pins_librosa(self):
         # BC: even with torchcodec available, the alias must still decode with librosa
-        with patch("transformers.audio_utils.is_torchcodec_available", return_value=True):
+        with patch("transformers.audio_utils.is_torchcodec_ffmpeg_usable", return_value=True):
             with self.assertWarns(FutureWarning):
                 audio = load_audio_librosa(self._path("audio.wav"), sampling_rate=16000)
         self.assertIsInstance(audio, np.ndarray)
@@ -1958,7 +1958,7 @@ class LoadAudioTester(unittest.TestCase):
     @require_torchcodec
     def test_deprecated_load_audio_torchcodec_warns_and_pins_torchcodec(self):
         # BC: the alias must use torchcodec even when the auto-selection would pick librosa
-        with patch("transformers.audio_utils.is_torchcodec_available", return_value=False):
+        with patch("transformers.audio_utils.is_torchcodec_ffmpeg_usable", return_value=False):
             with self.assertWarns(FutureWarning):
                 audio = load_audio_torchcodec(self._path("audio.wav"), sampling_rate=16000)
         self.assertIsInstance(audio, np.ndarray)
@@ -1990,3 +1990,46 @@ class LoadAudioTester(unittest.TestCase):
     def test_unknown_backend_raises(self):
         with self.assertRaises(ValueError):
             load_audio(self._path("audio.wav"), sampling_rate=16000, backend="not_a_backend")
+
+
+@require_librosa
+class LoadAudioTorchcodecUnusableTest(unittest.TestCase):
+    """torchcodec installed but unusable (failed to load, or no FFmpeg): `auto` falls back, an explicit choice lets
+    torchcodec raise its own error."""
+
+    def setUp(self):
+        import soundfile as sf
+
+        self.tmpdir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmpdir)
+        self.wav_path = os.path.join(self.tmpdir, "audio.wav")
+        sf.write(self.wav_path, np.zeros(44100, dtype=np.float32), 44100)
+
+    def test_auto_falls_back(self):
+        with patch("transformers.audio_utils.is_torchcodec_ffmpeg_usable", return_value=False):
+            audio = load_audio(self.wav_path, sampling_rate=16000)
+        self.assertEqual(audio.shape, (16000,))
+
+    def test_explicit_torchcodec_raises_torchcodec_error(self):
+        from transformers.utils.import_utils import BACKENDS_MAPPING, TORCHCODEC_IMPORT_ERROR
+
+        real_import = __import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "torchcodec" or name.startswith("torchcodec."):
+                raise OSError("Could not load this library: libtorchcodec_core.so")
+            return real_import(name, *args, **kwargs)
+
+        with (
+            patch.dict(BACKENDS_MAPPING, {"torchcodec": (lambda: True, TORCHCODEC_IMPORT_ERROR)}),  # installed
+            patch("builtins.__import__", side_effect=fake_import),
+        ):
+            with self.assertRaisesRegex(OSError, "Could not load this library"):
+                load_audio(self.wav_path, sampling_rate=16000, backend="torchcodec")
+
+    def test_explicit_torchcodec_not_installed_raises_standard_message(self):
+        from transformers.utils.import_utils import BACKENDS_MAPPING, TORCHCODEC_IMPORT_ERROR
+
+        with patch.dict(BACKENDS_MAPPING, {"torchcodec": (lambda: False, TORCHCODEC_IMPORT_ERROR)}):
+            with self.assertRaisesRegex(ImportError, "load_audio requires the TorchCodec library"):
+                load_audio(self.wav_path, sampling_rate=16000, backend="torchcodec")

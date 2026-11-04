@@ -1199,6 +1199,52 @@ def is_torchcodec_available() -> bool:
 
 
 @lru_cache
+@_make_compile_constant
+def is_torchcodec_usable() -> bool:
+    """
+    Whether torchcodec is installed *and* loads: its native libraries are built for a specific torch version that pip
+    doesn't enforce. Use it where transformers picks torchcodec on its own, to fall back instead of failing; where the
+    user explicitly asks for torchcodec, let it raise its own error. Enough for image decoding: audio and video also
+    need FFmpeg, see `is_torchcodec_ffmpeg_usable`.
+    """
+    if not is_torchcodec_available():
+        return False
+    try:
+        import torchcodec  # noqa: F401
+    except Exception as error:
+        while error.__cause__ is not None:  # "Could not load this library" hides the missing library / symbol
+            error = error.__cause__
+        logger.warning_once(
+            f"torchcodec is installed but failed to load ({error}), so it will not be used. This usually means its "
+            "build doesn't match the installed torch: see "
+            "https://github.com/meta-pytorch/torchcodec#installing-torchcodec."
+        )
+        return False
+    return True
+
+
+@lru_cache
+@_make_compile_constant
+def is_torchcodec_ffmpeg_usable() -> bool:
+    """
+    Whether torchcodec is usable (see `is_torchcodec_usable`) *and* found FFmpeg, i.e. can decode audio and video.
+    """
+    if not is_torchcodec_usable():
+        return False
+    import torchcodec
+
+    # Since 0.16, torchcodec imports even when its FFmpeg-based core library fails to load (its image decoders don't
+    # need it) and sets `ffmpeg_major_version` to None. Older versions fail to import instead.
+    if getattr(torchcodec, "ffmpeg_major_version", True) is None:
+        logger.warning_once(
+            "torchcodec loaded but could not load FFmpeg, so it will not be used to decode audio or video. Install a "
+            "supported FFmpeg: https://github.com/meta-pytorch/torchcodec#installing-torchcodec."
+        )
+        return False
+    return True
+
+
+@lru_cache
 def is_torchcodec_greater_or_equal(library_version: str) -> bool:
     if not is_torchcodec_available():
         return False
@@ -2017,10 +2063,7 @@ Please note that you may need to restart your runtime after installation.
 """
 
 TORCHCODEC_IMPORT_ERROR = """
-{0} requires the TorchCodec (https://github.com/pytorch/torchcodec) library, but it was not found in your environment. You can install it with:
-```
-pip install torchcodec
-```
+{0} requires the TorchCodec library, but it was not found in your environment. See https://github.com/meta-pytorch/torchcodec#installing-torchcodec to install it.
 Please note that you may need to restart your runtime after installation.
 """
 
