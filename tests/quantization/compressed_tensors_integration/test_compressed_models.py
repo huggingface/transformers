@@ -105,8 +105,9 @@ class StackCompressedModelTest(unittest.TestCase):
 @require_compressed_tensors
 @require_torch
 class DequantizeTest(unittest.TestCase):
-    """Non-FP8 schemes have no kernels, so they run dequantized: the weights are decompressed while loading.
-    `dequantize=True` (or the deprecated `run_compressed=False`) also drops the activation quantization."""
+    """Non-FP8 schemes have no kernels, so they run dequantized. `dequantize=True` (or the
+    deprecated `run_compressed=False`) does it at load time; by default the weights are left
+    compressed and compressed-tensors decompresses them on the first forward pass."""
 
     tinyllama_w4a16 = "nm-testing/tinyllama-w4a16-compressed"
     tinyllama_w8a8 = "nm-testing/tinyllama-w8a8-compressed"
@@ -120,7 +121,7 @@ class DequantizeTest(unittest.TestCase):
         backend_empty_cache(torch_device)
         gc.collect()
 
-    def test_default_load_decompresses_while_loading(self):
+    def test_default_load_stays_compressed_until_first_forward(self):
         from compressed_tensors import QuantizationStatus
 
         for stub in self.stubs:
@@ -129,10 +130,17 @@ class DequantizeTest(unittest.TestCase):
             compressed_count = sum(
                 1 for m in model.modules() if getattr(m, "quantization_status", None) == QuantizationStatus.COMPRESSED
             )
+            self.assertGreater(compressed_count, 0, "weights must not be decompressed at load time")
+
+            model(input_ids=torch.tensor([[0, 1, 2]]))
+
+            # The hook compressed-tensors registered decompressed the model on that forward pass.
+            compressed_count = sum(
+                1 for m in model.modules() if getattr(m, "quantization_status", None) == QuantizationStatus.COMPRESSED
+            )
             self.assertEqual(compressed_count, 0, "no modules should be left in COMPRESSED state")
             self.assertFalse(any("weight_packed" in name for name, _ in model.named_parameters()))
             self.assertTrue(model.model.layers[0].self_attn.q_proj.weight.is_floating_point())
-            model(input_ids=torch.tensor([[0, 1, 2]]))
 
     def test_deprecated_run_compressed_maps_to_dequantize(self):
         # `run_compressed=False` is deprecated and must behave as `dequantize=True`.
@@ -166,17 +174,76 @@ class DequantizeTest(unittest.TestCase):
         self.assertEqual(tokenizer.decode(output_default[0]), tokenizer.decode(output_dequantized[0]))
 
     def test_dequantize_drops_activation_quantization(self):
-        """`dequantize=True` loads a dense model: w8a8 also stops quantizing its activations, so its outputs differ
-        from the default (quantized activations) load."""
-        from transformers import AutoTokenizer
-
-        tokenizer = AutoTokenizer.from_pretrained(self.tinyllama_w8a8)
-        input_ids = tokenizer(self.prompt, return_tensors="pt").input_ids
+        """`dequantize=True` loads a plain dense model: no compressed-tensors scheme is left, so w8a8 also stops
+        quantizing its activations."""
         model = AutoModelForCausalLM.from_pretrained(
             self.tinyllama_w8a8, quantization_config=CompressedTensorsConfig(dequantize=True)
         )
-        output = model.generate(input_ids, max_new_tokens=20, do_sample=False)
-        self.assertEqual(
-            tokenizer.decode(output[0]),
-            "<s> Paris is the capital of which country?\n\n  * a) France\n  * b) Germany\n  * c) Italy\n",
-        )
+        self.assertFalse(any(hasattr(module, "quantization_scheme") for module in model.modules()))
+        self.assertTrue(model.model.layers[0].self_attn.q_proj.weight.is_floating_point())
+
+
+@require_compressed_tensors
+@require_torch
+class CompressedLoadTest(unittest.TestCase):
+    """By default the checkpoint loads in compressed-tensors' own format: every serialized tensor lands as is in the
+    params compressed-tensors creates, nothing is decompressed up front, and saving writes the same tensors back."""
+
+    stubs = [
+        "nm-testing/tinyllama-w4a16-compressed",  # pack-quantized
+        "nm-testing/tinyllama-w8a8-compressed",  # int-quantized
+        "nm-testing/TinyLlama-1.1B-Chat-v1.0-FP8-Dynamic-compressed",  # float-quantized
+    ]
+
+    def tearDown(self):
+        gc.collect()
+        backend_empty_cache(torch_device)
+        gc.collect()
+
+    @staticmethod
+    def _read_safetensors(path):
+        import glob
+        import os
+
+        from safetensors.torch import load_file
+
+        tensors = {}
+        for file in glob.glob(os.path.join(path, "*.safetensors")):
+            tensors.update(load_file(file))
+        return tensors
+
+    def _assert_same_tensors(self, actual, expected):
+        self.assertEqual(sorted(actual), sorted(expected))
+        for name, value in expected.items():
+            self.assertEqual(actual[name].dtype, value.dtype, name)
+            torch.testing.assert_close(actual[name].cpu(), value, rtol=0, atol=0, msg=name)
+
+    def test_load_keeps_checkpoint_tensors_compressed(self):
+        from huggingface_hub import snapshot_download
+
+        for stub in self.stubs:
+            with self.subTest(stub=stub):
+                checkpoint = self._read_safetensors(snapshot_download(stub, allow_patterns=["*.safetensors"]))
+                self.assertTrue(any(name.endswith("weight_scale") for name in checkpoint))
+
+                model, loading_info = AutoModelForCausalLM.from_pretrained(stub, output_loading_info=True)
+
+                self.assertEqual(loading_info["missing_keys"], set())
+                self.assertEqual(loading_info["unexpected_keys"], set())
+                state_dict = model.state_dict()
+                self._assert_same_tensors({name: state_dict[name] for name in checkpoint}, checkpoint)
+
+    def test_save_writes_the_compressed_tensors_back(self):
+        import tempfile
+
+        from huggingface_hub import snapshot_download
+
+        for stub in self.stubs:
+            with self.subTest(stub=stub):
+                checkpoint = self._read_safetensors(snapshot_download(stub, allow_patterns=["*.safetensors"]))
+                model = AutoModelForCausalLM.from_pretrained(stub)
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    model.save_pretrained(tmpdirname)
+                    saved = self._read_safetensors(tmpdirname)
+
+                self._assert_same_tensors(saved, checkpoint)

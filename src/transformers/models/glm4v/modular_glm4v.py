@@ -27,7 +27,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -43,10 +43,8 @@ from ...vision_utils import get_vision_attention_seqlens, get_vision_position_id
 from ..glm4.modeling_glm4 import Glm4MLP, Glm4RMSNorm, eager_attention_forward
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
-    Qwen2_5_VLCausalLMOutputWithPast,
     Qwen2_5_VLForConditionalGeneration,
     Qwen2_5_VLMLP,
-    Qwen2_5_VLModelOutputWithPast,
     Qwen2_5_VLPreTrainedModel,
     Qwen2_5_VLRotaryEmbedding,
     Qwen2_5_VLTextModel,
@@ -556,10 +554,6 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class Glm4vModelOutputWithPast(Qwen2_5_VLModelOutputWithPast):
-    pass
-
-
 class Glm4vPreTrainedModel(Qwen2_5_VLPreTrainedModel):
     _no_split_modules = ["Glm4vTextDecoderLayer", "Glm4vVisionBlock"]
 
@@ -872,7 +866,7 @@ class Glm4vModel(Qwen2VLModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Glm4vModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -927,14 +921,7 @@ class Glm4vModel(Qwen2VLModel):
             **kwargs,
         )
 
-        return Glm4vModelOutputWithPast(
-            **outputs,
-            rope_deltas=self.rope_deltas,
-        )
-
-
-class Glm4vCausalLMOutputWithPast(Qwen2_5_VLCausalLMOutputWithPast):
-    pass
+        return outputs
 
 
 class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
@@ -954,7 +941,7 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Glm4vCausalLMOutputWithPast:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
         Example:
 
@@ -1014,13 +1001,12 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return Glm4vCausalLMOutputWithPast(
+        return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=outputs.rope_deltas,
         )
 
     def _expand_multimodal_outputs(

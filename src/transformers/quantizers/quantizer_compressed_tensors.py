@@ -111,26 +111,12 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
                 ignore=ct_config.ignore,
                 modules_to_not_convert=self.modules_to_not_convert,
             )
-            apply_quantization_config(model, ct_config, run_compressed=False)
-            # Packed formats (e.g. int4 `weight_packed`) need the compressed module layout to
-            # receive the checkpoint tensors.
-            if self.quantization_config.is_quantization_compressed:
-                self.compressor.compress_model(model=model)
-            return
 
-        # No kernel runs these weights compressed: the `deserialize` load operation decompresses them, and
-        # compressed-tensors only sets up what quantizes at inference (activations, kv cache)
-        from compressed_tensors.quantization import QuantizationStatus
-
-        ct_config.quantization_status = QuantizationStatus.FROZEN
-        for group in ct_config.config_groups.values():
-            group.weights = None
-        ct_config.config_groups = {
-            name: group
-            for name, group in ct_config.config_groups.items()
-            if group.input_activations is not None or group.output_activations is not None
-        }
         apply_quantization_config(model, ct_config, run_compressed=False)
+        # Packed formats (e.g. int4 `weight_packed`) need the compressed module layout to
+        # receive the checkpoint tensors.
+        if self.quantization_config.is_quantization_compressed:
+            self.compressor.compress_model(model=model)
 
     @property
     def is_trainable(self):
@@ -182,5 +168,5 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     }
 
     def get_load_operations(self):
-        # Without kernels nothing runs compressed, so deserializing decompresses as well
-        return {"deserialize": CompressedTensorsDequantize, "dequantize": CompressedTensorsDequantize}
+        # No `deserialize`: the serialized tensors load as is into the params compressed-tensors creates
+        return {"dequantize": CompressedTensorsDequantize}

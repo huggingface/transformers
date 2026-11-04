@@ -244,20 +244,23 @@ class CompressedTensorsTest(unittest.TestCase):
             self.assertLessEqual(torch.exp(outputs.loss), 20.0)
 
     def test_use_optimized_inference_is_opt_in(self):
-        """Without `use_optimized_inference=True`, an FP8 checkpoint runs no kernels: its weights are
-        decompressed while loading."""
+        """Without `use_optimized_inference=True`, an FP8 checkpoint takes the regular compressed-tensors
+        route: no kernels, and with `dequantize=False` the weights are left compressed until the
+        first forward pass decompresses them."""
         from transformers.integrations.compressed_tensors import CompressedTensorsFP8Linear
 
         model = AutoModelForCausalLM.from_pretrained(self.tinyllama_fp8, device_map=torch_device)
         module = model.model.layers[0].self_attn.q_proj
 
         self.assertNotIsInstance(module, CompressedTensorsFP8Linear)
-        self.assertEqual(module.weight.dtype, model.dtype, "weights are decompressed while loading")
+        self.assertEqual(module.weight.dtype, torch.float8_e4m3fn, "weights must not be decompressed at load time")
 
         tokenizer = AutoTokenizer.from_pretrained(self.tinyllama_fp8)
         inputs = tokenizer(self.prompt, return_tensors="pt").to(model.device)
         with torch.no_grad():
             outputs = model(**inputs, labels=inputs["input_ids"])
+        # compressed-tensors decompressed the model on that first forward pass
+        self.assertEqual(module.weight.dtype, model.dtype)
         self.assertLessEqual(torch.exp(outputs.loss), 20.0)
 
     def test_non_fp8_model_unaffected(self):

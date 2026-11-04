@@ -20,7 +20,6 @@
 # limitations under the License.
 
 import math
-from collections import UserDict
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -30,7 +29,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, KVSharingDict
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
@@ -333,13 +332,13 @@ class MistralLarge4TextAttention(nn.Module):
     def __init__(self, config: MistralLarge4TextConfig, layer_idx: int):
         super().__init__()
         self.use_rope = config.no_rope_layers[layer_idx]
-        self.is_kv_shared_layer = config.kv_source_layers[layer_idx] != layer_idx
+        self.is_kv_shared_layer = config.kv_sharing_modes[layer_idx] in ("reuse", "reuse_but_indexer")
+        self.store_full_length_kv = config.kv_sharing_modes[layer_idx] == "store"
         self.config = config
         self.layer_idx = layer_idx
         self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
-
         self.qk_rope_head_dim = config.qk_rope_head_dim if self.use_rope else 0
         self.kv_lora_rank = config.kv_lora_rank
         self.v_head_dim = config.v_head_dim
@@ -348,7 +347,6 @@ class MistralLarge4TextAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
 
         self.is_causal = True
-
         self.kv_a_proj_with_mqa = (
             nn.Linear(self.hidden_size, config.kv_lora_rank + self.qk_rope_head_dim, bias=config.attention_bias)
             if not self.is_kv_shared_layer
@@ -375,10 +373,7 @@ class MistralLarge4TextAttention(nn.Module):
         self.indexer = None if self.skip_topk else MistralLarge4TextIndexer(config, layer_idx)
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-
         self.softmax_scaling = MistralLarge4TextSoftmaxScaling(self.num_heads)
-
-        self.store_full_length_kv = any(src == layer_idx for src in config.kv_source_layers[layer_idx + 1 :])
 
     def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Expands the compressed latents into key and value states. Args:
@@ -404,7 +399,7 @@ class MistralLarge4TextAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
-        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]],
+        shared_kv_states: KVSharingDict,
         position_ids: torch.Tensor,
         past_key_values: Cache | None = None,
         prev_topk_indices: torch.Tensor | None = None,
@@ -419,8 +414,6 @@ class MistralLarge4TextAttention(nn.Module):
         # Either the layer computes it's own cache or it loads it from shared_kv_states
         if self.is_kv_shared_layer:
             k_pass, k_rot = shared_kv_states["rope" if self.use_rope else "nope"]
-            k_pass = k_pass.to(q_states.device)  # device of past layer may be different from current one
-            k_rot = k_rot.to(q_states.device)
         else:
             compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
             kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
@@ -636,7 +629,7 @@ class MistralLarge4TextDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]],
+        shared_kv_states: KVSharingDict,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -674,7 +667,7 @@ class MistralLarge4PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MistralLarge4TextDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values", "shared_kv_states"]
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
     _supports_sdpa = True
     _supports_flex_attn = False
@@ -765,10 +758,8 @@ class MistralLarge4TextModel(MistralLarge4PreTrainedModel):
                 allow_is_causal_skip=False,  # Always force creation to account for causality in the indexer
             )
 
-        # Initialize as empty dict, or reuse past shared states. We use a UserDict instead of built-in dict (it behaves
-        # the same) for fsdp2 support (otherwise, `_apply_to_tensors` rebuilds every dict it recurses into, and `shared_kv_states`
-        # is not correctly shared, see https://github.com/pytorch/pytorch/blob/v2.10.0/torch/distributed/utils.py#L223-L255)
-        shared_kv_states = kwargs.pop("shared_kv_states", UserDict())
+        # Initialize as empty storage and it will be filled in the right layers.
+        shared_kv_states = KVSharingDict()
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)

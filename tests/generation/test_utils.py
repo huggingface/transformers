@@ -83,6 +83,7 @@ if is_torch_available():
     )
     from transformers.cache_utils import (
         Cache,
+        DummyLayer,
         DynamicCache,
         EncoderDecoderCache,
         LinearAttentionAndFullAttentionLayer,
@@ -2300,6 +2301,9 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 self.skipTest(f"{model_class.__name__} doesn't support packing!")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            # disable flakiness via norms as much as possible
+            set_config_for_less_flaky_test(config)
+
             if config.is_encoder_decoder:
                 self.skipTest("Model is an encoder-decoder")
 
@@ -2325,9 +2329,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
             if "position_ids" not in inspect.signature(model.forward).parameters:
                 self.skipTest("Model does not support position_ids")
-
-            if (not fa_kwargs) and "position_ids" not in inspect.signature(model.forward).parameters:
-                continue  # this model doesn't accept position ids as input
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
@@ -2357,6 +2358,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     .to(torch_device)
                     .eval()
                 )
+                # disable flakiness via norms as much as possible
+                set_model_for_less_flaky_test(model)
 
                 if fa_kwargs:
                     # flatten
@@ -2932,8 +2935,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
         # Check the size is coherent
         num_hidden_layers = config.num_hidden_layers
-        if getattr(config, "num_kv_shared_layers", None) is not None:
-            num_hidden_layers -= config.num_kv_shared_layers
         self.assertEqual(num_hidden_layers, len(past_key_values))
 
         def check_linear_attention_shapes(layer, num_conv_states, conv_shape, recurrent_shape):
@@ -2971,6 +2972,17 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             # Mamba only layer cache
             elif type(layer) is LinearAttentionLayer:
                 check_linear_attention_shapes(layer, num_conv_states, conv_shape, recurrent_shape)
+            # Dummy layer type
+            elif type(layer) is DummyLayer:
+                # Either the dummy layer is there because there is cache sharing
+                kv_sharing_modes = getattr(config, "kv_sharing_modes", None)
+                if kv_sharing_modes is not None:
+                    kv_sharing_mode = kv_sharing_modes[layer_idx]
+                    self.assertTrue(kv_sharing_mode == "reuse")
+                # Otherwise it's because there is no attention
+                else:
+                    layer_type = config.layer_types[layer_idx]
+                    self.assertTrue(layer_type == "no_attention")
             # Attention only layer type
             else:
                 self._check_attention_shapes(layer, seq_length, k_shape, v_shape)
