@@ -43,11 +43,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # Load model and tokenizer
 model_id = "LiquidAI/LFM3-1.7B-Preview"
-model = AutoModelForCausalLM.from_pretrained(
-    model_id,
-    device_map="auto",
-    dtype="bfloat16",
-)
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 # Generate answer
@@ -59,14 +55,7 @@ inputs = tokenizer.apply_chat_template(
     tokenize=True,
 ).to(model.device)
 
-output = model.generate(
-    **inputs,
-    do_sample=True,
-    temperature=0.3,
-    min_p=0.15,
-    repetition_penalty=1.05,
-    max_new_tokens=512,
-)
+output = model.generate(**inputs, max_new_tokens=512)
 
 print(tokenizer.decode(output[0], skip_special_tokens=False))
 ```
