@@ -242,7 +242,7 @@ def causal_conv1d_fn(
 
 # NOTE: the FLA package computes `x / torch.sqrt((x * x).sum(dim=dim, keepdim=True) + eps)` instead, so if we align
 # with the GatedRMSNorm, maybe we can make that change as well.
-def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
+def l2norm(x: torch.Tensor, dim: int = -1, eps: float = 1e-6):
     """This function is intended to align with the l2norm implementation in the FLA library."""
     inv_norm = torch.rsqrt((x * x).sum(dim=dim, keepdim=True) + eps)
     return x * inv_norm
@@ -1268,7 +1268,7 @@ class Qwen4ExpTextDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Cache | None = None,
         ple_input_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         if self.ple is not None:
             hidden_states = hidden_states + self.ple(
                 hidden_states, ple_input_ids, past_key_values, conv_mask=conv_mask
@@ -1379,7 +1379,7 @@ class Qwen4ExpTextModel(Qwen4ExpPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         ple_input_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1593,7 +1593,7 @@ class Qwen4ExpForCausalLM(Qwen4ExpPreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         output_router_logits: bool | None = None,
@@ -2156,7 +2156,7 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
     @auto_docstring
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -2168,7 +2168,7 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -2182,9 +2182,9 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor,
-        inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor | None = None,
-        video_features: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor,
+        image_features: torch.Tensor | None = None,
+        video_features: torch.Tensor | None = None,
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -2277,9 +2277,9 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
@@ -2378,12 +2378,12 @@ class Qwen4ExpForConditionalGeneration(Qwen4ExpPreTrainedModel, GenerationMixin)
     @auto_docstring
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input videos.
         """
         return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
@@ -2391,12 +2391,12 @@ class Qwen4ExpForConditionalGeneration(Qwen4ExpPreTrainedModel, GenerationMixin)
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
@@ -2409,10 +2409,10 @@ class Qwen4ExpForConditionalGeneration(Qwen4ExpPreTrainedModel, GenerationMixin)
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,

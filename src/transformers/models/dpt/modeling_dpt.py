@@ -51,14 +51,14 @@ logger = logging.get_logger(__name__)
 @dataclass
 class BaseModelOutputWithIntermediateActivations(ModelOutput):
     r"""
-    last_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    last_hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the model.
-    intermediate_activations (`tuple(torch.FloatTensor)`, *optional*):
+    intermediate_activations (`tuple(torch.Tensor)`, *optional*):
         Intermediate activations that can be used to compute hidden states of the model at various layers.
     """
 
-    last_hidden_states: torch.FloatTensor | None = None
-    intermediate_activations: tuple[torch.FloatTensor, ...] | None = None
+    last_hidden_states: torch.Tensor | None = None
+    intermediate_activations: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring(
@@ -70,20 +70,20 @@ class BaseModelOutputWithIntermediateActivations(ModelOutput):
 @dataclass
 class BaseModelOutputWithPoolingAndIntermediateActivations(ModelOutput):
     r"""
-    pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+    pooler_output (`torch.Tensor` of shape `(batch_size, hidden_size)`):
         Last layer hidden-state of the first token of the sequence (classification token) after further processing
         through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
         the classification token after processing through a linear layer and a tanh activation function. The linear
         layer weights are trained from the next sentence prediction (classification) objective during pretraining.
-    intermediate_activations (`tuple(torch.FloatTensor)`, *optional*):
+    intermediate_activations (`tuple(torch.Tensor)`, *optional*):
         Intermediate activations that can be used to compute hidden states of the model at various layers.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    pooler_output: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
-    intermediate_activations: tuple[torch.FloatTensor, ...] | None = None
+    last_hidden_state: torch.Tensor | None = None
+    pooler_output: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
+    intermediate_activations: tuple[torch.Tensor, ...] | None = None
 
 
 class DPTViTHybridEmbeddings(nn.Module):
@@ -522,7 +522,7 @@ class DPTReassembleStage(nn.Module):
     def forward(self, hidden_states: list[torch.Tensor], patch_height=None, patch_width=None) -> list[torch.Tensor]:
         """
         Args:
-            hidden_states (`list[torch.FloatTensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
+            hidden_states (`list[torch.Tensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
                 List of hidden states from the backbone.
         """
         out = []
@@ -782,7 +782,7 @@ class DPTModel(DPTPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPoolingAndIntermediateActivations:
         embedding_output: BaseModelOutputWithIntermediateActivations = self.embeddings(pixel_values)
@@ -854,7 +854,7 @@ class DPTNeck(nn.Module):
     ) -> list[torch.Tensor]:
         """
         Args:
-            hidden_states (`list[torch.FloatTensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
+            hidden_states (`list[torch.Tensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
                 List of hidden states from the backbone.
         """
         if not isinstance(hidden_states, (tuple, list)):
@@ -944,7 +944,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
     @filter_output_hidden_states
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> DepthEstimatorOutput:
@@ -1088,7 +1088,7 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
     @filter_output_hidden_states
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> SemanticSegmenterOutput:
