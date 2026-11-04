@@ -501,7 +501,10 @@ class PagedAttentionCache:
         for name in names:
             state = allocator.state_views(layer_idx)[name][index]
             fill = allocator.states[layer_idx][name][2]
-            states.append(torch.where(has_past.view(-1, *([1] * (state.dim() - 1))), state, fill))
+            # The read trash block holds zeros: only a non-zero fill is worth a pass over the states
+            if fill != 0:
+                state = torch.where(has_past.view(-1, *([1] * (state.dim() - 1))), state, fill)
+            states.append(state)
         return tuple(states)
 
     @torch.compiler.disable  # does not play well with the views of the cache tensor
