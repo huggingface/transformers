@@ -65,6 +65,7 @@ import pytest
 from transformersci.contracts import run as _run
 
 
+FLEET_REVISION = "{revision}"
 PARAMS = {params}
 
 
@@ -74,6 +75,7 @@ def test_contract(fleet, contract, target, variant, capsys):
         "--fixtures-only",
         "--run-all",
         "--fleet", fleet,
+        "--fleet-revision", FLEET_REVISION,
         "--contract", contract,
         "--target", target,
         "--variant", variant,
@@ -115,7 +117,8 @@ def main():
         params_repr += f"    {item!r},\n"
     params_repr += "]"
 
-    output_path.write_text(TEMPLATE.replace("{params}", params_repr), encoding="utf-8")
+    content = TEMPLATE.replace("{revision}", revision).replace("{params}", params_repr)
+    output_path.write_text(content, encoding="utf-8")
     print(f"Written: {output_path}")
 
 
