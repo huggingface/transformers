@@ -284,10 +284,10 @@ class DeepseekV32Attention(AXK1Attention):
 
     def cache_rows(self) -> dict[str, tuple[tuple[int, ...], torch.dtype | None]]:
         """The shape and dtype (None for the cache dtype) of the rows continuous batching caches per token for this
-        layer: the compressed latent of its keys and values, its shared rotary key, and its indexer's keys."""
+        layer: the compressed latent of its keys and values followed by its shared rotary key, in one row, and its
+        indexer's keys."""
         return {
-            "latent": ((self.kv_lora_rank,), None),
-            "rope_key": ((self.qk_rope_head_dim,), None),
+            "latent": ((self.kv_lora_rank + self.qk_rope_head_dim,), None),
             "index_key": ((self.config.index_head_dim,), None),
         }
 
@@ -318,8 +318,9 @@ class DeepseekV32Attention(AXK1Attention):
         # Cache read / write is performed while latent KV is still compressed
         paged_cache = kwargs.get("cache")
         if paged_cache is not None:  # continuous batching
-            rows = paged_cache.update_rows(self.layer_idx, {"latent": k_pass[0, 0], "rope_key": k_rot[0, 0]}, kwargs)
-            k_pass, k_rot = rows["latent"][None, None], rows["rope_key"][None, None]
+            latent = torch.cat((k_pass, k_rot), dim=-1)[0, 0]
+            latent = paged_cache.update_rows(self.layer_idx, {"latent": latent}, kwargs)["latent"]
+            k_pass, k_rot = latent[None, None].split([self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
         elif past_key_values is not None:
             k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
 

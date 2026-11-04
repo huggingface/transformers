@@ -316,8 +316,8 @@ class YoutuAttention(nn.Module):
 
     def cache_rows(self) -> dict[str, tuple[tuple[int, ...], torch.dtype | None]]:
         """The shape and dtype (None for the cache dtype) of the rows continuous batching caches per token for this
-        layer: the compressed latent of its keys and values, and its shared rotary key."""
-        return {"latent": ((self.kv_lora_rank,), None), "rope_key": ((self.qk_rope_head_dim,), None)}
+        layer: the compressed latent of its keys and values followed by its shared rotary key, in one row."""
+        return {"latent": ((self.kv_lora_rank + self.qk_rope_head_dim,), None)}
 
     def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Expands the compressed latents into key and value states. Args:
@@ -372,8 +372,9 @@ class YoutuAttention(nn.Module):
         # Cache read / write is performed while latent KV is still compressed
         paged_cache = kwargs.get("cache")
         if paged_cache is not None:  # continuous batching
-            rows = paged_cache.update_rows(self.layer_idx, {"latent": kv_nope[0, 0], "rope_key": k_rot[0, 0]}, kwargs)
-            kv_nope, k_rot = rows["latent"][None, None], rows["rope_key"][None, None]
+            latent = torch.cat((kv_nope, k_rot), dim=-1)[0, 0]
+            latent = paged_cache.update_rows(self.layer_idx, {"latent": latent}, kwargs)["latent"]
+            kv_nope, k_rot = latent[None, None].split([self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
         elif past_key_values is not None:
             kv_nope, k_rot = past_key_values.update(kv_nope, k_rot, self.layer_idx)
 

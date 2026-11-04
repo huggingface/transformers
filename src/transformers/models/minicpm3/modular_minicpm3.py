@@ -192,8 +192,9 @@ class MiniCPM3Attention(DeepseekV2Attention):
         # Cache read / write is performed while the latent KV is still compressed
         paged_cache = kwargs.get("cache")
         if paged_cache is not None:  # continuous batching
-            rows = paged_cache.update_rows(self.layer_idx, {"latent": k_pass[0, 0], "rope_key": k_rot[0, 0]}, kwargs)
-            k_pass, k_rot = rows["latent"][None, None], rows["rope_key"][None, None]
+            latent = torch.cat((k_pass, k_rot), dim=-1)[0, 0]
+            latent = paged_cache.update_rows(self.layer_idx, {"latent": latent}, kwargs)["latent"]
+            k_pass, k_rot = latent[None, None].split([self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
         elif past_key_values is not None:
             k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
 

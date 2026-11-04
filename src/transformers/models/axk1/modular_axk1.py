@@ -216,8 +216,9 @@ class AXK1Attention(DeepseekV3Attention):
         # Cache read / write is performed while latent KV is still compressed
         paged_cache = kwargs.get("cache")
         if paged_cache is not None:  # continuous batching
-            rows = paged_cache.update_rows(self.layer_idx, {"latent": kv_nope[0, 0], "rope_key": k_rot[0, 0]}, kwargs)
-            kv_nope, k_rot = rows["latent"][None, None], rows["rope_key"][None, None]
+            latent = torch.cat((kv_nope, k_rot), dim=-1)[0, 0]
+            latent = paged_cache.update_rows(self.layer_idx, {"latent": latent}, kwargs)["latent"]
+            kv_nope, k_rot = latent[None, None].split([self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
         elif past_key_values is not None:
             kv_nope, k_rot = past_key_values.update(kv_nope, k_rot, self.layer_idx)
 
