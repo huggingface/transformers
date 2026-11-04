@@ -187,16 +187,16 @@ class GotOcr2Processor(ProcessorMixin):
         if text is None:
             text = []
             if multi_page:
-                image_sizes = [get_image_size(image) for image_group in images for image in image_group]
+                image_sizes = [[get_image_size(image) for image in image_group] for image_group in images]
             else:
                 image_sizes = [get_image_size(image) for image in images]
 
             for box_single, color_single, size in itertools.zip_longest(box, color, image_sizes):
-                if box_single is not None and box_single[0] is not None:
+                if not multi_page and box_single is not None and box_single[0] is not None:
                     box_single = preprocess_box_annotation(box_single, size)
                 query = (
                     f"{f'[{color_single}] ' if color_single is not None else ''}"
-                    f"{str(box_single) if box_single is not None and box_single[0] is not None else ''} "
+                    f"{str(box_single) if not multi_page and box_single is not None and box_single[0] is not None else ''} "
                     "OCR"
                     f"{' with format' if format_output else ''}"
                     f"{' across multi pages' if multi_page else ''}"
@@ -204,6 +204,7 @@ class GotOcr2Processor(ProcessorMixin):
                     ": "
                 )
                 # build a conversation manually, ckpt has not chat template :(
+                num_pages = 1 if not multi_page else len(image_sizes)
                 prompt = (
                     self.message_start_token
                     + self.system_query
@@ -211,7 +212,7 @@ class GotOcr2Processor(ProcessorMixin):
                     + self.message_start_token
                     + "user\n"
                     + self.img_start_token
-                    + self.image_token  # <- the token to be expanded later
+                    + self.image_token * num_pages  # <- the token to be expanded later
                     + self.img_end_token
                     + "\n"
                     + query
@@ -222,6 +223,17 @@ class GotOcr2Processor(ProcessorMixin):
                 text.append(prompt)
 
         return images, text, None, None
+
+    def validate_inputs(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        # GotOCR has weird behavior when multi-page and we cannot expect
+        # num-images to match num of placeholder tokens in input text
+        if images is None and text is None:
+            raise ValueError(f"You need to provide at least one input to call {self.__class__.__name__}")
 
     def _process_images(self, images: ImageInput, **kwargs):
         # kwargs not used by image processor, only when building a conversation
