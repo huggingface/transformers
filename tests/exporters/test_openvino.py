@@ -132,6 +132,14 @@ class OpenVINOFusionTest(unittest.TestCase):
     def test_decode_fuses_attention_rope_and_kv_cache(self, model_type):
         self.assert_decode_fused(_decode(_model(model_type)))
 
+    @parameterized.expand(["mixtral", "qwen3_moe"])
+    def test_moe_experts_fuse_into_gather_matmuls(self, model_type):
+        decode = _decode(_model(model_type, torch.bfloat16))
+        layers = collections.Counter(layer for layer, _ in _compiled_ops(decode))
+        # gate, up and down per layer only compute the routed experts
+        self.assertEqual(layers["GatherMatmul"], 3 * NUM_LAYERS)
+        self.assertEqual(layers["MatMul"], 0)
+
     def test_single_token_decode_fuses_attention_rope_and_kv_cache(self):
         self.assert_decode_fused(_decode(_model("llama"), multi_token_decode=False))
 

@@ -73,6 +73,8 @@ if is_torch_available():
     from torch.export import ExportedProgram
     from torch.export.decomp_utils import CustomDecompTable
 
+    from ..integrations.moe import _default_apply_gate
+
 
 if is_openvino_available():
     import numpy as np
@@ -305,7 +307,7 @@ def _fix_non_tensor_inputs(ov_model: openvino.Model, graph_module) -> None:
 # (bf16 on CPUs with AMX or AVX-512 BF16): a bf16-typed graph misses some of them, notably the
 # compressed-weight matmuls of an NNCF int8/int4 graph. So, as OV's own `__make_16bit_traceable`
 # does, a bf16/fp16 model is traced with f32 activations while its linear and embedding weights stay
-# 16-bit: the patched `nn.Linear` / `nn.Embedding` forwards cast them to f32 inside the graph, so they
+# 16-bit: the patched `nn.Linear` / `nn.Embedding` / MoE experts forwards cast them to f32 inside the graph, so they
 # land in the OV model as a 16-bit constant and a `Convert`, which the plugin decompresses inside its
 # matmuls, without the weights ever being copied.
 
@@ -314,7 +316,7 @@ def _fix_non_tensor_inputs(ov_model: openvino.Model, graph_module) -> None:
 def _traced_in_float32(model: PreTrainedModel, sample_inputs: MutableMapping[str, Any]):
     """Trace a bf16/fp16 model with f32 activations, yielding f32 copies of the inputs.
 
-    Each linear and embedding weight moves to a `_16bit_<name>` parameter, and an f32 placeholder that broadcasts a
+    Each linear, embedding and MoE experts weight moves to a `_16bit_<name>` parameter, and an f32 placeholder that broadcasts a
     single zero takes its place: model code that reads `weight.dtype` (or `model.dtype`) sees f32, at no memory cost.
     The remaining 16-bit parameters, buffers and configs (norms, ...) are small and upcast for the trace. Everything
     gets its own dtype back afterwards, so modules a model keeps in fp32 stay fp32.
@@ -323,8 +325,7 @@ def _traced_in_float32(model: PreTrainedModel, sample_inputs: MutableMapping[str
     set_aside = [
         (module, name, getattr(module, name))
         for module in model.modules()
-        if isinstance(module, (torch.nn.Linear, torch.nn.Embedding))
-        for name in ("weight", "bias")
+        for name in _16bit_weight_names(module)
         if getattr(module, name, None) is not None and getattr(module, name).dtype in half
     ]
     set_aside_ids = {id(weight) for _, _, weight in set_aside}
@@ -357,6 +358,20 @@ def _traced_in_float32(model: PreTrainedModel, sample_inputs: MutableMapping[str
             tensor.data = tensor.data.to(dtype)
         for config, dtype in configs:
             config.dtype = dtype
+
+
+def _16bit_weight_names(module: torch.nn.Module) -> tuple[str, ...]:
+    """The weights of `module` that stay 16-bit through [`_traced_in_float32`]: the patched forwards cast them."""
+    if isinstance(module, (torch.nn.Linear, torch.nn.Embedding)):
+        return ("weight", "bias")
+    if hasattr(module, "has_gate") and hasattr(module, "is_transposed"):  # `@use_experts_implementation` experts
+        return ("gate_up_proj", "up_proj", "down_proj", "gate_up_proj_bias", "up_proj_bias", "down_proj_bias")
+    return ()
+
+
+def _16bit_weight(module: torch.nn.Module, name: str) -> torch.Tensor | None:
+    """`module.<name>`, or the 16-bit weight [`_traced_in_float32`] set aside in its place."""
+    return module._parameters.get(f"_16bit_{name}", getattr(module, name, None))
 
 
 def _configs(model):
@@ -1272,7 +1287,7 @@ def _patch_linear_forward(original):
     def patch(self, input):
         if "_16bit_weight" not in self._parameters:
             return original(self, input)
-        bias = self._parameters.get("_16bit_bias", self.bias)
+        bias = _16bit_weight(self, "bias")
         bias = bias.to(input.dtype) if bias is not None else None
         return torch.nn.functional.linear(input, self._16bit_weight.to(input.dtype), bias)
 
@@ -1301,6 +1316,54 @@ def _patch_embedding_forward(original):
         )
 
     return patch
+
+
+@register_patch("openvino", "transformers.integrations.moe.ExpertsInterface.get_interface")
+def _patch_experts_interface(original):
+    """Trace every `@use_experts_implementation` experts module with [`_tiled_experts_forward`]."""
+
+    def patch(self, experts_implementation, default):
+        return _tiled_experts_forward
+
+    return patch
+
+
+def _tiled_experts_forward(self, hidden_states, top_k_index, top_k_weights):
+    """Run every expert on every token and weight the outputs by the dense routing weights.
+
+    This is the form OV's CPU plugin turns into `GatherMatmul`s that only compute the routed experts
+    (`ConvertTiledMoeBlockTo{2,3}GatherMatmuls`): the hidden states tiled over the experts, a batched matmul per
+    projection against the stacked 16-bit expert weights (separate gate and up ones for the default gating), the
+    outputs scaled by the routing weights scattered over all experts, then summed over them.
+    """
+    num_tokens, hidden_dim = hidden_states.shape
+    dtype = hidden_states.dtype
+
+    def project(input, weight, bias):
+        weight = weight.to(dtype)
+        output = torch.bmm(input, weight if self.is_transposed else weight.transpose(1, 2))
+        return output + bias.to(dtype)[:, None] if bias is not None else output
+
+    routing_weights = torch.zeros(num_tokens, self.num_experts, dtype=dtype, device=hidden_states.device)
+    routing_weights = routing_weights.scatter(1, top_k_index, top_k_weights.to(dtype))
+    tiled = hidden_states.repeat(self.num_experts, 1).view(self.num_experts, num_tokens, hidden_dim)
+    if not self.has_gate:
+        output = self.act_fn(project(tiled, _16bit_weight(self, "up_proj"), _16bit_weight(self, "up_proj_bias")))
+    elif type(self)._apply_gate is _default_apply_gate and self.is_concatenated:
+        split_dim = -1 if self.is_transposed else -2
+        gate_weight, up_weight = _16bit_weight(self, "gate_up_proj").chunk(2, dim=split_dim)
+        bias = _16bit_weight(self, "gate_up_proj_bias")
+        gate_bias, up_bias = bias.chunk(2, dim=-1) if bias is not None else (None, None)
+        output = self.act_fn(project(tiled, gate_weight, gate_bias)) * project(tiled, up_weight, up_bias)
+    else:
+        gate_up_bias = _16bit_weight(self, "gate_up_proj_bias")
+        output = self._apply_gate(project(tiled, _16bit_weight(self, "gate_up_proj"), gate_up_bias))
+    output = project(output, _16bit_weight(self, "down_proj"), _16bit_weight(self, "down_proj_bias"))
+    output = output.view(self.num_experts, num_tokens, hidden_dim)
+    if self.has_post_expert_norm:
+        output = self.post_expert_norm(output)
+    output = output * routing_weights.transpose(0, 1)[..., None]
+    return output.sum(dim=0)
 
 
 @register_patch("openvino", "torch.nn.functional.layer_norm")
