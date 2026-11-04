@@ -1828,7 +1828,19 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
         past_length = 0
         if (cache := model_kwargs.get("past_key_values")) is not None:
             past_length = cache.get_seq_length()
-        if past_length != 0 and self.rope_deltas is not None:
+
+        # Check if current inputs contain vision/audio tokens - if so, we need to recompute rope index
+        has_vision_tokens = (
+            model_kwargs.get("image_grid_thw") is not None
+            or model_kwargs.get("video_grid_thw") is not None
+        )
+        has_audio_tokens = (
+            model_kwargs.get("audio_feature_lengths") is not None
+            or model_kwargs.get("feature_attention_mask") is not None
+        )
+
+        # Only take early exit if there are no new vision/audio tokens
+        if past_length != 0 and self.rope_deltas is not None and not has_vision_tokens and not has_audio_tokens:
             # Talker stores deltas relative to the physical cache length, which includes padding.
             vision_positions = text_positions.unsqueeze(0).expand(3, -1, -1) + self.rope_deltas + padding_length
             position_ids = torch.cat([text_positions[None, ...], vision_positions], dim=0)

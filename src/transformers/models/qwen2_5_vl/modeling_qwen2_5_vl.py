@@ -1393,7 +1393,15 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
         past_length = 0
         if (cache := model_kwargs.get("past_key_values")) is not None:
             past_length = cache.get_seq_length()
-        if past_length != 0 and self.model.rope_deltas is not None:
+
+        # Check if current inputs contain vision tokens - if so, we need to recompute rope index
+        has_vision_tokens = (
+            model_kwargs.get("image_grid_thw") is not None
+            or model_kwargs.get("video_grid_thw") is not None
+        )
+
+        # Only take early exit if there are no new vision tokens
+        if past_length != 0 and self.model.rope_deltas is not None and not has_vision_tokens:
             position_ids = text_positions[None, ...] + self.model.rope_deltas
             return position_ids
 
