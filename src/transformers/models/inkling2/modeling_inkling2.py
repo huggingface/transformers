@@ -718,8 +718,13 @@ class Inkling2VisionRotaryEmbedding(nn.Module):
     def __init__(self, config: Inkling2VisionConfig):
         super().__init__()
         self.config = config
+
         self.rope_type = self.config.rope_parameters["rope_type"]
-        inv_freq, self.attention_scaling = self.compute_axial_rope_parameters(self.config)
+        rope_init_fn: Callable = self.compute_axial_rope_parameters
+        if self.rope_type != "axial":
+            raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
+
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
@@ -737,9 +742,12 @@ class Inkling2VisionRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        spatial_dim = config.hidden_size // config.num_attention_heads // 2
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        spatial_dim = dim // 2
+
+        attention_factor = 1.0  # Unused in this type of RoPE
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
-        return inv_freq.to(device), 1.0
+        return inv_freq.to(device), attention_factor
 
     @torch.no_grad()
     def forward(self, x, position_ids):
@@ -959,6 +967,8 @@ class Inkling2VisionEmbeddings(nn.Module):
             spatial_merge_size=merge,
             kwargs=kwargs,
         )
+        interp_indices = interp_indices.to(pixel_values.device, non_blocking=True)
+        interp_weights = interp_weights.to(pixel_values.device, non_blocking=True)
         position_embeddings = (self.position_embedding(interp_indices) * interp_weights[:, :, None]).sum(1)
         patch_embeddings = patch_embeddings + position_embeddings.to(patch_embeddings.dtype)
 
@@ -978,7 +988,10 @@ class Inkling2VisionMerger(nn.Module):
         self.linear_2 = nn.Linear(config.projection_hidden_dim, config.text_hidden_size, bias=config.projector_bias)
 
     def forward(self, image_features):
-        return self.linear_2(self.act(self.linear_1(image_features)))
+        hidden_states = self.linear_1(image_features)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
 
 
 @auto_docstring
@@ -1240,23 +1253,25 @@ class Inkling2VisionModel(Inkling2PreTrainedModel):
             Temporal, height and width of each image, counted in language model image tokens.
         """
         merge = self.config.spatial_merge_size
-        patch_grid_thw = (image_grid_thw * image_grid_thw.new_tensor([1, merge, merge])).to(pixel_values.device)
+        device = pixel_values.device
+        patch_grid_thw = image_grid_thw.cpu() * torch.tensor([1, merge, merge])
         patches_per_image = patch_grid_thw.prod(-1)
         num_patches = pixel_values.shape[0] * merge**2
         if (cu_seqlens := kwargs.pop("cu_seqlens", None)) is None:
             cu_seqlens = F.pad((patches_per_image + 1).cumsum(0), (1, 0)).to(torch.int32)
         # sequence index of every patch, skipping the class token in front of each image
-        image_ids = torch.arange(1, patch_grid_thw.shape[0] + 1, device=pixel_values.device)
-        patch_index = torch.arange(num_patches, device=pixel_values.device) + torch.repeat_interleave(
+        image_ids = torch.arange(1, patch_grid_thw.shape[0] + 1)
+        patch_index = torch.arange(num_patches) + torch.repeat_interleave(
             image_ids, patches_per_image, output_size=num_patches
         )
+        patch_index = patch_index.to(device, non_blocking=True)
 
         pixel_values = pixel_values.to(self.embeddings.patch_embedding.weight.dtype)
         hidden_states = self.embeddings(pixel_values, patch_grid_thw, patch_index, **kwargs)
         hidden_states = self.pre_layernorm(hidden_states)
 
         # patches are 1-indexed (row, col) and class tokens sit at (0, 0)
-        position_ids = get_vision_position_ids(patch_grid_thw, merge, kwargs=kwargs)
+        position_ids = get_vision_position_ids(patch_grid_thw, merge, kwargs=kwargs).to(device, non_blocking=True)
         position_ids = position_ids.new_zeros(hidden_states.shape[0], 2).index_copy(0, patch_index, position_ids + 1)
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
@@ -1292,6 +1307,7 @@ class Inkling2Model(Inkling2PreTrainedModel):
     def get_image_features(
         self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
+        image_grid_thw = image_grid_thw.cpu()
         image_outputs = self.vision_tower(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
         image_outputs.pooler_output = image_outputs.pooler_output.split(image_grid_thw.prod(-1).tolist())
         return image_outputs
