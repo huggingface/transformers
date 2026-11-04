@@ -141,8 +141,19 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
         if isinstance(image, (str, Image.Image)):
             inputs = {"image": image, "candidate_labels": candidate_labels}
         elif isinstance(image, (list, tuple)) and valid_images(image):
-            if not isinstance(candidate_labels, (list, tuple)) or len(candidate_labels) != len(image):
-                raise ValueError("Batched images require one candidate_labels entry per image.")
+            if isinstance(candidate_labels, str) or (
+                isinstance(candidate_labels, (list, tuple)) and all(isinstance(x, str) for x in candidate_labels)
+            ):
+                candidate_labels = [candidate_labels] * len(image)
+            elif not isinstance(candidate_labels, (list, tuple)) or not all(
+                isinstance(labels, (list, tuple)) and all(isinstance(x, str) for x in labels)
+                for labels in candidate_labels
+            ):
+                raise ValueError(
+                    "candidate_labels must be a string, a flat list of strings, or per-image label lists."
+                )
+            elif len(candidate_labels) != len(image):
+                raise ValueError(f"Got {len(image)} images but {len(candidate_labels)} candidate label lists.")
             return list(
                 super().__call__(
                     ({"image": img, "candidate_labels": labels} for img, labels in zip(image, candidate_labels)),
