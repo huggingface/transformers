@@ -380,7 +380,7 @@ class NemotronHPreTrainedModel(PreTrainedModel):
 
 
 class NemotronHModel(NemotronHPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: NemotronHConfig):
         super().__init__(config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
@@ -486,7 +486,7 @@ class NemotronHForCausalLM(ZambaForCausalLM):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,

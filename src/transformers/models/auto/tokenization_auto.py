@@ -845,6 +845,8 @@ class AutoTokenizer:
             and _hub_declared_class is not None
             and _hub_declared_class.removesuffix("Fast") == "LlamaTokenizer"
             and (TOKENIZER_MAPPING_NAMES.get(config_model_type) or "").removesuffix("Fast") != "MistralCommonBackend"
+            and config_model_type not in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
+            and config_model_name not in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
             and TokenizersBackend._tokenizer_json_has_byte_level(pretrained_model_name_or_path, **kwargs)
         ):
             logger.warning_once(
