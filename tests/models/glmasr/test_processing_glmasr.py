@@ -81,18 +81,6 @@ class GlmAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(reloaded.feature_extractor.to_json_string(), feature_extractor.to_json_string())
         self.assertIsInstance(reloaded.feature_extractor, WhisperFeatureExtractor)
 
-    def prepare_transcription_conversation(self, processor, audio, transcription):
-        return [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "audio", "audio": audio},
-                    {"type": "text", "text": processor.default_transcription_prompt},
-                ],
-            },
-            {"role": "assistant", "content": [{"type": "text", "text": transcription}]},
-        ]
-
     # Overwrite to remove skip numpy inputs (still need to keep as many cases as parent)
     @require_librosa
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])

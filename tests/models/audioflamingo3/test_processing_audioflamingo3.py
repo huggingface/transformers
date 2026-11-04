@@ -189,18 +189,6 @@ class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertIn(key, helper_outputs)
             self.assertTrue(helper_outputs[key].equal(manual_outputs[key]))
 
-    def prepare_transcription_conversation(self, processor, audio, transcription):
-        return [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": processor.default_transcription_prompt},
-                    {"type": "audio", "audio": audio},
-                ],
-            },
-            {"role": "assistant", "content": [{"type": "text", "text": transcription}]},
-        ]
-
     # Overwrite to remove skip numpy inputs (still need to keep as many cases as parent)
     @require_librosa
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])

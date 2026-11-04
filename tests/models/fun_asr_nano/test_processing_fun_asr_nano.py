@@ -124,12 +124,6 @@ class FunAsrNanoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(processor.decode(token_ids[0], strip_prefix=True), "hello")
         self.assertEqual(processor.decode(token_ids[0]), text)
 
-    def prepare_transcription_conversation(self, processor, audio, transcription):
-        return [
-            {"role": "user", "content": [{"type": "audio", "audio": audio}]},
-            {"role": "assistant", "content": [{"type": "text", "text": transcription}]},
-        ]
-
     @require_librosa
     @require_torch
     def test_output_labels(self):

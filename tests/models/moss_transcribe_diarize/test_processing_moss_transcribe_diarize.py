@@ -203,12 +203,6 @@ class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase
             self.assertIn(key, helper_outputs)
             self.assertTrue(helper_outputs[key].equal(manual_outputs[key]))
 
-    def prepare_transcription_conversation(self, processor, audio, transcription):
-        return [
-            {"role": "user", "content": [{"type": "audio", "audio": audio}]},
-            {"role": "assistant", "content": [{"type": "text", "text": transcription}]},
-        ]
-
     @require_librosa
     def test_apply_transcription_request_with_prompt_and_keywords(self):
         processor = AutoProcessor.from_pretrained(self.tmpdirname)

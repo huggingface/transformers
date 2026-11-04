@@ -1316,49 +1316,51 @@ class ProcessorTesterMixin:
         for prompt in continue_prompt:
             self.assertTrue(prompt.endswith("It is the sound of"))  # no `eos` token at the end
 
-    def prepare_transcription_conversation(self, processor, audio, transcription):
-        """
-        The conversation that `apply_transcription_request` builds for one audio and its target `transcription`.
-        Override it for processors whose `apply_transcription_request` supports training; the training test is skipped
-        otherwise.
-        """
-        return None
-
-    @require_torch
-    def test_apply_transcription_request_with_transcription(self):
+    def _get_transcription_training_processor(self):
+        """Processor whose `apply_transcription_request` accepts a target `transcription`, or skip the test."""
         processor = self.get_processor()
-        audio = self.prepare_audio_inputs(batch_size=2)
-        transcriptions = ["Hello world.", "A longer transcription so that padding is applied."]
-        conversations = [
-            self.prepare_transcription_conversation(processor, audio_el, text)
-            for audio_el, text in zip(audio, transcriptions)
-        ]
-        if conversations[0] is None:
-            # check if `prepare_transcription_conversation` is overridden to test for training; if not, skip the test
+        apply_transcription_request = getattr(processor, "apply_transcription_request", None)
+        if (
+            apply_transcription_request is None
+            or "transcription" not in inspect.signature(apply_transcription_request).parameters
+        ):
             self.skipTest(
                 f"{self.processor_class.__name__} does not support training with `apply_transcription_request`."
             )
+        return processor
 
-        helper_outputs = processor.apply_transcription_request(audio=audio, transcription=transcriptions)
-        manual_outputs = processor.apply_chat_template(
-            conversations, tokenize=True, return_dict=True, processor_kwargs={"output_labels": True}
-        )
-        self.assertIn("labels", helper_outputs)
-        self.assertEqual(set(helper_outputs.keys()), set(manual_outputs.keys()))
-        for key in helper_outputs:
-            self.assertTrue(helper_outputs[key].equal(manual_outputs[key]))
+    @require_torch
+    def test_apply_transcription_request_with_transcription(self):
+        processor = self._get_transcription_training_processor()
+        audio = self.prepare_audio_inputs(batch_size=2)
+        transcriptions = ["Hello world.", "A longer transcription so that padding is applied."]
+        outputs = processor.apply_transcription_request(audio=audio, transcription=transcriptions)
+
+        # the same as processing the untokenized prompts, with labels
+        prompts = processor.apply_transcription_request(audio=audio, transcription=transcriptions, tokenize=False)
+        expected_outputs = processor(text=prompts, audio=audio, output_labels=True)
+        self.assertIn("labels", outputs)
+        self.assertEqual(set(outputs.keys()), set(expected_outputs.keys()))
+        for key in outputs:
+            self.assertTrue(outputs[key].equal(expected_outputs[key]))
+
+        # each target transcription is in the labels of its audio
+        for labels, transcription in zip(outputs["labels"], transcriptions):
+            self.assertIn(transcription, processor.tokenizer.decode(labels[labels != -100]))
 
         # user `processor_kwargs` are merged with the labels request
-        outputs = processor.apply_transcription_request(
-            audio=audio,
-            transcription=transcriptions,
-            processor_kwargs={"text_kwargs": {"padding": True}},
+        merged_outputs = processor.apply_transcription_request(
+            audio=audio, transcription=transcriptions, processor_kwargs={"text_kwargs": {"padding": True}}
         )
-        self.assertTrue(outputs["labels"].equal(helper_outputs["labels"]))
+        self.assertTrue(merged_outputs["labels"].equal(outputs["labels"]))
 
+    @require_torch
+    def test_apply_transcription_request_single_transcription_not_broadcast(self):
         # a transcription is specific to its audio, so a single one is not broadcast to the batch
+        processor = self._get_transcription_training_processor()
+        audio = self.prepare_audio_inputs(batch_size=2)
         with self.assertRaises(ValueError):
-            processor.apply_transcription_request(audio=audio, transcription=transcriptions[0])
+            processor.apply_transcription_request(audio=audio, transcription="Hello world.")
 
     @require_librosa
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])

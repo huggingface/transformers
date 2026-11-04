@@ -146,12 +146,6 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_apply_chat_template_assistant_mask(self):
         self.skipTest("Qwen3ASR processor requires audio; not compatible with text-only chat template tests.")
 
-    def prepare_transcription_conversation(self, processor, audio, transcription):
-        return [
-            {"role": "user", "content": [{"type": "audio", "audio": audio}]},
-            {"role": "assistant", "content": [{"type": "text", "text": transcription}]},
-        ]
-
     @require_torch
     def test_output_labels(self):
         import torch
