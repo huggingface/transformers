@@ -63,6 +63,15 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue("num_image_patches" in output)
         self.assertEqual(len(output["num_image_patches"]), 3)
 
+    def test_return_metadata_false_is_refused(self):
+        processor = self.get_processor()
+        video = self.prepare_videos_inputs()
+        text = f"Video: {self.video_token}"
+        inputs = processor(text=text, videos=[video], do_sample_frames=False, return_metadata=True)
+        self.assertIn("video_metadata", inputs)
+        with self.assertRaisesRegex(ValueError, "return_metadata=False"):
+            processor(text=text, videos=[video], do_sample_frames=False, return_metadata=False)
+
     def test_model_input_names(self):
         processor = self.get_processor()
 

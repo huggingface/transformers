@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections import UserDict
 from collections.abc import Callable
 
 import torch
@@ -21,7 +20,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, KVSharingDict
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
@@ -177,6 +176,22 @@ class MistralLarge4TextConfig(GlmMoeDsaConfig):
                     f"Layer {layer_idx} must share KV with an earlier layer that owns its cache, got {source}."
                 )
         PreTrainedConfig.validate_architecture(self)
+
+    @property
+    def kv_sharing_modes(self) -> list[str | None]:
+        kv_sharing_modes = [None if i == self.kv_source_layers[i] else "reuse" for i in range(self.num_hidden_layers)]
+        for i in range(self.num_hidden_layers):
+            # These specific layers share the k/v part, but still need a cache for the indexer part - setting it to `reuse_but_indexer`
+            # will still attribute them an IndexedLayer cache
+            if kv_sharing_modes[i] == "reuse" and self.indexer_types[i] != "shared":
+                kv_sharing_modes[i] = "reuse_but_indexer"
+        # Find indices of layers that compute AND share their cache (i.e. their index appears at least twice in `kv_source_layers`)
+        producers = [i for i in range(self.num_hidden_layers) if i in self.kv_source_layers[i + 1 :]]
+        # Mark producers as such
+        for producer_index in producers:
+            kv_sharing_modes[producer_index] = "store"
+
+        return kv_sharing_modes
 
 
 class MistralLarge4Config(Mistral3Config):
@@ -375,7 +390,8 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
 
     def __init__(self, config: MistralLarge4TextConfig, layer_idx: int):
         self.use_rope = config.no_rope_layers[layer_idx]
-        self.is_kv_shared_layer = config.kv_source_layers[layer_idx] != layer_idx
+        self.is_kv_shared_layer = config.kv_sharing_modes[layer_idx] in ("reuse", "reuse_but_indexer")
+        self.store_full_length_kv = config.kv_sharing_modes[layer_idx] == "store"
         super().__init__(config, layer_idx)
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
@@ -383,14 +399,9 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
         del self.q_a_proj
         del self.q_a_layernorm
         del self.q_b_proj
-
         self.softmax_scaling = MistralLarge4TextSoftmaxScaling(self.num_heads)
-
         self.qk_rope_head_dim = config.qk_rope_head_dim if self.use_rope else 0
         self.qk_nope_head_dim = config.qk_nope_head_dim + (0 if self.use_rope else config.qk_rope_head_dim)
-
-        self.store_full_length_kv = any(src == layer_idx for src in config.kv_source_layers[layer_idx + 1 :])
-
         self.kv_a_proj_with_mqa = (
             nn.Linear(self.hidden_size, config.kv_lora_rank + self.qk_rope_head_dim, bias=config.attention_bias)
             if not self.is_kv_shared_layer
@@ -406,7 +417,7 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
-        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]],
+        shared_kv_states: KVSharingDict,
         position_ids: torch.Tensor,
         past_key_values: Cache | None = None,
         prev_topk_indices: torch.Tensor | None = None,
@@ -421,8 +432,6 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
         # Either the layer computes it's own cache or it loads it from shared_kv_states
         if self.is_kv_shared_layer:
             k_pass, k_rot = shared_kv_states["rope" if self.use_rope else "nope"]
-            k_pass = k_pass.to(q_states.device)  # device of past layer may be different from current one
-            k_rot = k_rot.to(q_states.device)
         else:
             compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
             kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
@@ -556,7 +565,7 @@ class MistralLarge4TextDecoderLayer(GlmMoeDsaDecoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]],
+        shared_kv_states: KVSharingDict,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -592,7 +601,7 @@ class MistralLarge4PreTrainedModel(GlmMoeDsaPreTrainedModel):
     config: MistralLarge4Config
     input_modalities = ("image", "text")
     _no_split_modules = ["MistralLarge4TextDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values", "shared_kv_states"]
+    _skip_keys_device_placement = ["past_key_values"]
     _keep_in_fp32_modules_strict = ["rotary_emb", "mlp.gate.weight"]
     # The checkpoint ships a multi-token-prediction draft head that this model does not implement yet # TODO
     _keys_to_ignore_on_load_unexpected = [r"mtp_dspark\..*"]
@@ -658,10 +667,8 @@ class MistralLarge4TextModel(MistralLarge4PreTrainedModel, GlmMoeDsaModel):
                 allow_is_causal_skip=False,  # Always force creation to account for causality in the indexer
             )
 
-        # Initialize as empty dict, or reuse past shared states. We use a UserDict instead of built-in dict (it behaves
-        # the same) for fsdp2 support (otherwise, `_apply_to_tensors` rebuilds every dict it recurses into, and `shared_kv_states`
-        # is not correctly shared, see https://github.com/pytorch/pytorch/blob/v2.10.0/torch/distributed/utils.py#L223-L255)
-        shared_kv_states = kwargs.pop("shared_kv_states", UserDict())
+        # Initialize as empty storage and it will be filled in the right layers.
+        shared_kv_states = KVSharingDict()
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
