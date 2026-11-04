@@ -105,8 +105,9 @@ class StackCompressedModelTest(unittest.TestCase):
 @require_compressed_tensors
 @require_torch
 class DequantizeTest(unittest.TestCase):
-    """Non-FP8 schemes have no kernels, so they run dequantized: the weights are decompressed while loading.
-    `dequantize=True` (or the deprecated `run_compressed=False`) also drops the activation quantization."""
+    """Non-FP8 schemes have no kernels, so they run dequantized. `dequantize=True` (or the
+    deprecated `run_compressed=False`) does it at load time; by default the weights are left
+    compressed and compressed-tensors decompresses them on the first forward pass."""
 
     tinyllama_w4a16 = "nm-testing/tinyllama-w4a16-compressed"
     tinyllama_w8a8 = "nm-testing/tinyllama-w8a8-compressed"
@@ -120,7 +121,7 @@ class DequantizeTest(unittest.TestCase):
         backend_empty_cache(torch_device)
         gc.collect()
 
-    def test_default_load_decompresses_while_loading(self):
+    def test_default_load_stays_compressed_until_first_forward(self):
         from compressed_tensors import QuantizationStatus
 
         for stub in self.stubs:
@@ -129,10 +130,17 @@ class DequantizeTest(unittest.TestCase):
             compressed_count = sum(
                 1 for m in model.modules() if getattr(m, "quantization_status", None) == QuantizationStatus.COMPRESSED
             )
+            self.assertGreater(compressed_count, 0, "weights must not be decompressed at load time")
+
+            model(input_ids=torch.tensor([[0, 1, 2]]))
+
+            # The hook compressed-tensors registered decompressed the model on that forward pass.
+            compressed_count = sum(
+                1 for m in model.modules() if getattr(m, "quantization_status", None) == QuantizationStatus.COMPRESSED
+            )
             self.assertEqual(compressed_count, 0, "no modules should be left in COMPRESSED state")
             self.assertFalse(any("weight_packed" in name for name, _ in model.named_parameters()))
             self.assertTrue(model.model.layers[0].self_attn.q_proj.weight.is_floating_point())
-            model(input_ids=torch.tensor([[0, 1, 2]]))
 
     def test_deprecated_run_compressed_maps_to_dequantize(self):
         # `run_compressed=False` is deprecated and must behave as `dequantize=True`.
@@ -166,17 +174,10 @@ class DequantizeTest(unittest.TestCase):
         self.assertEqual(tokenizer.decode(output_default[0]), tokenizer.decode(output_dequantized[0]))
 
     def test_dequantize_drops_activation_quantization(self):
-        """`dequantize=True` loads a dense model: w8a8 also stops quantizing its activations, so its outputs differ
-        from the default (quantized activations) load."""
-        from transformers import AutoTokenizer
-
-        tokenizer = AutoTokenizer.from_pretrained(self.tinyllama_w8a8)
-        input_ids = tokenizer(self.prompt, return_tensors="pt").input_ids
+        """`dequantize=True` loads a plain dense model: no compressed-tensors scheme is left, so w8a8 also stops
+        quantizing its activations."""
         model = AutoModelForCausalLM.from_pretrained(
             self.tinyllama_w8a8, quantization_config=CompressedTensorsConfig(dequantize=True)
         )
-        output = model.generate(input_ids, max_new_tokens=20, do_sample=False)
-        self.assertEqual(
-            tokenizer.decode(output[0]),
-            "<s> Paris is the capital of which country?\n\n  * a) France\n  * b) Germany\n  * c) Italy\n",
-        )
+        self.assertFalse(any(hasattr(module, "quantization_scheme") for module in model.modules()))
+        self.assertTrue(model.model.layers[0].self_attn.q_proj.weight.is_floating_point())
