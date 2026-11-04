@@ -270,6 +270,14 @@ class PagedAttentionCache:
         # Helper attributes for the scheduler
         self.read_cache_limit = self._infer_read_cache_limit()
         self.max_decode_fast_path_length = self._infer_max_decode_fast_path_length()
+        # Layers caching rows other than keys and values (the latents of multi-head latent attention) rebuild their
+        # keys and values from every token a varlen batch reads, while the decode fast path reads them in place: for
+        # those, a single prefill in a batch of decodes costs a whole rebuild, so prefills get batches of their own
+        self.prefills_apart = self.max_decode_fast_path_length > 0 and any(
+            "key" not in allocator.rows  # type: ignore
+            for allocator in self.cache_allocators.values()
+            if not allocator.indexes_by_sequence
+        )
         # Helper attribute for the input/output classes
         self.max_tokens_read = max(ca.tokens_per_page * ca.num_blocks for ca in self.cache_allocators.values())
 
