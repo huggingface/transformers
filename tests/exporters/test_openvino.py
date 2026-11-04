@@ -15,7 +15,7 @@
 
 OpenVINO's CPU plugin only fuses the patterns it recognizes, and a graph that misses them still runs, just decomposed
 and slower. These tests check that the decode graph `export_for_generation` produces keeps the fused attention with its
-KV cache, RoPE and compressed-weight matmuls, on tiny models of each decoder family.
+KV cache, RoPE and compressed-weight matmuls, on the tiny models of each decoder family's own tests.
 """
 
 import collections
@@ -23,26 +23,15 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import (
-    GenerationConfig,
-    GraniteConfig,
-    GraniteForCausalLM,
-    LlamaConfig,
-    LlamaForCausalLM,
-    MixtralConfig,
-    MixtralForCausalLM,
-    Olmo2Config,
-    Olmo2ForCausalLM,
-    Phi3Config,
-    Phi3ForCausalLM,
-    Qwen2Config,
-    Qwen2ForCausalLM,
-    Qwen3Config,
-    Qwen3ForCausalLM,
-    Qwen3MoeConfig,
-    Qwen3MoeForCausalLM,
-    set_seed,
-)
+from tests.models.granite.test_modeling_granite import GraniteModelTester
+from tests.models.llama.test_modeling_llama import LlamaModelTester
+from tests.models.mixtral.test_modeling_mixtral import MixtralModelTester
+from tests.models.olmo2.test_modeling_olmo2 import Olmo2ModelTester
+from tests.models.phi3.test_modeling_phi3 import Phi3ModelTester
+from tests.models.qwen2.test_modeling_qwen2 import Qwen2ModelTester
+from tests.models.qwen3.test_modeling_qwen3 import Qwen3ModelTester
+from tests.models.qwen3_moe.test_modeling_qwen3_moe import Qwen3MoeModelTester
+from transformers import AutoModelForCausalLM, GenerationConfig, set_seed
 from transformers.exporters import OpenVINOConfig, OpenVINOExporter
 from transformers.testing_utils import require_nncf, require_openvino, require_torch, slow
 from transformers.utils import is_torch_available
@@ -52,40 +41,29 @@ if is_torch_available():
     import torch
 
 
-NUM_LAYERS = 2
-
 # The fused kernels the CPU plugin must compile each layer of a decode graph into. `MatMul` counts the matmuls left
 # decomposed (an unfused attention or expert), so it must stay at 0.
 DENSE_FUSIONS = {"ScaledDotProductAttention": 1, "RoPE": 2, "MatMul": 0}  # RoPE for the queries and the keys
 MOE_FUSIONS = {**DENSE_FUSIONS, "GatherMatmul": 3}  # gate, up and down, computing only the routed experts
 
-# model type: (config class, model class, fused kernels per layer)
+# model type: (the tester of its tiny model, fused kernels per layer)
 MODELS = {
-    "llama": (LlamaConfig, LlamaForCausalLM, DENSE_FUSIONS),
-    "qwen2": (Qwen2Config, Qwen2ForCausalLM, DENSE_FUSIONS),
-    "qwen3": (Qwen3Config, Qwen3ForCausalLM, DENSE_FUSIONS),
-    "phi3": (Phi3Config, Phi3ForCausalLM, DENSE_FUSIONS),
-    "olmo2": (Olmo2Config, Olmo2ForCausalLM, DENSE_FUSIONS),
-    "granite": (GraniteConfig, GraniteForCausalLM, DENSE_FUSIONS),
-    "mixtral": (MixtralConfig, MixtralForCausalLM, MOE_FUSIONS),
-    "qwen3_moe": (Qwen3MoeConfig, Qwen3MoeForCausalLM, MOE_FUSIONS),
+    "llama": (LlamaModelTester, DENSE_FUSIONS),
+    "qwen2": (Qwen2ModelTester, DENSE_FUSIONS),
+    "qwen3": (Qwen3ModelTester, DENSE_FUSIONS),
+    "phi3": (Phi3ModelTester, DENSE_FUSIONS),
+    "olmo2": (Olmo2ModelTester, DENSE_FUSIONS),
+    "granite": (GraniteModelTester, DENSE_FUSIONS),
+    "mixtral": (MixtralModelTester, MOE_FUSIONS),
+    "qwen3_moe": (Qwen3MoeModelTester, MOE_FUSIONS),
 }
 
 
 def _model(model_type, dtype=None):
-    """A tiny GQA decoder of `model_type`."""
-    config_class, model_class, _ = MODELS[model_type]
+    """The tiny causal LM the model's own tests use."""
     set_seed(0)
-    config = config_class(
-        vocab_size=128,
-        hidden_size=64,
-        intermediate_size=128,
-        num_hidden_layers=NUM_LAYERS,
-        num_attention_heads=4,
-        num_key_value_heads=2,
-        pad_token_id=0,  # inside the tiny vocabulary (Phi-3's default, 32000, isn't)
-    )
-    return model_class(config).to(dtype or torch.float32).eval()
+    config = MODELS[model_type][0](parent=None).get_config()
+    return AutoModelForCausalLM.from_config(config).to(dtype or torch.float32).eval()
 
 
 def _decode(model, multi_token_decode=True, quantizer=None):
@@ -116,7 +94,8 @@ def _compiled_ops(ov_model):
 @require_torch
 @require_openvino
 class OpenVINOFusionTest(unittest.TestCase):
-    def assert_decode_fused(self, decode, fusions):
+    def assert_decode_fused(self, model, decode, fusions):
+        num_layers = model.config.num_hidden_layers
         # The cache update feeds its state as is: anything between them keeps the plugin from fusing the cache into
         # its attention.
         assign_sources = [
@@ -124,20 +103,23 @@ class OpenVINOFusionTest(unittest.TestCase):
             for op in decode.get_ordered_ops()
             if op.get_type_name() == "Assign"
         ]
-        self.assertEqual(assign_sources, ["Concat"] * 2 * NUM_LAYERS)
+        self.assertEqual(assign_sources, ["Concat"] * 2 * num_layers)
         layers = collections.Counter(layer for layer, _ in _compiled_ops(decode))
-        self.assertEqual({op: layers[op] for op in fusions}, {op: n * NUM_LAYERS for op, n in fusions.items()})
+        self.assertEqual({op: layers[op] for op in fusions}, {op: n * num_layers for op, n in fusions.items()})
 
     # bf16, as checkpoints ship: MoE experts only fuse with 16-bit weights
     @parameterized.expand(list(MODELS))
     def test_decode_fuses(self, model_type):
-        self.assert_decode_fused(_decode(_model(model_type, torch.bfloat16)), MODELS[model_type][2])
+        model = _model(model_type, torch.bfloat16)
+        self.assert_decode_fused(model, _decode(model), MODELS[model_type][1])
 
     def test_float32_decode_fuses(self):
-        self.assert_decode_fused(_decode(_model("llama")), DENSE_FUSIONS)
+        model = _model("llama")
+        self.assert_decode_fused(model, _decode(model), DENSE_FUSIONS)
 
     def test_single_token_decode_fuses(self):
-        self.assert_decode_fused(_decode(_model("llama", torch.bfloat16), multi_token_decode=False), DENSE_FUSIONS)
+        model = _model("llama", torch.bfloat16)
+        self.assert_decode_fused(model, _decode(model, multi_token_decode=False), DENSE_FUSIONS)
 
     def test_16bit_model_exports_float32_graph_with_16bit_weights(self):
         import openvino
@@ -151,7 +133,7 @@ class OpenVINOFusionTest(unittest.TestCase):
             for op in decode.get_ordered_ops()
             if op.get_type_name() == "Constant"
             and len(op.get_output_shape(0)) == 2
-            and op.get_output_shape(0)[1] == 64
+            and op.get_output_shape(0)[1] == model.config.hidden_size
         ]
         self.assertTrue(weights)
         self.assertTrue(all(op.get_element_type() == openvino.Type.bf16 for op in weights))
@@ -164,9 +146,10 @@ class OpenVINOFusionTest(unittest.TestCase):
         from transformers.exporters import NNCFOpenVINOQuantizer, NNCFWeightCompressionConfig
 
         quantizer = NNCFOpenVINOQuantizer(NNCFWeightCompressionConfig(mode=nncf.CompressWeightsMode.INT8_ASYM))
-        decode = _decode(_model("llama", torch.bfloat16), quantizer=quantizer)
+        model = _model("llama", torch.bfloat16)
+        decode = _decode(model, quantizer=quantizer)
         precisions = collections.Counter(
             precision for layer, precision in _compiled_ops(decode) if layer == "FullyConnected"
         )
         # q, k, v, o, gate, up and down per layer read u8 weights in the fused matmul instead of decompressing them
-        self.assertGreaterEqual(precisions["u8"], 7 * NUM_LAYERS)
+        self.assertGreaterEqual(precisions["u8"], 7 * model.config.num_hidden_layers)
