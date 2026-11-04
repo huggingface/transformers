@@ -123,12 +123,16 @@ class Kolibri1IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         EXPECTED_MEAN = Expectations(
             {
                 ("cuda", None): torch.tensor([[-3.6648, -4.0749, -3.8838, -4.3631, -3.9150]]),
+                ("rocm", (9, 4)): torch.tensor([[-3.6640, -4.0664, -3.6125, -4.4985, -4.4048]]),
             }
         ).get_expectation()
         EXPECTED_SLICE = Expectations(
             {
                 ("cuda", None): torch.tensor(
                     [-2.0000, -7.0938, -8.3750, -9.5000, -8.6875, -8.6875, -8.9375, -7.9062, -4.7188, 1.8594]
+                ),
+                ("rocm", (9, 4)): torch.tensor(
+                    [-2.0000, -7.0625, -8.3125, -9.5000, -8.6875, -8.6250, -8.8750, -7.8750, -4.6875, 1.8516]
                 ),
             }
         ).get_expectation()

@@ -22,7 +22,6 @@ if TYPE_CHECKING:
     from ..utils.quantization_config import FPQuantConfig
 
 from ..utils import is_fp_quant_available, is_qutlass_available, is_torch_available, is_torch_xpu_available, logging
-from ..utils.quantization_config import QuantizationConfigMixin
 
 
 if is_torch_available():
@@ -39,9 +38,6 @@ class FPQuantHfQuantizer(HfQuantizer):
     requires_calibration = False
     is_qat_trainable = True
     quantization_config: "FPQuantConfig"
-
-    def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
-        super().__init__(quantization_config, **kwargs)
 
     def validate_environment(self, device_map, **kwargs):
         if not torch.cuda.is_available() and not is_torch_xpu_available():
@@ -140,25 +136,12 @@ class FPQuantHfQuantizer(HfQuantizer):
 
         return FpQuantQuantize(self)
 
-    def get_weight_conversions(self):
-        from ..core_model_loading import WeightConverter
+    @property
+    def serialized_names(self):
+        name = ".dqweight" if self.quantization_config.pseudoquantization else ".qweight"
+        return {name: [name]}
+
+    def get_load_operations(self):
         from ..integrations.fp_quant import FpQuantDeserialize
 
-        if self.pre_quantized:
-            if self.quantization_config.pseudoquantization:
-                return [
-                    WeightConverter(
-                        source_patterns=[".dqweight"],
-                        target_patterns=".dqweight",
-                        operations=[FpQuantDeserialize(self)],
-                    ),
-                ]
-            else:
-                return [
-                    WeightConverter(
-                        source_patterns=[".qweight"],
-                        target_patterns=".qweight",
-                        operations=[FpQuantDeserialize(self)],
-                    ),
-                ]
-        return []
+        return {"deserialize": FpQuantDeserialize}

@@ -190,7 +190,7 @@ class PeAudioContrastiveHead(nn.Module):
         self.layer_norm = nn.LayerNorm(normalized_shape=in_dim, eps=1e-6)
         self.proj = nn.Linear(in_dim, out_dim, bias=False)
 
-    def forward(self, x: torch.Tensor) -> torch.FloatTensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.proj(self.layer_norm(x))
 
 
@@ -539,16 +539,16 @@ class PeAudioPreTrainedModel(PreTrainedModel):
 @dataclass
 class PeAudioEncoderOutput(BaseModelOutputWithPooling):
     r"""
-    codec_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+    codec_features (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
         Features extracted from the codec encoder, used as intermediate representations before the main encoder
         processing.
-    output_mask (`tuple(torch.FloatTensor)`, *optional*):
-        Tuple of `torch.FloatTensor` masks corresponding to the encoder outputs, used to avoid performing attention
+    output_mask (`tuple(torch.Tensor)`, *optional*):
+        Tuple of `torch.Tensor` masks corresponding to the encoder outputs, used to avoid performing attention
         on padded regions.
     """
 
-    codec_features: torch.FloatTensor | None = None
-    output_mask: tuple[torch.FloatTensor] | None = None
+    codec_features: torch.Tensor | None = None
+    output_mask: tuple[torch.Tensor] | None = None
 
 
 class PeAudioEncoderRotaryEmbedding(nn.Module):
@@ -679,14 +679,14 @@ class PeAudioEncoder(PeAudioPreTrainedModel):
 @dataclass
 class PeAudioOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*):
         Contrastive loss computed between audio and text representations.
-    logits_audio_text (`torch.FloatTensor` of shape `(batch_size, batch_size)`, *optional*):
+    logits_audio_text (`torch.Tensor` of shape `(batch_size, batch_size)`, *optional*):
         Similarity logits between audio and text embeddings. [`PeAudioFrameLevelModel`] returns per-frame logits of
         shape `(batch_size, batch_size, sequence_length)` instead.
-    text_audio_embeds (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*):
+    text_audio_embeds (`torch.Tensor` of shape `(batch_size, hidden_size)`, *optional*):
         Text embeddings projected to the audio-text space.
-    audio_embeds (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*):
+    audio_embeds (`torch.Tensor` of shape `(batch_size, hidden_size)`, *optional*):
         Audio embeddings projected to the audio-text space. [`PeAudioFrameLevelModel`] returns per-frame embeddings of
         shape `(batch_size, sequence_length, hidden_size)` instead.
     text_outputs (`BaseModelOutputWithPooling`, *optional*):
@@ -695,10 +695,10 @@ class PeAudioOutput(ModelOutput):
         Model outputs for the audio encoder, including last hidden state and pooled output.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits_audio_text: torch.FloatTensor | None = None
-    text_audio_embeds: torch.FloatTensor | None = None
-    audio_embeds: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits_audio_text: torch.Tensor | None = None
+    text_audio_embeds: torch.Tensor | None = None
+    audio_embeds: torch.Tensor | None = None
     text_outputs: BaseModelOutputWithPooling = None
     audio_outputs: BaseModelOutputWithPooling = None
 

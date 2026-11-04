@@ -230,9 +230,9 @@ class BarkConfig(PreTrainedConfig):
 
     model_type = "bark"
     sub_configs_defaults = {
-        "semantic_config": SubConfigSpec(config_class=BarkSemanticConfig),
-        "coarse_acoustics_config": SubConfigSpec(config_class=BarkCoarseConfig),
-        "fine_acoustics_config": SubConfigSpec(config_class=BarkFineConfig),
+        "semantic_config": BarkSemanticConfig,
+        "coarse_acoustics_config": BarkCoarseConfig,
+        "fine_acoustics_config": BarkFineConfig,
         "codec_config": SubConfigSpec(config_class=AutoConfig, model_type="encodec"),
     }
 
