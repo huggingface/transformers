@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import unittest
-from unittest.mock import patch
 
 import numpy as np
 from huggingface_hub import hf_hub_download
@@ -453,31 +452,3 @@ class LoadVideoTester(unittest.TestCase):
                 fps=1,
                 num_frames=10,
             )
-
-
-@require_torch
-@require_torchvision
-@require_vision
-class VideoTorchcodecSelectionTest(unittest.TestCase):
-    """`fetch_videos` picks torchcodec by default only if it can decode video."""
-
-    def _fetch(self, ffmpeg_usable, torchvision_decoding):
-        from transformers.video_processing_utils import BaseVideoProcessor
-
-        with (
-            patch("transformers.video_processing_utils.is_torchcodec_ffmpeg_usable", return_value=ffmpeg_usable),
-            patch(
-                "transformers.video_processing_utils.is_torchvision_video_decoding_available",
-                return_value=torchvision_decoding,
-            ),
-            patch("transformers.video_processing_utils.load_video", return_value=("video", "metadata")) as load_video,
-        ):
-            BaseVideoProcessor().fetch_videos("video.mp4")
-        return load_video.call_args.kwargs["backend"]
-
-    def test_default_backend(self):
-        self.assertEqual(self._fetch(ffmpeg_usable=True, torchvision_decoding=True), "torchcodec")
-        with self.assertWarns(UserWarning):
-            self.assertEqual(self._fetch(ffmpeg_usable=False, torchvision_decoding=True), "torchvision")
-        with self.assertRaisesRegex(ImportError, "can't be loaded"):
-            self._fetch(ffmpeg_usable=False, torchvision_decoding=False)

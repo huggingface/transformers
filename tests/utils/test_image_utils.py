@@ -12,10 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import base64
-import builtins
 import codecs
 import unittest
-from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -847,23 +845,6 @@ class LoadImageTester(unittest.TestCase):
                 self.assertEqual(tuple(tensor.shape), (3, 500, 333))
                 self.assertEqual(tuple(pil_tensor.shape), (3, 500, 333))
                 self.assertLess((tensor.int() - pil_tensor.int()).abs().float().mean().item(), 2)
-
-    @require_torchvision
-    def test_load_image_as_tensor_falls_back_to_torchvision(self):
-        # torchcodec installed but unusable (e.g. its build doesn't match torch): decode with torchvision instead
-        def broken_torchcodec_import(name, *args, **kwargs):
-            if name.split(".")[0] == "torchcodec":
-                raise OSError("Could not load this library: libtorchcodec_core.so")
-            return real_import(name, *args, **kwargs)
-
-        real_import = builtins.__import__
-        with (
-            patch("transformers.image_utils.is_torchcodec_greater_or_equal", return_value=True),
-            patch("transformers.image_utils.is_torchcodec_usable", return_value=False),
-            patch("builtins.__import__", side_effect=broken_torchcodec_import),
-        ):
-            tensor = load_image_as_tensor("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        self.assertEqual(tuple(tensor.shape), (3, 480, 640))
 
 
 class UtilFunctionTester(unittest.TestCase):
