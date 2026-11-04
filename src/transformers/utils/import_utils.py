@@ -1202,10 +1202,8 @@ def is_torchcodec_available() -> bool:
 @_make_compile_constant
 def is_torchcodec_usable() -> bool:
     """
-    Whether torchcodec is installed *and* loads: its native libraries are built for a specific torch version that pip
-    doesn't enforce. Use it where transformers picks torchcodec on its own, to fall back instead of failing; where the
-    user explicitly asks for torchcodec, let it raise its own error. Enough for image decoding: audio and video also
-    need FFmpeg, see `is_torchcodec_ffmpeg_usable`.
+    Whether torchcodec is installed *and* loads (its native libraries must match the installed torch, which pip doesn't
+    enforce). Enough for image decoding; audio and video also need FFmpeg, see `is_torchcodec_ffmpeg_usable`.
     """
     if not is_torchcodec_available():
         return False
