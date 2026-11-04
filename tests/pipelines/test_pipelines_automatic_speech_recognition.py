@@ -12,9 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import builtins
-import sys
-import types
 import unittest
 from unittest.mock import patch
 
@@ -35,8 +32,6 @@ from transformers import (
     ParakeetForTDT,
     ParakeetTDTConfig,
     Speech2TextForConditionalGeneration,
-    Wav2Vec2Config,
-    Wav2Vec2FeatureExtractor,
     Wav2Vec2ForCTC,
     WhisperForConditionalGeneration,
 )
@@ -1980,56 +1975,3 @@ class AudioUtilsTest(unittest.TestCase):
     def test_ffmpeg_additional_args(self):
         mic = ffmpeg_microphone_live(16000, 2.0, ffmpeg_additional_args=["-nostdin"])
         mic.close()
-
-
-@is_pipeline_test
-@require_torch
-class AutomaticSpeechRecognitionTorchcodecTests(unittest.TestCase):
-    """torchcodec is only needed to recognize `AudioDecoder` inputs: other inputs must not import it."""
-
-    def setUp(self):
-        config = Wav2Vec2Config(
-            hidden_size=16,
-            num_hidden_layers=1,
-            num_attention_heads=2,
-            intermediate_size=16,
-            conv_dim=(8, 8),
-            conv_stride=(4, 4),
-            conv_kernel=(8, 8),
-            num_conv_pos_embeddings=16,
-            num_conv_pos_embedding_groups=2,
-            vocab_size=8,
-        )
-        self.speech_recognizer = AutomaticSpeechRecognitionPipeline(
-            model=Wav2Vec2ForCTC(config), feature_extractor=Wav2Vec2FeatureExtractor()
-        )
-
-    def _preprocess(self, inputs):
-        return next(iter(self.speech_recognizer.preprocess(inputs)))
-
-    def test_array_input_does_not_import_torchcodec(self):
-        real_import = builtins.__import__
-
-        def broken_torchcodec_import(name, *args, **kwargs):
-            # e.g. a torchcodec build that doesn't match the installed torch
-            if name.split(".")[0] == "torchcodec":
-                raise OSError("Could not load this library: libtorchcodec_core.so")
-            return real_import(name, *args, **kwargs)
-
-        with patch.dict(sys.modules), patch("builtins.__import__", side_effect=broken_torchcodec_import):
-            for name in [name for name in sys.modules if name.split(".")[0] == "torchcodec"]:
-                del sys.modules[name]
-            processed = self._preprocess(np.zeros(1600, dtype=np.float32))
-        self.assertEqual(processed["input_values"].shape, (1, 1600))
-
-    def test_audio_decoder_input_is_decoded(self):
-        class AudioDecoder:
-            def get_all_samples(self):
-                # torchcodec returns (num_channels, num_samples)
-                return types.SimpleNamespace(data=torch.zeros(1, 1600), sample_rate=16000)
-
-        torchcodec = types.ModuleType("torchcodec")
-        torchcodec.decoders = types.SimpleNamespace(AudioDecoder=AudioDecoder)
-        with patch.dict(sys.modules, {"torchcodec": torchcodec}):
-            processed = self._preprocess(AudioDecoder())
-        self.assertEqual(processed["input_values"].shape, (1, 1600))

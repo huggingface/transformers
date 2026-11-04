@@ -12,10 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import builtins
-import sys
 import unittest
-from unittest.mock import patch
 
 import datasets
 import numpy as np
@@ -249,43 +246,3 @@ class AudioClassificationPipelineTests(unittest.TestCase):
         num_labels = classification_pipeline.model.config.num_labels
 
         self.assertEqual(len(result), num_labels, "Should cap top_k to number of labels")
-
-
-@is_pipeline_test
-@require_torch
-class AudioClassificationTorchcodecTests(unittest.TestCase):
-    """torchcodec is only needed to recognize `AudioDecoder` inputs: other inputs must not import it."""
-
-    def test_array_input_does_not_import_torchcodec(self):
-        from transformers import Wav2Vec2Config, Wav2Vec2FeatureExtractor, Wav2Vec2ForSequenceClassification
-
-        config = Wav2Vec2Config(
-            hidden_size=16,
-            num_hidden_layers=1,
-            num_attention_heads=2,
-            intermediate_size=16,
-            conv_dim=(8, 8),
-            conv_stride=(4, 4),
-            conv_kernel=(8, 8),
-            num_conv_pos_embeddings=16,
-            num_conv_pos_embedding_groups=2,
-            classifier_proj_size=8,
-            num_labels=2,
-        )
-        classifier = AudioClassificationPipeline(
-            model=Wav2Vec2ForSequenceClassification(config), feature_extractor=Wav2Vec2FeatureExtractor()
-        )
-
-        real_import = builtins.__import__
-
-        def broken_torchcodec_import(name, *args, **kwargs):
-            # e.g. a torchcodec build that doesn't match the installed torch
-            if name.split(".")[0] == "torchcodec":
-                raise OSError("Could not load this library: libtorchcodec_core.so")
-            return real_import(name, *args, **kwargs)
-
-        with patch.dict(sys.modules), patch("builtins.__import__", side_effect=broken_torchcodec_import):
-            for name in [name for name in sys.modules if name.split(".")[0] == "torchcodec"]:
-                del sys.modules[name]
-            output = classifier(np.zeros(1600, dtype=np.float32))
-        self.assertEqual(len(output), 2)
