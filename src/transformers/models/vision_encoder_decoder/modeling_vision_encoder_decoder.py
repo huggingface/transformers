@@ -22,7 +22,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, can_return_tuple, logging
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel, AutoModelForCausalLM
 from .configuration_vision_encoder_decoder import VisionEncoderDecoderConfig
@@ -298,6 +298,7 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         config.tie_word_embeddings = False
         return cls(encoder=encoder, decoder=decoder, config=config)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -309,11 +310,8 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor] | Seq2SeqLMOutput:
+    ) -> tuple | Seq2SeqLMOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -372,13 +370,17 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         >>> generated_ids = model.generate(pixel_values)
         >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        # `record outputs` can rely on the absence of the kwarg to retrieve whether the config should be used or not
+        # Hence, we use this workaround to allow for defaults to work as expected
+        kwargs_shared = {key: kwargs[key] for key in ["output_attentions", "output_hidden_states"] if key in kwargs}
 
         kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}
+        kwargs_encoder = kwargs_encoder | kwargs_shared
 
         kwargs_decoder = {
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
+        kwargs_decoder = kwargs_decoder | kwargs_shared
 
         if encoder_outputs is None:
             if pixel_values is None:
@@ -386,9 +388,7 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
 
             encoder_outputs = self.encoder(
                 pixel_values=pixel_values,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                return_dict=True,
                 **kwargs_encoder,
             )
         elif isinstance(encoder_outputs, tuple):
@@ -418,27 +418,19 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             inputs_embeds=decoder_inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             use_cache=use_cache,
             past_key_values=past_key_values,
-            return_dict=return_dict,
+            return_dict=True,
             **kwargs_decoder,
         )
 
         # Compute loss independent from decoder (as some shift the logits inside them)
         loss = None
         if labels is not None:
-            logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
+            logits = decoder_outputs.logits
 
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.reshape(-1, self.decoder.config.vocab_size), labels.reshape(-1))
-
-        if not return_dict:
-            if loss is not None:
-                return (loss,) + decoder_outputs + encoder_outputs
-            else:
-                return decoder_outputs + encoder_outputs
 
         return Seq2SeqLMOutput(
             loss=loss,
