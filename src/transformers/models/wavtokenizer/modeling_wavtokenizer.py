@@ -38,7 +38,7 @@ logger = logging.get_logger(__name__)
 @dataclass
 class WavTokenizerOutput(ModelOutput):
     r"""
-    audio_values (`torch.FloatTensor` of shape `(batch_size, 1, sequence_length)`, *optional*):
+    audio_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`, *optional*):
         Decoded audio waveform values in the time domain, obtained using the decoder part of WavTokenizer.
     audio_codes (`torch.LongTensor` of shape `(batch_size, 1, codes_length)`, *optional*):
         Discrete code indices computed using `model.encode`.
@@ -46,7 +46,7 @@ class WavTokenizerOutput(ModelOutput):
         Downsampled `padding_mask` indicating valid audio codes in `audio_codes`.
     """
 
-    audio_values: torch.FloatTensor | None = None
+    audio_values: torch.Tensor | None = None
     audio_codes: torch.LongTensor | None = None
     audio_codes_mask: torch.Tensor | None = None
 
@@ -70,11 +70,11 @@ class WavTokenizerEncoderOutput(ModelOutput):
 @dataclass
 class WavTokenizerDecoderOutput(ModelOutput):
     r"""
-    audio_values (`torch.FloatTensor` of shape `(batch_size, 1, sequence_length)`, *optional*):
+    audio_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`, *optional*):
         Decoded audio waveform values in the time domain (`codes_length * hop_length` samples).
     """
 
-    audio_values: torch.FloatTensor | None = None
+    audio_values: torch.Tensor | None = None
 
 
 class WavTokenizerConv1d(nn.Module):

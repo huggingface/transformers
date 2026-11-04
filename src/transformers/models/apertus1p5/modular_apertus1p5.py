@@ -374,14 +374,14 @@ class Apertus1p5VisionTokenizerEncoderOutput(ModelOutput):
 @dataclass
 class Apertus1p5VisionTokenizerModelOutput(BaseModelOutputWithPooling):
     r"""
-    pooler_output (`tuple[torch.FloatTensor]`):
+    pooler_output (`tuple[torch.Tensor]`):
         One `(num_codes, hidden_size)` tensor of embedded image codes per input image.
     image_tokens (`list[torch.LongTensor]`):
         One grid of discrete codebook indices per input image, of shape `(height // factor, width // factor)`
         where `factor` is `config.spatial_scale_factor` (16 by default).
     """
 
-    pooler_output: tuple[torch.FloatTensor] | None = None
+    pooler_output: tuple[torch.Tensor] | None = None
     image_tokens: list[torch.LongTensor] | None = None
 
 
@@ -389,13 +389,13 @@ class Apertus1p5VisionTokenizerModelOutput(BaseModelOutputWithPooling):
 @dataclass
 class Apertus1p5AudioTokenizerModelOutput(BaseModelOutputWithPooling):
     r"""
-    pooler_output (`tuple[torch.FloatTensor]`):
+    pooler_output (`tuple[torch.Tensor]`):
         One `(num_codes, hidden_size)` tensor of embedded audio codes per input clip.
     audio_tokens (`list[torch.LongTensor]`):
         One 1D tensor of `ceil(length / hop)` discrete codebook indices per input clip.
     """
 
-    pooler_output: tuple[torch.FloatTensor] | None = None
+    pooler_output: tuple[torch.Tensor] | None = None
     audio_tokens: list[torch.LongTensor] | None = None
 
 
@@ -613,7 +613,7 @@ class Apertus1p5TextForCausalLM(ApertusForCausalLM):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -625,7 +625,7 @@ class Apertus1p5TextForCausalLM(ApertusForCausalLM):
             With a pruned head, mask multimodal/input-only ids with `-100`.
 
         Returns:
-            [`~modeling_outputs.CausalLMOutputWithPast`] or `tuple(torch.FloatTensor)`:
+            [`~modeling_outputs.CausalLMOutputWithPast`] or `tuple(torch.Tensor)`:
                 Logits use the physical LM-head width (`config.output_vocab_size` when set, otherwise
                 `config.vocab_size`), with or without `labels`.
         """
@@ -669,7 +669,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         self.audio_tokenizer = AutoModel.from_config(config.audio_config)
         self.post_init()
 
-    def _encode_images(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor) -> list[torch.LongTensor]:
+    def _encode_images(self, pixel_values: torch.Tensor, image_sizes: torch.LongTensor) -> list[torch.LongTensor]:
         """Crop batch padding and retain the raw code grid from each individually encoded image."""
         image_tokens = []
         for image, size in zip(pixel_values, image_sizes):
@@ -677,12 +677,12 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
             image_tokens.append(self.vision_tokenizer.encode(image).image_tokens[0])
         return image_tokens
 
-    def get_image_tokens(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor) -> torch.LongTensor:
+    def get_image_tokens(self, pixel_values: torch.Tensor, image_sizes: torch.LongTensor) -> torch.LongTensor:
         """
         Tokenizes each unpadded image and returns flattened shared-vocabulary ids.
 
         Args:
-            pixel_values (`torch.FloatTensor` of shape `(num_images, num_channels, height, width)`):
+            pixel_values (`torch.Tensor` of shape `(num_images, num_channels, height, width)`):
                 The tensors corresponding to the input images, padded to a common size.
             image_sizes (`torch.LongTensor` of shape `(num_images, 2)`):
                 The true size of each image, being (height, width).
@@ -697,12 +697,12 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
     @auto_docstring(custom_intro="Tokenizes images and embeds their discrete codes with the text embedding layer.")
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_sizes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Apertus1p5VisionTokenizerModelOutput:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(num_images, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(num_images, num_channels, height, width)`):
             The tensors corresponding to the input images, padded to a common size.
         image_sizes (`torch.LongTensor` of shape `(num_images, 2)`):
             The true size of each image, being (height, width).
@@ -713,14 +713,12 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
         image_features = torch.split(image_embeddings, [codes.numel() for codes in image_tokens])
         return Apertus1p5VisionTokenizerModelOutput(image_tokens=image_tokens, pooler_output=image_features)
 
-    def get_audio_tokens(
-        self, input_features: torch.FloatTensor, feature_attention_mask: torch.Tensor
-    ) -> torch.LongTensor:
+    def get_audio_tokens(self, input_features: torch.Tensor, feature_attention_mask: torch.Tensor) -> torch.LongTensor:
         """
         Tokenizes each unpadded audio clip and returns flattened shared-vocabulary ids.
 
         Args:
-            input_features (`torch.FloatTensor` of shape `(num_clips, 1, max_length)`):
+            input_features (`torch.Tensor` of shape `(num_clips, 1, max_length)`):
                 Mono 24 kHz waveforms, padded to a common length.
             feature_attention_mask (`torch.Tensor` of shape `(num_clips, max_length)`):
                 Mask with 1 for valid samples and 0 for padding, as returned by the feature extractor.
@@ -755,12 +753,12 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
     @auto_docstring(custom_intro="Tokenizes audio and embeds its discrete codes with the text embedding layer.")
     def get_audio_features(
         self,
-        input_features: torch.FloatTensor,
+        input_features: torch.Tensor,
         feature_attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Apertus1p5AudioTokenizerModelOutput:
         r"""
-        input_features (`torch.FloatTensor` of shape `(num_clips, 1, max_length)`):
+        input_features (`torch.Tensor` of shape `(num_clips, 1, max_length)`):
             Mono 24 kHz waveforms, padded to a common length.
         feature_attention_mask (`torch.Tensor` of shape `(num_clips, max_length)`):
             Mask with 1 for valid samples and 0 for padding, as returned by the feature extractor.
@@ -775,9 +773,9 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor,
-        inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor | None = None,
-        audio_features: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor,
+        image_features: torch.Tensor | None = None,
+        audio_features: torch.Tensor | None = None,
     ):
         """Build placeholder masks and verify that their lengths match the supplied media features."""
         if input_ids is None:
@@ -818,30 +816,30 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         image_sizes: torch.Tensor | None = None,
-        input_features: torch.FloatTensor | None = None,
+        input_features: torch.Tensor | None = None,
         feature_attention_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(num_images, num_channels, max_height, max_width)`, *optional*):
+        pixel_values (`torch.Tensor` of shape `(num_images, num_channels, max_height, max_width)`, *optional*):
             Processor-produced RGB image tensors, normalized to `[-1, 1]` and padded. Requires `image_sizes`;
             rows must follow expanded image-placeholder order.
         image_sizes (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
             True `(height, width)` per image, required with `pixel_values` to remove batch padding.
-        input_features (`torch.FloatTensor` of shape `(num_clips, 1, max_length)`, *optional*):
+        input_features (`torch.Tensor` of shape `(num_clips, 1, max_length)`, *optional*):
             Processor-produced mono 24 kHz waveforms, peak-normalized and padded. Requires
             `feature_attention_mask`; rows must follow expanded audio-placeholder order.
         feature_attention_mask (`torch.Tensor` of shape `(num_clips, max_length)`, *optional*):
             Right-padded mask with 1 for valid samples and 0 for padding, required with `input_features`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Input embeddings instead of `input_ids`. With modality inputs, placeholder positions must contain
             their exact token embeddings so the model can detect them.
         mm_encoder_outputs (`dict[str, BaseModelOutputWithPooling]`, *optional*):
@@ -914,12 +912,12 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_sizes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Apertus1p5VisionTokenizerModelOutput:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(num_images, num_channels, height, width)`):
+        pixel_values (`torch.Tensor` of shape `(num_images, num_channels, height, width)`):
             The tensors corresponding to the input images, padded to a common size.
         image_sizes (`torch.LongTensor` of shape `(num_images, 2)`):
             The true size of each image, being (height, width).
@@ -929,12 +927,12 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
     @auto_docstring
     def get_audio_features(
         self,
-        input_features: torch.FloatTensor,
+        input_features: torch.Tensor,
         feature_attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Apertus1p5AudioTokenizerModelOutput:
         r"""
-        input_features (`torch.FloatTensor` of shape `(num_clips, 1, max_length)`):
+        input_features (`torch.Tensor` of shape `(num_clips, 1, max_length)`):
             Mono 24 kHz waveforms, padded to a common length.
         feature_attention_mask (`torch.Tensor` of shape `(num_clips, max_length)`):
             Mask with 1 for valid samples and 0 for padding, as returned by the feature extractor.
@@ -946,14 +944,14 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         image_sizes: torch.Tensor | None = None,
-        input_features: torch.FloatTensor | None = None,
+        input_features: torch.Tensor | None = None,
         feature_attention_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         labels: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -961,15 +959,15 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(num_images, num_channels, max_height, max_width)`, *optional*):
+        pixel_values (`torch.Tensor` of shape `(num_images, num_channels, max_height, max_width)`, *optional*):
             Padded RGB images in `[-1, 1]`, in image-placeholder order. Requires `image_sizes`.
         image_sizes (`torch.LongTensor` of shape `(num_images, 2)`, *optional*):
             Unpadded `(height, width)` per image, required with `pixel_values`.
-        input_features (`torch.FloatTensor` of shape `(num_clips, 1, max_length)`, *optional*):
+        input_features (`torch.Tensor` of shape `(num_clips, 1, max_length)`, *optional*):
             Padded, peak-normalized mono 24 kHz waveforms in audio-placeholder order. Requires `feature_attention_mask`.
         feature_attention_mask (`torch.Tensor` of shape `(num_clips, max_length)`, *optional*):
             Audio sample mask: 1 for valid samples, 0 for right padding. Required with `input_features`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Embeddings instead of `input_ids`. With media inputs, placeholders must retain their exact token embeddings.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Next-token labels in `[0, output_vocab_size)` (or `[0, text_config.vocab_size)` when unset).
@@ -980,7 +978,7 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
             and `image_sizes`; audio still uses `input_features` and `feature_attention_mask`.
 
         Returns:
-            [`~modeling_outputs.CausalLMOutputWithPast`] or `tuple(torch.FloatTensor)`:
+            [`~modeling_outputs.CausalLMOutputWithPast`] or `tuple(torch.Tensor)`:
                 Logits have width `text_config.output_vocab_size`, or `text_config.vocab_size` when unset,
                 with or without `labels`.
         """
