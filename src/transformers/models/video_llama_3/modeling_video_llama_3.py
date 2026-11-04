@@ -535,8 +535,6 @@ class VideoLlama3ModelOutputWithPast(ModelOutput):
 @auto_docstring
 class VideoLlama3Model(VideoLlama3PreTrainedModel):
     base_model_prefix = "model"
-    # Reference: fix gemma3 grad acc #37208
-    accepts_loss_kwargs = False
     _can_compile_fullgraph = False
 
     def __init__(self, config: VideoLlama3Config):

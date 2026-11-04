@@ -25,7 +25,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, DynamicLayer, StaticLayer
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import TorchvisionBackend
-from ...loss.loss_utils import aux_loss_share
+from ...loss.loss_utils import load_balancing_loss_func
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
@@ -57,7 +57,7 @@ from ..minimax_m2.modeling_minimax_m2 import (
     MiniMaxM2TopKRouter,
     apply_rotary_pos_emb,
 )
-from ..mixtral.modeling_mixtral import MixtralDecoderLayer, load_balancing_loss_func
+from ..mixtral.modeling_mixtral import MixtralDecoderLayer
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VisionPatchEmbed, Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor, Qwen2VLProcessorKwargs
@@ -1179,12 +1179,6 @@ class MiniMaxM3SparseForConditionalGeneration(LlavaForConditionalGeneration):
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
 
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
-            )
-
         aux_loss = None
         if output_router_logits:
             aux_loss = load_balancing_loss_func(
@@ -1193,10 +1187,17 @@ class MiniMaxM3SparseForConditionalGeneration(LlavaForConditionalGeneration):
                 self.config.text_config.num_experts_per_tok,
                 attention_mask,
             )
-            if labels is not None:
-                loss += self.config.text_config.router_aux_loss_coef * aux_loss_share(aux_loss, labels, **kwargs).to(
-                    loss.device
-                )
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.text_config.vocab_size,
+                aux_loss=aux_loss,
+                aux_loss_coef=self.config.text_config.router_aux_loss_coef,
+                **kwargs,
+            )
 
         return MiniMaxM3VLCausalLMOutputWithPast(
             loss=loss,

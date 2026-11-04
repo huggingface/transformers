@@ -32,7 +32,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationMixin
 from ...image_utils import ImageInput
-from ...loss.loss_utils import aux_loss_share
+from ...loss.loss_utils import load_balancing_loss_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -95,7 +95,6 @@ from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoePreTrainedModel,
     Qwen3MoeSparseMoeBlock,
     Qwen3MoeTopKRouter,
-    load_balancing_loss_func,
 )
 from ..qwen3_vl_moe.configuration_qwen3_vl_moe import Qwen3VLMoeVisionConfig
 from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
@@ -1443,12 +1442,6 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
 
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.get_text_config().vocab_size, **kwargs
-            )
-
         aux_loss = None
         if output_router_logits:
             aux_loss = load_balancing_loss_func(
@@ -1457,8 +1450,17 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
                 self.num_experts_per_tok,
                 attention_mask,
             )
-            if labels is not None:
-                loss += self.router_aux_loss_coef * aux_loss_share(aux_loss, labels, **kwargs).to(loss.device)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.get_text_config().vocab_size,
+                aux_loss=aux_loss,
+                aux_loss_coef=self.router_aux_loss_coef,
+                **kwargs,
+            )
 
         return Qwen3OmniMoeThinkerCausalLMOutputWithPast(
             loss=loss,
@@ -1951,10 +1953,6 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
         hidden_states = outputs.last_hidden_state
         logits = self.codec_head(hidden_states)
 
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-
         aux_loss = None
         if output_router_logits:
             aux_loss = load_balancing_loss_func(
@@ -1963,8 +1961,17 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
                 self.num_experts_per_tok,
                 attention_mask,
             )
-            if labels is not None:
-                loss += self.router_aux_loss_coef * aux_loss_share(aux_loss, labels, **kwargs).to(loss.device)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.vocab_size,
+                aux_loss=aux_loss,
+                aux_loss_coef=self.router_aux_loss_coef,
+                **kwargs,
+            )
 
         return Qwen3OmniMoeTalkerOutputWithPast(
             loss=loss,

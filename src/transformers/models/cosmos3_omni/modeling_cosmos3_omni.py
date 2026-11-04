@@ -108,8 +108,6 @@ class Cosmos3OmniModelOutputWithPast(BaseModelOutputWithPast):
 @auto_docstring
 class Cosmos3OmniModel(Cosmos3OmniPreTrainedModel):
     base_model_prefix = "model"
-    # Reference: fix gemma3 grad acc #37208
-    accepts_loss_kwargs = False
 
     def __init__(self, config: Cosmos3OmniConfig):
         super().__init__(config)
@@ -518,8 +516,6 @@ class Cosmos3OmniCausalLMOutputWithPast(CausalLMOutputWithPast):
 class Cosmos3OmniForConditionalGeneration(Cosmos3OmniPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
-    # Reference: fix gemma3 grad acc #37208
-    accepts_loss_kwargs = False
 
     def __init__(self, config: Cosmos3OmniConfig):
         super().__init__(config)

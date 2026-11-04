@@ -633,6 +633,13 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         ):
             self.assertTrue(torch.isfinite(value).all())
 
+    def test_num_items_in_batch(self):
+        # With every layer sparse (`sparse_step=1`), the model skips its router losses: use one sparse layer out of two
+        # so the check covers them
+        self.model_tester.num_sparse_encoder_layers = 1
+        self.model_tester.num_sparse_decoder_layers = 1
+        super().test_num_items_in_batch()
+
     @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

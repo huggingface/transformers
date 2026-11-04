@@ -26,7 +26,6 @@ import datasets
 import numpy as np
 import pytest
 import torch
-from parameterized import parameterized
 from torch import nn
 
 from transformers import (
@@ -45,8 +44,6 @@ from transformers import (
     IntervalStrategy,
     LlamaConfig,
     LlamaForCausalLM,
-    Qwen3MoeConfig,
-    Qwen3MoeForCausalLM,
     Trainer,
     TrainingArguments,
     default_data_collator,
@@ -367,53 +364,6 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         self._check_gradient_accumulation(
             base_batch_size=8, gas_batch_size=4, gas_steps=2, loss_tolerance=0.001, label_smoothing_factor=0.1
         )
-
-    @staticmethod
-    def _tiny_moe_config():
-        return Qwen3MoeConfig(
-            vocab_size=128,
-            hidden_size=32,
-            intermediate_size=64,
-            moe_intermediate_size=32,
-            num_hidden_layers=1,
-            num_attention_heads=2,
-            num_key_value_heads=1,
-            head_dim=16,
-            num_experts=4,
-            num_experts_per_tok=1,
-            router_aux_loss_coef=0.5,
-            output_router_logits=True,
-        )
-
-    @parameterized.expand([("with_num_items_in_batch", True), ("without_num_items_in_batch", False)])
-    def test_gradient_accumulation_moe_aux_loss(self, _, use_num_items_in_batch):
-        """
-        Every sample is the same sequence, so every micro-batch has the routing of the full batch: 4 accumulated
-        batches of 1 must give the same loss and grad norm as one batch of 4, router aux loss included.
-        """
-        train_dataset = RepeatDataset(torch.randint(0, 128, (16,)), length=8)
-
-        def first_log(batch_size, gas_steps):
-            torch.manual_seed(0)
-            model = Qwen3MoeForCausalLM(self._tiny_moe_config())
-            args = TrainingArguments(
-                self.get_auto_remove_tmp_dir(),
-                per_device_train_batch_size=batch_size,
-                gradient_accumulation_steps=gas_steps,
-                max_steps=1,
-                logging_steps=1,
-                max_grad_norm=0.0,
-                use_cpu=True,
-            )
-            trainer = Trainer(model, args, train_dataset=train_dataset)
-            # Without loss kwargs, the Trainer passes no `num_items_in_batch` and divides the loss by the GAS itself
-            trainer.model_accepts_loss_kwargs = use_num_items_in_batch
-            trainer.train()
-            return trainer.state.log_history[0]
-
-        base, gas = first_log(batch_size=4, gas_steps=1), first_log(batch_size=1, gas_steps=4)
-        self.assertAlmostEqual(gas["loss"], base["loss"], places=4)
-        self.assertAlmostEqual(gas["grad_norm"], base["grad_norm"], places=4)
 
     @require_torch_non_multi_accelerator
     def test_num_items_in_batch_causal_lm(self):

@@ -42,7 +42,7 @@ from ...integrations import (
     use_kernelized_func,
 )
 from ...integrations.accelerate import force_accelerate_hooks
-from ...loss.loss_utils import aux_loss_share
+from ...loss.loss_utils import load_balancing_loss_func
 from ...masking_utils import create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
@@ -84,7 +84,6 @@ from ..glmga.video_processing_glmga import GlmgaVideoProcessor, GlmgaVideoProces
 from ..inkling.modeling_inkling import causal_conv1d_fn, causal_conv1d_update
 from ..llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
 from ..minimax_m3_vl.modeling_minimax_m3_vl import MiniMaxM3VLExperts
-from ..mixtral.modeling_mixtral import load_balancing_loss_func
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from ..qwen3_5.modeling_qwen3_5 import Qwen3_5RMSNormGated
 from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states
@@ -1666,12 +1665,6 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
 
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
-            )
-
         aux_loss = None
         if output_router_logits:
             aux_loss = load_balancing_loss_func(
@@ -1680,8 +1673,17 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
                 self.num_experts_per_tok,
                 attention_mask,
             )
-            if labels is not None:
-                loss += self.router_aux_loss_coef * aux_loss_share(aux_loss, labels, **kwargs).to(loss.device)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.text_config.vocab_size,
+                aux_loss=aux_loss,
+                aux_loss_coef=self.router_aux_loss_coef,
+                **kwargs,
+            )
 
         return MoeCausalLMOutputWithPast(
             loss=loss,

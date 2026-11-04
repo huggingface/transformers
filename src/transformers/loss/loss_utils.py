@@ -48,28 +48,92 @@ def fixed_cross_entropy(
     return loss
 
 
-def aux_loss_share(
-    aux_loss: torch.Tensor,
-    labels: torch.Tensor,
+def loss_share(
+    loss: torch.Tensor,
+    target: torch.Tensor,
     num_items_in_batch: torch.Tensor | int | None = None,
     ignore_index: int = -100,
-    shift_labels: torch.Tensor | None = None,
-    **kwargs,
 ) -> torch.Tensor:
     """
-    Weights `aux_loss` by this batch's share of the `num_items_in_batch` label tokens, like the causal LM loss, so it
-    is counted once across gradient accumulation steps and devices. Returns `aux_loss` as is without
-    `num_items_in_batch`.
+    Returns this batch's share of `loss`, a loss averaged over this batch alone such as the MoE router load balancing
+    loss.
+
+    Without `num_items_in_batch`, `loss` is returned as is.
     """
     if num_items_in_batch is None:
-        return aux_loss
-    if shift_labels is None:
-        shift_labels = labels[..., 1:]
-    # Same count as the causal LM loss and the Trainer's `num_items_in_batch`
-    num_label_tokens = (shift_labels != ignore_index).sum().to(aux_loss.device)
+        return loss
     if torch.is_tensor(num_items_in_batch):
-        num_items_in_batch = num_items_in_batch.to(aux_loss.device)
-    return aux_loss * num_label_tokens / num_items_in_batch
+        num_items_in_batch = num_items_in_batch.to(loss.device)
+    return loss * (target != ignore_index).sum().to(loss.device) / num_items_in_batch
+
+
+def load_balancing_loss_func(
+    gate_logits: torch.Tensor | tuple[torch.Tensor] | None,
+    num_experts: int | None = None,
+    top_k=2,
+    attention_mask: torch.Tensor | None = None,
+) -> torch.Tensor | int:
+    r"""
+    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
+
+    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
+    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
+    experts is too unbalanced.
+
+    Args:
+        gate_logits:
+            Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
+            shape [batch_size X sequence_length, num_experts].
+        num_experts:
+            Number of experts
+        top_k:
+            The number of experts to route per-token, can be also interpreted as the `top-k` routing
+            parameter.
+        attention_mask (`torch.Tensor`, *optional*):
+            The attention_mask used in forward function
+            shape [batch_size X sequence_length] if not None.
+
+    Returns:
+        The auxiliary loss.
+    """
+    if gate_logits is None or not isinstance(gate_logits, tuple):
+        return 0
+
+    # Accumulate assignment counts and probability sums layer by layer, normalizing at the end,
+    # so peak memory stays O(seq_len * num_experts) regardless of the number of layers.
+    compute_device = gate_logits[0].device
+    tokens_per_expert_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
+    router_prob_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
+    total_rows = 0.0
+
+    if attention_mask is not None:
+        # The same flat mask applies to every layer's [batch_size * sequence_length] rows.
+        flat_mask = attention_mask.reshape(-1).to(device=compute_device, dtype=torch.float32)
+
+    for layer_gate in gate_logits:
+        routing_weights = torch.nn.functional.softmax(layer_gate.to(compute_device), dim=-1)
+        _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+        if attention_mask is None:
+            # Count of top-k assignments per expert
+            tokens_per_expert_sum = (
+                tokens_per_expert_sum + torch.bincount(selected_experts.reshape(-1), minlength=num_experts).float()
+            )
+            # Sum of routing probabilities per expert
+            router_prob_sum = router_prob_sum + routing_weights.float().sum(dim=0)
+            total_rows = total_rows + routing_weights.shape[0]
+        else:
+            # Same reductions, weighted by the attention mask to exclude padding tokens
+            tokens_per_expert_sum = tokens_per_expert_sum + torch.zeros(
+                num_experts, dtype=torch.float32, device=compute_device
+            ).scatter_add_(0, selected_experts.reshape(-1), flat_mask.repeat_interleave(top_k))
+            router_prob_sum = router_prob_sum + (routing_weights.float() * flat_mask.unsqueeze(-1)).sum(dim=0)
+            total_rows = total_rows + flat_mask.sum()
+
+    tokens_per_expert = tokens_per_expert_sum / total_rows
+    router_prob_per_expert = router_prob_sum / total_rows
+
+    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
+    return overall_loss * num_experts
 
 
 def ForCausalLMLoss(
@@ -79,6 +143,8 @@ def ForCausalLMLoss(
     num_items_in_batch: torch.Tensor | None = None,
     ignore_index: int = -100,
     shift_labels: torch.Tensor | None = None,
+    aux_loss: torch.Tensor | float | None = None,
+    aux_loss_coef: float = 1.0,
     **kwargs,
 ) -> torch.Tensor:
     # Upcast to float if we need to compute the loss to avoid potential precision issues
@@ -94,6 +160,12 @@ def ForCausalLMLoss(
     shift_labels = shift_labels.view(-1)
     shift_labels = shift_labels.to(logits.device)
     loss = fixed_cross_entropy(logits, shift_labels, num_items_in_batch, ignore_index, **kwargs)
+
+    if aux_loss is not None:
+        aux_loss = loss_share(
+            torch.as_tensor(aux_loss, device=loss.device), shift_labels, num_items_in_batch, ignore_index
+        )
+        loss = loss + aux_loss_coef * aux_loss
     return loss
 
 
@@ -103,6 +175,8 @@ def ForMaskedLMLoss(
     vocab_size: int,
     num_items_in_batch: torch.Tensor | None = None,
     ignore_index: int = -100,
+    aux_loss: torch.Tensor | float | None = None,
+    aux_loss_coef: float = 1.0,
     **kwargs,
 ):
     # Upcast to float if we need to compute the loss to avoid potential precision issues
@@ -114,6 +188,10 @@ def ForMaskedLMLoss(
 
     labels = labels.to(logits.device)
     loss = fixed_cross_entropy(logits, labels, num_items_in_batch, ignore_index, **kwargs)
+
+    if aux_loss is not None:
+        aux_loss = loss_share(torch.as_tensor(aux_loss, device=loss.device), labels, num_items_in_batch, ignore_index)
+        loss = loss + aux_loss_coef * aux_loss
     return loss
 
 
@@ -220,6 +298,8 @@ LOSS_MAPPING = {
     "DFineForObjectDetection": DFineForObjectDetectionLoss,
     "Deimv2ForObjectDetection": Deimv2ForObjectDetectionLoss,
     "CsmForConditionalGeneration": ForCausalLMLoss,
+    "SwitchTransformersForConditionalGeneration": ForMaskedLMLoss,
+    "NllbMoeForConditionalGeneration": ForMaskedLMLoss,
     "LwDetrForObjectDetection": LwDetrForObjectDetectionLoss,
     "PocketTTSForConditionalGeneration": PocketTTSForConditionalGenerationLoss,
     "GradiumPhononTTSForConditionalGeneration": PocketTTSForConditionalGenerationLoss,

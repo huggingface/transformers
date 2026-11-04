@@ -17,7 +17,6 @@ import copy
 
 import torch
 import torch.nn as nn
-from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
@@ -740,15 +739,12 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
                 decoder_aux_loss = 0
 
         if labels is not None:
-            loss_fct = CrossEntropyLoss(ignore_index=-100)
-            # move labels to correct device to enable PP
-            labels = labels.to(lm_logits.device)
-            loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
-
+            router_loss = None
             if output_router_logits:
                 z_loss = self.router_z_loss_coef * (encoder_z_loss + decoder_z_loss)
                 aux_loss = self.router_aux_loss_coef * (encoder_aux_loss + decoder_aux_loss)
-                loss = loss + z_loss + aux_loss
+                router_loss = z_loss + aux_loss
+            loss = self.loss_function(lm_logits, labels, lm_logits.size(-1), aux_loss=router_loss, **kwargs)
 
         return Seq2SeqMoEOutput(
             loss=loss,

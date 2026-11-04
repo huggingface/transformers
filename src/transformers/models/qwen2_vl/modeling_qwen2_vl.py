@@ -851,8 +851,6 @@ class Qwen2VLTextModel(Qwen2VLPreTrainedModel):
 @auto_docstring
 class Qwen2VLModel(Qwen2VLPreTrainedModel):
     base_model_prefix = "model"
-    # Reference: fix gemma3 grad acc #37208
-    accepts_loss_kwargs = False
 
     def __init__(self, config: Qwen2VLConfig):
         super().__init__(config)

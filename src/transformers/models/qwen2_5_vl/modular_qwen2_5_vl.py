@@ -309,8 +309,6 @@ class Qwen2_5_VLModel(Qwen2VLModel):
     config: Qwen2_5_VLConfig
     base_model_prefix = "model"
     _no_split_modules = ["Qwen2_5_VLDecoderLayer", "Qwen2_5_VLVisionBlock"]
-    # Reference: fix gemma3 grad acc #37208
-    accepts_loss_kwargs = False
 
     def __init__(self, config: Qwen2_5_VLConfig):
         super().__init__(config)
@@ -574,9 +572,6 @@ class Qwen2_5_VLCausalLMOutputWithPast(Qwen2VLCausalLMOutputWithPast):
 
 
 class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
-    # Reference: fix gemma3 grad acc #37208
-    accepts_loss_kwargs = False
-
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

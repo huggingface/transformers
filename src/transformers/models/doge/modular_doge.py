@@ -29,7 +29,6 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...integrations.flex_attention import compile_friendly_flex_attention
-from ...loss.loss_utils import aux_loss_share
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -686,10 +685,6 @@ class DogeForCausalLM(MixtralForCausalLM):
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
 
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
-
         aux_loss = None
         if output_router_logits:
             aux_loss = load_balancing_loss_func(
@@ -699,8 +694,12 @@ class DogeForCausalLM(MixtralForCausalLM):
                 self.num_experts_per_tok,
                 attention_mask,
             )
-            if labels is not None:
-                loss += self.router_aux_loss_coef * aux_loss_share(aux_loss, labels, **kwargs).to(loss.device)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits, labels, self.vocab_size, aux_loss=aux_loss, aux_loss_coef=self.router_aux_loss_coef, **kwargs
+            )
 
         return MoeCausalLMOutputWithPast(
             loss=loss,

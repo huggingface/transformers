@@ -975,8 +975,6 @@ class PaddleOCRVLCausalLMOutputWithPast(CausalLMOutputWithPast):
 @auto_docstring
 class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
     base_model_prefix = "model"
-    # Reference: fix gemma3 grad acc #37208
-    accepts_loss_kwargs = False
     _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]
 
     def __init__(self, config: PaddleOCRVLConfig):

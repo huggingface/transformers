@@ -872,8 +872,6 @@ class Qwen2_5_VLTextModel(Qwen2_5_VLPreTrainedModel):
 @auto_docstring
 class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
     base_model_prefix = "model"
-    # Reference: fix gemma3 grad acc #37208
-    accepts_loss_kwargs = False
     config: Qwen2_5_VLConfig
     _no_split_modules = ["Qwen2_5_VLDecoderLayer", "Qwen2_5_VLVisionBlock"]
 
@@ -1281,8 +1279,6 @@ class Qwen2_5_VLCausalLMOutputWithPast(CausalLMOutputWithPast):
 class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
-    # Reference: fix gemma3 grad acc #37208
-    accepts_loss_kwargs = False
 
     def __init__(self, config: Qwen2_5_VLConfig):
         super().__init__(config)

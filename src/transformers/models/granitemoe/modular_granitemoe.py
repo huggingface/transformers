@@ -19,7 +19,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...loss.loss_utils import aux_loss_share
+from ...loss.loss_utils import load_balancing_loss_func
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
@@ -34,7 +34,6 @@ from ..mixtral.modeling_mixtral import (
     MixtralExperts,
     MixtralForCausalLM,
     MixtralModel,
-    load_balancing_loss_func,
 )
 from .configuration_granitemoe import GraniteMoeConfig
 
@@ -283,16 +282,6 @@ class GraniteMoeForCausalLM(MixtralForCausalLM):
         logits = self.lm_head(hidden_states)
         logits = logits / self.config.logits_scaling
 
-        loss = None
-        if labels is not None:
-            # Flatten the tokens
-            loss = self.loss_function(
-                logits,
-                labels,
-                vocab_size=self.config.vocab_size,
-                **kwargs,
-            )
-
         aux_loss = None
         if output_router_logits:
             aux_loss = load_balancing_loss_func(
@@ -301,8 +290,18 @@ class GraniteMoeForCausalLM(MixtralForCausalLM):
                 self.num_experts_per_tok,
                 attention_mask,
             )
-            if labels is not None:
-                loss += self.router_aux_loss_coef * aux_loss_share(aux_loss, labels, **kwargs).to(loss.device)
+
+        loss = None
+        if labels is not None:
+            # Flatten the tokens
+            loss = self.loss_function(
+                logits,
+                labels,
+                vocab_size=self.config.vocab_size,
+                aux_loss=aux_loss,
+                aux_loss_coef=self.router_aux_loss_coef,
+                **kwargs,
+            )
         return MoeCausalLMOutputWithPast(
             loss=loss,
             aux_loss=aux_loss,

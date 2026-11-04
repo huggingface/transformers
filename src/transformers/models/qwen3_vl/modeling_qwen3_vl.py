@@ -858,8 +858,6 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel):
 @auto_docstring
 class Qwen3VLModel(Qwen3VLPreTrainedModel):
     base_model_prefix = "model"
-    # Reference: fix gemma3 grad acc #37208
-    accepts_loss_kwargs = False
 
     def __init__(self, config: Qwen3VLConfig):
         super().__init__(config)
@@ -1268,8 +1266,6 @@ class Qwen3VLCausalLMOutputWithPast(CausalLMOutputWithPast):
 class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
-    # Reference: fix gemma3 grad acc #37208
-    accepts_loss_kwargs = False
 
     def __init__(self, config: Qwen3VLConfig):
         super().__init__(config)

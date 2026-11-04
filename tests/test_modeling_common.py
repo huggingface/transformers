@@ -2036,6 +2036,37 @@ class ModelTesterMixin(ExportTesterMixin):
             loss = model(**inputs).loss
             loss.backward()
 
+    def test_num_items_in_batch(self):
+        """
+        The Trainer passes `num_items_in_batch`, the label count of all the batches of an optimizer step, and adds their
+        losses up. So with twice this batch's label count, the loss must be half the plain loss, router aux loss
+        included. Only MoE heads are checked for now.
+        """
+        model_classes = [
+            model_class
+            for model_class in self.all_model_classes
+            if {"labels", "output_router_logits"} <= inspect.signature(model_class.forward).parameters.keys()
+        ]
+        if not model_classes:
+            self.skipTest(reason="No MoE head computes a loss from `labels`")
+
+        for model_class in model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config).to(torch_device).eval()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs["output_router_logits"] = True
+            # Ignore the last label of each row: the count must skip it like the loss does
+            inputs["labels"] = inputs["labels"].clone()
+            inputs["labels"][:, -1] = -100
+            # A causal LM loss never predicts the first token of a row
+            labels = inputs["labels"] if config.is_encoder_decoder else inputs["labels"][:, 1:]
+            num_items_in_batch = 2 * labels.ne(-100).sum()
+
+            with self.subTest(model_class.__name__), torch.no_grad():
+                loss = model(**inputs).loss
+                half_loss = model(**inputs, num_items_in_batch=num_items_in_batch).loss
+                torch.testing.assert_close(half_loss, loss / 2)
+
     def test_training_gradient_checkpointing(self):
         # Scenario - 1 default behaviour
         self.check_training_gradient_checkpointing()

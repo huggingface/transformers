@@ -971,8 +971,6 @@ class CohereCompassModel(CohereCompassPreTrainedModel):
     """Vision-language base model that fuses the vision tower into the decoder and applies DeepStack residuals."""
 
     base_model_prefix = "model"
-    # Reference: fix gemma3 grad acc #37208
-    accepts_loss_kwargs = False
 
     def __init__(self, config: CohereCompassConfig):
         super().__init__(config)
@@ -1374,8 +1372,6 @@ class CohereCompassModel(CohereCompassPreTrainedModel):
 class CohereCompassForConditionalGeneration(CohereCompassPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
-    # Reference: fix gemma3 grad acc #37208
-    accepts_loss_kwargs = False
 
     def __init__(self, config: CohereCompassConfig):
         super().__init__(config)

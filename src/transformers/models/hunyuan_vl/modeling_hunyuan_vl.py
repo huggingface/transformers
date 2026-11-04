@@ -826,8 +826,6 @@ class HunYuanVLTextModel(HunYuanVLPreTrainedModel):
 )
 class HunYuanVLModel(HunYuanVLPreTrainedModel):
     base_model_prefix = "model"
-    # Reference: fix gemma3 grad acc #37208
-    accepts_loss_kwargs = False
 
     def __init__(self, config: HunYuanVLConfig):
         super().__init__(config)

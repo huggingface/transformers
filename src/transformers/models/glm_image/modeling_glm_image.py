@@ -873,8 +873,6 @@ class GlmImageTextModel(GlmImagePreTrainedModel):
 @auto_docstring
 class GlmImageModel(GlmImagePreTrainedModel):
     base_model_prefix = "model"
-    # Reference: fix gemma3 grad acc #37208
-    accepts_loss_kwargs = False
     _no_split_modules = ["GlmImageTextDecoderLayer", "GlmImageVisionBlock"]
 
     def __init__(self, config: GlmImageConfig):

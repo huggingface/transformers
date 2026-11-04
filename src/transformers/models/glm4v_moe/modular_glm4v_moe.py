@@ -18,7 +18,7 @@ import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache, DynamicCache
-from ...loss.loss_utils import aux_loss_share
+from ...loss.loss_utils import load_balancing_loss_func
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
@@ -50,7 +50,6 @@ from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
 from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
     Qwen3VLMoeCausalLMOutputWithPast,
     Qwen3VLMoeModelOutputWithPast,
-    load_balancing_loss_func,
 )
 
 
@@ -384,12 +383,6 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
 
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
-            )
-
         aux_loss = None
         if output_router_logits:
             aux_loss = load_balancing_loss_func(
@@ -398,10 +391,17 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
                 self.num_experts_per_tok,
                 attention_mask,
             )
-            if labels is not None:
-                loss += self.config.text_config.router_aux_loss_coef * aux_loss_share(aux_loss, labels, **kwargs).to(
-                    loss.device
-                )
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.text_config.vocab_size,
+                aux_loss=aux_loss,
+                aux_loss_coef=self.config.text_config.router_aux_loss_coef,
+                **kwargs,
+            )
 
         return Glm4vMoeCausalLMOutputWithPast(
             loss=loss,
