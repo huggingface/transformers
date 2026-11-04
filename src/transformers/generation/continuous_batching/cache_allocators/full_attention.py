@@ -61,9 +61,19 @@ class FullAttentionCacheAllocator(CacheAllocator):
             bytes_per_block=self.bytes_per_token * page_size * len(layer_indices),
             allow_block_sharing=allow_block_sharing,
         )
-        # The block table kernels read the keys and values in place, as one uniform array of pages per row: they need
-        # the layers to cache exactly a key and a value of the same size
-        self.supports_block_table = set(rows) == {"key", "value"} and len(set(self.row_bytes)) == 1
+        # The block table kernels read the rows where they sit in the pages: flash attention a key and a value of the
+        # same size, FlashMLA the one latent row of multi-head latent attention, 576 values wide (DeepSeek V3's), in
+        # 16-bit pages of 64 tokens
+        from ....integrations.hub_kernels import lazy_load_kernel  # the integrations import the cache
+
+        reads_keys_and_values = set(rows) == {"key", "value"} and len(set(self.row_bytes)) == 1
+        reads_latents = (
+            set(rows) == {"latent"}
+            and rows["latent"] in (((576,), torch.bfloat16), ((576,), torch.float16))
+            and page_size == 64
+            and lazy_load_kernel("flash-mla") is not None
+        )
+        self.supports_block_table = reads_keys_and_values or reads_latents
 
     def register_cache_tensor(
         self, bytes_per_sector: int, non_trash_bytes: int, cache_tensor: torch.Tensor, pool: CachePool
