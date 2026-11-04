@@ -745,7 +745,7 @@ class Gemma3Model(PaliGemmaModel):
             **kwargs,
         )
 
-        return Gemma3ModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return Gemma3ModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
@@ -842,7 +842,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            mm_encoder_outputs=outputs.mm_encoder_outputs,
+            modality_outputs=outputs.modality_outputs,
         )
 
     def _update_model_kwargs_for_generation(self, **super_kwargs):

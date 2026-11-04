@@ -2136,7 +2136,7 @@ class Gemma4Model(Gemma3nModel):
             **kwargs,
         )
 
-        return Gemma4ModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return Gemma4ModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the audio encoder into language model space.")
@@ -2259,7 +2259,7 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            mm_encoder_outputs=outputs.mm_encoder_outputs,
+            modality_outputs=outputs.modality_outputs,
             shared_kv_states=outputs.shared_kv_states,
             router_logits=outputs.router_logits,
         )

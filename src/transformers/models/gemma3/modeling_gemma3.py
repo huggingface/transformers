@@ -887,7 +887,7 @@ class Gemma3Model(Gemma3PreTrainedModel):
             **kwargs,
         )
 
-        return Gemma3ModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return Gemma3ModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 @auto_docstring(
@@ -1002,7 +1002,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            mm_encoder_outputs=outputs.mm_encoder_outputs,
+            modality_outputs=outputs.modality_outputs,
         )
 
     def prepare_inputs_for_generation(self, input_ids, use_cache=True, is_first_iteration=False, **kwargs):

@@ -268,7 +268,7 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
             **kwargs,
         )
 
-        return Lfm2VlModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return Lfm2VlModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 @auto_docstring(
@@ -416,7 +416,7 @@ class Lfm2VlForConditionalGeneration(Lfm2VlPreTrainedModel, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            mm_encoder_outputs=outputs.mm_encoder_outputs,
+            modality_outputs=outputs.modality_outputs,
         )
 
 

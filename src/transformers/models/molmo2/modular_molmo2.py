@@ -1647,7 +1647,7 @@ class Molmo2Model(LlavaModel):
             **kwargs,
         )
 
-        return Molmo2ModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return Molmo2ModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 @auto_docstring(
@@ -1772,7 +1772,7 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            mm_encoder_outputs=outputs.mm_encoder_outputs,
+            modality_outputs=outputs.modality_outputs,
         )
 
     @staticmethod

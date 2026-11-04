@@ -1192,7 +1192,7 @@ class Gemma4UnifiedModel(Gemma4Model):
             **kwargs,
         )
 
-        return Gemma4UnifiedModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return Gemma4UnifiedModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
@@ -1268,7 +1268,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            mm_encoder_outputs=outputs.mm_encoder_outputs,
+            modality_outputs=outputs.modality_outputs,
             shared_kv_states=outputs.shared_kv_states,
         )
 

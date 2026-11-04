@@ -855,7 +855,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
             **kwargs,
         )
 
-        return EmbeddingGemma2ModelOutput(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return EmbeddingGemma2ModelOutput(**outputs, modality_outputs=mm_encoder_outputs)
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the audio encoder into language model space.")

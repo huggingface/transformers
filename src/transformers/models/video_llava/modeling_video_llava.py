@@ -333,7 +333,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
             **kwargs,
         )
 
-        return VideoLlavaModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return VideoLlavaModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 @auto_docstring(
@@ -503,7 +503,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            mm_encoder_outputs=outputs.mm_encoder_outputs,
+            modality_outputs=outputs.modality_outputs,
         )
 
 

@@ -1073,7 +1073,7 @@ class Step3p7Model(Step3p7PreTrainedModel):
             **kwargs,
         )
 
-        return Step3p7ModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return Step3p7ModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 @auto_docstring
@@ -1190,7 +1190,7 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            mm_encoder_outputs=outputs.mm_encoder_outputs,
+            modality_outputs=outputs.modality_outputs,
             router_logits=outputs.router_logits,
         )
 

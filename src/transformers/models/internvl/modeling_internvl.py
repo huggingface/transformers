@@ -658,7 +658,7 @@ class InternVLModel(InternVLPreTrainedModel):
             **kwargs,
         )
 
-        return InternVLModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return InternVLModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
     def pixel_shuffle(self, vision_features: torch.Tensor, scale_factor: float = 0.5):
         """Perform pixel shuffle downsampling on vision features.

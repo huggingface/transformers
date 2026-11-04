@@ -297,7 +297,7 @@ class GotOcr2Model(LlavaModel):
             **kwargs,
         )
 
-        return GotOcr2ModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return GotOcr2ModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
@@ -378,7 +378,7 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            mm_encoder_outputs=outputs.mm_encoder_outputs,
+            modality_outputs=outputs.modality_outputs,
         )
 
     @auto_docstring

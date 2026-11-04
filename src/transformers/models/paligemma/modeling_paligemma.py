@@ -257,7 +257,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
             **kwargs,
         )
 
-        return PaliGemmaModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return PaliGemmaModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 @auto_docstring(
@@ -354,7 +354,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            mm_encoder_outputs=outputs.mm_encoder_outputs,
+            modality_outputs=outputs.modality_outputs,
         )
 
     def _update_model_kwargs_for_generation(

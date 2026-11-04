@@ -464,7 +464,7 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
             **kwargs,
         )
 
-        return LlavaNextModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return LlavaNextModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 @auto_docstring(
@@ -607,7 +607,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            mm_encoder_outputs=outputs.mm_encoder_outputs,
+            modality_outputs=outputs.modality_outputs,
         )
 
 

@@ -1264,7 +1264,7 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
             **kwargs,
         )
 
-        return UnlimitedOcrModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return UnlimitedOcrModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 # Cannot inherit from XYZForConditionalGeneration as this results in MRO clashes between GenerationMixin
@@ -1427,7 +1427,7 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Unlimite
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            mm_encoder_outputs=outputs.mm_encoder_outputs,
+            modality_outputs=outputs.modality_outputs,
             router_logits=outputs.router_logits,
         )
 

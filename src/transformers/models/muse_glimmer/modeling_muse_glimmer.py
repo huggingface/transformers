@@ -1035,7 +1035,7 @@ class MuseGlimmerModel(MuseGlimmerPreTrainedModel):
             use_cache=use_cache,
             **kwargs,
         )
-        return MuseGlimmerModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return MuseGlimmerModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 @auto_docstring
@@ -1171,7 +1171,7 @@ class MuseGlimmerForConditionalGeneration(MuseGlimmerPreTrainedModel, Generation
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            mm_encoder_outputs=outputs.mm_encoder_outputs,
+            modality_outputs=outputs.modality_outputs,
         )
 
 

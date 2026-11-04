@@ -920,7 +920,7 @@ class AriaModel(AriaPreTrainedModel):
             **kwargs,
         )
 
-        return AriaModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return AriaModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
     def _create_patch_attention_mask(self, pixel_mask):
         if pixel_mask is None:

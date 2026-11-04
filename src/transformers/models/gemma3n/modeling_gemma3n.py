@@ -2142,7 +2142,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
             **kwargs,
         )
 
-        return Gemma3nModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return Gemma3nModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
     def get_per_layer_input_embeddings(self):
         return self.language_model.embed_tokens_per_layer
@@ -2304,7 +2304,7 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            mm_encoder_outputs=outputs.mm_encoder_outputs,
+            modality_outputs=outputs.modality_outputs,
         )
 
     def get_per_layer_input_embeddings(self):

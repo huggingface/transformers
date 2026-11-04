@@ -250,7 +250,7 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
             **kwargs,
         )
 
-        return LightOnOcrModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return LightOnOcrModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 @auto_docstring
@@ -360,7 +360,7 @@ class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMi
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            mm_encoder_outputs=outputs.mm_encoder_outputs,
+            modality_outputs=outputs.modality_outputs,
         )
 
 

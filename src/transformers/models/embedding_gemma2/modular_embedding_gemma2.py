@@ -743,7 +743,7 @@ class EmbeddingGemma2Model(Gemma4Model):
             **kwargs,
         )
 
-        return EmbeddingGemma2ModelOutput(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return EmbeddingGemma2ModelOutput(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 class EmbeddingGemma2VideoProcessorKwargs(Gemma4VideoProcessorKwargs):

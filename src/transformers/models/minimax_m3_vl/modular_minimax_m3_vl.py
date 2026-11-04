@@ -1115,7 +1115,7 @@ class MiniMaxM3VLModel(LlavaModel):
             **kwargs,
         )
 
-        return MiniMaxM3VLModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return MiniMaxM3VLModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 @auto_docstring(custom_intro="MiniMax M3 VL full model with LM head (text + vision).")
@@ -1195,7 +1195,7 @@ class MiniMaxM3SparseForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            mm_encoder_outputs=outputs.mm_encoder_outputs,
+            modality_outputs=outputs.modality_outputs,
         )
 
 

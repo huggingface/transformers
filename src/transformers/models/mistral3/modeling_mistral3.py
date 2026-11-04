@@ -299,7 +299,7 @@ class Mistral3Model(Mistral3PreTrainedModel):
             **kwargs,
         )
 
-        return Mistral3ModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return Mistral3ModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 @auto_docstring(
@@ -408,7 +408,7 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            mm_encoder_outputs=outputs.mm_encoder_outputs,
+            modality_outputs=outputs.modality_outputs,
         )
 
 

@@ -674,7 +674,7 @@ class Idefics3Model(Idefics3PreTrainedModel):
             **kwargs,
         )
 
-        return Idefics3BaseModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return Idefics3BaseModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 @auto_docstring(
@@ -832,7 +832,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            mm_encoder_outputs=outputs.mm_encoder_outputs,
+            modality_outputs=outputs.modality_outputs,
         )
 
 

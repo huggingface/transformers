@@ -882,7 +882,7 @@ class AriaModel(LlavaModel):
             **kwargs,
         )
 
-        return AriaModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return AriaModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 @auto_docstring(

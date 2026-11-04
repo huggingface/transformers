@@ -544,7 +544,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
             **kwargs,
         )
 
-        return LlavaNextVideoModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return LlavaNextVideoModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
     @merge_with_config_defaults
     @can_return_tuple
@@ -768,7 +768,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            mm_encoder_outputs=outputs.mm_encoder_outputs,
+            modality_outputs=outputs.modality_outputs,
         )
 
     @merge_with_config_defaults

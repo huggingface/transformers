@@ -192,7 +192,7 @@ class AyaVisionModel(LlavaModel):
             **kwargs,
         )
 
-        return AyaVisionModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return AyaVisionModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):

@@ -261,7 +261,7 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
             **kwargs,
         )
 
-        return AyaVisionModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return AyaVisionModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 @auto_docstring(

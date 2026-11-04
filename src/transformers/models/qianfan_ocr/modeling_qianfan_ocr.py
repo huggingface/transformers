@@ -665,7 +665,7 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
             **kwargs,
         )
 
-        return QianfanOCRModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return QianfanOCRModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
     def pixel_shuffle(self, vision_features: torch.Tensor, scale_factor: float = 0.5):
         """Perform pixel shuffle downsampling on vision features.

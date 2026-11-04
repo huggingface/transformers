@@ -586,7 +586,7 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
             **kwargs,
         )
 
-        return SmolVLMBaseModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return SmolVLMBaseModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -762,7 +762,7 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            mm_encoder_outputs=outputs.mm_encoder_outputs,
+            modality_outputs=outputs.modality_outputs,
         )
 
 

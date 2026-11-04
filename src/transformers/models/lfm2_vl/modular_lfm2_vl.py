@@ -226,7 +226,7 @@ class Lfm2VlModel(LlavaModel):
             **kwargs,
         )
 
-        return Lfm2VlModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return Lfm2VlModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
@@ -357,7 +357,7 @@ class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            mm_encoder_outputs=outputs.mm_encoder_outputs,
+            modality_outputs=outputs.modality_outputs,
         )
 
 

@@ -609,7 +609,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
             use_cache=use_cache,
             **kwargs,
         )
-        return Kimi_K25ModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return Kimi_K25ModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 @auto_docstring

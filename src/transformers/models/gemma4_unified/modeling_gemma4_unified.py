@@ -1116,7 +1116,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
             **kwargs,
         )
 
-        return Gemma4UnifiedModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return Gemma4UnifiedModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
     @can_return_tuple
     @auto_docstring(
@@ -1359,7 +1359,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            mm_encoder_outputs=outputs.mm_encoder_outputs,
+            modality_outputs=outputs.modality_outputs,
             shared_kv_states=outputs.shared_kv_states,
         )
 

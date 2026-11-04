@@ -1018,7 +1018,7 @@ class MistralLarge4Model(MistralLarge4PreTrainedModel):
             **kwargs,
         )
 
-        return MistralLarge4ModelOutputWithPast(**outputs, mm_encoder_outputs=mm_encoder_outputs)
+        return MistralLarge4ModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 @auto_docstring
@@ -1148,7 +1148,7 @@ class MistralLarge4ForConditionalGeneration(MistralLarge4PreTrainedModel, Genera
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
-            mm_encoder_outputs=outputs.mm_encoder_outputs,
+            modality_outputs=outputs.modality_outputs,
         )
 
 
