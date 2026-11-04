@@ -3375,6 +3375,8 @@ class PreTrainedModel(
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
+        if getattr(self, "_is_dummy", False):
+            raise ValueError("This is a dummy model (`from_pretrained(..., dummy=True)`): its weights are generated on the fly and can't be saved.")
         if token is not None:
             kwargs["token"] = token
 
@@ -4165,6 +4167,8 @@ class PreTrainedModel(
         use_kernels = kwargs.pop("use_kernels", False)
         kernel_config = kwargs.pop("kernel_config", None)
         key_mapping = kwargs.pop("key_mapping", None)
+        dummy = kwargs.pop("dummy", False)
+        dummy_seed = kwargs.pop("dummy_seed", 0)
 
         # Not used anymore -- remove them from the kwargs
         for name in ["mirror", "_fast_init", "low_cpu_mem_usage", "from_tf", "from_flax", "offload_state_dict"]:
@@ -4311,10 +4315,18 @@ class PreTrainedModel(
             )
             use_kernels = True
 
-        distributed_checkpoint_dir = get_distributed_checkpoint_dir(
-            pretrained_model_name_or_path, subfolder, gguf_file, state_dict
-        )
-        if distributed_checkpoint_dir is not None:
+        if dummy:
+            if hf_quantizer is not None or gguf_file or state_dict is not None:
+                raise ValueError("`dummy=True` can't be combined with quantization, a GGUF file or a `state_dict`.")
+            # Only the config is needed: the weights are generated on the fly
+            distributed_checkpoint_dir, checkpoint_files, sharded_metadata = None, None, None
+        else:
+            distributed_checkpoint_dir = get_distributed_checkpoint_dir(
+                pretrained_model_name_or_path, subfolder, gguf_file, state_dict
+            )
+        if dummy:
+            pass
+        elif distributed_checkpoint_dir is not None:
             checkpoint_files = _get_resolved_distributed_checkpoint_files(distributed_checkpoint_dir, hf_quantizer)
             sharded_metadata = None
         else:
@@ -4414,7 +4426,19 @@ class PreTrainedModel(
             download_kwargs=download_kwargs,
             disable_mmap=disable_mmap,
         )
-        if distributed_checkpoint_dir is not None:
+        if dummy:
+            from .utils.procedural import make_procedural
+
+            model.tie_weights()  # tie on meta first, so tied parameters share one procedural tensor
+            make_procedural(model, dummy_seed, device_map)
+            model._is_dummy = True
+            # Only the buffers (e.g. RoPE frequencies) are left to create and initialize
+            buffers = {name for name, _ in model.named_buffers()}
+            loading_info = cls._finalize_model_loading(
+                model, load_config, LoadStateDictInfo(buffers, set(), set(), [], {}, set())
+            )
+            disk_offload_index = None
+        elif distributed_checkpoint_dir is not None:
             loading_info = model._load_and_finalize_distributed_pretrained_model(
                 distributed_checkpoint_dir, device_map, device_mesh
             )
