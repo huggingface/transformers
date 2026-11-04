@@ -17,9 +17,17 @@ import tempfile
 import unittest
 
 from transformers import AutoTokenizer, is_torch_available
-from transformers.testing_utils import cleanup, require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import (
+    backend_device_count,
+    get_cpu_ram_total_gib,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -96,14 +104,50 @@ class FlintModelTest(CausalLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch_accelerator
-class FlintIntegrationTest(unittest.TestCase):
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
+class FlintIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # Assigned here rather than in the class body: `MemoryCleanupMixin` snapshots the class body and
+        # protects it from teardown, so a checkpoint parked on a class-body `model` is never released.
+        cls.model = None
+        cls.offload_dir = None
+
+    @classmethod
+    def get_model(cls):
+        if cls.model is None:
+            cls.offload_dir = tempfile.TemporaryDirectory()
+            # `device_map="auto"` budgets each device to its full capacity, leaving nothing for the
+            # ~1 GiB temporary the expert gate/up merge allocates while loading.
+            n = backend_device_count(torch_device)
+            if n > 0 and torch_device != "cpu":
+                torch_accel = getattr(torch, torch_device)
+                per_device = int(
+                    min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3
+                )
+                max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
+                max_memory["cpu"] = f"{int(get_cpu_ram_total_gib())}GiB"
+            else:
+                max_memory = None
+            cls.model = FlintForCausalLM.from_pretrained(
+                "RecursiveSI/flint",
+                dtype="auto",
+                device_map="auto",
+                max_memory=max_memory,
+                offload_folder=cls.offload_dir.name,
+            )
+        return cls.model
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls.offload_dir is not None:
+            cls.offload_dir.cleanup()
+        super().tearDownClass()
 
     def test_greedy_chat(self):
         model_id = "RecursiveSI/flint"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = FlintForCausalLM.from_pretrained(model_id, dtype="auto", device_map="auto")
+        model = self.get_model()
         expected = {
             "Who are you?": "<think>The user asks who I am. Simple identity question. Answer concisely: Flint, made by "
             "Recursive. No need for extra disclaimers.</think>I'm Flint, an AI assistant "
