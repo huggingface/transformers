@@ -473,6 +473,11 @@ class LogitsProcessorTest(unittest.TestCase):
         [
             # uniform over 50 tokens: keeps 50**0.4 -> 4 tokens, not 0.4 * 50 = 20
             ("uniform_50", lambda: torch.zeros(50), 0.4),
+            ("uniform_boundary", lambda: torch.zeros(16), 0.5),
+            ("candidate_cap", lambda: torch.zeros(200), 1.0),
+            ("full_support", lambda: torch.tensor([0.0, -0.5, -1.0, -2.0]), 1.0),
+            ("masked_logits", lambda: torch.tensor([2.0, 1.0, 0.0, -float("inf")]), 0.9),
+            ("peaked_logits", lambda: -100.0 * torch.arange(16, dtype=torch.float), 0.4),
             # long-tailed vocabulary: the entropy budget must come from the full distribution, not the top 100
             ("zipf_49152", lambda: -1.1 * torch.arange(1, 49153, dtype=torch.float).log(), 0.4),
         ]
@@ -489,6 +494,35 @@ class LogitsProcessorTest(unittest.TestCase):
         self.assertEqual(kept.sum().item(), top_h_reference_num_kept(logits, top_h))
         if (~kept).any():
             self.assertGreaterEqual(logits[kept].min().item(), logits[~kept].max().item())
+
+    def test_top_h_batch_and_invariances(self):
+        generator = torch.Generator().manual_seed(42)
+        scores = torch.randn(3, 257, generator=generator).to(torch_device)
+        original = scores.clone()
+        warper = TopHLogitsWarper(0.4)
+        output = warper(None, scores)
+        kept = torch.isfinite(output)
+        permutation = torch.randperm(scores.shape[-1], generator=generator).to(torch_device)
+        torch.testing.assert_close(torch.isfinite(warper(None, scores[:, permutation])), kept[:, permutation])
+        torch.testing.assert_close(torch.isfinite(warper(None, scores + 8.0)), kept)
+        torch.testing.assert_close(scores, original)
+        torch.testing.assert_close(output[kept], scores[kept])
+        for row, mask in zip(scores, kept):
+            torch.testing.assert_close(torch.isfinite(warper(None, row[None]))[0], mask)
+            self.assertEqual(mask.sum().item(), top_h_reference_num_kept(row, 0.4))
+            self.assertGreaterEqual(row[mask].min().item(), row[~mask].max().item())
+
+    @parameterized.expand([("float16",), ("bfloat16",)])
+    def test_top_h_low_precision_matches_reference(self, dtype):
+        scores = (-torch.arange(1, 51, device=torch_device, dtype=torch.float).log()).to(getattr(torch, dtype))
+        original = scores.clone()
+        output = TopHLogitsWarper(0.4)(None, scores[None])[0]
+        kept = torch.isfinite(output)
+        self.assertEqual(kept.sum().item(), top_h_reference_num_kept(scores, 0.4))
+        self.assertEqual(output.dtype, scores.dtype)
+        torch.testing.assert_close(output[kept], scores[kept])
+        torch.testing.assert_close(scores, original)
+        self.assertGreaterEqual(scores[kept].min().item(), scores[~kept].max().item())
 
     def test_min_p_dist_warper(self):
         input_ids = None
