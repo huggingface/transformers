@@ -38,6 +38,7 @@ def enumerate_params(fleet_name: str, lock: dict) -> list:
 
 def load_lock(fleet_name: str, revision: str) -> dict:
     from transformersci.contracts.fleet import lock_path
+
     path, _ = lock_path(fleet_name, revision)
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
