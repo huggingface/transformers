@@ -3217,6 +3217,7 @@ class GenerationMixin(ContinuousMixin):
         else:
             stop_check = StopCheck(streamer)
 
+        accepts_attention_mask = logits_processor._accepts_kwarg("attention_mask")
         with self._optimize_model_for_decode():
             while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
                 if prefill_consumed:
@@ -3237,9 +3238,15 @@ class GenerationMixin(ContinuousMixin):
                 # Copy is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
                 # (the clone itself is always small)
                 next_token_logits = outputs.logits[:, -1].to(copy=True, dtype=torch.float32, device=input_ids.device)
-
+                processor_kwargs = {}
+                if accepts_attention_mask:
+                    mask_key = "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
+                    attention_mask = model_kwargs.get(mask_key)
+                    if attention_mask is not None and attention_mask.shape[-1] != input_ids.shape[-1]:
+                        attention_mask = attention_mask[:, : input_ids.shape[-1]]
+                    processor_kwargs["attention_mask"] = attention_mask
                 # pre-process distribution
-                next_token_scores = logits_processor(input_ids, next_token_logits)
+                next_token_scores = logits_processor(input_ids, next_token_logits, **processor_kwargs)
 
                 # Store scores, attentions and hidden_states when required
                 if return_dict_in_generate:
@@ -3710,6 +3717,7 @@ class GenerationMixin(ContinuousMixin):
         )
 
         # 4. run the generation loop
+        accepts_attention_mask = logits_processor._accepts_kwarg("attention_mask")
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             if prefill_consumed:
                 # a. Forward current tokens, obtain the logits
@@ -3736,7 +3744,14 @@ class GenerationMixin(ContinuousMixin):
             # b. Compute log probs -- get log probabilities from logits, process logits with processors (*e.g.*
             # `temperature`, ...), and add new logprobs to existing running logprobs scores.
             log_probs = nn.functional.log_softmax(logits, dim=-1)
-            log_probs = logits_processor(flat_running_sequences, log_probs)
+            processor_kwargs = {}
+            if accepts_attention_mask:
+                mask_key = "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
+                attention_mask = model_kwargs.get(mask_key)
+                if attention_mask is not None and attention_mask.shape[-1] != flat_running_sequences.shape[-1]:
+                    attention_mask = attention_mask[:, : flat_running_sequences.shape[-1]]
+                processor_kwargs["attention_mask"] = attention_mask
+            log_probs = logits_processor(flat_running_sequences, log_probs, **processor_kwargs)
 
             # Store logits, attentions and hidden_states when required
             if return_dict_in_generate:
