@@ -110,6 +110,7 @@ class Inkling2VisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("swa_num_key_value_heads", 2)
         kwargs.setdefault("swa_head_dim", 16)
         super().__init__(parent, **kwargs)
+        self.text_hidden_size = self.hidden_size
 
     def create_pixel_values(self, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size

@@ -15,11 +15,11 @@
 import math
 from collections.abc import Callable
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
+from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -87,14 +87,11 @@ class Inkling2TextConfig(InklingTextConfig):
         Position from which queries and relative states are scaled up logarithmically in the full-attention layers.
     log_scaling_alpha (`float`, *optional*, defaults to 0.1):
         Strength of the logarithmic scaling controlled by `log_scaling_n_floor`.
-    local_layer_ids (`list[int]`, *optional*, defaults to `None`):
-        Indices of the layers using sliding window attention. Used to derive `layer_types` when it is not provided.
-        If `None`, every layer whose index is not 5 modulo 6 uses sliding window attention.
     qk_l2_clip_threshold (`float`, *optional*, defaults to 22.627416997969522):
         Maximum L2 norm of each query and key head vector. Longer vectors are scaled down to this norm.
     rel_l2_clip_threshold (`float`, *optional*, defaults to 8.0):
         Maximum L2 norm of each relative-state head vector.
-    n_layers_per_attnres_block (`int`, *optional*, defaults to 6):
+    n_layers_per_attn_res_block (`int`, *optional*, defaults to 6):
         Number of decoder layers summed into one block before the block becomes a source of the attention residuals.
     mlp_gate_softcap (`float`, *optional*, defaults to 4.0):
         Softcap applied to the linear part of the experts' gate projection.
@@ -141,7 +138,7 @@ class Inkling2TextConfig(InklingTextConfig):
     eos_token_id: int | None = 200006
     qk_l2_clip_threshold: float = 22.627416997969522
     rel_l2_clip_threshold: float = 8.0
-    n_layers_per_attnres_block: int = 6
+    n_layers_per_attn_res_block: int = 6
     mlp_gate_softcap: float = 4.0
     mlp_up_softcap: float = 25.0
     final_logit_softcapping: float = 30.0
@@ -155,19 +152,15 @@ class Inkling2TextConfig(InklingTextConfig):
     num_mtp_layers = AttributeError()
     chain_hidden_post_norm = AttributeError()
     mtp_hidden_states_first = AttributeError()
+    local_layer_ids = AttributeError()
     mtp_local_layer_ids = AttributeError()
+    number_of_conv_states = 4
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
-            if self.local_layer_ids is not None:
-                local_layer_ids = set(self.local_layer_ids)
-            else:
-                local_layer_ids = {i for i in range(self.num_hidden_layers) if (i + 1) % 6}
             self.layer_types = [
-                "hybrid_sliding" if i in local_layer_ids else "hybrid" for i in range(self.num_hidden_layers)
+                "hybrid" if (i + 1) % 6 == 0 else "hybrid_sliding" for i in range(self.num_hidden_layers)
             ]
-        # 4 conv modules per layer, each needing its own conv cache
-        self.number_of_conv_states = 4
         PreTrainedConfig.__post_init__(self, **kwargs)
 
     def mtp_layer_types(self):
@@ -244,8 +237,14 @@ class Inkling2Config(InklingConfig):
     image_bos_token_id = AttributeError()
 
     def __post_init__(self, **kwargs):
-        PreTrainedConfig.__post_init__(self, **kwargs)
-        self.vision_config.text_hidden_size = self.text_config.hidden_size
+        raise AttributeError("Not needed for Inkling2")
+
+    def validate_architecture(self):
+        if self.vision_config.text_hidden_size != self.text_config.hidden_size:
+            raise ValueError(
+                f"`vision_config.text_hidden_size` ({self.vision_config.text_hidden_size}) must match "
+                f"`text_config.hidden_size` ({self.text_config.hidden_size})."
+            )
 
 
 class Inkling2ModelOutputWithPast(InklingModelOutputWithPast):
@@ -428,23 +427,36 @@ class Inkling2Attention(InklingAttention):
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
 
-        kv_size = self.num_key_value_heads * self.head_dim
         self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.k_proj = nn.Linear(config.hidden_size, kv_size, bias=False)
-        self.v_proj = nn.Linear(config.hidden_size, kv_size, bias=False)
+        self.k_proj = nn.Linear(config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.r_proj = nn.Linear(config.hidden_size, self.num_heads * config.d_rel, bias=False)
         self.gate_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.sink_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
         if self.is_sliding:
-            self.k_sconv = Inkling2ShortConvolution(kv_size, config.sconv_kernel_size, layer_idx, conv_idx=0)
-            self.v_sconv = Inkling2ShortConvolution(kv_size, config.sconv_kernel_size, layer_idx, conv_idx=1)
+            self.k_sconv = Inkling2ShortConvolution(
+                self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx, conv_idx=0
+            )
+            self.v_sconv = Inkling2ShortConvolution(
+                self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx, conv_idx=1
+            )
         else:
             self.k_sconv = Inkling2DynamicShortConvolution(
-                kv_size, config.hidden_size, self.num_key_value_heads, config.sconv_kernel_size, layer_idx, conv_idx=0
+                self.num_key_value_heads * self.head_dim,
+                config.hidden_size,
+                self.num_key_value_heads,
+                config.sconv_kernel_size,
+                layer_idx,
+                conv_idx=0,
             )
             self.v_sconv = Inkling2DynamicShortConvolution(
-                kv_size, config.hidden_size, self.num_key_value_heads, config.sconv_kernel_size, layer_idx, conv_idx=1
+                self.num_key_value_heads * self.head_dim,
+                config.hidden_size,
+                self.num_key_value_heads,
+                config.sconv_kernel_size,
+                layer_idx,
+                conv_idx=1,
             )
         self.q_l2_clip = Inkling2L2Clip(self.num_heads, self.head_dim, config.qk_l2_clip_threshold, True)
         self.k_l2_clip = Inkling2L2Clip(self.num_key_value_heads, self.head_dim, config.qk_l2_clip_threshold, False)
@@ -542,24 +554,30 @@ class Inkling2Attention(InklingAttention):
         return attn_output, attn_weights
 
 
-def softcapped_swiglu(gate: torch.Tensor, up: torch.Tensor, gate_softcap: float, up_softcap: float) -> torch.Tensor:
+class Inkling2SoftcappedSwiGLU(nn.Module):
     """SwiGLU where the sigmoid sees the raw gate and the softcaps only bound the linear gate factor and `up`."""
-    input_dtype = gate.dtype
-    gate, up = gate.float(), up.float()
-    gate_linear = gate_softcap * torch.tanh(gate / gate_softcap)
-    up = up_softcap * torch.tanh(up / up_softcap)
-    return (gate_linear * torch.sigmoid(gate) * up).to(input_dtype)
+
+    def __init__(self, config: Inkling2TextConfig):
+        super().__init__()
+        self.gate_softcap = config.mlp_gate_softcap
+        self.up_softcap = config.mlp_up_softcap
+
+    def forward(self, gate: torch.Tensor, up: torch.Tensor) -> torch.Tensor:
+        input_dtype = gate.dtype
+        gate, up = gate.float(), up.float()
+        gate_linear = self.gate_softcap * torch.tanh(gate / self.gate_softcap)
+        up = self.up_softcap * torch.tanh(up / self.up_softcap)
+        return (gate_linear * torch.sigmoid(gate) * up).to(input_dtype)
 
 
 class Inkling2Experts(InklingExperts):
     def __init__(self, config: Inkling2TextConfig):
         super().__init__(config)
-        self.gate_softcap = config.mlp_gate_softcap
-        self.up_softcap = config.mlp_up_softcap
+        self.act_fn = Inkling2SoftcappedSwiGLU(config)
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up[..., 0::2], gate_up[..., 1::2]
-        return softcapped_swiglu(gate, up, self.gate_softcap, self.up_softcap)
+        return self.act_fn(gate, up)
 
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
@@ -651,7 +669,7 @@ class Inkling2DecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.is_sliding = config.layer_types[layer_idx] == "hybrid_sliding"
         self.attention_type = "sliding_attention" if self.is_sliding else "full_attention"
-        self.is_block_boundary = layer_idx % config.n_layers_per_attnres_block == 0
+        self.is_block_boundary = layer_idx % config.n_layers_per_attn_res_block == 0
         self.attn_res = Inkling2BlockAttentionResidual(config, 1 if self.is_sliding else 3) if layer_idx > 0 else None
         self.mlp_res = Inkling2BlockAttentionResidual(config)
         self.self_attn = Inkling2Attention(config, layer_idx)
@@ -827,8 +845,9 @@ class Inkling2VisionEmbeddings(nn.Module):
 class Inkling2VisionMerger(LlavaMultiModalProjector):
     def __init__(self, config: Inkling2VisionConfig):
         nn.Module.__init__(self)
-        merged_size = config.spatial_merge_size**2 * config.hidden_size
-        self.linear_1 = nn.Linear(merged_size, config.projection_hidden_dim, bias=config.projector_bias)
+        self.linear_1 = nn.Linear(
+            config.spatial_merge_size**2 * config.hidden_size, config.projection_hidden_dim, bias=config.projector_bias
+        )
         self.act = ACT2FN[config.hidden_act]
         self.linear_2 = nn.Linear(config.projection_hidden_dim, config.text_hidden_size, bias=config.projector_bias)
 
@@ -1239,8 +1258,8 @@ class Inkling2ImageProcessor(TorchvisionBackend):
     ) -> "torch.Tensor":
         # keep the alpha channel of PIL images so that `convert_to_rgb` composites it onto the checkerboard
         if do_convert_rgb and get_image_type(image) == ImageType.PIL:
-            image = np.array(image.convert("RGBA" if image.has_transparency_data else "RGB"))
-            input_data_format = ChannelDimension.LAST
+            image = tvF.pil_to_tensor(image.convert("RGBA" if image.has_transparency_data else "RGB"))
+            input_data_format = ChannelDimension.FIRST
         return super().process_image(
             image, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device, **kwargs
         )

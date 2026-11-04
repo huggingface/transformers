@@ -151,8 +151,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "rms_norm_eps_moe_gate",
         "shared_expert_sink",
     ],
-    # Consumed by config logic: `local_layer_ids` builds `layer_types`, `mlp_ratio` sets `intermediate_size`.
-    "Inkling2TextConfig": ["local_layer_ids"],
+    # Consumed by config logic: `mlp_ratio` sets `intermediate_size`.
     "Inkling2VisionConfig": ["mlp_ratio"],
     "FalconMambaConfig": ["expand"],
     "FSMTConfig": ["langs", "common_kwargs", "early_stopping", "length_penalty", "max_length", "num_beams"],

@@ -396,23 +396,36 @@ class Inkling2Attention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
 
-        kv_size = self.num_key_value_heads * self.head_dim
         self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.k_proj = nn.Linear(config.hidden_size, kv_size, bias=False)
-        self.v_proj = nn.Linear(config.hidden_size, kv_size, bias=False)
+        self.k_proj = nn.Linear(config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.r_proj = nn.Linear(config.hidden_size, self.num_heads * config.d_rel, bias=False)
         self.gate_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.sink_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
         if self.is_sliding:
-            self.k_sconv = Inkling2ShortConvolution(kv_size, config.sconv_kernel_size, layer_idx, conv_idx=0)
-            self.v_sconv = Inkling2ShortConvolution(kv_size, config.sconv_kernel_size, layer_idx, conv_idx=1)
+            self.k_sconv = Inkling2ShortConvolution(
+                self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx, conv_idx=0
+            )
+            self.v_sconv = Inkling2ShortConvolution(
+                self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx, conv_idx=1
+            )
         else:
             self.k_sconv = Inkling2DynamicShortConvolution(
-                kv_size, config.hidden_size, self.num_key_value_heads, config.sconv_kernel_size, layer_idx, conv_idx=0
+                self.num_key_value_heads * self.head_dim,
+                config.hidden_size,
+                self.num_key_value_heads,
+                config.sconv_kernel_size,
+                layer_idx,
+                conv_idx=0,
             )
             self.v_sconv = Inkling2DynamicShortConvolution(
-                kv_size, config.hidden_size, self.num_key_value_heads, config.sconv_kernel_size, layer_idx, conv_idx=1
+                self.num_key_value_heads * self.head_dim,
+                config.hidden_size,
+                self.num_key_value_heads,
+                config.sconv_kernel_size,
+                layer_idx,
+                conv_idx=1,
             )
         self.q_l2_clip = Inkling2L2Clip(self.num_heads, self.head_dim, config.qk_l2_clip_threshold, True)
         self.k_l2_clip = Inkling2L2Clip(self.num_key_value_heads, self.head_dim, config.qk_l2_clip_threshold, False)
@@ -510,13 +523,20 @@ class Inkling2Attention(nn.Module):
         return attn_output, attn_weights
 
 
-def softcapped_swiglu(gate: torch.Tensor, up: torch.Tensor, gate_softcap: float, up_softcap: float) -> torch.Tensor:
+class Inkling2SoftcappedSwiGLU(nn.Module):
     """SwiGLU where the sigmoid sees the raw gate and the softcaps only bound the linear gate factor and `up`."""
-    input_dtype = gate.dtype
-    gate, up = gate.float(), up.float()
-    gate_linear = gate_softcap * torch.tanh(gate / gate_softcap)
-    up = up_softcap * torch.tanh(up / up_softcap)
-    return (gate_linear * torch.sigmoid(gate) * up).to(input_dtype)
+
+    def __init__(self, config: Inkling2TextConfig):
+        super().__init__()
+        self.gate_softcap = config.mlp_gate_softcap
+        self.up_softcap = config.mlp_up_softcap
+
+    def forward(self, gate: torch.Tensor, up: torch.Tensor) -> torch.Tensor:
+        input_dtype = gate.dtype
+        gate, up = gate.float(), up.float()
+        gate_linear = self.gate_softcap * torch.tanh(gate / self.gate_softcap)
+        up = self.up_softcap * torch.tanh(up / self.up_softcap)
+        return (gate_linear * torch.sigmoid(gate) * up).to(input_dtype)
 
 
 @use_experts_implementation
@@ -530,9 +550,7 @@ class Inkling2Experts(nn.Module):
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
-        self.act_fn = ACT2FN[config.hidden_act]
-        self.gate_softcap = config.mlp_gate_softcap
-        self.up_softcap = config.mlp_up_softcap
+        self.act_fn = Inkling2SoftcappedSwiGLU(config)
 
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
@@ -557,7 +575,7 @@ class Inkling2Experts(nn.Module):
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up[..., 0::2], gate_up[..., 1::2]
-        return softcapped_swiglu(gate, up, self.gate_softcap, self.up_softcap)
+        return self.act_fn(gate, up)
 
 
 class Inkling2TopkRouter(nn.Module):
@@ -640,7 +658,7 @@ class Inkling2DecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.is_sliding = config.layer_types[layer_idx] == "hybrid_sliding"
         self.attention_type = "sliding_attention" if self.is_sliding else "full_attention"
-        self.is_block_boundary = layer_idx % config.n_layers_per_attnres_block == 0
+        self.is_block_boundary = layer_idx % config.n_layers_per_attn_res_block == 0
         self.attn_res = Inkling2BlockAttentionResidual(config, 1 if self.is_sliding else 3) if layer_idx > 0 else None
         self.mlp_res = Inkling2BlockAttentionResidual(config)
         self.self_attn = Inkling2Attention(config, layer_idx)
@@ -982,8 +1000,9 @@ class Inkling2VisionEmbeddings(nn.Module):
 class Inkling2VisionMerger(nn.Module):
     def __init__(self, config: Inkling2VisionConfig):
         super().__init__()
-        merged_size = config.spatial_merge_size**2 * config.hidden_size
-        self.linear_1 = nn.Linear(merged_size, config.projection_hidden_dim, bias=config.projector_bias)
+        self.linear_1 = nn.Linear(
+            config.spatial_merge_size**2 * config.hidden_size, config.projection_hidden_dim, bias=config.projector_bias
+        )
         self.act = ACT2FN[config.hidden_act]
         self.linear_2 = nn.Linear(config.projection_hidden_dim, config.text_hidden_size, bias=config.projector_bias)
 

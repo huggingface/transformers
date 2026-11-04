@@ -20,9 +20,9 @@
 
 import math
 
-import numpy as np
 import torch
 import torch.nn.functional as F
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
@@ -51,8 +51,8 @@ class Inkling2ImageProcessor(TorchvisionBackend):
     ) -> "torch.Tensor":
         # keep the alpha channel of PIL images so that `convert_to_rgb` composites it onto the checkerboard
         if do_convert_rgb and get_image_type(image) == ImageType.PIL:
-            image = np.array(image.convert("RGBA" if image.has_transparency_data else "RGB"))
-            input_data_format = ChannelDimension.LAST
+            image = tvF.pil_to_tensor(image.convert("RGBA" if image.has_transparency_data else "RGB"))
+            input_data_format = ChannelDimension.FIRST
         return super().process_image(
             image, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device, **kwargs
         )

@@ -46,14 +46,11 @@ class Inkling2TextConfig(PreTrainedConfig):
         Position from which queries and relative states are scaled up logarithmically in the full-attention layers.
     log_scaling_alpha (`float`, *optional*, defaults to 0.1):
         Strength of the logarithmic scaling controlled by `log_scaling_n_floor`.
-    local_layer_ids (`list[int]`, *optional*, defaults to `None`):
-        Indices of the layers using sliding window attention. Used to derive `layer_types` when it is not provided.
-        If `None`, every layer whose index is not 5 modulo 6 uses sliding window attention.
     qk_l2_clip_threshold (`float`, *optional*, defaults to 22.627416997969522):
         Maximum L2 norm of each query and key head vector. Longer vectors are scaled down to this norm.
     rel_l2_clip_threshold (`float`, *optional*, defaults to 8.0):
         Maximum L2 norm of each relative-state head vector.
-    n_layers_per_attnres_block (`int`, *optional*, defaults to 6):
+    n_layers_per_attn_res_block (`int`, *optional*, defaults to 6):
         Number of decoder layers summed into one block before the block becomes a source of the attention residuals.
     mlp_gate_softcap (`float`, *optional*, defaults to 4.0):
         Softcap applied to the linear part of the experts' gate projection.
@@ -100,7 +97,6 @@ class Inkling2TextConfig(PreTrainedConfig):
     rel_extent: int = 1024
     log_scaling_n_floor: int = 8192
     log_scaling_alpha: float = 0.1
-    local_layer_ids: list[int] | None = None
     layer_types: list[str] | None = None
     max_position_embeddings: int = 1048576
     rms_norm_eps: float = 1e-6
@@ -118,23 +114,18 @@ class Inkling2TextConfig(PreTrainedConfig):
     eos_token_id: int | None = 200006
     qk_l2_clip_threshold: float = 22.627416997969522
     rel_l2_clip_threshold: float = 8.0
-    n_layers_per_attnres_block: int = 6
+    n_layers_per_attn_res_block: int = 6
     mlp_gate_softcap: float = 4.0
     mlp_up_softcap: float = 25.0
     final_logit_softcapping: float = 30.0
     use_cache: bool = True
+    number_of_conv_states = 4
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:
-            if self.local_layer_ids is not None:
-                local_layer_ids = set(self.local_layer_ids)
-            else:
-                local_layer_ids = {i for i in range(self.num_hidden_layers) if (i + 1) % 6}
             self.layer_types = [
-                "hybrid_sliding" if i in local_layer_ids else "hybrid" for i in range(self.num_hidden_layers)
+                "hybrid" if (i + 1) % 6 == 0 else "hybrid_sliding" for i in range(self.num_hidden_layers)
             ]
-        # 4 conv modules per layer, each needing its own conv cache
-        self.number_of_conv_states = 4
         super().__post_init__(**kwargs)
 
 
@@ -203,9 +194,12 @@ class Inkling2Config(PreTrainedConfig):
     vision_config: Inkling2VisionConfig | dict | None = None
     image_token_id: int = 200054
 
-    def __post_init__(self, **kwargs):
-        super().__post_init__(**kwargs)
-        self.vision_config.text_hidden_size = self.text_config.hidden_size
+    def validate_architecture(self):
+        if self.vision_config.text_hidden_size != self.text_config.hidden_size:
+            raise ValueError(
+                f"`vision_config.text_hidden_size` ({self.vision_config.text_hidden_size}) must match "
+                f"`text_config.hidden_size` ({self.text_config.hidden_size})."
+            )
 
 
 __all__ = ["Inkling2Config", "Inkling2TextConfig", "Inkling2VisionConfig"]
