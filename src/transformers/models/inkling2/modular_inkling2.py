@@ -343,8 +343,8 @@ class Inkling2DynamicShortConvolution(nn.Module):
         self.conv_idx = conv_idx
         self.conv_kernel_size = conv_kernel_size
         self.num_heads = num_heads
-        # tap index is the backward distance: `static_w[0]` weights the current token
-        self.static_w = nn.Parameter(torch.zeros(conv_kernel_size, hidden_size))
+        # tap index is the backward distance: `static_weight[0]` weights the current token
+        self.static_weight = nn.Parameter(torch.zeros(conv_kernel_size, hidden_size))
         self.weight_proj = nn.Parameter(torch.empty(num_heads * conv_kernel_size, input_size))
 
     def forward(
@@ -359,7 +359,7 @@ class Inkling2DynamicShortConvolution(nn.Module):
         batch_size, seq_len, hidden_size = hidden_states.shape
         dynamic_weights = F.linear(dynamic_input, self.weight_proj.to(dynamic_input.dtype)).float()
         dynamic_weights = dynamic_weights.view(batch_size, seq_len, self.num_heads, 1, self.conv_kernel_size)
-        weights = self.static_w.float().T.view(self.num_heads, -1, self.conv_kernel_size) + dynamic_weights
+        weights = self.static_weight.float().T.view(self.num_heads, -1, self.conv_kernel_size) + dynamic_weights
 
         hidden_states = hidden_states.float()
         residual = hidden_states
@@ -422,7 +422,7 @@ class Inkling2Attention(InklingAttention):
         self.num_key_value_heads = config.swa_num_key_value_heads if self.is_sliding else config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.sliding_window = config.sliding_window_size if self.is_sliding else None
-        self.rel_extent = config.sliding_window_size if self.is_sliding else config.rel_extent
+        self.relative_extent = config.sliding_window_size if self.is_sliding else config.rel_extent
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
@@ -430,19 +430,19 @@ class Inkling2Attention(InklingAttention):
         self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.r_proj = nn.Linear(config.hidden_size, self.num_heads * config.d_rel, bias=False)
+        self.relative_proj = nn.Linear(config.hidden_size, self.num_heads * config.d_rel, bias=False)
         self.gate_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.sink_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
         if self.is_sliding:
-            self.k_sconv = Inkling2ShortConvolution(
+            self.key_convolution = Inkling2ShortConvolution(
                 self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx, conv_idx=0
             )
-            self.v_sconv = Inkling2ShortConvolution(
+            self.value_convolution = Inkling2ShortConvolution(
                 self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx, conv_idx=1
             )
         else:
-            self.k_sconv = Inkling2DynamicShortConvolution(
+            self.key_convolution = Inkling2DynamicShortConvolution(
                 self.num_key_value_heads * self.head_dim,
                 config.hidden_size,
                 self.num_key_value_heads,
@@ -450,7 +450,7 @@ class Inkling2Attention(InklingAttention):
                 layer_idx,
                 conv_idx=0,
             )
-            self.v_sconv = Inkling2DynamicShortConvolution(
+            self.value_convolution = Inkling2DynamicShortConvolution(
                 self.num_key_value_heads * self.head_dim,
                 config.hidden_size,
                 self.num_key_value_heads,
@@ -460,8 +460,8 @@ class Inkling2Attention(InklingAttention):
             )
         self.q_l2_clip = Inkling2L2Clip(self.num_heads, self.head_dim, config.qk_l2_clip_threshold, True)
         self.k_l2_clip = Inkling2L2Clip(self.num_key_value_heads, self.head_dim, config.qk_l2_clip_threshold, False)
-        self.rel_l2_clip = Inkling2L2Clip(self.num_heads, config.d_rel, config.rel_l2_clip_threshold, True)
-        self.rel_logits_proj = Inkling2RelativeLogits(config.d_rel, self.rel_extent)
+        self.relative_l2_clip = Inkling2L2Clip(self.num_heads, config.d_rel, config.rel_l2_clip_threshold, True)
+        self.relative_logits_proj = Inkling2RelativeLogits(config.d_rel, self.relative_extent)
 
     def forward(
         self,
@@ -487,18 +487,18 @@ class Inkling2Attention(InklingAttention):
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(key_hidden_states)
         value_states = self.v_proj(value_hidden_states)
-        relative_states = self.r_proj(hidden_states)
+        relative_states = self.relative_proj(hidden_states)
         gate = self.gate_proj(hidden_states)
         sinks = self.sink_proj(hidden_states)
 
         if self.is_sliding:
-            key_states = self.k_sconv(key_states, past_key_values=past_key_values, conv_mask=conv_mask)
-            value_states = self.v_sconv(value_states, past_key_values=past_key_values, conv_mask=conv_mask)
+            key_states = self.key_convolution(key_states, past_key_values=past_key_values, conv_mask=conv_mask)
+            value_states = self.value_convolution(value_states, past_key_values=past_key_values, conv_mask=conv_mask)
         else:
-            key_states = self.k_sconv(
+            key_states = self.key_convolution(
                 key_states, key_hidden_states, past_key_values=past_key_values, conv_mask=conv_mask
             )
-            value_states = self.v_sconv(
+            value_states = self.value_convolution(
                 value_states, value_hidden_states, past_key_values=past_key_values, conv_mask=conv_mask
             )
 
@@ -523,12 +523,12 @@ class Inkling2Attention(InklingAttention):
         key_states = self.k_l2_clip(key_states.view(hidden_shape)).transpose(1, 2)
         value_states = F.rms_norm(value_states.view(hidden_shape), (self.head_dim,), eps=self.config.rms_norm_eps)
         value_states = value_states.transpose(1, 2)
-        relative_states = self.rel_l2_clip(relative_states.view(*input_shape, self.num_heads, -1), tau)
+        relative_states = self.relative_l2_clip(relative_states.view(*input_shape, self.num_heads, -1), tau)
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        position_bias = self.rel_logits_proj(relative_states, q_positions, kv_positions)
+        position_bias = self.relative_logits_proj(relative_states, q_positions, kv_positions)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -670,8 +670,10 @@ class Inkling2DecoderLayer(GradientCheckpointingLayer):
         self.is_sliding = config.layer_types[layer_idx] == "hybrid_sliding"
         self.attention_type = "sliding_attention" if self.is_sliding else "full_attention"
         self.is_block_boundary = layer_idx % config.n_layers_per_attn_res_block == 0
-        self.attn_res = Inkling2BlockAttentionResidual(config, 1 if self.is_sliding else 3) if layer_idx > 0 else None
-        self.mlp_res = Inkling2BlockAttentionResidual(config)
+        self.attention_input = (
+            Inkling2BlockAttentionResidual(config, 1 if self.is_sliding else 3) if layer_idx > 0 else None
+        )
+        self.mlp_input = Inkling2BlockAttentionResidual(config)
         self.self_attn = Inkling2Attention(config, layer_idx)
         self.mlp = Inkling2MoE(config)
         if self.is_sliding:
@@ -681,10 +683,10 @@ class Inkling2DecoderLayer(GradientCheckpointingLayer):
             self.k_input_layernorm = Inkling2RMSNorm(config.hidden_size, config.rms_norm_eps)
             self.v_input_layernorm = Inkling2RMSNorm(config.hidden_size, config.rms_norm_eps)
         self.post_attention_layernorm = Inkling2RMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.attn_sconv = Inkling2ShortConvolution(
+        self.post_attention_convolution = Inkling2ShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=2
         )
-        self.mlp_sconv = Inkling2ShortConvolution(
+        self.post_mlp_convolution = Inkling2ShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=3
         )
 
@@ -699,10 +701,10 @@ class Inkling2DecoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         dtype = hidden_states.dtype
         block_residual = hidden_states
-        if self.attn_res is None:
+        if self.attention_input is None:
             qkv_hidden_states = (hidden_states,) * (1 if self.is_sliding else 3)
         else:
-            qkv_hidden_states = self.attn_res(block_states, hidden_states)
+            qkv_hidden_states = self.attention_input(block_states, hidden_states)
 
         if self.is_sliding:
             attention_inputs = {"hidden_states": self.input_layernorm(qkv_hidden_states[0]).to(dtype)}
@@ -719,7 +721,9 @@ class Inkling2DecoderLayer(GradientCheckpointingLayer):
             past_key_values=past_key_values,
             **kwargs,
         )
-        hidden_states = self.attn_sconv(hidden_states, past_key_values=past_key_values, conv_mask=conv_mask)
+        hidden_states = self.post_attention_convolution(
+            hidden_states, past_key_values=past_key_values, conv_mask=conv_mask
+        )
         residual = hidden_states
 
         if self.is_block_boundary:
@@ -727,9 +731,9 @@ class Inkling2DecoderLayer(GradientCheckpointingLayer):
         else:
             hidden_states = block_residual.float() + hidden_states.float()
 
-        hidden_states = self.mlp_res(block_states, hidden_states)[0]
+        hidden_states = self.mlp_input(block_states, hidden_states)[0]
         hidden_states = self.mlp(self.post_attention_layernorm(hidden_states).to(dtype))
-        hidden_states = self.mlp_sconv(hidden_states, past_key_values=past_key_values, conv_mask=conv_mask)
+        hidden_states = self.post_mlp_convolution(hidden_states, past_key_values=past_key_values, conv_mask=conv_mask)
 
         if not self.is_block_boundary:
             residual = block_residual + residual
@@ -860,13 +864,13 @@ class Inkling2PreTrainedModel(InklingPreTrainedModel):
     _supports_flex_attn = False
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
-        "attn_sconv",
-        "mlp_sconv",
-        "k_sconv",
-        "v_sconv",
-        "attn_res",
-        "mlp_res",
-        "output_res",
+        "post_attention_convolution",
+        "post_mlp_convolution",
+        "key_convolution",
+        "value_convolution",
+        "attention_input",
+        "mlp_input",
+        "final_input",
     ]
     _keys_to_ignore_on_load_unexpected = AttributeError()
 
@@ -885,7 +889,7 @@ class Inkling2PreTrainedModel(InklingPreTrainedModel):
         elif isinstance(module, Inkling2L2Clip) and module.scale is not None:
             init.ones_(module.scale)
         elif isinstance(module, Inkling2DynamicShortConvolution):
-            init.zeros_(module.static_w)
+            init.zeros_(module.static_weight)
             init.normal_(module.weight_proj, mean=0.0, std=std)
         elif isinstance(module, Inkling2BlockAttentionResidual):
             init.zeros_(module.query)
@@ -901,7 +905,7 @@ class Inkling2PreTrainedModel(InklingPreTrainedModel):
 class Inkling2TextModel(InklingTextModel):
     def __init__(self, config: Inkling2TextConfig):
         super().__init__(config)
-        self.output_res = Inkling2BlockAttentionResidual(config)
+        self.final_input = Inkling2BlockAttentionResidual(config)
 
     @merge_with_config_defaults
     @capture_outputs
@@ -960,7 +964,7 @@ class Inkling2TextModel(InklingTextModel):
                 block_states = [*block_states, hidden_states]
             hidden_states = new_hidden_states
 
-        hidden_states = self.output_res(block_states, hidden_states)[0]
+        hidden_states = self.final_input(block_states, hidden_states)[0]
         hidden_states = self.norm(hidden_states).to(inputs_embeds.dtype)
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
