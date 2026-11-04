@@ -210,8 +210,6 @@ class GlmAsrProcessor(ProcessorMixin):
             transcription (`str` or `list[str]`, *optional*):
                 Target transcript(s) for training, one per audio. When given, each transcript is written as the
                 assistant turn and `labels` are returned (see `output_labels` in [`~GlmAsrProcessor.__call__`]).
-                The chat template does not close the last assistant turn, so `<|user|>` (one of the model's EOS
-                tokens) is appended to each transcript for the model to learn when to stop.
             tokenize (`bool`, *optional*, defaults to `True`):
                 Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
                 the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
@@ -273,11 +271,7 @@ class GlmAsrProcessor(ProcessorMixin):
                 }
             ]
             if transcript is not None:
-                # The chat template doesn't close the last assistant turn, so the EOS (`<|user|>`, which opens the next
-                # turn) is appended for it to be learned
-                conversation.append(
-                    {"role": "assistant", "content": [{"type": "text", "text": transcript + "<|user|>"}]}
-                )
+                conversation.append({"role": "assistant", "content": [{"type": "text", "text": transcript}]})
             conversations.append(conversation)
 
         return self.apply_chat_template(
