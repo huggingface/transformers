@@ -49,8 +49,9 @@ from transformers.generation.continuous_batching.cache_allocators import (
     CacheAllocator,
     CachePool,
     FullAttentionCacheAllocator,
-    LinearAttentionCacheAllocator,
     SlidingAttentionCacheAllocator,
+    StateCacheAllocator,
+    StateSpec,
 )
 from transformers.generation.continuous_batching.continuous_api import (
     BackgroundThreadStatus,
@@ -284,7 +285,7 @@ def _make_allocator(
 ) -> FullAttentionCacheAllocator | SlidingAttentionCacheAllocator:
     """Builds an allocator caching float16 keys and values of `num_kv_heads` heads of `head_dim`, as an attention
     layer declares by default."""
-    rows = [((num_kv_heads, head_dim), torch.float16)] * 2
+    rows = dict.fromkeys(("key", "value"), ((num_kv_heads, head_dim), torch.float16))
     kwargs = {} if sliding_window is None else {"sliding_window": sliding_window}
     return cls(
         index=index,
@@ -296,19 +297,17 @@ def _make_allocator(
     )
 
 
-def _make_linear_allocator(
-    layer_indices: list[int] | None = None, index: int = 0, block_alignment: int = 1
-) -> LinearAttentionCacheAllocator:
-    """Builds a linear attention allocator holding, per layer, a conv state of shape [32, 2] in float16 and a
-    recurrent state of shape [4, 4, 4] in float32, as a gated delta net with 2 key heads and 4 value heads of
-    dimension 4 and a convolution of width 3 would declare."""
-    states = [((32, 2), torch.float16), ((4, 4, 4), torch.float32)]
-    return LinearAttentionCacheAllocator(
-        index=index,
-        states=states,
-        layer_indices=layer_indices if layer_indices is not None else [0],
-        block_alignment=block_alignment,
-    )
+def _make_state_allocator(
+    layer_indices: tuple[int, ...] = (0,), block_alignment: int = 1, fill: int | float = 0
+) -> StateCacheAllocator:
+    """Builds a state allocator where each layer keeps a float16 conv state of shape [32, 2] and a float32 recurrent
+    state of shape [4, 4, 4], as a gated delta net with 2 key heads and 4 value heads of dimension 4 and a convolution
+    of width 3 would declare. The recurrent state starts at `fill`."""
+    states = {
+        "conv": StateSpec((32, 2), torch.float16),
+        "recurrent": StateSpec((4, 4, 4), torch.float32, fill),
+    }
+    return StateCacheAllocator(index=0, states=dict.fromkeys(layer_indices, states), block_alignment=block_alignment)
 
 
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
@@ -461,7 +460,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         """A request of a linear attention allocator owns one block, allocated with its first tokens and kept for its
         whole life. It reads its states from the zeroed trash block while it has no past and from its block after,
         and always writes them to its block. Each index list holds one entry per request, not one per token."""
-        allocator = _make_linear_allocator(layer_indices=[0, 2])
+        allocator = _make_state_allocator(layer_indices=(0, 2))
         pool = _setup_cache_pool([allocator], num_sectors=2)
         pool.allocate_sector(allocator.index)
 
@@ -485,45 +484,48 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         allocator.free_blocks("req")
         self.assertEqual(pool.count_free_blocks(allocator.index), free_blocks + 1)
 
-    def test_cache_layout_is_declared_by_the_layers(self) -> None:
-        """The paged cache sizes the rows and states from what the layers declare: all layers of a group have to
-        declare the same, an attention layer that declares no rows gets the default keys and values, and a linear
-        attention layer that declares no states is refused with a readable error."""
-        states = [((32, 2), torch.float16), ((4, 4, 4), torch.float32)]
-        self.assertEqual(PagedAttentionCache._get_declared([0, 2], {0: states, 2: states}, "states"), states)
-        with self.assertRaisesRegex(ValueError, "Layer 2 declares no cache states"):
-            PagedAttentionCache._get_declared([0, 2], {0: states}, "states")
-        with self.assertRaisesRegex(ValueError, "declare different cache states"):
-            PagedAttentionCache._get_declared([0, 2], {0: states, 2: states[:1]}, "states")
-        default_rows = [((2, 8), torch.float16)] * 2
-        self.assertEqual(PagedAttentionCache._get_declared([1, 3], {}, "rows", default_rows), default_rows)
-        mla_rows = [((1, 512), torch.float16), ((1, 64), torch.float16)]
-        self.assertEqual(PagedAttentionCache._get_declared([1], {1: mla_rows}, "rows", default_rows), mla_rows)
+    def test_cache_rows_are_declared_by_the_layers(self) -> None:
+        """The rows of a group's layers come from what they declare: all layers of a group have to declare the same,
+        and an attention layer that declares none gets its keys and values."""
+        default_rows = dict.fromkeys(("key", "value"), ((2, 8), torch.float16))
+        self.assertEqual(PagedAttentionCache._get_declared_rows([1, 3], {}, default_rows), default_rows)
+        mla_rows = {"latent": ((1, 512), torch.float16), "rope_key": ((1, 64), torch.float16)}
+        self.assertEqual(PagedAttentionCache._get_declared_rows([1], {1: mla_rows}, default_rows), mla_rows)
         with self.assertRaisesRegex(ValueError, "declare different cache rows"):
-            PagedAttentionCache._get_declared([1, 3], {1: mla_rows}, "rows", default_rows)
+            PagedAttentionCache._get_declared_rows([1, 3], {1: mla_rows}, default_rows)
 
-    def test_linear_attention_block_alignment(self) -> None:
-        """The block is sized to a multiple of the alignment, which the paged cache sets to the other allocators'
-        block sizes so the sectors stay small, with pages of equal size."""
-        allocator = _make_linear_allocator(layer_indices=[0, 1, 2], block_alignment=1000)
+    def test_state_allocator_layout(self) -> None:
+        """The layers keeping states need not declare the same ones: each layer's states follow each other in the
+        block, each on a 128-byte boundary, and the block is sized to a multiple of the alignment, which the paged
+        cache sets to the other allocators' block sizes so the sectors stay small."""
+        states = {
+            0: {"conv": StateSpec((32, 2), torch.float16), "recurrent": StateSpec((4, 4, 4), torch.float32)},
+            3: {"context": StateSpec((2,), torch.int64, 7)},
+        }
+        allocator = StateCacheAllocator(index=0, states=states, block_alignment=1000)
+        self.assertEqual(allocator.layer_indices, [0, 3])
         self.assertEqual(allocator.bytes_per_block % 1000, 0)
-        self.assertEqual(allocator.bytes_per_block, 3 * allocator.bytes_per_page)
-        # Each state starts on a 128-byte boundary, after the previous one
-        self.assertEqual(allocator.state_offsets[0], 0)
-        self.assertEqual(allocator.state_offsets[1] % 128, 0)
-        self.assertGreaterEqual(allocator.state_offsets[1], 32 * 2 * torch.float16.itemsize)
+        offsets = [allocator.state_offsets[0]["conv"], allocator.state_offsets[0]["recurrent"]]
+        offsets.append(allocator.state_offsets[3]["context"])
+        self.assertEqual(offsets, [0, 128, 384])
+
+        # Each state is viewed in its own shape and dtype
+        _setup_cache_pool([allocator], num_sectors=2)
+        self.assertEqual(allocator.state_views(3)["context"].dtype, torch.int64)
+        self.assertEqual(allocator.state_views(0)["recurrent"].shape[1:], (4, 4, 4))
 
     def test_cache_states_round_trip(self) -> None:
         """The paged cache reads and writes the states of the batch's sequences through the allocator's views, from
         the index storages on the varlen path and from the block table on the decode fast path, and sends padding
         sequences to the trash blocks. Forks copy blocks, states included."""
-        allocator = _make_linear_allocator(layer_indices=[0, 2])
+        allocator = _make_state_allocator(layer_indices=(0, 2), fill=0.5)
         # A sector holds one block here, so three requests (a, b and a fork) need three sectors
         pool = _setup_cache_pool([allocator], num_sectors=3)
         cache = PagedAttentionCache.__new__(PagedAttentionCache)
         cache.pool = pool
         cache.cache_allocators = {"linear_attention": allocator}
-        cache.layer_to_allocator = {0: allocator, 2: allocator}
+        cache.state_allocator = allocator
+        names = ("conv", "recurrent")
         for _ in range(2):
             pool.allocate_sector(allocator.index)
         for request_id in ("a", "b"):
@@ -534,35 +536,37 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         conv_states = torch.randn(2, 32, 2)
         recurrent_states = torch.randn(2, 4, 4, 4)
 
-        # Varlen path: the requests have no past, so they read zeros and write their block
+        # Varlen path: the requests have no past, so they read the fill values (0 for the conv state, 0.5 for the
+        # recurrent one) and write their block
         kwargs = {"read_index": [torch.tensor([0, 0])], "write_index": [torch.tensor(blocks)], "block_table": None}
-        read_conv, read_recurrent = cache.read_cache_states(0, kwargs)
+        read_conv, read_recurrent = cache.read_cache_states(0, names, kwargs)
         self.assertEqual(read_conv.shape, conv_states.shape)
         self.assertEqual(read_recurrent.shape, recurrent_states.shape)
-        self.assertTrue((read_conv == 0).all() and (read_recurrent == 0).all())
-        cache.write_cache_states(0, (conv_states, recurrent_states), kwargs)
+        self.assertTrue((read_conv == 0).all() and (read_recurrent == 0.5).all())
+        cache.write_cache_states(0, {"conv": conv_states, "recurrent": recurrent_states}, kwargs)
 
-        # Then they read what they wrote, in the cache dtypes, and the other layer is untouched
+        # Then they read what they wrote, in the cache dtypes
         kwargs["read_index"] = [torch.tensor(blocks)]
-        read_conv, read_recurrent = cache.read_cache_states(0, kwargs)
+        read_conv, read_recurrent = cache.read_cache_states(0, names, kwargs)
         torch.testing.assert_close(read_conv, conv_states.to(torch.float16))
         torch.testing.assert_close(read_recurrent, recurrent_states)
-        read_conv, read_recurrent = cache.read_cache_states(2, kwargs)
+        # The other layer's blocks were never written: a sequence with a past reads them as they are
+        read_conv, read_recurrent = cache.read_cache_states(2, names, kwargs)
         self.assertTrue((read_conv == 0).all() and (read_recurrent == 0).all())
 
         # Decode fast path: the block table gives the blocks, and its padding rows (-1) go to the trash blocks
         block_table = torch.tensor([[[blocks[1], -1], [-1, -1], [blocks[0], -1]]], dtype=torch.int32)
         kwargs = {"block_table": block_table}
-        read_conv, read_recurrent = cache.read_cache_states(0, kwargs)
+        read_conv, read_recurrent = cache.read_cache_states(0, names, kwargs)
         torch.testing.assert_close(read_conv[[0, 2]], conv_states[[1, 0]].to(torch.float16))
         torch.testing.assert_close(read_recurrent[[0, 2]], recurrent_states[[1, 0]])
-        self.assertTrue((read_conv[1] == 0).all() and (read_recurrent[1] == 0).all())
-        cache.write_cache_states(0, (read_conv + 1, read_recurrent + 1), kwargs)
-        read_conv, read_recurrent = cache.read_cache_states(0, kwargs)
+        self.assertTrue((read_conv[1] == 0).all() and (read_recurrent[1] == 0.5).all())
+        cache.write_cache_states(0, {"conv": read_conv + 1, "recurrent": read_recurrent + 1}, kwargs)
+        read_conv, read_recurrent = cache.read_cache_states(0, names, kwargs)
         torch.testing.assert_close(read_conv[[0, 2]], conv_states[[1, 0]].to(torch.float16) + 1)
         torch.testing.assert_close(read_recurrent[[0, 2]], recurrent_states[[1, 0]] + 1)
-        # The padding row wrote to the write trash, so the read trash still reads zeros
-        self.assertTrue((read_conv[1] == 0).all() and (read_recurrent[1] == 0).all())
+        # The padding row wrote to the write trash, so it still reads the fill values
+        self.assertTrue((read_conv[1] == 0).all() and (read_recurrent[1] == 0.5).all())
 
         # A fork copies the block, states included
         pool.allocate_sector(allocator.index)
@@ -570,7 +574,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         fork = allocator.block_table["c"][0]
         allocator.copy_blocks([blocks[0]], [fork])
         kwargs = {"read_index": [torch.tensor([fork])], "write_index": [torch.tensor([fork])], "block_table": None}
-        read_conv, read_recurrent = cache.read_cache_states(0, kwargs)
+        read_conv, read_recurrent = cache.read_cache_states(0, names, kwargs)
         torch.testing.assert_close(read_conv[0], conv_states[0].to(torch.float16) + 1)
         torch.testing.assert_close(read_recurrent[0], recurrent_states[0] + 1)
 
@@ -705,7 +709,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         write_index = torch.tensor(allocator.get_write_indices("req", past_length, query_length))
         written = {}
         for layer_idx in (1, 3):
-            rows = tuple(torch.randn(query_length, 2, 4).half() for _ in range(2))
+            rows = {name: torch.randn(query_length, 2, 4).half() for name in ("key", "value")}
             allocator.update(rows, layer_idx, torch.tensor([]), write_index)
             written[layer_idx] = rows
 
@@ -714,8 +718,9 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         allocator.fill_block_table("req", past_length, query_length, block_table)
         for layer_idx in (1, 3):
             page_views = allocator.get_cache_for_block_table(layer_idx)
-            self.assertEqual(len({view.shape[0] for view in page_views}), 1)
-            for view, row in zip(page_views, written[layer_idx]):
+            self.assertEqual(len({view.shape[0] for view in page_views.values()}), 1)
+            for name, view in page_views.items():
+                row = written[layer_idx][name]
                 pages = view[block_table[:2].long()].reshape(-1, 2, 4)[:query_length]
                 torch.testing.assert_close(pages, row)
 
