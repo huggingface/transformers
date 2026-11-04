@@ -322,11 +322,11 @@ class DFineMLP(nn.Module):
         input_dims = [input_dim] + hidden_dims
         output_dims = hidden_dims + [output_dim]
         self.layers = nn.ModuleList(nn.Linear(in_dim, out_dim) for in_dim, out_dim in zip(input_dims, output_dims))
-        self.act = ACT2CLS[act]()
+        self.act_fn = ACT2CLS[act]()
 
     def forward(self, stat_features: torch.Tensor) -> torch.Tensor:
         for i, layer in enumerate(self.layers):
-            stat_features = self.act(layer(stat_features)) if i < self.num_layers - 1 else layer(stat_features)
+            stat_features = self.act_fn(layer(stat_features)) if i < self.num_layers - 1 else layer(stat_features)
         return stat_features
 
 

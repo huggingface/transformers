@@ -323,12 +323,11 @@ class Glm5NextTextMLP(Qwen2MoeMLP):
         self.swiglu_limit = config.swiglu_limit
 
     def forward(self, x):
-        gate = self.gate_proj(x)
-        up = self.up_proj(x)
         # Key difference using clamping
-        gate = gate.clamp(min=None, max=self.swiglu_limit)
-        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
-        return self.down_proj(self.act_fn(gate) * up)
+        gate = self.gate_proj(x).clamp(max=self.swiglu_limit)
+        up = self.up_proj(x).clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        down_proj = self.down_proj(self.act_fn(gate) * up)
+        return down_proj
 
 
 class Glm5NextTextExperts(MiniMaxM3VLExperts):
@@ -1367,17 +1366,16 @@ class Glm5NextTextModel(Glm5NextPreTrainedModel):
 
 
 class Glm5NextVisionMLP(GlmOcrVisionMlp):
-    def __init__(self, config, bias: bool = True):
-        super().__init__(config, bias=bias)
+    def __init__(self, config):
+        super().__init__(config)
         self.swiglu_limit = config.swiglu_limit
 
-    def forward(self, hidden_state):
-        gate = self.gate_proj(hidden_state)
-        up = self.up_proj(hidden_state)
+    def forward(self, x):
         # Key difference using clamping
-        gate = gate.clamp(min=None, max=self.swiglu_limit)
-        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
-        return self.down_proj(self.act_fn(gate) * up)
+        gate = self.gate_proj(x).clamp(max=self.swiglu_limit)
+        up = self.up_proj(x).clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        down_proj = self.down_proj(self.act_fn(gate) * up)
+        return down_proj
 
 
 class Glm5NextVisionPatchMerger(GlmOcrVisionPatchMerger):
@@ -1399,7 +1397,7 @@ class Glm5NextVisionPatchMerger(GlmOcrVisionPatchMerger):
 class Glm5NextVisionBlock(GlmOcrVisionBlock):
     def __init__(self, config) -> None:
         super().__init__(config)
-        self.mlp = Glm5NextVisionMLP(config, bias=config.attention_bias)
+        self.mlp = Glm5NextVisionMLP(config)
 
 
 @auto_docstring

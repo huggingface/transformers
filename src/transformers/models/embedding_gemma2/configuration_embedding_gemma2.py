@@ -50,6 +50,7 @@ class EmbeddingGemma2TextConfig(PreTrainedConfig):
     """
 
     model_type = "embedding_gemma2_text"
+    attribute_map = {"hidden_activation": "hidden_act"}
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -75,7 +76,7 @@ class EmbeddingGemma2TextConfig(PreTrainedConfig):
     num_attention_heads: int = 4
     num_key_value_heads: int = 2
     head_dim: int = 256
-    hidden_activation: str = "gelu_pytorch_tanh"
+    hidden_act: str = "gelu_pytorch_tanh"
     max_position_embeddings: int = 262_144
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-6

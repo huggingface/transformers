@@ -181,7 +181,7 @@ class EsmFold2SwiGLU(Phi3MLP):
         nn.Module.__init__(self)
         self.gate_up_proj = nn.Linear(hidden_size, 2 * intermediate_size, bias=False)
         self.down_proj = nn.Linear(intermediate_size, hidden_size, bias=False)
-        self.activation_fn = ACT2FN["silu"]
+        self.act_fn = ACT2FN["silu"]
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):

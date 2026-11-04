@@ -639,13 +639,14 @@ class NemotronHMLP(nn.Module):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.intermediate_size = intermediate_size or config.intermediate_size
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
         self.act_fn = ACT2FN[config.mlp_hidden_act]
 
     def forward(self, x):
-        return self.down_proj(self.act_fn(self.up_proj(x)))
+        down_proj = self.down_proj(self.act_fn(self.up_proj(x)))
+        return down_proj
 
 
 @use_experts_implementation(has_gate=False)

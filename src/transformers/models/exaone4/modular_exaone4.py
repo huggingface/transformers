@@ -45,7 +45,8 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..olmo2.modeling_olmo2 import Olmo2DecoderLayer, Olmo2MLP
+from ..mistral.modeling_mistral import MistralMLP
+from ..olmo2.modeling_olmo2 import Olmo2DecoderLayer
 
 
 logger = logging.get_logger(__name__)
@@ -222,7 +223,7 @@ class Exaone4Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class Exaone4MLP(Olmo2MLP):
+class Exaone4MLP(MistralMLP):
     pass
 
 

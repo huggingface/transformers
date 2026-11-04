@@ -36,12 +36,12 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import LlamaDecoderLayer
+from ..mistral.modeling_mistral import MistralMLP
 from ..olmo2.modeling_olmo2 import Olmo2RotaryEmbedding
 from ..olmo3.modeling_olmo3 import (
     Olmo3Attention,
     Olmo3DecoderLayer,
     Olmo3ForCausalLM,
-    Olmo3MLP,
     Olmo3RMSNorm,
     apply_rotary_pos_emb,
     eager_attention_forward,
@@ -451,7 +451,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         return output
 
 
-class OlmoHybridMLP(Olmo3MLP):
+class OlmoHybridMLP(MistralMLP):
     pass
 
 

@@ -197,13 +197,13 @@ class EsmFold2SwiGLU(nn.Module):
         super().__init__()
         self.gate_up_proj = nn.Linear(hidden_size, 2 * intermediate_size, bias=False)
         self.down_proj = nn.Linear(intermediate_size, hidden_size, bias=False)
-        self.activation_fn = ACT2FN["silu"]
+        self.act_fn = ACT2FN["silu"]
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
         up_states = self.gate_up_proj(hidden_states)
 
         gate, up_states = up_states.chunk(2, dim=-1)
-        up_states = up_states * self.activation_fn(gate)
+        up_states = up_states * self.act_fn(gate)
 
         return self.down_proj(up_states)
 

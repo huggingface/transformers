@@ -119,11 +119,11 @@ class MLP(nn.Module):
         nx = config.n_embd
         self.c_fc = Conv1D(n_state, nx)
         self.c_proj = Conv1D(nx, n_state)
-        self.act = ACT_FNS[config.afn]
+        self.act_fn = ACT_FNS[config.afn]
         self.dropout = nn.Dropout(config.resid_pdrop)
 
     def forward(self, x):
-        h = self.act(self.c_fc(x))
+        h = self.act_fn(self.c_fc(x))
         h2 = self.c_proj(h)
         return self.dropout(h2)
 

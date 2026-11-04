@@ -488,7 +488,7 @@ class DiffusionGemmaDecoderTextAttention(nn.Module):
 
 
 class DiffusionGemmaText4MLP(nn.Module):
-    def __init__(self, config: DiffusionGemmaTextConfig, layer_idx: int):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -496,7 +496,7 @@ class DiffusionGemmaText4MLP(nn.Module):
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_activation]
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
@@ -551,7 +551,7 @@ class DiffusionGemmaTextExperts(nn.Module):
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
-        self.act_fn = ACT2FN[config.hidden_activation]
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(
         self,
@@ -596,7 +596,7 @@ class DiffusionGemmaEncoderTextLayer(nn.Module):
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
         self.self_attn = DiffusionGemmaEncoderTextAttention(config=config, layer_idx=layer_idx)
-        self.mlp = DiffusionGemmaText4MLP(config, layer_idx)
+        self.mlp = DiffusionGemmaText4MLP(config)
         self.input_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.pre_feedforward_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
@@ -674,7 +674,7 @@ class DiffusionGemmaDecoderTextLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
         self.self_attn = DiffusionGemmaDecoderTextAttention(config=config, layer_idx=layer_idx)
-        self.mlp = DiffusionGemmaText4MLP(config, layer_idx)
+        self.mlp = DiffusionGemmaText4MLP(config)
         self.input_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.pre_feedforward_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
@@ -796,7 +796,7 @@ class DiffusionGemmaSelfConditioning(nn.Module):
         self.gate_proj = nn.Linear(hidden_size, intermediate_size, bias=False)
         self.up_proj = nn.Linear(hidden_size, intermediate_size, bias=False)
         self.down_proj = nn.Linear(intermediate_size, hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_activation]
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, inputs_embeds, self_conditioning_signal: torch.Tensor) -> torch.Tensor:
         """

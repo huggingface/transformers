@@ -25,12 +25,12 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..mistral.modeling_mistral import MistralMLP
 from ..mixtral.modeling_mixtral import MixtralModel, MixtralPreTrainedModel
 from ..olmo2.modeling_olmo2 import Olmo2Attention, Olmo2RMSNorm, Olmo2RotaryEmbedding
 from ..olmoe.modeling_olmoe import (
     OlmoeDecoderLayer,
     OlmoeForCausalLM,
-    OlmoeMLP,
     OlmoeSparseMoeBlock,
     OlmoeTopKRouter,
 )
@@ -120,7 +120,7 @@ class FlexOlmoRotaryEmbedding(Olmo2RotaryEmbedding):
     pass
 
 
-class FlexOlmoMLP(OlmoeMLP):
+class FlexOlmoMLP(MistralMLP):
     pass
 
 

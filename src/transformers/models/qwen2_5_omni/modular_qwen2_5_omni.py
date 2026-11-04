@@ -60,12 +60,13 @@ from ...vision_utils import (
     get_vision_position_ids,
     get_vision_window_index,
 )
+from ..clip.modeling_clip import CLIPMLP
 from ..llama.modeling_llama import LlamaRotaryEmbedding, apply_rotary_pos_emb
+from ..mistral.modeling_mistral import MistralMLP
 from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionTransformerPretrainedModel,
     Qwen2_5_VLAttention,
-    Qwen2_5_VLMLP,
     Qwen2_5_VLPreTrainedModel,
     Qwen2_5_VLTextModel,
     Qwen2_5_VLVisionBlock,
@@ -1599,7 +1600,7 @@ class Qwen2_5OmniAttention(Qwen2_5_VLAttention):
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
 
-class Qwen2MLP(Qwen2_5_VLMLP):
+class Qwen2MLP(MistralMLP):
     pass
 
 
@@ -2741,24 +2742,18 @@ class Qwen2_5_OmniAdaLayerNormZero_Final(nn.Module):
 
 
 # FeedForward
-class DiTMLP(nn.Module):
+class DiTMLP(CLIPMLP):
     def __init__(self, dim, mult=4, dropout=0.0):
-        super().__init__()
+        nn.Module.__init__(self)
         inner_dim = int(dim * mult)
-
-        self.ff = nn.ModuleList(
-            [
-                nn.Linear(dim, inner_dim),
-                nn.GELU(approximate="tanh"),
-                nn.Dropout(dropout),
-                nn.Linear(inner_dim, dim),
-            ]
-        )
+        self.up_proj = nn.Linear(dim, inner_dim)
+        self.act_fn = nn.GELU(approximate="tanh")
+        self.dropout = nn.Dropout(dropout)
+        self.down_proj = nn.Linear(inner_dim, dim)
 
     def forward(self, hidden_states):
-        for layer in self.ff:
-            hidden_states = layer(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.dropout(self.act_fn(self.up_proj(hidden_states))))
+        return down_proj
 
 
 class DiTAttention(nn.Module):

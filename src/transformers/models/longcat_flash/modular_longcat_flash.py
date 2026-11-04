@@ -31,7 +31,6 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
-    DeepseekV3MLP,
     DeepseekV3Model,
     DeepseekV3RMSNorm,
     DeepseekV3RotaryEmbedding,
@@ -40,6 +39,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
 )
 from ..deepseek_v32.modeling_deepseek_v32 import DeepseekV32Attention
 from ..mixtral.modeling_mixtral import MixtralTopKRouter
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from .configuration_longcat_flash import LongcatFlashConfig
 
 
@@ -54,7 +54,7 @@ class LongcatFlashRotaryEmbedding(DeepseekV3RotaryEmbedding):
     pass
 
 
-class LongcatFlashMLP(DeepseekV3MLP):
+class LongcatFlashMLP(Qwen2MoeMLP):
     pass
 
 

@@ -24,11 +24,11 @@ from ...utils import auto_docstring, logging
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3DecoderLayer,
     DeepseekV3ForCausalLM,
-    DeepseekV3MLP,
     DeepseekV3MoE,
     DeepseekV3PreTrainedModel,
     DeepseekV3TopkRouter,
 )
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from ..qwen3.modeling_qwen3 import (
     Qwen3Attention,
     Qwen3Model,
@@ -156,7 +156,7 @@ class Dots1Attention(Qwen3Attention):
     pass
 
 
-class Dots1MLP(DeepseekV3MLP):
+class Dots1MLP(Qwen2MoeMLP):
     pass
 
 

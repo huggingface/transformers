@@ -38,8 +38,8 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
-from ...utils.generic import TransformersKwargs, is_flash_attention_requested
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
+from ...utils.generic import can_return_tuple, is_flash_attention_requested
 from ...utils.output_capturing import OutputRecorder
 from ..auto import AutoModel
 from .configuration_edgetam_video import (
@@ -1185,13 +1185,14 @@ class EdgeTamVideoMemoryAttentionMLP(nn.Module):
         self.config = config
         self.hidden_size = config.memory_attention_hidden_size
         self.intermediate_size = config.memory_attention_mlp_hidden_size
+        self.act_fn = ACT2FN[config.memory_attention_mlp_hidden_act]
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size)
         self.dropout = nn.Dropout(config.memory_attention_dropout)
-        self.act_fn = ACT2FN[config.memory_attention_mlp_hidden_act]
 
-    def forward(self, x):
-        return self.down_proj(self.dropout(self.act_fn(self.up_proj(x))))
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        down_proj = self.down_proj(self.dropout(self.act_fn(self.up_proj(hidden_states))))
+        return down_proj
 
 
 class EdgeTamVideoMemoryAttentionLayer(nn.Module):

@@ -32,11 +32,11 @@ from ..llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
-    LlamaMLP,
     LlamaModel,
     LlamaPreTrainedModel,
     LlamaRotaryEmbedding,
 )
+from ..mistral.modeling_mistral import MistralMLP
 
 
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
@@ -147,12 +147,8 @@ class GemmaRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
-class GemmaMLP(LlamaMLP):
-    def __init__(self, config):
-        super().__init__(config)
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+class GemmaMLP(MistralMLP):
+    pass
 
 
 class GemmaRotaryEmbedding(LlamaRotaryEmbedding):

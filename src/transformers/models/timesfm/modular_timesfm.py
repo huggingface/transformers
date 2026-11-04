@@ -81,13 +81,13 @@ class TimesFmMLP(nn.Module):
         self.layer_norm = nn.LayerNorm(normalized_shape=hidden_size, eps=1e-6)
 
     def forward(self, x, paddings=None):
-        gate_inp = self.layer_norm(x)
-        gate = self.gate_proj(gate_inp)
-        gate = F.relu(gate)
-        outputs = self.down_proj(gate)
+        hidden_states = self.layer_norm(x)
+        hidden_states = self.gate_proj(hidden_states)
+        hidden_states = F.relu(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         if paddings is not None:
-            outputs = outputs * (1.0 - paddings[:, :, None])
-        return outputs + x
+            hidden_states = hidden_states * (1.0 - paddings[:, :, None])
+        return hidden_states + x
 
 
 class TimesFmResidualBlock(nn.Module):

@@ -53,12 +53,12 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
-    Gemma2MLP,
     Gemma2PreTrainedModel,
     Gemma2RMSNorm,
     Gemma2RotaryEmbedding,
     eager_attention_forward,
 )
+from ..mistral.modeling_mistral import MistralMLP
 
 
 logger = logging.get_logger(__name__)
@@ -145,15 +145,13 @@ class T5GemmaRMSNorm(Gemma2RMSNorm):
     pass
 
 
-class T5GemmaMLP(Gemma2MLP):
+class T5GemmaMLP(MistralMLP):
     def __init__(self, config):
         super().__init__(config)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, x):
-        hidden_states = self.act_fn(self.gate_proj(x)) * self.up_proj(x)
-        hidden_states = self.dropout(hidden_states)
-        down_proj = self.down_proj(hidden_states)
+        down_proj = self.down_proj(self.dropout(self.act_fn(self.gate_proj(x)) * self.up_proj(x)))
         return down_proj
 
 

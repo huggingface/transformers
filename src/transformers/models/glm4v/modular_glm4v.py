@@ -40,12 +40,13 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
-from ..glm4.modeling_glm4 import Glm4MLP, Glm4RMSNorm, eager_attention_forward
+from ..glm4.modeling_glm4 import Glm4RMSNorm, eager_attention_forward
+from ..mistral.modeling_mistral import MistralMLP
+from ..phi3.modeling_phi3 import Phi3MLP
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
     Qwen2_5_VLCausalLMOutputWithPast,
     Qwen2_5_VLForConditionalGeneration,
-    Qwen2_5_VLMLP,
     Qwen2_5_VLModelOutputWithPast,
     Qwen2_5_VLPreTrainedModel,
     Qwen2_5_VLRotaryEmbedding,
@@ -226,9 +227,9 @@ class Glm4vRMSNorm(Glm4RMSNorm):
     pass
 
 
-class Glm4VisionMlp(Qwen2_5_VLMLP):
-    def __init__(self, config, bias: bool = False):
-        super().__init__(config, bias)
+class Glm4VisionMlp(MistralMLP):
+    def __init__(self, config):
+        super().__init__(config)
         self.intermediate_size = config.out_hidden_size
 
 
@@ -353,7 +354,7 @@ class Glm4vVisionBlock(Qwen2_5_VLVisionBlock):
         self.norm1 = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.norm2 = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attn = Glm4vVisionAttention(config)
-        self.mlp = Glm4VisionMlp(config, bias=False)
+        self.mlp = Glm4VisionMlp(config)
 
 
 class Glm4vTextRotaryEmbedding(Qwen2_5_VLRotaryEmbedding):
@@ -502,7 +503,7 @@ class Glm4vTextAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Glm4vTextMLP(Glm4MLP):
+class Glm4vTextMLP(Phi3MLP):
     pass
 
 

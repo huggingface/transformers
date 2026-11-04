@@ -38,11 +38,11 @@ from ...utils.generic import no_inherit_decorator
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaForCausalLM,
-    LlamaMLP,
     LlamaModel,
     LlamaRotaryEmbedding,
     eager_attention_forward,
 )
+from ..mistral.modeling_mistral import MistralMLP
 from .configuration_cohere import CohereConfig
 
 
@@ -114,12 +114,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed.to(dtype=dtype), k_embed.to(dtype=dtype)
 
 
-class CohereMLP(LlamaMLP):
-    def __init__(self, config):
-        super().__init__(config)
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+class CohereMLP(MistralMLP):
+    pass
 
 
 @no_inherit_decorator

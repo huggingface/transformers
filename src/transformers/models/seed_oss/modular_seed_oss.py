@@ -18,7 +18,6 @@ from collections.abc import Callable
 import torch
 import torch.nn as nn
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -30,6 +29,7 @@ from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
+    LlamaMLP,
     LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
@@ -48,16 +48,9 @@ class SeedOssRMSNorm(LlamaRMSNorm):
     pass
 
 
-class SeedOssMLP(nn.Module):
+class SeedOssMLP(LlamaMLP):
     def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
-        self.act_fn = ACT2FN[config.hidden_act]
+        super().__init__(config)
         self.residual_dropout = config.residual_dropout
 
     def forward(self, x):
