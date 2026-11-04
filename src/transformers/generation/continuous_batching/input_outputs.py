@@ -22,7 +22,7 @@ from transformers.generation.configuration_utils import ContinuousBatchingConfig
 
 from ...utils import get_available_devices
 from .cache import PagedAttentionCache
-from .cache_allocators import FULL_ATTENTION, SLIDING_ATTENTION
+from .cache_allocators import FULL_ATTENTION, LINEAR_ATTENTION, SLIDING_ATTENTION
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .requests import TMP_TOKEN_ID, FutureRequestState
 from .utils import (
@@ -396,9 +396,9 @@ class ContinuousBatchingIOs:
             cumulative_seqlens_q.append(cumulative_seqlens_q[-1] + query_length)
             self.max_length_q = max(self.max_length_q, query_length)
 
-            # Accumulate the key sequence lengths for the current request
-            for layer_type, cache_allocator in self.cache.cache_allocators.items():
-                seqlen_k = cache_allocator.get_seqlen_k(past_length, query_length)
+            # Accumulate the key sequence lengths for the current request, for the attention types that read keys
+            for layer_type in cumulative_seqlens_k:
+                seqlen_k = self.cache.cache_allocators[layer_type].get_seqlen_k(past_length, query_length)
                 cumulative_seqlens_k[layer_type].append(cumulative_seqlens_k[layer_type][-1] + seqlen_k)
                 self.max_length_k[layer_type] = max(self.max_length_k[layer_type], seqlen_k)
 
@@ -526,14 +526,19 @@ class ContinuousBatchingIOs:
         kwargs["max_length_q"] = 1 if self.use_block_table else self.max_length_q
 
         # For the attributes that are lists of tensors, we construct list of tensor references
-        for i in range(len(self.cache.cache_allocators)):
-            write_index_size = q_size if use_padding else self.true_write_sizes[i]
-            kwargs["write_index"].append(self.write_index_storage[i, :write_index_size])
-            # If there is no cache to read, pass a list of empty tensors so `cache.update` uses the write-only fast path
-            if self.max_kv_read == 0:
-                read_index_size = 0
+        for i, allocator in enumerate(self.cache.cache_allocators.values()):
+            # An allocator indexing by sequence reads and writes one entry per sequence, padding ones included: the
+            # reset filled the entries no request wrote with the trash indices
+            if allocator.indexes_by_sequence:
+                write_index_size = read_index_size = num_sequences
             else:
-                read_index_size = kv_size if use_padding else self.true_read_sizes[i]
+                write_index_size = q_size if use_padding else self.true_write_sizes[i]
+                # If there is no cache to read, pass an empty tensor so `cache.update` uses the write-only fast path
+                if self.max_kv_read == 0:
+                    read_index_size = 0
+                else:
+                    read_index_size = kv_size if use_padding else self.true_read_sizes[i]
+            kwargs["write_index"].append(self.write_index_storage[i, :write_index_size])
             kwargs["read_index"].append(self.read_index_storage[i, :read_index_size])
 
         # For the attributes that are dict of tensors, we first fill the dict with the actual values
@@ -543,6 +548,9 @@ class ContinuousBatchingIOs:
             if self.attention_mask is not None:
                 k_len = kv_size if use_padding else self.total_seqlen_k[layer_type]
                 kwargs["attention_mask"][layer_type] = self.attention_mask[layer_type][..., :q_size, :k_len]
+        # Linear attention layers take no mask: the model looks their entry up, so it has to exist
+        if self.attention_mask is not None and LINEAR_ATTENTION in self.cache.cache_allocators:
+            kwargs["attention_mask"][LINEAR_ATTENTION] = None
 
         # The masking utils expect a single tensor if the model has only one layer type
         if len(self.cumulative_seqlens_k.keys()) == 1 and self.attention_mask is not None:
