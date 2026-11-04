@@ -16,7 +16,6 @@ from math import gcd
 
 import torch
 
-from ....configuration_utils import PreTrainedConfig
 from .cache_allocator import CacheAllocator
 from .cache_pool import CachePool
 
@@ -42,34 +41,22 @@ class LinearAttentionCacheAllocator(CacheAllocator):
     supports_block_sharing = False
     supports_block_table = True
     layer_type = "linear_attention"
-    # A page holds one state, not tokens, so it counts as one row of one token
-    rows_per_token = 1
     # The indices point at the block of each sequence, not at the slot of each token
     indexes_by_sequence = True
 
     def __init__(
         self,
         index: int,
-        config: PreTrainedConfig,
-        num_key_value_heads: int,
-        cache_dtype: torch.dtype,
-        page_size: int,
-        layer_indices: list[int],
-        allow_block_sharing: bool,
         states: list[StateSpec],
+        layer_indices: list[int],
         block_alignment: int = 1,
     ) -> None:
         """Initializes the cache allocator for a group of linear attention layers.
 
         Args:
-            - config: unused, the states are declared by the layers
-            - num_key_value_heads: unused, the linear attention heads are not split across tensor parallel ranks
-            - cache_dtype: unused, each state declares its dtype
-            - page_size: unused, a page holds one set of states rather than tokens
-            - layer_indices: the indices of the layers which cache is handled by this allocator
-            - allow_block_sharing: unused, states are never shared
             - states: the shape and dtype of each per-request state of a layer, in the order the layer reads and
               writes them
+            - layer_indices: the indices of the layers which cache is handled by this allocator
             - block_alignment: the block is sized to a multiple of this, so the sectors shared with the other
               allocators stay small (the sector is the LCM of all block sizes)
         """
@@ -88,7 +75,7 @@ class LinearAttentionCacheAllocator(CacheAllocator):
             layer_indices=layer_indices,
             tokens_per_page=1,
             bytes_per_page=bytes_per_page,
-            allow_block_sharing=allow_block_sharing,
+            allow_block_sharing=False,
         )
 
     def register_cache_tensor(
@@ -117,12 +104,9 @@ class LinearAttentionCacheAllocator(CacheAllocator):
         for (shape, dtype), offset in zip(self.states, self.state_offsets):
             state_bytes = pages[:, :, offset : offset + torch.Size(shape).numel() * dtype.itemsize]
             self._state_views.append(state_bytes.view(dtype).view(num_blocks, self.pages_per_block, *shape))
+        # With one token per page, the indices address blocks: the read trash is the first block of sector 0 (zeroed,
+        # never written) and the write trash is the first block of sector 1 (written, never read)
         self._after_cache_tensor_init(non_trash_bytes, bytes_per_sector, cache_tensor, pool)
-
-        # States are indexed by block: the read trash is the first block of sector 0 (zeroed, never written) and the
-        # write trash is the first block of sector 1 (written, never read)
-        self.read_trash_index = 0
-        self.write_trash_index = self.blocks_per_sector
 
     # _________________________________________________ BLOCK LEVEL __________________________________________________ #
 
@@ -173,13 +157,12 @@ class LinearAttentionCacheAllocator(CacheAllocator):
 
     def update(
         self,
-        key_states: torch.Tensor,
-        value_states: torch.Tensor,
+        rows: tuple[torch.Tensor, ...],
         layer_idx: int,
         read_index: torch.Tensor,
         write_index: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        raise NotImplementedError("Linear attention layers hold states, not key and value states")
+    ) -> tuple[torch.Tensor, ...]:
+        raise NotImplementedError("Linear attention layers hold states per request, not rows per token")
 
-    def get_cache_for_block_table(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-        raise NotImplementedError("Linear attention layers hold states, not key and value states")
+    def get_cache_for_block_table(self, layer_idx: int) -> tuple[torch.Tensor, ...]:
+        raise NotImplementedError("Linear attention layers hold states per request, not rows per token")

@@ -14,104 +14,100 @@
 
 import torch
 
-from ....configuration_utils import PreTrainedConfig
-from ..utils import find_head_dim
 from .cache_allocator import CacheAllocator
 from .cache_pool import CachePool
 
 
+# The shape and dtype of one per-token row cached by a layer, as it declares it
+RowSpec = tuple[tuple[int, ...], torch.dtype]
+
+
 class FullAttentionCacheAllocator(CacheAllocator):
-    """Cache allocator for a group of full attention layers."""
+    """Cache allocator for a group of full attention layers, or of any layers that keep rows per token.
+
+    The layers declare the rows they cache per token (the keys and the values for an attention layer, with their
+    shape and dtype), and every token of a request is kept for its whole life. A token lives in a block at a slot of
+    the block's pages, and the indices address it as `block * tokens_per_page + slot`, for every row at once.
+    """
 
     supports_block_sharing = True
     supports_block_table = True
     layer_type = "full_attention"
-    # One row for the keys and one for the values of each token
-    rows_per_token = 2
 
     def __init__(
         self,
         index: int,
-        config: PreTrainedConfig,
-        num_key_value_heads: int,
-        cache_dtype: torch.dtype,
+        rows: list[RowSpec],
         page_size: int,
         layer_indices: list[int],
         allow_block_sharing: bool,
     ) -> None:
-        """Initializes the cache allocator for a group of full attention layers.
+        """Initializes the cache allocator for a group of layers caching rows per token.
 
         Args:
-            - config: the configuration of the model, used to determine the number of bytes per token
-            - num_key_value_heads: the number of key value heads, accounting for TP if enabled
-            - cache_dtype: the dtype of the cache, also used to determine the number of bytes per token
+            - rows: the shape and dtype of each row a layer caches per token, in the order the layer reads and writes
+              them
             - page_size: the number of tokens per page
             - layer_indices: the indices of the layers which cache is handled by this allocator
             - allow_block_sharing: whether to allow block sharing or not. Can be disabled for diagnostics or perfs.
         """
-        self.head_dim = find_head_dim(config)
-        self.num_key_value_heads = num_key_value_heads
-        self.cache_dtype = cache_dtype
-        bytes_per_page = self.get_bytes_per_page(num_key_value_heads, self.head_dim, cache_dtype, page_size)
+        self.rows = rows
+        self.row_bytes = [torch.Size(shape).numel() * dtype.itemsize for shape, dtype in rows]
+        self.bytes_per_token = sum(self.row_bytes)
         self._before_cache_tensor_init(
             index=index,
             layer_indices=layer_indices,
             tokens_per_page=page_size,
-            bytes_per_page=bytes_per_page,
+            bytes_per_page=self.bytes_per_token * page_size,
             allow_block_sharing=allow_block_sharing,
         )
+        # The block table kernels read one uniform array of pages per row, which needs every row to have the same size
+        self.supports_block_table = len(set(self.row_bytes)) == 1
 
     def register_cache_tensor(
         self, bytes_per_sector: int, non_trash_bytes: int, cache_tensor: torch.Tensor, pool: CachePool
     ) -> None:
-        """Registers the cache tensor so the allocator can use it for updates. For a full attention KV cache allocator
-        with 2 layers, the cache is arranged this way (L0 = Layer 0):
+        """Registers the cache tensor so the allocator can use it for updates. For a full attention cache allocator
+        with 2 layers, the cache is arranged this way (L0 = Layer 0), row by row then layer by layer inside a block:
 
-        [ L0 KEYS | L0 VALUES | L1 KEYS | L1 VALUES | L0 KEYS | L0 VALUES | L1 KEYS | L1 VALUES ]
-        [ ------ PAGE 0 ----- | ------ PAGE 1 ----- | ------ PAGE 2 ----- | ------ PAGE 3 ----- ]
+        [ L0 KEYS | L1 KEYS | L0 VALUES | L1 VALUES | L0 KEYS | L1 KEYS | L0 VALUES | L1 VALUES ]
         [ ---------------- BLOCK 0 ---------------- | ---------------- BLOCK 1 ---------------- ]
         [ --------------------------------------- SECTOR -------------------------------------- ]
 
-        Here, a sector is dimensionned to hold 2 full attention blocks.
+        Here, a sector is dimensionned to hold 2 full attention blocks. Every "L0 KEYS" is a page: the keys of
+        page_size tokens for layer 0.
         """
         self.bytes_per_sector = bytes_per_sector
         # Byte view of the whole tensor as one row per block, used to copy blocks when forking
         self._copy_view = cache_tensor.view(-1, self.bytes_per_block)
 
-        # Reshape the cache. The views span the entire tensor, including the two leading trash sectors
+        # The views span the entire tensor, including the two leading trash sectors
         total_bytes = non_trash_bytes + 2 * bytes_per_sector
-        total_tokens = (total_bytes // self.bytes_per_page) * self.tokens_per_page
-        cache_shape = (total_tokens, 2, self.num_key_value_heads, self.head_dim)
-        numel = torch.Size(cache_shape).numel()
-
-        cache_tensor = cache_tensor.view(self.cache_dtype)
-        cache_tensor = cache_tensor[:numel].view(*cache_shape)
+        num_blocks = total_bytes // self.bytes_per_block
+        blocks = cache_tensor[: num_blocks * self.bytes_per_block].view(num_blocks, self.bytes_per_block)
+        # One view per row, shaped [num_blocks, pages_per_block, tokens_per_page, *shape]
+        self._row_views: list[torch.Tensor] = []
+        offset = 0
+        for (shape, dtype), row_bytes in zip(self.rows, self.row_bytes):
+            row_region_bytes = row_bytes * self.tokens_per_page * self.pages_per_block
+            row_region = blocks[:, offset : offset + row_region_bytes].view(dtype)
+            self._row_views.append(row_region.view(num_blocks, self.pages_per_block, self.tokens_per_page, *shape))
+            offset += row_region_bytes
         self._after_cache_tensor_init(non_trash_bytes, bytes_per_sector, cache_tensor, pool)
 
-        # Precompute the per-layer shifted views used by update()
-        flattened_view = self.cache_tensor.view(total_tokens * 2, self.num_key_value_heads, self.head_dim)
-        self._kv_token_views: dict[int, tuple[torch.Tensor, torch.Tensor]] = {}
-        for i, layer_idx in enumerate(self.layer_indices):
-            k_view = flattened_view[(2 * i + 0) * self.tokens_per_page :]
-            v_view = flattened_view[(2 * i + 1) * self.tokens_per_page :]
-            self._kv_token_views[layer_idx] = (k_view, v_view)
-
-        # Precompute the same views at page granularity for the decode fast path. The block table kernel requires K and
-        # V to hold the same number of pages, so both are truncated to the shorter one (which is always V)
-        page_shape = (-1, self.tokens_per_page, self.num_key_value_heads, self.head_dim)
-        self._kv_page_views: dict[int, tuple[torch.Tensor, torch.Tensor]] = {}
-        for layer_idx, (k_view, v_view) in self._kv_token_views.items():
-            k_pages, v_pages = k_view.view(*page_shape), v_view.view(*page_shape)
-            num_pages = min(k_pages.shape[0], v_pages.shape[0])
-            self._kv_page_views[layer_idx] = (k_pages[:num_pages], v_pages[:num_pages])
-
-    @classmethod
-    def get_bytes_per_page(
-        cls, num_key_value_heads: int, head_dim: int, cache_dtype: torch.dtype, page_size: int
-    ) -> int:
-        """Computes the number of bytes in a full attention page."""
-        # The first "2" is because we need space for both keys and values
-        return 2 * num_key_value_heads * head_dim * cache_dtype.itemsize * page_size
+        # For the block table kernels, every row of a layer is one array of all the pages of the cache, shifted to the
+        # layer's first page of that row, so the block table holds the first page of each block. The kernels require
+        # the rows to hold the same number of pages, so they are all truncated to the shortest (the last row's).
+        self._layer_page_views: dict[int, tuple[torch.Tensor, ...]] = {}
+        if self.supports_block_table:
+            row_pages = [
+                cache_tensor[: num_blocks * self.bytes_per_block].view(dtype).view(-1, self.tokens_per_page, *shape)
+                for shape, dtype in self.rows
+            ]
+            for page, layer_idx in enumerate(self.layer_indices):
+                shifted = [pages[row * self.pages_per_block + page :] for row, pages in enumerate(row_pages)]
+                num_pages = min(view.shape[0] for view in shifted)
+                self._layer_page_views[layer_idx] = tuple(view[:num_pages] for view in shifted)
 
     # _________________________________________________ BLOCK LEVEL __________________________________________________ #
 
@@ -153,10 +149,10 @@ class FullAttentionCacheAllocator(CacheAllocator):
         # Compute the physical indices
         physical_indices = []
         for b in range(num_full_pages):
-            start = block_table[b] * self.block_physical_stride
+            start = block_table[b] * self.tokens_per_page
             physical_indices.extend(range(start, start + self.tokens_per_page))
         if remainder:
-            start = block_table[num_full_pages] * self.block_physical_stride
+            start = block_table[num_full_pages] * self.tokens_per_page
             physical_indices.extend(range(start, start + remainder))
         return physical_indices
 
@@ -174,7 +170,7 @@ class FullAttentionCacheAllocator(CacheAllocator):
         # Compute the physical indices
         physical_indices = []
         for b in range(start_page, end_page + 1):
-            physical_start = block_table[b] * self.block_physical_stride
+            physical_start = block_table[b] * self.tokens_per_page
             # First page may start mid-page, last page may end mid-page
             local_start = start_offset if b == start_page else 0
             local_end = (end_pos - 1) % self.tokens_per_page + 1 if b == end_page else self.tokens_per_page
@@ -184,48 +180,48 @@ class FullAttentionCacheAllocator(CacheAllocator):
     def fill_block_table(
         self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor
     ) -> None:
-        """Fills the request's row of the kernel block table."""
+        """Fills the request's row of the kernel block table: the first page of each block in the row's page array,
+        the layer's shift being applied through the view the kernel reads."""
         block_ids = self.block_table[request_id]
-        pages_stride = self.block_physical_stride // self.tokens_per_page
-        entries = torch.tensor(block_ids, dtype=block_table.dtype) * pages_stride
+        entries = torch.tensor(block_ids, dtype=block_table.dtype) * (len(self.rows) * self.pages_per_block)
         block_table[: len(block_ids)].copy_(entries, non_blocking=True)
 
     # ________________________________________________ RUNTIME UPDATE ________________________________________________ #
 
+    def _row_views_for_layer(self, layer_idx: int) -> list[torch.Tensor]:
+        """The views of the layer's rows, each shaped [num_blocks, tokens_per_page, *shape]."""
+        page = self.layer_indices.index(layer_idx)
+        return [view[:, page] for view in self._row_views]
+
     def update(
         self,
-        key_states: torch.Tensor,  # shape [seqlen_q, num_kv_heads, head_dim]
-        value_states: torch.Tensor,  # shape [seqlen_q, num_kv_heads, head_dim]
+        rows: tuple[torch.Tensor, ...],  # shapes [seqlen_q, *shape]
         layer_idx: int,
         read_index: torch.Tensor,  # shape [seqlen_q + past_length]
         write_index: torch.Tensor,  # shape [seqlen_q]
-    ) -> tuple[torch.Tensor, torch.Tensor]:  # shape [seqlen_q + past_length, num_kv_heads, head_dim]
+    ) -> tuple[torch.Tensor, ...]:  # shapes [seqlen_q + past_length, *shape]
         """
-        Update the cache with new key-value states for a specific layer, and retrieves the relevant KV states from
-        the cache for attention computation. For full attention layers, new KV states are written to cache, then the
-        complete sequence is read from cache.
+        Update the cache with the new rows for a specific layer, and retrieves the rows needed for the computation.
+        For full attention layers, new rows are written to cache, then the complete sequence is read from cache.
 
         When the layer's read index is empty, the batch has no cache reads (all requests are non-chunked prefills): we
-        only write to the cache and return the input KV states directly, skipping the index_select read-back.
+        only write to the cache and return the input rows directly, skipping the read-back.
 
-        Returns the complete KV states (cached + new) for attention computation.
+        Returns the complete rows (cached + new) for the computation.
         """
-        # Select the shifted views of this layer's keys and values
-        k_cache, v_cache = self._kv_token_views[layer_idx]
+        views = self._row_views_for_layer(layer_idx)
+        write_block, write_slot = write_index // self.tokens_per_page, write_index % self.tokens_per_page
+        for view, row in zip(views, rows):
+            view[write_block, write_slot] = row
 
-        # Write the newly computed key and value states to the cache
-        k_cache.index_copy_(0, write_index, key_states)
-        v_cache.index_copy_(0, write_index, value_states)
-
-        # If there is no old cache to read, the input KV states already contain everything the attention needs
+        # If there is no old cache to read, the input rows already contain everything the computation needs
         if read_index.numel() == 0:
-            return key_states, value_states
+            return rows
 
         # Otherwise, read the whole sequence back from the cache
-        key_states_with_cache = torch.index_select(k_cache, 0, read_index)
-        value_states_with_cache = torch.index_select(v_cache, 0, read_index)
-        return key_states_with_cache, value_states_with_cache
+        read_block, read_slot = read_index // self.tokens_per_page, read_index % self.tokens_per_page
+        return tuple(view[read_block, read_slot] for view in views)
 
-    def get_cache_for_block_table(self, layer_idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-        """Returns the K and V cache views for a block table update."""
-        return self._kv_page_views[layer_idx]
+    def get_cache_for_block_table(self, layer_idx: int) -> tuple[torch.Tensor, ...]:
+        """Returns the cache views of the layer's rows for a block table update."""
+        return self._layer_page_views[layer_idx]

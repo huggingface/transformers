@@ -97,10 +97,12 @@ Shared pool (first two chunks reserved for padding / never allocated)
     sliding:   [ ----------- SLIDING BLOCK 0 ----------- ]
                [ page L1 | page L2 | page L3 | … ]  (one page per sliding layer)
 
-  page  = page_size tokens of KV for one layer
+  page  = page_size tokens of the rows one layer caches (its keys and values for attention)
   block = one page per layer of that attention type
   chunk = pool unit sized so full and sliding blocks tile the same bytes
 ```
+
+The layers declare what they cache: rows per token through `cache_rows` (an attention layer that declares none caches its keys and values, `num_key_value_heads` by `head_dim` each) and states per request through `cache_states`. The allocator of a group sizes its pages from those declarations, so the engine never reads a model's dimensions itself.
 
 Continuous batching supports three attention types: `full_attention` (`FullAttentionCacheAllocator`), `sliding_attention` (`SlidingAttentionCacheAllocator`) and `linear_attention` (`LinearAttentionCacheAllocator`). Hybrid models get one allocator of each kind they use. Attention type comes from the model (`layer_types` / `sliding_window`), not from [`ContinuousBatchingConfig`].
 
