@@ -23,11 +23,13 @@ from ...generation.configuration_utils import ContinuousBatchingConfig
 from ...utils.generic import is_flash_attention_requested
 from .cache_allocators import (
     FULL_ATTENTION,
+    INDEXED_ATTENTION,
     LINEAR_ATTENTION,
     SLIDING_ATTENTION,
     CacheAllocator,
     CachePool,
     FullAttentionCacheAllocator,
+    IndexedAttentionCacheAllocator,
     RowSpec,
     SlidingAttentionCacheAllocator,
     StateCacheAllocator,
@@ -42,6 +44,7 @@ from .utils import find_head_dim, find_num_key_value_heads, get_device_and_memor
 ATTN_TYPE_TO_ALLOCATOR = {
     FULL_ATTENTION: FullAttentionCacheAllocator,
     SLIDING_ATTENTION: SlidingAttentionCacheAllocator,
+    INDEXED_ATTENTION: IndexedAttentionCacheAllocator,
     LINEAR_ATTENTION: StateCacheAllocator,
 }
 
@@ -478,15 +481,28 @@ class PagedAttentionCache:
 
         # Index-based update: actually update the cache and return full KV
         else:
-            read_index = kwargs["read_index"][allocator.index]
-            write_index = kwargs["write_index"][allocator.index]
             # Allocator update is done with the KV cache shape: [seqlen_q, num_kv_heads, head_dim]. We also return the
             # KV states in the same shape they were passed. It will help when we unify with regular Cache.
             rows = {"key": key_states.squeeze(0).transpose(0, 1), "value": value_states.squeeze(0).transpose(0, 1)}
-            rows = allocator.update(rows, layer_idx, read_index, write_index)
+            rows = self.update_rows(layer_idx, rows, kwargs)
             key_states, value_states = (rows[name].transpose(0, 1).unsqueeze(0) for name in ("key", "value"))
 
         return key_states, value_states
+
+    @torch.compiler.disable  # does not play well with the views of the cache tensor
+    def update_rows(
+        self,
+        layer_idx: int,
+        rows: dict[str, torch.Tensor],  # shapes [seqlen_q, *shape]
+        kwargs: dict[str, Any],
+    ) -> dict[str, torch.Tensor]:  # shapes [seqlen_k, *shape]
+        """Writes some of a layer's rows, by name, for the batch's new tokens, and reads them back for all the tokens
+        the batch's sequences attend to, in the order of the keys. A layer caching several rows can write them at
+        different points of its forward, like an indexer writing its keys before the attention writes its own."""
+        allocator = self.layer_to_allocator[layer_idx]
+        read_index = kwargs["read_index"][allocator.index]
+        write_index = kwargs["write_index"][allocator.index]
+        return allocator.update(rows, layer_idx, read_index, write_index)
 
     @torch.compiler.disable  # does not play well with the views of the cache tensor
     def read_cache_states(
@@ -665,14 +681,14 @@ class PagedAttentionMemoryHandler:
         self.trash_bytes = 2 * bytes_per_sector  # the two trash sectors at the start of the cache tensor
         self.num_groups = len(attn_types)
 
-        # TODO: when we generalize to allow for block-attn, we can use `num_attention_masks=len(set(attn_types))`
         # Flash reads GQA heads natively, but eager/sdpa repeat KV heads to num_attention_heads while V is in VRAM
         num_key_value_heads = find_num_key_value_heads(self.config)
         if is_flash_attention_requested(self.config):
             self.num_attention_masks = 0
             self.kv_heads_at_peak = 2 * num_key_value_heads
         else:
-            self.num_attention_masks = 2 if SLIDING_ATTENTION in attn_types else 1
+            # One mask per attention type reading keys from the cache
+            self.num_attention_masks = len([attn_type for attn_type in attn_types if attn_type != LINEAR_ATTENTION])
             self.kv_heads_at_peak = 2 * self.config.num_attention_heads + num_key_value_heads  # repeated KV + V
 
         if cb_config.max_blocks_per_request is None:
