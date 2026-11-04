@@ -1219,10 +1219,6 @@ class IndexOffsetWeightRename(WeightRenaming):
             renamed_key = prefix_dot + renamed_key
         return renamed_key, self.source_patterns[int(matching_group_name[1:])]
 
-    def copy(self, source_patterns, target_patterns, **kwargs) -> IndexOffsetWeightRename:
-        kwargs.setdefault("offset", self.offset)
-        return super().copy(source_patterns, target_patterns, **kwargs)
-
     def reverse_transform(self) -> IndexOffsetWeightRename:
         return self.copy(self._original_target_patterns, self._original_source_patterns, offset=-self.offset)
 
