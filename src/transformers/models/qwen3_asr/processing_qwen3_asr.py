@@ -25,12 +25,8 @@ from ...audio_utils import (
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
-from ...utils import auto_docstring, is_torch_available
+from ...utils import auto_docstring
 from ...utils.import_utils import is_nagisa_available, is_soynlp_available
-
-
-if is_torch_available():
-    import torch
 
 
 # fmt: off
@@ -352,9 +348,6 @@ class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class Qwen3ASRProcessor(ProcessorMixin):
     valid_processor_kwargs = Qwen3ASRProcessorKwargs
-    # Chat template markers delimiting the assistant turns, which are the only positions kept in the labels
-    assistant_header = "<|im_start|>assistant\n"
-    assistant_end = "<|im_end|>"
 
     def __init__(
         self,
@@ -386,9 +379,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
     ) -> BatchFeature:
         r"""
         output_labels (bool, *optional*, default=False):
-            Whether to return labels for training. Only the assistant turns (up to and including their end-of-turn
-            token) are kept, so that the prompt, the audio placeholders and the padding are masked out of the loss.
-            Text without an assistant turn only has its audio placeholders and padding masked.
+            Whether to return labels for training.
 
         Returns:
             [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
@@ -406,29 +397,9 @@ class Qwen3ASRProcessor(ProcessorMixin):
             labels = model_inputs["input_ids"].clone()
             labels[mm_token_type_ids != 0] = -100  # audio positions
             labels[labels == self.tokenizer.pad_token_id] = -100
-            model_inputs["labels"] = self._mask_non_assistant_tokens(model_inputs["input_ids"], labels)
+            model_inputs["labels"] = labels
 
         return BatchFeature(data=model_inputs, tensor_type="pt")
-
-    def _mask_non_assistant_tokens(self, input_ids: "torch.Tensor", labels: "torch.Tensor") -> "torch.Tensor":
-        """
-        Mask everything outside the assistant turns, e.g. the system and user prompts, out of the loss. Each assistant
-        turn is kept from the token after `assistant_header` up to and including `assistant_end` (or the end of the
-        sequence). Sequences without an assistant turn are left unchanged.
-        """
-        header_ids = self.tokenizer.encode(self.assistant_header, add_special_tokens=False)
-        end_id = self.tokenizer.convert_tokens_to_ids(self.assistant_end)
-        header_len = len(header_ids)
-        for row, ids in enumerate(input_ids.tolist()):
-            starts = [i + header_len for i in range(len(ids)) if ids[i : i + header_len] == header_ids]
-            if not starts:
-                continue
-            keep = torch.zeros(len(ids), dtype=torch.bool)
-            for start in starts:
-                end = ids.index(end_id, start) + 1 if end_id in ids[start:] else len(ids)
-                keep[start:end] = True
-            labels[row, ~keep] = -100
-        return labels
 
     def validate_inputs(
         self,
@@ -504,7 +475,8 @@ class Qwen3ASRProcessor(ProcessorMixin):
                 Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
                 the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
                 audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
-                `tokenize=True`.
+                `tokenize=True`, except for the `labels`: only `tokenize=True` masks
+                them outside the assistant turn.
             **kwargs:
                 Additional keyword arguments forwarded to [`~Qwen3ASRProcessor.apply_chat_template`].
                 Processor kwargs (for example `text_kwargs`, `audio_kwargs`, ...) should be passed as
@@ -512,8 +484,9 @@ class Qwen3ASRProcessor(ProcessorMixin):
 
         Returns:
             [`BatchFeature`] or `list[str]`: One prompt per audio when `tokenize=False`, otherwise processor
-            outputs ready to be passed to [`Qwen3ASRForConditionalGeneration.generate`],
-            or to [`Qwen3ASRForConditionalGeneration.forward`] to compute the loss when `transcription` is given.
+            outputs ready to be passed to
+            [`Qwen3ASRForConditionalGeneration.generate`], or to [`Qwen3ASRForConditionalGeneration.forward`] to
+            compute the loss when `transcription` is given.
         """
         audio_items = list(make_list_of_audio_chat_template(audio))
 
@@ -528,6 +501,8 @@ class Qwen3ASRProcessor(ProcessorMixin):
         transcriptions = prepare_prompt_input(transcription, batch_size, input_name="transcription", broadcast=False)
         if is_training:
             kwargs["processor_kwargs"] = {"output_labels": True, **kwargs.get("processor_kwargs", {})}
+            # the labels are masked outside the assistant turns, i.e. the `{% generation %}` blocks of the chat template
+            kwargs["return_assistant_tokens_mask"] = tokenize
 
         conversations = []
         for prompt_text, audio_item in zip(prompts, audio_items):

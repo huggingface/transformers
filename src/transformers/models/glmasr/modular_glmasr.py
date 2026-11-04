@@ -54,10 +54,6 @@ class GlmAsrProcessorKwargs(AudioFlamingo3ProcessorKwargs): ...
 @requires(backends=("torch",))
 @auto_docstring
 class GlmAsrProcessor(AudioFlamingo3Processor):
-    # `<|user|>` opens the next turn and is one of the model's EOS tokens
-    assistant_header = "<|assistant|>\n"
-    assistant_end = "<|user|>"
-
     def __init__(
         self,
         feature_extractor,
@@ -178,9 +174,10 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
                 }
             ]
             if transcript is not None:
-                # The chat template doesn't close the last assistant turn, so the EOS is appended for it to be learned
+                # The chat template doesn't close the last assistant turn, so the EOS (`<|user|>`, which opens the next
+                # turn) is appended for it to be learned
                 conversation.append(
-                    {"role": "assistant", "content": [{"type": "text", "text": transcript + self.assistant_end}]}
+                    {"role": "assistant", "content": [{"type": "text", "text": transcript + "<|user|>"}]}
                 )
             conversations.append(conversation)
 

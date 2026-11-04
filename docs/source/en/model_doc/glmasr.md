@@ -210,13 +210,7 @@ assert decoded_outputs == EXPECTED_OUTPUT
 
 ### Training
 
-The model can be trained with the loss it outputs. Pass the target transcripts to `apply_transcription_request` with
-`transcription`, which writes them as the assistant turn and returns `labels`. Only the assistant turn contributes to
-the loss: the prompt, the audio placeholders and the padding are masked automatically.
-
-The chat template doesn't close the last assistant turn, so `apply_transcription_request` appends `<|user|>` (one of
-the model's EOS tokens) to each transcript for the model to learn when to stop. When training with
-`apply_chat_template` and `processor_kwargs={"output_labels": True}` instead, append `<|user|>` to the assistant turn yourself.
+Pass the target transcripts to `apply_transcription_request` with `transcription`, and the returned `labels` are used to compute the loss.
 
 ```python
 from datasets import Audio, load_dataset
