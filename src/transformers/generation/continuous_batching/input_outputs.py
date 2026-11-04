@@ -553,7 +553,7 @@ class ContinuousBatchingIOs:
             kwargs["attention_mask"][LINEAR_ATTENTION] = None
 
         # The masking utils expect a single tensor if the model has only one layer type
-        if len(self.cumulative_seqlens_k.keys()) == 1 and self.attention_mask is not None:
+        if len(self.cache.cache_allocators) == 1 and self.attention_mask is not None:
             kwargs["attention_mask"] = kwargs["attention_mask"].popitem()[1]  # type: ignore
 
         return kwargs
