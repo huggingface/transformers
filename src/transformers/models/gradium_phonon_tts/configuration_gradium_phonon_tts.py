@@ -22,13 +22,13 @@ from typing import Literal
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 from ...utils.type_validators import activation_fn_key, interval, positive_int_field
 
 
-@auto_docstring(checkpoint="eustlb/gradium-phonon-tts")
+@auto_docstring(checkpoint="gradium/phonon-31m-en")
 @strict
 class GradiumPhononTTSFlowHeadConfig(PreTrainedConfig):
     r"""
@@ -77,7 +77,7 @@ class GradiumPhononTTSFlowHeadConfig(PreTrainedConfig):
         return 2 if self.flow_type == "lsd" else 0
 
 
-@auto_docstring(checkpoint="eustlb/gradium-phonon-tts")
+@auto_docstring(checkpoint="gradium/phonon-31m-en")
 @strict
 class GradiumPhononTTSConfig(PreTrainedConfig):
     r"""
@@ -135,7 +135,7 @@ class GradiumPhononTTSConfig(PreTrainedConfig):
     """
 
     model_type = "gradium_phonon_tts"
-    sub_configs = {"flow_head_config": GradiumPhononTTSFlowHeadConfig}
+    sub_configs_defaults = {"flow_head_config": SubConfigSpec(config_class=GradiumPhononTTSFlowHeadConfig)}
 
     flow_head_config: dict | PreTrainedConfig | None = None
 
@@ -180,11 +180,6 @@ class GradiumPhononTTSConfig(PreTrainedConfig):
     duration_delta_max_period: float = 10000.0
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.flow_head_config, dict):
-            self.flow_head_config = GradiumPhononTTSFlowHeadConfig(**self.flow_head_config)
-        elif self.flow_head_config is None:
-            self.flow_head_config = GradiumPhononTTSFlowHeadConfig()
-
         self.head_dim = self.head_dim or self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads

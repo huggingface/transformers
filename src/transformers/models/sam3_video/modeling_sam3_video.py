@@ -493,7 +493,7 @@ class Sam3VideoPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = Sam3VideoConfig
+    config: Sam3VideoConfig
     base_model_prefix = "sam3_video"
     main_input_name = "pixel_values"
     input_modalities = ["video", "text"]
@@ -1842,7 +1842,6 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             yield from yield_list
 
 
-@torch.jit.script
 def fast_diag_box_iou(boxes1, boxes2):
     box1_xy = boxes1[:, 2:]
     box1_XY = boxes1[:, :2]

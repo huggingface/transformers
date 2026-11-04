@@ -23,7 +23,7 @@ from torch import nn
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import get_max_seqlen, is_flash_attention_requested
@@ -193,13 +193,13 @@ class Exaone4_5_VisionBlock(Qwen2_5_VLVisionBlock):
 
 
 class Exaone4_5_PreTrainedModel(Exaone4PreTrainedModel):
-    config_class = Exaone4_5_Config
+    config: Exaone4_5_Config
     _no_split_modules = ["Exaone4_5_VisionBlock", "Exaone4_5_DecoderLayer"]
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
 
 class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel, Qwen2_5_VisionTransformerPretrainedModel):
-    config_class = Exaone4_5_VisionConfig
+    config: Exaone4_5_VisionConfig
 
     def __init__(self, config: Exaone4_5_VisionConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -386,8 +386,8 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

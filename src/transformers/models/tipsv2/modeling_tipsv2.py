@@ -504,8 +504,12 @@ class Tipsv2VisionModel(Tipsv2VisionPreTrainedModel):
     """
 )
 class Tipsv2VisionBackbone(BackboneMixin, Tipsv2VisionPreTrainedModel):
+    # trf-ignore: TRF055
+    config: Tipsv2VisionConfig
+
     def __init__(self, config: "Tipsv2Config | Tipsv2VisionConfig"):
         # reassign config to vision_config for compatibility with AutoBackbone
+        # FIXME raushan should not happen in practice!
         if isinstance(config, Tipsv2Config):
             config = config.vision_config
             super().__init__(config)

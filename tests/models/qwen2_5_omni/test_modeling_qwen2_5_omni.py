@@ -35,6 +35,7 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    require_deterministic_for_accelerator,
     require_deterministic_for_xpu,
     require_flash_attn,
     require_torch,
@@ -632,6 +633,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @slow
+    @require_deterministic_for_accelerator(devices=["rocm"])
     def test_small_model_integration_test(self):
         model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2.5-Omni-7B", dtype=torch.bfloat16, device_map="auto"
@@ -683,7 +685,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         inputs = inputs.to(torch_device)
 
         output = model.generate(
-            **inputs, thinker_temperature=0, thinker_do_sample=False, return_audio=False, thinker_max_new_tokens=20
+            **inputs, thinker_temperature=0, thinker_do_sample=False, generation_mode="text", thinker_max_new_tokens=20
         )
 
         EXPECTED_DECODED_TEXT = Expectations({
@@ -708,7 +710,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         ).to(torch_device, dtype=torch.bfloat16)
 
         output = model.generate(
-            **inputs, thinker_temperature=0, thinker_do_sample=False, return_audio=False, thinker_max_new_tokens=20
+            **inputs, thinker_temperature=0, thinker_do_sample=False, generation_mode="text", thinker_max_new_tokens=20
         )
 
         EXPECTED_DECODED_TEXTS = Expectations(
@@ -756,7 +758,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         ).to(torch_device, dtype=torch.bfloat16)
 
         output = model.generate(
-            **inputs, thinker_temperature=0, thinker_do_sample=False, return_audio=False, thinker_max_new_tokens=20
+            **inputs, thinker_temperature=0, thinker_do_sample=False, generation_mode="text", thinker_max_new_tokens=20
         )
 
         EXPECTED_DECODED_TEXT = "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.\nuser\nHow about this one?\nassistant\nThe sound is a cough."
@@ -1004,7 +1006,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
             padding=True,
         ).to(torch_device)
 
-        output = model.generate(**inputs, thinker_temperature=0, thinker_do_sample=False, return_audio=False)
+        output = model.generate(**inputs, thinker_temperature=0, thinker_do_sample=False, generation_mode="text")
 
         EXPECTED_DECODED_TEXT = Expectations({
             (None, None): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.",

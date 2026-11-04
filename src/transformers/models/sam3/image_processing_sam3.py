@@ -136,7 +136,9 @@ def _is_box_near_crop_edge(boxes, crop_box, orig_box, atol=20.0):
 
 
 def _pad_masks(masks, crop_box: list[int], orig_height: int, orig_width: int):
-    left, top, right, bottom = crop_box
+    left, top, right, bottom = (int(v) for v in crop_box)
+    orig_height = int(orig_height)
+    orig_width = int(orig_width)
     if left == 0 and top == 0 and right == orig_width and bottom == orig_height:
         return masks
     # Coordinate transform masks
@@ -152,7 +154,7 @@ def _generate_crop_boxes(
     overlap_ratio: float = 512 / 1500,
     points_per_crop: int | None = 32,
     crop_n_points_downscale_factor: list[int] | None = 1,
-) -> tuple[list[list[int]], list[int]]:
+) -> tuple[torch.Tensor, torch.Tensor, list[torch.Tensor], torch.Tensor]:
     """
     Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
 
@@ -185,13 +187,12 @@ def _generate_crop_boxes(
     crop_boxes, layer_idxs = _generate_per_layer_crops(crop_n_layers, overlap_ratio, original_size)
 
     cropped_images, point_grid_per_crop = _generate_crop_images(
-        crop_boxes, image, points_grid, layer_idxs, target_size, original_size
+        crop_boxes, image, points_grid, layer_idxs, target_size
     )
     crop_boxes = torch.tensor(crop_boxes)
     crop_boxes = crop_boxes.float()
     points_per_crop = torch.stack(point_grid_per_crop)
     points_per_crop = points_per_crop.unsqueeze(0).permute(0, 2, 1, 3)
-    cropped_images = torch.stack(cropped_images)
 
     input_labels = torch.ones_like(points_per_crop[:, :, :, 0], dtype=torch.int64)
 
@@ -242,9 +243,7 @@ def _build_point_grid(n_per_side: int) -> torch.Tensor:
     return points
 
 
-def _generate_crop_images(
-    crop_boxes, image, points_grid, layer_idxs, target_size, original_size, input_data_format=None
-):
+def _generate_crop_images(crop_boxes, image, points_grid, layer_idxs, target_size, input_data_format=None):
     """
     Takes as an input bounding boxes that are used to crop the image. Based in the crops, the corresponding points are
     also passed.
@@ -261,7 +260,7 @@ def _generate_crop_images(
         points_scale = torch.tensor(cropped_im_size).flip(dims=(0,)).unsqueeze(0)
 
         points = points_grid[layer_idxs[i]] * points_scale
-        normalized_points = _normalize_coordinates(target_size, points, original_size)
+        normalized_points = _normalize_coordinates(target_size, points, cropped_im_size)
         total_points_per_crop.append(normalized_points)
 
     return cropped_images, total_points_per_crop
@@ -543,7 +542,7 @@ class Sam3ImageProcessor(TorchvisionBackend):
             device = torch.device("cpu")
         crop_boxes = crop_boxes.to(device)
         points_per_crop = points_per_crop.to(device)
-        # cropped_images stays as torch.Tensor
+        # cropped_images is a list of torch tensors
         input_labels = input_labels.to(device)
 
         return crop_boxes, points_per_crop, cropped_images, input_labels
@@ -619,6 +618,10 @@ class Sam3ImageProcessor(TorchvisionBackend):
         scores = scores[keep_mask]
         masks = masks[keep_mask]
         converted_boxes = converted_boxes[keep_mask]
+
+        left = int(cropped_box_image[0])
+        top = int(cropped_box_image[1])
+        converted_boxes += torch.tensor([left, top, left, top], device=converted_boxes.device)
 
         masks = _pad_masks(masks, cropped_box_image, original_height, original_width)
         # conversion to rle is necessary to run non-maximum suppression

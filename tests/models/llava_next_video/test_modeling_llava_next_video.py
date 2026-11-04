@@ -328,17 +328,6 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    def _video_features_prepare_config_and_inputs(self):
-        """
-        Helper method to extract only image-related inputs from the full set of inputs, for testing `get_image_features`.
-
-        Despite using `pixel_values_videos` in forward, LlavaNextVideo's `get_video_features` method
-        instead uses `pixel_values` as input, so we need to override the inputs accordingly.
-        """
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        inputs_dict = {"pixel_values": inputs_dict["pixel_values_videos"]}
-        return config, inputs_dict
-
 
 @require_torch
 class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):

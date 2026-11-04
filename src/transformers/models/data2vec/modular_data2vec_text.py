@@ -28,7 +28,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
@@ -65,7 +65,7 @@ class Data2VecTextLayer(RobertaLayer):
 
 @auto_docstring
 class Data2VecTextPreTrainedModel(PreTrainedModel):
-    config_class = Data2VecTextConfig
+    config: Data2VecTextConfig
     base_model_prefix = "data2vec_text"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Data2VecTextEmbeddings", "Data2VecTextLayer"]
@@ -110,7 +110,7 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel, GenerationMixin):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: Data2VecTextConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -185,9 +185,8 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -210,7 +209,7 @@ class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: Data2VecTextConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -281,7 +280,7 @@ class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
     """
 )
 class Data2VecTextForSequenceClassification(Data2VecTextPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecTextConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -351,7 +350,7 @@ class Data2VecTextForSequenceClassification(Data2VecTextPreTrainedModel):
 
 @auto_docstring
 class Data2VecTextForMultipleChoice(Data2VecTextPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecTextConfig):
         super().__init__(config)
 
         self.data2vec_text = Data2VecTextModel(config)
@@ -443,7 +442,7 @@ class Data2VecTextForMultipleChoice(Data2VecTextPreTrainedModel):
 
 @auto_docstring
 class Data2VecTextForTokenClassification(Data2VecTextPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecTextConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -501,7 +500,7 @@ class Data2VecTextForTokenClassification(Data2VecTextPreTrainedModel):
 
 @auto_docstring
 class Data2VecTextForQuestionAnswering(Data2VecTextPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecTextConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

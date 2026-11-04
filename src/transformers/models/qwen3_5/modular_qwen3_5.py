@@ -27,7 +27,11 @@ from ...modeling_layers import (
     GenericForTokenClassification,
     GradientCheckpointingLayer,
 )
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, SequenceClassifierOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    SequenceClassifierOutputWithPast,
+)
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -58,7 +62,6 @@ from ..qwen3_next.modeling_qwen3_next import (
 from ..qwen3_vl.configuration_qwen3_vl import Qwen3VLConfig, Qwen3VLVisionConfig
 from ..qwen3_vl.modeling_qwen3_vl import (
     Qwen3VLForConditionalGeneration,
-    Qwen3VLModelOutputWithPast,
     Qwen3VLTextRotaryEmbedding,
     Qwen3VLVisionModel,
     Qwen3VLVisionRotaryEmbedding,
@@ -437,7 +440,7 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
     config: Qwen3_5VisionConfig
     _no_split_modules = ["Qwen3_5VisionBlock"]
 
-    def __init__(self, config, *inputs, **kwargs) -> None:
+    def __init__(self, config: Qwen3_5VisionConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         del self.deepstack_visual_indexes
         del self.deepstack_merger_list
@@ -489,10 +492,6 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
             last_hidden_state=hidden_states,
             pooler_output=merged_hidden_states,
         )
-
-
-class Qwen3_5ModelOutputWithPast(Qwen3VLModelOutputWithPast):
-    pass
 
 
 class Qwen3_5TextModel(Qwen3NextModel):
@@ -566,7 +565,7 @@ class Qwen3_5TextModel(Qwen3NextModel):
 
         hidden_states = self.norm(hidden_states)
 
-        return Qwen3_5ModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
@@ -576,7 +575,7 @@ class Qwen3_5Model(Qwen2VLModel):
     input_modalities = ("image", "video", "text")
     _no_split_modules = ["Qwen3_5DecoderLayer", "Qwen3_5VisionBlock"]
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen3_5Config):
         super().__init__(config)
         self.visual = AutoModel.from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
@@ -632,7 +631,7 @@ class Qwen3_5ForCausalLM(Qwen3ForCausalLM):
     config: Qwen3_5TextConfig
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*", r"^model.visual.*"]
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen3_5TextConfig):
         super().__init__(config)
         self.model = Qwen3_5TextModel(config)
 

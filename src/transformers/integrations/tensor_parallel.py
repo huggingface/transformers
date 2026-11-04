@@ -13,34 +13,37 @@
 # limitations under the License.
 """Backward-compatibility shim for the tensor parallel API.
 
-The canonical implementation lives in ``transformers.distributed.tensor_parallel``.
+The canonical implementation lives in ``transformers.distributed.tensor_parallel`` and, for the expert-parallel
+styles, ``transformers.distributed.expert_parallel``.
 """
 
 from __future__ import annotations
 
 import warnings
 
+from ..distributed.expert_parallel import (
+    EpRouterParallel,
+    MoEParamShard,
+    MoeTensorParalellMegaMoeExperts,
+    RouterParallelMegaMoe,
+)
+from ..distributed.parallel_utils import replace_layer_number_by_wildcard
 from ..distributed.tensor_parallel import (
     ALL_PARALLEL_STYLES,
     AllReduceParallel,
     ColwiseParallel,
-    EpRouterParallel,
     MlaKvAProjParallel,
     MoeExpertsParallel,
     MoeIdentityParallel,
-    MoEParamShard,
-    MoeTensorParalellMegaMoeExperts,
     PackedColwiseParallel,
     PackedRowwiseParallel,
     ParallelInterface,
     ReplicatedWithGradAllReduce,
-    RouterParallelMegaMoe,
     RowwiseParallel,
     SequenceParallel,
     TensorParallelLayer,
     apply_tensor_parallelism,
     gather_state_dict_for_save,
-    replace_layer_number_by_wildcard,
     verify_tp_plan,
 )
 from ..distributed.utils import initialize_tensor_parallelism
