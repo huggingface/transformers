@@ -33,20 +33,24 @@ from ...integrations import use_experts_implementation
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
-    BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import is_torchdynamo_compiling
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_position_ids
 from .configuration_minimax_m3_vl import MiniMaxM3VLConfig, MiniMaxM3VLTextConfig, MiniMaxM3VLVisionConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
@@ -1215,13 +1219,9 @@ class MiniMaxM3VLMultiModalProjector(nn.Module):
         return self.merge_linear_2(self.merge_act(self.merge_linear_1(hidden_states)))
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for MiniMaxM3VL outputs, with hidden states and attentions.
-    """
-)
+@auto_docstring
 @dataclass
-class MiniMaxM3VLModelOutputWithPast(BaseModelOutputWithPast):
+class MiniMaxM3VLModelOutputWithPast(MultimodalBaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
@@ -1238,19 +1238,21 @@ class MiniMaxM3VLModelOutputWithPast(BaseModelOutputWithPast):
         Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
     """
 
-    image_hidden_states: torch.FloatTensor | None = None
-
     video_hidden_states: torch.FloatTensor | None = None
     router_logits: tuple[torch.FloatTensor] | None = None
 
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+        )
+        return self.image_pooler_output
 
-@auto_docstring(
-    custom_intro="""
-    Base class for MiniMaxM3VL causal language model (or autoregressive) outputs.
-    """
-)
+
+@auto_docstring
 @dataclass
-class MiniMaxM3VLCausalLMOutputWithPast(ModelOutput):
+class MiniMaxM3VLCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
@@ -1273,16 +1275,17 @@ class MiniMaxM3VLCausalLMOutputWithPast(ModelOutput):
         Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    image_hidden_states: torch.FloatTensor | None = None
-
     video_hidden_states: torch.FloatTensor | None = None
     aux_loss: torch.FloatTensor | None = None
     router_logits: tuple[torch.FloatTensor] | None = None
+
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+        )
+        return self.image_pooler_output
 
 
 @auto_docstring(custom_intro="MiniMax M3 VL backbone (vision + projector + text), without LM head.")
