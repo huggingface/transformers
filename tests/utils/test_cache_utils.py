@@ -335,6 +335,26 @@ class CacheTest(unittest.TestCase):
         layer.crop(0)
         self.assertEqual(layer.get_seq_length(), 4)
 
+    def test_fp8_quantized_layer_crop_beyond_length(self):
+        """Tests that cropping more tokens than cached is clamped to the cached length."""
+        layer = Fp8QuantizedLayer()
+        layer.update(torch.randn(1, 2, 8, 8), torch.randn(1, 2, 8, 8))
+        self.assertEqual(layer.get_seq_length(), 8)
+
+        layer.crop(-9)
+        self.assertEqual(layer.get_seq_length(), 0)
+
+    @require_optimum_quanto
+    def test_quantized_layer_crop_beyond_length(self):
+        """Tests that cropping more tokens than cached is clamped for group-wise layers."""
+        layer = QuantoQuantizedLayer(nbits=4, q_group_size=16, residual_length=128)
+        states = torch.ones(1, 2, 8, 16, device=torch_device)
+        layer.update(states, 2 * states)
+        self.assertEqual(layer.get_seq_length(), 8)
+
+        layer.crop(-20)
+        self.assertEqual(layer.get_seq_length(), 0)
+
     @require_optimum_quanto
     def test_quantized_layer_crop_within_residual(self):
         """Tests that cropping within the residual buffer of a group-wise quantized layer works."""
