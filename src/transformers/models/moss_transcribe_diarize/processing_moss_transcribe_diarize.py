@@ -224,8 +224,9 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         prompt: str | list[str] | None = None,
         keywords: str | list[str] | list[list[str]] | None = None,
         transcription: str | list[str] | None = None,
+        tokenize: bool = True,
         **kwargs: Unpack[MossTranscribeDiarizeProcessorKwargs],
-    ) -> BatchFeature:
+    ) -> BatchFeature | list[str]:
         """
         Prepare inputs for transcription / diarization without manually writing the chat template, either for
         inference or, when `transcription` is given, for training.
@@ -245,6 +246,11 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
                 Target transcript(s) for training, one per audio, in the model's output format (e.g.
                 `"[0.00][S01] Hello world.[1.20]"`). When given, each transcript is written as the assistant turn and
                 `labels` are returned (see `output_labels` in [`~MossTranscribeDiarizeProcessor.__call__`]).
+            tokenize (`bool`, *optional*, defaults to `True`):
+                Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
+                the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
+                audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
+                `tokenize=True`.
             **kwargs:
                 Additional keyword arguments forwarded to [`~MossTranscribeDiarizeProcessor.apply_chat_template`].
                 Processor kwargs (for example `text_kwargs`, `audio_kwargs`, ...) should be passed as
@@ -261,9 +267,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         keyword_batches = prepare_keyword_inputs(keywords, batch_size)
 
         is_training = transcription is not None
-        if isinstance(transcription, str):
-            transcription = [transcription]
-        transcriptions = prepare_prompt_input(transcription, batch_size, input_name="transcription")
+        transcriptions = prepare_prompt_input(transcription, batch_size, input_name="transcription", broadcast=False)
         if is_training:
             kwargs["processor_kwargs"] = {"output_labels": True, **kwargs.get("processor_kwargs", {})}
 
@@ -283,7 +287,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
 
         return self.apply_chat_template(
             conversations,
-            tokenize=True,
+            tokenize=tokenize,
             add_generation_prompt=not is_training,
             return_dict=True,
             **kwargs,

@@ -324,7 +324,7 @@ class CwmModelOutputWithPast(BaseModelOutputWithPast):
 
 @auto_docstring
 class CwmModel(CwmPreTrainedModel):
-    config_class = CwmConfig
+    config: CwmConfig
 
     def __init__(self, config: CwmConfig):
         super().__init__(config)
@@ -351,7 +351,7 @@ class CwmModel(CwmPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CwmModelOutputWithPast:
@@ -411,7 +411,7 @@ class CwmForCausalLM(CwmPreTrainedModel, GenerationMixin):
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: CwmConfig):
         super().__init__(config)
         self.model = CwmModel(config)
         self.vocab_size = config.vocab_size
@@ -428,7 +428,7 @@ class CwmForCausalLM(CwmPreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,

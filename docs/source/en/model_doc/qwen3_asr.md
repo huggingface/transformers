@@ -218,7 +218,7 @@ for text in transcriptions:
 
 ### Training
 
-Qwen3 ASR can be trained with the loss outputted by the model. Pass the target transcripts to `apply_transcription_request` with `transcription`, which writes them as the assistant turn and returns `labels`. Only the assistant turn contributes to the loss: the prompt, audio and padding positions are masked automatically. When a `language` is given, the transcripts are written in the model's output format `language <NAME><asr_text>...` to preserve the pretrained behavior. Without a `language`, the transcripts are written as is, so they should already be in that format. With the [chat template](#chat-template), the same is done by putting the transcript in the assistant turn and passing `processor_kwargs={"output_labels": True}`.
+Pass the target transcripts to `apply_transcription_request` with `transcription` to get the `labels` used to compute the loss.
 
 ```python
 from datasets import Audio, load_dataset
@@ -237,7 +237,7 @@ speech_samples = [el["array"] for el in ds["audio"][:NUM_SAMPLES]]
 text_samples = ds["text"][:NUM_SAMPLES]
 
 inputs = processor.apply_transcription_request(speech_samples, language="en", transcription=text_samples)
-inputs.to(model.device, model.dtype)
+inputs.to(model.device, dtype=model.dtype)
 
 loss = model(**inputs).loss
 print("Loss:", loss.item())

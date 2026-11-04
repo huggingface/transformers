@@ -181,7 +181,7 @@ class T5Gemma2EncoderConfig(PreTrainedConfig):
         "eoi_token_id": "eoi_token_index",
     }
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=T5Gemma2TextConfig),
+        "text_config": T5Gemma2TextConfig,
         "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="siglip_vision_model"),
     }
 
@@ -332,8 +332,8 @@ class T5Gemma2Config(PreTrainedConfig):
     model_type = "t5gemma2"
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs_defaults = {
-        "encoder": SubConfigSpec(config_class=T5Gemma2EncoderConfig),
-        "decoder": SubConfigSpec(config_class=T5Gemma2DecoderConfig),
+        "encoder": T5Gemma2EncoderConfig,
+        "decoder": T5Gemma2DecoderConfig,
     }
 
     attribute_map = {

@@ -510,8 +510,21 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         # Remap layer types if needed
         remap_legacy_layer_types(config=self)
 
+        # Remote code assigns `rope_scaling` before init finishes, so the setter only standardizes after this
+        self._post_init_done = True
+
     def __init_subclass__(cls, *args, **kwargs):
         super().__init_subclass__(*args, **kwargs)
+
+        # Resolve simple `XXXConfigClass` to `SubConfigSpec`
+        def resolve_spec(spec_or_config):
+            if not isinstance(spec_or_config, SubConfigSpec):
+                return SubConfigSpec(config_class=spec_or_config)
+            return spec_or_config
+
+        if (sub_configs_defaults := cls.__dict__.get("sub_configs_defaults")) is not None:
+            cls.sub_configs_defaults = {k: resolve_spec(v) for k, v in sub_configs_defaults.items()}
+
         cls_has_custom_init = "__init__" in cls.__dict__
         # kw_only=True ensures fields without defaults in subclasses can follow
         # parent fields that have defaults (Python dataclass ordering rule).
@@ -713,7 +726,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             FutureWarning,
         )
         self.rope_parameters = value
-        if value is not None:
+        if value is not None and getattr(self, "_post_init_done", False):
             self.standardize_rope_params()
 
     def save_pretrained(self, save_directory: str | os.PathLike, push_to_hub: bool = False, **kwargs):
@@ -864,6 +877,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         kwargs["cache_dir"] = cache_dir
         kwargs["force_download"] = force_download
         kwargs["local_files_only"] = local_files_only
+        kwargs["token"] = token
         kwargs["revision"] = revision
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
@@ -1404,6 +1418,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             "_commit_hash",
             "_attn_implementation_internal",
             "_experts_implementation_internal",
+            "_post_init_done",
             "ignore_keys_at_rope_validation",
             "base_model_tp_plan",
             "base_model_pp_plan",
@@ -1677,20 +1692,16 @@ def recursive_diff_dict(dict_a, dict_b, config_obj=None):
 def get_head_shapes(config) -> tuple[int | list[int], int | list[int]]:
     """Returns a tuple `(num_kv_heads, head_dim)`, each of them either a single int for all layers, or a list of int
     with the value for each layer."""
-    # Layers sharing kv states have no kv cache of their own, so they are excluded.
-    num_cache_layers = config.num_hidden_layers - getattr(config, "num_kv_shared_layers", 0)
-    layer_configs = config.per_layer_config[:num_cache_layers]
-
     head_dim = [
         getattr(layer_config, "head_dim", None) or layer_config.hidden_size // layer_config.num_attention_heads
-        for layer_config in layer_configs
+        for layer_config in config.per_layer_config
     ]
     if len(set(head_dim)) == 1:
         head_dim = head_dim[0]
 
     num_kv_heads = [
         getattr(layer_config, "num_key_value_heads", None) or layer_config.num_attention_heads
-        for layer_config in layer_configs
+        for layer_config in config.per_layer_config
     ]
     if len(set(num_kv_heads)) == 1:
         num_kv_heads = num_kv_heads[0]

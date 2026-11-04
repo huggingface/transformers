@@ -359,7 +359,7 @@ class LongcatFlashModel(DeepseekV3Model):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
@@ -410,7 +410,7 @@ class LongcatFlashModel(DeepseekV3Model):
 class LongcatFlashForCausalLM(DeepseekV3ForCausalLM):
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp.*"]
 
-    def __init__(self, config):
+    def __init__(self, config: LongcatFlashConfig):
         super().__init__(config)
         self.model = LongcatFlashModel(config)
 

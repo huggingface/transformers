@@ -102,9 +102,7 @@ print(processor.decode(generated_ids, skip_special_tokens=True)[0])
 
 ### Training
 
-The model can be trained with the loss it outputs. Pass the target transcripts to `apply_transcription_request` with
-`transcription`, which writes them as the assistant turn and returns `labels`. With `apply_chat_template`, the same is done by putting the transcript in an assistant turn
-and passing `processor_kwargs={"output_labels": True}`.
+Pass the target transcripts to `apply_transcription_request` with `transcription`, and the returned `labels` are used to compute the loss.
 
 ```python
 from datasets import Audio, load_dataset

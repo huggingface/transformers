@@ -209,8 +209,9 @@ class AudioFlamingo3Processor(ProcessorMixin):
         audio: str | list[str] | AudioInput,
         prompt: str | list[str] | None = None,
         transcription: str | list[str] | None = None,
+        tokenize: bool = True,
         **kwargs: Unpack[AudioFlamingo3ProcessorKwargs],
-    ) -> BatchFeature:
+    ) -> BatchFeature | list[str]:
         """
         Prepare inputs for automatic speech recognition without manually writing the default transcription prompt,
         either for inference or, when `transcription` is given, for training.
@@ -226,14 +227,19 @@ class AudioFlamingo3Processor(ProcessorMixin):
                 Target transcript(s) for training, one per audio. When given, each transcript is written as the
                 assistant turn and `labels` are returned (see `output_labels` in
                 [`~AudioFlamingo3Processor.__call__`]).
+            tokenize (`bool`, *optional*, defaults to `True`):
+                Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
+                the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
+                audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
+                `tokenize=True`.
             **kwargs:
                 Additional keyword arguments forwarded to [`~AudioFlamingo3Processor.apply_chat_template`].
                 Processor kwargs (for example `text_kwargs`, `audio_kwargs`, ...) should be passed as
                 `processor_kwargs={...}`.
 
         Returns:
-            [`BatchFeature`]: Processor outputs ready to be passed to
-            [`AudioFlamingo3ForConditionalGeneration.generate`], or to
+            [`BatchFeature`] or `list[str]`: One prompt per audio when `tokenize=False`, otherwise processor
+            outputs ready to be passed to [`AudioFlamingo3ForConditionalGeneration.generate`], or to
             [`AudioFlamingo3ForConditionalGeneration.forward`] to compute the loss when `transcription` is given.
 
         """
@@ -266,9 +272,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
             raise TypeError("`prompt` must be a string, a sequence of strings, or `None`.")
 
         is_training = transcription is not None
-        if isinstance(transcription, str):
-            transcription = [transcription]
-        transcriptions = prepare_prompt_input(transcription, batch_size, input_name="transcription")
+        transcriptions = prepare_prompt_input(transcription, batch_size, input_name="transcription", broadcast=False)
         if is_training:
             kwargs["processor_kwargs"] = {"output_labels": True, **kwargs.get("processor_kwargs", {})}
 
@@ -289,7 +293,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
         return self.apply_chat_template(
             conversations,
-            tokenize=True,
+            tokenize=tokenize,
             add_generation_prompt=not is_training,
             return_dict=True,
             **kwargs,

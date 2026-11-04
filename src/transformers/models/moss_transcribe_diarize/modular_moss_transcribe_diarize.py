@@ -474,8 +474,9 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
         prompt: str | list[str] | None = None,
         keywords: str | list[str] | list[list[str]] | None = None,
         transcription: str | list[str] | None = None,
+        tokenize: bool = True,
         **kwargs: Unpack[MossTranscribeDiarizeProcessorKwargs],
-    ) -> BatchFeature:
+    ) -> BatchFeature | list[str]:
         """
         Prepare inputs for transcription / diarization without manually writing the chat template, either for
         inference or, when `transcription` is given, for training.
@@ -495,6 +496,11 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
                 Target transcript(s) for training, one per audio, in the model's output format (e.g.
                 `"[0.00][S01] Hello world.[1.20]"`). When given, each transcript is written as the assistant turn and
                 `labels` are returned (see `output_labels` in [`~MossTranscribeDiarizeProcessor.__call__`]).
+            tokenize (`bool`, *optional*, defaults to `True`):
+                Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
+                the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
+                audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
+                `tokenize=True`.
             **kwargs:
                 Additional keyword arguments forwarded to [`~MossTranscribeDiarizeProcessor.apply_chat_template`].
                 Processor kwargs (for example `text_kwargs`, `audio_kwargs`, ...) should be passed as
@@ -511,9 +517,7 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
         keyword_batches = prepare_keyword_inputs(keywords, batch_size)
 
         is_training = transcription is not None
-        if isinstance(transcription, str):
-            transcription = [transcription]
-        transcriptions = prepare_prompt_input(transcription, batch_size, input_name="transcription")
+        transcriptions = prepare_prompt_input(transcription, batch_size, input_name="transcription", broadcast=False)
         if is_training:
             kwargs["processor_kwargs"] = {"output_labels": True, **kwargs.get("processor_kwargs", {})}
 
@@ -533,7 +537,7 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
 
         return self.apply_chat_template(
             conversations,
-            tokenize=True,
+            tokenize=tokenize,
             add_generation_prompt=not is_training,
             return_dict=True,
             **kwargs,
@@ -546,6 +550,9 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
         `MM:SS` / `HH:MM:SS` string (`"1:23"`, `"01:02:03"`), for MOSS-Transcribe-Diarize's diarization output.
         """
         return sum(float(part) * 60**i for i, part in enumerate(reversed(value.strip().split(":"))))
+
+    def _decode_complete_segments(self, *args, **kwargs):
+        raise AttributeError("Not needed for MossTranscribeDiarize")
 
     def extract_speaker_dict(self, text: str | list[str]) -> list[dict] | str | list[list[dict] | str]:
         """
@@ -663,7 +670,7 @@ class MossTranscribeDiarizeAudioModel(Qwen2AudioEncoder):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
+        input_features (`torch.Tensor` of shape `(batch_size, feature_size, sequence_length)`):
             Log-mel features extracted from the raw speech waveform, one row per 30s Whisper window. See
             [`~MossTranscribeDiarizeFeatureExtractor.__call__`].
         attention_mask (`torch.Tensor`, *optional*):
@@ -760,10 +767,10 @@ class MossTranscribeDiarizeModel(AudioFlamingo3Model):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
+        input_features: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         padding_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MossTranscribeDiarizeModelOutputWithPast:
@@ -773,7 +780,7 @@ class MossTranscribeDiarizeModel(AudioFlamingo3Model):
             `input_features`. Used to compute each chunk's valid encoder-output length.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Forwarded as-is to the language model.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Precomputed embeddings, in place of passing `input_ids`. When `input_features` is also given,
             `input_ids` is still required so the audio placeholder positions in `inputs_embeds` can be located
             and filled with the audio embeddings.
@@ -827,11 +834,11 @@ class MossTranscribeDiarizeForConditionalGeneration(AudioFlamingo3ForConditional
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
+        input_features: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         padding_mask: torch.Tensor | None = None,
@@ -843,7 +850,7 @@ class MossTranscribeDiarizeForConditionalGeneration(AudioFlamingo3ForConditional
             `input_features`. Used to compute each chunk's valid encoder-output length.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Forwarded as-is to the language model.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Precomputed embeddings, in place of passing `input_ids`. When `input_features` is also given,
             `input_ids` is still required so the audio placeholder positions in `inputs_embeds` can be located
             and filled with the audio embeddings.
