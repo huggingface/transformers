@@ -49,6 +49,7 @@ from transformers.generation.continuous_batching.cache_allocators import (
     CacheAllocator,
     CachePool,
     FullAttentionCacheAllocator,
+    LinearAttentionCacheAllocator,
     SlidingAttentionCacheAllocator,
 )
 from transformers.generation.continuous_batching.continuous_api import (
@@ -71,6 +72,7 @@ from transformers.generation.continuous_batching.utils import (
     get_device_and_memory_breakdown,
 )
 from transformers.integrations.eager_paged import eager_paged_attention_forward
+from transformers.integrations.linear_attention_paged import causal_conv1d_varlen
 from transformers.testing_utils import (
     Expectations,
     backend_empty_cache,
@@ -78,6 +80,7 @@ from transformers.testing_utils import (
     require_deterministic_for_xpu,
     require_flash_attn,
     require_flash_attn_3,
+    require_flash_linear_attention,
     require_torch_accelerator,
     require_torch_multi_accelerator,
     slow,
@@ -293,6 +296,31 @@ def _make_allocator(
     )
 
 
+def _make_linear_allocator(
+    layer_indices: list[int] | None = None, index: int = 0, block_alignment: int = 1
+) -> LinearAttentionCacheAllocator:
+    """Builds a linear attention allocator on a minimal namespace config holding the shape of the states: 2 key heads
+    and 4 value heads of dimension 4, and a convolution of width 3."""
+    config = SimpleNamespace(
+        linear_key_head_dim=4,
+        linear_value_head_dim=4,
+        linear_num_key_heads=2,
+        linear_num_value_heads=4,
+        linear_conv_kernel_dim=3,
+    )
+    config.get_text_config = lambda: config
+    return LinearAttentionCacheAllocator(
+        index=index,
+        config=config,  # type: ignore
+        num_key_value_heads=1,
+        cache_dtype=torch.float16,
+        page_size=4,
+        layer_indices=layer_indices if layer_indices is not None else [0],
+        allow_block_sharing=False,
+        block_alignment=block_alignment,
+    )
+
+
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
     @parameterized.expand([("paged|eager", eager_paged_attention_forward)])
@@ -364,6 +392,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
             ("ssfssf", 4096, {"f": [2, 5], "s": [0, 1, 3, 4]}),
             ("ssssf", 4096, {"f": [4], "s": [0, 1, 2, 3]}),
             ("fffsffs", 4096, {"f": [0, 1, 2, 4, 5], "s": [3, 6]}),
+            ("lllflllf", None, {"l": [0, 1, 2, 4, 5, 6], "f": [3, 7]}),
             # No layer_types attribute: falls back on the presence of a sliding window
             (None, None, {"f": [0, 1, 2, 3]}),
             (None, 4096, {"s": [0, 1, 2, 3]}),
@@ -376,7 +405,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         expected_groups: dict[str, list[int]],
     ) -> None:
         """Test the layer grouping: one group per attention type, holding the indices of its layers in order."""
-        letter_to_type = {"f": "full_attention", "s": "sliding_attention"}
+        letter_to_type = {"f": "full_attention", "s": "sliding_attention", "l": "linear_attention"}
 
         # Take a config and change the layer_types attribute to the mix we want
         config = AutoConfig.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
@@ -437,6 +466,138 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
                 f"Expected mask:\n{str_expected_mask}\n"
                 f"Actual mask:\n{str_mask}"
             )
+
+    def test_linear_attention_blocks_and_indices(self) -> None:
+        """A request of a linear attention allocator owns one block, allocated with its first tokens and kept for its
+        whole life. It reads its states from the zeroed trash block while it has no past and from its block after,
+        and always writes them to its block. Each index list holds one entry per request, not one per token."""
+        allocator = _make_linear_allocator(layer_indices=[0, 2])
+        pool = _setup_cache_pool([allocator], num_sectors=2)
+        pool.allocate_sector(allocator.index)
+
+        self.assertEqual(allocator.needs_new_blocks("req", 0, 5), 1)
+        allocator.allocate_cache_to_request("req", 0, 5)
+        block = allocator.block_table["req"]
+        self.assertEqual(len(block), 1)
+        self.assertEqual(allocator.needs_new_blocks("req", 5, 1), 0)
+        self.assertEqual(allocator.needs_new_blocks("req", 5, 100), 0)
+
+        self.assertEqual(allocator.get_read_indices("req", 0, 5), [allocator.read_trash_index])
+        self.assertEqual(allocator.get_read_indices("req", 5, 1), block)
+        self.assertEqual(allocator.get_write_indices("req", 0, 5), block)
+        self.assertEqual(allocator.get_write_indices("req", 5, 1), block)
+        # The trash blocks are in the reserved sectors, which the pool never hands out
+        self.assertNotEqual(allocator.read_trash_index, allocator.write_trash_index)
+        self.assertNotIn(block[0], (allocator.read_trash_index, allocator.write_trash_index))
+
+        # The block goes back to the pool when the request is freed
+        free_blocks = pool.count_free_blocks(allocator.index)
+        allocator.free_blocks("req")
+        self.assertEqual(pool.count_free_blocks(allocator.index), free_blocks + 1)
+
+    def test_linear_attention_block_alignment(self) -> None:
+        """The block is sized to a multiple of the alignment, which the paged cache sets to the other allocators'
+        block sizes so the sectors stay small, with pages of equal size."""
+        allocator = _make_linear_allocator(layer_indices=[0, 1, 2], block_alignment=1000)
+        self.assertEqual(allocator.bytes_per_block % 1000, 0)
+        self.assertEqual(allocator.bytes_per_block, 3 * allocator.bytes_per_page)
+        # The recurrent state is read as float32 from a 128-byte boundary
+        self.assertEqual(allocator.recurrent_offset % 128, 0)
+        self.assertGreaterEqual(allocator.recurrent_offset, allocator.conv_bytes)
+
+    def test_linear_attention_states_round_trip(self) -> None:
+        """The paged cache reads and writes the states of the batch's sequences through the allocator's views, from
+        the index storages on the varlen path and from the block table on the decode fast path, and sends padding
+        sequences to the trash blocks. Forks copy blocks, states included."""
+        allocator = _make_linear_allocator(layer_indices=[0, 2])
+        # A sector holds one block here, so three requests (a, b and a fork) need three sectors
+        pool = _setup_cache_pool([allocator], num_sectors=3)
+        cache = PagedAttentionCache.__new__(PagedAttentionCache)
+        cache.pool = pool
+        cache.cache_allocators = {"linear_attention": allocator}
+        cache.layer_to_allocator = {0: allocator, 2: allocator}
+        for _ in range(2):
+            pool.allocate_sector(allocator.index)
+        for request_id in ("a", "b"):
+            allocator.allocate_cache_to_request(request_id, 0, 1)
+        blocks = [allocator.block_table["a"][0], allocator.block_table["b"][0]]
+
+        torch.manual_seed(0)
+        conv_states = torch.randn(2, allocator.conv_dim, allocator.conv_state_len)
+        recurrent_states = torch.randn(2, *allocator.recurrent_shape)
+
+        # Varlen path: the requests have no past, so they read zeros and write their block
+        kwargs = {"read_index": [torch.tensor([0, 0])], "write_index": [torch.tensor(blocks)], "block_table": None}
+        read_conv, read_recurrent = cache.read_linear_attention_states(0, kwargs)
+        self.assertEqual(read_conv.shape, conv_states.shape)
+        self.assertEqual(read_recurrent.shape, recurrent_states.shape)
+        self.assertTrue((read_conv == 0).all() and (read_recurrent == 0).all())
+        cache.write_linear_attention_states(0, conv_states, recurrent_states, kwargs)
+
+        # Then they read what they wrote, in the cache dtypes, and the other layer is untouched
+        kwargs["read_index"] = [torch.tensor(blocks)]
+        read_conv, read_recurrent = cache.read_linear_attention_states(0, kwargs)
+        torch.testing.assert_close(read_conv, conv_states.to(torch.float16))
+        torch.testing.assert_close(read_recurrent, recurrent_states)
+        read_conv, read_recurrent = cache.read_linear_attention_states(2, kwargs)
+        self.assertTrue((read_conv == 0).all() and (read_recurrent == 0).all())
+
+        # Decode fast path: the block table gives the blocks, and its padding rows (-1) go to the trash blocks
+        block_table = torch.tensor([[[blocks[1], -1], [-1, -1], [blocks[0], -1]]], dtype=torch.int32)
+        kwargs = {"block_table": block_table}
+        read_conv, read_recurrent = cache.read_linear_attention_states(0, kwargs)
+        torch.testing.assert_close(read_conv[[0, 2]], conv_states[[1, 0]].to(torch.float16))
+        torch.testing.assert_close(read_recurrent[[0, 2]], recurrent_states[[1, 0]])
+        self.assertTrue((read_conv[1] == 0).all() and (read_recurrent[1] == 0).all())
+        cache.write_linear_attention_states(0, read_conv + 1, read_recurrent + 1, kwargs)
+        read_conv, read_recurrent = cache.read_linear_attention_states(0, kwargs)
+        torch.testing.assert_close(read_conv[[0, 2]], conv_states[[1, 0]].to(torch.float16) + 1)
+        torch.testing.assert_close(read_recurrent[[0, 2]], recurrent_states[[1, 0]] + 1)
+        # The padding row wrote to the write trash, so the read trash still reads zeros
+        self.assertTrue((read_conv[1] == 0).all() and (read_recurrent[1] == 0).all())
+
+        # A fork copies the block, states included
+        pool.allocate_sector(allocator.index)
+        allocator.allocate_cache_to_request("c", 0, 1)
+        fork = allocator.block_table["c"][0]
+        allocator.copy_blocks([blocks[0]], [fork])
+        kwargs = {"read_index": [torch.tensor([fork])], "write_index": [torch.tensor([fork])], "block_table": None}
+        read_conv, read_recurrent = cache.read_linear_attention_states(0, kwargs)
+        torch.testing.assert_close(read_conv[0], conv_states[0].to(torch.float16) + 1)
+        torch.testing.assert_close(read_recurrent[0], recurrent_states[0] + 1)
+
+    @parameterized.expand(
+        [
+            # (sequence lengths, convolution width)
+            ([3, 1, 5], 2),
+            ([3, 1, 5], 4),
+            ([1, 1, 1], 4),  # all decode tokens
+            ([0, 4, 2, 0], 3),  # empty padding sequences
+            ([6], 7),  # a sequence shorter than the window
+        ]
+    )
+    def test_causal_conv1d_varlen(self, lengths: list[int], width: int) -> None:
+        """Each packed sequence is convolved from its own conv state and leaves its next state behind, as if it had
+        been convolved alone after that state."""
+        torch.manual_seed(0)
+        dim, state_len = 6, width - 1
+        weight, bias = torch.randn(dim, width), torch.randn(dim)
+        conv_states = torch.randn(len(lengths), dim, state_len)
+        inputs = torch.randn(1, dim, sum(lengths))
+        cu_seqlens = torch.tensor([0] + list(itertools.accumulate(lengths)), dtype=torch.int32)
+
+        output, next_states = causal_conv1d_varlen(inputs, conv_states, cu_seqlens, weight, bias, "silu")
+
+        self.assertEqual(output.shape, inputs.shape)
+        self.assertEqual(next_states.shape, conv_states.shape)
+        for i, (start, end) in enumerate(zip(cu_seqlens[:-1].tolist(), cu_seqlens[1:].tolist())):
+            # Reference: the sequence is convolved after its state, without padding. An empty sequence has no output
+            # and keeps its state.
+            state_and_inputs = torch.cat([conv_states[i], inputs[0, :, start:end]], dim=-1).unsqueeze(0)
+            if end > start:
+                expected = torch.nn.functional.conv1d(state_and_inputs, weight.unsqueeze(1), bias, groups=dim)
+                torch.testing.assert_close(output[:, :, start:end], torch.nn.functional.silu(expected))
+            torch.testing.assert_close(next_states[i], state_and_inputs[0, :, -state_len:])
 
     def test_continuous_batching_can_store_request_tokens(self) -> None:
         """Tests the allocation check on a hybrid full + sliding cache: the sliding allocator caps its need at the
@@ -1239,6 +1400,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         max_new_tokens: int = 20,
         num_repeat_prompts: int = 1,
         upcast_lm_head: bool = False,
+        dtype: torch.dtype | str | None = None,
     ) -> None:
         """Tests the parity between continuous batching and non-continuous batching generation."""
 
@@ -1260,7 +1422,8 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # Eager and SDPA implementations get a precision boost to account for the fact that an attention mask is used in
         # continuous batching but not in generate
         is_fa = is_flash_attention_requested(requested_attention_implementation=attn_implementation)
-        dtype = "auto" if is_fa else torch.float32
+        if dtype is None:
+            dtype = "auto" if is_fa else torch.float32
         # Disable auto-switch to flash: if requested by the test, we keep SDPA or eager
         continuous_batching_config.auto_switch_to_flash = False
 
@@ -1387,6 +1550,21 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             continuous_batching_config=continuous_batching_config,
             attn_implementation=attn_implementation,
             upcast_lm_head=is_flash_attention_requested(requested_attention_implementation=attn_implementation),
+        )
+
+    @parameterized.expand([("sdpa", False), ("flash_attention_2", False), ("flash_attention_2", True)])
+    @require_flash_linear_attention
+    @slow
+    def test_continuous_batching_linear_attention_parity(self, attn_implementation: str, use_cuda_graph: bool) -> None:
+        """A hybrid model with linear attention layers carries their conv and recurrent states in the paged cache."""
+        continuous_batching_config = ContinuousBatchingConfig(use_cuda_graph=use_cuda_graph, default_compile_level=0)
+        # The tiny model is stored in float32, which flash attention does not take
+        is_fa = is_flash_attention_requested(requested_attention_implementation=attn_implementation)
+        self._test_continuous_batching_parity(
+            model_id="hf-tiny-v2/tiny-random-Qwen3_5ForCausalLM",
+            continuous_batching_config=continuous_batching_config,
+            attn_implementation=attn_implementation,
+            dtype=torch.bfloat16 if is_fa else None,
         )
 
     @parameterized.expand(

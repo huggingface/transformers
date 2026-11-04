@@ -102,9 +102,11 @@ Shared pool (first two chunks reserved for padding / never allocated)
   chunk = pool unit sized so full and sliding blocks tile the same bytes
 ```
 
-Continuous batching supports two attention types only: `full_attention` (`FullAttentionCacheAllocator`) and `sliding_attention` (`SlidingAttentionCacheAllocator`). Hybrid models get one allocator of each kind. Attention type comes from the model (`layer_types` / `sliding_window`), not from [`ContinuousBatchingConfig`].
+Continuous batching supports three attention types: `full_attention` (`FullAttentionCacheAllocator`), `sliding_attention` (`SlidingAttentionCacheAllocator`) and `linear_attention` (`LinearAttentionCacheAllocator`). Hybrid models get one allocator of each kind they use. Attention type comes from the model (`layer_types` / `sliding_window`), not from [`ContinuousBatchingConfig`].
 
 Sliding layers keep only a fixed window of recent tokens by recycling a small set of pages. They do not support kernel block tables or block sharing.
+
+Linear attention layers (the gated delta net of Qwen3-Next and Qwen3.5) keep no tokens at all: each request owns a state of fixed size per layer, the last inputs of the layer's causal convolution and its recurrent state. The allocator stores that state in one page per layer, so a request holds one block for its whole life, allocated with its first tokens and overwritten in place by every forward pass. The layer runs the batch as one packed row: every sequence continues from its own state and leaves its next state behind, whether it is a prefill chunk or a single decode token. States are never shared, since nothing identifies them by content, and forks copy them. These layers need the `flash-linear-attention` kernels, and the chunked kernel reads the sequence lengths on the host, so accelerator graphs stay off on the varlen path for such models.
 
 The cache reserves two chunks ahead of the data chunks for padding reads and writes that requests never use. Those chunks are never allocated to requests.
 
