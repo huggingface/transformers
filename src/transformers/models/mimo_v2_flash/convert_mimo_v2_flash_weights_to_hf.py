@@ -42,6 +42,10 @@ def convert_config_kwargs(original_config: dict) -> dict:
         "swa_qk_head_dim",
         "auto_map",
     }
+    # `swa_qk_head_dim` is redundant with `swa_head_dim`, the query/key dimension of the sliding-window layers.
+    swa_qk_head_dim = original_config.get("swa_qk_head_dim")
+    if swa_qk_head_dim is not None and swa_qk_head_dim != original_config.get("swa_head_dim", swa_qk_head_dim):
+        raise ValueError("`swa_qk_head_dim` must match `swa_head_dim`.")
     new_config_kwargs = {k: v for k, v in original_config.items() if k not in keys_to_drop}
 
     if original_config.get("sliding_window_size") is not None:
@@ -81,7 +85,10 @@ def convert_config_kwargs(original_config: dict) -> dict:
     }
     if rope_scaling is not None:
         # `type` is the legacy name of `rope_type`.
-        rope_parameters["full_attention"].update({k: v for k, v in rope_scaling.items() if k != "type"})
+        rope_scaling = dict(rope_scaling)
+        legacy_rope_type = rope_scaling.pop("type", None)
+        rope_scaling.setdefault("rope_type", legacy_rope_type or "default")
+        rope_parameters["full_attention"].update(rope_scaling)
     new_config_kwargs["rope_parameters"] = rope_parameters
     return new_config_kwargs
 

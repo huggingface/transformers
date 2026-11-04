@@ -23,6 +23,7 @@ and store:
     - for multimodal checkpoints, the learned audio tokenizer in the `audio_tokenizer` directory.
 
 This script dequantizes every weight, splits the fused QKV projections and renames the tensors to the native layout.
+The experts of multimodal checkpoints are also fused like in the native model, which needs no load-time conversion.
 It writes the configuration with a distinct `model_type`/`architectures` per family, together with the processor:
     - multimodal checkpoints: `model_type="mimo_v2_vl"`, [`MiMoV2VLForConditionalGeneration`], [`MiMoV2VLProcessor`],
     - text-only checkpoints: `model_type="mimo_v2_flash"`, [`MiMoV2FlashForCausalLM`], tokenizer.
@@ -65,19 +66,20 @@ from transformers import (
     MiMoV2VLVideoProcessor,
     TokenizersBackend,
 )
+from transformers.core_model_loading import revert_weight_conversion
+from transformers.integrations.mxfp4 import FP4_VALUES
 from transformers.models.mimo_v2_flash.convert_mimo_v2_flash_weights_to_hf import convert_config_kwargs
+from transformers.utils.hub import convert_file_size_to_int
 
 
-# --------------------------------------------------------------------------------------------------------------------
-# Mappings from the original names to the native ones
-# --------------------------------------------------------------------------------------------------------------------
-
-# Original text settings that have no native equivalent (quantization is removed by this conversion).
+# Original text settings that have no native equivalent (quantization is removed by this conversion, and the router
+# logits are always computed in float32).
 TEXT_KEYS_TO_DROP = {
     "architectures",
     "attention_projection_layout",
     "hybrid_block_size",
     "model_type",
+    "moe_router_dtype",
     "num_nextn_predict_layers",
     "quantization_config",
     "transformers_version",
@@ -112,10 +114,9 @@ VISION_CONFIG_MAPPING = {
     "spatial_merge_size": "spatial_merge_size",
     "out_hidden_size": "out_hidden_size",
     "visual_token_window_size": "sliding_window",
-    "use_sink": "use_attention_sinks",
 }
-# Original `audio_config` entries -> `MiMoV2VLAudioConfig` arguments (`rope_theta`, `input_full_attention`,
-# `speech_vocab_size` and `speech_zeroemb_idx` are converted separately).
+# Original `audio_config` entries -> `MiMoV2VLAudioConfig` arguments (`rope_theta`, `speech_vocab_size` and
+# `speech_zeroemb_idx` are converted separately).
 AUDIO_CONFIG_MAPPING = {
     "audio_channels": "num_codebooks",
     "group_size": "group_size",
@@ -125,9 +126,7 @@ AUDIO_CONFIG_MAPPING = {
     "input_local_head_dim": "head_dim",
     "input_local_intermediate_size": "intermediate_size",
     "input_local_hidden_dropout": "attention_dropout",
-    "add_post_norm": "use_final_norm",
     "out_hidden_size": "out_hidden_size",
-    "projection_layers": "projection_layers",
 }
 # Original `audio_tokenizer/config.json` entries -> `MiMoV2VLAudioTokenizerConfig` arguments (the attention window,
 # layer pattern, skip connection, codebook sizes and `rope_theta` are converted separately).
@@ -140,7 +139,6 @@ AUDIO_TOKENIZER_CONFIG_MAPPING = {
     "encoder_attention_heads": "num_attention_heads",
     "encoder_ffn_dim": "intermediate_size",
     "activation_function": "hidden_act",
-    "encoder_causal": "is_causal",
     "avg_pooler": "downsample_factor",
 }
 # Original `processor_config` entries -> `MiMoV2VLFeatureExtractor` arguments.
@@ -185,13 +183,24 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"^audio_encoder\.projection\.mlp\.2\.": "model.audio_encoder.projection.linear_fc2.",
     r"^audio_encoder\.": "model.audio_encoder.",
 }
-# Original audio tokenizer tensor names -> native tensor names. Only the encoder is used for understanding.
-AUDIO_TOKENIZER_KEY_MAPPING = {
+# Original audio tokenizer tensor names -> native tensor names. Only the encoder is used for understanding. Its
+# Whisper-style layers are renamed to the GLM-ASR layout.
+AUDIO_TOKENIZER_ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
+    r"^encoder\.layers\.(\d+)\.self_attn_layer_norm\.": r"model.audio_tokenizer.layers.\1.input_layernorm.",
+    r"^encoder\.layers\.(\d+)\.final_layer_norm\.": r"model.audio_tokenizer.layers.\1.post_attention_layernorm.",
+    r"^encoder\.layers\.(\d+)\.fc(1|2)\.": r"model.audio_tokenizer.layers.\1.mlp.fc\2.",
+    r"^encoder\.layers\.(\d+)\.self_attn\.out_proj\.": r"model.audio_tokenizer.layers.\1.self_attn.o_proj.",
     r"^encoder\.down_sample_layer\.0\.": "model.audio_tokenizer.downsample_conv.",
     r"^encoder\.down_sample_norm\.": "model.audio_tokenizer.downsample_norm.",
-    r"^encoder\.quantizer\.vq\.layers\.(\d+)\._codebook\.embed$": r"model.audio_tokenizer.quantizer.codebooks.\1.embed",
+    r"^encoder\.quantizer\.vq\.layers\.(\d+)\._codebook\.embed$": r"model.audio_tokenizer.quantizer.layers.\1.codebook.embed",
     r"^encoder\.": "model.audio_tokenizer.",
 }
+# Fused, TP-interleaved QKV projections of the original decoder layers.
+QKV_PROJ_PATTERN = re.compile(r"model\.layers\.(\d+)\.self_attn\.qkv_proj\.weight")
+# Per-expert projections, fused into the `gate_up_proj` and `down_proj` of the native multimodal model.
+EXPERT_PROJ_PATTERN = re.compile(
+    r"(?P<prefix>.+\.mlp\.experts)\.(?P<expert>\d+)\.(?P<projection>gate|up|down)_proj\.weight"
+)
 
 
 def convert_key(key: str, mapping: dict[str, str]) -> str:
@@ -214,11 +223,6 @@ def parse_per_codebook_values(value: str | int | list[int], num_codebooks: int) 
     return value * num_codebooks if len(value) == 1 else value
 
 
-# --------------------------------------------------------------------------------------------------------------------
-# Configuration
-# --------------------------------------------------------------------------------------------------------------------
-
-
 def is_multimodal(original_config: dict) -> bool:
     return bool(original_config.get("vision_config") or original_config.get("audio_config"))
 
@@ -236,6 +240,9 @@ def convert_text_config(original_config: dict) -> dict:
 
 
 def convert_vision_config(original_vision_config: dict) -> dict:
+    # Like every released checkpoint, the windowed blocks have learned attention sinks.
+    if not original_vision_config.get("use_sink", True):
+        raise ValueError("Only vision encoders with attention sinks in their windowed blocks are supported.")
     vision_config = rename_config_keys(original_vision_config, VISION_CONFIG_MAPPING)
     # `vit_window_attn_types`: -1 for full attention, 0 (row-major) or 1 (column-major) for windowed attention.
     window_attn_types = original_vision_config.get("vit_window_attn_types")
@@ -253,10 +260,18 @@ def convert_vision_config(original_vision_config: dict) -> dict:
 
 def convert_audio_config(original_audio_config: dict) -> dict:
     audio_config = rename_config_keys(original_audio_config, AUDIO_CONFIG_MAPPING)
-    if original_audio_config.get("partial_rotary_factor", 1.0) != 1.0:
-        raise ValueError("Only full rotary embeddings are supported in the audio encoder.")
-    if "input_full_attention" in original_audio_config:
-        audio_config["is_causal"] = not original_audio_config["input_full_attention"]
+    # Like every released checkpoint, the codec frames of a group attend bidirectionally with full rotary embeddings,
+    # the encoder ends with a norm, and a 2-layer MLP projects each group to the language model.
+    if (
+        original_audio_config.get("partial_rotary_factor", 1.0) != 1.0
+        or not original_audio_config.get("input_full_attention", True)
+        or not original_audio_config.get("add_post_norm", True)
+        or original_audio_config.get("projection_layers", 2) != 2
+    ):
+        raise ValueError(
+            "Only bidirectional audio encoders with full rotary embeddings, a final norm and a 2-layer projection are "
+            "supported."
+        )
     if "rope_theta" in original_audio_config:
         audio_config["rope_parameters"] = {
             "rope_type": "default",
@@ -281,10 +296,10 @@ def convert_audio_tokenizer_config(original_audio_tokenizer_config: dict, segmen
 
     # `encoder_attn_window_size` is `[left, right]`, -1 meaning unbounded. With `hybrid_attention`, the last layer of
     # every cycle of `swa_per_block` layers attends without a window.
-    left, right = original.get("encoder_attn_window_size", [128, 0])
-    is_causal = original.get("encoder_causal", True)
-    if right not in (0, -1) and not is_causal:
-        raise ValueError("Only causal or left-only attention windows are supported in the audio tokenizer.")
+    left, _ = original.get("encoder_attn_window_size", [128, 0])
+    # Like every released checkpoint, the encoder attends causally and adds the output of one layer to its output.
+    if not original.get("encoder_causal", True) or not original.get("encoder_skip_layer_id"):
+        raise ValueError("Only causal audio tokenizers with a skip connection are supported.")
     if left < 0:
         layer_types = ["full_attention"] * num_layers
     elif original.get("hybrid_attention", False):
@@ -300,8 +315,7 @@ def convert_audio_tokenizer_config(original_audio_tokenizer_config: dict, segmen
         audio_tokenizer_config["sliding_window"] = left
 
     # `encoder_skip_layer_id` is one-based.
-    skip_layer_id = original.get("encoder_skip_layer_id")
-    audio_tokenizer_config["skip_layer_idx"] = skip_layer_id - 1 if skip_layer_id else None
+    audio_tokenizer_config["skip_layer_idx"] = original["encoder_skip_layer_id"] - 1
     if "codebook_size" in original:
         num_quantizers = original.get("num_quantizers", len(original["codebook_size"]))
         codebook_sizes = list(original["codebook_size"])[:num_quantizers]
@@ -318,12 +332,16 @@ def convert_audio_tokenizer_config(original_audio_tokenizer_config: dict, segmen
     return audio_tokenizer_config
 
 
+def get_token_id(original_config: dict, name: str) -> int | None:
+    """Returns the ID of a special token, stored at the top level or in the processor settings."""
+    return original_config.get(name, (original_config.get("processor_config") or {}).get(name))
+
+
 def load_original_config(input_dir: Path) -> dict:
     return json.loads((input_dir / "config.json").read_text(encoding="utf-8"))
 
 
-def convert_config(input_dir: Path) -> MiMoV2VLConfig | MiMoV2FlashConfig:
-    original_config = load_original_config(input_dir)
+def convert_config(original_config: dict, input_dir: Path) -> MiMoV2VLConfig | MiMoV2FlashConfig:
     text_config = convert_text_config(original_config)
     if not is_multimodal(original_config):
         return MiMoV2FlashConfig(**text_config)
@@ -331,11 +349,10 @@ def convert_config(input_dir: Path) -> MiMoV2VLConfig | MiMoV2FlashConfig:
     original_audio_tokenizer_config = json.loads(
         (input_dir / "audio_tokenizer" / "config.json").read_text(encoding="utf-8")
     )
-    processor_config = original_config.get("processor_config") or {}
     token_ids = {
-        name: original_config.get(name, processor_config.get(name))
+        name: get_token_id(original_config, name)
         for name in MULTIMODAL_KEYS
-        if name.endswith("_token_id") and original_config.get(name, processor_config.get(name)) is not None
+        if name.endswith("_token_id") and get_token_id(original_config, name) is not None
     }
     return MiMoV2VLConfig(
         text_config=text_config,
@@ -363,13 +380,7 @@ def convert_generation_config(input_dir: Path) -> GenerationConfig | None:
     return GenerationConfig(**generation_config)
 
 
-# --------------------------------------------------------------------------------------------------------------------
-# Processor
-# --------------------------------------------------------------------------------------------------------------------
-
-
-def convert_processor(input_dir: Path, config: MiMoV2VLConfig) -> MiMoV2VLProcessor:
-    original_config = load_original_config(input_dir)
+def convert_processor(original_config: dict, input_dir: Path, config: MiMoV2VLConfig) -> MiMoV2VLProcessor:
     processor_config = original_config.get("processor_config") or {}
     vision_config = config.vision_config
     audio_tokenizer_config = config.audio_tokenizer_config
@@ -421,7 +432,7 @@ def convert_processor(input_dir: Path, config: MiMoV2VLConfig) -> MiMoV2VLProces
     # Use the special tokens of the checkpoint's token IDs.
     token_kwargs = {}
     for name in PROCESSOR_TOKEN_NAMES:
-        token_id = original_config.get(f"{name}_token_id", processor_config.get(f"{name}_token_id"))
+        token_id = get_token_id(original_config, f"{name}_token_id")
         if token_id is not None:
             token_kwargs[f"{name}_token"] = tokenizer.convert_ids_to_tokens(token_id)
 
@@ -441,16 +452,9 @@ def convert_processor(input_dir: Path, config: MiMoV2VLConfig) -> MiMoV2VLProces
     )
 
 
-# --------------------------------------------------------------------------------------------------------------------
-# Weights
-# --------------------------------------------------------------------------------------------------------------------
-
-
 def dequantize_mxfp4(weight: torch.Tensor, scales: torch.Tensor, block_size: int = 32) -> torch.Tensor:
     """Unpack two E2M1 values per byte (low nibble first) and apply the per-block E8M0 scales."""
-    values = torch.tensor(
-        [0, 0.5, 1, 1.5, 2, 3, 4, 6, -0.0, -0.5, -1, -1.5, -2, -3, -4, -6], device=weight.device, dtype=torch.float32
-    )
+    values = torch.tensor(FP4_VALUES, device=weight.device, dtype=torch.float32)
     indices = torch.stack((weight & 15, weight >> 4), dim=-1).flatten(-2).long()
     if tuple(scales.shape) != (weight.shape[0], indices.shape[1] // block_size):
         raise ValueError(f"MXFP4 scales of shape {tuple(scales.shape)} do not match weights {tuple(weight.shape)}.")
@@ -512,7 +516,7 @@ def infer_tp_size(checkpoint, text_config, block_rows=128) -> int:
     """Infers the TP size used to save the fused QKV weights, which must be consistent across all layers."""
     candidates = None
     for name in checkpoint.names():
-        if match := re.fullmatch(r"model\.layers\.(\d+)\.self_attn\.qkv_proj\.weight", name):
+        if match := QKV_PROJ_PATTERN.fullmatch(name):
             scale_name = name + "_scale_inv"
             num_scale_rows = checkpoint.shape(scale_name)[0] if scale_name in checkpoint else None
             layer_candidates = get_tp_size_candidates(
@@ -600,7 +604,8 @@ class ShardWriter:
 class SafetensorsCheckpoint:
     """
     Lazy access to a (sharded) safetensors checkpoint. Names, dtypes and shapes come from the shard headers only, so
-    that a conversion can be planned and validated without reading (or downloading) the weights.
+    that a conversion can be planned and validated without reading (or downloading) the weights. The headers are
+    parsed directly because `safe_open` rejects files truncated after their header.
     """
 
     def __init__(self, path: Path):
@@ -664,6 +669,18 @@ def load_qkv(checkpoint, name, scale_name, text_config, layer_idx, tp_size, bloc
     )
 
 
+def load_fused_experts(gate_steps, up_steps):
+    """Stacks the experts like the native `gate_up_proj`: the gate projections, then the up projections."""
+    gate = torch.stack([step.convert()[0].cpu() for step in gate_steps])
+    up = torch.stack([step.convert()[0].cpu() for step in up_steps])
+    return [torch.cat((gate, up), dim=1)]
+
+
+def load_stacked_experts(down_steps):
+    """Stacks the experts like the native `down_proj`."""
+    return [torch.stack([step.convert()[0].cpu() for step in down_steps])]
+
+
 @dataclass
 class ConversionStep:
     """Produces the tensors `names` (with shapes `shapes`) of the converted checkpoint from the original one."""
@@ -671,6 +688,29 @@ class ConversionStep:
     names: list[str]
     shapes: list[tuple[int, ...]]
     convert: Callable[[], list[torch.Tensor]]
+
+
+def fuse_expert_steps(steps: list[ConversionStep]) -> list[ConversionStep]:
+    """Merges the per-expert steps of every MoE layer into the fused experts of the native model."""
+    fused_steps, experts = [], {}
+    for step in steps:
+        match = EXPERT_PROJ_PATTERN.fullmatch(step.names[0])
+        if match is None:
+            fused_steps.append(step)
+        else:
+            experts.setdefault(match["prefix"], {}).setdefault(match["projection"], {})[int(match["expert"])] = step
+    for prefix, projections in experts.items():
+        gate, up, down = (
+            [projections[name][idx] for idx in sorted(projections[name])] for name in ("gate", "up", "down")
+        )
+        rows, cols = gate[0].shapes[0]
+        gate_up_shape = (len(gate), 2 * rows, cols)
+        fused_steps.append(
+            ConversionStep([f"{prefix}.gate_up_proj"], [gate_up_shape], partial(load_fused_experts, gate, up))
+        )
+        down_shape = (len(down), *down[0].shapes[0])
+        fused_steps.append(ConversionStep([f"{prefix}.down_proj"], [down_shape], partial(load_stacked_experts, down)))
+    return fused_steps
 
 
 def plan_conversion(
@@ -687,11 +727,13 @@ def plan_conversion(
     quantization_config = original_config.get("quantization_config") or {}
     fp8_block_size = tuple(quantization_config.get("weight_block_size", (128, 128)))
     mxfp4_block_size = quantization_config.get("mxfp4_block_size", 32)
+    # The index metadata may store the TP size as a string.
     tp_size = (
-        tp_size or checkpoint.metadata.get("tp_size") or infer_tp_size(checkpoint, text_config, fp8_block_size[0])
+        tp_size
+        or int(checkpoint.metadata.get("tp_size") or 0)
+        or infer_tp_size(checkpoint, text_config, fp8_block_size[0])
     )
     print(f"Splitting the fused QKV weights with TP={tp_size}.", flush=True)
-    qkv_pattern = re.compile(r"model\.layers\.(\d+)\.self_attn\.qkv_proj\.weight")
 
     steps = []
     for name in checkpoint.names():
@@ -701,21 +743,23 @@ def plan_conversion(
         ):
             continue
         shape = checkpoint.shape(name)
-        target = convert_key(name, ORIGINAL_TO_CONVERTED_KEY_MAPPING) if multimodal else name
+        target = name
+        if multimodal:
+            # Unlike the text-only model, the native multimodal model has no load-time renaming of its sinks.
+            target = convert_key(name, ORIGINAL_TO_CONVERTED_KEY_MAPPING).replace(".attention_sink_bias", ".sinks")
         stem = name.removesuffix(".weight")
-        fp8_scale_name = stem + ".weight_scale_inv" if name.endswith(".weight") else None
-        if fp8_scale_name not in checkpoint:
+        fp8_scale_name = f"{stem}.weight_scale_inv"
+        if not name.endswith(".weight") or fp8_scale_name not in checkpoint:
             fp8_scale_name = None
 
-        if qkv_match := qkv_pattern.fullmatch(name):
+        if qkv_match := QKV_PROJ_PATTERN.fullmatch(name):
             layer_idx = int(qkv_match[1])
-            layer_tp_size = tp_size
             num_heads, num_kv_heads, head_dim, v_head_dim = get_attention_shape(text_config, layer_idx)
             # Each rank stores its query heads and its (possibly replicated) key/value heads.
-            kv_heads_per_rank = max(1, num_kv_heads // layer_tp_size)
-            expected_rows = num_heads * head_dim + layer_tp_size * kv_heads_per_rank * (head_dim + v_head_dim)
+            kv_heads_per_rank = max(1, num_kv_heads // tp_size)
+            expected_rows = num_heads * head_dim + tp_size * kv_heads_per_rank * (head_dim + v_head_dim)
             if shape[0] != expected_rows:
-                raise ValueError(f"{name} has {shape[0]} rows, expected {expected_rows} for TP={layer_tp_size}.")
+                raise ValueError(f"{name} has {shape[0]} rows, expected {expected_rows} for TP={tp_size}.")
             prefix = target.removesuffix("qkv_proj.weight")
             names = [f"{prefix}{projection}_proj.weight" for projection in "qkv"]
             shapes = [
@@ -724,7 +768,7 @@ def plan_conversion(
                 (num_kv_heads * v_head_dim, shape[1]),
             ]
             convert = partial(
-                load_qkv, checkpoint, name, fp8_scale_name, text_config, layer_idx, layer_tp_size, fp8_block_size
+                load_qkv, checkpoint, name, fp8_scale_name, text_config, layer_idx, tp_size, fp8_block_size
             )
         elif checkpoint.dtype(name) == "U8":
             # MXFP4 stores two 4-bit values per byte.
@@ -739,6 +783,7 @@ def plan_conversion(
         steps.append(ConversionStep(names, shapes, partial(convert, device=device)))
 
     if multimodal:
+        steps = fuse_expert_steps(steps)
         num_quantizers = len(config.audio_tokenizer_config.codebook_sizes)
         for name in audio_tokenizer.names():
             # Only the encoder and the codebooks of the quantizer stages used by the model are needed: the decoder
@@ -749,7 +794,7 @@ def plan_conversion(
                 continue
             steps.append(
                 ConversionStep(
-                    [convert_key(name, AUDIO_TOKENIZER_KEY_MAPPING)],
+                    [convert_key(name, AUDIO_TOKENIZER_ORIGINAL_TO_CONVERTED_KEY_MAPPING)],
                     [audio_tokenizer.shape(name)],
                     partial(load_tensor, audio_tokenizer, name),
                 )
@@ -759,28 +804,13 @@ def plan_conversion(
 
 def get_expected_checkpoint_shapes(model_class, config) -> dict[str, tuple[int, ...]]:
     """
-    Returns the names and shapes of a saved native checkpoint: the model state dict, with the fused experts and the
-    attention sinks in the layout they are saved in (`conversion_mapping.py` converts them when loading).
+    Returns the names and shapes of a saved native checkpoint: like `save_pretrained`, the load-time conversions of
+    `conversion_mapping.py` (the per-expert layout of the text-only model) are reverted.
     """
     with torch.device("meta"):
         model = model_class(config)
-    shapes = {}
-    for name, tensor in model.state_dict().items():
-        if name.endswith(".experts.gate_up_proj"):
-            num_experts, double_intermediate_size, hidden_size = tensor.shape
-            prefix = name.removesuffix("gate_up_proj")
-            for expert in range(num_experts):
-                for projection in ("gate_proj", "up_proj"):
-                    shapes[f"{prefix}{expert}.{projection}.weight"] = (double_intermediate_size // 2, hidden_size)
-        elif name.endswith(".experts.down_proj"):
-            prefix = name.removesuffix("down_proj")
-            for expert in range(tensor.shape[0]):
-                shapes[f"{prefix}{expert}.down_proj.weight"] = tuple(tensor.shape[1:])
-        elif name.endswith(".self_attn.sinks"):
-            shapes[name.replace(".self_attn.sinks", ".self_attn.attention_sink_bias")] = tuple(tensor.shape)
-        else:
-            shapes[name] = tuple(tensor.shape)
-    return shapes
+    state_dict = revert_weight_conversion(model, model.state_dict())
+    return {name: tuple(tensor.shape) for name, tensor in state_dict.items()}
 
 
 def check_conversion_plan(steps: list[ConversionStep], model_class, config):
@@ -792,7 +822,7 @@ def check_conversion_plan(steps: list[ConversionStep], model_class, config):
     mismatched = sorted(
         f"{name}: {planned[name]} != {expected[name]}"
         for name in set(planned) & set(expected)
-        if tuple(planned[name]) != tuple(expected[name])
+        if planned[name] != expected[name]
     )
     if missing or unexpected or mismatched:
         raise ValueError(
@@ -803,16 +833,17 @@ def check_conversion_plan(steps: list[ConversionStep], model_class, config):
 
 
 def write_converted_weights(
-    steps: list[ConversionStep], output_dir: Path, dtype=torch.bfloat16, max_shard_size=5 * 1024**3
+    steps: list[ConversionStep], output_dir: Path, model_class, dtype=torch.bfloat16, max_shard_size=5 * 1024**3
 ):
+    # Like `from_pretrained`, the modules of `_keep_in_fp32_modules_strict` are kept in float32.
+    keep_in_fp32 = set(model_class._keep_in_fp32_modules_strict or [])
     writer = ShardWriter(output_dir, max_shard_size)
     with torch.no_grad():
         for step in steps:
             for name, shape, tensor in zip(step.names, step.shapes, step.convert()):
-                if tuple(tensor.shape) != tuple(shape):
+                if tuple(tensor.shape) != shape:
                     raise ValueError(f"{name} has shape {tuple(tensor.shape)}, expected {shape}.")
-                # The audio tokenizer quantizer and the router correction bias are kept in float32.
-                keep_float32 = ".quantizer." in name or name.endswith("e_score_correction_bias")
+                keep_float32 = not keep_in_fp32.isdisjoint(name.split("."))
                 if tensor.is_floating_point() and not keep_float32:
                     tensor = tensor.to(dtype)
                 writer.add(name, tensor)
@@ -835,11 +866,14 @@ def convert_checkpoint(
     """
     input_dir = Path(input_dir)
     original_config = load_original_config(input_dir)
-    config = convert_config(input_dir)
+    config = convert_config(original_config, input_dir)
     multimodal = isinstance(config, MiMoV2VLConfig)
     model_class = MiMoV2VLForConditionalGeneration if multimodal else MiMoV2FlashForCausalLM
     config.architectures = [model_class.__name__]
-    processor = convert_processor(input_dir, config) if multimodal else TokenizersBackend.from_pretrained(input_dir)
+    if multimodal:
+        processor = convert_processor(original_config, input_dir, config)
+    else:
+        processor = TokenizersBackend.from_pretrained(input_dir)
     generation_config = convert_generation_config(input_dir)
 
     checkpoint = SafetensorsCheckpoint(input_dir)
@@ -857,7 +891,7 @@ def convert_checkpoint(
     processor.save_pretrained(output_dir)
     if generation_config is not None:
         generation_config.save_pretrained(output_dir)
-    write_converted_weights(steps, output_dir, dtype, max_shard_size)
+    write_converted_weights(steps, output_dir, model_class, dtype, max_shard_size)
     print(f"Saved the converted checkpoint to {output_dir}")
     return config, processor
 
@@ -873,8 +907,13 @@ def main():
         help="TP size of the fused QKV weights. Read from the weight index metadata, or inferred from the shapes.",
     )
     parser.add_argument("--device", default="cpu", help="Device used to dequantize the weights, e.g. `cuda`.")
-    parser.add_argument("--dtype", default="bfloat16", help="Dtype of the converted weights.")
-    parser.add_argument("--max_shard_size_gb", type=float, default=5.0, help="Maximum size of each output shard.")
+    parser.add_argument(
+        "--dtype",
+        default="bfloat16",
+        choices=["bfloat16", "float16", "float32"],
+        help="Dtype of the converted weights.",
+    )
+    parser.add_argument("--max_shard_size", default="5GB", help="Maximum size of each output shard, e.g. `5GB`.")
     parser.add_argument(
         "--dry_run",
         action="store_true",
@@ -889,7 +928,7 @@ def main():
         tp_size=args.tp_size,
         device=args.device,
         dtype=getattr(torch, args.dtype),
-        max_shard_size=int(args.max_shard_size_gb * 1024**3),
+        max_shard_size=convert_file_size_to_int(args.max_shard_size),
         dry_run=args.dry_run,
     )
 

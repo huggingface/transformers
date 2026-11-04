@@ -27,7 +27,8 @@ with a visual encoder, audio codec embeddings, and a learned audio tokenizer. Th
 and sliding-window attention with partial RoPE and attention sinks. The visual encoder processes spatial/temporal
 patches with row- and column-ordered attention windows.
 
-The following checkpoints share this implementation and provide their own model and preprocessing configurations:
+The following checkpoints share this implementation and provide their own model and preprocessing configurations.
+They are published in their original format: [convert them](#convert-the-original-checkpoints) first.
 
 - [XiaomiMiMo/MiMo-V2.5](https://huggingface.co/XiaomiMiMo/MiMo-V2.5)
 - [XiaomiMiMo/MiMo-V2.6-Flash-RL](https://huggingface.co/XiaomiMiMo/MiMo-V2.6-Flash-RL)
@@ -75,7 +76,7 @@ The following example runs on CPU and downloads only the processor files and a s
 from transformers import AutoProcessor
 
 model_id = "/path/to/MiMo-V2.6-Flash-RL-hf"
-processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=False)
+processor = AutoProcessor.from_pretrained(model_id)
 
 messages = [
     {
@@ -121,11 +122,10 @@ model = AutoModelForImageTextToText.from_pretrained(
     model_id,
     device_map="auto",
     dtype=torch.bfloat16,
-    trust_remote_code=False,
 )
 inputs = inputs.to(model.get_input_embeddings().weight.device)
 
-generated_ids = model.generate(**inputs, max_new_tokens=256, do_sample=False, logits_to_keep=1)
+generated_ids = model.generate(**inputs, max_new_tokens=256, do_sample=False)
 response = processor.batch_decode(
     generated_ids[:, inputs.input_ids.shape[1]:],
     skip_special_tokens=True,
@@ -149,7 +149,7 @@ from huggingface_hub import hf_hub_download
 from transformers import AutoProcessor
 
 model_id = "/path/to/MiMo-V2.6-Flash-RL-hf"
-processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=False)
+processor = AutoProcessor.from_pretrained(model_id)
 audio_path = hf_hub_download(
     repo_id="hf-internal-testing/dummy-audio-samples",
     filename="f2641_0_throatclearing.wav",
@@ -178,7 +178,7 @@ from huggingface_hub import hf_hub_download
 from transformers import AutoProcessor
 
 model_id = "/path/to/MiMo-V2.6-Flash-RL-hf"
-processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=False)
+processor = AutoProcessor.from_pretrained(model_id)
 video_path = hf_hub_download(
     repo_id="hf-internal-testing/test-videos",
     filename="tiny_video_320x240.mp4",
@@ -232,18 +232,15 @@ inputs = processor.apply_chat_template(
 ```
 
 For batches, pass a list of conversations and set `processor_kwargs={"text_kwargs": {"padding": True}}`.
-The processor also accepts `image_url`, `audio_url`, and `video_url` content types with a string or a nested
-`{"url": ...}` value, for example `{"type": "image_url", "image_url": {"url": "https://..."}}`.
-Applying the chat template leaves the original messages unchanged.
+The processor also accepts OpenAI-style `image_url` content blocks with a string or a nested `{"url": ...}` value, for
+example `{"type": "image_url", "image_url": {"url": "https://..."}}`.
 
 ## Configuration and input notes
 
 - [`MiMoV2VLTextConfig`] shares the MiMo V2 text-family settings of [`MiMoV2FlashConfig`]. Customize it with
   `layer_types`, `mlp_layer_types`, `rope_parameters` and `sliding_window`.
-- The learned attention sinks of the vision encoder are one extra logit per head in the softmax denominator, and its
-  patch merger normalizes with RMSNorm. The `modeling_mimo_v2.py` remote code shipped with the original checkpoints
-  adds the sinks to the logit of the first patch and uses a LayerNorm in the merger instead, which gives different
-  visual features.
+- The vision encoder adds its learned attention sinks to the softmax denominator and normalizes its patch merger with
+  RMSNorm, so its features differ from the remote code shipped with the original checkpoints.
 - The returned model inputs include `pixel_values` / `image_grid_thw` for images, `pixel_values_videos` /
   `video_grid_thw` for videos, and `input_features` / `feature_attention_mask` for waveforms. `audio_feature_lens`
   counts grouped audio tokens, and `audio_segment_offsets` aligns them with the prompt.
@@ -280,6 +277,10 @@ Applying the chat template leaves the original messages unchanged.
 
 [[autodoc]] MiMoV2VLAudioTokenizerConfig
 
+## MiMoV2VLPreTrainedModel
+
+[[autodoc]] MiMoV2VLPreTrainedModel
+
 ## MiMoV2VLModel
 
 [[autodoc]] MiMoV2VLModel
@@ -291,6 +292,7 @@ Applying the chat template leaves the original messages unchanged.
 ## MiMoV2VLTextModel
 
 [[autodoc]] MiMoV2VLTextModel
+    - forward
 
 ## MiMoV2VLForConditionalGeneration
 

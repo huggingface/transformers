@@ -2138,39 +2138,32 @@ class ProcessorMixin(PushToHubMixin):
         return {"sampling_rate": sampling_rate, "backend": backend}
 
     def _normalize_conversations(self, conversation) -> tuple[list, bool]:
-        """Batch a single conversation if needed and convert OpenAI `*_url` blocks to HF media blocks."""
+        """Batch a single conversation if needed and convert OpenAI image_url blocks to HF image blocks."""
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
         ):
             is_batched = True
-            conversations = list(conversation)
+            conversations = conversation
         else:
             is_batched = False
             conversations = [conversation]
 
-        # Normalize OpenAI-style "{image,audio,video}_url" content blocks to HuggingFace-style media blocks
+        # Normalize OpenAI-style "image_url" content blocks to HuggingFace-style "image" blocks
         # OpenAI format: {"type": "image_url", "image_url": {"url": "..."}}
         # HuggingFace format: {"type": "image", "url": "..."}
-        # Messages are shallow-copied so that the caller's conversation is never mutated.
-        url_types = ("image_url", "audio_url", "video_url")
-        for idx, messages in enumerate(conversations):
-            normalized_messages = []
-            for message in messages:
-                message = dict(message)
-                normalized_messages.append(message)
+        for conversation in conversations:
+            for message in conversation:
                 if not isinstance(message.get("content"), list):
                     continue
                 new_content = []
                 for content in message["content"]:
-                    if isinstance(content, dict) and content.get("type") in url_types and content["type"] in content:
-                        url_key = content["type"]
-                        url_info = content[url_key]
-                        url = url_info.get("url", "") if isinstance(url_info, dict) else url_info
-                        content = {key: value for key, value in content.items() if key != url_key}
-                        content.update(type=url_key.removesuffix("_url"), url=url)
-                    new_content.append(content)
+                    if isinstance(content, dict) and content.get("type") == "image_url" and "image_url" in content:
+                        image_url_info = content["image_url"]
+                        url = image_url_info.get("url", "") if isinstance(image_url_info, dict) else image_url_info
+                        new_content.append({"type": "image", "url": url})
+                    else:
+                        new_content.append(content)
                 message["content"] = new_content
-            conversations[idx] = normalized_messages
 
         return conversations, is_batched
 
@@ -2242,7 +2235,7 @@ class ProcessorMixin(PushToHubMixin):
                 The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
                 chat template is used.
         """
-        processor_kwargs = dict(processor_kwargs or {})
+        processor_kwargs = processor_kwargs or {}
 
         chat_template = self._resolve_chat_template(chat_template)
         processor_kwargs = self._prepare_processor_kwargs(

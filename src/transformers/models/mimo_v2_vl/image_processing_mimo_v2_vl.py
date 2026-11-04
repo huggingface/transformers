@@ -24,11 +24,10 @@ from collections.abc import Iterable
 
 import numpy as np
 import torch
-from torch.nn import functional as F
 from torchvision.transforms.v2 import functional as tvF
 
+from ...feature_extraction_utils import BatchFeature
 from ...image_processing_backends import TorchvisionBackend
-from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
@@ -63,13 +62,8 @@ class MiMoV2VLImageProcessorKwargs(ImagesKwargs, total=False):
     merge_size: int
 
 
-# --------------------------------------------------------------------------------------------------------------------
-# Image and video processors
-# --------------------------------------------------------------------------------------------------------------------
-
-
 def smart_resize(height: int, width: int, factor: int, min_pixels: int, max_pixels: int) -> tuple[int, int]:
-    """Apply MiMo's minimum merge-block scaling before Qwen-style pixel-budget rounding."""
+    """Applies MiMo's minimum merge-block scaling before Qwen-style pixel-budget rounding."""
     if min(height, width, factor, min_pixels) <= 0 or max_pixels < min_pixels:
         raise ValueError("Image dimensions and pixel limits must be positive and min_pixels <= max_pixels.")
     if min(height, width) < factor:
@@ -92,35 +86,25 @@ def smart_resize(height: int, width: int, factor: int, min_pixels: int, max_pixe
     return resized_height, resized_width
 
 
-def resize_frames(frames: torch.Tensor, size: SizeDict, resample: PILImageResampling, factor: int) -> torch.Tensor:
-    """Resize float32 frames without antialiasing, as in the original MiMo processor."""
+def resize_frames(
+    processor: TorchvisionBackend,
+    frames: torch.Tensor,
+    size: SizeDict,
+    resample: PILImageResampling,
+    factor: int,
+) -> torch.Tensor:
+    """Resizes the frames in float32 without antialiasing, as in the original MiMo processor."""
     if not size.shortest_edge or not size.longest_edge:
         raise ValueError("size must contain shortest_edge and longest_edge pixel budgets.")
-    resized_size = smart_resize(
+    height, width = smart_resize(
         *frames.shape[-2:], factor=factor, min_pixels=size.shortest_edge, max_pixels=size.longest_edge
     )
-    interpolation_modes = {PILImageResampling.BILINEAR: "bilinear", PILImageResampling.BICUBIC: "bicubic"}
-    if resample not in interpolation_modes:
-        raise ValueError("The MiMo V2 series supports bilinear and bicubic resampling.")
     frames = frames.float()
-    if tuple(frames.shape[-2:]) != resized_size:
-        frames = F.interpolate(
-            frames, size=resized_size, mode=interpolation_modes[resample], align_corners=False, antialias=False
-        )
-    return frames
-
-
-def normalize_frames(processor, frames, do_rescale, rescale_factor, do_normalize, image_mean, image_std):
-    """Use the common backend operations with explicitly float32 source-pixel statistics."""
-    frames = frames.float()
-    if do_normalize:
-        scale = 1 / rescale_factor if do_rescale else 1.0
-        mean = torch.as_tensor(image_mean, dtype=torch.float32, device=frames.device) * scale
-        std = torch.as_tensor(image_std, dtype=torch.float32, device=frames.device) * scale
-        return processor.normalize(frames, mean, std)
-    if do_rescale:
-        return processor.rescale(frames, rescale_factor)
-    return frames
+    if tuple(frames.shape[-2:]) == (height, width):
+        return frames
+    return TorchvisionBackend.resize(
+        processor, frames, SizeDict(height=height, width=width), resample=resample, antialias=False
+    )
 
 
 @auto_docstring(custom_intro="Constructs an image processor for the MiMo V2 VL series.")
@@ -186,9 +170,11 @@ class MiMoV2VLImageProcessor(TorchvisionBackend):
         self, images: torch.Tensor, size: SizeDict, resample: PILImageResampling, factor: int, **kwargs
     ) -> torch.Tensor:
         """Resize dynamically based on input image aspect ratio."""
-        return resize_frames(images, size, resample, factor)
+        return resize_frames(self, images, size, resample, factor)
 
-    def patchify(self, images, patch_size, merge_size, temporal_patch_size) -> tuple["torch.Tensor", int, int]:
+    def patchify(
+        self, images: torch.Tensor, patch_size: int, merge_size: int, temporal_patch_size: int
+    ) -> tuple[torch.Tensor, int, int]:
         """Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."""
         if min(patch_size, temporal_patch_size, merge_size) <= 0:
             raise ValueError("Patch and merge sizes must be positive.")
@@ -318,9 +304,6 @@ class MiMoV2VLImageProcessor(TorchvisionBackend):
         return super().process_image(
             image, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device, **kwargs
         )
-
-    def rescale_and_normalize(self, images, do_rescale, rescale_factor, do_normalize, image_mean, image_std):
-        return normalize_frames(self, images, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
 
 
 __all__ = ["MiMoV2VLImageProcessor"]

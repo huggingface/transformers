@@ -194,15 +194,11 @@ class MiMoV2VLVisionConfig(PreTrainedConfig):
         Dimension of the attention heads, independent of `hidden_size // num_heads`.
     out_hidden_size (`int`, *optional*, defaults to 4096):
         Output dimension of the patch merger; must match the language model's hidden size.
-    merger_bias (`bool`, *optional*, defaults to `False`):
-        Whether the linear layers of the patch merger have biases.
     layer_types (`list[str]`, *optional*):
         Attention type of each block: `"full_attention"` (every patch of the image or frame) or `"sliding_attention"`
-        (the `sliding_window` patches on each side, with learned attention sinks if `use_attention_sinks`).
+        (the `sliding_window` patches on each side, with learned attention sinks).
     sliding_window (`int`, *optional*, defaults to 64):
         Number of patches visible on each side of a query in `"sliding_attention"` blocks.
-    use_attention_sinks (`bool`, *optional*, defaults to `True`):
-        Whether `"sliding_attention"` blocks have learned attention sinks.
     patch_orders (`list[str]`, *optional*):
         Order in which each block traverses the patches of every image or frame: `"row_major"` (as produced by the
         processor) or `"column_major"`. This matters for the windows of `"sliding_attention"` blocks.
@@ -215,24 +211,22 @@ class MiMoV2VLVisionConfig(PreTrainedConfig):
 
     depth: int = 28
     hidden_size: int = 1280
-    intermediate_size: int = 4608
     hidden_act: str = "silu"
+    intermediate_size: int = 4608
     num_heads: int = 32
-    num_key_value_heads: int = 8
-    head_dim: int = 64
     in_channels: int = 3
     patch_size: int = 16
-    temporal_patch_size: int = 2
     spatial_merge_size: int = 2
+    temporal_patch_size: int = 2
     out_hidden_size: int = 4096
-    rms_norm_eps: float = 1e-6
-    merger_bias: bool = False
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
+    num_key_value_heads: int = 8
+    head_dim: int = 64
+    rms_norm_eps: float = 1e-6
     layer_types: list[str] | None = None
     sliding_window: int = 64
-    use_attention_sinks: bool = True
     patch_orders: list[str] | None = None
-    rope_parameters: dict | None = None
 
     def __post_init__(self, **kwargs):
         # Blocks 0, 9, 18 and 27 attend to the full image. Within each cycle of 9 blocks, the 4 last sliding blocks
@@ -270,14 +264,8 @@ class MiMoV2VLAudioConfig(PreTrainedConfig):
         Number of consecutive codec frames represented by one language-model token.
     head_dim (`int`, *optional*, defaults to 64):
         Dimension of the attention heads.
-    is_causal (`bool`, *optional*, defaults to `False`):
-        Whether the codec frames of a group attend causally instead of bidirectionally.
-    use_final_norm (`bool`, *optional*, defaults to `True`):
-        Whether to apply RMS normalization after the last layer.
     out_hidden_size (`int`, *optional*, defaults to 4096):
         Output dimension of the audio projection; must match the language model's hidden size.
-    projection_layers (`int`, *optional*, defaults to 2):
-        Number of linear layers of the audio projection, either one or two.
     codebook_vocab_sizes (`list[int]`, *optional*):
         Vocabulary size of the embedding of each codebook. Defaults to 1280 for every codebook.
     codebook_pad_token_ids (`list[int]`, *optional*):
@@ -300,11 +288,8 @@ class MiMoV2VLAudioConfig(PreTrainedConfig):
     intermediate_size: int = 4096
     hidden_act: str = "silu"
     attention_dropout: float = 0.0
-    is_causal: bool = False
-    use_final_norm: bool = True
     rms_norm_eps: float = 1e-6
     out_hidden_size: int = 4096
-    projection_layers: int = 2
     codebook_vocab_sizes: list[int] | None = None
     codebook_pad_token_ids: list[int] | None = None
     rope_parameters: dict | None = None
@@ -321,8 +306,6 @@ class MiMoV2VLAudioConfig(PreTrainedConfig):
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if self.projection_layers not in (1, 2):
-            raise ValueError(f"`projection_layers` must be 1 or 2, got {self.projection_layers}.")
         for name in ("codebook_vocab_sizes", "codebook_pad_token_ids"):
             if len(getattr(self, name)) != self.num_codebooks:
                 raise ValueError(f"`{name}` must contain one value per codebook ({self.num_codebooks}).")
@@ -338,15 +321,13 @@ class MiMoV2VLAudioTokenizerConfig(PreTrainedConfig):
         Kernel size of the two input convolutions.
     conv_stride (`int`, *optional*, defaults to 2):
         Stride of the second input convolution.
-    is_causal (`bool`, *optional*, defaults to `True`):
-        Whether the encoder layers attend causally.
     layer_types (`list[str]`, *optional*):
         Attention type of each layer: `"sliding_attention"` (the `sliding_window` previous frames) or
         `"full_attention"`. Defaults to alternating sliding and full attention layers.
     sliding_window (`int`, *optional*, defaults to 128):
         Number of previous frames visible to each frame in `"sliding_attention"` layers.
     skip_layer_idx (`int`, *optional*, defaults to 2):
-        Index of the layer whose output is added to the output of the last layer. `None` disables the skip connection.
+        Index of the layer whose output is added to the output of the last layer.
     downsample_factor (`int`, *optional*, defaults to 2):
         Temporal downsampling factor applied after the encoder layers.
     codebook_sizes (`list[int]`, *optional*):
@@ -357,43 +338,51 @@ class MiMoV2VLAudioTokenizerConfig(PreTrainedConfig):
     """
 
     model_type = "mimo_v2_vl_audio_tokenizer"
+
+    hidden_size: int = 1024
+    intermediate_size: int = 4096
+    num_hidden_layers: int = 24
+    num_attention_heads: int = 16
+    num_key_value_heads: int | None = None
+    hidden_act: str = "gelu"
+    initializer_range: float = 0.02
+    rope_parameters: dict | None = None
+    attention_dropout: float | int = 0.0
+    num_mel_bins: int = 128
     base_config_key = "audio_tokenizer_config"
     default_theta = 10000.0
     # The encoder runs over segments of at most `segment_length` mel frames.
     attribute_map = {"max_position_embeddings": "segment_length"}
-
-    hidden_size: int = 1024
-    num_mel_bins: int = 128
     conv_kernel_size: int = 3
     conv_stride: int = 2
-    num_hidden_layers: int = 24
-    num_attention_heads: int = 16
-    intermediate_size: int = 4096
-    hidden_act: str = "gelu"
     layer_norm_eps: float = 1e-5
-    is_causal: bool = True
     layer_types: list[str] | None = None
     sliding_window: int = 128
-    skip_layer_idx: int | None = 2
+    skip_layer_idx: int = 2
     downsample_factor: int = 2
     codebook_sizes: list[int] | None = None
     segment_length: int = 6000
-    rope_parameters: dict | None = None
-    initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
         if self.layer_types is None:
             self.layer_types = [
                 "sliding_attention" if i % 2 == 0 else "full_attention" for i in range(self.num_hidden_layers)
             ]
         if self.codebook_sizes is None:
             self.codebook_sizes = [1024, 1024, 256] + [128] * 17
+        # Skips the GLM-ASR defaults: the rotary embedding covers the full head dimension.
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError("`hidden_size` must be divisible by `num_attention_heads`.")
+        if not 0 <= self.skip_layer_idx < self.num_hidden_layers:
+            raise ValueError("`skip_layer_idx` must be the index of one of the encoder layers.")
+        if self.num_key_value_heads != self.num_attention_heads:
+            raise ValueError("The audio tokenizer only supports multi-head attention (`num_key_value_heads`).")
 
 
 @auto_docstring(checkpoint="XiaomiMiMo/MiMo-V2.6-Flash-RL")
@@ -423,21 +412,23 @@ class MiMoV2VLConfig(PreTrainedConfig):
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
-    audio_config: dict | PreTrainedConfig | None = None
-    audio_tokenizer_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 151655
     video_token_id: int = 151656
-    audio_token_id: int = 151669
     vision_start_token_id: int = 151652
     vision_end_token_id: int = 151653
+    tie_word_embeddings: bool = False
+
+    audio_config: dict | PreTrainedConfig | None = None
+    audio_tokenizer_config: dict | PreTrainedConfig | None = None
+    audio_token_id: int = 151669
     audio_start_token_id: int = 151673
     audio_end_token_id: int = 151674
-    tie_word_embeddings: bool = False
     initializer_range: float = 0.02
     pad_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
 
     def __post_init__(self, **kwargs):
+        # Skips the Qwen2.5-VL backward compatibility with flat and mislabeled configurations.
         super().__post_init__(**kwargs)
         if self.pad_token_id is None:
             self.pad_token_id = self.text_config.pad_token_id

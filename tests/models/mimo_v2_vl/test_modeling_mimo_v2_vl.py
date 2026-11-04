@@ -32,7 +32,7 @@ from transformers import (
     MiMoV2VLTextModel,
     MiMoV2VLVisionConfig,
 )
-from transformers.testing_utils import require_accelerate, require_torch, require_torch_gpu, torch_device
+from transformers.testing_utils import require_accelerate, require_torch, require_torch_accelerator, torch_device
 from transformers.utils import is_torch_available
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -278,7 +278,7 @@ class MiMoV2VLModelTest(unittest.TestCase):
         }
 
     @require_accelerate
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_multimodal_encoders_with_cpu_offload(self):
         from accelerate import dispatch_model
 
@@ -292,14 +292,14 @@ class MiMoV2VLModelTest(unittest.TestCase):
                 "lm_head": 0,
             },
         )
-        inputs = {key: value.cuda() for key, value in self.image_inputs().items()}
+        inputs = {key: value.to(torch_device) for key, value in self.image_inputs().items()}
         with torch.no_grad():
             self.assertTrue(torch.isfinite(model(**inputs).logits).all())
             audio_inputs = {
-                "input_ids": torch.tensor([[2, 6, 6, 8]], device="cuda"),
-                "input_features": torch.randn(1, 9, 4, device="cuda"),
-                "feature_attention_mask": torch.ones(1, 9, device="cuda", dtype=torch.long),
-                "audio_feature_lens": torch.tensor([2], device="cuda"),
+                "input_ids": torch.tensor([[2, 6, 6, 8]], device=torch_device),
+                "input_features": torch.randn(1, 9, 4, device=torch_device),
+                "feature_attention_mask": torch.ones(1, 9, device=torch_device, dtype=torch.long),
+                "audio_feature_lens": torch.tensor([2], device=torch_device),
             }
             self.assertTrue(torch.isfinite(model(**audio_inputs).logits).all())
 
@@ -379,10 +379,23 @@ class MiMoV2VLModelTest(unittest.TestCase):
             self.assertEqual(restored.config.text_config.rope_parameters, config.text_config.rope_parameters)
             torch.testing.assert_close(restored(**inputs, use_cache=False).logits, expected, rtol=0, atol=0)
 
+    def test_audio_tokenizer_encodes_after_casting_to_bfloat16(self):
+        tokenizer = self.model.model.audio_tokenizer
+        for layer in tokenizer.quantizer.layers:
+            layer.codebook.embed.copy_(torch.randn_like(layer.codebook.embed))
+        # Casting the whole model also casts the codebooks, which are still compared in float32.
+        tokenizer.to(torch.bfloat16)
+        codes = tokenizer(torch.randn(1, 12, 4)).audio_codes[0]
+        self.assertEqual(codes.dtype, torch.long)
+        codebook = tokenizer.quantizer.layers[0].codebook
+        hidden_states = torch.randn(32, codebook.embed.shape[1])
+        expected = (hidden_states[:, None] - codebook.embed.float()[None]).square().sum(-1).argmin(-1)
+        torch.testing.assert_close(codebook.quantize(hidden_states), expected, rtol=0, atol=0)
+
     def test_float_and_boolean_audio_masks_match_integer_masks(self):
         tokenizer = self.model.model.audio_tokenizer
-        for codebook in tokenizer.quantizer.codebooks:
-            codebook.embed.copy_(torch.randn_like(codebook.embed))
+        for layer in tokenizer.quantizer.layers:
+            layer.codebook.embed.copy_(torch.randn_like(layer.codebook.embed))
         features = torch.randn(2, 12, 4)
         mask = torch.tensor([[1] * 9 + [0] * 3, [0] * 3 + [1] * 9])
         expected = tokenizer(features, mask).audio_codes
@@ -552,16 +565,16 @@ class MiMoV2VLModelTest(unittest.TestCase):
         for name, parameter in model.named_parameters():
             if not name.endswith("e_score_correction_bias"):
                 parameter.data = parameter.data.to(torch.bfloat16)
-        for codebook in model.model.audio_tokenizer.quantizer.codebooks:
-            codebook.embed.copy_(torch.randn_like(codebook.embed))
+        for layer in model.model.audio_tokenizer.quantizer.layers:
+            layer.codebook.embed.copy_(torch.randn_like(layer.codebook.embed))
         with tempfile.TemporaryDirectory() as directory:
             model.save_pretrained(directory)
             restored = AutoModelForImageTextToText.from_pretrained(directory, dtype="auto")
             for original, loaded in zip(
-                model.model.audio_tokenizer.quantizer.codebooks, restored.model.audio_tokenizer.quantizer.codebooks
+                model.model.audio_tokenizer.quantizer.layers, restored.model.audio_tokenizer.quantizer.layers
             ):
-                self.assertEqual(loaded.embed.dtype, torch.float32)
-                torch.testing.assert_close(original.embed, loaded.embed, atol=0, rtol=0)
+                self.assertEqual(loaded.codebook.embed.dtype, torch.float32)
+                torch.testing.assert_close(original.codebook.embed, loaded.codebook.embed, atol=0, rtol=0)
             buffers = dict(restored.named_buffers())
             for name, buffer in model.named_buffers():
                 if name.endswith("inv_freq"):
@@ -616,17 +629,17 @@ class MiMoV2VLModelTest(unittest.TestCase):
         expected_gradient = torch.tensor([[[[1.4, -0.2]]]], dtype=torch.bfloat16, device=torch_device)
         torch.testing.assert_close(query.grad, expected_gradient, rtol=0, atol=0)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_rotary_reinitialization_matches_cpu_construction(self):
         for theta in (10000.0, 10000000.0, 640000.0):
             config = MiMoV2VLAudioTokenizerConfig(rope_parameters={"rope_type": "default", "rope_theta": theta})
             rotary = MiMoV2VLAudioTokenizerRotaryEmbedding(config)
             expected = rotary.inv_freq.clone()
-            rotary.cuda()
+            rotary.to(torch_device)
             self.model._init_weights(rotary)
             torch.testing.assert_close(rotary.inv_freq.cpu(), expected, rtol=0, atol=0)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_bfloat16_gpu_round_trip_at_long_positions(self):
         config = get_config()
         config.text_config.head_dim = config.text_config.swa_head_dim = 192
@@ -636,15 +649,15 @@ class MiMoV2VLModelTest(unittest.TestCase):
         for name, parameter in model.named_parameters():
             if not name.endswith("e_score_correction_bias"):
                 parameter.data = parameter.data.to(torch.bfloat16)
-        model.cuda()
+        model.to(torch_device)
         inputs = {
-            "input_ids": torch.tensor([[2, 7, 8, 9]], device="cuda"),
-            "position_ids": torch.arange(49000, 49004, device="cuda")[None],
+            "input_ids": torch.tensor([[2, 7, 8, 9]], device=torch_device),
+            "position_ids": torch.arange(49000, 49004, device=torch_device)[None],
         }
         with torch.no_grad(), tempfile.TemporaryDirectory() as directory:
             expected = model(**inputs, use_cache=False).logits
             model.save_pretrained(directory)
-            restored = AutoModelForImageTextToText.from_pretrained(directory, dtype="auto", device_map="cuda")
+            restored = AutoModelForImageTextToText.from_pretrained(directory, dtype="auto", device_map=torch_device)
             actual = restored(**inputs, use_cache=False).logits
             torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
@@ -674,7 +687,19 @@ def write_original_checkpoint(model, directory, multimodal=True, tp_size=2, fp8_
     model.save_pretrained(native)
     native_weights = {}
     for shard in native.glob("*.safetensors"):
-        native_weights.update(load_file(shard))
+        for name, tensor in load_file(shard).items():
+            # The original checkpoints store one tensor per expert projection, and name the sinks differently.
+            if name.endswith(".mlp.experts.gate_up_proj"):
+                prefix = name.removesuffix("gate_up_proj")
+                for expert, (gate, up) in enumerate(zip(*tensor.chunk(2, dim=1))):
+                    native_weights[f"{prefix}{expert}.gate_proj.weight"] = gate.clone()
+                    native_weights[f"{prefix}{expert}.up_proj.weight"] = up.clone()
+            elif name.endswith(".mlp.experts.down_proj"):
+                prefix = name.removesuffix("down_proj")
+                for expert, down in enumerate(tensor):
+                    native_weights[f"{prefix}{expert}.down_proj.weight"] = down.clone()
+            else:
+                native_weights[name.replace(".self_attn.sinks", ".self_attn.attention_sink_bias")] = tensor
 
     # Inverse of the converter's key mappings: native names -> original names.
     native_to_original = {
@@ -687,9 +712,13 @@ def write_original_checkpoint(model, directory, multimodal=True, tp_size=2, fp8_
         r"^model\.audio_encoder\.projection\.linear_fc1\.": "audio_encoder.projection.mlp.0.",
         r"^model\.audio_encoder\.projection\.linear_fc2\.": "audio_encoder.projection.mlp.2.",
         r"^model\.audio_encoder\.(layers|norm)\.": r"audio_encoder.input_local_transformer.\1.",
+        r"^model\.audio_tokenizer\.layers\.(\d+)\.input_layernorm\.": r"encoder.layers.\1.self_attn_layer_norm.",
+        r"^model\.audio_tokenizer\.layers\.(\d+)\.post_attention_layernorm\.": r"encoder.layers.\1.final_layer_norm.",
+        r"^model\.audio_tokenizer\.layers\.(\d+)\.mlp\.fc(1|2)\.": r"encoder.layers.\1.fc\2.",
+        r"^model\.audio_tokenizer\.layers\.(\d+)\.self_attn\.o_proj\.": r"encoder.layers.\1.self_attn.out_proj.",
         r"^model\.audio_tokenizer\.downsample_conv\.": "encoder.down_sample_layer.0.",
         r"^model\.audio_tokenizer\.downsample_norm\.": "encoder.down_sample_norm.",
-        r"^model\.audio_tokenizer\.quantizer\.codebooks\.(\d+)\.embed$": r"encoder.quantizer.vq.layers.\1._codebook.embed",
+        r"^model\.audio_tokenizer\.quantizer\.layers\.(\d+)\.codebook\.embed$": r"encoder.quantizer.vq.layers.\1._codebook.embed",
         r"^model\.audio_tokenizer\.": "encoder.",
     }
     weights, audio_weights = {}, {}
@@ -768,7 +797,7 @@ def write_original_checkpoint(model, directory, multimodal=True, tp_size=2, fp8_
             "spatial_merge_size": vision.spatial_merge_size,
             "out_hidden_size": vision.out_hidden_size,
             "visual_token_window_size": vision.sliding_window,
-            "use_sink": vision.use_attention_sinks,
+            "use_sink": True,
             "fullatt_block_indexes": [i for i, kind in enumerate(vision.layer_types) if kind == "full_attention"],
             "vit_window_attn_types": [
                 -1 if kind == "full_attention" else int(order == "column_major")
@@ -784,10 +813,10 @@ def write_original_checkpoint(model, directory, multimodal=True, tp_size=2, fp8_
             "input_local_attn_heads": audio.num_attention_heads,
             "input_local_head_dim": audio.head_dim,
             "input_local_intermediate_size": audio.intermediate_size,
-            "input_full_attention": not audio.is_causal,
-            "add_post_norm": audio.use_final_norm,
+            "input_full_attention": True,
+            "add_post_norm": True,
             "out_hidden_size": audio.out_hidden_size,
-            "projection_layers": audio.projection_layers,
+            "projection_layers": 2,
             "rope_theta": int(audio.rope_parameters["rope_theta"]),
             "partial_rotary_factor": 1.0,
             "speech_vocab_size": "-".join(map(str, audio.codebook_vocab_sizes)),
@@ -824,7 +853,7 @@ def write_original_checkpoint(model, directory, multimodal=True, tp_size=2, fp8_
             "encoder_attention_heads": tokenizer.num_attention_heads,
             "encoder_ffn_dim": tokenizer.intermediate_size,
             "activation_function": tokenizer.hidden_act,
-            "encoder_causal": tokenizer.is_causal,
+            "encoder_causal": True,
             "encoder_attn_window_size": [tokenizer.sliding_window, 0],
             "hybrid_attention": True,
             "swa_per_block": 2,

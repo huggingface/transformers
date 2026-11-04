@@ -270,6 +270,57 @@ class MiMoV2VLProcessorTest(unittest.TestCase):
             )
             self.assertNotEqual(ids, other.input_ids[0].tolist())
 
+    def test_sampled_video_timestamps_match_original_processor(self):
+        # Sampling 4 frames per second gives timestamps with milliseconds, and the sampled video ends at its duration.
+        p = self.processor
+        out = p(
+            text=p.video_token,
+            videos=self.video,
+            audio=self.codes,
+            is_tokenized=True,
+            use_audio_in_video=True,
+            video_metadata=VideoMetadata(total_num_frames=5, fps=2),
+            do_sample_frames=True,
+            fps=4,
+            input_data_format="channels_last",
+            return_tensors="pt",
+        )
+        torch.testing.assert_close(out.audio_segment_offsets, torch.tensor([[0, 0, 6], [0, 6, 3], [0, 9, 6]]))
+        expected = (
+            p.video_start_token
+            + "".join(
+                timestamp
+                + p.vision_start_token
+                + p.video_token * 2
+                + p.vision_end_token
+                + p.audio_start_token
+                + p.audio_token * n
+                + p.audio_end_token
+                for timestamp, n in [("00:00.000", 6), ("00:01.000", 3), ("00:01.500", 6)]
+            )
+            + p.video_end_token
+        )
+        self.assertEqual(out.input_ids[0].tolist(), p.tokenizer.encode(expected))
+
+    def test_audio_shorter_than_video_gives_empty_audio_units(self):
+        p = self.processor
+        out = p(
+            text=p.video_token,
+            videos=self.video,
+            audio=self.codes[:40],
+            is_tokenized=True,
+            use_audio_in_video=True,
+            return_tensors="pt",
+            **self.video_kwargs(),
+        )
+        torch.testing.assert_close(out.audio_segment_offsets, torch.tensor([[0, 0, 6], [0, 6, 4], [0, 10, 0]]))
+        self.assertEqual(out.input_ids[0].tolist().count(p.audio_token_id), 10)
+
+    def test_load_audio_from_video_is_rejected(self):
+        messages = [{"role": "user", "content": [{"type": "video", "path": "video.mp4"}, {"type": "audio"}]}]
+        with self.assertRaisesRegex(ValueError, "use_audio_in_video"):
+            self.processor.apply_chat_template(messages, tokenize=True, load_audio_from_video=True)
+
     def test_mixed_standalone_audio_and_silent_video(self):
         p = self.processor
         metadata = [self.video_kwargs()["video_metadata"] for _ in range(2)]
@@ -553,62 +604,9 @@ class MiMoV2VLProcessorTest(unittest.TestCase):
         for key in actual:
             torch.testing.assert_close(actual[key], expected[key], rtol=0, atol=0)
 
-    @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
-    def test_url_messages_load_all_modalities_without_mutation(self, batched, nested_url):
-        """Verify normalization and loader arguments without making network requests."""
-        processor = make_processor(chat_template=MULTIMODAL_CHAT_TEMPLATE)
-        image_url = hf_hub_url(*MEDIA_FIXTURES["image"], repo_type="dataset")
-        audio_url = hf_hub_url(*MEDIA_FIXTURES["audio"], repo_type="dataset")
-        video_url = hf_hub_url(*MEDIA_FIXTURES["video"], repo_type="dataset")
-
-        def content_block(modality, url):
-            return {"type": f"{modality}_url", f"{modality}_url": {"url": url} if nested_url else url}
-
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "before"},
-                    *[content_block("image", image_url) for _ in range(3)],
-                    content_block("audio", audio_url),
-                    content_block("video", video_url),
-                ],
-            }
-        ]
-        if batched:
-            messages = [messages]
-        original = copy.deepcopy(messages)
-        with (
-            patch.object(processor.image_processor, "fetch_images", return_value=[self.image] * 3) as fetch_images,
-            patch.object(
-                processor.video_processor,
-                "fetch_videos",
-                return_value=([self.video], [self.video_kwargs()["video_metadata"]]),
-            ) as fetch_videos,
-            patch("transformers.processing_utils.load_audio", return_value=np.zeros(24000, dtype=np.float32)) as load,
-        ):
-            output = processor.apply_chat_template(
-                messages,
-                tokenize=True,
-                return_dict=True,
-                return_tensors="pt",
-                processor_kwargs={"videos_kwargs": {"do_sample_frames": False, "input_data_format": "channels_last"}},
-            )
-        self.assertEqual(messages, original)
-        self.assertEqual(output.image_grid_thw.shape[0], 3)
-        self.assertEqual(output.video_grid_thw.shape[0], 1)
-        self.assertEqual(output.input_features.shape[0], 1)
-        self.assertEqual(fetch_images.call_args_list[0].args, ([[image_url] * 3],))
-        self.assertEqual(fetch_videos.call_count, 1)
-        self.assertEqual(fetch_videos.call_args.args[0], [video_url])
-        load.assert_called_once_with(
-            audio_url, sampling_rate=processor.feature_extractor.sampling_rate, backend="auto"
-        )
-
     def test_chat_template_merges_processor_kwargs(self):
         p = make_processor(chat_template="{% for message in messages %}{{ message['content'] }}{% endfor %}")
         options = {"text_kwargs": {"padding": "max_length", "max_length": 12}}
-        original = copy.deepcopy(options)
         output = p.apply_chat_template(
             [{"role": "user", "content": "text"}],
             tokenize=True,
@@ -618,7 +616,6 @@ class MiMoV2VLProcessorTest(unittest.TestCase):
             sampling_rate=24000,
         )
         self.assertEqual(output.input_ids.shape, (1, 12))
-        self.assertEqual(options, original)
 
     def test_assistant_mask_after_image_expansion(self):
         p = self.processor
@@ -676,6 +673,7 @@ class MiMoV2VLProcessorTest(unittest.TestCase):
 @require_torchvision
 @require_vision
 @require_torchcodec
+@unittest.skip("The native MiMo V2.6 checkpoints are not released yet")
 class MiMoV2VLProcessorIntegrationTest(unittest.TestCase):
     """Exercise real Hub downloads and media decoders without downloading model weights."""
 

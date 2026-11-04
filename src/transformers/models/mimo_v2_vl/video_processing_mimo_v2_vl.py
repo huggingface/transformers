@@ -20,12 +20,13 @@
 
 import math
 import warnings
+from collections.abc import Callable
 
 import numpy as np
 import torch
-from torch.nn import functional as F
 
-from ...image_processing_utils import BatchFeature
+from ...feature_extraction_utils import BatchFeature
+from ...image_processing_backends import TorchvisionBackend
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ChannelDimension, PILImageResampling, SizeDict
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, auto_docstring
@@ -74,13 +75,8 @@ class MiMoV2VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     total_max_pixels: int
 
 
-# --------------------------------------------------------------------------------------------------------------------
-# Image and video processors
-# --------------------------------------------------------------------------------------------------------------------
-
-
 def smart_resize(height: int, width: int, factor: int, min_pixels: int, max_pixels: int) -> tuple[int, int]:
-    """Apply MiMo's minimum merge-block scaling before Qwen-style pixel-budget rounding."""
+    """Applies MiMo's minimum merge-block scaling before Qwen-style pixel-budget rounding."""
     if min(height, width, factor, min_pixels) <= 0 or max_pixels < min_pixels:
         raise ValueError("Image dimensions and pixel limits must be positive and min_pixels <= max_pixels.")
     if min(height, width) < factor:
@@ -103,39 +99,29 @@ def smart_resize(height: int, width: int, factor: int, min_pixels: int, max_pixe
     return resized_height, resized_width
 
 
-def resize_frames(frames: torch.Tensor, size: SizeDict, resample: PILImageResampling, factor: int) -> torch.Tensor:
-    """Resize float32 frames without antialiasing, as in the original MiMo processor."""
+def resize_frames(
+    processor: TorchvisionBackend,
+    frames: torch.Tensor,
+    size: SizeDict,
+    resample: PILImageResampling,
+    factor: int,
+) -> torch.Tensor:
+    """Resizes the frames in float32 without antialiasing, as in the original MiMo processor."""
     if not size.shortest_edge or not size.longest_edge:
         raise ValueError("size must contain shortest_edge and longest_edge pixel budgets.")
-    resized_size = smart_resize(
+    height, width = smart_resize(
         *frames.shape[-2:], factor=factor, min_pixels=size.shortest_edge, max_pixels=size.longest_edge
     )
-    interpolation_modes = {PILImageResampling.BILINEAR: "bilinear", PILImageResampling.BICUBIC: "bicubic"}
-    if resample not in interpolation_modes:
-        raise ValueError("The MiMo V2 series supports bilinear and bicubic resampling.")
     frames = frames.float()
-    if tuple(frames.shape[-2:]) != resized_size:
-        frames = F.interpolate(
-            frames, size=resized_size, mode=interpolation_modes[resample], align_corners=False, antialias=False
-        )
-    return frames
-
-
-def normalize_frames(processor, frames, do_rescale, rescale_factor, do_normalize, image_mean, image_std):
-    """Use the common backend operations with explicitly float32 source-pixel statistics."""
-    frames = frames.float()
-    if do_normalize:
-        scale = 1 / rescale_factor if do_rescale else 1.0
-        mean = torch.as_tensor(image_mean, dtype=torch.float32, device=frames.device) * scale
-        std = torch.as_tensor(image_std, dtype=torch.float32, device=frames.device) * scale
-        return processor.normalize(frames, mean, std)
-    if do_rescale:
-        return processor.rescale(frames, rescale_factor)
-    return frames
+    if tuple(frames.shape[-2:]) == (height, width):
+        return frames
+    return TorchvisionBackend.resize(
+        processor, frames, SizeDict(height=height, width=width), resample=resample, antialias=False
+    )
 
 
 def get_video_frame_size(size: SizeDict, num_frames: int, temporal_factor: int, total_max_pixels: int) -> SizeDict:
-    """Share the pre-padding pixel budget between preprocessing and patch-count estimation."""
+    """Returns the per-frame pixel budget, shared between preprocessing and patch-count estimation."""
     if min(num_frames, temporal_factor, total_max_pixels) <= 0:
         raise ValueError("Video frame count, temporal factor and total_max_pixels must be positive.")
     if not size.shortest_edge or not size.longest_edge:
@@ -212,7 +198,7 @@ class MiMoV2VLVideoProcessor(BaseVideoProcessor):
         max_frames: int | None = None,
         **kwargs,
     ) -> np.ndarray:
-        """Use rounded, endpoint-exclusive intervals, retaining repeats for short videos."""
+        """Samples frames at rounded, endpoint-exclusive intervals, retaining repeats for short videos."""
         if num_frames is not None and fps is not None:
             raise ValueError("num_frames and fps are mutually exclusive.")
         total_num_frames = metadata.total_num_frames
@@ -258,12 +244,21 @@ class MiMoV2VLVideoProcessor(BaseVideoProcessor):
         total_max_pixels = self.total_max_pixels if total_max_pixels is None else total_max_pixels
         batch_size, num_frames = videos.shape[:2]
         video_size = get_video_frame_size(size, num_frames, temporal_factor, total_max_pixels)
-        frames = resize_frames(videos.flatten(0, 1), video_size, resample, factor)
+        frames = resize_frames(self, videos.flatten(0, 1), video_size, resample, factor)
         return frames.reshape(batch_size, num_frames, *frames.shape[1:])
 
     def patchify(
-        self, videos, patch_size, merge_size, temporal_patch_size, temporal_compression_ratio=1
+        self,
+        videos: torch.Tensor,
+        patch_size: int,
+        merge_size: int,
+        temporal_patch_size: int,
+        temporal_compression_ratio: int = 1,
     ) -> tuple[torch.Tensor, int, int, int]:
+        """
+        Patchifies each video into a flat layout of shape (`seq_len`, `patch_dim`), after padding its frames to a
+        multiple of `temporal_patch_size * temporal_compression_ratio` by repeating the last frame.
+        """
         if min(patch_size, temporal_patch_size, merge_size, temporal_compression_ratio) <= 0:
             raise ValueError("Patch, merge and compression sizes must be positive.")
         if any(length % (patch_size * merge_size) for length in videos.shape[-2:]):
@@ -271,19 +266,11 @@ class MiMoV2VLVideoProcessor(BaseVideoProcessor):
         temporal_factor = temporal_patch_size * temporal_compression_ratio
         if pad_length := -videos.shape[1] % temporal_factor:
             videos = torch.cat((videos, videos[:, -1:].expand(-1, pad_length, -1, -1, -1)), dim=1)
-        "Patchifies each video into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
+
         batch_size, num_frames, channel, resized_height, resized_width = videos.shape
-
-        # Check that videos have `num_frames` divisible by `temporal_patch_size`
-        if pad := -num_frames % temporal_patch_size:
-            repeats = videos[:, -1:].expand(-1, pad, -1, -1, -1)
-            videos = torch.cat((videos, repeats), dim=1)
-            num_frames += pad
-
         grid_t = num_frames // temporal_patch_size
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-
-        patches = videos.view(
+        patches = videos.reshape(
             batch_size,
             grid_t,
             temporal_patch_size,
@@ -296,12 +283,10 @@ class MiMoV2VLVideoProcessor(BaseVideoProcessor):
             patch_size,
         )
         patches = patches.permute(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
+        # The patches are contiguous, as the patch embedding of the vision encoder reshapes them with `view`.
         flatten_patches = patches.reshape(
-            batch_size,
-            grid_t * grid_h * grid_w,
-            channel * temporal_patch_size * patch_size * patch_size,
-        )
-
+            batch_size, grid_t * grid_h * grid_w, channel * temporal_patch_size * patch_size * patch_size
+        ).contiguous()
         return flatten_patches, grid_t, grid_h, grid_w
 
     def _preprocess(
@@ -385,7 +370,13 @@ class MiMoV2VLVideoProcessor(BaseVideoProcessor):
         padded_frames = num_frames + -num_frames % temporal_factor
         return (padded_frames // temporal_patch_size) * (height // patch_size) * (width // patch_size)
 
-    def _decode_and_sample_videos(self, videos, video_metadata, do_sample_frames=None, sample_indices_fn=None):
+    def _decode_and_sample_videos(
+        self,
+        videos: VideoInput,
+        video_metadata: VideoMetadata | dict,
+        do_sample_frames: bool | None = None,
+        sample_indices_fn: Callable | None = None,
+    ) -> list[torch.Tensor]:
         if video_metadata is not None:
             num_videos = len(make_batched_videos(videos))
             metadata = (
@@ -425,9 +416,6 @@ class MiMoV2VLVideoProcessor(BaseVideoProcessor):
         elif self.num_frames is not None and "fps" not in kwargs:
             kwargs["fps"] = None
         return super().preprocess(videos, **kwargs)
-
-    def rescale_and_normalize(self, images, do_rescale, rescale_factor, do_normalize, image_mean, image_std):
-        return normalize_frames(self, images, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
 
 
 __all__ = ["MiMoV2VLVideoProcessor"]

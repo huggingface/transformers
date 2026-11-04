@@ -71,9 +71,9 @@ class MiMoV2VLConfigTest(unittest.TestCase):
             ("vision_kv_heads", MiMoV2VLVisionConfig, {"num_heads": 6, "num_key_value_heads": 4}),
             ("vision_head_dim", MiMoV2VLVisionConfig, {"head_dim": 6}),
             ("vision_patch_orders", MiMoV2VLVisionConfig, {"depth": 2, "patch_orders": ["row_major", "diagonal"]}),
-            ("audio_projection_layers", MiMoV2VLAudioConfig, {"projection_layers": 3}),
             ("audio_codebook_values", MiMoV2VLAudioConfig, {"num_codebooks": 2, "codebook_vocab_sizes": [1, 2, 3]}),
             ("codec_heads", MiMoV2VLAudioTokenizerConfig, {"hidden_size": 10, "encoder_attention_heads": 4}),
+            ("codec_skip_layer", MiMoV2VLAudioTokenizerConfig, {"num_hidden_layers": 2, "skip_layer_idx": 2}),
             ("output_size", MiMoV2VLConfig, {"vision_config": {"out_hidden_size": 8}}),
         ]
     )
