@@ -29,7 +29,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -890,7 +890,8 @@ class BltPatcher(BltPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
+        mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
+        causal_mask = mask_function(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
@@ -1228,8 +1229,11 @@ class BltModel(BltPreTrainedModel):
             position_ids = torch.arange(encoder_embeds.shape[1], device=encoder_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
+        mask_function = (
+            create_causal_mask if self.config.local_attention_window_len is None else create_sliding_window_causal_mask
+        )
+        causal_mask = mask_function(
+            config=self.config.encoder_config,
             inputs_embeds=encoder_embeds,
             attention_mask=attention_mask,
             past_key_values=past_key_values.self_attention_cache if past_key_values is not None else None,
