@@ -44,7 +44,7 @@ from transformers import (
     set_seed,
 )
 from transformers.exporters import OpenVINOConfig, OpenVINOExporter
-from transformers.testing_utils import require_nncf, require_openvino, require_torch
+from transformers.testing_utils import require_nncf, require_openvino, require_torch, slow
 from transformers.utils import is_torch_available
 
 
@@ -110,6 +110,7 @@ def _compiled_ops(ov_model):
     ]
 
 
+@slow
 @require_torch
 @require_openvino
 class OpenVINOFusionTest(unittest.TestCase):
