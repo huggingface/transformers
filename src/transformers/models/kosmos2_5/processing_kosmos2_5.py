@@ -19,7 +19,11 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
-from ...utils import auto_docstring
+from ...utils import auto_docstring, is_torch_available
+
+
+if is_torch_available():
+    import torch
 
 
 class Kosmos2_5ProcessorKwargs(ProcessingKwargs, total=False):
@@ -27,7 +31,6 @@ class Kosmos2_5ProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": True,
             "return_token_type_ids": False,
-            "return_mm_token_type_ids": False,
             "stride": 0,
             "truncation": True,
         },
@@ -40,8 +43,6 @@ class Kosmos2_5ProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class Kosmos2_5Processor(ProcessorMixin):
-    valid_processor_kwargs = Kosmos2_5ProcessorKwargs
-
     def __init__(self, image_processor, tokenizer, num_image_tokens: int = 2048):
         r"""
         num_image_tokens (`int`, *optional*, defaults to 2048):
@@ -60,37 +61,50 @@ class Kosmos2_5Processor(ProcessorMixin):
         text: TextInput | list[TextInput] = None,
         **kwargs: Unpack[Kosmos2_5ProcessorKwargs],
     ) -> BatchFeature:
-        model_inputs = super().__call__(images=images, text=text, **kwargs)
-        model_inputs["image_embeds_position_mask"] = model_inputs.pop("mm_token_type_ids", None)
-        return model_inputs
-
-    def prepare_inputs_layout(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | list[TextInput] | None = None,
-        **kwargs: Unpack[ProcessingKwargs],
-    ):
-        images, text, *_ = super().prepare_inputs_layout(text=text, images=images)
-        if images is not None:
-            prepend_prompt = (
-                f"{self.tokenizer.bos_token}{self.image_start_token}{self.image_token}{self.image_end_token}"
-            )
-            text = [f"{prepend_prompt}{sample}" for sample in text]
-        return images, text, None, None
-
-    def validate_inputs(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | list[TextInput] | None = None,
-        **kwargs: Unpack[ProcessingKwargs],
-    ):
-        # Do not check that number of placeholders in text is same as number of images
-        # Model uses same id for BOS and IMAGE tokens :(
         if images is None and text is None:
-            raise ValueError(f"You need to provide at least one input to call {self.__class__.__name__}")
+            raise ValueError("You have to specify either images or text.")
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
-        return self.image_token * self.num_image_tokens
+        if images is None:
+            raise ValueError("Kosmos2_5Processor requires images to be passed.")
+
+        output_kwargs = self._merge_kwargs(
+            Kosmos2_5ProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        encoding = BatchFeature()
+
+        if images is not None:
+            image_encoding = self.image_processor(images, **output_kwargs["images_kwargs"])
+            image_encoding.pop("rows")
+            image_encoding.pop("cols")
+            encoding.update(image_encoding)
+
+        prompt = f"{self.tokenizer.bos_token}{self.image_start_token}{self.image_token * self.num_image_tokens}{self.image_end_token}"
+
+        if text is not None:
+            if isinstance(text, str):
+                text = [prompt + text]
+            else:
+                text = [prompt + t for t in text]
+            input = self.tokenizer(text, **output_kwargs["text_kwargs"])
+
+            batch_size, seq_len = input.input_ids.shape
+            image_embeds_position_mask = [0, -1] + [1] * self.num_image_tokens + [-1]
+            image_embeds_position_mask += [0] * (seq_len - len(image_embeds_position_mask))
+            image_embeds_position_mask = (
+                torch.LongTensor(image_embeds_position_mask).unsqueeze(0).repeat(batch_size, 1)
+            )
+
+            encoding.update(
+                {
+                    "input_ids": input.input_ids,
+                    "attention_mask": input.attention_mask,
+                    "image_embeds_position_mask": image_embeds_position_mask,
+                }
+            )
+
+        return encoding
 
     def batch_decode(self, *args, **kwargs):
         """
@@ -111,10 +125,6 @@ class Kosmos2_5Processor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
-
-    @property
-    def unused_input_names(self) -> list[str]:
-        return ["rows", "cols"]
 
 
 __all__ = ["Kosmos2_5Processor"]

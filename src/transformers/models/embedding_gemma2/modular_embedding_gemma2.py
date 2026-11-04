@@ -939,6 +939,15 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin, Gemma4Processor):
         if audio is not None and (self.audio_token is None or self.boa_token is None or self.eoa_token is None):
             raise ValueError("Audio inputs were provided, but the tokenizer does not have an `audio_token` defined.")
 
+        if text is not None and images is not None:
+            n_images_in_text = [sample.count(self.image_token) for sample in text]
+            n_images_in_images = [len(sublist) for sublist in images]
+            if n_images_in_text != n_images_in_images:
+                raise ValueError(
+                    f"The number of {self.image_token} tokens in each prompt should be the same as the number of images passed."
+                    f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
+                )
+
     @staticmethod
     def timestamp_fmt(sec: int | float) -> str:
         # Round (not floor): at fractional fps (e.g. 29.97) sampled timestamps land just below the nominal second

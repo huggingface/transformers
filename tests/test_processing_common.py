@@ -917,7 +917,7 @@ class ProcessorTesterMixin:
             audio_inputs = self.prepare_audio_inputs(batch_size=4)
             text = self.prepare_text_inputs(batch_size=3, modalities=["audio"])
 
-            with self.assertRaisesRegex(ValueError, " tokens in the prompts should be the same as the number of "):
+            with self.assertRaisesRegex(ValueError, "Got 4 waveforms for 3 audio placeholders."):
                 processor(audio=audio_inputs, text=text, **processing_kwargs)
 
     # These kwargs-related tests ensure that processors are correctly instantiated.
