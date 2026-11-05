@@ -402,6 +402,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         self.module_quantizers, self.prefix = {}, ""
         self.set_quantizers(quantizers)
         self.pre_quantized = all(quantizer.pre_quantized for quantizer in self.all_quantizers)
+        self.converters = {}
 
     @property
     def all_quantizers(self):
@@ -449,47 +450,35 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
 
     def update_weight_conversions(self, weight_conversions, model):
         """
-        The model's conversions, each converter updated by the quantizer of its target's module only (e.g. FP8 must
-        not add its names to the merge of NVFP4 experts), then each quantizer's renamings on its own layers
+        The model's renamings, then each quantizer's on its own layers. The converters stay the model's: a key uses its
+        layer's quantizer's (`get_weight_converters`), each model converter updated by it, then its own
         """
         from ..core_model_loading import WeightConverter
 
-        def owner(converter):
-            module = converter._original_target_patterns[0].replace("\\", "").rpartition(".")[0].lstrip("^.")
-            names = (name for name in self.module_quantizers if name == module or name.endswith(f".{module}"))
-            return self.module_quantizers.get(next(names, None))
-
         param_names = "\n".join(name for name, _ in chain(model.named_parameters(), model.named_buffers()))
-        updated, general = [], {}
-        for converter in weight_conversions:
-            quantizer = owner(converter) if isinstance(converter, WeightConverter) else None
-            updated += quantizer.update_weight_converter(converter, param_names) if quantizer else [converter]
-        for quantizer in self.all_quantizers:
-            layers = [name for name, module in model.named_modules() if self.module_quantizers.get(name) is quantizer]
-            updated += quantizer.get_weight_renamings(model, layers)
-            for converter in quantizer.get_weight_conversions():
-                general.setdefault(converter._original_target_patterns[0], []).append(converter)
-        # One general converter per param collects the names of every quantizer, `weight` first (it takes
-        # `*.down_proj.weight` before the experts' own-name `down_proj` does). `update_weight_transform` gives a param
-        # its quantizer's ops
-        general = dict(sorted(general.items(), key=lambda item: item[0] != "weight"))
-        return updated + [
-            WeightConverter(
-                list(dict.fromkeys(name for c in converters for name in c._original_source_patterns)),
-                target,
-                converters[0].operations,
+        model_converters = [c for c in weight_conversions if isinstance(c, WeightConverter)]
+        self.converters = {
+            quantizer: [
+                *(variant for c in model_converters for variant in quantizer.update_weight_converter(c, param_names)),
+                *quantizer.get_weight_conversions(),
+            ]
+            for quantizer in self.all_quantizers
+        }
+        renamings = [
+            renaming
+            for quantizer in self.all_quantizers
+            for renaming in quantizer.get_weight_renamings(
+                model, [name for name, q in self.module_quantizers.items() if q is quantizer]
             )
-            for target, converters in general.items()
         ]
+        return weight_conversions + renamings
+
+    def get_weight_converters(self, name, converters):
+        return self.converters.get(self.get_quantizer(name), converters)
 
     def update_weight_transform(self, transform, model, name):
         quantizer = self.get_quantizer(name)
-        if quantizer is None:
-            return transform
-        # A general converter may carry another quantizer's ops: swap in this one's
-        targets = getattr(transform, "_original_target_patterns", None)
-        own = next((c for c in quantizer.get_weight_conversions() if c._original_target_patterns == targets), None)
-        return quantizer.update_weight_transform(own or transform, model, name)
+        return transform if quantizer is None else quantizer.update_weight_transform(transform, model, name)
 
     def param_element_size(self, model, param_name, param):
         if not self.module_quantizers:

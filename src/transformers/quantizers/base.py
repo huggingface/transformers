@@ -404,6 +404,10 @@ class HfQuantizer(ABC):
             updated += self.update_weight_converter(converter, param_names) if is_converter else [converter]
         return updated + self.get_weight_renamings(model) + self.get_weight_conversions()
 
+    def get_weight_converters(self, name: str, converters: list) -> list:
+        "The converters loading the key `name` (renamed): in a quantization plan, those of its layer's quantizer"
+        return converters
+
     def update_weight_converter(self, converter, param_names: str) -> list:
         """
         A model converter (from the conversion mapping) made to load the serialized names. The model's params decide,
