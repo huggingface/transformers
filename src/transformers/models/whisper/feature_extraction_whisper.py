@@ -21,7 +21,7 @@ from ... import is_torch_available
 from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...utils import TensorType, logging
+from ...utils import PaddingStrategy, TensorType, logging
 
 
 if is_torch_available():
@@ -330,12 +330,23 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs["input_features"] = input_features
 
         if return_attention_mask:
-            # rescale from sample (48000) to feature (3000): frame i is valid iff its whole hop lies in the
-            # unpadded audio, so each sample gets `length // hop_length` valid frames regardless of how much
-            # padding the batch adds. The slice length equals the number of frames (the last STFT frame is skipped).
-            padded_inputs["attention_mask"] = padded_inputs["attention_mask"][
-                :, self.hop_length - 1 :: self.hop_length
-            ]
+            # rescale from sample (48000) to feature (3000)
+            if (
+                self._get_padding_strategies(padding, max_length=max_length or self.n_samples)
+                == PaddingStrategy.LONGEST
+            ):
+                # Padded to the longest sample: only count frames whose whole hop is unpadded audio, so a sample gets
+                # `len // hop_length` valid frames whether or not it is the longest one in the batch.
+                rescaled_attention_mask = padded_inputs["attention_mask"][:, self.hop_length - 1 :: self.hop_length]
+            else:
+                rescaled_attention_mask = padded_inputs["attention_mask"][:, :: self.hop_length]
+
+                # The STFT computation produces L//hop_length + 1 frames, but we skip the last frame (see `_torch_extract_fbank_features`).
+                # This means we need to trim the rescaled attention mask to match the actual number of frames (L//hop_length) when the input length
+                # is not perfectly divisible by the hop length.
+                if padded_inputs["attention_mask"].shape[1] % self.hop_length != 0:
+                    rescaled_attention_mask = rescaled_attention_mask[:, :-1]
+            padded_inputs["attention_mask"] = rescaled_attention_mask
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)

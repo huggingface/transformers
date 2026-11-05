@@ -154,12 +154,16 @@ class MossTranscribeDiarizeFeatureExtractor(WhisperFeatureExtractor):
         )
         padded_inputs["input_features"] = extract_fbank_features(input_features[0], device)
 
-        # rescale from sample (48000) to feature (3000): frame i is valid iff its whole hop lies in the
-        # unpadded audio, so each sample gets `length // hop_length` valid frames regardless of batch padding.
+        # rescale from sample (48000) to feature (3000)
+        rescaled_attention_mask = padded_inputs["attention_mask"][:, :: self.hop_length]
+
+        # The STFT computation produces L//hop_length + 1 frames, but we skip the last frame (see `_torch_extract_fbank_features`).
+        # This means we need to trim the rescaled attention mask to match the actual number of frames (L//hop_length) when the input length
+        # is not divisible by the hop length.
+        if padded_inputs["attention_mask"].shape[1] % self.hop_length != 0:
+            rescaled_attention_mask = rescaled_attention_mask[:, :-1]
         # Whisper overwrites `attention_mask` in place, here the frame-level mask is`input_features_mask`
-        padded_inputs["input_features_mask"] = padded_inputs["attention_mask"][
-            :, self.hop_length - 1 :: self.hop_length
-        ]
+        padded_inputs["input_features_mask"] = rescaled_attention_mask
         padded_inputs.pop("attention_mask")
 
         # Not in Whisper: `input_features_mask` alone can't tell chunks apart at a window boundary, so

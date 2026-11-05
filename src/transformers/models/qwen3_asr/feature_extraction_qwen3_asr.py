@@ -17,7 +17,7 @@ import numpy as np
 from ...audio_utils import mel_filter_bank
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...utils import logging
+from ...utils import PaddingStrategy, logging
 from ...utils.import_utils import is_torch_available, requires
 
 
@@ -210,9 +210,16 @@ class Qwen3ASRFeatureExtractor(SequenceFeatureExtractor):
         input_features = self._torch_extract_fbank_features(input_features[0], device)
         padded_inputs["input_features"] = input_features
 
-        # Rescale raw-sample attention mask to mel-frame resolution; each sample gets `length // hop_length`
-        # valid frames, independent of batch padding (same as `WhisperFeatureExtractor`).
-        padded_inputs["attention_mask"] = padded_inputs["attention_mask"][:, self.hop_length - 1 :: self.hop_length]
+        # Rescale raw-sample attention mask to mel-frame resolution.
+        if self._get_padding_strategies(padding, max_length=max_length or self.n_samples) == PaddingStrategy.LONGEST:
+            # Same as `WhisperFeatureExtractor`: a sample gets `len // hop_length` valid frames whether or not it is
+            # the longest one in the batch.
+            rescaled_attention_mask = padded_inputs["attention_mask"][:, self.hop_length - 1 :: self.hop_length]
+        else:
+            rescaled_attention_mask = padded_inputs["attention_mask"][:, :: self.hop_length]
+            if padded_inputs["attention_mask"].shape[1] % self.hop_length != 0:
+                rescaled_attention_mask = rescaled_attention_mask[:, :-1]
+        padded_inputs["attention_mask"] = rescaled_attention_mask
 
         # Right-pad the mel time axis to a multiple of `2 * n_window` (needed by `Qwen3ASREncoder`).
         if n_window is None:
