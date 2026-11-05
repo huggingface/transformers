@@ -17,7 +17,7 @@ import functools
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from ..core_model_loading import ConversionOps
+from ..core_model_loading import ConversionOps, _IdentityOp
 from ..utils import is_torch_available
 from ..utils.import_utils import (
     KERNELS_MAX_VERSION,
@@ -424,6 +424,11 @@ class NVFP4Dequantize(ConversionOps):
                 weights = [self._dequantize(*tensors).to(dtype) for tensors in zip(weights, scales, scales_2)]
             output[key] = weights
         return output
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        # A dequantized model has no quantization config anymore: it saves unquantized
+        return _IdentityOp()
 
     def _dequantize(self, packed, scales, scale_2):
         values = torch.tensor(FP4_VALUES, device=packed.device)
