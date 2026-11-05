@@ -124,7 +124,7 @@ class Xcodec2Config(LlamaConfig):
 @dataclass
 class Xcodec2Output(ModelOutput):
     r"""
-    audio_values (`torch.FloatTensor` of shape `(batch_size, 1, sequence_length)`, *optional*):
+    audio_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`, *optional*):
         Decoded audio waveform values in the time domain, obtained using the decoder
         part of Xcodec2. These represent the reconstructed audio signal.
     audio_codes (`torch.LongTensor` of shape `(batch_size, 1, codes_length)`, *optional*):
@@ -136,7 +136,7 @@ class Xcodec2Output(ModelOutput):
         Downsampled `padding_mask` for indicating valid audio codes in `audio_codes`.
     """
 
-    audio_values: torch.FloatTensor | None = None
+    audio_values: torch.Tensor | None = None
     audio_codes: torch.LongTensor | None = None
     latents: torch.Tensor | None = None
     audio_codes_mask: torch.Tensor | None = None
@@ -165,13 +165,13 @@ class Xcodec2EncoderOutput(ModelOutput):
 @dataclass
 class Xcodec2DecoderOutput(ModelOutput):
     r"""
-    audio_values (`torch.FloatTensor` of shape `(batch_size, 1, segment_length)`, *optional*):
+    audio_values (`torch.Tensor` of shape `(batch_size, 1, segment_length)`, *optional*):
         Decoded audio waveform values in the time domain, obtained by converting
         the discrete codes back into continuous audio signals. This represents
         the reconstructed audio that can be played back.
     """
 
-    audio_values: torch.FloatTensor | None = None
+    audio_values: torch.Tensor | None = None
 
 
 class Xcodec2RotaryEmbedding(LlamaRotaryEmbedding):

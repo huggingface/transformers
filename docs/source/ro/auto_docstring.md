@@ -97,20 +97,20 @@ Aplică `@auto_docstring` și la clasele care moștenesc din [`~utils.ModelOutpu
 @dataclass
 class MyModelOutput(ImageClassifierOutput):
     r"""
-    loss (`torch.FloatTensor`, *optional*):
+    loss (`torch.Tensor`, *optional*):
         Loss-ul modelului.
-    custom_field (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*):
+    custom_field (`torch.Tensor` of shape `(batch_size, hidden_size)`, *optional*):
         Un câmp de ieșire personalizat specific acestui model.
     """
 
     # Câmpurile standard (hidden_states, logits, attentions, etc.) sunt documentate automat când
     # descrierea corespunde textului standard. Loss-ul variază de obicei per model, deci documentează-l mai sus.
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: Optional[torch.Tensor] = None
+    logits: Optional[torch.Tensor] = None
+    hidden_states: Optional[tuple[torch.Tensor, ...]] = None
+    attentions: Optional[tuple[torch.Tensor, ...]] = None
     # Câmpurile personalizate trebuie documentate în docstring-ul de mai sus
-    custom_field: Optional[torch.FloatTensor] = None
+    custom_field: Optional[torch.Tensor] = None
 ```
 
 ### Clase de config
