@@ -32,7 +32,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
-from ...utils.generic import can_return_tuple, get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
+from ...utils.generic import can_return_tuple, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.import_utils import is_torchdynamo_compiling
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
@@ -817,6 +817,7 @@ class MiniMaxM3VLVisionAttention(CLIPAttention):
         attention_mask: torch.Tensor | None = None,
         cu_seqlens: torch.Tensor | None = None,
         max_seqlen: int | None = None,
+        segment_lengths: list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -835,7 +836,6 @@ class MiniMaxM3VLVisionAttention(CLIPAttention):
         )
         if cu_seqlens is None or cu_seqlens.numel() == 2 or is_flash_attention_requested(self.config):
             if cu_seqlens is not None and is_flash_attention_requested(self.config):
-                max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
                 kwargs.update(
                     cu_seq_lens_q=cu_seqlens,
                     cu_seq_lens_k=cu_seqlens,
@@ -854,9 +854,6 @@ class MiniMaxM3VLVisionAttention(CLIPAttention):
                 **kwargs,
             )
         else:
-            segment_lengths = kwargs.pop("segment_lengths", None)
-            if segment_lengths is None:
-                segment_lengths = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
             splits = [torch.split(tensor, segment_lengths, dim=2) for tensor in (queries, keys, values)]
             attn_outputs, attn_weights = [], []
             start = 0
@@ -930,6 +927,9 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(
             grid_thw, self.config, merge_temporal=True, kwargs=kwargs
         )
+        segment_lengths = kwargs.pop("segment_lengths", None)
+        if segment_lengths is None and cu_seqlens.numel() > 2 and not is_flash_attention_requested(self.config):
+            segment_lengths = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
         position_ids = get_vision_position_ids(
             grid_thw, self.config.spatial_merge_size, include_temporal=True, kwargs=kwargs
         )
@@ -942,6 +942,7 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
                 position_embeddings=position_embeddings,
                 cu_seqlens=cu_seqlens,
                 max_seqlen=max_seqlen,
+                segment_lengths=segment_lengths,
                 **kwargs,
             )
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=hidden_states[:, 0])
@@ -1336,9 +1337,9 @@ class MiniMaxM3VLProcessor(Qwen2VLProcessor):
                 for start in range(0, t, max_frames)
             ]
             video_inputs["video_grid_thw"] = (
-                grid_thw.new_tensor(segments)
-                if isinstance(grid_thw, torch.Tensor)
-                else np.asarray(segments, dtype=grid_thw.dtype)
+                np.asarray(segments, dtype=grid_thw.dtype)
+                if isinstance(grid_thw, np.ndarray)
+                else grid_thw.new_tensor(segments)
             )
         return video_inputs, video_replacements
 

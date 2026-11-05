@@ -42,7 +42,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check, torch_int
-from ...utils.generic import get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
+from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_position_ids
 from .configuration_step3p7 import Step3p7Config, Step3p7TextConfig, Step3p7VisionConfig
@@ -211,6 +211,7 @@ class Step3p7VisionAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         cu_seqlens: torch.Tensor | None = None,
         max_seqlen: int | None = None,
+        segment_lengths: list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
@@ -230,7 +231,6 @@ class Step3p7VisionAttention(nn.Module):
         )
         if cu_seqlens is None or cu_seqlens.numel() == 2 or is_flash_attention_requested(self.config):
             if cu_seqlens is not None and is_flash_attention_requested(self.config):
-                max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
                 kwargs.update(
                     cu_seq_lens_q=cu_seqlens,
                     cu_seq_lens_k=cu_seqlens,
@@ -249,9 +249,6 @@ class Step3p7VisionAttention(nn.Module):
                 **kwargs,
             )
         else:
-            segment_lengths = kwargs.pop("segment_lengths", None)
-            if segment_lengths is None:
-                segment_lengths = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
             splits = [torch.split(tensor, segment_lengths, dim=2) for tensor in (queries, keys, values)]
             attn_outputs, attn_weights = [], []
             start = 0

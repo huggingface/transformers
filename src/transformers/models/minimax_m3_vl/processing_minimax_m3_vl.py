@@ -19,7 +19,6 @@
 # limitations under the License.
 
 import numpy as np
-import torch
 
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
@@ -177,9 +176,9 @@ class MiniMaxM3VLProcessor(ProcessorMixin):
                 for start in range(0, t, max_frames)
             ]
             video_inputs["video_grid_thw"] = (
-                grid_thw.new_tensor(segments)
-                if isinstance(grid_thw, torch.Tensor)
-                else np.asarray(segments, dtype=grid_thw.dtype)
+                np.asarray(segments, dtype=grid_thw.dtype)
+                if isinstance(grid_thw, np.ndarray)
+                else grid_thw.new_tensor(segments)
             )
         return video_inputs, video_replacements
 
