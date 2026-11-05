@@ -828,17 +828,25 @@ runs the fused graph much faster than the plain one. The fusions cover RMS and l
 (`MultiHeadAttention`, or `GroupQueryAttention` when there's a key-value cache), rotary embeddings, GELU, and
 projections that share an input. Each fusion gives the same result as the ops it replaces.
 
-Set `ort_fusions` to the execution provider the graph will run on.
+Set `ort_fusions` to the execution provider the graph will run on. The fusions differ by provider, each keeping what
+its kernels run fastest.
 
 ```python
 config = OnnxConfig(ort_fusions="cpu")
 config = OnnxConfig(ort_fusions="cuda")
+config = OnnxConfig(ort_fusions="webgpu")
 ```
 
-With `"cuda"`, the exporter skips the fusions that the CUDA kernels run more slowly, and it rewrites what CUDA graphs
-can't replay, so a static export can run with CUDA graphs. It also fuses mixture-of-experts blocks into ONNX Runtime's
-`MoE` op, which only exists for CUDA, so the graph may no longer run on CPU. Graphs fused
-for `"cuda"` need onnxruntime 1.28 or later.
+| | `"cpu"` | `"cuda"` | `"webgpu"` |
+|---|---|---|---|
+| Attention with a key-value cache | `GroupQueryAttention`, rotary included | `GroupQueryAttention` with its query and key norms, decode only (the prefill keeps `MultiHeadAttention`) | `GroupQueryAttention`, rotary as its own `RotaryEmbedding` |
+| Other attention | plain ops (the CPU `MultiHeadAttention` is slower) | `MultiHeadAttention` | `MultiHeadAttention` |
+| Mixture of experts | unfused | `MoE` | unfused |
+| CUDA graphs | — | static exports can replay | — |
+| onnxruntime | any | 1.28 or later | any |
+
+A `"cuda"` graph with `MoE` doesn't run on CPU, since ONNX Runtime's `MoE` only exists for CUDA. A `"webgpu"` graph runs
+in the browser with onnxruntime-web, or natively with onnxruntime-webgpu.
 
 The fused ops aren't standard ONNX, so other ONNX consumers such as TensorRT or OpenVINO can't read them. The default
 is `ort_fusions=None`, which keeps the graph standard. If you need the model on several runtimes, export it once for

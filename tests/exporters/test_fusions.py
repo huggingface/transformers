@@ -86,15 +86,18 @@ def _run(program, feeds):
 @require_onnxscript
 @require_onnxruntime
 class OnnxRuntimeFusionTest(unittest.TestCase):
-    """`OnnxConfig(ort_fusions=...)`: the ONNX Runtime ops of the fused graph, for either provider (building a `"cuda"`
-    graph needs no GPU), and on CPU its outputs against the plain export."""
+    """`OnnxConfig(ort_fusions=...)`: the ONNX Runtime ops of the fused graph, for each provider (building a `"cuda"` or
+    `"webgpu"` graph needs no GPU), and on CPU its outputs against the plain export."""
 
     @slow
-    @parameterized.expand([(model_type, ort_fusions) for model_type in TESTERS for ort_fusions in ("cpu", "cuda")])
+    @parameterized.expand(
+        [(model_type, ort_fusions) for model_type in TESTERS for ort_fusions in ("cpu", "cuda", "webgpu")]
+    )
     def test_generation_fuses(self, model_type, ort_fusions):
         """Every layer of the prefill and the decode runs ONNX Runtime's attention (CUDA's prefill, with a mask,
-        `MultiHeadAttention`; otherwise `GroupQueryAttention`) and, on CUDA, its `MoE`, with no rotary (`Neg`),
-        attention (`Softmax`) or RMS norm (`ReduceMean`) left decomposed."""
+        `MultiHeadAttention`; otherwise `GroupQueryAttention`, rotating its query and key itself except on WebGPU) and,
+        on CUDA, its `MoE`, with no rotary (`Neg`), attention (`Softmax`) or RMS norm (`ReduceMean`) left
+        decomposed."""
         # A CUDA graph is fused in float16, which the per-head query and key norms need to fold into
         # `GroupQueryAttention`. The experts are SiLU-gated, as checkpoints are: ONNX Runtime's `MoE` miscomputes
         # gated GELU experts (microsoft/onnxruntime#33863), so those stay unfused.
@@ -109,20 +112,28 @@ class OnnxRuntimeFusionTest(unittest.TestCase):
         layers = model.config.num_hidden_layers
         moe = model_type in MOE_MODELS
         for component, program in programs.items():
-            ops = collections.Counter(node.op_type for node in program.model.graph.all_nodes())
+            nodes = list(program.model.graph.all_nodes())
+            ops = collections.Counter(node.op_type for node in nodes)
             attention = (
                 "MultiHeadAttention" if ort_fusions == "cuda" and component == "prefill" else "GroupQueryAttention"
             )
             expected = {
                 attention: layers,
                 "MoE": layers if moe and ort_fusions == "cuda" else 0,
-                # The CPU keeps the router's softmax: it has no `MoE` (microsoft/onnxruntime#33866).
-                "Softmax": layers if moe and ort_fusions == "cpu" else 0,
+                # The CPU and WebGPU keep the router's softmax: they have no `MoE` (microsoft/onnxruntime#33866).
+                "Softmax": layers if moe and ort_fusions != "cuda" else 0,
+                # WebGPU's `GroupQueryAttention` rotates at the positions after the past, not at `position_ids`.
+                "RotaryEmbedding": 2 * layers if ort_fusions == "webgpu" else ops["RotaryEmbedding"],
                 # A float16 OLMo2 rotates in float32: fused, it would rotate in float16.
                 "Neg": 2 * layers if model_type == "olmo2" and ort_fusions == "cuda" else 0,
                 "ReduceMean": 0,
             }
             self.assertEqual({op: ops[op] for op in expected}, expected, component)
+            if ort_fusions == "webgpu":
+                rotating = [node for node in nodes if node.attributes.get_int("do_rotary", 0)]
+                self.assertEqual(rotating, [], component)
+                # WebGPU has no `FusedMatMul`: it would run on the CPU.
+                self.assertEqual(ops["FusedMatMul"], 0, component)
 
     def setUp(self):
         torch.manual_seed(0)
