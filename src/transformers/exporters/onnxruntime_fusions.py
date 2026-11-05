@@ -1176,6 +1176,43 @@ def _pack_sibling_matmuls(model: ir.Model) -> int:
     return count
 
 
+def _unmerged(value: ir.Value) -> ir.Value:
+    """`value` before a reshape splitting its last axis into heads and one merging them back, if that's what made it."""
+    outer = _producer(value, "Reshape")
+    inner = _producer(outer.inputs[0], "Reshape") if outer is not None else None
+    target = _constant(outer.inputs[1]) if outer is not None else None
+    if inner is None or target is None or target.tolist() != [0, 0, -1]:
+        return value
+    x, heads = inner.inputs[0], inner.outputs[0]
+    if x.shape is None or heads.shape is None or len(x.shape) != 3 or len(heads.shape) != 4:
+        return value
+    size, split = _static_dim(x, 2), (_static_dim(heads, 2), _static_dim(heads, 3))
+    if size is None or None in split or split[0] * split[1] != size or list(heads.shape[:2]) != list(x.shape[:2]):
+        return value
+    return x
+
+
+def _pack_group_query_attention_inputs(model: ir.Model) -> int:
+    """Hand each `GroupQueryAttention` whose query, key and value are the split of one packed projection that
+    projection instead, which it reads packed: no split. Returns how many."""
+    count = 0
+    for node in model.graph:
+        if node.op_type != "GroupQueryAttention" or node.domain != "com.microsoft" or None in node.inputs[:3]:
+            continue
+        parts = [_unmerged(value) for value in node.inputs[:3]]
+        split = _producer(parts[0], "Split")
+        if split is None or len(split.outputs) != 3 or [part.index() for part in parts] != [0, 1, 2]:
+            continue
+        if any(part.producer() is not split for part in parts) or split.attributes.get_int("axis", 0) not in (-1, 2):
+            continue
+        node.replace_input_with(0, split.inputs[0])
+        node.replace_input_with(1, None)
+        node.replace_input_with(2, None)
+        count += 1
+    common_passes.RemoveUnusedNodesPass()(model)
+    return count
+
+
 # ── 6. CUDA provider ──────────────────────────────────────────────────────────
 
 
@@ -1268,6 +1305,7 @@ _STEPS = (
     ("unfused_attentions", _unfuse_attentions, _CPU),
     ("head_transposes", _sink_head_transposes, _ANY),
     ("packed_matmuls", _pack_sibling_matmuls, _ANY),
+    ("packed_group_query_attentions", _pack_group_query_attention_inputs, _ANY),
     # 6. CUDA provider.
     ("constant_gather_nds", _CONSTANT_GATHER_ND.apply_to_model, _CUDA),
 )
