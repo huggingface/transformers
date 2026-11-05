@@ -537,20 +537,27 @@ class Inkling2Attention(nn.Module):
         return attn_output, attn_weights
 
 
+class Inkling2Softcap(nn.Module):
+    def __init__(self, softcap: float):
+        super().__init__()
+        self.softcap = softcap
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return torch.tanh(hidden_states / self.softcap) * self.softcap
+
+
 class Inkling2SoftcappedSwiGLU(nn.Module):
     """SwiGLU where the sigmoid sees the raw gate and the softcaps only bound the linear gate factor and `up`."""
 
     def __init__(self, config: Inkling2TextConfig):
         super().__init__()
-        self.gate_softcap = config.mlp_gate_softcap
-        self.up_softcap = config.mlp_up_softcap
+        self.gate_softcap = Inkling2Softcap(config.mlp_gate_softcap)
+        self.up_softcap = Inkling2Softcap(config.mlp_up_softcap)
 
     def forward(self, gate: torch.Tensor, up: torch.Tensor) -> torch.Tensor:
         input_dtype = gate.dtype
         gate, up = gate.float(), up.float()
-        gate_linear = self.gate_softcap * torch.tanh(gate / self.gate_softcap)
-        up = self.up_softcap * torch.tanh(up / self.up_softcap)
-        return (gate_linear * torch.sigmoid(gate) * up).to(input_dtype)
+        return (self.gate_softcap(gate) * torch.sigmoid(gate) * self.up_softcap(up)).to(input_dtype)
 
 
 @use_experts_implementation(is_concatenated=False)
@@ -1198,6 +1205,7 @@ class Inkling2ForCausalLM(Inkling2PreTrainedModel, GenerationMixin):
         self.model = Inkling2TextModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.logit_softcap = Inkling2Softcap(config.final_logit_softcapping)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1241,8 +1249,7 @@ class Inkling2ForCausalLM(Inkling2PreTrainedModel, GenerationMixin):
 
         hidden_states = slice_logits_to_keep(outputs.last_hidden_state, logits_to_keep)
         logits = self.lm_head(hidden_states).float()
-        softcap = self.config.final_logit_softcapping
-        logits = torch.tanh(logits / softcap) * softcap
+        logits = self.logit_softcap(logits)
         logits = logits[..., : self.config.unpadded_vocab_size]
 
         loss = None
@@ -1455,6 +1462,7 @@ class Inkling2ForConditionalGeneration(Inkling2PreTrainedModel, GenerationMixin)
         # checkpoints store `unembed` padded to vocab_size; logits are sliced to
         # unpadded_vocab_size in forward, like sglang
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.logit_softcap = Inkling2Softcap(config.text_config.final_logit_softcapping)
         self.post_init()
 
     @auto_docstring
@@ -1500,8 +1508,7 @@ class Inkling2ForConditionalGeneration(Inkling2PreTrainedModel, GenerationMixin)
         text_config = self.config.text_config
         hidden_states = slice_logits_to_keep(outputs.last_hidden_state, logits_to_keep)
         logits = self.lm_head(hidden_states).float()
-        softcap = text_config.final_logit_softcapping
-        logits = torch.tanh(logits / softcap) * softcap
+        logits = self.logit_softcap(logits)
         logits = logits[..., : text_config.unpadded_vocab_size]
 
         loss = None
