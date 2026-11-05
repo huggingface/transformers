@@ -125,7 +125,7 @@ class PerceptionLMModelOutputWithPast(MultimodalBaseModelOutputWithPast):
         Video hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    video_hidden_states: torch.FloatTensor | None = None
+    video_hidden_states: torch.Tensor | None = None
 
     @property
     def image_hidden_states(self):
@@ -157,7 +157,7 @@ class PerceptionLMCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
         Video hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    video_hidden_states: torch.FloatTensor | None = None
+    video_hidden_states: torch.Tensor | None = None
 
     @property
     def image_hidden_states(self):

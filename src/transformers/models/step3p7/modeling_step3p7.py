@@ -921,7 +921,7 @@ class Step3p7TextModel(Step3p7PreTrainedModel):
 @auto_docstring
 @dataclass
 class Step3p7ModelOutputWithPast(MultimodalBaseModelOutputWithPast):
-    router_logits: tuple[torch.FloatTensor] | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
     @property
     def image_hidden_states(self):
@@ -1079,7 +1079,7 @@ class Step3p7Model(Step3p7PreTrainedModel):
 @auto_docstring
 @dataclass
 class Step3p7CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
-    router_logits: tuple[torch.FloatTensor] | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
     @property
     def image_hidden_states(self):

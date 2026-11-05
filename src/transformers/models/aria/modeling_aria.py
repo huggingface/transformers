@@ -780,7 +780,7 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, GenerationMixin):
 @auto_docstring
 @dataclass
 class AriaCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
-    router_logits: tuple[torch.FloatTensor] | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
     @property
     def image_hidden_states(self):
@@ -794,7 +794,7 @@ class AriaCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
 @auto_docstring
 @dataclass
 class AriaModelOutputWithPast(MultimodalBaseModelOutputWithPast):
-    router_logits: tuple[torch.FloatTensor] | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
     @property
     def image_hidden_states(self):

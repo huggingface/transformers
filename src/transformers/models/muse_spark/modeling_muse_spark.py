@@ -61,7 +61,7 @@ logger = logging.get_logger(__name__)
 @auto_docstring
 @dataclass
 class MuseSparkModelOutputWithPast(MultimodalBaseModelOutputWithPast):
-    router_logits: tuple[torch.FloatTensor] | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
     @property
     def image_hidden_states(self):
@@ -75,7 +75,7 @@ class MuseSparkModelOutputWithPast(MultimodalBaseModelOutputWithPast):
 @auto_docstring
 @dataclass
 class MuseSparkCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
-    router_logits: tuple[torch.FloatTensor] | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
     @property
     def image_hidden_states(self):

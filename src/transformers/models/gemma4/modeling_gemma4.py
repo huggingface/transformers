@@ -86,8 +86,8 @@ class Gemma4ModelOutputWithPast(MultimodalBaseModelOutputWithPast):
         Tuple of `torch.Tensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`.
     """
 
-    shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
-    router_logits: tuple[torch.FloatTensor] | None = None
+    shared_kv_states: KVSharingDict | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
     @property
     def image_hidden_states(self):
@@ -117,8 +117,8 @@ class Gemma4CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
         Tuple of `torch.Tensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`.
     """
 
-    shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
-    router_logits: tuple[torch.FloatTensor] | None = None
+    shared_kv_states: KVSharingDict | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
     @property
     def image_hidden_states(self):

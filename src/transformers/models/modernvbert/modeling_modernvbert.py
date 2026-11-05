@@ -68,7 +68,7 @@ class ModernVBertBaseModelOutput(BaseModelOutput):
 @auto_docstring
 @dataclass
 class ModernVBertMaskedLMOutput(MaskedLMOutput):
-    """
+    r"""
     image_pooler_output (`tuple(torch.FloatTensor)`, *optional*):
         Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
         sequence_length, hidden_size)`. Pooled image features of the model produced by the vision encoder

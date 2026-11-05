@@ -804,7 +804,7 @@ class MistralLarge4ModelOutputWithPast(MultimodalBaseModelOutputWithPast):
         Tuple of `torch.Tensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`.
     """
 
-    router_logits: tuple[torch.FloatTensor] | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
     @property
     def image_hidden_states(self):
@@ -1015,7 +1015,7 @@ class MistralLarge4Model(MistralLarge4PreTrainedModel):
 @auto_docstring
 @dataclass
 class MistralLarge4CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
-    router_logits: tuple[torch.FloatTensor] | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
     @property
     def image_hidden_states(self):

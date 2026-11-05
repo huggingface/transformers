@@ -98,7 +98,7 @@ class UnlimitedOcrModelOutputWithPooling(BaseModelOutputWithPooling):
 )
 @dataclass
 class UnlimitedOcrModelOutputWithPast(MultimodalBaseModelOutputWithPast):
-    router_logits: tuple[torch.FloatTensor] | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
     @property
     def image_hidden_states(self):
@@ -112,7 +112,7 @@ class UnlimitedOcrModelOutputWithPast(MultimodalBaseModelOutputWithPast):
 @auto_docstring
 @dataclass
 class UnlimitedOcrCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
-    router_logits: tuple[torch.FloatTensor] | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
     @property
     def image_hidden_states(self):

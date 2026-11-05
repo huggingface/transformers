@@ -60,7 +60,7 @@ logger = logging.get_logger(__name__)
 @auto_docstring
 @dataclass
 class InklingModelOutputWithPast(MultimodalBaseModelOutputWithPast):
-    router_logits: tuple[torch.FloatTensor] | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
     @property
     def image_hidden_states(self):
@@ -74,7 +74,7 @@ class InklingModelOutputWithPast(MultimodalBaseModelOutputWithPast):
 @auto_docstring
 @dataclass
 class InklingCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
-    router_logits: tuple[torch.FloatTensor] | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
     @property
     def image_hidden_states(self):

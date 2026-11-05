@@ -107,7 +107,7 @@ class Gemma4UnifiedCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
         Used to pass shared KV states between layers during KV sharing.
     """
 
-    shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
+    shared_kv_states: KVSharingDict | None = None
 
     @property
     def image_hidden_states(self):
@@ -135,7 +135,7 @@ class Gemma4UnifiedModelOutputWithPast(MultimodalBaseModelOutputWithPast):
         Used to pass shared KV states between layers during KV sharing.
     """
 
-    shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]] | None = None
+    shared_kv_states: KVSharingDict | None = None
 
     @property
     def image_hidden_states(self):

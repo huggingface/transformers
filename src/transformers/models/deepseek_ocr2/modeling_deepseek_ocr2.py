@@ -80,7 +80,7 @@ class DeepseekOcr2ModelOutputWithPooling(BaseModelOutputWithPooling):
 @auto_docstring
 @dataclass
 class DeepseekOcr2ModelOutputWithPast(MultimodalBaseModelOutputWithPast):
-    router_logits: tuple[torch.FloatTensor] | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
     @property
     def image_hidden_states(self):
@@ -94,7 +94,7 @@ class DeepseekOcr2ModelOutputWithPast(MultimodalBaseModelOutputWithPast):
 @auto_docstring
 @dataclass
 class DeepseekOcr2CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
-    router_logits: tuple[torch.FloatTensor] | None = None
+    router_logits: tuple[torch.Tensor] | None = None
 
     @property
     def image_hidden_states(self):
