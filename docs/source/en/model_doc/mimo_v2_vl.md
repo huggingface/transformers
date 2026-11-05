@@ -12,7 +12,7 @@ specific language governing permissions and limitations under the License.
 ⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 -->
-*This model was contributed to Hugging Face Transformers on 2026-11-02.*
+*This model was contributed to Hugging Face Transformers on 2026-11-04.*
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -58,7 +58,8 @@ converted weights are checked from the safetensors headers, without reading the 
 be published as a native repository, for example with `hf upload-large-folder <repo_id> <output_dir>`.
 
 The converted checkpoint has `model_type="mimo_v2_vl"` and `architectures=["MiMoV2VLForConditionalGeneration"]`.
-Its BF16 weights need approximately 580 GB of disk space for MiMo-V2.6-Flash-RL. Text-only checkpoints such as
+Its BF16 weights need approximately 620 GB (580 GiB) of disk space for MiMo-V2.6-Flash-RL, and 2 TB for
+MiMo-V2.6-Pro-RL. Text-only checkpoints such as
 MiMo-V2.5-Pro are converted by the same script to `model_type="mimo_v2_flash"` and [`MiMoV2FlashForCausalLM`]. The
 original MiMo-V2-Flash checkpoint already uses the native format. The examples below use `model_id` for a converted
 checkpoint.
@@ -111,7 +112,7 @@ and increase `max_new_tokens` to leave room for both reasoning and the final ans
 Load the model and pass the processor outputs directly to `generate`. This section uses `model_id`, `processor`,
 and `inputs` from the image example. It also works with the audio, video, and mixed inputs shown below.
 
-MiMo-V2.6-Flash-RL needs approximately 580 GB of memory for its BF16 weights, plus activation and cache memory.
+MiMo-V2.6-Flash-RL needs approximately 620 GB of memory for its BF16 weights, plus activation and cache memory.
 Use a multi-device setup with sufficient memory. MTP/speculative decoding is not implemented.
 
 ```python
@@ -255,6 +256,7 @@ example `{"type": "image_url", "image_url": {"url": "https://..."}}`.
   `do_sample_frames=False` for already-sampled frames.
 - Video blocks process frames by default. To interleave a video's soundtrack, provide the decoded track through
   `audio` in a direct processor call and set `use_audio_in_video=True`. Audio inputs follow placeholder order.
+  `apply_chat_template` does not support `load_audio_from_video`, which would not interleave the soundtrack.
   `video_audio_interleave_length` selects per-grid (`0`), video-then-audio (`-1`), or positive-duration grouping.
 
 ## MiMoV2VLConfig

@@ -23,6 +23,7 @@ from parameterized import parameterized
 from transformers import (
     AutoConfig,
     AutoModelForImageTextToText,
+    AutoProcessor,
     MiMoV2VLAudioConfig,
     MiMoV2VLAudioTokenizerConfig,
     MiMoV2VLConfig,
@@ -32,13 +33,17 @@ from transformers import (
     MiMoV2VLTextModel,
     MiMoV2VLVisionConfig,
 )
-from transformers.testing_utils import require_accelerate, require_torch, require_torch_accelerator, torch_device
+from transformers.testing_utils import (
+    require_accelerate,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
-from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
+from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
 if is_torch_available():
@@ -123,14 +128,52 @@ def get_config():
     )
 
 
-class MiMoV2VLModelTester:
-    if is_torch_available():
-        conditional_generation_class = MiMoV2VLForConditionalGeneration
-        base_model_class = MiMoV2VLModel
+class MiMoV2VLModelTester(VLMModelTester):
+    base_model_class = MiMoV2VLModel
+    config_class = MiMoV2VLConfig
+    text_config_class = MiMoV2VLTextConfig
+    vision_config_class = MiMoV2VLVisionConfig
+    conditional_generation_class = MiMoV2VLForConditionalGeneration
 
-    def __init__(self, parent, text_only=False):
+    def __init__(self, parent, **kwargs):
+        text_config = get_config().text_config
+        # Each image has 2x2 patches of 3x2x2x2 pixels, merged into a single token.
+        kwargs.setdefault("num_image_tokens", 1)
+        kwargs.setdefault("image_token_id", get_config().image_token_id)
+        kwargs.setdefault("vocab_size", text_config.vocab_size)
+        kwargs.setdefault("hidden_size", text_config.hidden_size)
+        kwargs.setdefault("num_hidden_layers", text_config.num_hidden_layers)
+        kwargs.setdefault("num_attention_heads", text_config.num_attention_heads)
+        kwargs.setdefault("bos_token_id", 2)
+        kwargs.setdefault("eos_token_id", text_config.eos_token_id)
+        kwargs.setdefault("pad_token_id", text_config.pad_token_id)
+        super().__init__(parent, **kwargs)
+
+    @property
+    def _special_token_ids(self):
+        # The text must not contain the video, audio or span placeholders, which would need media.
+        config = get_config()
+        token_ids = {getattr(config, name) for name in dir(config) if name.endswith("_token_id")}
+        return super()._special_token_ids | {token_id for token_id in token_ids if isinstance(token_id, int)}
+
+    def get_config(self):
+        config = get_config()
+        config.text_config.max_position_embeddings = 64
+        config.text_config.bos_token_id = self.bos_token_id
+        return config
+
+    def create_pixel_values(self, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        return floats_tensor([batch_size * 4, 24]).to(torch_device)
+
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        return {"image_grid_thw": torch.tensor([[1, 2, 2]] * batch_size, device=torch_device)}
+
+
+class MiMoV2VLTextModelTester:
+    def __init__(self, parent):
         self.parent = parent
-        self.text_only = text_only
         self.batch_size = 2
         self.seq_length = 7
         self.hidden_size = 32
@@ -140,10 +183,7 @@ class MiMoV2VLModelTester:
         self.is_training = True
 
     def get_config(self):
-        config = get_config()
-        config.text_config.max_position_embeddings = 64
-        config.text_config.bos_token_id = 2
-        return config.text_config if self.text_only else config
+        return MiMoV2VLModelTester(self.parent).get_config().text_config
 
     def prepare_config_and_inputs_for_common(self):
         config = self.get_config()
@@ -176,23 +216,13 @@ class MiMoV2VLCommonTestMixin:
 
 
 @require_torch
-class MiMoV2VLCommonModelTest(
-    MiMoV2VLCommonTestMixin,
-    ModelTesterMixin,
-    GenerationTesterMixin,
-    TensorParallelTesterMixin,
-    ExpertParallelTesterMixin,
-    unittest.TestCase,
-):
-    all_model_classes = (MiMoV2VLModel, MiMoV2VLForConditionalGeneration) if is_torch_available() else ()
-    _is_composite = True
+class MiMoV2VLCommonModelTest(MiMoV2VLCommonTestMixin, VLMModelTest, unittest.TestCase):
+    model_tester_class = MiMoV2VLModelTester
     has_attentions = False
     test_torch_exportable = False
-    # Common API tests use text inputs. Modality-specific gradients and frozen audio encoding are tested below.
+    # Common API tests use text and image inputs. Modality-specific gradients and frozen audio encoding are tested
+    # below.
     test_all_params_have_gradient = False
-
-    def setUp(self):
-        self.model_tester = MiMoV2VLModelTester(self)
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         text_config = config.get_text_config()
@@ -216,32 +246,22 @@ class MiMoV2VLCommonModelTest(
         return config
 
     def _image_features_prepare_config_and_inputs(self):
-        grid_thw = torch.tensor([[1, 2, 2], [1, 2, 4]], device=torch_device)
+        # One image per sample, with different sizes.
+        sizes = [[1, 2, 2], [1, 2, 4], [1, 4, 2]][: self.model_tester.batch_size]
+        grid_thw = torch.tensor(sizes, device=torch_device)
         pixel_values = floats_tensor([int(grid_thw.prod(-1).sum()), 24]).to(torch_device)
         return self._feature_config(), {"pixel_values": pixel_values, "image_grid_thw": grid_thw}
 
     def _video_features_prepare_config_and_inputs(self):
-        grid_thw = torch.tensor([[2, 2, 2], [1, 2, 2]], device=torch_device)
+        # One video per sample, with different lengths.
+        sizes = [[2, 2, 2], [1, 2, 2], [3, 2, 2]][: self.model_tester.batch_size]
+        grid_thw = torch.tensor(sizes, device=torch_device)
         pixel_values = floats_tensor([int(grid_thw.prod(-1).sum()), 24]).to(torch_device)
         return self._feature_config(), {"pixel_values_videos": pixel_values, "video_grid_thw": grid_thw}
 
     def _audio_features_prepare_config_and_inputs(self):
         codes = ids_tensor([self.model_tester.batch_size, 3, 2, 4], 15).to(torch_device)
         return self._feature_config(), {"input_audio_codes": codes}
-
-    def test_generate_from_multimodal_encoder_outputs_and_raw_data(self):
-        # The common inputs are text-only; add one image per sample so that `mm_encoder_outputs` are exercised.
-        prepare_text_inputs = self.prepare_config_and_inputs_for_generate
-
-        def prepare_image_inputs(batch_size=2):
-            config, inputs = prepare_text_inputs(batch_size)
-            inputs["input_ids"][:, 1] = config.image_token_id
-            inputs["pixel_values"] = floats_tensor([batch_size * 4, 24]).to(torch_device)
-            inputs["image_grid_thw"] = torch.tensor([[1, 2, 2]] * batch_size, device=torch_device)
-            return config, inputs
-
-        with patch.object(self, "prepare_config_and_inputs_for_generate", prepare_image_inputs):
-            super().test_generate_from_multimodal_encoder_outputs_and_raw_data()
 
     def _image_features_get_expected_num_attentions(self, model_tester=None):
         return self._feature_config().vision_config.depth
@@ -261,7 +281,7 @@ class MiMoV2VLTextCommonModelTest(MiMoV2VLCommonTestMixin, ModelTesterMixin, uni
     test_all_params_have_gradient = False
 
     def setUp(self):
-        self.model_tester = MiMoV2VLModelTester(self, text_only=True)
+        self.model_tester = MiMoV2VLTextModelTester(self)
 
 
 @require_torch
@@ -598,7 +618,8 @@ class MiMoV2VLModelTest(unittest.TestCase):
         config = MiMoV2VLAudioTokenizerConfig(
             hidden_size=rotary_dim, num_attention_heads=1, rope_parameters={"rope_type": "default", "rope_theta": 1e4}
         )
-        cos, sin = MiMoV2VLAudioTokenizerRotaryEmbedding(config).to(torch_device)(query, positions)
+        # float32 tables, as computed by the rotary embedding of the language model.
+        cos, sin = MiMoV2VLAudioTokenizerRotaryEmbedding(config).to(torch_device)(query.float(), positions)
         self.assertEqual(cos.dtype, torch.float32)
         self.assertEqual(sin.dtype, torch.float32)
         actual = apply_rotary_pos_emb_fp32(query, key, cos, sin)
@@ -628,6 +649,14 @@ class MiMoV2VLModelTest(unittest.TestCase):
         rotated.sum().backward()
         expected_gradient = torch.tensor([[[[1.4, -0.2]]]], dtype=torch.bfloat16, device=torch_device)
         torch.testing.assert_close(query.grad, expected_gradient, rtol=0, atol=0)
+
+    def test_audio_tokenizer_rotates_in_activation_dtype(self):
+        # Like the original tokenizer: rotating in float32 instead changes about a fifth of the codec IDs.
+        config = MiMoV2VLAudioTokenizerConfig(hidden_size=8, num_attention_heads=1)
+        hidden_states = torch.randn(1, 3, 8, dtype=torch.bfloat16, device=torch_device)
+        positions = torch.tensor([[0, 1, 4000]], device=torch_device)
+        cos, sin = MiMoV2VLAudioTokenizerRotaryEmbedding(config).to(torch_device)(hidden_states, positions)
+        self.assertEqual((cos.dtype, sin.dtype), (torch.bfloat16, torch.bfloat16))
 
     @require_torch_accelerator
     def test_rotary_reinitialization_matches_cpu_construction(self):
@@ -673,6 +702,35 @@ ORIGINAL_SPECIAL_TOKENS = [
     "<|mimo_video_start|>",
     "<|mimo_video_end|>",
 ]
+
+
+@slow
+@require_torch_accelerator
+@unittest.skip("The native MiMo V2.6 checkpoints are not released yet")
+class MiMoV2VLIntegrationTest(unittest.TestCase):
+    model_id = "XiaomiMiMo/MiMo-V2.6-Flash-RL"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.processor = AutoProcessor.from_pretrained(cls.model_id)
+        cls.model = MiMoV2VLForConditionalGeneration.from_pretrained(
+            cls.model_id, device_map="auto", dtype=torch.bfloat16
+        )
+
+    def test_text_generation(self):
+        question = "What is the capital of France? Answer in one sentence."
+        messages = [{"role": "user", "content": [{"type": "text", "text": question}]}]
+        inputs = self.processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            enable_thinking=False,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        ).to(self.model.device)
+        generated = self.model.generate(**inputs, max_new_tokens=16, do_sample=False)
+        text = self.processor.decode(generated[0, inputs.input_ids.shape[1] :], skip_special_tokens=True)
+        self.assertEqual(text, "The capital of France is Paris.")
 
 
 def write_original_checkpoint(model, directory, multimodal=True, tp_size=2, fp8_layer=None):

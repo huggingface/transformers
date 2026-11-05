@@ -31,9 +31,6 @@ from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, U
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
 from ...video_utils import VideoInput, VideoMetadata
-from .feature_extraction_mimo_v2_vl import MiMoV2VLFeatureExtractor
-from .image_processing_mimo_v2_vl import MiMoV2VLImageProcessor
-from .video_processing_mimo_v2_vl import MiMoV2VLVideoProcessor
 
 
 class MiMoV2VLAudioProcessorKwargs(AudioKwargs, total=False):
@@ -67,10 +64,7 @@ class MiMoV2VLProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {}
 
 
-@auto_docstring(
-    custom_intro="Constructs a multimodal processor for the MiMo V2 VL series.",
-    checkpoint="XiaomiMiMo/MiMo-V2.6-Flash-RL",
-)
+@auto_docstring
 class MiMoV2VLProcessor(ProcessorMixin):
     valid_processor_kwargs = MiMoV2VLProcessorKwargs
     _special_token_names = (
@@ -105,14 +99,6 @@ class MiMoV2VLProcessor(ProcessorMixin):
         use_per_grid_t_timestamps=False,
     ):
         r"""
-        image_processor ([`MiMoV2VLImageProcessor`], *optional*):
-            Image processor. Defaults to a new `MiMoV2VLImageProcessor` when unset.
-        video_processor ([`MiMoV2VLVideoProcessor`], *optional*):
-            Video processor. Defaults to a new `MiMoV2VLVideoProcessor` when unset.
-        feature_extractor ([`MiMoV2VLFeatureExtractor`], *optional*):
-            Audio feature extractor. Defaults to a new `MiMoV2VLFeatureExtractor` when unset.
-        chat_template (`str`, *optional*):
-            Jinja template for chat messages. Defaults to the tokenizer's chat template when available.
         image_token (`str`, *optional*, defaults to `"<|image_pad|>"`):
             Image placeholder token.
         video_token (`str`, *optional*, defaults to `"<|video_pad|>"`):
@@ -137,9 +123,7 @@ class MiMoV2VLProcessor(ProcessorMixin):
         use_per_grid_t_timestamps (`bool`, *optional*, defaults to `False`):
             Emit a timestamp for every video and audio grid rather than once per group.
         """
-        image_processor = image_processor if image_processor is not None else MiMoV2VLImageProcessor()
-        video_processor = video_processor if video_processor is not None else MiMoV2VLVideoProcessor()
-        feature_extractor = feature_extractor if feature_extractor is not None else MiMoV2VLFeatureExtractor()
+        # The converted checkpoints keep the chat template of the original tokenizer.
         if chat_template is None:
             chat_template = getattr(tokenizer, "chat_template", None)
         super().__init__(image_processor, video_processor, feature_extractor, tokenizer, chat_template=chat_template)
@@ -246,7 +230,6 @@ class MiMoV2VLProcessor(ProcessorMixin):
             text=text,
             videos=videos,
             audio=None if is_tokenized_audio else audio,
-            sampling_rate=audio_kwargs.get("sampling_rate", self.feature_extractor.sampling_rate),
         )
         audio = audio if is_tokenized_audio else fetched_audio
         self.validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
@@ -254,6 +237,8 @@ class MiMoV2VLProcessor(ProcessorMixin):
             if inputs is not None:
                 self._validate_modality_tokens(modality)
         image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"]) if images is not None else {}
+        # The timestamps are computed from the video metadata, which is only returned on request.
+        return_metadata = video_kwargs.get("return_metadata", False)
         video_kwargs["return_metadata"] = True
         video_inputs = self.video_processor(videos, **video_kwargs) if videos is not None else {}
         audio_inputs = self.feature_extractor(audio, **audio_kwargs) if audio is not None else {}
@@ -261,8 +246,6 @@ class MiMoV2VLProcessor(ProcessorMixin):
             audio_inputs["feature_attention_mask"] = audio_inputs.pop("attention_mask")
 
         num_videos = len(video_inputs.get("video_grid_thw", []))
-        if len(video_inputs.get("video_metadata", [])) != num_videos:
-            raise ValueError("video_metadata must contain one entry per video.")
         use_audio_in_video = (
             [use_audio_in_video] * num_videos if isinstance(use_audio_in_video, bool) else list(use_audio_in_video)
         )
@@ -298,7 +281,7 @@ class MiMoV2VLProcessor(ProcessorMixin):
         data = {**text_inputs, **image_inputs, **video_inputs, **audio_inputs}
         if audio_segment_offsets:
             data["audio_segment_offsets"] = audio_segment_offsets
-        if not kwargs.get("return_metadata", kwargs.get("videos_kwargs", {}).get("return_metadata", False)):
+        if not return_metadata:
             data.pop("video_metadata", None)
         return BatchFeature(
             data, tensor_type=text_kwargs.get("return_tensors"), skip_tensor_conversion=self.skip_tensor_conversion
@@ -385,6 +368,7 @@ class MiMoV2VLProcessor(ProcessorMixin):
             audio_segment_offsets.append((index, 0, audio_length))
             return self.audio_start_token + self.audio_token * audio_length + self.audio_end_token
 
+        # The tokens can be changed after the processor is created.
         pattern = self._get_multimodal_token_pattern()
         expanded_text, batch_replacement_offsets = [], []
         for sample in text:
@@ -504,21 +488,9 @@ class MiMoV2VLProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        return list(
-            dict.fromkeys(
-                self.tokenizer.model_input_names
-                + self.image_processor.model_input_names
-                + self.video_processor.model_input_names
-                + [
-                    "input_features",
-                    "input_audio_codes",
-                    "feature_attention_mask",
-                    "audio_feature_lens",
-                    "audio_segment_offsets",
-                    "mm_token_type_ids",
-                ]
-            )
-        )
+        # The feature extractor mask is renamed, and the prompt layout adds the audio segment offsets.
+        extra_names = ["feature_attention_mask", "audio_segment_offsets", "mm_token_type_ids"]
+        return list(dict.fromkeys(super().model_input_names + extra_names))
 
 
 __all__ = ["MiMoV2VLProcessor"]

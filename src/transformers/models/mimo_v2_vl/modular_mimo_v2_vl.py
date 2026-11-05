@@ -40,6 +40,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
 )
+from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import TextInput
@@ -821,8 +822,16 @@ class MiMoV2VLAudioEncoder(MiMoV2VLPreTrainedModel):
 
 
 class MiMoV2VLAudioTokenizerRotaryEmbedding(OlmoRotaryEmbedding):
-    # Unlike the audio encoder, the cos/sin tables stay in float32: queries and keys are rotated in float32.
-    pass
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
+        # Unlike the language model, queries and keys are rotated in the activation dtype, like the original
+        # tokenizer: its codec IDs are sensitive to this rounding.
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 class MiMoV2VLAudioCodebook(EncodecEuclideanCodebook):
@@ -894,7 +903,7 @@ class MiMoV2VLAudioTokenizerAttention(GlmAsrAttention):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb_fp32(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         # Like the original implementation, the masked attention always runs with SDPA.
         attn_output = F.scaled_dot_product_attention(
@@ -1542,7 +1551,7 @@ class MiMoV2VLImageProcessorKwargs(Qwen2VLImageProcessorKwargs, total=False):
     """
 
 
-@auto_docstring(custom_intro="Constructs an image processor for the MiMo V2 VL series.")
+@auto_docstring
 class MiMoV2VLImageProcessor(Qwen2VLImageProcessor):
     size = {"shortest_edge": 8 * 32 * 32, "longest_edge": 8192 * 32 * 32}
     resample = PILImageResampling.BILINEAR
@@ -1628,7 +1637,7 @@ class MiMoV2VLVideoProcessorInitKwargs(Qwen2VLVideoProcessorInitKwargs, total=Fa
     max_video_tokens = AttributeError()
 
 
-@auto_docstring(custom_intro="Constructs a video processor for the MiMo V2 VL series.")
+@auto_docstring
 class MiMoV2VLVideoProcessor(Qwen2VLVideoProcessor):
     size = {"shortest_edge": 8 * 32 * 32, "longest_edge": 8192 * 32 * 32}
     default_to_square = False
@@ -1653,6 +1662,7 @@ class MiMoV2VLVideoProcessor(Qwen2VLVideoProcessor):
         sample_indices_fn: Callable | None = None,
     ) -> list[torch.Tensor]:
         if video_metadata is not None:
+            # Only counts the videos: the parent method decodes video paths, frame paths included, before batching.
             num_videos = len(make_batched_videos(videos))
             metadata = (
                 []
@@ -1769,28 +1779,7 @@ class MiMoV2VLVideoProcessor(Qwen2VLVideoProcessor):
         temporal_factor = temporal_patch_size * temporal_compression_ratio
         if pad_length := -videos.shape[1] % temporal_factor:
             videos = torch.cat((videos, videos[:, -1:].expand(-1, pad_length, -1, -1, -1)), dim=1)
-
-        batch_size, num_frames, channel, resized_height, resized_width = videos.shape
-        grid_t = num_frames // temporal_patch_size
-        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-        patches = videos.reshape(
-            batch_size,
-            grid_t,
-            temporal_patch_size,
-            channel,
-            grid_h // merge_size,
-            merge_size,
-            patch_size,
-            grid_w // merge_size,
-            merge_size,
-            patch_size,
-        )
-        patches = patches.permute(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
-        # The patches are contiguous, as the patch embedding of the vision encoder reshapes them with `view`.
-        flatten_patches = patches.reshape(
-            batch_size, grid_t * grid_h * grid_w, channel * temporal_patch_size * patch_size * patch_size
-        ).contiguous()
-        return flatten_patches, grid_t, grid_h, grid_w
+        return super().patchify(videos, patch_size, merge_size, temporal_patch_size)
 
     def _preprocess(
         self,
@@ -1936,7 +1925,7 @@ class MiMoV2VLFeatureExtractor(SequenceFeatureExtractor):
             whose codec lengths are computed separately.
     """
 
-    model_input_names = ["input_features", "attention_mask", "audio_feature_lens"]
+    model_input_names = ["input_features", "input_audio_codes", "attention_mask", "audio_feature_lens"]
 
     def __init__(
         self,
@@ -2142,7 +2131,7 @@ class MiMoV2VLFeatureExtractor(SequenceFeatureExtractor):
         output["audio_feature_lens"] = [self._get_audio_token_length(length) for length in mel_lengths]
         if not return_attention_mask:
             output.pop("attention_mask")
-        return BatchFeature(dict(output), tensor_type=return_tensors)
+        return output.convert_to_tensors(return_tensors)
 
     def _process_audio_codes(
         self, audio: AudioInput, padding: bool | str, return_tensors: str | TensorType | None
@@ -2225,10 +2214,7 @@ class MiMoV2VLProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {}
 
 
-@auto_docstring(
-    custom_intro="Constructs a multimodal processor for the MiMo V2 VL series.",
-    checkpoint="XiaomiMiMo/MiMo-V2.6-Flash-RL",
-)
+@auto_docstring
 class MiMoV2VLProcessor(ProcessorMixin):
     valid_processor_kwargs = MiMoV2VLProcessorKwargs
     _special_token_names = (
@@ -2263,14 +2249,6 @@ class MiMoV2VLProcessor(ProcessorMixin):
         use_per_grid_t_timestamps=False,
     ):
         r"""
-        image_processor ([`MiMoV2VLImageProcessor`], *optional*):
-            Image processor. Defaults to a new `MiMoV2VLImageProcessor` when unset.
-        video_processor ([`MiMoV2VLVideoProcessor`], *optional*):
-            Video processor. Defaults to a new `MiMoV2VLVideoProcessor` when unset.
-        feature_extractor ([`MiMoV2VLFeatureExtractor`], *optional*):
-            Audio feature extractor. Defaults to a new `MiMoV2VLFeatureExtractor` when unset.
-        chat_template (`str`, *optional*):
-            Jinja template for chat messages. Defaults to the tokenizer's chat template when available.
         image_token (`str`, *optional*, defaults to `"<|image_pad|>"`):
             Image placeholder token.
         video_token (`str`, *optional*, defaults to `"<|video_pad|>"`):
@@ -2295,9 +2273,7 @@ class MiMoV2VLProcessor(ProcessorMixin):
         use_per_grid_t_timestamps (`bool`, *optional*, defaults to `False`):
             Emit a timestamp for every video and audio grid rather than once per group.
         """
-        image_processor = image_processor if image_processor is not None else MiMoV2VLImageProcessor()
-        video_processor = video_processor if video_processor is not None else MiMoV2VLVideoProcessor()
-        feature_extractor = feature_extractor if feature_extractor is not None else MiMoV2VLFeatureExtractor()
+        # The converted checkpoints keep the chat template of the original tokenizer.
         if chat_template is None:
             chat_template = getattr(tokenizer, "chat_template", None)
         super().__init__(image_processor, video_processor, feature_extractor, tokenizer, chat_template=chat_template)
@@ -2404,7 +2380,6 @@ class MiMoV2VLProcessor(ProcessorMixin):
             text=text,
             videos=videos,
             audio=None if is_tokenized_audio else audio,
-            sampling_rate=audio_kwargs.get("sampling_rate", self.feature_extractor.sampling_rate),
         )
         audio = audio if is_tokenized_audio else fetched_audio
         self.validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
@@ -2412,6 +2387,8 @@ class MiMoV2VLProcessor(ProcessorMixin):
             if inputs is not None:
                 self._validate_modality_tokens(modality)
         image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"]) if images is not None else {}
+        # The timestamps are computed from the video metadata, which is only returned on request.
+        return_metadata = video_kwargs.get("return_metadata", False)
         video_kwargs["return_metadata"] = True
         video_inputs = self.video_processor(videos, **video_kwargs) if videos is not None else {}
         audio_inputs = self.feature_extractor(audio, **audio_kwargs) if audio is not None else {}
@@ -2419,8 +2396,6 @@ class MiMoV2VLProcessor(ProcessorMixin):
             audio_inputs["feature_attention_mask"] = audio_inputs.pop("attention_mask")
 
         num_videos = len(video_inputs.get("video_grid_thw", []))
-        if len(video_inputs.get("video_metadata", [])) != num_videos:
-            raise ValueError("video_metadata must contain one entry per video.")
         use_audio_in_video = (
             [use_audio_in_video] * num_videos if isinstance(use_audio_in_video, bool) else list(use_audio_in_video)
         )
@@ -2456,7 +2431,7 @@ class MiMoV2VLProcessor(ProcessorMixin):
         data = {**text_inputs, **image_inputs, **video_inputs, **audio_inputs}
         if audio_segment_offsets:
             data["audio_segment_offsets"] = audio_segment_offsets
-        if not kwargs.get("return_metadata", kwargs.get("videos_kwargs", {}).get("return_metadata", False)):
+        if not return_metadata:
             data.pop("video_metadata", None)
         return BatchFeature(
             data, tensor_type=text_kwargs.get("return_tensors"), skip_tensor_conversion=self.skip_tensor_conversion
@@ -2543,6 +2518,7 @@ class MiMoV2VLProcessor(ProcessorMixin):
             audio_segment_offsets.append((index, 0, audio_length))
             return self.audio_start_token + self.audio_token * audio_length + self.audio_end_token
 
+        # The tokens can be changed after the processor is created.
         pattern = self._get_multimodal_token_pattern()
         expanded_text, batch_replacement_offsets = [], []
         for sample in text:
@@ -2662,21 +2638,9 @@ class MiMoV2VLProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        return list(
-            dict.fromkeys(
-                self.tokenizer.model_input_names
-                + self.image_processor.model_input_names
-                + self.video_processor.model_input_names
-                + [
-                    "input_features",
-                    "input_audio_codes",
-                    "feature_attention_mask",
-                    "audio_feature_lens",
-                    "audio_segment_offsets",
-                    "mm_token_type_ids",
-                ]
-            )
-        )
+        # The feature extractor mask is renamed, and the prompt layout adds the audio segment offsets.
+        extra_names = ["feature_attention_mask", "audio_segment_offsets", "mm_token_type_ids"]
+        return list(dict.fromkeys(super().model_input_names + extra_names))
 
 
 __all__ = [

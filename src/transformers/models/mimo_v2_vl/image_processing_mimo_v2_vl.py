@@ -107,7 +107,7 @@ def resize_frames(
     )
 
 
-@auto_docstring(custom_intro="Constructs an image processor for the MiMo V2 VL series.")
+@auto_docstring
 class MiMoV2VLImageProcessor(TorchvisionBackend):
     do_resize = True
     resample = PILImageResampling.BILINEAR

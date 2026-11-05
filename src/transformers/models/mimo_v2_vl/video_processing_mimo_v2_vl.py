@@ -130,7 +130,7 @@ def get_video_frame_size(size: SizeDict, num_frames: int, temporal_factor: int, 
     return SizeDict(shortest_edge=size.shortest_edge, longest_edge=max_pixels)
 
 
-@auto_docstring(custom_intro="Constructs a video processor for the MiMo V2 VL series.")
+@auto_docstring
 class MiMoV2VLVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BILINEAR
     size = {"shortest_edge": 8 * 32 * 32, "longest_edge": 8192 * 32 * 32}
@@ -266,11 +266,19 @@ class MiMoV2VLVideoProcessor(BaseVideoProcessor):
         temporal_factor = temporal_patch_size * temporal_compression_ratio
         if pad_length := -videos.shape[1] % temporal_factor:
             videos = torch.cat((videos, videos[:, -1:].expand(-1, pad_length, -1, -1, -1)), dim=1)
-
+        "Patchifies each video into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."
         batch_size, num_frames, channel, resized_height, resized_width = videos.shape
+
+        # Check that videos have `num_frames` divisible by `temporal_patch_size`
+        if pad := -num_frames % temporal_patch_size:
+            repeats = videos[:, -1:].expand(-1, pad, -1, -1, -1)
+            videos = torch.cat((videos, repeats), dim=1)
+            num_frames += pad
+
         grid_t = num_frames // temporal_patch_size
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-        patches = videos.reshape(
+
+        patches = videos.view(
             batch_size,
             grid_t,
             temporal_patch_size,
@@ -283,10 +291,12 @@ class MiMoV2VLVideoProcessor(BaseVideoProcessor):
             patch_size,
         )
         patches = patches.permute(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
-        # The patches are contiguous, as the patch embedding of the vision encoder reshapes them with `view`.
         flatten_patches = patches.reshape(
-            batch_size, grid_t * grid_h * grid_w, channel * temporal_patch_size * patch_size * patch_size
-        ).contiguous()
+            batch_size,
+            grid_t * grid_h * grid_w,
+            channel * temporal_patch_size * patch_size * patch_size,
+        )
+
         return flatten_patches, grid_t, grid_h, grid_w
 
     def _preprocess(
@@ -378,6 +388,7 @@ class MiMoV2VLVideoProcessor(BaseVideoProcessor):
         sample_indices_fn: Callable | None = None,
     ) -> list[torch.Tensor]:
         if video_metadata is not None:
+            # Only counts the videos: the parent method decodes video paths, frame paths included, before batching.
             num_videos = len(make_batched_videos(videos))
             metadata = (
                 []

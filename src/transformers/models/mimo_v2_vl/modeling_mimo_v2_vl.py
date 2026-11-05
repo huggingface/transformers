@@ -1229,7 +1229,9 @@ class MiMoV2VLAudioTokenizerRotaryEmbedding(nn.Module):
         emb = torch.cat((freqs, freqs), dim=-1)
         cos = emb.cos() * self.attention_scaling
         sin = emb.sin() * self.attention_scaling
-        return cos, sin
+        # Unlike the language model, queries and keys are rotated in the activation dtype, like the original
+        # tokenizer: its codec IDs are sensitive to this rounding.
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 class MiMoV2VLAudioCodebook(nn.Module):
@@ -1341,7 +1343,7 @@ class MiMoV2VLAudioTokenizerAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb_fp32(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         # Like the original implementation, the masked attention always runs with SDPA.
         attn_output = F.scaled_dot_product_attention(

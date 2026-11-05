@@ -109,7 +109,7 @@ class MiMoV2VLFeatureExtractor(SequenceFeatureExtractor):
             whose codec lengths are computed separately.
     """
 
-    model_input_names = ["input_features", "attention_mask", "audio_feature_lens"]
+    model_input_names = ["input_features", "input_audio_codes", "attention_mask", "audio_feature_lens"]
 
     def __init__(
         self,
@@ -315,7 +315,7 @@ class MiMoV2VLFeatureExtractor(SequenceFeatureExtractor):
         output["audio_feature_lens"] = [self._get_audio_token_length(length) for length in mel_lengths]
         if not return_attention_mask:
             output.pop("attention_mask")
-        return BatchFeature(dict(output), tensor_type=return_tensors)
+        return output.convert_to_tensors(return_tensors)
 
     def _process_audio_codes(
         self, audio: AudioInput, padding: bool | str, return_tensors: str | TensorType | None

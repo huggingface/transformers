@@ -792,6 +792,12 @@ class MiMoV2VLProcessorIntegrationTest(unittest.TestCase):
 class MiMoV2VLProcessorCommonTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = MiMoV2VLProcessor
 
+    @unittest.skip(
+        "MiMo V2 VL interleaves the audio tracks of videos with `use_audio_in_video`, not in chat templates."
+    )
+    def test_chat_template_audio_from_video(self):
+        pass
+
     @staticmethod
     def prepare_processor_dict():
         return {
