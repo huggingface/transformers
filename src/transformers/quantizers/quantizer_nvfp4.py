@@ -110,7 +110,18 @@ class NVFP4HfQuantizer(HfQuantizer):
 
         return NVFP4Quantize(self.quantization_device)
 
-    serialized_names = {"weight": ["weight", "weight_sf", "weight_sf_rowmajor", "weight_global_scale"]}
+    # ModelOpt checkpoints: `weight_scale` (block scales), `weight_scale_2` (`1 / weight_global_scale`), `input_scale`
+    serialized_names = {
+        "weight": [
+            "weight",
+            "weight_sf",
+            "weight_sf_rowmajor",
+            "weight_global_scale",
+            "weight_scale",
+            "weight_scale_2",
+            "input_scale",
+        ]
+    }
 
     def get_load_operations(self):
         from ..integrations.nvfp4 import NVFP4Dequantize, NVFP4Deserialize

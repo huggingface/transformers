@@ -45,6 +45,7 @@ class NVFP4Kernel:
     gemm: Callable
     pack: Callable
     swizzled_sf_shape: Callable
+    ops: object  # the raw ops, for the W4A4 GEMM with a static activation scale
 
 
 @functools.cache
@@ -70,6 +71,7 @@ def load_nvfp4_kernel() -> NVFP4Kernel:
         "gemm": getattr(kernel, "gemm", None),
         "pack": getattr(kernel, "pack", None),
         "swizzled_sf_shape": getattr(kernel, "swizzled_sf_shape", None),
+        "ops": getattr(getattr(kernel, "_ops", None), "ops", None),
     }
     missing = [name for name, entry_point in entry_points.items() if entry_point is None]
     if missing:
@@ -86,8 +88,12 @@ def nvfp4_linear(
     weight_global_scale: torch.Tensor,
     out_features: int,
     in_features: int,
+    input_scale: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    """Apply an NVFP4 linear operation using packed weights and dynamic activation quantization."""
+    """
+    Apply an NVFP4 linear operation using packed weights. Activations are quantized with the static `input_scale`
+    (ModelOpt's `amax / (6 * 448)`) when given, else dynamically.
+    """
 
     kernel = load_nvfp4_kernel()
     packed_weight = kernel.PackedWeight(
@@ -98,7 +104,17 @@ def nvfp4_linear(
         k=in_features,
         sf_rowmajor=weight_sf_rowmajor,
     )
-    return kernel.gemm(packed_weight, input)
+    if input_scale is None or input.numel() <= 2 * in_features:
+        return kernel.gemm(packed_weight, input)  # dynamic activation scale, or the W4A16 decode GEMV
+    # The kernel's W4A4 GEMM, with the static activation global scale instead of one from the input's amax
+    qinput, input_sf = kernel.ops.scaled_fp4_quant(
+        input.reshape(-1, in_features).to(torch.bfloat16).contiguous(), 1 / input_scale, True
+    )
+    fp8 = torch.float8_e4m3fn
+    output = kernel.ops.cutlass_scaled_fp4_mm(
+        qinput, weight, input_sf.view(fp8), weight_sf.view(fp8), input_scale / weight_global_scale
+    )
+    return output.reshape(*input.shape[:-1], out_features)
 
 
 class NVFP4Linear(nn.Module):
@@ -116,6 +132,8 @@ class NVFP4Linear(nn.Module):
         # The W4A16 decode GEMV consumes row-major scales, while the W4A4 prefill GEMM consumes swizzled scales.
         self.weight_sf_rowmajor = nn.Buffer(torch.empty(out_features, in_features // SF_VEC_SIZE, dtype=torch.uint8))
         self.weight_global_scale = nn.Buffer(torch.empty(1, dtype=torch.float32))
+        # A static activation scale (ModelOpt checkpoints), empty for dynamic activation quantization
+        self.input_scale = nn.Buffer(torch.empty(0, dtype=torch.float32))
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         return nvfp4_linear(
@@ -126,6 +144,7 @@ class NVFP4Linear(nn.Module):
             self.weight_global_scale,
             self.out_features,
             self.in_features,
+            self.input_scale if self.input_scale.numel() else None,
         )
 
     def extra_repr(self) -> str:
@@ -153,6 +172,7 @@ class NVFP4Quantize(ConversionOps):
             output[f"{base}.weight_sf"] = packed_weight.sf
             output[f"{base}.weight_sf_rowmajor"] = packed_weight.sf_rowmajor
             output[f"{base}.weight_global_scale"] = packed_weight.global_scale
+            output[f"{base}.input_scale"] = torch.empty(0, device=self.device)
         return output
 
 
@@ -172,7 +192,8 @@ def swizzle_sf(sf_rowmajor: torch.Tensor) -> torch.Tensor:
 class NVFP4Deserialize(ConversionOps):
     """
     The `NVFP4Linear` buffers from a checkpoint's `weight`, `weight_sf_rowmajor` and `weight_global_scale`: the kernel's
-    swizzled `weight_sf` is derived from the row-major scales.
+    swizzled `weight_sf` is derived from the row-major scales. ModelOpt checkpoints name the FP8 block scales
+    `weight_scale` and store `weight_scale_2 = 1 / weight_global_scale`, plus an optional static `input_scale`.
     """
 
     def __init__(self, hf_quantizer):
@@ -180,10 +201,17 @@ class NVFP4Deserialize(ConversionOps):
 
     def convert(self, input_dict, **kwargs) -> dict[str, torch.Tensor]:
         tensors = {name: value[0] if isinstance(value, list) else value for name, value in input_dict.items()}
-        if "weight_sf_rowmajor" in tensors and "weight_sf" not in tensors:
+        if "weight_scale_2" in tensors:
+            tensors["weight_sf_rowmajor"] = tensors.pop("weight_scale").view(torch.uint8)
+            tensors["weight_global_scale"] = (1 / tensors.pop("weight_scale_2").float()).reshape(1)
+        if "weight_sf_rowmajor" not in tensors:
+            return tensors  # not an NVFP4 weight
+        if "weight_sf" not in tensors:
             out_features, in_features = tensors["weight"].shape[0], tensors["weight"].shape[1] * 2
             sf_shape = load_nvfp4_kernel().swizzled_sf_shape(out_features, in_features)
             tensors["weight_sf"] = swizzle_sf(tensors["weight_sf_rowmajor"]).view(torch.int32).view(sf_shape)
+        input_scale = tensors.get("input_scale", torch.empty(0, device=tensors["weight"].device))
+        tensors["input_scale"] = input_scale.float().reshape(-1)
         return tensors
 
     # TODO: a reverse op, so that NVFP4 checkpoints can be saved (`swizzle_sf` is invertible)
@@ -192,7 +220,8 @@ class NVFP4Deserialize(ConversionOps):
 class NVFP4Dequantize(ConversionOps):
     """
     Dense weights from the packed `weight` (two e2m1 values per byte, low nibble first), its row-major FP8 block
-    scales `weight_sf_rowmajor` and `weight_global_scale`: `weight = fp4 * block_scale / global_scale`.
+    scales `weight_sf_rowmajor` and `weight_global_scale`: `weight = fp4 * block_scale / global_scale`. Or ModelOpt's
+    `weight_scale` and `weight_scale_2`: `weight = fp4 * weight_scale * weight_scale_2`.
     """
 
     def __init__(self, hf_quantizer):
@@ -204,14 +233,18 @@ class NVFP4Dequantize(ConversionOps):
             if not key.endswith("weight"):
                 continue  # the scales, read along with their weight
             weights = weights if isinstance(weights, list) else [weights]
-            scales = input_dict.get(f"{key}_sf_rowmajor")
-            global_scales = input_dict.get(f"{key}_global_scale")
+            modelopt = f"{key}_scale_2" in input_dict
+            scales = input_dict.get(f"{key}_scale" if modelopt else f"{key}_sf_rowmajor")
+            global_scales = input_dict.get(f"{key}_scale_2" if modelopt else f"{key}_global_scale")
             if scales is not None and global_scales is not None:
                 scales = scales if isinstance(scales, list) else [scales]
                 global_scales = global_scales if isinstance(global_scales, list) else [global_scales]
                 # In the dtype of the dense param it loads into
                 dtype = model.get_parameter_or_buffer(full_layer_name).dtype
-                weights = [self._dequantize(*tensors).to(dtype) for tensors in zip(weights, scales, global_scales)]
+                weights = [
+                    self._dequantize(weight, scale, 1 / global_scale if modelopt else global_scale).to(dtype)
+                    for weight, scale, global_scale in zip(weights, scales, global_scales)
+                ]
             output[key] = weights
         return output
 

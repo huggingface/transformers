@@ -13,10 +13,17 @@
 # limitations under the License.
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from transformers import NVFP4Config
-from transformers.integrations.nvfp4 import NVFP4Linear, NVFP4Quantize
+from transformers.integrations.mxfp4 import FP4_VALUES
+from transformers.integrations.nvfp4 import (
+    NVFP4Dequantize,
+    NVFP4Deserialize,
+    NVFP4Linear,
+    NVFP4Quantize,
+    swizzle_sf,
+)
 from transformers.quantizers.quantizer_nvfp4 import NVFP4HfQuantizer
 from transformers.utils import is_torch_available
 from transformers.utils.quantization_config import QuantizationMethod
@@ -42,12 +49,31 @@ def _fake_kernel():
             global_scale=torch.ones(1, dtype=torch.float32, device=device),
         )
 
+    def scaled_fp4_quant(input, global_scale, swizzled):
+        return input.new_zeros(input.shape[0], input.shape[1] // 2, dtype=torch.uint8), input.new_zeros(
+            input.shape[0], input.shape[1] // 64, dtype=torch.int32
+        )
+
+    def cutlass_scaled_fp4_mm(qinput, weight, input_sf, weight_sf, alpha):
+        return qinput.new_zeros(qinput.shape[0], weight.shape[0], dtype=torch.bfloat16)
+
     return SimpleNamespace(
         PackedWeight=_PackedWeight,
         gemm=lambda packed_weight, input: input.new_zeros((*input.shape[:-1], packed_weight.n)),
         pack=pack,
         swizzled_sf_shape=lambda rows, columns: (rows, columns // 64),
+        ops=SimpleNamespace(scaled_fp4_quant=scaled_fp4_quant, cutlass_scaled_fp4_mm=cutlass_scaled_fp4_mm),
     )
+
+
+def _modelopt_quantize(weight):
+    """ModelOpt's NVFP4 (`NVFP4QTensor.quantize`): `weight ~= fp4 * weight_scale * weight_scale_2`."""
+    weight_scale_2 = weight.abs().amax() / (6 * 448)
+    blocks = weight.view(weight.shape[0], -1, 16)
+    weight_scale = (blocks.abs().amax(-1) / (6 * weight_scale_2)).to(torch.float8_e4m3fn)
+    scaled = blocks / (weight_scale.float() * weight_scale_2).unsqueeze(-1)
+    codes = (scaled.unsqueeze(-1) - torch.tensor(FP4_VALUES)).abs().argmin(-1).flatten(1)  # nearest e2m1
+    return (codes[:, 0::2] | codes[:, 1::2] << 4).to(torch.uint8), weight_scale, weight_scale_2
 
 
 @unittest.skipUnless(is_torch_available(), "test requires PyTorch")
@@ -95,12 +121,10 @@ class NVFP4IntegrationTest(unittest.TestCase):
     def test_packed_tensors_are_registered_in_state_dict(self, _):
         layer = NVFP4Linear(64, 32)
 
-        for buffer_name in ("weight", "weight_sf", "weight_sf_rowmajor", "weight_global_scale"):
+        buffer_names = {"weight", "weight_sf", "weight_sf_rowmajor", "weight_global_scale", "input_scale"}
+        for buffer_name in buffer_names:
             self.assertIsInstance(getattr(layer, buffer_name), nn.Buffer)
-        self.assertEqual(
-            set(layer.state_dict()),
-            {"weight", "weight_sf", "weight_sf_rowmajor", "weight_global_scale"},
-        )
+        self.assertEqual(set(layer.state_dict()), buffer_names)
         self.assertNotIn("nvfp4_kernel", layer.state_dict())
 
     @patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel)
@@ -116,9 +140,69 @@ class NVFP4IntegrationTest(unittest.TestCase):
                 "model.proj.weight_sf",
                 "model.proj.weight_sf_rowmajor",
                 "model.proj.weight_global_scale",
+                "model.proj.input_scale",
             },
         )
         self.assertEqual(output["model.proj.weight"].shape, (32, 32))
+
+    @patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel)
+    def test_modelopt_checkpoint_round_trip(self, _):
+        weight = torch.randn(128, 64)
+        packed, weight_scale, weight_scale_2 = _modelopt_quantize(weight)
+        checkpoint = {
+            "weight": packed,
+            "weight_scale": weight_scale,
+            "weight_scale_2": weight_scale_2,
+            "input_scale": torch.tensor(0.01),
+        }
+
+        buffers = NVFP4Deserialize(None).convert(dict(checkpoint))
+        layer = NVFP4Linear(64, 128)
+        self.assertEqual(set(buffers), set(layer.state_dict()))
+        for name in ("weight_sf", "weight_sf_rowmajor", "weight_global_scale"):  # `weight` is a bf16 placeholder
+            self.assertEqual(
+                (name, buffers[name].dtype, buffers[name].shape),
+                (name, getattr(layer, name).dtype, getattr(layer, name).shape),
+            )
+        torch.testing.assert_close(buffers["weight_sf_rowmajor"], weight_scale.view(torch.uint8))
+        torch.testing.assert_close(
+            buffers["weight_sf"].view(-1), swizzle_sf(weight_scale.view(torch.uint8)).view(torch.int32)
+        )
+        torch.testing.assert_close(buffers["weight_global_scale"], (1 / weight_scale_2).reshape(1))
+        torch.testing.assert_close(buffers["input_scale"], torch.tensor([0.01]))
+
+        model = SimpleNamespace(get_parameter_or_buffer=lambda name: torch.empty(0))
+        dense = NVFP4Dequantize(None).convert(checkpoint, model=model, full_layer_name="proj.weight")["weight"][0]
+        # Within half the widest e2m1 step (4 -> 6) of each block
+        bound = (weight_scale.float() * weight_scale_2).unsqueeze(-1)
+        self.assertTrue(((dense - weight).abs().view(128, -1, 16) <= bound + 1e-6).all())
+        # The transformers layout of the same scales dequantizes to the same weight
+        ours = {key: buffers[key] for key in ("weight", "weight_sf_rowmajor", "weight_global_scale")}
+        torch.testing.assert_close(
+            NVFP4Dequantize(None).convert(ours, model=model, full_layer_name="proj.weight")["weight"][0], dense
+        )
+
+    @patch("transformers.integrations.nvfp4.load_nvfp4_kernel")
+    def test_static_input_scale_replaces_the_dynamic_one(self, load_kernel):
+        kernel = _fake_kernel()
+        kernel.ops = SimpleNamespace(
+            scaled_fp4_quant=Mock(wraps=kernel.ops.scaled_fp4_quant),
+            cutlass_scaled_fp4_mm=Mock(wraps=kernel.ops.cutlass_scaled_fp4_mm),
+        )
+        kernel.gemm = Mock(wraps=kernel.gemm)
+        load_kernel.return_value = kernel
+        layer = NVFP4Linear(64, 32)
+        layer.weight_global_scale = torch.tensor([2.0])
+
+        layer(torch.randn(3, 64))  # no static scale: the kernel's dynamic GEMM
+        self.assertEqual((kernel.gemm.call_count, kernel.ops.scaled_fp4_quant.call_count), (1, 0))
+
+        layer.input_scale = torch.tensor([0.5])
+        self.assertEqual(layer(torch.randn(2, 3, 64)).shape, (2, 3, 32))
+        torch.testing.assert_close(kernel.ops.scaled_fp4_quant.call_args.args[1], torch.tensor([2.0]))
+        torch.testing.assert_close(kernel.ops.cutlass_scaled_fp4_mm.call_args.args[4], torch.tensor([0.25]))
+        layer(torch.randn(1, 64))  # decode keeps the W4A16 GEMV
+        self.assertEqual((kernel.gemm.call_count, kernel.ops.scaled_fp4_quant.call_count), (2, 1))
 
 
 @unittest.skipUnless(is_torch_available(), "test requires PyTorch")
