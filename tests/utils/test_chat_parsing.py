@@ -22,6 +22,8 @@ import random
 import tempfile
 import unittest
 
+import pytest
+
 from transformers import AutoTokenizer
 from transformers.testing_utils import require_torch
 from transformers.utils.chat_parsing import ResponseParser, parse_response
@@ -1927,3 +1929,41 @@ class ToolArgCoercionTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@pytest.mark.parametrize("with_tools", [False, True])
+def test_pipeline_forwards_tool_schemas(with_tools):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    import torch
+
+    from transformers.pipelines.text_generation import ReturnType, TextGenerationPipeline
+    from transformers.utils.chat_template_utils import Chat
+
+    tokenizer = Mock(response_template=_XML_STRING_ARGS_TEMPLATE)
+    tokenizer.decode.side_effect = lambda ids, **kw: "<|im_start|>assistant\n" if int(ids[0]) == 1 else _SET_ALARM_CALL
+    tokenizer.parse_response.side_effect = lambda value, **kw: parse_response(value, _XML_STRING_ARGS_TEMPLATE, **kw)
+    pipe = SimpleNamespace(
+        tokenizer=tokenizer,
+        assistant_model=None,
+        assistant_tokenizer=None,
+    )
+    _, _, post = TextGenerationPipeline._sanitize_parameters(pipe, tools=_SET_ALARM_TOOLS if with_tools else None)
+    result = TextGenerationPipeline.postprocess(
+        pipe,
+        {
+            "input_ids": torch.tensor([[1]]),
+            "generated_sequence": torch.tensor([[[1, 2]]]),
+            "prompt_text": Chat([{"role": "user", "content": "Set alarm."}]),
+        },
+        return_type=ReturnType.FULL_TEXT,
+        **post,
+    )
+    actual = result[0]["generated_text"][-1]["tool_calls"][0]["function"]["arguments"]
+    expected = (
+        {"hour": 7, "enabled": True, "label": "wake up"}
+        if with_tools
+        else {"hour": "7", "enabled": "true", "label": "wake up"}
+    )
+    assert actual == expected

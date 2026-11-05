@@ -571,7 +571,9 @@ class ResponseHandler(BaseHandler):
         gen_manager: BaseGenerateManager,
     ) -> StreamingResponse:
         """Generate a streaming Responses API reply (SSE) using DirectStreamer."""
-        response_parser = build_response_parser(processor, model, inputs["input_ids"])
+        response_parser = build_response_parser(
+            processor, model, inputs["input_ids"], tools=self._normalize_tools(body.get("tools"))
+        )
         queue, streamer = gen_manager.generate_streaming(
             model,
             processor,
@@ -682,7 +684,12 @@ class ResponseHandler(BaseHandler):
         )
 
         content, reasoning_content, parsed_tool_calls = parse_assistant_message(
-            processor, model, generated_ids, input_ids=inputs["input_ids"], cleaned_content=content
+            processor,
+            model,
+            generated_ids,
+            input_ids=inputs["input_ids"],
+            cleaned_content=content,
+            tools=self._normalize_tools(body.get("tools")),
         )
 
         output_items = []

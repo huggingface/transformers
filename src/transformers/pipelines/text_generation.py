@@ -204,6 +204,8 @@ class TextGenerationPipeline(Pipeline):
 
         # postprocess kwargs
         postprocess_params = {}
+        if tools is not None:
+            postprocess_params["tools"] = tools
         if return_full_text is not None and return_type is None:
             if return_text is not None:
                 raise ValueError("`return_text` is mutually exclusive with `return_full_text`")
@@ -427,6 +429,7 @@ class TextGenerationPipeline(Pipeline):
         clean_up_tokenization_spaces=None,
         continue_final_message=None,
         skip_special_tokens=None,
+        tools=None,
     ):
         generated_sequence = model_outputs["generated_sequence"][0]
         input_ids = model_outputs["input_ids"]
@@ -487,7 +490,9 @@ class TextGenerationPipeline(Pipeline):
                                     skip_special_tokens=skip_special_tokens,
                                     clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                                 )
-                                assistant_message = self.tokenizer.parse_response(all_text, prefix=prompt_prefix)
+                                assistant_message = self.tokenizer.parse_response(
+                                    all_text, prefix=prompt_prefix, tools=tools
+                                )
                             else:
                                 # If there's no template, then we have to assume it's all content
                                 assistant_message = {"role": "assistant", "content": all_text}

@@ -163,6 +163,7 @@ class ChatCompletionHandler(BaseHandler):
                 inputs,
                 gen_config,
                 gen_manager=gen_manager,
+                tools=body.get("tools"),
             )
         else:
             return await self._non_streaming(
@@ -173,6 +174,7 @@ class ChatCompletionHandler(BaseHandler):
                 inputs,
                 gen_config,
                 gen_manager=gen_manager,
+                tools=body.get("tools"),
             )
 
     # ----- streaming -----
@@ -186,9 +188,10 @@ class ChatCompletionHandler(BaseHandler):
         inputs: dict,
         gen_config: "GenerationConfig",
         gen_manager: BaseGenerateManager,
+        tools=None,
     ) -> StreamingResponse:
         """Stream tokens as SSE via DirectStreamer."""
-        response_parser = build_response_parser(processor, model, inputs["input_ids"])
+        response_parser = build_response_parser(processor, model, inputs["input_ids"], tools=tools)
         queue, streamer = gen_manager.generate_streaming(
             model,
             processor,
@@ -288,6 +291,7 @@ class ChatCompletionHandler(BaseHandler):
         inputs: dict,
         gen_config: "GenerationConfig",
         gen_manager: BaseGenerateManager,
+        tools=None,
     ) -> JSONResponse:
         """Run generation and return a JSONResponse."""
         content, input_len, generated_ids = await gen_manager.generate_non_streaming(
@@ -303,7 +307,7 @@ class ChatCompletionHandler(BaseHandler):
         )
 
         content, reasoning_content, parsed_tool_calls = parse_assistant_message(
-            processor, model, generated_ids, input_ids=inputs["input_ids"], cleaned_content=content
+            processor, model, generated_ids, input_ids=inputs["input_ids"], cleaned_content=content, tools=tools
         )
         tool_calls = None
         if parsed_tool_calls:
