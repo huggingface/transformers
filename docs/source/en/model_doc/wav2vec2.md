@@ -137,6 +137,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 ## Wav2Vec2ProcessorWithLM
 
+> [!WARNING]
+> [`Wav2Vec2ProcessorWithLM`] and n-gram language model decoding with pyctcdecode + kenlm are deprecated and will be
+> removed in Transformers v6. They require `pip install pyctcdecode kenlm` (kenlm is built from source and needs a C++
+> toolchain). To keep the same outputs, call pyctcdecode directly, see [Migrating to pyctcdecode](#migrating-to-pyctcdecode).
+
 [[autodoc]] Wav2Vec2ProcessorWithLM
     - __call__
     - pad
@@ -201,6 +206,59 @@ with get_context("fork").Pool(processes=2) as pool:
 
 result["transcription"][:2]
 ['MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL', "NOR IS MISTER COULTER'S MANNER LESS INTERESTING THAN HIS MATTER"]
+```
+
+### Migrating to pyctcdecode
+
+[`Wav2Vec2ProcessorWithLM`] is a thin wrapper around [pyctcdecode](https://github.com/kensho-technologies/pyctcdecode).
+Load the feature extractor and tokenizer with [`Wav2Vec2Processor`], load the language model with pyctcdecode, and call
+pyctcdecode on the logits. This gives the same transcriptions as [`~Wav2Vec2ProcessorWithLM.batch_decode`].
+
+```python
+import torch
+from pyctcdecode import BeamSearchDecoderCTC
+
+from transformers import AutoModelForCTC, Wav2Vec2Processor
+
+
+repo = "patrickvonplaten/wav2vec2-base-100h-with-lm"
+model = AutoModelForCTC.from_pretrained(repo)
+processor = Wav2Vec2Processor.from_pretrained(repo)  # feature extractor + tokenizer
+# only download the language model and the alphabet, not the model weights
+decoder = BeamSearchDecoderCTC.load_from_hf_hub(repo, allow_patterns=["language_model/*", "alphabet.json"])
+
+inputs = processor(audio, sampling_rate=16_000, padding=True, return_tensors="pt")
+with torch.no_grad():
+    logits = model(**inputs).logits.cpu().numpy()
+
+# was: processor_with_lm.batch_decode(logits, alpha=0.5, beta=1.0, beam_width=50).text
+# `alpha`, `beta`, `unk_score_offset` and `lm_score_boundary` are set on the decoder (values that are not passed are kept)
+decoder.reset_params(alpha=0.5, beta=1.0)
+# drop the frames padded with -100, as `batch_decode` does
+logits_list = [sample[(sample != -100.0).all(axis=-1)] for sample in logits]
+# `beam_width`, `beam_prune_logp`, `token_min_logp`, `hotwords` and `hotword_weight` are decoding arguments
+beams = decoder.decode_beams_batch(None, logits_list, beam_width=50)
+transcription = [sample_beams[0][0] for sample_beams in beams]
+```
+
+For a single sample, `processor_with_lm.decode(logits[0]).text` becomes `decoder.decode_beams(logits[0])[0][0]`. Use
+`decode_beams` / `decode_beams_batch` rather than `decode` / `decode_batch`: the latter prune the beam history and can
+give different transcriptions. Pass a `multiprocessing.Pool` created with a `fork` context as the first argument of
+`decode_beams_batch` to decode in parallel. The beams are sorted best first and also carry the scores and word offsets:
+`(text, word_offsets, logit_score, lm_score)` for `decode_beams_batch`, `(text, last_lm_state, word_offsets,
+logit_score, lm_score)` for `decode_beams`.
+
+To decode without the language model, take the most likely token at each frame:
+
+```python
+transcription = processor.batch_decode(logits.argmax(-1))
+```
+
+pyctcdecode pins `numpy<2`, but it works with numpy 2. To keep numpy 2, install it without its dependencies:
+
+```bash
+pip install --no-deps pyctcdecode
+pip install pygtrie kenlm
 ```
 
 ## Wav2Vec2 specific outputs

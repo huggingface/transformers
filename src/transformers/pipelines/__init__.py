@@ -39,9 +39,7 @@ from ..utils import (
     CONFIG_NAME,
     find_adapter_config_file,
     hf_api,
-    is_kenlm_available,
     is_peft_available,
-    is_pyctcdecode_available,
     is_torch_available,
     logging,
     resolve_revision,
@@ -660,7 +658,7 @@ def _maybe_load_ctc_decoder(model_name, hub_kwargs, kwargs, pretrained_model_nam
         return
 
     try:
-        import kenlm  # to trigger `ImportError` if not installed
+        import kenlm  # noqa: F401  # to trigger `ImportError` if not installed
         from pyctcdecode import BeamSearchDecoderCTC
 
         if os.path.isdir(model_name) or os.path.isfile(model_name):
@@ -673,12 +671,12 @@ def _maybe_load_ctc_decoder(model_name, hub_kwargs, kwargs, pretrained_model_nam
 
         kwargs["decoder"] = decoder
     except ImportError as error:
-        logger.warning(f"Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Error: {error}")
-        if not is_kenlm_available():
-            logger.warning("Try to install `kenlm`: `pip install kenlm")
-
-        if not is_pyctcdecode_available():
-            logger.warning("Try to install `pyctcdecode`: `pip install pyctcdecode")
+        warnings.warn(
+            f"`{model_name}` ships an n-gram language model for `{processor_class}`, but it is not used and decoding "
+            f"falls back to greedy CTC ({error}). To use it, run `pip install pyctcdecode kenlm` (kenlm is built from "
+            "source and needs a C++ toolchain). Language model decoding is deprecated and will be removed in "
+            "Transformers v6; see https://huggingface.co/docs/transformers/model_doc/wav2vec2#migrating-to-pyctcdecode"
+        )
 
 
 def _resolve_feature_extractor(
