@@ -341,6 +341,37 @@ class CacheTest(unittest.TestCase):
         self.assertEqual(layers[2].sliding_window, 16)
         self.assertFalse(layers[3].is_sliding)
 
+    def test_dynamic_cache_full_sliding_layers(self):
+        """With `full_sliding_layers`, sliding-window layers keep every token, and `generate` takes it from
+        `cache_config`: the mask still applies the window, so greedy decoding past it gives the same tokens."""
+        config = LlamaConfig(
+            vocab_size=99,
+            hidden_size=32,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            layer_types=["sliding_attention", "full_attention"],
+            sliding_window=4,
+        )
+        layers = DynamicCache(config=config, full_sliding_layers=True).layers
+        self.assertEqual([type(layer) for layer in layers], [DynamicLayer, DynamicLayer])
+
+        torch.manual_seed(0)
+        model = LlamaForCausalLM(config).eval()
+        input_ids = torch.randint(0, 99, (1, 6))
+        outputs = {}
+        for cache_config in (None, {"full_sliding_layers": True}):
+            generation_config = GenerationConfig(
+                max_new_tokens=8, do_sample=False, cache_config=cache_config, return_dict_in_generate=True
+            )
+            outputs[bool(cache_config)] = model.generate(input_ids, generation_config=generation_config)
+        torch.testing.assert_close(outputs[True].sequences, outputs[False].sequences)
+        self.assertIsInstance(outputs[True].past_key_values.layers[0], DynamicLayer)
+        self.assertFalse(outputs[True].past_key_values.layers[0].is_sliding)
+        # Every token but the last one generated, which isn't fed back
+        self.assertEqual(outputs[True].past_key_values.layers[0].keys.shape[-2], 6 + 8 - 1)
+
     def test_static_cache_uses_per_layer_sliding_windows(self):
         config = LlamaConfig(
             hidden_size=64,
