@@ -63,6 +63,7 @@ class DogeModelTester:
         initializer_range=0.02,
         num_labels=3,
         pad_token_id=0,
+        is_moe=False,
         scope=None,
     ):
         self.parent = parent
@@ -84,6 +85,7 @@ class DogeModelTester:
         self.initializer_range = initializer_range
         self.num_labels = num_labels
         self.pad_token_id = pad_token_id
+        self.is_moe = is_moe
         self.scope = scope
 
     def prepare_config_and_inputs(self):
@@ -120,6 +122,7 @@ class DogeModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             pad_token_id=self.pad_token_id,
+            is_moe=self.is_moe,
         )
 
     def create_and_check_model(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels):
@@ -367,6 +370,11 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             side_effect=prepare_with_moe,
         ):
             super().test_output_router_logits_from_config()
+
+    def test_num_items_in_batch(self):
+        # The tester builds a dense model, which has no router loss to check
+        self.model_tester.is_moe = True
+        super().test_num_items_in_batch()
 
     def test_load_balancing_loss_is_invariant_to_expert_relabeling(self):
         r"""

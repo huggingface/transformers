@@ -752,7 +752,6 @@ class Cosmos3EdgePatchMerger(nn.Module):
 @auto_docstring
 class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
     base_model_prefix = "model"
-    accepts_loss_kwargs = False
     config: Cosmos3EdgeConfig
 
     def __init__(self, config: Cosmos3EdgeConfig):
@@ -1128,7 +1127,6 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
     _tied_weights_keys = {}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     config: Cosmos3EdgeConfig
-    accepts_loss_kwargs = False
 
     def __init__(self, config: Cosmos3EdgeConfig):
         super().__init__(config)
