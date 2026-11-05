@@ -1080,6 +1080,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
         EXPECTED_COMPLETIONS = Expectations(
             {
                 ("cuda", 8): [
+                    # compile forces some very weird optimization on the decoding path
                     "That sounds lovely! It seems like you're really enjoying the place you'"
                     if attn_implementation == "sdpa"
                     else "That sounds like a very pleasant place! It seems like you're really enjoying",
