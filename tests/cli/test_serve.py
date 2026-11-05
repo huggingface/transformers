@@ -39,6 +39,7 @@ from transformers.cli.serving.utils import (
     GenerationState,
     Modality,
     ToolCall,
+    build_response_parser,
     get_response_template,
     parse_assistant_message,
     response_events_to_chunks,
@@ -1903,6 +1904,41 @@ class TestToolCallUnit(unittest.TestCase):
         tokenizer.parse_response.assert_called_once()
         called_template = tokenizer.parse_response.call_args.args[1]
         self.assertIs(called_template, template)
+
+    def test_tool_schema_forwarded_to_serving_parsers(self):
+        tokenizer = MagicMock()
+        tokenizer.response_template = {
+            "defaults": {"role": "assistant"},
+            "fields": {},
+        }
+        tokenizer.decode.return_value = ""
+        tokenizer.parse_response.return_value = {"role": "assistant"}
+
+        processor = MagicMock()
+        model = MagicMock()
+        processor.tokenizer = tokenizer
+
+        tools = [
+            {
+                "type": "function",
+                "function": {"name": "set_alarm"},
+            }
+        ]
+
+        for schema in (None, tools):
+            with self.subTest(tools=schema):
+                parse_assistant_message(processor, model, [2], [1], tools=schema)
+                self.assertEqual(
+                    tokenizer.parse_response.call_args.kwargs["tools"],
+                    schema,
+                )
+
+                with patch("transformers.cli.serving.utils.ResponseParser") as parser:
+                    build_response_parser(processor, model, [1], tools=schema)
+                    self.assertEqual(
+                        parser.call_args.kwargs["tools"],
+                        schema,
+                    )
 
     def test_parse_assistant_message_multiple_tool_calls(self):
         tokenizer = MagicMock()
