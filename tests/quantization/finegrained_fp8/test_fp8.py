@@ -541,7 +541,7 @@ class FP8EmbeddingTest(unittest.TestCase):
         scale = table.abs().max().float() / torch.finfo(torch.float8_e4m3fn).max
         embedding = FP8Embedding(64, 16)
         embedding.weight = torch.nn.Parameter((table.float() / scale).to(torch.float8_e4m3fn), requires_grad=False)
-        embedding.weight_scale = torch.nn.Parameter(scale.to(torch.bfloat16).reshape(1), requires_grad=False)
+        embedding.weight_scale_inv = torch.nn.Parameter(scale.to(torch.bfloat16).reshape(1), requires_grad=False)
 
         ids = torch.randint(0, 64, (2, 5))
         rows, expected = embedding(ids), table[ids]

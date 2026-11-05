@@ -13,7 +13,6 @@
 # limitations under the License.
 from __future__ import annotations
 
-import re
 from typing import TYPE_CHECKING
 
 from ..utils import is_kernels_available, is_torch_available
@@ -138,18 +137,10 @@ class NVFP4HfQuantizer(HfQuantizer):
 
         # ModelOpt's block scales are our row-major ones, and every companion starts with `weight`: the model's merge
         # converters get a copy for each (e.g. `experts.*.w1.weight_scale_2` into `experts.gate_up_proj_scale_2`).
-        # Only those of our modules, after the model's renamings: in a plan, FP8 has its own `weight_scale`
-        owner = self.plan.get_quantizer if self.plan is not None else self.get_quantizer
-        prefix = f"{model.base_model_prefix}."
-        modules = "|".join(
-            re.escape(name.removeprefix(prefix))
-            for name, module in model.named_modules()
-            if owner(name) is self and (module._parameters or module._buffers)
-        )
+        # In a plan, only on our params (FP8 has its own `weight_scale`)
         renames = [
-            WeightRenaming(rf"((?:^|\.)(?:{modules})(?:\.\d+\.[^.]+)?)\.{name}$", rf"\1.{ours}")
-            for name, ours in (("weight_scale", "weight_sf_rowmajor"), ("input_scale", "weight_input_scale"))
-            if modules
+            WeightRenaming(r"\.weight_scale$", ".weight_sf_rowmajor"),
+            WeightRenaming(r"\.input_scale$", ".weight_input_scale"),
         ]
         return super().update_weight_conversions(weight_conversions + renames, model)
 

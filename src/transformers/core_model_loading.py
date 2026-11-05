@@ -824,6 +824,7 @@ class WeightTransform:
         "_was_used",
         "scope_prefix",
         "base_model_prefix",
+        "applies_to",
     )
 
     def __init__(self, source_patterns: str | list[str], target_patterns: str | list[str]):
@@ -846,6 +847,8 @@ class WeightTransform:
         # either `base_model_prefix.scope_prefix.` or `scope_prefix.` prefixes
         self.scope_prefix: str | None = None
         self.base_model_prefix: str | None = None
+        # Optional predicate on the key, e.g. a quantization plan scopes a quantizer's renamings to its own params
+        self.applies_to: Callable[[str], bool] | None = None
 
         # We need to process a few exceptions here when instantiating the reverse mapping (i.e. the targets become
         # sources, and sources become targets). The issues lie in the sources usually, so here we need to check the
@@ -926,6 +929,8 @@ class WeightTransform:
         one `base_model_prefix` level stripped or prepended when the former didn't match.
         `None` when `scope_prefix` is unset.
         """
+        if self.applies_to is not None and not self.applies_to(source_key):
+            return None
         key_to_match = source_key
         prefix = None
         if self.scope_prefix is not None:

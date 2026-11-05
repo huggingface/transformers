@@ -450,7 +450,7 @@ class FP8Linear(nn.Linear):
 
 
 class FP8Embedding(nn.Embedding):
-    """`nn.Embedding` whose table is stored in FP8 with a single per-tensor `weight_scale`.
+    """`nn.Embedding` whose table is stored in FP8 with a single per-tensor `weight_scale_inv`.
 
     Qwen4-Exp's hashed n-gram table is ~48 GiB in FP8, too big to dequantize at load time, so the
     rescale runs on the rows a lookup gathers instead. Build it on the `meta` device: like
@@ -466,11 +466,11 @@ class FP8Embedding(nn.Embedding):
         super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
         self.weight = nn.Parameter(torch.empty(num_embeddings, embedding_dim, dtype=_FP8_DTYPE), requires_grad=False)
         # `(1,)` rather than a scalar: the shape checkpoints serialize per-tensor scales with.
-        self.weight_scale = nn.Parameter(torch.ones(1), requires_grad=False)
+        self.weight_scale_inv = nn.Parameter(torch.ones(1), requires_grad=False)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         rows = super().forward(input)
-        return rows.to(self.weight_scale.dtype) * self.weight_scale
+        return rows.to(self.weight_scale_inv.dtype) * self.weight_scale_inv
 
 
 class FP8GroupedLinear(FP8Linear):
@@ -1015,9 +1015,8 @@ class Fp8Quantize(ConversionOps):
 def _rename_modelopt_scales(tensors: dict) -> dict:
     """
     ModelOpt checkpoints name the scales `weight_scale` (our `weight_scale_inv`, possibly saved as
-    `(out / 128, 1, in / 128, 1)` per block) and `input_scale` (our static `activation_scale`), like the per-tensor
-    `weight_scale` of FP8 embeddings. Loading `FP8Linear`s, `FineGrainedFP8HfQuantizer.update_weight_conversions`
-    renames them.
+    `(out / 128, 1, in / 128, 1)` per block) and `input_scale` (our static `activation_scale`), like FP8 embeddings.
+    Loading quantized, `FineGrainedFP8HfQuantizer.update_weight_conversions` renames them.
     """
     renamed = {}
     for key, value in tensors.items():

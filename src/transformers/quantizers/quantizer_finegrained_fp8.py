@@ -1,4 +1,3 @@
-import re
 from typing import TYPE_CHECKING
 
 from ..utils import is_accelerate_available, is_torch_available, is_torch_xpu_available, logging
@@ -195,7 +194,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
     def update_weight_conversions(self, weight_conversions, model):
         from ..core_model_loading import WeightRenaming
-        from ..integrations.finegrained_fp8 import FP8Linear
 
         # Some FP8 checkpoints ship per-block scales under `.scale` (e.g. DeepSeek-V4-Flash) or `.qscale_weight`
         # (e.g. Mistral Large 4)
@@ -204,13 +202,11 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             WeightRenaming(source_patterns=r"\.qscale_weight", target_patterns=".weight_scale_inv"),
         ]
         conversions = scale_renames + super().update_weight_conversions(weight_conversions, model)
-        # ModelOpt's `weight_scale` and `input_scale`, after the model's renamings. Only those of the FP8 linears:
-        # NVFP4 and `FP8Embedding` have their own `weight_scale`
-        prefix = f"{model.base_model_prefix}."
-        modules = "|".join(
-            re.escape(n.removeprefix(prefix)) for n, m in model.named_modules() if isinstance(m, FP8Linear)
-        )
-        if modules and not self.quantization_config.dequantize:
-            for name, ours in (("weight_scale", "weight_scale_inv"), ("input_scale", "activation_scale")):
-                conversions.append(WeightRenaming(rf"({modules})\.{name}", rf"\1.{ours}"))
+        # ModelOpt's names (and FP8 embeddings' `weight_scale`), after the model's renamings. In a plan, only on our
+        # params (NVFP4 has its own `weight_scale`)
+        if not self.quantization_config.dequantize:
+            conversions += [
+                WeightRenaming(r"\.weight_scale$", ".weight_scale_inv"),
+                WeightRenaming(r"\.input_scale$", ".activation_scale"),
+            ]
         return conversions

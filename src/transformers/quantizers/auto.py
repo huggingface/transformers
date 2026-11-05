@@ -463,6 +463,8 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
             for converter in updated:
                 if isinstance(converter, WeightConverter):
                     owners.setdefault(id(converter), quantizer)
+                elif not any(converter is c for c in visible):  # its own renamings: only on its own params
+                    converter.applies_to = lambda key, quantizer=quantizer: self.get_quantizer(key) is quantizer
             weight_conversions = updated + hidden
             for converter in own:
                 general.setdefault(converter._original_target_patterns[0], []).append(converter)
