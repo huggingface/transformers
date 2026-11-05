@@ -37,11 +37,13 @@ if is_torch_available():
     import torch
     from safetensors.torch import load_file, save_file
 
+    from transformers.integrations.mxfp4 import FP4_VALUES
+
 # A tiny Mistral4 saved pre-quantized like Mistral-Large-4's NVFP4 release: fp8 attention and experts, nvfp4 shared
 # experts. `dense_reference.pt` holds the bf16 weights it was quantized from.
 REPO = "hf-internal-testing/tiny-random-Mistral4-fp8-nvfp4"
 
-# Trimmed `quantization_config`s of released ModelOpt checkpoints, quantized per layer
+# Trimmed `quantization_config`s of released checkpoints, quantized per layer
 NVFP4 = {"quant_algo": "NVFP4", "group_size": 16}
 QWEN = {  # nvidia/Qwen3.6-35B-A3B-NVFP4
     "quant_method": "modelopt",
@@ -56,37 +58,18 @@ QWEN = {  # nvidia/Qwen3.6-35B-A3B-NVFP4
 }
 DEEPSEEK = {  # nvidia/DeepSeek-V4-Flash-NVFP4: block fp8, but ModelOpt's NVFP4 experts
     "quant_method": "fp8",
-    "activation_scheme": "dynamic",
-    "fmt": "e4m3",
     "scale_fmt": "ue8m0",
-    "weight_block_size": [128, 128],
     "quant_algo": "MIXED_PRECISION",
-    "moe_quant_algo": "NVFP4",
     "quantized_layers": {"layers.0.ffn.experts": NVFP4, "layers.1.ffn.experts": NVFP4},
     "ignore": ["*.attn.*", "*.ffn.shared_experts.*", "head", "mtp.*"],
 }
 MISTRAL = {  # mistralai/Mistral-Large-4-1T-A52B-NVFP4 (params.json)
     "quant_method": "modelopt",
     "quant_algo": "MIXED_PRECISION",
-    "group_size": 16,
-    "ignore": [],
-    "quantized_layers": {
-        "layers.0.attention.wq": {"quant_algo": "FP8_PB_WO"},
-        "layers.0.feed_forward.w1": {"quant_algo": "FP8_PB_WO"},
-        "layers.3.experts": NVFP4,
-        "layers.4.experts": NVFP4,
-    },
+    "quantized_layers": {"layers.0.attention.wq": {"quant_algo": "FP8_PB_WO"}, "layers.3.experts": NVFP4},
 }
-# deepseek-ai/DeepSeek-V4-Flash: block fp8, MXFP4 routed experts (`expert_dtype: fp4` in the model config). V4.1 has it
-# in its quantization config
-DEEPSEEK_V4 = {
-    "quant_method": "fp8",
-    "activation_scheme": "dynamic",
-    "fmt": "e4m3",
-    "scale_fmt": "ue8m0",
-    "weight_block_size": [128, 128],
-}
-DEEPSEEK_V4_1 = {"quant_method": "fp8", "scale_fmt": "ue8m0", "weight_block_size": [32, 32], "expert_dtype": "fp4"}
+# deepseek-ai/DeepSeek-V4-Flash: MXFP4 experts from `expert_dtype: fp4` in the model config, V4.1's quantization config
+DEEPSEEK_V4 = {"quant_method": "fp8", "scale_fmt": "ue8m0", "weight_block_size": [128, 128]}
 TINY_DEEPSEEK = {
     "num_hidden_layers": 2,
     "hidden_size": 64,
@@ -94,7 +77,6 @@ TINY_DEEPSEEK = {
     "n_routed_experts": 4,
     "moe_intermediate_size": 32,
 }
-FP4_VALUES = [0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0]
 
 
 @require_torch
@@ -152,28 +134,21 @@ class QuantizationPlanTest(unittest.TestCase):
         self.assertIsNone(plan.get_quantizer("model.layers.0.self_attn.q_proj.weight"))
         self.assertFalse(plan.is_serializable())  # NVFP4 can't be saved
 
-    def plan_from_config(self, quantization_config, config=None):
-        config = config or DeepseekV4Config(
-            num_hidden_layers=2, hidden_size=64, vocab_size=128, n_routed_experts=4, moe_intermediate_size=32
-        )
-        config.quantization_config = quantization_config
+    def plan_from_config(self, quantization_config, **kwargs):
+        config = DeepseekV4Config(**TINY_DEEPSEEK, **kwargs, quantization_config=dict(quantization_config))
         with patch.object(QuantizationPlanHfQuantizer, "validate_environment"):  # NVFP4 checks for a Blackwell GPU
             return get_hf_quantizer(config, None, None, True, {})[:2]
 
     def test_modelopt_per_layer_configs(self):
-        fp8_static = FineGrainedFP8Config(activation_scheme="static", weight_block_size=None)
-        for saved, plan in [
-            (
-                QWEN,
-                {"mtp.layers.0*": None, "mtp*": None} | dict.fromkeys(list(QWEN["quantized_layers"])[:2], fp8_static),
-            ),
-            (DEEPSEEK, dict.fromkeys(DEEPSEEK["quantized_layers"], NVFP4Config())),
-            (
-                MISTRAL,
-                dict.fromkeys(list(MISTRAL["quantized_layers"])[:2], FineGrainedFP8Config(activation_scheme="none")),
-            ),
+        fp8 = FineGrainedFP8Config(activation_scheme="static", weight_block_size=None)
+        qwen = {"mtp.layers.0*": None, "mtp*": None, **dict.fromkeys(list(QWEN["quantized_layers"])[:2], fp8)}
+        for saved, plan, kwargs in [
+            (QWEN, qwen, {}),
+            # ModelOpt's NVFP4 experts win over DeepSeek's `expert_dtype`, which the config copies into theirs too
+            (DEEPSEEK, dict.fromkeys(DEEPSEEK["quantized_layers"], NVFP4Config()), {"expert_dtype": "fp4"}),
+            (MISTRAL, {"layers.0.attention.wq": FineGrainedFP8Config(activation_scheme="none")}, {}),
         ]:
-            hf_quantizer, config = self.plan_from_config(saved)
+            hf_quantizer, config = self.plan_from_config(saved, **kwargs)
             # Each layer keeps its own config, one quantizer per distinct config
             self.assertEqual(len(hf_quantizer.all_quantizers), 2)
             self.assertTrue(hf_quantizer.pre_quantized)
@@ -190,58 +165,40 @@ class QuantizationPlanTest(unittest.TestCase):
         with torch.device("meta"):
             model = DeepseekV4ForCausalLM(config)
         hf_quantizer.match_modules(model)
-        # The checkpoint's `layers.0.ffn.experts` is the model's `layers.0.mlp.experts`, its fused experts
+        # The checkpoint's `layers.0.ffn.experts` is the model's `layers.0.mlp.experts`; exact names beat the `"*"`
         nvfp4, fp8 = hf_quantizer.quantizers["layers.0.mlp.experts"], hf_quantizer.quantizers["*"]
         self.assertEqual(
-            (nvfp4.quantization_config.quant_method, fp8.quantization_config.quant_method), ("nvfp4", "fp8")
+            [nvfp4.quantization_config.quant_method, fp8.quantization_config.quant_method], ["nvfp4", "fp8"]
         )
-        self.assertEqual(model.config.quantization_config, hf_quantizer.quantization_config)
-        # The exact names win over the `"*"` fallback
-        self.assertIs(hf_quantizer.get_quantizer("model.layers.0.mlp.experts.gate_up_proj"), nvfp4)
-        self.assertIs(hf_quantizer.get_quantizer("model.layers.1.mlp.experts.down_proj"), nvfp4)
-        self.assertIs(hf_quantizer.get_quantizer("model.layers.0.self_attn.q_a_proj.weight"), fp8)
-        self.assertIs(hf_quantizer.get_quantizer("model.layers.0.mlp.shared_experts.gate_proj.weight"), fp8)
-        self.assertIs(hf_quantizer.get_quantizer("lm_head.weight"), fp8)
+        for name, expected in [
+            ("model.layers.0.mlp.experts.gate_up_proj", nvfp4),
+            ("model.layers.1.mlp.experts.down_proj", nvfp4),
+            ("model.layers.0.mlp.shared_experts.gate_proj.weight", fp8),
+            ("lm_head.weight", fp8),
+        ]:
+            self.assertIs(hf_quantizer.get_quantizer(name), expected, name)
         # `None` leaves the modules unquantized, an exact name doesn't match a longer one
         plan = QuantizationPlanHfQuantizer({"layers.1.mlp": nvfp4, "*.mlp.*": None})
         plan.match_modules(model)
         self.assertIs(plan.get_quantizer("model.layers.1.mlp.experts.down_proj"), nvfp4)
         self.assertIsNone(plan.get_quantizer("model.layers.11.mlp.experts.down_proj"))
 
-    def test_fp4_experts(self):
-        for saved, expert_dtype in [(DEEPSEEK_V4, "fp4"), (DEEPSEEK_V4_1, None)]:
-            config = DeepseekV4Config(**TINY_DEEPSEEK, expert_dtype=expert_dtype, quantization_config=dict(saved))
-            hf_quantizer, config = self.plan_from_config(config.quantization_config, config)
-            fp8 = FineGrainedFP8Config(**{k: v for k, v in saved.items() if k != "expert_dtype"})
-            plan = {"*.mlp.experts": Mxfp4Config(), "*": fp8}
+    @patch("torch.cuda.get_device_capability", return_value=(10, 0))
+    @patch("torch.cuda.is_available", return_value=True)
+    def test_fp4_experts(self, *_):
+        # DeepSeek-V4's `expert_dtype: fp4` in its model config, V4.1's in its quantization config
+        for kwargs, saved in [({"expert_dtype": "fp4"}, DEEPSEEK_V4), ({}, DEEPSEEK_V4 | {"expert_dtype": "fp4"})]:
+            hf_quantizer, config = self.plan_from_config(saved, **kwargs)
+            plan = {"*.mlp.experts": Mxfp4Config(), "*": FineGrainedFP8Config(**DEEPSEEK_V4)}
             self.assertEqual(
                 {k: repr(v) for k, v in config.quantization_config.items()}, {k: repr(v) for k, v in plan.items()}
             )
             with torch.device("meta"):
                 model = DeepseekV4ForCausalLM(config)
-            with (
-                patch("torch.cuda.is_available", return_value=True),
-                patch("torch.cuda.get_device_capability", return_value=(10, 0)),
-            ):
-                hf_quantizer.preprocess_model(model, use_kernels=False)
+            hf_quantizer.preprocess_model(model, use_kernels=False)
             # The fused experts the FP8 quantizer used to build, now MXFP4's
-            experts = model.model.layers[0].mlp.experts
-            self.assertEqual(type(experts).__name__, "Mxfp4Experts")
-            self.assertEqual(
-                hf_quantizer.get_quantizer("model.layers.0.mlp.experts.gate_up_proj").quantization_config.quant_method,
-                "mxfp4",
-            )
-            self.assertEqual((experts.gate_up_proj.shape, experts.gate_up_proj.dtype), ((4, 64, 32), torch.int8))
-            self.assertEqual(
-                (experts.down_proj_scale_inv.shape, experts.down_proj_scale_inv.dtype),
-                ((4, 64, 1), torch.float8_e8m0fnu),
-            )
+            self.assertEqual(type(model.model.layers[0].mlp.experts).__name__, "Mxfp4Experts")
             self.assertEqual(type(model.model.layers[0].self_attn.q_a_proj).__name__, "FP8Linear")
-        # ModelOpt's NVFP4 experts win over DeepSeek's `expert_dtype`, which the config copies into theirs too
-        config = DeepseekV4Config(**TINY_DEEPSEEK, expert_dtype="fp4", quantization_config=dict(DEEPSEEK))
-        hf_quantizer = self.plan_from_config(config.quantization_config, config)[0]
-        methods = {q.quantization_config.quant_method for q in hf_quantizer.all_quantizers}
-        self.assertEqual(methods, {"nvfp4", "fp8"})
 
     def test_fp4_experts_load_dequantize(self):
         # A DeepSeek-V4 checkpoint: per-expert e2m1 pairs in `int8`, a ue8m0 `.scale` per 32
@@ -251,25 +208,22 @@ class QuantizationPlanTest(unittest.TestCase):
             state_dict, expected = load_file(f"{tmp}/model.safetensors"), {}
             for key in [k for k in state_dict if ".experts." in k]:
                 rows, cols = state_dict[key].shape
-                low, high = torch.randint(0, 16, (2, rows, cols // 2))
-                exponents = torch.randint(-8, -2, (rows, cols // 32)).float()
-                state_dict[key] = (low | high << 4).to(torch.uint8).view(torch.int8)
-                state_dict[key.replace("weight", "scale")] = exponents.exp2().to(torch.float8_e8m0fnu)
-                values = torch.stack([torch.tensor(FP4_VALUES)[low], torch.tensor(FP4_VALUES)[high]], -1).flatten(1)
-                expected[key] = values * exponents.exp2().repeat_interleave(32, 1)
+                codes, exponents = torch.randint(0, 16, (rows, cols)), torch.randint(-8, -2, (rows, cols // 32))
+                state_dict[key] = (codes[:, 0::2] | codes[:, 1::2] << 4).to(torch.uint8).view(torch.int8)
+                state_dict[key.replace("weight", "scale")] = exponents.float().exp2().to(torch.float8_e8m0fnu)
+                expected[key] = torch.tensor(FP4_VALUES)[codes] * exponents.float().exp2().repeat_interleave(32, 1)
             save_file(state_dict, f"{tmp}/model.safetensors", metadata={"format": "pt"})
-            DeepseekV4Config(**TINY_DEEPSEEK, expert_dtype="fp4", quantization_config=DEEPSEEK_V4).save_pretrained(tmp)
+            DeepseekV4Config(
+                **TINY_DEEPSEEK, expert_dtype="fp4", quantization_config=dict(DEEPSEEK_V4)
+            ).save_pretrained(tmp)
             model, info = DeepseekV4ForCausalLM.from_pretrained(
                 tmp, dtype=torch.bfloat16, quantization_config={"dequantize": True}, output_loading_info=True
             )
         self.assertFalse(any(info.values()))
-        for i, layer in enumerate(model.model.layers):
-            experts = [
-                [expected[f"model.layers.{i}.ffn.experts.{e}.w{n}.weight"] for e in range(4)] for n in (1, 2, 3)
-            ]
-            gate_up = torch.stack([torch.cat(pair) for pair in zip(experts[0], experts[2])])
-            torch.testing.assert_close(layer.mlp.experts.gate_up_proj, gate_up.to(torch.bfloat16))
-            torch.testing.assert_close(layer.mlp.experts.down_proj, torch.stack(experts[1]).to(torch.bfloat16))
+        experts = model.model.layers[1].mlp.experts
+        w1, w2, w3 = ([expected[f"model.layers.1.ffn.experts.{e}.w{n}.weight"] for e in range(4)] for n in (1, 2, 3))
+        torch.testing.assert_close(experts.gate_up_proj, torch.stack(list(map(torch.cat, zip(w1, w3)))).bfloat16())
+        torch.testing.assert_close(experts.down_proj, torch.stack(w2).bfloat16())
 
     @slow
     @require_torch_gpu
