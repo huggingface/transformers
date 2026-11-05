@@ -11,19 +11,26 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import tempfile
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from transformers import NVFP4Config
+from transformers import MixtralConfig, MixtralForCausalLM, NVFP4Config, Qwen3_5MoeForCausalLM, Qwen3_5MoeTextConfig
+from transformers.conversion_mapping import get_model_conversion_mapping
 from transformers.integrations.mxfp4 import FP4_VALUES
 from transformers.integrations.nvfp4 import (
     NVFP4Dequantize,
     NVFP4Deserialize,
+    NVFP4Experts,
     NVFP4Linear,
     NVFP4Quantize,
+    nvfp4_eager_experts_forward,
+    nvfp4_grouped_linear,
+    swizzle_grouped_sf,
     swizzle_sf,
 )
+from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from transformers.quantizers.quantizer_nvfp4 import NVFP4HfQuantizer
 from transformers.utils import is_torch_available
 from transformers.utils.quantization_config import QuantizationMethod
@@ -31,6 +38,7 @@ from transformers.utils.quantization_config import QuantizationMethod
 
 if is_torch_available():
     import torch
+    from safetensors.torch import save_file
     from torch import nn
 
 
@@ -39,31 +47,79 @@ class _PackedWeight:
         self.__dict__.update(kwargs)
 
 
+def _padded_sf_shape(rows, columns):
+    return -(-rows // 128) * 128, -(-columns // 64)  # 128 x 4 tiles of fp8 scales, four per int32
+
+
+def _unswizzle(sf, rows, columns):
+    "Inverse of `swizzle_sf`: the row-major `(rows, columns)` block scales"
+    row_tiles, col_tiles = -(-rows // 128), -(-columns // 4)
+    tiles = sf.reshape(-1).view(torch.uint8).view(row_tiles, col_tiles, 32, 4, 4).transpose(2, 3)
+    return tiles.reshape(row_tiles, col_tiles, 128, 4).transpose(1, 2).reshape(row_tiles * 128, -1)[:rows, :columns]
+
+
+def _dequantize(packed, sf_rowmajor):
+    "e2m1 values times their fp8 block scales"
+    values = torch.tensor(FP4_VALUES)[torch.stack([packed & 0xF, packed >> 4], -1).int()].flatten(-2)
+    scales = sf_rowmajor.view(torch.float8_e4m3fn).float().repeat_interleave(16, -1)
+    return values * scales
+
+
+def _quantize(input, global_scale):
+    "NVFP4 activations: `input * global_scale` as e2m1 values and row-major fp8 block scales"
+    blocks = (input.float() * global_scale).view(input.shape[0], -1, 16)
+    sf = (blocks.abs().amax(-1) / 6).to(torch.float8_e4m3fn)
+    scaled = blocks / sf.float().clamp(min=1e-12).unsqueeze(-1)
+    codes = (scaled.unsqueeze(-1) - torch.tensor(FP4_VALUES)).abs().argmin(-1).flatten(1)
+    return (codes[:, 0::2] | codes[:, 1::2] << 4).to(torch.uint8), sf.view(torch.uint8)
+
+
 def _fake_kernel():
+    "The NVFP4 kernel's entry points, computing in float32 from the dequantized operands"
+
     def pack(weight, device):
         out_features, in_features = weight.shape
         return SimpleNamespace(
             qweight=torch.empty(out_features, in_features // 2, dtype=torch.uint8, device=device),
-            sf=torch.empty(out_features, in_features // 64, dtype=torch.int32, device=device),
+            sf=torch.empty(_padded_sf_shape(out_features, in_features), dtype=torch.int32, device=device),
             sf_rowmajor=torch.empty(out_features, in_features // 16, dtype=torch.uint8, device=device),
             global_scale=torch.ones(1, dtype=torch.float32, device=device),
         )
 
     def scaled_fp4_quant(input, global_scale, swizzled):
-        return input.new_zeros(input.shape[0], input.shape[1] // 2, dtype=torch.uint8), input.new_zeros(
-            input.shape[0], input.shape[1] // 64, dtype=torch.int32
-        )
+        qinput, sf = _quantize(input, global_scale)
+        return qinput, swizzle_sf(sf).view(torch.int32).view(_padded_sf_shape(*input.shape)) if swizzled else sf
 
     def cutlass_scaled_fp4_mm(qinput, weight, input_sf, weight_sf, alpha):
-        return qinput.new_zeros(qinput.shape[0], weight.shape[0], dtype=torch.bfloat16)
+        (rows, k), out_features = qinput.shape, weight.shape[0]
+        input = _dequantize(qinput, _unswizzle(input_sf, rows, k // 8))
+        weight = _dequantize(weight, _unswizzle(weight_sf, out_features, k // 8))
+        return (input @ weight.T * alpha).to(torch.bfloat16)
+
+    def gemm(packed_weight, input):  # W4A16
+        weight = _dequantize(packed_weight.qweight, packed_weight.sf_rowmajor) / packed_weight.global_scale
+        return (input.float() @ weight.T).to(input.dtype)
 
     return SimpleNamespace(
         PackedWeight=_PackedWeight,
-        gemm=lambda packed_weight, input: input.new_zeros((*input.shape[:-1], packed_weight.n)),
+        gemm=gemm,
         pack=pack,
-        swizzled_sf_shape=lambda rows, columns: (rows, columns // 64),
+        swizzled_sf_shape=_padded_sf_shape,
         ops=SimpleNamespace(scaled_fp4_quant=scaled_fp4_quant, cutlass_scaled_fp4_mm=cutlass_scaled_fp4_mm),
     )
+
+
+def _fake_scaled_grouped_mm(mat_a, mat_b, scale_a, recipe_a, scale_b, recipe_b, swizzle_a, swizzle_b, offs, **_):
+    "`scaled_grouped_mm` for NVFP4 2D x 3D operands: each group's activation scales start on a 128-row tile"
+    a, b = mat_a.view(torch.uint8), mat_b.transpose(-2, -1).view(torch.uint8)  # (rows, k / 2), (groups, n, k / 2)
+    k_blocks = a.shape[1] // 8
+    a_sf = _unswizzle(scale_a, scale_a.numel() // (-(-k_blocks // 4) * 4), k_blocks)
+    output, start, padded_start = a.new_zeros(a.shape[0], b.shape[1], dtype=torch.float32), 0, 0
+    for group, end in enumerate(offs.tolist()):
+        input = _dequantize(a[start:end], a_sf[padded_start : padded_start + end - start])
+        output[start:end] = input @ _dequantize(b[group], _unswizzle(scale_b[group], b.shape[1], k_blocks)).T
+        start, padded_start = end, padded_start + -(-(end - start) // 128) * 128
+    return output.to(torch.bfloat16)
 
 
 def _modelopt_quantize(weight):
@@ -113,6 +169,7 @@ class NVFP4IntegrationTest(unittest.TestCase):
     @patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel)
     def test_linear_forward_uses_normal_function_entry_point(self, _):
         layer = NVFP4Linear(64, 32)
+        layer.weight = torch.zeros(32, 32, dtype=torch.uint8)
         output = layer(torch.randn(2, 3, 64))
 
         self.assertEqual(output.shape, (2, 3, 32))
@@ -149,11 +206,12 @@ class NVFP4IntegrationTest(unittest.TestCase):
     def test_modelopt_checkpoint_round_trip(self, _):
         weight = torch.randn(128, 64)
         packed, weight_scale, weight_scale_2 = _modelopt_quantize(weight)
+        # ModelOpt's names, as renamed by the quantizer
         checkpoint = {
             "weight": packed,
-            "weight_scale": weight_scale,
+            "weight_sf_rowmajor": weight_scale,
             "weight_scale_2": weight_scale_2,
-            "input_scale": torch.tensor(0.01),
+            "weight_input_scale": torch.tensor(0.01),
         }
 
         buffers = NVFP4Deserialize(None).convert(dict(checkpoint))
@@ -192,6 +250,7 @@ class NVFP4IntegrationTest(unittest.TestCase):
         kernel.gemm = Mock(wraps=kernel.gemm)
         load_kernel.return_value = kernel
         layer = NVFP4Linear(64, 32)
+        layer.weight = torch.zeros(32, 32, dtype=torch.uint8)
         layer.weight_global_scale = torch.tensor([2.0])
 
         layer(torch.randn(3, 64))  # no static scale: the kernel's dynamic GEMM
@@ -203,6 +262,234 @@ class NVFP4IntegrationTest(unittest.TestCase):
         torch.testing.assert_close(kernel.ops.cutlass_scaled_fp4_mm.call_args.args[4], torch.tensor([0.25]))
         layer(torch.randn(1, 64))  # decode keeps the W4A16 GEMV
         self.assertEqual((kernel.gemm.call_count, kernel.ops.scaled_fp4_quant.call_count), (2, 1))
+
+
+def _tiny_config(config_class, **kwargs):
+    # Only the experts are quantized in these tests
+    modules_to_not_convert = ["q_proj", "k_proj", "v_proj", "o_proj", "lm_head", ".*shared_expert", ".*linear_attn"]
+    return config_class(
+        vocab_size=64,
+        hidden_size=128,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        num_experts_per_tok=2,
+        quantization_config=NVFP4Config(modules_to_not_convert=modules_to_not_convert),
+        **kwargs,
+    )
+
+
+def _modelopt_experts_checkpoint(model, experts_prefix, names, prefix=""):
+    """
+    The state dict of `model` as a ModelOpt NVFP4 export: per-expert projections `names` (gate, up, down) with their
+    scales, a different `weight_scale_2` for each.
+    """
+    checkpoint = {}
+    for key, value in model.state_dict().items():
+        key = prefix + key
+        if ".experts." not in key:
+            checkpoint[key] = value.contiguous()
+            continue
+        layer = key.rsplit(".experts.", 1)[0]
+        for expert, weight in enumerate(value):
+            gate, up = weight.chunk(2)
+            projections = dict(zip(names, (gate, up))) if key.endswith("gate_up_proj") else {names[2]: weight}
+            for name, projection in projections.items():
+                packed, weight_scale, weight_scale_2 = _modelopt_quantize(projection.float())
+                name = f"{layer}.{experts_prefix}.{expert}.{name}"
+                checkpoint[f"{name}.weight"] = packed
+                checkpoint[f"{name}.weight_scale"] = weight_scale
+                checkpoint[f"{name}.weight_scale_2"] = weight_scale_2
+                checkpoint[f"{name}.input_scale"] = torch.tensor(1 / 448)
+    return checkpoint
+
+
+def _dequantized_expert(checkpoint, prefix, names, expert):
+    "The dense `gate_up_proj` and `down_proj` of one expert, from its ModelOpt tensors"
+    projections = []
+    for name in names:
+        name = f"{prefix}.{expert}.{name}"
+        dense = _dequantize(checkpoint[f"{name}.weight"], checkpoint[f"{name}.weight_scale"].view(torch.uint8))
+        projections.append(dense * checkpoint[f"{name}.weight_scale_2"])
+    return torch.cat(projections[:2]), projections[2]
+
+
+def _load(config, model_class, checkpoint, **kwargs):
+    with tempfile.TemporaryDirectory() as tmp:
+        config.save_pretrained(tmp)
+        save_file(checkpoint, f"{tmp}/model.safetensors", metadata={"format": "pt"})
+        return model_class.from_pretrained(tmp, output_loading_info=True, **kwargs)
+
+
+@unittest.skipUnless(is_torch_available(), "test requires PyTorch")
+@patch.object(NVFP4HfQuantizer, "validate_environment")  # no CUDA GPU needed with the fake kernel
+@patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel)
+class NVFP4ExpertsTest(unittest.TestCase):
+    def _check_load(self, model_class, config, checkpoint, experts_prefix, names):
+        quantized, info = _load(config, model_class, checkpoint, experts_implementation="eager")
+        dense, dense_info = _load(config, model_class, checkpoint, quantization_config=NVFP4Config(dequantize=True))
+        for loading_info in (info, dense_info):
+            self.assertFalse(any(loading_info.values()), loading_info)
+
+        experts = quantized.model.layers[0].mlp.experts
+        self.assertIsInstance(experts, NVFP4Experts)
+        prefix, expert = f"model.layers.0.mlp.{experts_prefix}", 2
+        source = f"{prefix}.{expert}" if f"{prefix}.{expert}.{names[0]}.weight" in checkpoint else None
+        if source is None:  # prefixed checkpoint
+            prefix = next(key for key in checkpoint if key.endswith(f"{expert}.{names[0]}.weight")).rsplit(".", 3)[0]
+            source = f"{prefix}.{expert}"
+        gate, up, down = (f"{source}.{name}" for name in names)
+        packed = torch.cat([checkpoint[f"{gate}.weight"], checkpoint[f"{up}.weight"]])
+        torch.testing.assert_close(experts.gate_up_proj[expert], packed)
+        weight_scale = checkpoint[f"{down}.weight_scale"].view(torch.uint8)
+        torch.testing.assert_close(experts.down_proj_sf_rowmajor[expert], weight_scale)
+        torch.testing.assert_close(experts.down_proj_sf[expert].view(-1), swizzle_sf(weight_scale).view(torch.int32))
+        scales_2 = torch.stack([checkpoint[f"{gate}.weight_scale_2"], checkpoint[f"{up}.weight_scale_2"]])
+        torch.testing.assert_close(experts.gate_up_proj_scale_2[expert], scales_2)
+        torch.testing.assert_close(experts.down_proj_scale_2[expert], checkpoint[f"{down}.weight_scale_2"])
+        torch.testing.assert_close(experts.gate_up_proj_input_scale, torch.full((4, 2), 1 / 448))
+        self.assertEqual(quantized(torch.tensor([[1, 2, 3]])).logits.shape, (1, 3, 64))
+
+        # `dequantize=True`: the dense experts, each half with its own global scale
+        gate_up, down = _dequantized_expert(checkpoint, prefix, names, expert)
+        torch.testing.assert_close(dense.model.layers[0].mlp.experts.gate_up_proj[expert], gate_up)
+        torch.testing.assert_close(dense.model.layers[0].mlp.experts.down_proj[expert], down)
+
+    def test_experts_are_swapped_and_the_model_converters_get_a_copy_per_companion(self, *_):
+        with torch.device("meta"):
+            model = MixtralForCausalLM(_tiny_config(MixtralConfig, intermediate_size=64, num_local_experts=4))
+        quantizer = NVFP4HfQuantizer(model.config.quantization_config, pre_quantized=True)
+        quantizer.modules_to_not_convert = model.config.quantization_config.modules_to_not_convert
+        quantizer.replace_modules(model)
+
+        experts = model.model.layers[0].mlp.experts
+        self.assertIsInstance(experts, NVFP4Experts)
+        self.assertEqual(experts.gate_up_proj.shape, (4, 128, 64))
+        self.assertEqual(experts.down_proj_sf_rowmajor.shape, (4, 128, 4))
+        self.assertEqual((experts.gate_up_proj_scale_2.shape, experts.down_proj_scale_2.shape), ((4, 2), (4,)))
+
+        copies = {
+            converter._original_target_patterns[0]: converter
+            for converter in get_model_conversion_mapping(model, hf_quantizer=quantizer)
+            if isinstance(getattr(converter, "operations", [None])[-1], NVFP4Deserialize)
+        }
+        for suffix in ("_sf_rowmajor", "_scale_2", "_input_scale"):
+            self.assertIn(f".experts.gate_up_proj{suffix}", copies)
+            sources = copies[f".experts.gate_up_proj{suffix}"]._original_source_patterns
+            self.assertEqual(sources, [f".experts.*.w1.weight{suffix}", f".experts.*.w3.weight{suffix}"])
+
+    def test_load_mixtral(self, *_):
+        config = _tiny_config(MixtralConfig, intermediate_size=64, num_local_experts=4)
+        model = MixtralForCausalLM(config)
+        names = ("w1", "w3", "w2")
+        checkpoint = _modelopt_experts_checkpoint(model, "experts", names)
+        checkpoint = {key.replace(".mlp.", ".block_sparse_moe."): value for key, value in checkpoint.items()}
+        self._check_load(MixtralForCausalLM, config, checkpoint, "experts", names)
+
+    def test_load_qwen3_5_moe(self, *_):
+        # The layout of e.g. nvidia/Qwen3.6-35B-A3B-NVFP4: `model.language_model.layers.N.mlp.experts.E.gate_proj`
+        config = _tiny_config(
+            Qwen3_5MoeTextConfig,
+            moe_intermediate_size=64,
+            shared_expert_intermediate_size=64,
+            num_experts=4,
+            layer_types=["linear_attention", "full_attention"],
+        )
+        model = Qwen3_5MoeForCausalLM(config)
+        names = ("gate_proj", "up_proj", "down_proj")
+        checkpoint = _modelopt_experts_checkpoint(model, "experts", names)
+        checkpoint = {key.replace("model.", "model.language_model.", 1): value for key, value in checkpoint.items()}
+        self._check_load(Qwen3_5MoeForCausalLM, config, checkpoint, "experts", names)
+
+    @patch.object(FineGrainedFP8HfQuantizer, "validate_environment")
+    def test_load_qwen3_5_moe_modelopt_plan(self, *_):
+        # Like nvidia/Qwen3.6-35B-A3B-NVFP4: ModelOpt's per-layer algos, FP8 attention listed before the NVFP4 experts
+        config = _tiny_config(
+            Qwen3_5MoeTextConfig,
+            moe_intermediate_size=64,
+            shared_expert_intermediate_size=64,
+            num_experts=4,
+            layer_types=["linear_attention", "full_attention"],
+        )
+        model = Qwen3_5MoeForCausalLM(config)
+        names = ("gate_proj", "up_proj", "down_proj")
+        checkpoint = _modelopt_experts_checkpoint(model, "experts", names)
+        checkpoint = {key.replace("model.", "model.language_model.", 1): value for key, value in checkpoint.items()}
+        o_proj = "model.language_model.layers.1.self_attn.o_proj"
+        checkpoint[f"{o_proj}.weight"] = checkpoint[f"{o_proj}.weight"].to(torch.float8_e4m3fn)
+        checkpoint[f"{o_proj}.weight_scale"], checkpoint[f"{o_proj}.input_scale"] = (
+            torch.tensor(1.0),
+            torch.tensor(1.0),
+        )
+        experts = {f"model.language_model.layers.{i}.mlp.experts": {"quant_algo": "W4A16_NVFP4"} for i in range(2)}
+        config.quantization_config = {
+            "quant_method": "modelopt",
+            "quant_algo": "MIXED_PRECISION",
+            "quantized_layers": {o_proj: {"quant_algo": "FP8"}} | experts,
+        }
+        quantized, info = _load(config, Qwen3_5MoeForCausalLM, checkpoint, experts_implementation="eager")
+        dense, dense_info = _load(config, Qwen3_5MoeForCausalLM, checkpoint, quantization_config={"dequantize": True})
+        for loading_info in (info, dense_info):
+            self.assertFalse(any(loading_info.values()), loading_info)
+        self.assertIsInstance(quantized.model.layers[0].mlp.experts, NVFP4Experts)
+        gate_up, down = _dequantized_expert(checkpoint, "model.language_model.layers.0.mlp.experts", names, 2)
+        torch.testing.assert_close(dense.model.layers[0].mlp.experts.gate_up_proj[2], gate_up)
+        torch.testing.assert_close(dense.model.layers[0].mlp.experts.down_proj[2], down)
+
+    def test_forward_applies_each_global_scale_exactly(self, *_):
+        config = _tiny_config(MixtralConfig, intermediate_size=64, num_local_experts=4)
+        model = MixtralForCausalLM(config)
+        names = ("w1", "w3", "w2")
+        checkpoint = _modelopt_experts_checkpoint(model, "experts", names)
+        checkpoint = {key.replace(".mlp.", ".block_sparse_moe."): value for key, value in checkpoint.items()}
+        quantized, _ = _load(config, MixtralForCausalLM, checkpoint, experts_implementation="eager")
+        experts = quantized.model.layers[0].mlp.experts
+        prefix = "model.layers.0.block_sparse_moe.experts"
+
+        # Activations on the e2m1 grid with a block max of 6: `input_scale = 1 / 448` quantizes them exactly
+        input = torch.tensor(FP4_VALUES)[torch.randint(0, 16, (5, 128))].view(5, -1, 16)
+        input[:, :, 0] = 6.0
+        input = input.flatten(1).to(torch.bfloat16)
+        expected_ids = torch.tensor([0, 0, 1, 3, 3])
+        sorted_ids, tokens = expected_ids, torch.tensor([2, 1, 0, 2])
+        offsets = torch.cumsum(tokens, 0, dtype=torch.int32)
+        with patch("torch.nn.functional.scaled_grouped_mm", _fake_scaled_grouped_mm):
+            grouped = nvfp4_grouped_linear(experts, "gate_up_proj", input, sorted_ids, tokens, offsets)
+        for row, expert in enumerate(expected_ids.tolist()):
+            gate_up, _ = _dequantized_expert(checkpoint, prefix, names, expert)
+            reference = (input[row].float() @ gate_up.T).to(torch.bfloat16)
+            # Eager, one expert: the W4A4 GEMM for a few rows, the W4A16 GEMV for one
+            for rows in (input[[row, row, row]], input[[row]]):
+                eager = experts.linear("gate_up_proj", torch.tensor(expert), rows)
+                torch.testing.assert_close(eager[0], reference)
+            torch.testing.assert_close(grouped[row], reference)
+
+    def test_grouped_forward_matches_eager(self, *_):
+        config = _tiny_config(MixtralConfig, intermediate_size=64, num_local_experts=4)
+        model = MixtralForCausalLM(config)
+        checkpoint = _modelopt_experts_checkpoint(model, "experts", ("w1", "w3", "w2"))
+        checkpoint = {key.replace(".mlp.", ".block_sparse_moe."): value for key, value in checkpoint.items()}
+        quantized, _ = _load(config, MixtralForCausalLM, checkpoint, experts_implementation="eager")
+        experts = quantized.model.layers[0].mlp.experts
+
+        hidden_states = torch.randn(7, 128, dtype=torch.bfloat16)
+        top_k_index = torch.tensor([[0, 3], [3, 0], [1, 3], [3, 1], [0, 1], [3, 0], [1, 0]])  # expert 2 is not hit
+        top_k_weights = torch.rand(7, 2)
+        eager = nvfp4_eager_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
+        experts.config._experts_implementation = "grouped_mm"
+        with patch("torch.nn.functional.scaled_grouped_mm", _fake_scaled_grouped_mm):
+            grouped = experts(hidden_states, top_k_index, top_k_weights)
+        # Same quantized operands, but the grouped path divides the activations by their scale in bf16 first
+        torch.testing.assert_close(grouped, eager, rtol=0.05, atol=0.05)
+
+    def test_grouped_scales_start_each_expert_on_a_new_tile(self, *_):
+        sf = torch.randint(0, 255, (300, 8), dtype=torch.uint8)
+        tokens = torch.tensor([130, 0, 1, 169])
+        expert_ids = torch.repeat_interleave(torch.arange(4), tokens)
+        grouped = swizzle_grouped_sf(sf, expert_ids, tokens).view(-1)
+        expected = torch.cat([swizzle_sf(group) for group in sf.split(tokens.tolist()) if len(group)])
+        torch.testing.assert_close(grouped[: expected.numel()], expected)
+        self.assertEqual(grouped[expected.numel() :].count_nonzero(), 0)
 
 
 @unittest.skipUnless(is_torch_available(), "test requires PyTorch")

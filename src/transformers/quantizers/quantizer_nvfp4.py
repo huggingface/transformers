@@ -13,6 +13,7 @@
 # limitations under the License.
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 from ..utils import is_kernels_available, is_torch_available
@@ -23,6 +24,7 @@ from .quantizers_utils import get_module_from_name
 
 if is_torch_available():
     import torch
+    from torch import nn
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -99,27 +101,30 @@ class NVFP4HfQuantizer(HfQuantizer):
         )
 
     def quantized_module(self, name, module):
-        from ..integrations.nvfp4 import NVFP4Linear, is_nvfp4_compatible
+        from ..integrations.nvfp4 import NVFP4Experts, NVFP4Linear, is_nvfp4_compatible
 
-        if (self.pre_quantized and self.quantization_config.dequantize) or not is_nvfp4_compatible(module):
+        if self.pre_quantized and self.quantization_config.dequantize:
             return None
-        return NVFP4Linear(module.in_features, module.out_features)
+        if name.endswith(".experts") and self.pre_quantized and is_nvfp4_compatible(module):
+            return NVFP4Experts(module)  # TODO: quantize experts from a full-precision checkpoint too
+        if isinstance(module, nn.Linear) and is_nvfp4_compatible(module):
+            return NVFP4Linear(module.in_features, module.out_features)
+        return None
 
     def get_quantize_ops(self):
         from ..integrations.nvfp4 import NVFP4Quantize
 
         return NVFP4Quantize(self.quantization_device)
 
-    # ModelOpt checkpoints: `weight_scale` (block scales), `weight_scale_2` (`1 / weight_global_scale`), `input_scale`
+    # ModelOpt's `weight_scale` and `input_scale` are renamed (see `update_weight_conversions`)
     serialized_names = {
         "weight": [
             "weight",
             "weight_sf",
             "weight_sf_rowmajor",
             "weight_global_scale",
-            "weight_scale",
             "weight_scale_2",
-            "input_scale",
+            "weight_input_scale",
         ]
     }
 
@@ -127,6 +132,26 @@ class NVFP4HfQuantizer(HfQuantizer):
         from ..integrations.nvfp4 import NVFP4Dequantize, NVFP4Deserialize
 
         return {"deserialize": NVFP4Deserialize, "dequantize": NVFP4Dequantize}
+
+    def update_weight_conversions(self, weight_conversions, model):
+        from ..core_model_loading import WeightRenaming
+
+        # ModelOpt's block scales are our row-major ones, and every companion starts with `weight`: the model's merge
+        # converters get a copy for each (e.g. `experts.*.w1.weight_scale_2` into `experts.gate_up_proj_scale_2`).
+        # Only those of our modules, after the model's renamings: in a plan, FP8 has its own `weight_scale`
+        owner = self.plan.get_quantizer if self.plan is not None else self.get_quantizer
+        prefix = f"{model.base_model_prefix}."
+        modules = "|".join(
+            re.escape(name.removeprefix(prefix))
+            for name, module in model.named_modules()
+            if owner(name) is self and (module._parameters or module._buffers)
+        )
+        renames = [
+            WeightRenaming(rf"((?:^|\.)(?:{modules})(?:\.\d+\.[^.]+)?)\.{name}$", rf"\1.{ours}")
+            for name, ours in (("weight_scale", "weight_sf_rowmajor"), ("input_scale", "weight_input_scale"))
+            if modules
+        ]
+        return super().update_weight_conversions(weight_conversions + renames, model)
 
     def is_serializable(self) -> bool:
         return False
