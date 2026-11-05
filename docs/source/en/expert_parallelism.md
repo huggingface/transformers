@@ -46,7 +46,7 @@ Each MoE model defines two plans in its config: `base_model_tp_plan` for the den
 
 ### Choosing an implementation
 
-`"ep_dispatch_experts"` shards the experts once and picks how tokens reach them from `ALL_EP_IMPLEMENTATIONS`, a registry selected with `ep_implementation` in [`DistributedConfig`]:
+`"ep_dispatch_experts"` shards the experts once and picks how tokens reach them from `EpDispatchExpertsParallel.ep_implementations`, selected with `ep_implementation` in [`DistributedConfig`]:
 
 | `ep_implementation` | advantages | disadvantages |
 | :--- | :--- | :--- |
@@ -59,19 +59,18 @@ Each MoE model defines two plans in its config: `base_model_tp_plan` for the den
 
 ### Adding an implementation
 
-An implementation subclasses `EPImplementation` and registers under the name `ep_implementation` selects. It is built once per experts module, so it can keep state such as communication buffers, and implements two steps around the local experts: `dispatch` returns the rows the local experts run on with their local expert ids and weights, plus the state `combine` needs, and `combine` returns the weighted expert output for each token of the batch this rank holds.
+An implementation subclasses `EPImplementation` and registers under the name `ep_implementation` selects. It is built once per experts module, so it can keep state such as communication buffers. Calling it with the batch this rank holds, with global expert ids, returns the weighted expert output for each of its tokens. It runs this rank's experts with `run_experts`, on the rows, local expert ids and weights it brought them.
 
 ```py
-from transformers.distributed.expert_parallel import ALL_EP_IMPLEMENTATIONS, EPImplementation
+from transformers.distributed.expert_parallel import EpDispatchExpertsParallel, EPImplementation
 
 class MyEP(EPImplementation):
-    def dispatch(self, hidden_states, top_k_index, top_k_weights):
-        ...  # the rows the local experts run on, their local expert ids and weights, and the state for combine
+    def __call__(self, hidden_states, top_k_index, top_k_weights):
+        tokens, expert_ids, weights = ...  # bring this rank's experts the rows routed to them
+        expert_output = self.run_experts(tokens, expert_ids, weights)
+        return ...  # the weighted expert output for each token of the batch this rank holds
 
-    def combine(self, expert_output, state):
-        ...  # the weighted expert output for each token of the batch this rank holds
-
-ALL_EP_IMPLEMENTATIONS.register("my_ep", MyEP)
+EpDispatchExpertsParallel.ep_implementations["my_ep"] = MyEP
 distributed_config = DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8, ep_implementation="my_ep")
 ```
 
