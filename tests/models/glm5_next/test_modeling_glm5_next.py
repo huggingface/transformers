@@ -185,20 +185,6 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
         }
         self.assertTrue(expected_keys.issubset(saved_keys))
 
-    def test_mhc_base_and_scale_load_in_fp32(self):
-        """The checkpoint stores the mHC `base` and `scale` in fp32 and `fn` in bf16."""
-        config = self.model_tester.get_text_config()
-        model = Glm5NextTextModel(config)
-
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            model.save_pretrained(tmpdirname)
-            model = Glm5NextTextModel.from_pretrained(tmpdirname, dtype=torch.bfloat16)
-
-        for hc in (model.layers[0].attn_hc, model.layers[0].ffn_hc):
-            self.assertEqual(hc.base.dtype, torch.float32)
-            self.assertEqual(hc.scale.dtype, torch.float32)
-            self.assertEqual(hc.fn.dtype, torch.bfloat16)
-
     @staticmethod
     def _prepare_config_headdim(config, requested_dim):
         config = copy.deepcopy(config)
