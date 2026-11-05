@@ -12,7 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import re
 import warnings
+from collections.abc import Callable
 from typing import TypeGuard
 
 from ..models.auto.configuration_auto import AutoConfig
@@ -338,12 +340,41 @@ def register_quantizer(name: str):
 
 
 def is_quantization_plan(quantization_config) -> TypeGuard[dict]:
-    "A plan maps glob patterns (like the dtype plan's) to the config quantizing the modules they match"
+    "A plan maps module names or glob patterns to the config quantizing the modules they match (`None`: unquantized)"
     return (
         isinstance(quantization_config, dict)
         and len(quantization_config) > 0
-        and all(isinstance(config, (dict, QuantizationConfigMixin)) for config in quantization_config.values())
+        and all(
+            isinstance(config, (dict, QuantizationConfigMixin, type(None))) for config in quantization_config.values()
+        )
     )
+
+
+# ModelOpt `quant_algo` -> its config. Weight-only algos load with their W8A8/W4A4 config, which quantizes activations
+MODELOPT_ALGOS = {
+    "NVFP4": NVFP4Config,
+    "W4A16_NVFP4": NVFP4Config,
+    "FP8": lambda: FineGrainedFP8Config(activation_scheme="static", weight_block_size=None),
+    "FP8_PB_WO": lambda: FineGrainedFP8Config(weight_block_size=(128, 128)),
+}
+
+
+def modelopt_plan(config: dict) -> dict | None:
+    """
+    ModelOpt's per-layer `quantized_layers`. The layers it leaves out keep the base `quant_method` if it is one (e.g.
+    `fp8`), else stay unquantized like its `ignore`d ones.
+    """
+    if "quantized_layers" not in config:
+        return None
+    base = {key: value for key, value in config.items() if key != "quantized_layers"}
+    base = base if base.get("quant_method") in AUTO_QUANTIZATION_CONFIG_MAPPING else None
+    plan = {} if base else dict.fromkeys(config.get("ignore") or config.get("exclude_modules") or [])
+    plan |= {name: MODELOPT_ALGOS[layer["quant_algo"]]() for name, layer in config["quantized_layers"].items()}
+    return plan | {"*": base} if base else plan
+
+
+# Saved formats that quantize per module, turned into a plan keyed by checkpoint module names
+PLAN_CONVERTERS: dict[str, Callable[[dict], dict | None]] = {"modelopt": modelopt_plan}
 
 
 class QuantizationPlanHfQuantizer(HfQuantizer):
@@ -352,27 +383,46 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
     the others stay unquantized. While loading, a param goes through the converters and ops of its quantizer.
     """
 
-    def __init__(self, quantizers: dict[str, HfQuantizer]):
+    def __init__(self, quantizers: dict[str, HfQuantizer | None], checkpoint_names: bool = False):
+        self.checkpoint_names = checkpoint_names  # patterns are checkpoint module names, renamed in `preprocess_model`
+        self.set_quantizers(quantizers)
+        self.pre_quantized = all(quantizer.pre_quantized for quantizer in self.all_quantizers)
+        for quantizer in self.all_quantizers:
+            quantizer.plan = self
+
+    @property
+    def all_quantizers(self):
+        "Each quantizer once: patterns with equal configs share one"
+        return [quantizer for quantizer in dict.fromkeys(self.quantizers.values()) if quantizer is not None]
+
+    def set_quantizers(self, quantizers):
         from ..core_model_loading import build_glob_alternation
 
         self.quantizers = quantizers
         self.quantization_config = {
-            pattern: quantizer.quantization_config for pattern, quantizer in quantizers.items()
+            pattern: None if quantizer is None else quantizer.quantization_config
+            for pattern, quantizer in quantizers.items()
         }
-        self.pre_quantized = all(quantizer.pre_quantized for quantizer in quantizers.values())
-        self.alternation, self.group_to_pattern, _ = build_glob_alternation(list(quantizers))
-        for quantizer in quantizers.values():
-            quantizer.plan = self
+        # Exact module names first, then globs, `"*"` last: each matches anywhere in the name, the first one wins
+        patterns = sorted(quantizers, key=lambda pattern: (pattern == "*") + ("*" in pattern))
+        globs = [
+            (pattern if pattern.startswith("*") else f"*{pattern}")
+            if "*" in pattern
+            else rf"(?:^|.+\.){re.escape(pattern)}(?:\.|$)"
+            for pattern in patterns
+        ]
+        self.alternation, groups, _ = build_glob_alternation(globs)
+        self.group_to_pattern = dict(zip(groups, patterns))
 
     def get_quantizer(self, name):
-        match = self.alternation.search(name)
+        match = self.alternation.match(name)
         return self.quantizers[self.group_to_pattern[match.lastgroup]] if match else None
 
     def update_weight_conversions(self, weight_conversions, model):
         from ..core_model_loading import WeightConverter
 
         general = {}
-        for quantizer in self.quantizers.values():
+        for quantizer in self.all_quantizers:
             own = quantizer.get_weight_conversions()
             # `update_weight_conversions` ends with the general converters of `get_weight_conversions`
             weight_conversions = quantizer.update_weight_conversions(weight_conversions, model)[: -len(own) or None]
@@ -404,29 +454,45 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         return param.element_size() if quantizer is None else quantizer.param_element_size(model, param_name, param)
 
     def validate_environment(self, *args, **kwargs):
-        for quantizer in self.quantizers.values():
+        for quantizer in self.all_quantizers:
             quantizer.validate_environment(*args, **kwargs)
 
     def update_dtype(self, dtype):
-        for quantizer in self.quantizers.values():
+        for quantizer in self.all_quantizers:
             dtype = quantizer.update_dtype(dtype)
         return dtype
 
     def update_device_map(self, device_map):
-        for quantizer in self.quantizers.values():
+        for quantizer in self.all_quantizers:
             device_map = quantizer.update_device_map(device_map)
         return device_map
 
     def adjust_max_memory(self, max_memory):
-        for quantizer in self.quantizers.values():
+        for quantizer in self.all_quantizers:
             max_memory = quantizer.adjust_max_memory(max_memory)
         return max_memory
 
+    def rename_patterns(self, model):
+        "Renames checkpoint module names to the model's, the way the checkpoint keys are renamed on load"
+        from ..conversion_mapping import get_model_conversion_mapping
+
+        transforms = get_model_conversion_mapping(model)
+        quantizers = {}
+        for pattern, quantizer in self.quantizers.items():
+            name = f"{pattern}.weight"  # the converters match params: per-expert ones collapse on the fused param
+            for transform in transforms:
+                name, _ = transform.rename_source_key(name)
+            quantizers.setdefault(name.removesuffix(".weight"), quantizer)
+        self.set_quantizers(quantizers)
+        model.config.quantization_config = self.quantization_config
+
     def preprocess_model(self, model, **kwargs):
-        for quantizer in self.quantizers.values():
+        if self.checkpoint_names:
+            self.rename_patterns(model)
+        for quantizer in self.all_quantizers:
             quantizer.preprocess_model(model, **kwargs)
         self.replace_modules(model)
-        for quantizer in self.quantizers.values():
+        for quantizer in self.all_quantizers:
             quantizer.update_parallel_plan(model, model.tp_plan)
             quantizer.update_parallel_plan(model, model.ep_plan)
 
@@ -435,32 +501,29 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         Runs the after-load hook of every quantizer. The patterns loaded with `dequantize=True` leave the plan: with
         none left, the model is plain unquantized.
         """
-        for quantizer in self.quantizers.values():
+        for quantizer in self.all_quantizers:
             quantizer._process_model_after_weight_loading(model, **kwargs)
-        self.quantizers = {
-            pattern: quantizer
-            for pattern, quantizer in self.quantizers.items()
-            if not (quantizer.pre_quantized and getattr(quantizer.quantization_config, "dequantize", False))
-        }
-        if not self.quantizers:
+        self.set_quantizers(
+            {
+                pattern: quantizer
+                for pattern, quantizer in self.quantizers.items()
+                if quantizer is None
+                or not (quantizer.pre_quantized and getattr(quantizer.quantization_config, "dequantize", False))
+            }
+        )
+        if not self.all_quantizers:
             self.remove_quantization_config(model)
             return model
-        from ..core_model_loading import build_glob_alternation
-
-        self.quantization_config = {
-            pattern: quantizer.quantization_config for pattern, quantizer in self.quantizers.items()
-        }
-        self.alternation, self.group_to_pattern, _ = build_glob_alternation(list(self.quantizers))
         model.config.quantization_config = self.quantization_config
         _assign_is_quantized(model)
         return model
 
     def is_serializable(self):
-        return all(quantizer.is_serializable() for quantizer in self.quantizers.values())
+        return all(quantizer.is_serializable() for quantizer in self.all_quantizers)
 
     @property
     def is_trainable(self):
-        return all(quantizer.is_trainable for quantizer in self.quantizers.values())
+        return all(quantizer.is_trainable for quantizer in self.all_quantizers)
 
 
 def get_hf_quantizer(config, quantization_config, device_map, weights_only, user_agent, gguf_file=None):
@@ -478,6 +541,12 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
     quantization_params_from_config = getattr(config, "quantization_config", None) or getattr(
         config.get_text_config(decoder=True), "quantization_config", None
     )
+    checkpoint_names = False
+    if isinstance(quantization_params_from_config, dict) and not is_quantization_plan(quantization_params_from_config):
+        for convert in PLAN_CONVERTERS.values():
+            if (plan := convert(quantization_params_from_config)) is not None:
+                quantization_params_from_config, checkpoint_names = plan, True
+                break
     pre_quantized = quantization_params_from_config is not None
     plan_from_config = is_quantization_plan(quantization_params_from_config)
     if (
@@ -493,8 +562,11 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
         # One quantizer per pattern. Loading attributes update the saved configs: for every pattern (e.g.
         # `{"dequantize": True}`), or per pattern (a plan of them)
         loading_attributes = user_plan if user_plan is not None else dict.fromkeys(plan, quantization_config)
-        quantizers = {}
+        quantizers, shared = {}, {}  # patterns with equal configs share one quantizer
         for pattern, pattern_config in plan.items():
+            if pattern_config is None:
+                quantizers[pattern] = None
+                continue
             if plan_from_config:
                 attributes = loading_attributes.get(pattern)
                 pattern_config = AutoHfQuantizer.merge_quantization_configs(
@@ -502,8 +574,12 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
                 )
                 for key, value in (attributes if isinstance(attributes, dict) else {}).items():
                     setattr(pattern_config, key, value)
-            quantizers[pattern] = AutoHfQuantizer.from_config(pattern_config, pre_quantized=plan_from_config)
-        hf_quantizer = QuantizationPlanHfQuantizer(quantizers)
+            elif isinstance(pattern_config, dict):
+                pattern_config = AutoQuantizationConfig.from_dict(pattern_config)
+            if (key := repr(pattern_config)) not in shared:
+                shared[key] = AutoHfQuantizer.from_config(pattern_config, pre_quantized=plan_from_config)
+            quantizers[pattern] = shared[key]
+        hf_quantizer = QuantizationPlanHfQuantizer(quantizers, checkpoint_names)
         config.quantization_config = hf_quantizer.quantization_config
     elif pre_quantized or quantization_config is not None:
         if pre_quantized:

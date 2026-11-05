@@ -222,7 +222,7 @@ class HfQuantizer(ABC):
             model.set_submodule(name, new_module)
             replaced.add(quantizer)
             swapped += (f"{name}.",)
-        for quantizer in getattr(self, "quantizers", {"": self}).values():
+        for quantizer in getattr(self, "all_quantizers", [self]):
             if quantizer.replaces_modules and quantizer not in replaced:
                 logger.warning(
                     f"No module was quantized with {quantizer.quantization_config.quant_method}: please double check "
