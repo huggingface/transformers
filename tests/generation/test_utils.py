@@ -2301,6 +2301,9 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 self.skipTest(f"{model_class.__name__} doesn't support packing!")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            # disable flakiness via norms as much as possible
+            set_config_for_less_flaky_test(config)
+
             if config.is_encoder_decoder:
                 self.skipTest("Model is an encoder-decoder")
 
@@ -2326,9 +2329,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
             if "position_ids" not in inspect.signature(model.forward).parameters:
                 self.skipTest("Model does not support position_ids")
-
-            if (not fa_kwargs) and "position_ids" not in inspect.signature(model.forward).parameters:
-                continue  # this model doesn't accept position ids as input
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
@@ -2358,6 +2358,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     .to(torch_device)
                     .eval()
                 )
+                # disable flakiness via norms as much as possible
+                set_model_for_less_flaky_test(model)
 
                 if fa_kwargs:
                     # flatten
@@ -3685,7 +3687,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
 
         class DummyCriteria(StoppingCriteria):
-            def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
+            def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor, **kwargs) -> bool:
                 return input_ids.shape[-1] >= 20
 
         stopping_criteria = StoppingCriteriaList()

@@ -145,33 +145,33 @@ class CLIPSegOutput(CLIPOutput):
 @dataclass
 class CLIPSegDecoderOutput(ModelOutput):
     r"""
-    logits (`torch.FloatTensor` of shape `(batch_size, height, width)`):
+    logits (`torch.Tensor` of shape `(batch_size, height, width)`):
         Classification scores for each pixel.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*,):
+    hidden_states (`tuple(torch.Tensor)`, *optional*,):
         Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
 
         Returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`
-    attentions (`tuple(torch.FloatTensor)`, *optional*):
+    attentions (`tuple(torch.Tensor)`, *optional*):
         Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
         heads. Returned when `output_attentions=True` is passed or when `config.output_attentions=True`
     """
 
-    logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring
 @dataclass
 class CLIPSegImageSegmentationOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Binary cross entropy loss for segmentation.
-    logits (`torch.FloatTensor` of shape `(batch_size, height, width)`):
+    logits (`torch.Tensor` of shape `(batch_size, height, width)`):
         Classification scores for each pixel.
-    conditional_embeddings (`torch.FloatTensor` of shape `(batch_size, projection_dim)`):
+    conditional_embeddings (`torch.Tensor` of shape `(batch_size, projection_dim)`):
         Conditional embeddings used for segmentation.
-    pooled_output (`torch.FloatTensor` of shape `(batch_size, embed_dim)`):
+    pooled_output (`torch.Tensor` of shape `(batch_size, embed_dim)`):
         Pooled output of the [`CLIPSegVisionModel`].
     vision_model_output (`BaseModelOutputWithPooling`):
         The output of the [`CLIPSegVisionModel`].
@@ -179,10 +179,10 @@ class CLIPSegImageSegmentationOutput(ModelOutput):
         The output of the [`CLIPSegDecoder`].
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    conditional_embeddings: torch.FloatTensor | None = None
-    pooled_output: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    conditional_embeddings: torch.Tensor | None = None
+    pooled_output: torch.Tensor | None = None
     vision_model_output: BaseModelOutputWithPooling = None
     decoder_output: CLIPSegDecoderOutput = None
 
@@ -192,7 +192,7 @@ class CLIPSegImageSegmentationOutput(ModelOutput):
 
 class CLIPSegVisionEmbeddings(CLIPVisionEmbeddings):
     # Different default for `interpolate_pos_encoding` from CLIP
-    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=True) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding=True) -> torch.Tensor:
         super().forward(pixel_values, interpolate_pos_encoding)
 
 
@@ -223,7 +223,7 @@ class CLIPSegDecoderLayer(CLIPEncoderLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         **kwargs,
-    ) -> tuple[torch.FloatTensor]:
+    ) -> tuple[torch.Tensor]:
         residual = hidden_states
 
         hidden_states, _ = self.self_attn(
@@ -347,7 +347,7 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> CLIPSegDecoderOutput:
         r"""
-        conditional_embeddings (`torch.FloatTensor` of shape `(batch_size, config.projection_dim)`, *optional*):
+        conditional_embeddings (`torch.Tensor` of shape `(batch_size, config.projection_dim)`, *optional*):
             The conditional embeddings for the query images. If provided, the model will use this instead of computing
             the embeddings from the conditional_pixel_values.
         """
@@ -403,7 +403,7 @@ class CLIPSegTextModel(CLIPTextModel):
 class CLIPSegVisionModel(CLIPVisionModel):
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None,
+        pixel_values: torch.Tensor | None,
         interpolate_pos_encoding: bool | None = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -452,7 +452,7 @@ class CLIPSegModel(CLIPModel):
 
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         interpolate_pos_encoding: bool = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -530,7 +530,7 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         conditional_pixel_values: torch.Tensor | None = None,
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         if input_ids is not None:
             # compute conditional embeddings from texts
             if len(input_ids) != batch_size:
@@ -556,23 +556,23 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.FloatTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        conditional_pixel_values: torch.FloatTensor | None = None,
-        conditional_embeddings: torch.FloatTensor | None = None,
+        input_ids: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        conditional_pixel_values: torch.Tensor | None = None,
+        conditional_embeddings: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        labels: torch.FloatTensor | None = None,
+        labels: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CLIPSegOutput:
         r"""
-        conditional_pixel_values (`torch.FloatTensor`, *optional*):
+        conditional_pixel_values (`torch.Tensor`, *optional*):
             The pixel values of the conditional images.
-        conditional_embeddings (`torch.FloatTensor` of shape `(batch_size, config.projection_dim)`, *optional*):
+        conditional_embeddings (`torch.Tensor` of shape `(batch_size, config.projection_dim)`, *optional*):
             The conditional embeddings for the query images. If provided, the model will use this instead of computing
             the embeddings from the conditional_pixel_values.
-        labels (`torch.FloatTensor` of shape `(batch_size, height, width)`, *optional*):
+        labels (`torch.Tensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth segmentation masks, with values in `[0, 1]` and the same spatial size as `logits`. A binary
             cross-entropy loss is computed between the predicted logits and these masks.
 
