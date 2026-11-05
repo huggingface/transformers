@@ -77,14 +77,14 @@ class JanusPreTrainedModel(PreTrainedModel):
 @dataclass
 class JanusVQVAEOutput(ModelOutput):
     r"""
-    decoded_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+    decoded_pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
         Reconstructed pixel values after encoding and decoding the input.
-    embedding_loss (`torch.FloatTensor`):
+    embedding_loss (`torch.Tensor`):
         Embedding loss.
     """
 
-    decoded_pixel_values: torch.FloatTensor | None = None
-    embedding_loss: torch.FloatTensor | None = None
+    decoded_pixel_values: torch.Tensor | None = None
+    embedding_loss: torch.Tensor | None = None
 
 
 @auto_docstring
@@ -335,7 +335,7 @@ class JanusVisionEncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
@@ -414,7 +414,7 @@ class JanusVisionModel(JanusPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -508,7 +508,7 @@ class JanusVQVAEVectorQuantizer(nn.Module):
 
         return hidden_state_quant, loss, min_encoding_indices
 
-    def get_codebook_entry(self, image_tokens: torch.LongTensor) -> torch.FloatTensor:
+    def get_codebook_entry(self, image_tokens: torch.LongTensor) -> torch.Tensor:
         batch_size = image_tokens.shape[0]
         emb_dim: int = self.embedding.weight.shape[-1]
 
@@ -772,7 +772,7 @@ class JanusVQVAEDecoder(nn.Module):
         self.norm_out = torch.nn.GroupNorm(num_groups=32, num_channels=block_in, eps=1e-6, affine=True)
         self.conv_out = torch.nn.Conv2d(block_in, out_channels, kernel_size=3, stride=1, padding=1)
 
-    def forward(self, hidden_state: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         hidden_state = self.conv_in(hidden_state)
 
         # middle
@@ -797,17 +797,17 @@ class JanusVQVAEDecoder(nn.Module):
 @dataclass
 class JanusVQVAEModelOutput(BaseModelOutputWithPooling):
     r"""
-    quantized_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+    quantized_last_hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
         Quantized last hidden state from the VQ-VAE model.
-    image_tokens (`torch.FloatTensor` of shape `(batch_size, config.vocab_size`):
+    image_tokens (`torch.Tensor` of shape `(batch_size, config.vocab_size`):
         Indices of the image tokens predicted by the VQ-VAE model.
-    embedding_loss (`torch.FloatTensor`):
+    embedding_loss (`torch.Tensor`):
         The embedding loss computed during quantization.
     """
 
-    quantized_last_hidden_state: torch.FloatTensor | None = None
-    image_tokens: torch.FloatTensor | None = None
-    embedding_loss: torch.FloatTensor | None = None
+    quantized_last_hidden_state: torch.Tensor | None = None
+    image_tokens: torch.Tensor | None = None
+    embedding_loss: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -856,13 +856,13 @@ class JanusVQVAE(JanusPreTrainedModel):
             embedding_loss=emb_loss,
         )
 
-    def decode(self, image_tokens: torch.LongTensor) -> torch.FloatTensor:
+    def decode(self, image_tokens: torch.LongTensor) -> torch.Tensor:
         """
         Decodes quantized token IDs into pixel values.
         Args:
             image_tokens (torch.LongTensor): Batch of token IDs.
         Returns:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
                 Pixel values decoded from the token IDs.
         """
         if image_tokens.shape[1] != self.quantize.quant_state_dims[0] * self.quantize.quant_state_dims[1]:
@@ -879,9 +879,9 @@ class JanusVQVAE(JanusPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs,
-    ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = pixel_values.shape[0]
         encode_outputs = self.encode(pixel_values, return_dict=True, **kwargs)
         decoded_pixel_values = self.decode(encode_outputs.image_tokens.view(batch_size, -1))
@@ -953,7 +953,7 @@ class JanusModel(JanusPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         vision_outputs = self.vision_model(pixel_values, return_dict=True, **kwargs)
         vision_outputs.pooler_output = self.aligner(vision_outputs.last_hidden_state)
@@ -961,7 +961,7 @@ class JanusModel(JanusPreTrainedModel):
         return vision_outputs
 
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -989,11 +989,11 @@ class JanusModel(JanusPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
@@ -1058,11 +1058,11 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,

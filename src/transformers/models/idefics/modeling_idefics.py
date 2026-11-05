@@ -624,7 +624,7 @@ class IdeficsDecoderLayer(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -727,14 +727,14 @@ class IdeficsGatedCrossAttentionLayer(GradientCheckpointingLayer):
         cross_attention_gate: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         r"""
-        image_hidden_states (`torch.FloatTensor`):
+        image_hidden_states (`torch.Tensor`):
             Input to the layer of shape `(batch, seq_len, embed_dim)`
-        image_attention_mask (`torch.FloatTensor`, *optional*):
+        image_attention_mask (`torch.Tensor`, *optional*):
             image attention mask of size
             `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-        cross_attention_gate (`torch.FloatTensor`, *optional*):
+        cross_attention_gate (`torch.Tensor`, *optional*):
             gate of size `(batch, seq_len)` used to zero-out cross-attention output for tokens attending no images.
         """
         if image_hidden_states is None:
@@ -903,19 +903,19 @@ class IdeficsModel(IdeficsPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        image_encoder_embeddings: torch.FloatTensor | None = None,
-        perceiver_embeddings: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        image_encoder_embeddings: torch.Tensor | None = None,
+        perceiver_embeddings: torch.Tensor | None = None,
         image_attention_mask: torch.Tensor | None = None,
         use_cache: bool | None = None,
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | IdeficsBaseModelOutputWithPast:
         r"""
-        image_encoder_embeddings (`torch.FloatTensor`, *optional*):
+        image_encoder_embeddings (`torch.Tensor`, *optional*):
             The output of the image encoder.
-        perceiver_embeddings (`torch.FloatTensor`, *optional*):
+        perceiver_embeddings (`torch.Tensor`, *optional*):
             The output of the perceiver resampler.
         image_attention_mask (`torch.LongTensor`, *optional*):
             The attention mask for the image encoder.
@@ -1081,10 +1081,10 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        image_encoder_embeddings: torch.FloatTensor | None = None,
-        perceiver_embeddings: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        image_encoder_embeddings: torch.Tensor | None = None,
+        perceiver_embeddings: torch.Tensor | None = None,
         image_attention_mask: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -1093,9 +1093,9 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | IdeficsCausalLMOutputWithPast:
         r"""
-        image_encoder_embeddings (`torch.FloatTensor`, *optional*):
+        image_encoder_embeddings (`torch.Tensor`, *optional*):
             The output of the image encoder.
-        perceiver_embeddings (`torch.FloatTensor`, *optional*):
+        perceiver_embeddings (`torch.Tensor`, *optional*):
             The output of the perceiver resampler.
         image_attention_mask (`torch.LongTensor`, *optional*):
             The attention mask for the image encoder.

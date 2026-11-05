@@ -330,7 +330,7 @@ class ColModernVBertForRetrieval(ColPaliForRetrieval):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ColModernVBertForRetrievalOutput:
