@@ -535,7 +535,7 @@ class Trainer:
         # Causal LM losses shift labels internally (predictions at position i target label[i+1]), so position 0 of
         # each row is never a prediction target. The valid-prediction count used by `num_items_in_batch` must therefore
         # be taken over `labels[..., 1:]`, not the full label tensor. Inspect the actual loss function via
-        # LOSS_MAPPING so model-specific loss_types that route to ForCausalLMLoss (e.g. CsmForConditionalGeneration)
+        # LOSS_MAPPING so model-specific loss_types that route to ForCausalLMLoss (e.g. GPT2LMHeadModel)
         # are caught too. Encoder-decoder models are excluded: their loss is aligned with unshifted targets (usually
         # because they feed right-shifted `decoder_input_ids` to the decoder), so every non-`-100` label is a
         # prediction target and the decoder-only `labels[..., 1:]` counting rule must not apply -- it would

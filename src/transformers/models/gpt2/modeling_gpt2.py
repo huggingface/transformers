@@ -20,12 +20,12 @@ from dataclasses import dataclass
 
 import torch
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN, get_activation
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
+from ...loss.loss_utils import ForMultipleChoiceLoss
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -818,15 +818,10 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel, GenerationMixin):
 
         mc_loss = None
         if mc_labels is not None:
-            loss_fct = CrossEntropyLoss()
-            mc_loss = loss_fct(mc_logits.view(-1, mc_logits.size(-1)), mc_labels.view(-1))
+            mc_loss = ForMultipleChoiceLoss(mc_logits, mc_labels)
         lm_loss = None
         if labels is not None:
-            labels = labels.to(lm_logits.device)
-            shift_logits = lm_logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            loss_fct = CrossEntropyLoss()
-            lm_loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+            lm_loss = self.loss_function(lm_logits, labels, vocab_size=lm_logits.size(-1), **kwargs)
 
         return GPT2DoubleHeadsModelOutput(
             loss=lm_loss,
@@ -929,26 +924,7 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(pooled_logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(pooled_logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(pooled_logits, labels)
+            loss = self.loss_function(labels=labels, pooled_logits=pooled_logits, config=self.config, **kwargs)
         return SequenceClassifierOutputWithPast(
             loss=loss,
             logits=pooled_logits,
@@ -1027,8 +1003,7 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
         loss = None
         if labels is not None:
             labels = labels.to(logits.device)
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            loss = self.loss_function(logits, labels, self.config, **kwargs)
 
         return TokenClassifierOutput(
             loss=loss,
@@ -1095,19 +1070,7 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
         total_loss = None
         if start_positions is not None and end_positions is not None:
             # If we are on multi-GPU, split add a dimension
-            if len(start_positions.size()) > 1:
-                start_positions = start_positions.squeeze(-1).to(start_logits.device)
-            if len(end_positions.size()) > 1:
-                end_positions = end_positions.squeeze(-1).to(end_logits.device)
-            # sometimes the start/end positions are outside our model inputs, we ignore these terms
-            ignored_index = start_logits.size(1)
-            start_positions = start_positions.clamp(0, ignored_index)
-            end_positions = end_positions.clamp(0, ignored_index)
-
-            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
-            start_loss = loss_fct(start_logits, start_positions)
-            end_loss = loss_fct(end_logits, end_positions)
-            total_loss = (start_loss + end_loss) / 2
+            total_loss = self.loss_function(start_logits, end_logits, start_positions, end_positions, **kwargs)
 
         return QuestionAnsweringModelOutput(
             loss=total_loss,

@@ -20,7 +20,6 @@ from typing import Any
 
 import torch
 import torch.nn as nn
-from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -720,13 +719,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # Upcast to float if we need to compute the loss to avoid potential precision issues
-            logits = logits.float()
-            loss_fct = CrossEntropyLoss()
-
-            labels = labels.masked_fill(labels == self.config.audio_vocab_size, -100).reshape(-1)
-            labels = labels.to(logits.device)
-            loss = loss_fct(logits.reshape(-1, self.config.audio_vocab_size), labels)
+            loss = self.loss_function(logits, labels, config=self.config, **kwargs)
 
         return CausalLMOutputWithPast(loss=loss, logits=logits, past_key_values=past_key_values)
 

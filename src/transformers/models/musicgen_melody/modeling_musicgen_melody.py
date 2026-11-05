@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import torch
 import torch.nn as nn
-from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -720,25 +719,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # since encoder hidden states have been concatenated to the decoder hidden states,
-            # we take the last timestamps corresponding to labels
-            logits = lm_logits[:, :, -labels.shape[1] :]
-
-            loss_fct = CrossEntropyLoss()
-            loss = torch.zeros([], device=self.device)
-
-            # per codebook cross-entropy
-            # ref: https://github.com/facebookresearch/audiocraft/blob/69fea8b290ad1b4b40d28f92d1dfc0ab01dbab85/audiocraft/solvers/musicgen.py#L242-L243
-            # -100 labels are ignored
-            labels = labels.masked_fill(labels == self.config.pad_token_id, -100)
-
-            # per codebook cross-entropy
-            for codebook in range(self.config.num_codebooks):
-                codebook_logits = logits[:, codebook].contiguous().view(-1, logits.shape[-1])
-                codebook_labels = labels[..., codebook].contiguous().view(-1)
-                loss += loss_fct(codebook_logits, codebook_labels)
-
-            loss = loss / self.config.num_codebooks
+            loss = self.loss_function(lm_logits, labels, config=self.config, **kwargs)
 
         # (bsz, num_codebooks, seq_len, vocab_size) -> (bsz * num_codebooks, seq_len, vocab_size)
         lm_logits = lm_logits.reshape(-1, *lm_logits.shape[2:])
