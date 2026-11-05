@@ -24,7 +24,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="thinkingmachines/model-share")
+@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small")
 @strict
 class Inkling2TextConfig(PreTrainedConfig):
     r"""
@@ -132,7 +132,7 @@ class Inkling2TextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="thinkingmachines/model-share")
+@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small")
 @strict
 class Inkling2VisionConfig(PreTrainedConfig):
     r"""
@@ -178,7 +178,7 @@ class Inkling2VisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="thinkingmachines/model-share")
+@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small")
 @strict
 class Inkling2Config(PreTrainedConfig):
     r"""

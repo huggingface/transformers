@@ -1375,8 +1375,8 @@ class Inkling2ForCausalLM(Inkling2PreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, Inkling2ForCausalLM
 
-        >>> model = Inkling2ForCausalLM.from_pretrained("thinkingmachines/model-share")
-        >>> tokenizer = AutoTokenizer.from_pretrained("thinkingmachines/model-share")
+        >>> model = Inkling2ForCausalLM.from_pretrained("thinkingmachines/Inkling-2-Small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("thinkingmachines/Inkling-2-Small")
 
         >>> inputs = tokenizer("What is your favorite condiment?", return_tensors="pt")
         >>> generate_ids = model.generate(**inputs, max_new_tokens=30)

@@ -18,31 +18,50 @@ limitations under the License.
 -->
 *This model was contributed to Hugging Face Transformers on 2026-11-05.*
 
-# Inkling2
+# Inkling 2 Small
 
-Inkling2 is a multimodal model from [Thinking Machines Lab](https://huggingface.co/thinkingmachines) that takes text and images and generates text. It keeps the decoder of [Inkling](./inkling), with learned relative attention, short causal convolutions and mixture-of-experts layers, and adds block attention residuals, gated attention with a learned sink and dynamic key/value convolutions. Every decoder layer is a mixture-of-experts layer. Images are encoded by a vision transformer based on the Perception Encoder and projected into the language model embeddings, one embedding per 40x40 pixel patch.
+[Inkling 2 Small](https://huggingface.co/thinkingmachines/Inkling-2-Small) is a multimodal model from [Thinking Machines Lab](https://huggingface.co/thinkingmachines) that takes text and images and generates text. It keeps the decoder of [Inkling](./inkling), with learned relative attention, short causal convolutions and mixture-of-experts layers, and adds block attention residuals, gated attention with a learned sink and dynamic key/value convolutions. Every decoder layer is a mixture-of-experts layer. Images are encoded by a vision transformer based on the Perception Encoder and projected into the language model embeddings, one embedding per 40x40 pixel patch.
 
 The example below generates text from an image and a prompt.
-<TODO> update with autoprocessor only!
-```py
-import torch
 
-from transformers import AutoModelForImageTextToText, AutoTokenizer, Inkling2ImageProcessor, Inkling2Processor
-from transformers.image_utils import load_image
+<hfoptions id="usage">
+<hfoption id="AutoModel">
 
-model_id = "thinkingmachines/model-share"
-processor = Inkling2Processor(image_processor=Inkling2ImageProcessor(), tokenizer=AutoTokenizer.from_pretrained(model_id))
-model = AutoModelForImageTextToText.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+```python
+from transformers import AutoModelForMultimodalLM, AutoProcessor
 
-image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
-prompt = (
-    "<|message_user|><|content_image|><|unused_200054|><|end_message|>"
-    "<|message_user|><|content_text|>What animal is in this image, and where is it?<|end_message|>"
-)
-inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device)
-output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
-print(processor.decode(output[0, inputs["input_ids"].shape[1] :]))
+model_id = "thinkingmachines/Inkling-2-Small"
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "image",
+                "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+            },
+            {"type": "text", "text": "What animal is in this image, and where is it?"},
+        ],
+    },
+]
+
+inputs = processor.apply_chat_template(
+    messages,
+    tokenize=True,
+    add_generation_prompt=True,
+    return_dict=True,
+    return_tensors="pt",
+).to(model.device)
+input_len = inputs["input_ids"].shape[-1]
+
+outputs = model.generate(**inputs, max_new_tokens=256)
+print(processor.decode(outputs[0][input_len:], skip_special_tokens=True))
 ```
+
+</hfoption>
+</hfoptions>
 
 ## Notes
 

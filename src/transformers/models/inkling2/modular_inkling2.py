@@ -66,7 +66,7 @@ from ..step3p7.modeling_step3p7 import Step3p7VisionEncoderLayer
 from ..video_llama_3.modeling_video_llama_3 import VideoLlama3VisionAttention
 
 
-@auto_docstring(checkpoint="thinkingmachines/model-share")
+@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small")
 @strict
 class Inkling2TextConfig(InklingTextConfig):
     r"""
@@ -175,7 +175,7 @@ class Inkling2TextConfig(InklingTextConfig):
         raise AttributeError("Not needed for Inkling2")
 
 
-@auto_docstring(checkpoint="thinkingmachines/model-share")
+@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small")
 @strict
 class Inkling2VisionConfig(Step3p7VisionConfig):
     r"""
@@ -216,7 +216,7 @@ class Inkling2VisionConfig(Step3p7VisionConfig):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
-@auto_docstring(checkpoint="thinkingmachines/model-share")
+@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small")
 @strict
 class Inkling2Config(InklingConfig):
     r"""
@@ -1111,8 +1111,8 @@ class Inkling2ForCausalLM(InklingForCausalLM):
         ```python
         >>> from transformers import AutoTokenizer, Inkling2ForCausalLM
 
-        >>> model = Inkling2ForCausalLM.from_pretrained("thinkingmachines/model-share")
-        >>> tokenizer = AutoTokenizer.from_pretrained("thinkingmachines/model-share")
+        >>> model = Inkling2ForCausalLM.from_pretrained("thinkingmachines/Inkling-2-Small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("thinkingmachines/Inkling-2-Small")
 
         >>> inputs = tokenizer("What is your favorite condiment?", return_tensors="pt")
         >>> generate_ids = model.generate(**inputs, max_new_tokens=30)
