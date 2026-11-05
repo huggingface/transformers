@@ -75,6 +75,7 @@ else:
             ("align", {"torchvision": "EfficientNetImageProcessor", "pil": "EfficientNetImageProcessorPil"}),
             ("altclip", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("aya_vision", {"torchvision": "GotOcr2ImageProcessor", "pil": "GotOcr2ImageProcessorPil"}),
+            ("bevformer", {"torchvision": "BevformerImageProcessor"}),
             ("blip-2", {"torchvision": "BlipImageProcessor", "pil": "BlipImageProcessorPil"}),
             ("clipseg", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("colpali", {"torchvision": "SiglipImageProcessor", "pil": "SiglipImageProcessorPil"}),
