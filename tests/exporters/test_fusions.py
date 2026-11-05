@@ -65,7 +65,7 @@ def _model(model_type, dtype=None, **config):
     model_config = TESTERS[model_type](parent=None).get_config()
     for name, value in config.items():
         setattr(model_config, name, value)
-    return AutoModelForCausalLM.from_config(model_config).to(dtype or torch.float32).eval()
+    return AutoModelForCausalLM.from_config(model_config, dtype=dtype or torch.float32).eval()
 
 
 # The fused kernels OpenVINO's CPU plugin must compile each layer of a decode graph into. `MatMul` counts the matmuls
