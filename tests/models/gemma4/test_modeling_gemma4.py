@@ -1080,9 +1080,13 @@ class Gemma4IntegrationTest(unittest.TestCase):
         EXPECTED_COMPLETIONS = Expectations(
             {
                 ("cuda", 8): [
-                    "That sounds lovely! It seems like you're really enjoying the place you'"
+                    "That sounds like a very pleasant place! It seems like you're really enjoying",
+                    "Here are a few ways you could use or expand upon that list, depending on",
+                ],
+                ("cuda", 9): [
+                    "That sounds like a very pleasant place! It seems like you're really enjoying"
                     if attn_implementation == "sdpa"
-                    else "That sounds like a very pleasant place! It seems like you're really enjoying",
+                    else "That sounds lovely! It seems like you're really enjoying the place you'",
                     "Here are a few ways you could use or expand upon that list, depending on",
                 ],
                 ("xpu", 5): [
