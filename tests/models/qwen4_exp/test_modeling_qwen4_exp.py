@@ -44,7 +44,7 @@ if is_torch_available():
         Qwen4ExpTextModel,
         StaticCache,
     )
-    from transformers.distributed.fsdp import verify_fsdp_plan
+    from transformers.distributed.fsdp import ALL_FSDP_STYLES
     from transformers.integrations import FP8Embedding
     from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 
@@ -150,6 +150,18 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
                 list(outputs.attentions[0].shape[-3:]),
                 [config.num_attention_heads, seq_len, seq_len],
             )
+
+    def test_eager_attention_with_left_padding(self):
+        """Regression for #49888: overlapping float masks must not cause NaNs for left-padding queries."""
+        config = self.model_tester.get_config()
+        model = Qwen4ExpTextModel._from_config(config, attn_implementation="eager").to(torch_device).eval()
+        input_ids = torch.tensor([[config.pad_token_id, config.pad_token_id, 5, 6, 7]], device=torch_device)
+        attention_mask = torch.tensor([[0, 0, 1, 1, 1]], device=torch_device)
+
+        with torch.no_grad():
+            outputs = model(input_ids, attention_mask=attention_mask, output_attentions=True, use_cache=False)
+
+        self.assertTrue(torch.isfinite(outputs.attentions[0]).all())
 
     def test_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -524,8 +536,8 @@ class Qwen4ExpVisionText2TextModelTest(VLMModelTest, unittest.TestCase):
     def test_fsdp_plan_has_no_unused_rules(self):
         with torch.device("meta"):
             model = Qwen4ExpForConditionalGeneration(self.model_tester.get_config())
-        with self.assertNoLogs("transformers.distributed.fsdp", level="WARNING"):
-            verify_fsdp_plan([name for name, _ in model.named_modules()], model._fsdp_plan)
+        with self.assertNoLogs("transformers.distributed.mixin", level="WARNING"):
+            model._validate_parallel_plan(model.fsdp_plan, ALL_FSDP_STYLES, "fsdp_plan")
 
     def test_generate_with_ple_and_inputs_embeds(self):
         config = self.model_tester.get_config()

@@ -141,7 +141,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         return model
 
     def update_parallel_plan(self, model, plan):
-        from ..distributed.tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
+        from ..distributed.parallel_utils import _get_parameter_plan, replace_layer_number_by_wildcard
         from ..integrations.finegrained_fp8 import FP8Experts
 
         super().update_parallel_plan(model, plan)

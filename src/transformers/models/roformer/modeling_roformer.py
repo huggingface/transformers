@@ -527,20 +527,18 @@ class RoFormerSequenceSummary(nn.Module):
         if hasattr(config, "summary_last_dropout") and config.summary_last_dropout > 0:
             self.last_dropout = nn.Dropout(config.summary_last_dropout)
 
-    def forward(
-        self, hidden_states: torch.FloatTensor, cls_index: torch.LongTensor | None = None
-    ) -> torch.FloatTensor:
+    def forward(self, hidden_states: torch.Tensor, cls_index: torch.LongTensor | None = None) -> torch.Tensor:
         """
         Compute a single vector summary of a sequence hidden states.
 
         Args:
-            hidden_states (`torch.FloatTensor` of shape `[batch_size, seq_len, hidden_size]`):
+            hidden_states (`torch.Tensor` of shape `[batch_size, seq_len, hidden_size]`):
                 The hidden states of the last layer.
             cls_index (`torch.LongTensor` of shape `[batch_size]` or `[batch_size, ...]` where ... are optional leading dimensions of `hidden_states`, *optional*):
                 Used if `summary_type == "cls_index"` and takes the last token of the sequence as classification token.
 
         Returns:
-            `torch.FloatTensor`: The summary of the sequence hidden states.
+            `torch.Tensor`: The summary of the sequence hidden states.
         """
         if self.summary_type == "last":
             output = hidden_states[:, -1]
@@ -645,7 +643,7 @@ class RoFormerPreTrainedModel(PreTrainedModel):
     """
 )
 class RoFormerModel(RoFormerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RoFormerConfig):
         super().__init__(config)
         self.config = config
         self.embeddings = RoFormerEmbeddings(config)
@@ -668,11 +666,11 @@ class RoFormerModel(RoFormerPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
         output_attentions: bool | None = None,
@@ -773,7 +771,7 @@ class RoFormerForMaskedLM(RoFormerPreTrainedModel):
         "cls.predictions.decoder.weight": "roformer.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: RoFormerConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -799,11 +797,11 @@ class RoFormerForMaskedLM(RoFormerPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
@@ -856,7 +854,7 @@ class RoFormerForCausalLM(RoFormerPreTrainedModel, GenerationMixin):
         "cls.predictions.decoder.weight": "roformer.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: RoFormerConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -879,11 +877,11 @@ class RoFormerForCausalLM(RoFormerPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -982,7 +980,7 @@ class RoFormerClassificationHead(nn.Module):
     """
 )
 class RoFormerForSequenceClassification(RoFormerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RoFormerConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.roformer = RoFormerModel(config)
@@ -995,9 +993,9 @@ class RoFormerForSequenceClassification(RoFormerPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
@@ -1056,7 +1054,7 @@ class RoFormerForSequenceClassification(RoFormerPreTrainedModel):
 
 @auto_docstring
 class RoFormerForMultipleChoice(RoFormerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RoFormerConfig):
         super().__init__(config)
 
         self.roformer = RoFormerModel(config)
@@ -1070,9 +1068,9 @@ class RoFormerForMultipleChoice(RoFormerPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
@@ -1095,7 +1093,7 @@ class RoFormerForMultipleChoice(RoFormerPreTrainedModel):
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -1149,7 +1147,7 @@ class RoFormerForMultipleChoice(RoFormerPreTrainedModel):
 
 @auto_docstring
 class RoFormerForTokenClassification(RoFormerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RoFormerConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1164,9 +1162,9 @@ class RoFormerForTokenClassification(RoFormerPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
@@ -1210,7 +1208,7 @@ class RoFormerForTokenClassification(RoFormerPreTrainedModel):
 
 @auto_docstring
 class RoFormerForQuestionAnswering(RoFormerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RoFormerConfig):
         super().__init__(config)
 
         config.num_labels = 2
@@ -1226,9 +1224,9 @@ class RoFormerForQuestionAnswering(RoFormerPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
         output_attentions: bool | None = None,

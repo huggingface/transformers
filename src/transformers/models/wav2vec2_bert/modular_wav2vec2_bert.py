@@ -52,12 +52,12 @@ def _compute_new_attention_mask(hidden_states: torch.Tensor, seq_lens: torch.Ten
     Computes an attention mask of the form `(batch, seq_len)` with an attention for each element in the batch that
     stops at the corresponding element in `seq_lens`.
     Args:
-        hidden_states (`torch.FloatTensor` of shape `(batch, seq_len, *)`):
+        hidden_states (`torch.Tensor` of shape `(batch, seq_len, *)`):
             The sequences to mask, where `*` is any number of sequence-specific dimensions including none.
         seq_lens (`torch.Tensor` of shape `(batch)`:
             Each element represents the length of the sequence at the same index in `hidden_states`
     Returns:
-        `torch.FloatTensor`: The float attention mask of shape `(batch, seq_len)`
+        `torch.Tensor`: The float attention mask of shape `(batch, seq_len)`
     """
     batch_size, mask_seq_len = hidden_states.shape[:2]
 
@@ -692,7 +692,7 @@ class Wav2Vec2BertModel(Wav2Vec2Model, Wav2Vec2BertPreTrainedModel):
         self,
         input_features: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        mask_time_indices: torch.FloatTensor | None = None,
+        mask_time_indices: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Wav2Vec2BertBaseModelOutput:
         r"""
@@ -727,7 +727,7 @@ class Wav2Vec2BertModel(Wav2Vec2Model, Wav2Vec2BertPreTrainedModel):
 
 
 class Wav2Vec2BertForCTC(Wav2Vec2ConformerForCTC):
-    def __init__(self, config, target_lang: str | None = None):
+    def __init__(self, config: Wav2Vec2BertConfig, target_lang: str | None = None):
         r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
@@ -794,7 +794,7 @@ class Wav2Vec2BertForCTC(Wav2Vec2ConformerForCTC):
 
 
 class Wav2Vec2BertForSequenceClassification(Wav2Vec2ForSequenceClassification):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2BertConfig):
         super().__init__(config)
 
     def freeze_feature_encoder(self):
@@ -866,7 +866,7 @@ class Wav2Vec2BertForSequenceClassification(Wav2Vec2ForSequenceClassification):
 
 
 class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2ConformerForAudioFrameClassification):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2BertConfig):
         super().__init__(config)
 
     def freeze_feature_encoder(self):
@@ -921,7 +921,7 @@ class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2ConformerForAudioFrameClas
 
 
 class Wav2Vec2BertForXVector(Wav2Vec2ConformerForXVector):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2BertConfig):
         super().__init__(config)
 
     def freeze_feature_encoder(self):

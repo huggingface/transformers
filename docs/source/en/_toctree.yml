@@ -268,72 +268,66 @@
   sections:
   - local: quantization/overview
     title: Overview
-  - local: quantization/selecting
-    title: Selecting a quantization method
   - local: quantization/concept_guide
     title: Quantization concepts
+  - local: quantization/selecting
+    title: Choose a method
   - sections:
     - local: quantization/bitsandbytes
       title: bitsandbytes
     - local: quantization/eetq
       title: EETQ
-    - local: quantization/higgs
-      title: HIGGS
-    - local: quantization/hqq
-      title: HQQ
-    - local: quantization/metal
-      title: Metal
-    - local: quantization/quanto
-      title: Quanto
-    - local: quantization/sinq
-      title: SINQ
-    - local: quantization/torchao
-      title: torchao
-    title: Quantize on the fly
-  - sections:
     - local: quantization/fbgemm_fp8
-      title: FBGEMM
+      title: FBGEMM FP8
     - local: quantization/finegrained_fp8
       title: Fine-grained FP8
     - local: quantization/fouroversix
       title: Four Over Six
     - local: quantization/fp_quant
       title: FP-Quant
+    - local: quantization/gptq
+      title: GPTQ
+    - local: quantization/higgs
+      title: HIGGS
+    - local: quantization/hqq
+      title: HQQ
+    - local: quantization/metal
+      title: Metal
     - local: quantization/mxfp4
       title: MXFP4
     - local: quantization/nvfp4
       title: NVFP4
-    title: FP4 and FP8 formats
+    - local: quantization/quanto
+      title: Quanto
+    - local: quantization/sinq
+      title: SINQ
+    - local: quantization/torchao
+      title: torchao
+    title: Quantize while loading
   - sections:
+    - local: quantization/aqlm
+      title: AQLM
     - local: quantization/auto_round
       title: AutoRound
     - local: quantization/awq
       title: AWQ
-    - local: quantization/gptq
-      title: GPTQ
-    title: Calibration-based methods
-  - sections:
-    - local: quantization/aqlm
-      title: AQLM
     - local: quantization/bitnet
       title: BitNet
     - local: quantization/compressed_tensors
       title: compressed-tensors
     - local: quantization/gguf
       title: GGUF
+    - local: quantization/quark
+      title: Quark
     - local: quantization/spqr
       title: SpQR
     - local: quantization/vptq
       title: VPTQ
-    title: Load pre-quantized models
-  - sections:
-    - local: quantization/optimum
-      title: Optimum
-    - local: quantization/quark
-      title: Quark
-    title: Hardware toolkits
+    title: Load pre-quantized checkpoints
+  - local: quantization/optimum
+    title: Optimum
   - local: quantization/contribute
-    title: Contribute
+    title: Contribute a quantization method
   title: Quantization
 - isExpanded: false
   sections:

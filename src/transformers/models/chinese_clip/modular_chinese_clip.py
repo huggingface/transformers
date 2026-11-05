@@ -321,7 +321,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
         "attentions": ChineseCLIPTextSelfAttention,
     }
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: ChineseCLIPTextConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -460,7 +460,7 @@ class ChineseCLIPModel(CLIPModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,

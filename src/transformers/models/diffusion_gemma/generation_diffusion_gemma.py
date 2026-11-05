@@ -294,7 +294,7 @@ class LinearTemperatureScheduleLogitsProcessor(LogitsProcessor):
         self.t_max = t_max
         self.max_denoising_steps = max_denoising_steps
 
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, cur_step: int) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor, cur_step: int) -> torch.Tensor:
         """
         Applies the linear temperature schedule to the logits.
 
@@ -304,13 +304,13 @@ class LinearTemperatureScheduleLogitsProcessor(LogitsProcessor):
         Args:
             input_ids (`torch.LongTensor`):
                 The input ids.
-            scores (`torch.FloatTensor`):
+            scores (`torch.Tensor`):
                 The logits.
             cur_step (`int`):
                 The current step.
 
         Returns:
-            `torch.FloatTensor`: The logits after applying the linear temperature schedule.
+            `torch.Tensor`: The logits after applying the linear temperature schedule.
         """
         temperature = self.t_min + ((self.t_max - self.t_min) * (cur_step / self.max_denoising_steps))
         return scores / temperature
@@ -407,7 +407,7 @@ class EntropyBoundSampler:
         self,
         current_canvas: torch.LongTensor,
         denoiser_canvas: torch.LongTensor,
-        logits: torch.FloatTensor,
+        logits: torch.Tensor,
         cur_step: int,
     ) -> torch.LongTensor:
         """
@@ -426,7 +426,7 @@ class EntropyBoundSampler:
                 The current canvas.
             denoiser_canvas (`torch.LongTensor`):
                 The canvas sampled from the denoiser predictions.
-            logits (`torch.FloatTensor`):
+            logits (`torch.Tensor`):
                 The logits from the denoiser.
             cur_step (`int`):
                 The current step.
@@ -475,7 +475,7 @@ class DiffusionGemmaAdaptiveStopping(ABC):
     """
 
     @abstractmethod
-    def __call__(self, argmax_canvas: torch.LongTensor, logits: torch.FloatTensor, **kwargs) -> torch.BoolTensor: ...
+    def __call__(self, argmax_canvas: torch.LongTensor, logits: torch.Tensor, **kwargs) -> torch.BoolTensor: ...
 
     def reset(self):
         pass  # Default no-op for stateless stoppers
@@ -500,7 +500,7 @@ class StableAndConfidentStoppingCriteria(DiffusionGemmaAdaptiveStopping):
         self.confidence_threshold = confidence_threshold
         self.argmax_canvas_history = None
 
-    def __call__(self, argmax_canvas: torch.LongTensor, logits: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
+    def __call__(self, argmax_canvas: torch.LongTensor, logits: torch.Tensor, **kwargs) -> torch.BoolTensor:
         """
         Applies the stable and confident adaptive stopping strategy, returning a boolean tensor indicating whether to
         stop for each sample in the batch.
@@ -508,7 +508,7 @@ class StableAndConfidentStoppingCriteria(DiffusionGemmaAdaptiveStopping):
         Args:
             argmax_canvas(`torch.LongTensor`):
                 The argmax of the latest denoiser prediction.
-            logits (`torch.FloatTensor`):
+            logits (`torch.Tensor`):
                 The predicted logits, after applying logits processors.
 
         Returns:

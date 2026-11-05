@@ -82,29 +82,29 @@ def simple_nms(scores: torch.Tensor, nms_radius: int) -> torch.Tensor:
 @dataclass
 class SuperPointKeypointDescriptionOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*):
         Loss computed during training.
-    keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
+    keypoints (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`):
         Relative (x, y) coordinates of predicted keypoints in a given image.
-    scores (`torch.FloatTensor` of shape `(batch_size, num_keypoints)`):
+    scores (`torch.Tensor` of shape `(batch_size, num_keypoints)`):
         Scores of predicted keypoints.
-    descriptors (`torch.FloatTensor` of shape `(batch_size, num_keypoints, descriptor_size)`):
+    descriptors (`torch.Tensor` of shape `(batch_size, num_keypoints, descriptor_size)`):
         Descriptors of predicted keypoints.
     mask (`torch.BoolTensor` of shape `(batch_size, num_keypoints)`):
         Mask indicating which values in keypoints, scores and descriptors are keypoint information.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or
+    hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or
     when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
         one for the output of each stage) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states
         (also called feature maps) of the model at the output of each stage.
     """
 
-    loss: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
     keypoints: torch.IntTensor | None = None
-    scores: torch.FloatTensor | None = None
-    descriptors: torch.FloatTensor | None = None
+    scores: torch.Tensor | None = None
+    descriptors: torch.Tensor | None = None
     mask: torch.BoolTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
 
 
 class SuperPointConvBlock(nn.Module):
@@ -327,7 +327,7 @@ class SuperPointPreTrainedModel(PreTrainedModel):
     input_modalities = ("image",)
     supports_gradient_checkpointing = False
 
-    def extract_one_channel_pixel_values(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
+    def extract_one_channel_pixel_values(self, pixel_values: torch.Tensor) -> torch.Tensor:
         """
         Assuming pixel_values has shape (batch_size, 3, height, width), and that all channels values are the same,
         extract the first channel value to get a tensor of shape (batch_size, 1, height, width) for SuperPoint. This is
@@ -335,10 +335,10 @@ class SuperPointPreTrainedModel(PreTrainedModel):
         https://github.com/huggingface/transformers/pull/25786#issuecomment-1730176446
 
         Args:
-            pixel_values: torch.FloatTensor of shape (batch_size, 3, height, width)
+            pixel_values: torch.Tensor of shape (batch_size, 3, height, width)
 
         Returns:
-            pixel_values: torch.FloatTensor of shape (batch_size, 1, height, width)
+            pixel_values: torch.Tensor of shape (batch_size, 1, height, width)
 
         """
         return pixel_values[:, 0, :, :][:, None, :, :]
@@ -373,7 +373,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         labels: torch.LongTensor | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
