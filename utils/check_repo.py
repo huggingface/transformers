@@ -918,7 +918,7 @@ def check_models_are_tested(module: types.ModuleType, test_file: str) -> list[st
     defined_models = filter_out_non_tested_backbones(defined_models)
 
     failures = []
-    for model_name, x in defined_models:
+    for model_name, _ in defined_models:
         if model_name not in tested_models and should_be_tested(model_name):
             failures.append(
                 f"{model_name} is defined in {module.__name__} but is not tested in "

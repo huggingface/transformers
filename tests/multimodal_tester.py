@@ -200,7 +200,7 @@ class MultiModalModelTester:
 
     def _build_sub_config(self, config_cls, prefix):
         sig = list(signature(config_cls.__init__).parameters.keys())
-        # not all text config defien special tokens in signature - allow anyway
+        # not all text config define special tokens in signature - allow anyway
         if "text" in prefix:
             sig += ["bos_token_id", "eos_token_id", "pad_token_id"]
         kwargs = self._collect_kwargs(sig, config_cls, prefix=prefix)
@@ -209,6 +209,7 @@ class MultiModalModelTester:
         nested_defaults = getattr(config_cls, "sub_configs_defaults", None) or {}
         for key, specs in nested_defaults.items():
             nested_cls = self._resolve_config_cls(specs)
+            # Crop the last 7 chars (i.e. `_config`) so we only end up with subconfig name
             kwargs[key] = self._build_sub_config(nested_cls, prefix=f"{prefix}_{key[:-7]}")
 
         return config_cls(**kwargs)

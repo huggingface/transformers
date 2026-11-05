@@ -295,7 +295,7 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
     def test_flash_attention_2_continue_generate_with_position_ids(self):
         pass
 
-    # Base model doesn't appear in AutoModel but rather a generatiev model is there
+    # Base model doesn't appear in AutoModel but rather a generative model is there
     # FIXME eustlib, model with gen head deserves to be in task-specific mapping
     @pytest.mark.skip(reason="HiggsAudioV2 has incorrect base model in auto-mapping")
     def test_training(self):
