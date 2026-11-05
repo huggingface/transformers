@@ -1,5 +1,7 @@
+import py_compile
 import sys
 from contextlib import contextmanager
+from pathlib import Path
 from types import ModuleType
 from unittest.mock import DEFAULT, MagicMock, patch
 
@@ -20,6 +22,7 @@ from transformers.utils.import_utils import (
     _is_package_available,
     _LazyModule,
     clear_import_cache,
+    define_import_structure,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
 )
@@ -487,3 +490,15 @@ def test_legacy_fast_image_processor_module_alias():
     # Only paths that actually existed are aliased.
     with pytest.raises(ModuleNotFoundError):
         import transformers.models.aria.image_processing_pil_aria_fast  # noqa: F401
+
+
+def test_compiled_import_structure_matches_source(tmp_path):
+    """
+    Compiled distributions ship only `.pyc` files, so the import structure is read from the bytecode instead of the
+    source text. It must be identical to the one built from the sources.
+    """
+    source_dir = Path(__file__).parent / "import_structures"
+    for source_file in source_dir.glob("*.py"):
+        py_compile.compile(str(source_file), cfile=str(tmp_path / f"{source_file.stem}.pyc"), doraise=True)
+
+    assert define_import_structure(tmp_path) == define_import_structure(source_dir)

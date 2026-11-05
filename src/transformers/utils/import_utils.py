@@ -15,12 +15,14 @@
 Import utilities: Utilities related to imports and our lazy inits.
 """
 
+import dis
 import functools
 import importlib.abc
 import importlib.machinery
 import importlib.metadata
 import importlib.util
 import json
+import marshal
 import operator
 import os
 import re
@@ -3070,6 +3072,215 @@ def fetch__all__(file_content) -> list[str]:
         return _all
 
 
+def _extract_base_reqs_from_compiled_module_name(module_name, uses_torchvision_backend) -> tuple[str, ...]:
+    """
+    The source text is not available for compiled modules, so `BASE_FILE_REQUIREMENTS` (which inspects it) cannot be
+    used. This mirrors its rules (same rules, same order) based on the `module_name` (without `.pyc` suffix) and
+    `uses_torchvision_backend` (determined from the bytecode by `_extract_from_pyc_content`).
+
+    Returns the base backends of all objects of the module (empty if no rule matches)
+
+    Rules (the first match wins):
+        `modeling_*`: torch
+        `tokenization_*_fast`: tokenizers
+        `image_processing_*`: vision, torch, torchvision if `uses_torchvision_backend`, otherwise vision
+        `video_processing_*`: vision, torch, torchvision
+        `generation_*`: torch
+    Keep in sync with `BASE_FILE_REQUIREMENTS` when upgrading transformers.
+    """
+    if "modeling_" in module_name:
+        return ("torch",)
+    if "tokenization_" in module_name and module_name.endswith("_fast"):
+        return ("tokenizers",)
+    if "image_processing_" in module_name:
+        return ("vision", "torch", "torchvision") if uses_torchvision_backend else ("vision",)
+    if "video_processing_" in module_name:
+        return ("vision", "torch", "torchvision")
+    if "generation_" in module_name:
+        return ("torch",)
+    return ()
+
+
+def _extract_reqs_from_compiled_instructions(
+    instructions, pyc_path, co_consts=()
+) -> list[tuple[tuple[str, ...], str]]:
+    """
+    The source text is not available for compiled modules, so the filtered top-level bytecode `instructions` (without
+    `EXTENDED_ARG`, `CACHE`, `NOP` and `PRECALL`) of the module read from `pyc_path` (only used for warnings) are
+    inspected. `co_consts` are the constants of the module code (the operand of `KW_NAMES` is an index into them, which
+    `dis` does not resolve in Python 3.11).
+
+    Returns `[(backends, object_name), ...]` for the module level `@requires(backends=...)` decorators (empty if none)
+        backends: Backend names given to the decorator
+        object_name: Name of the decorated class/function (the first `STORE_NAME` after the decorator call)
+
+    A decorated definition compiles to `LOAD_NAME requires`, the backends, the keyword name `backends` and the call.
+    The layout depends on the Python version (a `PUSH_NULL` before `LOAD_NAME requires` is not part of the pattern):
+        Python 3.11, 3.12: `LOAD_NAME requires`, backends, `KW_NAMES ('backends',)`, `CALL 1` (3.11: `PRECALL 1` before)
+        Python 3.13, 3.14, 3.15: `LOAD_NAME requires`, `PUSH_NULL`, backends, `LOAD_CONST ('backends',)`, `CALL_KW 1`
+
+    Other versions are not tested. If a version compiles the decorator differently, the decorators of all modules are
+    skipped with a warning (see below), so a new Python version has to be checked by comparing the extraction with
+    the one of the supported versions.
+    Handled `backends` forms:
+        `backends=("A", "B")` (`LOAD_CONST (tuple)`),
+        `backends=("A", "B", ...)` built from constants (`LOAD_CONST` x n + `BUILD_TUPLE n` or `BUILD_LIST n`) and
+        `@requires()` (directly followed by `CALL 0`: no backends).
+    A decorator that is not understood (e.g. backends given as a variable, or a layout of an unknown Python version)
+    is skipped with a warning.
+    """
+    decorator_requirements = []
+    for index, instruction in enumerate(instructions):
+        if instruction.opname != "LOAD_NAME" or instruction.argval != "requires":
+            continue
+
+        position = index + 1
+        if position < len(instructions) and instructions[position].opname == "PUSH_NULL":
+            position += 1  # Python 3.13 and later: `PUSH_NULL` follows the callable (3.11, 3.12: it precedes it)
+
+        operands = []
+        while position < len(instructions) and instructions[position].opname in (
+            "LOAD_CONST",
+            "BUILD_TUPLE",
+            "BUILD_LIST",
+            "KW_NAMES",
+        ):
+            operands.append(instructions[position])
+            position += 1
+
+        # The collected operands must be the complete argument list, i.e. directly followed by the call. Otherwise an
+        # argument is not a constant (e.g. `backends=SOME_TUPLE`) and the backends cannot be determined.
+        call = instructions[position] if position < len(instructions) else None
+        backends = None
+        if call is None or call.opname not in ("CALL", "CALL_KW"):
+            pass
+        elif not operands:
+            if call.opname == "CALL" and call.arg == 0:
+                backends = ()  # `@requires()`: no backends registered
+        else:
+            if call.opname == "CALL_KW":
+                # Python 3.13 and later: the keyword names are the constant tuple pushed right before `CALL_KW`
+                keyword_names = operands[-1].argval if operands[-1].opname == "LOAD_CONST" else None
+                values = operands[:-1]
+            else:
+                # Python 3.11, 3.12: the keyword names are the operand of the `KW_NAMES` instruction (an index into
+                # `co_consts`, which `dis` only resolves from Python 3.12 on)
+                keyword_names_list = [
+                    o.argval
+                    if isinstance(o.argval, tuple)
+                    else (co_consts[o.arg] if 0 <= o.arg < len(co_consts) else None)
+                    for o in operands
+                    if o.opname == "KW_NAMES"
+                ]
+                keyword_names = keyword_names_list[0] if len(keyword_names_list) == 1 else None
+                values = [o for o in operands if o.opname != "KW_NAMES"]
+
+            if keyword_names == ("backends",) and values:
+                if values[-1].opname in ("BUILD_TUPLE", "BUILD_LIST") and values[-1].arg is not None:
+                    count = values[-1].arg
+                    constants = values[-1 - count : -1] if 0 <= count < len(values) else []
+                    if len(constants) == count and all(c.opname == "LOAD_CONST" for c in constants):
+                        backends = tuple(c.argval for c in constants)
+                elif len(values) == 1 and isinstance(values[0].argval, (tuple, list)):
+                    backends = tuple(values[0].argval)
+
+        object_name = next(
+            (i.argval for i in instructions[position:] if i.opname == "STORE_NAME"),
+            None,
+        )
+        if backends is None or object_name is None or not all(isinstance(b, str) for b in backends):
+            logger.warning(
+                f"Could not extract any `@requires` backends from the compiled module {pyc_path}; "
+                "its objects may not have their backend checks."
+            )
+            continue
+        decorator_requirements.append((backends, object_name))
+    return decorator_requirements
+
+
+def _extract_from_pyc_content(
+    pyc_path,
+) -> tuple[list[str], bool, list[tuple[tuple[str, ...], str]]]:
+    """
+    The source text is not available for compiled modules, so the top-level bytecode of the `.pyc` file at `pyc_path`
+    is inspected.
+
+    Returns:
+        extracted_names: Names assigned to the module level `__all__`
+        uses_torchvision_backend: Whether the module references `TorchvisionBackend` (replaces the source regex
+            `_TORCHVISION_BACKEND_SUBCLASS`)
+        decorator_requirements: `@requires` decorators as `(backends, object_name)` (see
+            `_extract_reqs_from_compiled_instructions`)
+    If the file cannot be read, a warning is logged and `([], False, [])` is returned.
+
+    Handled `__all__` forms (the last assignment wins, like `fetch__all__` for sources):
+        `__all__ = ["A", "B"]` (`LOAD_CONST` x n + `BUILD_LIST n`, `BUILD_LIST 0` for `__all__ = []`) and
+        `__all__ = ["A", "B", "C", ...]` (`BUILD_LIST 0` + `LOAD_CONST (tuple)` + `LIST_EXTEND`) and
+        long lists on newer Python versions (`BUILD_LIST 0` + (`LOAD_CONST` + `LIST_APPEND`) x n).
+    If the module assigns `__all__` but no assignment is understood, a warning is logged.
+    """
+    try:
+        with open(pyc_path, "rb") as f:
+            data = f.read()
+        # A `.pyc` header is 16 bytes (magic, flags, mtime/hash, size) since Python 3.7.
+        code = marshal.loads(data[16:])
+        # Drop instructions that may sit between the constants and the `BUILD_LIST` / the call (e.g. `EXTENDED_ARG`;
+        # `PRECALL` only exists in Python 3.11).
+        instructions = [
+            instruction
+            for instruction in dis.get_instructions(code)
+            if instruction.opname not in ("EXTENDED_ARG", "CACHE", "NOP", "PRECALL")
+        ]
+    except (OSError, ValueError, EOFError, TypeError) as e:
+        logger.warning(f"Could not read the compiled module {pyc_path} ({e!r}); its objects will not be importable.")
+        return [], False, []
+
+    uses_torchvision_backend = "TorchvisionBackend" in code.co_names
+
+    extracted_names: list[str] = []
+    is_all_understood = False  # an assignment of `__all__` was understood (it may be empty: `__all__ = []`)
+    for index, instruction in enumerate(instructions):
+        if instruction.opname != "STORE_NAME" or instruction.argval != "__all__" or index < 1:
+            continue
+        previous = instructions[index - 1]
+        names = None
+        if previous.opname == "LIST_EXTEND" and index >= 2 and isinstance(instructions[index - 2].argval, tuple):
+            names = list(instructions[index - 2].argval)
+        elif previous.opname == "LIST_APPEND":
+            # Long lists on newer Python versions (observed on 3.15): `BUILD_LIST 0`, then `LOAD_CONST` +
+            # `LIST_APPEND 1` for every name instead of one constant tuple.
+            position = index - 1
+            appended_names = []
+            while (
+                position >= 1
+                and instructions[position].opname == "LIST_APPEND"
+                and instructions[position - 1].opname == "LOAD_CONST"
+            ):
+                appended_names.append(instructions[position - 1].argval)
+                position -= 2
+            if position >= 0 and instructions[position].opname == "BUILD_LIST" and instructions[position].arg == 0:
+                names = appended_names[::-1]
+        elif previous.opname in ("BUILD_LIST", "BUILD_TUPLE") and previous.arg is not None:
+            count = previous.arg
+            start = index - 1 - count
+            if start >= 0:
+                candidates = instructions[start : index - 1]
+                if all(candidate.opname == "LOAD_CONST" for candidate in candidates):
+                    names = [candidate.argval for candidate in candidates]
+        if names is not None and all(isinstance(name, str) for name in names):
+            extracted_names = names
+            is_all_understood = True
+
+    if not is_all_understood and "__all__" in code.co_names:
+        # `__all__` is defined in a form that is not understood (e.g. built dynamically, or different bytecode of a
+        # newer Python version): fail loudly instead of silently dropping the objects of this module.
+        logger.warning(
+            f"Could not extract `__all__` from the compiled module {pyc_path}; its objects will not be importable."
+        )
+    decorator_requirements = _extract_reqs_from_compiled_instructions(instructions, pyc_path, code.co_consts)
+    return extracted_names, uses_torchvision_backend, decorator_requirements
+
+
 @lru_cache
 def create_import_structure_from_path(module_path):
     """
@@ -3144,18 +3355,36 @@ def create_import_structure_from_path(module_path):
     # files, but this is not supported at this time.
     if "__init__.py" in adjacent_modules:
         adjacent_modules.remove("__init__.py")
+    # compiled distributions ship `.pyc` files.
+    if "__init__.pyc" in adjacent_modules:
+        adjacent_modules.remove("__init__.pyc")
 
     module_requirements = {}
     for module_name in adjacent_modules:
-        # Only modules ending in `.py` are accepted here.
-        if not module_name.endswith(".py"):
+        is_compiled = False
+        extracted_names = []
+        decorator_requirements = []
+        if module_name.endswith(".pyc"):
+            if module_name[:-1] in adjacent_modules:
+                # If source file exists as well: it is handled via its `.py` entry.
+                continue
+            is_compiled = True
+            extracted_names, uses_torchvision_backend, decorator_requirements = _extract_from_pyc_content(
+                os.path.join(module_path, module_name)
+            )
+            file_content = ""
+
+            # Remove the .pyc suffix
+            module_name = module_name[:-4]
+        elif module_name.endswith(".py"):
+            with open(os.path.join(module_path, module_name), encoding="utf-8") as f:
+                file_content = f.read()
+
+            # Remove the .py suffix
+            module_name = module_name[:-3]
+        else:
+            # Only modules ending in `.py` or `.pyc` are accepted here.
             continue
-
-        with open(os.path.join(module_path, module_name), encoding="utf-8") as f:
-            file_content = f.read()
-
-        # Remove the .py suffix
-        module_name = module_name[:-3]
 
         previous_line = ""
         previous_index = 0
@@ -3164,15 +3393,30 @@ def create_import_structure_from_path(module_path):
         # For example, any file named `modeling_xxx.py`
         # should have torch as a required backend.
         base_requirements = ()
-        for check, requirements in BASE_FILE_REQUIREMENTS.items():
-            if check(module_name, file_content):
-                base_requirements = requirements
-                break
+        if is_compiled:
+            # `BASE_FILE_REQUIREMENTS` inspects the source text, which compiled modules do not have.
+            base_requirements = _extract_base_reqs_from_compiled_module_name(module_name, uses_torchvision_backend)
+        else:
+            for check, requirements in BASE_FILE_REQUIREMENTS.items():
+                if check(module_name, file_content):
+                    base_requirements = requirements
+                    break
 
         # Objects that have a `@require` assigned to them will get exported
         # with the backends specified in the decorator as well as the file backends.
         exported_objects = set()
-        if "@requires" in file_content:
+        if is_compiled:
+            # `@requires` decorators were read from the bytecode
+            for requires_backends_tuple, object_name in decorator_requirements:
+                backends = frozenset(requires_backends_tuple + base_requirements)
+                if backends not in module_requirements:
+                    module_requirements[backends] = {}
+                if module_name not in module_requirements[backends]:
+                    module_requirements[backends][module_name] = set()
+                module_requirements[backends][module_name].add(object_name)
+                exported_objects.add(object_name)
+        elif "@requires" in file_content:
+            # `@requires` decorators are read from the source text.
             lines = file_content.split("\n")
             for index, line in enumerate(lines):
                 # This allows exporting items with other decorators. We'll take a look
@@ -3253,8 +3497,9 @@ def create_import_structure_from_path(module_path):
 
         # All objects that are in __all__ should be exported by default.
         # These objects are exported with the file backends.
-        if "__all__" in file_content:
-            for _all_object in fetch__all__(file_content):
+        if is_compiled or "__all__" in file_content:
+            # for `.pyc` files `__all__` comes from the bytecode, otherwise from the source text
+            for _all_object in extracted_names if is_compiled else fetch__all__(file_content):
                 if _all_object not in exported_objects:
                     backends = frozenset(base_requirements)
                     if backends not in module_requirements:
