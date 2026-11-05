@@ -953,8 +953,13 @@ class Fp8Deserialize(ConversionOps):
         for key, value in input_dict.items():
             value = value[0] if isinstance(value, list) else value
             value = value.flatten(1) if value.ndim == 4 else value
-            param = getattr(module, key, None)
-            output[key] = value.to(param.dtype) if isinstance(param, torch.Tensor) else value
+            param = getattr(module, key.rpartition(".")[2], None)  # experts: keys are the converter's targets
+            if not isinstance(param, torch.Tensor):
+                output[key] = value
+            elif value.dtype == torch.uint8 and param.dtype.is_floating_point and param.element_size() == 1:
+                output[key] = value.view(param.dtype)  # ue8m0 scales saved as bytes (e.g. MXFP8): their bits
+            else:
+                output[key] = value.to(param.dtype)
         return output
 
 
