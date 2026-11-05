@@ -216,9 +216,11 @@ class NVFP4Experts(nn.Module):
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
-        experts_forward = ALL_NVFP4_EXPERTS_FUNCTIONS.get_interface(
-            self.config._experts_implementation, nvfp4_eager_experts_forward
-        )
+        implementation = self.config._experts_implementation
+        # torch's grouped NVFP4 GEMM only runs on sm90 / sm100 (e.g. not on sm120): one GEMM per expert elsewhere
+        if hidden_states.is_cuda and torch.cuda.get_device_capability(hidden_states.device) not in ((9, 0), (10, 0)):
+            implementation = "eager"
+        experts_forward = ALL_NVFP4_EXPERTS_FUNCTIONS.get_interface(implementation, nvfp4_eager_experts_forward)
         return experts_forward(self, hidden_states, top_k_index, top_k_weights)
 
 

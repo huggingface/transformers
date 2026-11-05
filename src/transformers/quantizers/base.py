@@ -313,9 +313,11 @@ class HfQuantizer(ABC):
         keep_in_fp32_modules: list[str] | None = None,
         add_default_skips: bool = False,
     ):
-        # In a quantization plan, the plan alone says what is quantized (e.g. ModelOpt quantizes `lm_head`)
-        if (skip_modules is None or add_default_skips) and self.plan is None:
+        if skip_modules is None or add_default_skips:
             modules_to_not_convert = get_keys_to_not_convert(model)
+            if self.plan is not None:  # a module a plan names is quantized (e.g. ModelOpt's `lm_head`), not `"*"`
+                named = {pattern for pattern in self.plan.quantizers if "*" not in pattern}
+                modules_to_not_convert = [module for module in modules_to_not_convert if module not in named]
         else:
             modules_to_not_convert = []
 
