@@ -108,6 +108,10 @@ class _IdentityOp(ConversionOps):
     def convert(self, input_dict: dict[str, Any], **kwargs) -> dict[str, Any]:
         return input_dict
 
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return _IdentityOp()
+
 
 class Chunk(ConversionOps):
     """Split a tensor along `dim` into equally sized chunks. Additionally, `num_shards_attribute` is a config field to read
@@ -212,7 +216,9 @@ class Concatenate(ConversionOps):
                 all_tensors.extend(tensors)
             else:
                 all_tensors.append(tensors)
-        return {target_pattern: torch.cat(all_tensors, dim=self.dim)}
+        # Tensors without `dim` (e.g. one scale per expert after a merge) are stacked along it
+        join = torch.stack if all_tensors[0].dim() <= self.dim else torch.cat
+        return {target_pattern: join(all_tensors, dim=self.dim)}
 
     def get_target_pattern(self, target_patterns: list[str]) -> str:
         # Here we always return the target pattern

@@ -125,12 +125,11 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         from ..integrations.finegrained_fp8 import FP8Embedding, build_fp8_experts, build_fp8_linear
 
         config = self.quantization_config
+        if config.dequantize:
+            return None
         modules_to_convert = config.modules_to_convert if self.pre_quantized else None
         if modules_to_convert and type(module) is nn.Embedding and name.endswith(tuple(modules_to_convert)):
-            # Also under `dequantize=True`: a table worth quantizing is one we cannot afford to expand
             new_module = FP8Embedding(module.num_embeddings, module.embedding_dim, module.padding_idx)
-        elif config.dequantize:
-            return None
         elif name.endswith(".experts"):
             new_module = build_fp8_experts(module, config, self.text_config)
         elif isinstance(module, nn.Linear):
@@ -140,14 +139,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         if new_module is not None:
             new_module._hf_quantized_needs_local_tp = True
         return new_module
-
-    def _process_model_after_weight_loading(self, model, **kwargs):
-        # Single-process multi-device is unsafe for DeepGEMM (its kernels are bound to one CUDA
-        # context); route those models through Triton/grouped_mm instead.
-        from ..integrations.finegrained_fp8 import _disable_deepgemm_on_multi_device
-
-        _disable_deepgemm_on_multi_device(model)
-        return model
 
     def update_parallel_plan(self, model, plan):
         from ..distributed.parallel_utils import _get_parameter_plan, replace_layer_number_by_wildcard
@@ -184,17 +175,21 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     }
 
     def get_load_operations(self):
-        from ..integrations.finegrained_fp8 import Fp8Dequantize
+        from ..integrations.finegrained_fp8 import Fp8Dequantize, Fp8Deserialize
 
-        return {"dequantize": Fp8Dequantize}
+        return {"deserialize": Fp8Deserialize, "dequantize": Fp8Dequantize}
 
-    def update_weight_conversions(self, weight_conversions, model):
-        from ..core_model_loading import WeightRenaming
+    def get_weight_conversions(self):
+        # Deserializing only reshapes linear scales (ModelOpt's 4-D blocks): the experts load through the model's merges
+        conversions = super().get_weight_conversions()
+        if self.quantization_config.dequantize:
+            return conversions
+        return [c for c in conversions if c._original_target_patterns == ["weight"]]
 
-        # Some FP8 checkpoints ship per-block scales under `.scale` (e.g. DeepSeek-V4-Flash) or `.qscale_weight`
-        # (e.g. Mistral Large 4)
-        scale_renames = [
-            WeightRenaming(source_patterns=r"^(.+)\.scale", target_patterns=r"\1.weight_scale_inv"),
-            WeightRenaming(source_patterns=r"\.qscale_weight", target_patterns=".weight_scale_inv"),
-        ]
-        return scale_renames + super().update_weight_conversions(weight_conversions, model)
+    # DeepSeek-V4-Flash's per-block `.scale`, Mistral Large 4's `.qscale_weight`, ModelOpt's names (and FP8 embeddings')
+    renamed_names = {
+        "scale": "weight_scale_inv",
+        "qscale_weight": "weight_scale_inv",
+        "weight_scale": "weight_scale_inv",
+        "input_scale": "activation_scale",
+    }
