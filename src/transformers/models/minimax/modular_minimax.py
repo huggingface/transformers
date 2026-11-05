@@ -183,6 +183,8 @@ class MiniMaxCache(DynamicCache):
         return max(super().__len__(), len(self.linear_cache))
 
     def batch_repeat_interleave(self, repeats: int):
+        if repeats == 1:
+            return
         for layer_idx in range(len(self)):
             if self.linear_cache[layer_idx] != []:
                 self.linear_cache[layer_idx] = self.linear_cache[layer_idx].repeat_interleave(repeats, dim=0)

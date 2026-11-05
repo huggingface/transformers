@@ -52,6 +52,7 @@ if is_torch_available():
 
     from transformers.models.minimax_m3_vl.configuration_minimax_m3_vl import MiniMaxM3VLVisionConfig
     from transformers.models.minimax_m3_vl.modeling_minimax_m3_vl import (
+        MiniMaxM3VLSparseCacheLayer,
         MiniMaxM3VLVisionRotaryEmbedding,
     )
     from transformers.vision_utils import get_vision_position_ids
@@ -128,6 +129,19 @@ class MiniMaxM3VLVisionText2TextModelTester(VLMModelTester):
 @require_torch
 class MiniMaxM3VLModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = MiniMaxM3VLVisionText2TextModelTester
+
+    def test_sparse_cache_batch_repeat_interleave_one_preserves_storage(self):
+        layer = MiniMaxM3VLSparseCacheLayer()
+        key_states = torch.randn(2, 1, 3, 4)
+        layer.update(key_states, torch.randn_like(key_states))
+        index_keys = torch.randn(2, 3, 5)
+        layer.idx_keys = index_keys
+        cached_keys = layer.keys
+
+        layer.batch_repeat_interleave(1)
+
+        self.assertIs(layer.keys, cached_keys)
+        self.assertIs(layer.idx_keys, index_keys)
 
     # The vision tower packs every image's (and video frame's) patches into a single sequence
     # (batch dim 1), so ``last_hidden_state`` does not carry a per-item batch axis to shape-check.

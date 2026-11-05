@@ -93,8 +93,8 @@ class BenchmarkConfig:
         if compile_kwargs is None:
             self.compile_config = None
         else:
-            compile_kwargs["fullgraph"] = compile_kwargs.get("fullgraph", True)
-            self.compile_config = CompileConfig(**compile_kwargs)
+            compile_kwargs_with_defaults = {**compile_kwargs, "fullgraph": compile_kwargs.get("fullgraph", True)}
+            self.compile_config = CompileConfig(**compile_kwargs_with_defaults)
         self.kernelize = kernelize
         # Constant parameters
         self.dtype = "torch.bfloat16"

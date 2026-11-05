@@ -248,6 +248,8 @@ class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
             self.idx_keys = self.idx_keys.index_select(0, beam_idx.to(self.idx_keys.device))
 
     def batch_repeat_interleave(self, repeats: int) -> None:
+        if repeats == 1:
+            return
         super().batch_repeat_interleave(repeats)
         if self.idx_keys is not None:
             self.idx_keys = self.idx_keys.repeat_interleave(repeats, dim=0)

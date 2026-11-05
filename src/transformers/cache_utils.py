@@ -116,6 +116,27 @@ class DynamicLayer(CacheLayerMixin):
         self.values = torch.tensor([], dtype=self.dtype, device=self.device)
         self.is_initialized = True
 
+    def _can_skip_empty_update(self, key_states: torch.Tensor, value_states: torch.Tensor) -> bool:
+        if (
+            torch.is_grad_enabled()
+            or key_states.shape[-2] != 0
+            or value_states.shape[-2] != 0
+            or key_states.device != value_states.device
+        ):
+            return False
+        if not self.is_initialized:
+            return True
+        return (
+            key_states.shape[:-2] == self.keys.shape[:-2]
+            and key_states.shape[-1] == self.keys.shape[-1]
+            and value_states.shape[:-2] == self.values.shape[:-2]
+            and value_states.shape[-1] == self.values.shape[-1]
+            and key_states.device == self.keys.device
+            and value_states.device == self.values.device
+            and key_states.dtype == self.keys.dtype
+            and value_states.dtype == self.values.dtype
+        )
+
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -129,6 +150,9 @@ class DynamicLayer(CacheLayerMixin):
         Returns:
             tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
         """
+        if self._can_skip_empty_update(key_states, value_states):
+            return (self.keys, self.values) if self.is_initialized else (key_states, value_states)
+
         # Lazy initialization
         if not self.is_initialized:
             self.lazy_initialization(key_states, value_states)
@@ -182,6 +206,8 @@ class DynamicLayer(CacheLayerMixin):
 
     def batch_repeat_interleave(self, repeats: int) -> None:
         """Repeat the cache `repeats` times in the batch dimension."""
+        if repeats == 1:
+            return
         if self.get_seq_length() > 0:
             self.keys = self.keys.repeat_interleave(repeats, dim=0)
             self.values = self.values.repeat_interleave(repeats, dim=0)
@@ -232,6 +258,9 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         Returns:
             tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
         """
+        if self._can_skip_empty_update(key_states, value_states):
+            return (self.keys, self.values) if self.is_initialized else (key_states, value_states)
+
         # Lazy initialization
         if not self.is_initialized:
             self.lazy_initialization(key_states, value_states)
@@ -344,6 +373,16 @@ class DynamicIndexedLayer(DynamicLayer):
         Returns:
             `torch.Tensor`: The full cached indexer keys, shape `[batch_size, total_len, index_head_dim]`.
         """
+        if indexer_key_states.shape[1] == 0 and not torch.is_grad_enabled():
+            if not self.is_indexer_initialized:
+                return indexer_key_states
+            if (
+                indexer_key_states.shape[0] == self.indexer_keys.shape[0]
+                and indexer_key_states.shape[2] == self.indexer_keys.shape[2]
+                and indexer_key_states.device == self.indexer_keys.device
+                and indexer_key_states.dtype == self.indexer_keys.dtype
+            ):
+                return self.indexer_keys
         if not self.is_indexer_initialized:
             self.lazy_initialization_indexer(indexer_key_states)
         self.indexer_keys = torch.cat([self.indexer_keys, indexer_key_states], dim=1)
@@ -386,6 +425,8 @@ class DynamicIndexedLayer(DynamicLayer):
         self.indexer_keys = self.indexer_keys[:, : -abs(tokens_to_remove), :]
 
     def batch_repeat_interleave(self, repeats: int) -> None:
+        if repeats == 1:
+            return
         super().batch_repeat_interleave(repeats)
         if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
             self.indexer_keys = self.indexer_keys.repeat_interleave(repeats, dim=0)
@@ -1832,6 +1873,8 @@ class Cache:
 
     def batch_repeat_interleave(self, repeats: int):
         """Repeat and interleave the cache"""
+        if repeats == 1:
+            return
         for layer_idx in range(len(self.layers)):
             self.layers[layer_idx].batch_repeat_interleave(repeats)
 
@@ -2316,6 +2359,8 @@ class EncoderDecoderCache(Cache):
     def batch_repeat_interleave(self, repeats: int):
         """Repeat the cache `repeats` times in the batch dimension. Used in contrastive search (on the Hub)."""
         self.check_dynamic_cache(self.batch_repeat_interleave.__name__)
+        if repeats == 1:
+            return
         self.self_attention_cache.batch_repeat_interleave(repeats)
         self.cross_attention_cache.batch_repeat_interleave(repeats)
 
