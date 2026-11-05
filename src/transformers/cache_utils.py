@@ -199,6 +199,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
     """
     A cache layer that grows dynamically as more tokens are generated, up until the sliding window size.
     It stores the key and value states as tensors of shape `[batch_size, num_heads, min(seq_len, sliding_window), head_dim]`.
+    A tensor counter gives the mask its offset, so an exported decode keeps its graph before and after the window fills.
     """
 
     is_sliding = True
@@ -206,7 +207,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
     def __init__(self, sliding_window: int, **kwargs):
         super().__init__()
         self.sliding_window = sliding_window
-        self.cumulative_length = 0
+        self.cumulative_length = torch.tensor(0, dtype=torch.long)
         self._sliding_window_tensor = torch.tensor(self.sliding_window, dtype=torch.long)
         self.record_past = False
 
@@ -219,7 +220,9 @@ class DynamicSlidingWindowLayer(DynamicLayer):
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         super().lazy_initialization(key_states, value_states)
-        self._sliding_window_tensor = self._sliding_window_tensor.to(self.device)
+        # Filled on the device rather than copied from the host: a copy would sync once per layer
+        self._sliding_window_tensor = torch.full((), self.sliding_window, dtype=torch.long, device=self.device)
+        self.cumulative_length = torch.zeros((), dtype=torch.long, device=self.device)
 
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
@@ -238,7 +241,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         if not self.is_initialized:
             self.lazy_initialization(key_states, value_states)
 
-        self.cumulative_length += key_states.shape[-2]
+        self.cumulative_length = self.cumulative_length + key_states.shape[-2]
 
         # Compute the full states
         full_key_states = torch.cat([self.keys, key_states], dim=-2)
@@ -260,17 +263,18 @@ class DynamicSlidingWindowLayer(DynamicLayer):
             num_visible = self.sliding_window - 1 + key_states.shape[-2]
             return full_key_states[:, :, -num_visible:, :], full_value_states[:, :, -num_visible:, :]
 
-    def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
+    def get_mask_sizes(self, query_length: int) -> tuple[int, int | torch.Tensor]:
         """Return the length and offset of the cache, used to generate the attention mask"""
-        is_full = self.cumulative_length >= self.sliding_window
-
-        kv_offset = max(self.cumulative_length - self.sliding_window + 1, 0)
-        if is_full:
-            kv_length = self.sliding_window - 1 + query_length
-        else:
-            kv_length = self.cumulative_length + query_length
-
-        return kv_length, kv_offset
+        if not self.is_initialized:
+            return query_length, 0
+        if self.record_past:  # the cache may hold more than the window until the next `crop`
+            cumulative_length = int(self.cumulative_length)
+            kv_offset = max(cumulative_length - self.sliding_window + 1, 0)
+            return min(cumulative_length, self.sliding_window - 1) + query_length, kv_offset
+        # The cached states are the last `min(seen, sliding_window - 1)` tokens: sizing the mask from their count and
+        # the tensor counter needs no branch on whether the window is full.
+        cached_length = self.keys.shape[-2]
+        return cached_length + query_length, self.cumulative_length - cached_length
 
     def get_seq_length(self) -> int:
         """Returns the sequence length of the cached states."""
@@ -312,7 +316,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         # If we did not reach the sliding window, we can do the same as for a full attention layer
         else:
             super().crop(tokens_to_remove)
-            self.cumulative_length = self.keys.shape[-2]
+            self.cumulative_length = torch.tensor(self.keys.shape[-2], dtype=torch.long, device=self.keys.device)
 
 
 class DynamicIndexedLayer(DynamicLayer):
