@@ -16,6 +16,7 @@ import unittest
 
 from transformers import ReformerConfig, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -1354,10 +1355,11 @@ class ReformerIntegrationTests(unittest.TestCase):
         )
         output = tokenizer.decode(output_ids[0])
 
-        self.assertEqual(
-            output,
-            "A few months later state expression in his ideas, at the first entrance. He was positively for an inst",
-        )
+        expected_output = Expectations({
+            (None, None): "A few months later state expression in his ideas, at the first entrance. He was positively for an inst",
+            ("cuda", 8): "A few months later state expression in his ideas, so attentively two or three thousand roubles, and",
+        }).get_expectation()  # fmt: skip
+        self.assertEqual(output, expected_output)
 
     @slow
     def test_pretrained_generate_use_cache_equality(self):
