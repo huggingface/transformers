@@ -673,9 +673,11 @@ def _maybe_load_ctc_decoder(model_name, hub_kwargs, kwargs, pretrained_model_nam
     except ImportError as error:
         warnings.warn(
             f"`{model_name}` ships an n-gram language model for `{processor_class}`, but it is not used and decoding "
-            f"falls back to greedy CTC ({error}). To use it, run `pip install pyctcdecode kenlm` (kenlm is built from "
-            "source and needs a C++ toolchain). Language model decoding is deprecated and will be removed in "
-            "Transformers v6; see https://huggingface.co/docs/transformers/model_doc/wav2vec2#migrating-to-pyctcdecode"
+            f"falls back to greedy CTC ({error}). Language model decoding is deprecated and will be removed in "
+            "Transformers v6. To keep it until then, install `pip install --no-deps pyctcdecode && pip install pygtrie "
+            "kenlm` (pyctcdecode's pinned dependencies would downgrade numpy below 2, and kenlm is built from source "
+            "with a C++ toolchain); see https://huggingface.co/docs/transformers/model_doc/wav2vec2#migrating-to-pyctcdecode",
+            FutureWarning,
         )
 
 

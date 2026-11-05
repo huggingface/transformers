@@ -73,13 +73,14 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         "be removed in Transformers v6. To keep identical LM-boosted outputs, call pyctcdecode directly; see "
         "https://huggingface.co/docs/transformers/model_doc/wav2vec2#migrating-to-pyctcdecode"
     )
-    _missing_dependencies_hint = (
-        "\nThis checkpoint uses `Wav2Vec2ProcessorWithLM`, which needs both `pip install pyctcdecode kenlm` (kenlm is "
-        "built from source and needs a C++ toolchain). It is deprecated and will be removed in Transformers v6.\n"
+    _missing_dependencies_message = (
+        "`{name}` needs `pyctcdecode` and `kenlm`. It is deprecated and will be removed in Transformers v6.\n"
+        "- To keep language model decoding, install them with `pip install --no-deps pyctcdecode && pip install "
+        "pygtrie kenlm` (pyctcdecode's pinned dependencies would downgrade numpy below 2, and kenlm is built from "
+        "source with a C++ toolchain), or call pyctcdecode directly: "
+        "https://huggingface.co/docs/transformers/model_doc/wav2vec2#migrating-to-pyctcdecode\n"
         "- To decode without the language model, load `Wav2Vec2Processor` instead and decode "
-        "`logits.argmax(-1)` with `processor.batch_decode`.\n"
-        "- To keep language model decoding, see "
-        "https://huggingface.co/docs/transformers/model_doc/wav2vec2#migrating-to-pyctcdecode"
+        "`logits.argmax(-1)` with `processor.batch_decode`."
     )
 
     def __init__(
@@ -151,8 +152,8 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         """
         try:
             requires_backends(cls, ["pyctcdecode", "kenlm"])
-        except ImportError as error:
-            raise ImportError(f"{error}{cls._missing_dependencies_hint}") from None
+        except ImportError:
+            raise ImportError(cls._missing_dependencies_message.format(name=cls.__name__)) from None
         from pyctcdecode import BeamSearchDecoderCTC
 
         feature_extractor, tokenizer = super()._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)

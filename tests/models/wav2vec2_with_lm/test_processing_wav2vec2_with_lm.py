@@ -21,8 +21,10 @@ import tempfile
 import unittest
 from unittest import mock
 
+from transformers import Wav2Vec2Config, Wav2Vec2FeatureExtractor, Wav2Vec2ForCTC
 from transformers.models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
-from transformers.pipelines import _maybe_load_ctc_decoder
+from transformers.pipelines import AutomaticSpeechRecognitionPipeline, _maybe_load_ctc_decoder
+from transformers.testing_utils import require_torch
 from transformers.utils import import_utils
 
 
@@ -37,7 +39,7 @@ class Wav2Vec2ProcessorWithLMDeprecationTest(unittest.TestCase):
                 Wav2Vec2ProcessorWithLM.from_pretrained("hf-internal-testing/processor_with_lm")
 
         message = str(context.exception)
-        self.assertIn("pip install pyctcdecode kenlm", message)
+        self.assertIn("pip install --no-deps pyctcdecode", message)  # keeps numpy 2
         self.assertIn("Transformers v6", message)
         self.assertIn("Wav2Vec2Processor", message)
         self.assertIn("#migrating-to-pyctcdecode", message)
@@ -56,11 +58,32 @@ class Wav2Vec2ProcessorWithLMDeprecationTest(unittest.TestCase):
             kwargs = {}
             # `None` in `sys.modules` makes `import kenlm` raise an `ImportError`
             with mock.patch.dict(sys.modules, {"kenlm": None}):
-                with self.assertWarns(UserWarning) as context:
+                with self.assertWarns(FutureWarning) as context:
                     _maybe_load_ctc_decoder(tmpdir, {}, kwargs, None)
 
         self.assertNotIn("decoder", kwargs)
         message = str(context.warning)
         self.assertIn("falls back to greedy CTC", message)
-        self.assertIn("pip install pyctcdecode kenlm", message)
+        self.assertIn("pip install --no-deps pyctcdecode", message)
         self.assertIn("Transformers v6", message)
+
+    @require_torch
+    def test_pipeline_with_decoder_warns(self):
+        config = Wav2Vec2Config(
+            hidden_size=16,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            intermediate_size=16,
+            conv_dim=(8, 8),
+            conv_stride=(4, 4),
+            conv_kernel=(8, 8),
+            num_conv_pos_embeddings=16,
+            num_conv_pos_embedding_groups=2,
+            vocab_size=8,
+        )
+        with self.assertWarns(FutureWarning) as context:
+            # any decoder object takes the deprecated LM path: pyctcdecode isn't needed to check the warning
+            AutomaticSpeechRecognitionPipeline(
+                model=Wav2Vec2ForCTC(config), feature_extractor=Wav2Vec2FeatureExtractor(), decoder=object()
+            )
+        self.assertIn("Transformers v6", str(context.warning))

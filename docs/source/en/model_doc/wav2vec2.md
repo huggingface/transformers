@@ -139,8 +139,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 > [!WARNING]
 > [`Wav2Vec2ProcessorWithLM`] and n-gram language model decoding with pyctcdecode + kenlm are deprecated and will be
-> removed in Transformers v6. They require `pip install pyctcdecode kenlm` (kenlm is built from source and needs a C++
-> toolchain). To keep the same outputs, call pyctcdecode directly, see [Migrating to pyctcdecode](#migrating-to-pyctcdecode).
+> removed in Transformers v6. They require pyctcdecode and kenlm, which are no longer installed with Transformers. To
+> keep the same outputs, call pyctcdecode directly: [Migrating to pyctcdecode](#migrating-to-pyctcdecode) shows how, and
+> how to install both without downgrading numpy.
 
 [[autodoc]] Wav2Vec2ProcessorWithLM
     - __call__
@@ -151,6 +152,10 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
     - decode
 
 ### Decoding multiple audios
+
+> [!WARNING]
+> This example uses the deprecated [`Wav2Vec2ProcessorWithLM`]. For new code, pass a `multiprocessing.Pool` to
+> pyctcdecode's `decode_beams_batch` instead, see [Migrating to pyctcdecode](#migrating-to-pyctcdecode).
 
 If you are planning to decode multiple batches of audios, you should consider using [`~Wav2Vec2ProcessorWithLM.batch_decode`] and passing an instantiated `multiprocessing.Pool`.
 Otherwise, [`~Wav2Vec2ProcessorWithLM.batch_decode`] performance will be slower than calling [`~Wav2Vec2ProcessorWithLM.decode`] for each audio individually, as it internally instantiates a new `Pool` for every call. See the example below:
