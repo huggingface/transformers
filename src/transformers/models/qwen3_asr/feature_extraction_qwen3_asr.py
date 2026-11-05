@@ -210,11 +210,9 @@ class Qwen3ASRFeatureExtractor(SequenceFeatureExtractor):
         input_features = self._torch_extract_fbank_features(input_features[0], device)
         padded_inputs["input_features"] = input_features
 
-        # Rescale raw-sample attention mask to mel-frame resolution.
-        rescaled_attention_mask = padded_inputs["attention_mask"][:, :: self.hop_length]
-        if padded_inputs["attention_mask"].shape[1] % self.hop_length != 0:
-            rescaled_attention_mask = rescaled_attention_mask[:, :-1]
-        padded_inputs["attention_mask"] = rescaled_attention_mask
+        # Rescale raw-sample attention mask to mel-frame resolution; each sample gets `length // hop_length`
+        # valid frames, independent of batch padding (same as `WhisperFeatureExtractor`).
+        padded_inputs["attention_mask"] = padded_inputs["attention_mask"][:, self.hop_length - 1 :: self.hop_length]
 
         # Right-pad the mel time axis to a multiple of `2 * n_window` (needed by `Qwen3ASREncoder`).
         if n_window is None:

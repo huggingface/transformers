@@ -254,6 +254,22 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
             == 4
         )
 
+    def test_attention_mask_independent_of_batch_padding(self):
+        # the number of valid frames of a sample must not depend on how much the batch pads it
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        hop_length = feature_extractor.hop_length
+        audio = np.random.randn(hop_length * 5 + 16)
+        longer = np.random.randn(hop_length * 8 + 32)
+
+        def num_valid_frames(inputs, padding):
+            return feature_extractor(
+                inputs, return_attention_mask=True, padding=padding, return_tensors="np"
+            ).attention_mask.sum(-1)[0]
+
+        self.assertEqual(num_valid_frames([audio], "longest"), 5)
+        self.assertEqual(num_valid_frames([audio, longer], "longest"), 5)
+        self.assertEqual(num_valid_frames([audio], "max_length"), 5)
+
     @require_torch
     def test_double_precision_pad(self):
         import torch
