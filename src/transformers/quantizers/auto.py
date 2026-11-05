@@ -469,6 +469,8 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         # One general converter per param collects the names of every quantizer, before the own-name ones take them
         # (`down_proj` would take `shared_experts.down_proj.weight_sf_rowmajor`). Its quantizer gives a param its own
         # ops in `update_weight_transform`; the others pass through the params without companions
+        # `weight` first: it takes `*.down_proj.weight` before the experts' own-name `down_proj` does
+        general = dict(sorted(general.items(), key=lambda item: item[0] != "weight"))
         return weight_conversions + [
             WeightConverter(
                 list(dict.fromkeys(name for c in converters for name in c._original_source_patterns)),
