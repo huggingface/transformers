@@ -16,7 +16,7 @@
 import numpy as np
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput, get_image_size, is_valid_image
+from ...image_utils import ImageInput, get_image_size, is_pil_image, is_valid_image
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
@@ -93,16 +93,27 @@ def preprocess_box_annotation(box: list | tuple, image_size: tuple[int, int]) ->
     """
     Convert box annotation to the format [x1, y1, x2, y2] in the range [0, 1000].
     """
-    width, height = image_size
-    if len(box) == 4:
-        box[0] = int(box[0] / width * 1000)
-        box[1] = int(box[1] / height * 1000)
-        box[2] = int(box[2] / width * 1000)
-        box[3] = int(box[3] / height * 1000)
-    else:
+    if len(box) != 4:
         raise ValueError("Box must be a list or tuple of lists in the form [x1, y1, x2, y2].")
 
-    return list(box)
+    width, height = image_size
+    box = list(box)
+    box[0] = int(box[0] / width * 1000)
+    box[1] = int(box[1] / height * 1000)
+    box[2] = int(box[2] / width * 1000)
+    box[3] = int(box[3] / height * 1000)
+
+    return box
+
+
+def _get_image_size_width_height(image: ImageInput) -> tuple[int, int]:
+    """
+    Returns the (width, height) dimensions of the image.
+    """
+    if is_pil_image(image):
+        return image.size
+    height, width = get_image_size(image)
+    return width, height
 
 
 @auto_docstring
@@ -186,9 +197,9 @@ class GotOcr2Processor(ProcessorMixin):
         if text is None:
             text = []
             if multi_page:
-                image_sizes = [get_image_size(image) for image_group in images for image in image_group]
+                image_sizes = [_get_image_size_width_height(image) for image_group in images for image in image_group]
             else:
-                image_sizes = [get_image_size(image) for image in images]
+                image_sizes = [_get_image_size_width_height(image) for image in images]
 
             for box_single, color_single, size in zip(box, color, image_sizes):
                 if box_single[0] is not None:
