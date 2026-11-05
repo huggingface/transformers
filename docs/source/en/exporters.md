@@ -838,8 +838,7 @@ config = OnnxConfig(ort_fusions="cuda")
 With `"cuda"`, the exporter skips the fusions that the CUDA kernels run more slowly, and it rewrites what CUDA graphs
 can't replay, so a static export can run with CUDA graphs. It also fuses mixture-of-experts blocks into ONNX Runtime's
 `MoE` op, which only exists for CUDA, so the graph may no longer run on CPU. Graphs fused
-for `"cuda"` need onnxruntime 1.28 or later. The PyPI builds from 1.27 on need CUDA 13; for CUDA 12, install
-`onnxruntime-gpu` from ONNX Runtime's [CUDA 12 package feed](https://onnxruntime.ai/docs/install/#install-onnx-runtime-gpu-cuda-12x).
+for `"cuda"` need onnxruntime 1.28 or later.
 
 The fused ops aren't standard ONNX, so other ONNX consumers such as TensorRT or OpenVINO can't read them. The default
 is `ort_fusions=None`, which keeps the graph standard. If you need the model on several runtimes, export it once for
