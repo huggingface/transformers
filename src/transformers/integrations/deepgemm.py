@@ -889,7 +889,7 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
     if process_group is None or symm_buffers is None:
         raise ValueError(
             "DeepGEMM Mega MoE requires a `process_group` for the EP group and a `symm_buffers` cache for its "
-            "symmetric buffers. The `deepgemm_megamoe` expert-parallel strategy supplies both; pass them explicitly otherwise."
+            "symmetric buffers. The `deepgemm_megamoe` expert-parallel implementation supplies both; pass them explicitly otherwise."
         )
 
     deepgemm = load_deepgemm_kernel()

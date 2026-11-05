@@ -64,7 +64,7 @@ class DistributedConfig:
             `"ep_dispatch_experts"` rule lets `ep_implementation` pick how tokens reach the experts.
         ep_implementation (`str`, *optional*, defaults to `"auto"`):
             How an `"ep_dispatch_experts"` rule brings the experts their tokens. It names an `EPImplementation`
-            registered in `ALL_EP_IMPLEMENTATIONS`:
+            registered in `EpDispatchExpertsParallel.ep_implementations`:
 
             - `"all_to_all"` exchanges the routed tokens with all-to-all collectives.
             - `"all_reduce"` runs each rank's experts on the batch the EP group shares, and sums the outputs. It
