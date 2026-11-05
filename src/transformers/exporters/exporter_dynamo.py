@@ -221,15 +221,10 @@ def patch_forward_signature(model: PreTrainedModel, inputs: dict[str, Any]):
     "transformers.cache_utils.DynamicSlidingWindowLayer.get_seq_length",
 )
 def _patch_sliding_window_layer(original):
-    """Give sliding-window cache layers the full cache of a `DynamicLayer`; the sliding mask still applies the window.
+    """Trace sliding-window cache layers as a full `DynamicLayer`; the sliding mask still applies the window.
 
-    A `DynamicSlidingWindowLayer` sizes its mask from a Python token counter and slices its cache to the window, so a
-    trace fixes both at the sample's length: the exported decode fails once generation goes past the window. With the
-    full cache, the mask sizes come from the cache's shape, and the sliding mask keeps attention within the window. It
-    also keeps the KV-cache concat feeding the state directly, which OpenVINO needs to fuse the cache into its
-    attention. The cache of sliding layers then grows with the sequence instead of stopping at the window.
-
-    Temporary: it goes once huggingface/transformers#49542 keeps sliding-window decode on one graph.
+    A trace bakes in the sliding layer's Python token counter and its cut to the window, so the exported decode breaks
+    past the window. Temporary: it goes once huggingface/transformers#49542 keeps sliding-window decode on one graph.
     """
     return getattr(DynamicLayer, original.__name__)
 
