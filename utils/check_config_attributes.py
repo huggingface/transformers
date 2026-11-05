@@ -329,6 +329,9 @@ SPECIAL_CASES_TO_ALLOW = {
         "mask_focal_alpha",
         "mask_focal_gamma",
         "mask_loss_coefficient",
+        "matcher_bbox_cost",
+        "matcher_class_cost",
+        "matcher_giou_cost",
     ],
     "Sam3LiteTextConfig": [
         "auxiliary_loss",
@@ -342,6 +345,9 @@ SPECIAL_CASES_TO_ALLOW = {
         "mask_focal_alpha",
         "mask_focal_gamma",
         "mask_loss_coefficient",
+        "matcher_bbox_cost",
+        "matcher_class_cost",
+        "matcher_giou_cost",
     ],
     # Internally uses Got Ocr2 so no need to use in the modeling code as we remap in auto instead
     "PPChart2TableConfig": True,
@@ -530,9 +536,11 @@ def check_config_attributes():
             cls
             for name, cls in inspect.getmembers(
                 inspect.getmodule(_config_class),
-                lambda x: inspect.isclass(x)
-                and issubclass(x, PreTrainedConfig)
-                and inspect.getmodule(x) == inspect.getmodule(_config_class),
+                lambda x: (
+                    inspect.isclass(x)
+                    and issubclass(x, PreTrainedConfig)
+                    and inspect.getmodule(x) == inspect.getmodule(_config_class)
+                ),
             )
         ]
         for config_class in config_classes_in_module:

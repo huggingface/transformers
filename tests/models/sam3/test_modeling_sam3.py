@@ -283,6 +283,7 @@ class Sam3ModelTester:
             boxes = torch.rand(num_boxes, 4, device=torch_device)
             boxes[:, 2:] = boxes[:, :2] + 0.2
             boxes = torch.clamp(boxes, 0, 1)
+            # SAM3 mask decoder outputs masks at 1/4 of the input image resolution (stride 4)
             masks = (
                 torch.rand(num_boxes, self.image_size // 4, self.image_size // 4, device=torch_device) > 0.5
             ).float()

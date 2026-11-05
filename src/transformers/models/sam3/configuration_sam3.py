@@ -224,6 +224,12 @@ class Sam3Config(PreTrainedConfig):
         Alpha parameter for sigmoid focal loss on mask predictions.
     mask_focal_gamma (`float`, *optional*, defaults to 2.0):
         Gamma parameter for sigmoid focal loss on mask predictions.
+    matcher_class_cost (`float`, *optional*, defaults to 2.0):
+        The relative weight of the classification error in the matching cost.
+    matcher_bbox_cost (`float`, *optional*, defaults to 5.0):
+        The relative weight of the L1 error of the bounding box coordinates in the matching cost.
+    matcher_giou_cost (`float`, *optional*, defaults to 2.0):
+        The relative weight of the generalized IoU loss of the bounding box in the matching cost.
 
     Example:
     ```python
@@ -281,6 +287,9 @@ class Sam3Config(PreTrainedConfig):
     ce_gamma: float = 2.0
     mask_focal_alpha: float = 0.25
     mask_focal_gamma: float = 2.0
+    matcher_class_cost: float = 2.0
+    matcher_bbox_cost: float = 5.0
+    matcher_giou_cost: float = 2.0
 
     @property
     def image_size(self):

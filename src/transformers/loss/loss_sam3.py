@@ -16,7 +16,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..image_transforms import corners_to_center_format
 from ..utils import is_scipy_available, is_vision_available, requires_backends
 
 
@@ -24,7 +23,7 @@ if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
 
 if is_vision_available():
-    from ..image_transforms import center_to_corners_format
+    from ..image_transforms import center_to_corners_format, corners_to_center_format
 
 from .loss_for_object_detection import (
     box_iou,
@@ -48,22 +47,20 @@ class Sam3HungarianMatcher(nn.Module):
     This is a more efficient implementation of BinaryHungarianMatcher.
 
     Args:
-        class_cost:
-            The relative weight of the classification error in the matching cost.
-        bbox_cost:
-            The relative weight of the L1 error of the bounding box coordinates in the matching cost.
-        giou_cost:
-            The relative weight of the giou loss of the bounding box in the matching cost.
+        config:
+            Sam3Config or Sam3LiteTextConfig containing matcher hyperparameters.
     """
 
-    def __init__(self, cost_class: float = 2.0, cost_bbox: float = 5.0, cost_giou: float = 2.0):
+    def __init__(self, config):
         super().__init__()
-        requires_backends(self, ["scipy"])
+        requires_backends(self, ["scipy", "vision"])
 
-        self.cost_class = cost_class
-        self.cost_bbox = cost_bbox
-        self.cost_giou = cost_giou
-        if cost_class == 0 and cost_bbox == 0 and cost_giou == 0:
+        self.class_cost = getattr(config, "matcher_class_cost", 2.0)
+        self.bbox_cost = getattr(config, "matcher_bbox_cost", 5.0)
+        self.giou_cost = getattr(config, "matcher_giou_cost", 2.0)
+        self.alpha = getattr(config, "ce_alpha", 0.25)
+        self.gamma = getattr(config, "ce_gamma", 2.0)
+        if self.class_cost == 0 and self.bbox_cost == 0 and self.giou_cost == 0:
             raise ValueError("All costs of the Matcher can't be 0")
 
     @torch.no_grad()
@@ -91,7 +88,9 @@ class Sam3HungarianMatcher(nn.Module):
             - `tgt_idx` is the index into the packed target tensor `targets["boxes"]`
             For each batch element, len(matched) = min(num_queries, num_target_boxes).
         """
-        out_score = outputs["pred_logits"].squeeze(-1)
+        out_score = outputs["pred_logits"]
+        if out_score.dim() == 3:
+            out_score = out_score.squeeze(-1)
         out_bbox = outputs["pred_boxes"]
         tgt_bbox = targets["boxes_padded"]
 
@@ -112,8 +111,8 @@ class Sam3HungarianMatcher(nn.Module):
                 )
 
         # Focal binary class cost
-        alpha = 0.25
-        gamma = 2.0
+        alpha = self.alpha
+        gamma = self.gamma
         out_prob = out_score.sigmoid()
 
         log_out_prob = F.logsigmoid(out_score)
@@ -124,8 +123,9 @@ class Sam3HungarianMatcher(nn.Module):
         cost_class = cost_class.unsqueeze(-1).expand_as(cost_bbox)
 
         # Final cost matrix
-        cost_matrix = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou
-        cost_matrix = cost_matrix.cpu()
+        cost_matrix = self.bbox_cost * cost_bbox + self.class_cost * cost_class + self.giou_cost * cost_giou
+        cost_matrix = torch.nan_to_num(cost_matrix)
+        cost_matrix = cost_matrix.cpu().float()
 
         num_boxes = targets["num_boxes"]
         sizes = num_boxes.tolist()
@@ -149,10 +149,20 @@ class Sam3HungarianMatcher(nn.Module):
             if len(tgt) > 0:
                 tgt_parts.append(tgt + offset)
             offset += sizes[i]
-        tgt_idx = torch.cat(tgt_parts) if tgt_parts else torch.zeros(0, dtype=torch.int64)
 
-        batch_idx = torch.cat([torch.full_like(src, i) for i, (src, _) in enumerate(src_indices)])
-        src_idx = torch.cat([src for (src, _) in src_indices])
+        device = out_bbox.device
+        if not tgt_parts:
+            return (
+                torch.empty(0, dtype=torch.int64, device=device),
+                torch.empty(0, dtype=torch.int64, device=device),
+                torch.empty(0, dtype=torch.int64, device=device),
+            )
+
+        batch_idx = torch.cat([torch.full_like(src, i) for i, (src, _) in enumerate(src_indices) if len(src) > 0]).to(
+            device
+        )
+        src_idx = torch.cat([src for src, _ in src_indices if len(src) > 0]).to(device)
+        tgt_idx = torch.cat(tgt_parts).to(device)
 
         return batch_idx, src_idx, tgt_idx
 
@@ -166,7 +176,8 @@ class Sam3Loss(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.matcher = Sam3HungarianMatcher()
+        requires_backends(self, ["scipy", "vision"])
+        self.matcher = Sam3HungarianMatcher(config)
         self.auxiliary_loss = config.auxiliary_loss
 
         self.weight_dict = {
@@ -201,7 +212,8 @@ class Sam3Loss(nn.Module):
         masks_list = []
         valid_list = []
         num_boxes = []
-        has_masks = False
+        has_any_masks = False
+        mask_spatial_shape = None
 
         for label in labels:
             boxes = label["boxes"]  # xyxy
@@ -211,11 +223,10 @@ class Sam3Loss(nn.Module):
                 continue
             boxes_xyxy_list.append(boxes)
             masks = label.get("masks")
-            if masks is not None:
-                has_masks = True
-                masks_list.append(masks)
-                valid = label.get("is_valid_mask", torch.ones(n, dtype=torch.bool, device=boxes.device))
-                valid_list.append(valid)
+            if masks is not None and masks.shape[0] > 0:
+                has_any_masks = True
+                if mask_spatial_shape is None:
+                    mask_spatial_shape = masks.shape[-2:]
 
         if len(boxes_xyxy_list) == 0:
             device = labels[0]["boxes"].device if len(labels) > 0 else torch.device("cpu")
@@ -243,7 +254,25 @@ class Sam3Loss(nn.Module):
 
         masks_packed = None
         is_valid_packed = None
-        if has_masks:
+        if has_any_masks:
+            for label in labels:
+                boxes = label["boxes"]
+                n = len(boxes)
+                if n == 0:
+                    continue
+                masks = label.get("masks")
+                if masks is not None:
+                    masks_list.append(masks)
+                    valid = label.get("is_valid_mask")
+                    if valid is None:
+                        valid = torch.ones(n, dtype=torch.bool, device=boxes.device)
+                    valid_list.append(valid)
+                else:
+                    # In mixed-mask batches, zero-fill masks and mark as invalid
+                    zero_masks = torch.zeros((n, *mask_spatial_shape), dtype=torch.float32, device=boxes.device)
+                    masks_list.append(zero_masks)
+                    valid_list.append(torch.zeros(n, dtype=torch.bool, device=boxes.device))
+
             masks_packed = torch.cat(masks_list)
             is_valid_packed = torch.cat(valid_list)
 
@@ -262,7 +291,9 @@ class Sam3Loss(nn.Module):
             raise KeyError("No pred_logits found in outputs")
         if "pred_boxes" not in outputs:
             raise KeyError("No pred_boxes found in outputs")
-        src_logits = outputs["pred_logits"].squeeze(-1)
+        src_logits = outputs["pred_logits"]
+        if src_logits.dim() == 3:
+            src_logits = src_logits.squeeze(-1)
         prob = src_logits.sigmoid()
 
         with torch.no_grad():
