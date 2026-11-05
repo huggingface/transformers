@@ -44,6 +44,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
+    # The checkpoint names are the params of `FbgemmFp8Linear`
     serialized_names = {"weight": ["weight", "weight_scale"]}
     quantization_config: "FbgemmFp8Config"
 
@@ -52,6 +53,8 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
         return 1
 
     def validate_environment(self, *args, **kwargs):
+        if self.dequantizing:
+            return  # the `dequantize` load operation is pure torch
         if not is_torch_cuda_available() and not is_torch_xpu_available():
             raise ImportError("Using fbgemm fp8 quantization requires a GPU or XPU")
         if is_torch_xpu_available() and not is_kernels_available():
@@ -117,6 +120,9 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
+        if self.dequantizing:
+            # The model stays unquantized: the `dequantize` load operation runs on every checkpoint weight
+            return
         from ..integrations import replace_with_fbgemm_fp8_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
@@ -130,20 +136,6 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
             pre_quantized=self.pre_quantized,
         )
 
-    def _process_model_after_weight_loading(self, model, **kwargs):
-        """
-        Force update the input scale upper bound after weight loading and device dispatch are complete.
-        This resolves issues where persistent buffers are zeroed out or overwritten during the loading process.
-        """
-        from ..integrations.fbgemm_fp8 import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts
-
-        for m in model.modules():
-            if isinstance(m, (FbgemmFp8Linear, FbgemmFp8Llama4TextExperts)):
-                if hasattr(m, "input_scale_ub"):
-                    # The model is now on the target device, so we can use fill_ directly.
-                    m.input_scale_ub.fill_(self.quantization_config.activation_scale_ub)
-        return model
-
     def is_serializable(self):
         return True
 
@@ -151,7 +143,7 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return False
 
-    def get_quantize_ops(self):
-        from ..integrations.fbgemm_fp8 import FbgemmFp8Quantize
+    def get_load_operations(self):
+        from ..integrations.fbgemm_fp8 import FbgemmFp8Dequantize, FbgemmFp8Quantize
 
-        return FbgemmFp8Quantize(self)
+        return {"dequantize": FbgemmFp8Dequantize, "quantize": FbgemmFp8Quantize}

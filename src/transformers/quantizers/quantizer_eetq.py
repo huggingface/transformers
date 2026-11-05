@@ -38,9 +38,13 @@ class EetqHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
+    # The checkpoint names are the params of `EetqLinear`
+    serialized_names = {"weight": ["weight", "weight_scales"]}
     quantization_config: "EetqConfig"
 
     def validate_environment(self, *args, **kwargs):
+        if self.dequantizing:
+            return  # dequantizing falls back to torch without the kernel or a GPU
         if not is_kernels_available():
             raise ImportError("Loading an EETQ quantized model requires kernels (`pip install kernels`)")
 
@@ -85,6 +89,8 @@ class EetqHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
+        if self.dequantizing:
+            return  # no kernel: the `dequantize` load operation runs on every checkpoint weight
         from ..integrations import load_eetq_kernels
 
         load_eetq_kernels()
@@ -108,7 +114,7 @@ class EetqHfQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return True
 
-    def get_quantize_ops(self):
-        from ..integrations.eetq import EetqQuantize
+    def get_load_operations(self):
+        from ..integrations.eetq import EetqDequantize, EetqQuantize
 
-        return EetqQuantize(self)
+        return {"dequantize": EetqDequantize, "quantize": EetqQuantize}

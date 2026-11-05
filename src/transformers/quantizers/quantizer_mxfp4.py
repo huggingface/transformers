@@ -202,7 +202,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
         if isinstance(module, Mxfp4GptOssExperts):
             return module  # swapped with its MLP by `replace_with_mxfp4_linear`
-        if self.quantization_config.dequantize or not self.pre_quantized or not name.endswith(".experts"):
+        if not self.pre_quantized or not name.endswith(".experts"):
             return None
         has_gate, has_bias = getattr(module, "has_gate", True), getattr(module, "has_bias", False)
         experts_class = use_experts_implementation(
@@ -215,17 +215,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
         new_module._hf_quantized_needs_local_tp = True
         return new_module
 
-    def get_state_dict_and_metadata(self, model):
-        from ..integrations.mxfp4 import Mxfp4GptOssExperts, Mxfp4ReverseDeserialize
-
-        state_dict = model.state_dict()
-        reverse_op = Mxfp4ReverseDeserialize(self)
-        for name, module in model.named_modules():
-            if isinstance(module, Mxfp4GptOssExperts):
-                for proj in ("gate_up_proj", "down_proj"):
-                    state_dict.update(reverse_op.convert({}, model=model, full_layer_name=f"{name}.{proj}_blocks"))
-        return state_dict, {}
-
     def is_serializable(self):
         return True
 
@@ -235,11 +224,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
             "MXFP4 quantization don't support training, please consider dequantizing the model first by passing quantization_config=Mxfp4Config(dequantize=True) to .from_pretrained()"
         )
         return False
-
-    def get_quantize_ops(self):
-        from ..integrations.mxfp4 import Mxfp4Quantize
-
-        return Mxfp4Quantize(self)
 
     serialized_names = {
         "gate_up_proj": ["gate_up_proj_blocks", "gate_up_proj_scales"],
@@ -256,6 +240,11 @@ class Mxfp4HfQuantizer(HfQuantizer):
     renamed_names = {"scale": "weight_scale_inv"}
 
     def get_load_operations(self):
-        from ..integrations.mxfp4 import Mxfp4Dequantize, Mxfp4Deserialize
+        from ..integrations.mxfp4 import Mxfp4Dequantize, Mxfp4Deserialize, Mxfp4Quantize, Mxfp4Serialize
 
-        return {"deserialize": Mxfp4Deserialize, "dequantize": Mxfp4Dequantize}
+        return {
+            "deserialize": Mxfp4Deserialize,
+            "dequantize": Mxfp4Dequantize,
+            "quantize": Mxfp4Quantize,
+            "serialize": Mxfp4Serialize,
+        }

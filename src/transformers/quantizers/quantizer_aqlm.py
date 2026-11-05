@@ -42,6 +42,8 @@ class AqlmHfQuantizer(HfQuantizer):
     quantization_config: "AqlmConfig"
 
     def validate_environment(self, *args, **kwargs):
+        if self.dequantizing:
+            return  # dequantizing is pure torch
         if not is_accelerate_available():
             raise ImportError("Using `aqlm` quantization requires Accelerate: `pip install accelerate`")
 
@@ -84,3 +86,10 @@ class AqlmHfQuantizer(HfQuantizer):
 
     def is_serializable(self):
         return True
+
+    serialized_names = {"weight": ["codes", "codebooks", "scales"]}
+
+    def get_load_operations(self):
+        from ..integrations.aqlm import AqlmDequantize
+
+        return {"dequantize": AqlmDequantize}

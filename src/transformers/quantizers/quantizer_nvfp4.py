@@ -102,26 +102,19 @@ class NVFP4HfQuantizer(HfQuantizer):
     def quantized_module(self, name, module):
         from ..integrations.nvfp4 import NVFP4Experts, NVFP4Linear, is_nvfp4_compatible
 
-        if self.pre_quantized and self.quantization_config.dequantize:
-            return None
         if name.endswith(".experts") and self.pre_quantized and is_nvfp4_compatible(module):
             return NVFP4Experts(module)  # TODO: quantize experts from a full-precision checkpoint too
         if isinstance(module, nn.Linear) and is_nvfp4_compatible(module):
             return NVFP4Linear(module.in_features, module.out_features)
         return None
 
-    def get_quantize_ops(self):
-        from ..integrations.nvfp4 import NVFP4Quantize
-
-        return NVFP4Quantize(self.quantization_device)
-
     # As ModelOpt saves them
     serialized_names = {"weight": ["weight", "weight_scale", "weight_scale_2", "input_scale"]}
 
     def get_load_operations(self):
-        from ..integrations.nvfp4 import NVFP4Dequantize, NVFP4Deserialize
+        from ..integrations.nvfp4 import NVFP4Dequantize, NVFP4Deserialize, NVFP4Quantize
 
-        return {"deserialize": NVFP4Deserialize, "dequantize": NVFP4Dequantize}
+        return {"deserialize": NVFP4Deserialize, "dequantize": NVFP4Dequantize, "quantize": NVFP4Quantize}
 
     def is_serializable(self) -> bool:
         return False

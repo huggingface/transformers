@@ -37,6 +37,8 @@ class QuantoHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
+    # The flattened quanto weight, as in the `state_dict` of a frozen `QLinear`: int4 / int2 values are packed
+    serialized_names = {"weight": ["weight._data", "weight._data._data", "weight._scale", "weight._shift"]}
     quantization_config: "QuantoConfig"
 
     @property
@@ -44,6 +46,8 @@ class QuantoHfQuantizer(HfQuantizer):
         return {"int8": 1, "float8": 1, "int4": 0.5, "int2": 0.25}.get(self.quantization_config.weights)
 
     def validate_environment(self, *args, **kwargs):
+        if self.dequantizing:
+            return  # the `dequantize` load operation is pure torch
         if not is_optimum_quanto_available():
             raise ImportError(
                 "Loading an optimum-quanto quantized model requires optimum-quanto library (`pip install optimum-quanto`)"
@@ -82,6 +86,9 @@ class QuantoHfQuantizer(HfQuantizer):
         return max_memory
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        if self.dequantizing:
+            # The model stays unquantized: the `dequantize` load operation runs on every checkpoint weight
+            return
         from ..integrations import replace_with_quanto_layers
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
@@ -99,7 +106,7 @@ class QuantoHfQuantizer(HfQuantizer):
     def is_serializable(self):
         return False
 
-    def get_quantize_ops(self):
-        from ..integrations.quanto import QuantoQuantize
+    def get_load_operations(self):
+        from ..integrations.quanto import QuantoDequantize, QuantoQuantize
 
-        return QuantoQuantize(self)
+        return {"dequantize": QuantoDequantize, "quantize": QuantoQuantize}

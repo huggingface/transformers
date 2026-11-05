@@ -29,6 +29,7 @@ from transformers.core_model_loading import (
     Chunk,
     Concatenate,
     Conv3dToLinear,
+    ConversionOps,
     ErnieFuseAndSplitTextVisionExperts,
     GroupWeightRename,
     LinearToConv3d,
@@ -42,11 +43,13 @@ from transformers.core_model_loading import (
     WeightRenaming,
     build_glob_alternation,
     convert_and_load_state_dict_in_model,
+    expand_target_names,
     rename_source_key,
     revert_weight_conversion,
     spawn_materialize,
 )
 from transformers.modeling_utils import LoadStateDictConfig
+from transformers.quantizers.auto import QuantizationPlanHfQuantizer
 from transformers.utils.import_utils import is_triton_available
 
 from ..test_modeling_common import compare_state_dicts
@@ -558,6 +561,71 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         # Make sure both saved state_dict are identical
         self.assertTrue(compare_state_dicts(reversed_state_dict, state_dict))
 
+    def test_quantize_load_operation_runs_last_on_full_names(self):
+        model = DummyRoot(PreTrainedConfig())
+        seen = []
+
+        class DoubleQuantize(ConversionOps):
+            def __init__(self, hf_quantizer):
+                pass
+
+            def convert(self, input_dict, model=None, full_layer_name=None, **kwargs):
+                # Like bnb: looks the params up in the model by their full names
+                tensors = expand_target_names(input_dict, full_layer_name)
+                seen.extend(name for name in tensors if model.get_parameter(name) is not None)
+                return {name: (value[0] if isinstance(value, list) else value) * 2 for name, value in tensors.items()}
+
+        class Quantizer:
+            pre_quantized, quantization_config = False, None
+
+            def param_needs_quantization(self, model, name):
+                return "down_proj" not in name or name.startswith("mlp.")
+
+            def get_load_operations(self):
+                return {"quantize": DoubleQuantize}
+
+        quantizer = QuantizationPlanHfQuantizer({"*": Quantizer()})
+        raw = {
+            "model.layers.0.experts.0.w1.weight": torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
+            "model.layers.0.experts.1.w1.weight": torch.tensor([[10.0, 11.0], [12.0, 13.0]]),
+            "model.layers.0.experts.0.w3.weight": torch.tensor([[4.0, 5.0], [6.0, 7.0]]),
+            "model.layers.0.experts.1.w3.weight": torch.tensor([[14.0, 15.0], [16.0, 17.0]]),
+            "model.layers.0.self_attn.qkv_proj.weight": torch.tensor([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]),
+            "mlp.w2.weight": torch.tensor([[60.0, 61.0], [62.0, 63.0]]),
+        }
+        weight_mapping = [
+            WeightConverter(
+                ["experts.*.w1.weight", "experts.*.w3.weight"],
+                "experts.gate_up_proj.weight",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                "self_attn.qkv_proj.weight",
+                ["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightRenaming("mlp.w2.weight", "mlp.down_proj.weight"),
+        ]
+        load_config = LoadStateDictConfig(weight_mapping=weight_mapping, hf_quantizer=quantizer)
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model, {k: v.clone() for k, v in raw.items()}, load_config
+        )
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        self.assertEqual(
+            sorted(seen),
+            [
+                "mlp.down_proj.weight",
+                "model.layers.0.experts.gate_up_proj.weight",
+                "model.layers.0.self_attn.k_proj.weight",
+                "model.layers.0.self_attn.q_proj.weight",
+                "model.layers.0.self_attn.v_proj.weight",
+            ],
+        )
+        state = model.state_dict()
+        torch.testing.assert_close(state["mlp.down_proj.weight"], raw["mlp.w2.weight"] * 2)
+        torch.testing.assert_close(state["model.layers.0.self_attn.v_proj.weight"], torch.tensor([[10.0, 12.0]]))
+
     def test_qkv_chunk_rope_permute_with_fp8_quantization(self):
         if is_triton_available():
             from transformers.integrations.finegrained_fp8 import Fp8Dequantize, Fp8Quantize
@@ -627,7 +695,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                     self, "quantization_config", SimpleNamespace(weight_block_size=bs)
                 ),
                 "param_needs_quantization": lambda self, _model, param_name: param_name.endswith("q_proj.weight"),
-                "get_quantize_ops": lambda self: Fp8Quantize(self),
+                "get_load_operations": lambda self: {"quantize": Fp8Quantize},
                 "pre_quantized": False,
             },
         )

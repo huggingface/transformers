@@ -211,6 +211,18 @@ class Mxfp4ReverseDeserialize(ConversionOps):
         return {f"{name}_blocks": blocks.reshape(*scales.shape, -1), f"{name}_scales": scales}
 
 
+class Mxfp4Serialize(Mxfp4ReverseDeserialize):
+    """`*_blocks` and `*_scales` of each param that `Mxfp4Deserialize` swizzled into a triton tensor."""
+
+    def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, torch.Tensor]:
+        module = model.get_submodule(full_layer_name)
+        for param in self.hf_quantizer.serialized_names:
+            if getattr(module, f"{param}_precision_config", None) is not None:
+                name = f"{full_layer_name}.{param}" if full_layer_name else param
+                input_dict.update(super().convert({}, model=model, full_layer_name=f"{name}_blocks"))
+        return input_dict
+
+
 # Copied from GPT_OSS repo and vllm
 def quantize_to_mxfp4(w, triton_kernels_hub):
     downcast_to_mxfp_torch = triton_kernels_hub.numerics_details.mxfp.downcast_to_mxfp_torch

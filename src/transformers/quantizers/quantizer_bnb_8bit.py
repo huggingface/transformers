@@ -54,6 +54,8 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         return 1
 
     def validate_environment(self, *args, **kwargs):
+        if self.dequantizing:
+            return  # the `dequantize` load operation is pure torch
         if not is_accelerate_available():
             raise ImportError(
                 f"Using `bitsandbytes` 8-bit quantization requires accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
@@ -111,7 +113,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         return isinstance(module, bnb.nn.Linear8bitLt) and name != "bias"
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        setattr(model, "is_loaded_in_8bit", True)
+        setattr(model, "is_loaded_in_8bit", not self.quantization_config.dequantize)
         return model
 
     def _process_model_before_weight_loading(
@@ -120,6 +122,9 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         device_map,
         **kwargs,
     ):
+        if self.dequantizing:
+            # The model stays unquantized: the `dequantize` load operation runs on every checkpoint weight
+            return
         from ..integrations import replace_with_bnb_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
@@ -145,20 +150,9 @@ class Bnb8BitHfQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return True
 
-    def _dequantize(self, model, dtype=None):
-        from ..integrations import dequantize_and_replace
-
-        model = dequantize_and_replace(model, quantization_config=self.quantization_config, dtype=dtype)
-        return model
-
-    def get_quantize_ops(self):
-        from ..integrations.bitsandbytes import Bnb8bitQuantize
-
-        return Bnb8bitQuantize(self)
-
     serialized_names = {"weight": ["weight", "SCB", "weight_format"]}
 
     def get_load_operations(self):
-        from ..integrations.bitsandbytes import Bnb8bitDeserialize
+        from ..integrations.bitsandbytes import Bnb8bitDequantize, Bnb8bitDeserialize, Bnb8bitQuantize
 
-        return {"deserialize": Bnb8bitDeserialize}
+        return {"deserialize": Bnb8bitDeserialize, "dequantize": Bnb8bitDequantize, "quantize": Bnb8bitQuantize}

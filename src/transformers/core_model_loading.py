@@ -172,10 +172,8 @@ class Split(ConversionOps):
             raise ValueError("Undefined Operation encountered")
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
-        sizes = [
-            model.get_parameter(full_layer_name.replace(target_patterns[0], target)).shape[self.dim]
-            for target in target_patterns
-        ]
+        full_names = expand_target_names(dict.fromkeys(target_patterns), full_layer_name)
+        sizes = [model.get_parameter(name).shape[self.dim] for name in full_names]
         chunks = torch.split(tensor, sizes, dim=self.dim)
         return {target: chunk.contiguous() for target, chunk in zip(target_patterns, chunks)}
 
@@ -813,6 +811,19 @@ def process_source_pattern(source_pattern: str, target_pattern: str) -> str:
     return source_pattern
 
 
+def expand_target_names(tensors: dict, layer_name: str) -> dict:
+    """
+    Ops return tensors under the target patterns: expand them to full names with the prefix and suffix of `layer_name`,
+    the full name of a target. Keys that already are full names (some ops rename in `convert`) are left untouched.
+    """
+    full_name = layer_name.replace("*.", "0.")
+    for key in tensors:
+        if key in full_name:
+            prefix, _, suffix = full_name.partition(key)
+            return {prefix + k + suffix: v for k, v in tensors.items()}
+    return tensors
+
+
 class WeightTransform:
     # Restrict the attributes that can be attached
     __slots__ = (
@@ -839,7 +850,8 @@ class WeightTransform:
 
         # Init fields that will be used during conversion
         self.distributed_operation: Any = None
-        self.quantization_operation: ConversionOps | None = None
+        # Unused: quantization is the "quantize" load operation. Kept for peft, which copies it to its converters
+        self.quantization_operation = None
         self.collected_tensors: dict[str, list[Future]] = defaultdict(list)
         self.layer_targets: dict[str, set[str]] = defaultdict(set)
 
@@ -985,10 +997,6 @@ class WeightTransform:
 
     def reverse_transform(self) -> WeightTransform:
         """Reverse the current `WeightTransform` instance, to be able to save with the opposite weight transformations."""
-        # TODO: check this and relax when quantizer have `reverse_op`
-        if self.quantization_operation is not None:
-            raise ValueError("Cannot reverse the transform with TP or quantization")
-
         kwargs = {}
         # Add the reverse ops if applicable (it needs to be provided at __init__)
         if hasattr(self, "operations"):
@@ -1064,20 +1072,6 @@ class WeightRenaming(WeightTransform):
         # only be of length 1, and are actually the full key names - we also have only 1 single related tensor)
         target_key = self.target_patterns[0]
         collected_tensors = {target_key: collected_tensors[self.source_patterns[0]]}
-
-        if hf_quantizer is not None and self.quantization_operation is not None:
-            with log_conversion_errors(
-                layer_name, loading_info, (len(collected_tensors), layer_name), self.quantization_operation
-            ):
-                collected_tensors = self.quantization_operation.convert(
-                    collected_tensors,
-                    source_patterns=self.source_patterns,
-                    target_patterns=self.target_patterns,
-                    full_layer_name=target_key,
-                    model=model,
-                    config=config,
-                    missing_keys=loading_info.missing_keys if loading_info else None,
-                )
 
         return collected_tensors
 
@@ -1182,10 +1176,6 @@ class PrefixChange(WeightRenaming):
 
     def reverse_transform(self) -> WeightTransform:
         """Reverse the current `WeightTransform` instance, to be able to save with the opposite weight transformations."""
-        # TODO: check this and relax when quantizer have `reverse_op`
-        if self.quantization_operation is not None:
-            raise ValueError("Cannot reverse the transform with TP or quantization")
-
         # Only one of the 2 can ever be used, so 1 is always None
         result = PrefixChange(
             prefix_to_add=self.prefix_to_remove, prefix_to_remove=self.prefix_to_add, model_prefix=self.model_prefix
@@ -1250,34 +1240,7 @@ class WeightConverter(WeightTransform):
                     missing_keys=loading_info.missing_keys if loading_info else None,
                 )
 
-        # Tensors are returned from ops with the target patterns, we need to expand them to full name.
-        # This means we need to grab the prefix and suffix to add to every target key
-        full_name = layer_name
-        if "*." in layer_name:
-            full_name = layer_name.replace("*.", "0.")
-
-        try:
-            prefix, _, suffix = next(full_name.partition(k) for k in collected_tensors.keys() if k in full_name)
-            # Rename the tensors
-            collected_tensors = {prefix + k + suffix: v for k, v in collected_tensors.items()}
-        # some quantizers need to already rename in `convert` as they cannot only rely on prefix and suffix
-        except StopIteration:
-            pass
-
-        if hf_quantizer is not None and self.quantization_operation is not None:
-            with log_conversion_errors(
-                layer_name, loading_info, (len(collected_tensors), layer_name), self.quantization_operation
-            ):
-                collected_tensors = self.quantization_operation.convert(
-                    collected_tensors,
-                    source_patterns=self.source_patterns,
-                    target_patterns=self.target_patterns,
-                    full_layer_name=layer_name,
-                    config=config,
-                    model=model,
-                    missing_keys=loading_info.missing_keys if loading_info else None,
-                )
-        return collected_tensors
+        return expand_target_names(collected_tensors, layer_name)
 
 
 # For I/O bound operations (i.e. here reading files), it is better to have fewer threads, e.g. 4 is a good default.
@@ -1725,11 +1688,11 @@ def convert_and_load_state_dict_in_model(
             # Otherwise, only potential renaming
             else:
                 new_converter = WeightRenaming(original_key, renamed_key)
-                source_pattern = original_key
             # each target key gets its own converter instance, with the ops of its quantizer
             if hf_quantizer is not None and renamed_key not in param_name_to_load:
                 new_converter = hf_quantizer.update_weight_transform(new_converter, model, renamed_key)
             mapping = param_name_to_load.setdefault(renamed_key, new_converter)
+            source_pattern = source_pattern or mapping._original_source_patterns[0]
 
             # 3. Handle dtype casting
             _dtype = dtype
@@ -1776,12 +1739,8 @@ def convert_and_load_state_dict_in_model(
             mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
         elif source_pattern is not None:  # add all target keys as unexpected
             mapping = pattern_to_converter[source_pattern]
-            for k in mapping.target_patterns:
-                _add_unmatched_checkpoint_key(
-                    renamed_key.replace(mapping.target_patterns[0], k),
-                    model,
-                    loading_info,
-                )
+            for name in expand_target_names(dict.fromkeys(mapping.target_patterns), renamed_key):
+                _add_unmatched_checkpoint_key(name, model, loading_info)
         else:
             _add_unmatched_checkpoint_key(renamed_key, model, loading_info)
 
