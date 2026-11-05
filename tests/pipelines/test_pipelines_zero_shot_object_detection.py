@@ -144,6 +144,37 @@ class ZeroShotObjectDetectionPipelineTests(unittest.TestCase):
         )
 
     @require_torch
+    def test_batched_input_validation(self):
+        from unittest.mock import patch
+
+        detector = object.__new__(ZeroShotObjectDetectionPipeline)
+        images = [Image.new("RGB", (8, 8)) for _ in range(3)]
+
+        with patch(
+            "transformers.pipelines.zero_shot_object_detection.ChunkPipeline.__call__",
+            side_effect=lambda inputs, **kwargs: list(inputs),
+        ):
+            # Shared labels: broadcast regardless of list length.
+            for labels in ("cat,dog", ["cat", "dog"], ["cat", "dog", "bird"]):
+                result = detector(images, candidate_labels=labels)
+                self.assertEqual([item["candidate_labels"] for item in result], [labels] * 3)
+
+            # Nested labels: preserve one label list per image.
+            per_image = [["cat"], ["dog", "bird"], ["bird"]]
+            result = detector(images, candidate_labels=per_image)
+            self.assertEqual([item["candidate_labels"] for item in result], per_image)
+
+            # Both lengths must appear in mismatch errors.
+            for count in (2, 4):
+                with self.assertRaisesRegex(ValueError, f"3 images but {count} candidate label lists"):
+                    detector(images, candidate_labels=[["cat"]] * count)
+
+            # Reject ambiguous or invalid label structures.
+            for labels in (None, ["cat", ["dog"]], [1, 2, 3]):
+                with self.assertRaisesRegex(ValueError, "candidate_labels must be"):
+                    detector(images, candidate_labels=labels)
+
+    @require_torch
     @slow
     def test_large_model_pt(self):
         object_detector = pipeline("zero-shot-object-detection")
