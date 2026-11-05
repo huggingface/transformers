@@ -15,6 +15,7 @@
 import re
 import warnings
 from collections.abc import Callable
+from itertools import chain
 from typing import TypeGuard
 
 from ..models.auto.configuration_auto import AutoConfig
@@ -435,17 +436,34 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
     def update_weight_conversions(self, weight_conversions, model):
         from ..core_model_loading import WeightConverter
 
+        # Each model converter is updated by the quantizer of its target param only, e.g. the fp8 quantizer must not
+        # add its companions to the merge of NVFP4 experts
+        names = "\n".join(name for name, _ in chain(model.named_parameters(), model.named_buffers()))
+
+        def owner(converter):
+            target = converter._original_target_patterns[0].replace("*", ".*")
+            match = re.search(rf"^(.*{target})$", names, re.MULTILINE)
+            return self.get_quantizer(match.group(1)) if match else None
+
+        owners = {id(c): owner(c) for c in weight_conversions if isinstance(c, WeightConverter)}
         general = {}
         for quantizer in self.all_quantizers:
+            # Chained like a single quantizer (renamings keep their order), but blind to the converters of others
+            hidden = [c for c in weight_conversions if owners.get(id(c), quantizer) is not quantizer]
+            visible = [c for c in weight_conversions if owners.get(id(c), quantizer) is quantizer]
             own = quantizer.get_weight_conversions()
             # Taken out of `update_weight_conversions` by patterns, not position: renamings may come after them
             general_patterns = [(c._original_source_patterns, c._original_target_patterns) for c in own]
-            weight_conversions = [
+            updated = [
                 c
-                for c in quantizer.update_weight_conversions(weight_conversions, model)
+                for c in quantizer.update_weight_conversions(visible, model)
                 if (getattr(c, "_original_source_patterns", None), getattr(c, "_original_target_patterns", None))
                 not in general_patterns
             ]
+            for converter in updated:
+                if isinstance(converter, WeightConverter):
+                    owners.setdefault(id(converter), quantizer)
+            weight_conversions = updated + hidden
             for converter in own:
                 general.setdefault(converter._original_target_patterns[0], []).append(converter)
         # One general converter per param collects the names of every quantizer, before the own-name ones take them
