@@ -278,7 +278,7 @@ class ParakeetTDTGenerationMixin(ParakeetRNNTGenerationMixin):
     """
 
     def _update_model_kwargs_for_generation(self, outputs, *args, **kwargs):
-        # Skip ParakeetRNNTGenerationMixin's update (it counts per-frame symbols we don't use) and go
+        # Skip ParakeetRNNTGenerationMixin's update (its frame advance ignores durations) and go
         # straight to the base GenerationMixin bookkeeping.
         model_kwargs = GenerationMixin._update_model_kwargs_for_generation(self, outputs, *args, **kwargs)
 
@@ -290,6 +290,17 @@ class ParakeetTDTGenerationMixin(ParakeetRNNTGenerationMixin):
         # Only force forward progress (duration >= 1) for blank predictions;
         blank_mask = tokens == self.config.blank_token_id
         durations = torch.where(blank_mask & (durations == 0), torch.ones_like(durations), durations)
+
+        # Count consecutive zero-duration (necessarily non-blank) emissions at the current encoder frame and force a
+        # one-frame advance after `max_symbols_per_step` of them, mirroring NeMo's greedy TDT decoding.
+        if self._symbols_at_frame is None:
+            self._symbols_at_frame = torch.zeros_like(tokens)
+        stalled = durations == 0
+        symbols = torch.where(stalled, self._symbols_at_frame + 1, torch.zeros_like(self._symbols_at_frame))
+        force_advance = symbols >= self.max_symbols_per_step
+        durations = torch.where(force_advance, torch.ones_like(durations), durations)
+        self._symbols_at_frame = torch.where(force_advance, torch.zeros_like(symbols), symbols)
+
         model_kwargs["encoder_frame_idxs"] = model_kwargs["encoder_frame_idxs"] + durations
         self._step_durations.append(durations)
 
