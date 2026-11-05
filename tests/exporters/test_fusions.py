@@ -13,9 +13,9 @@
 # limitations under the License.
 """Fusion tests, one class per backend.
 
-OpenVINO: its CPU plugin only fuses the patterns it recognizes, and a graph that misses them still runs, just decomposed
-and slower. These tests check that the decode graph `export_for_generation` produces keeps the fused attention with its
-KV cache, RoPE and compressed-weight matmuls, on the tiny models of each decoder family's own tests.
+A backend only runs its fused kernels on the patterns it recognizes, and a graph that misses them still runs, decomposed
+and slower. Each class exports the tiny model of each decoder family's own tests and counts, per layer, the fused ops
+the backend runs, and that none of the ops they replace are left.
 """
 
 import collections
@@ -43,31 +43,35 @@ if is_torch_available():
     import torch
 
 
-# The fused kernels the CPU plugin must compile each layer of a decode graph into. `MatMul` counts the matmuls left
-# decomposed (an unfused attention or expert), so it must stay at 0.
-DENSE_FUSIONS = {"ScaledDotProductAttention": 1, "RoPE": 2, "MatMul": 0}  # RoPE for the queries and the keys
-MOE_FUSIONS = {**DENSE_FUSIONS, "GatherMatmul": 3}  # gate, up and down, computing only the routed experts
-
-# model type: (the tester of its tiny model, fused kernels per layer)
-MODELS = {
-    "llama": (LlamaModelTester, DENSE_FUSIONS),
-    "qwen2": (Qwen2ModelTester, DENSE_FUSIONS),
-    "qwen3": (Qwen3ModelTester, DENSE_FUSIONS),
-    "phi3": (Phi3ModelTester, DENSE_FUSIONS),
-    "olmo2": (Olmo2ModelTester, DENSE_FUSIONS),
-    "granite": (GraniteModelTester, DENSE_FUSIONS),
-    "mistral": (MistralModelTester, DENSE_FUSIONS),  # sliding-window attention
-    "gemma3": (Gemma3TextModelTester, DENSE_FUSIONS),  # sliding-window and full attention layers
-    "mixtral": (MixtralModelTester, MOE_FUSIONS),
-    "qwen3_moe": (Qwen3MoeModelTester, MOE_FUSIONS),
+# model type: the tester of its tiny model
+TESTERS = {
+    "llama": LlamaModelTester,
+    "qwen2": Qwen2ModelTester,
+    "qwen3": Qwen3ModelTester,  # per-head query and key norms
+    "phi3": Phi3ModelTester,
+    "olmo2": Olmo2ModelTester,
+    "granite": GraniteModelTester,
+    "mistral": MistralModelTester,  # sliding-window attention
+    "gemma3": Gemma3TextModelTester,  # sliding-window and full attention layers
+    "mixtral": MixtralModelTester,  # mixture of experts
+    "qwen3_moe": Qwen3MoeModelTester,  # mixture of experts
 }
+MOE_MODELS = {"mixtral", "qwen3_moe"}
 
 
-def _model(model_type, dtype=None):
-    """The tiny causal LM the model's own tests use."""
+def _model(model_type, dtype=None, **config):
+    """The tiny causal LM the model's own tests use, with `config` overriding its config."""
     set_seed(0)
-    config = MODELS[model_type][0](parent=None).get_config()
-    return AutoModelForCausalLM.from_config(config).to(dtype or torch.float32).eval()
+    model_config = TESTERS[model_type](parent=None).get_config()
+    for name, value in config.items():
+        setattr(model_config, name, value)
+    return AutoModelForCausalLM.from_config(model_config).to(dtype or torch.float32).eval()
+
+
+# The fused kernels OpenVINO's CPU plugin must compile each layer of a decode graph into. `MatMul` counts the matmuls
+# left decomposed (an unfused attention or expert), so it must stay at 0.
+OPENVINO_FUSIONS = {"ScaledDotProductAttention": 1, "RoPE": 2, "MatMul": 0}  # RoPE for the queries and the keys
+OPENVINO_MOE_FUSIONS = {**OPENVINO_FUSIONS, "GatherMatmul": 3}  # gate, up and down, computing only the routed experts
 
 
 def _decode(model, multi_token_decode=True, quantizer=None):
@@ -98,6 +102,9 @@ def _compiled_ops(ov_model):
 @require_torch
 @require_openvino
 class OpenVINOFusionTest(unittest.TestCase):
+    """The kernels OpenVINO's CPU plugin compiles the decode graph into: the attention fused with its KV cache, RoPE
+    and compressed-weight matmuls."""
+
     def assert_decode_fused(self, model, decode, fusions):
         num_layers = model.config.num_hidden_layers
         # The cache update feeds its state as is: anything between them keeps the plugin from fusing the cache into
@@ -112,18 +119,19 @@ class OpenVINOFusionTest(unittest.TestCase):
         self.assertEqual({op: layers[op] for op in fusions}, {op: n * num_layers for op, n in fusions.items()})
 
     # bf16, as checkpoints ship: MoE experts only fuse with 16-bit weights
-    @parameterized.expand(list(MODELS))
+    @parameterized.expand(list(TESTERS))
     def test_decode_fuses(self, model_type):
         model = _model(model_type, torch.bfloat16)
-        self.assert_decode_fused(model, _decode(model), MODELS[model_type][1])
+        fusions = OPENVINO_MOE_FUSIONS if model_type in MOE_MODELS else OPENVINO_FUSIONS
+        self.assert_decode_fused(model, _decode(model), fusions)
 
     def test_float32_decode_fuses(self):
         model = _model("llama")
-        self.assert_decode_fused(model, _decode(model), DENSE_FUSIONS)
+        self.assert_decode_fused(model, _decode(model), OPENVINO_FUSIONS)
 
     def test_single_token_decode_fuses(self):
         model = _model("llama", torch.bfloat16)
-        self.assert_decode_fused(model, _decode(model, multi_token_decode=False), DENSE_FUSIONS)
+        self.assert_decode_fused(model, _decode(model, multi_token_decode=False), OPENVINO_FUSIONS)
 
     def test_16bit_model_exports_float32_graph_with_16bit_weights(self):
         import openvino
