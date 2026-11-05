@@ -447,8 +447,13 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "RTDetrV2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "PPDocLayoutV2ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "PPDocLayoutV3ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "PPDocLayoutV4ForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "MMGroundingDinoModel": "Same tied-`topk` box selection as `DFineModel`.",
         "MMGroundingDinoForObjectDetection": "Same tied-`topk` box selection as `DFineModel`.",
+        "TimesFmModelForPrediction": (
+            "The left-padding patches attend to no key: OpenVINO gives them the uniform average, torch's fused "
+            "kernels zeros. The real patches and the predictions match."
+        ),
     },
     # OpenVINO, generate path only.
     "openvino.generate": {},
@@ -990,6 +995,12 @@ class ExportTesterMixin:
         attend to -- so each runtime fills it differently and no caller reads it; comparing those
         positions measures nothing.
         """
+        # exports keep a full cache on sliding-window layers, eager only the window: skip them
+        sliding = tuple(
+            key.removesuffix("_sliding_window_tensor") for key in expected if key.endswith("._sliding_window_tensor")
+        )
+        actual = {key: value for key, value in actual.items() if not key.startswith(sliding)}
+        expected = {key: value for key, value in expected.items() if not key.startswith(sliding)}
         # a model with per-layer masks passes a `dict` here, and a flex-attention one a `BlockMask`;
         # only a plain 2D `(batch, seq)` tensor maps onto output positions. NaViT-style vision models
         # (siglip2) mark their valid patches with `pixel_attention_mask` instead.
