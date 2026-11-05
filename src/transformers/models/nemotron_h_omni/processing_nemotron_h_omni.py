@@ -37,7 +37,7 @@ AudioInput = Union[str, "np.ndarray", "torch.Tensor", list]
 class NemotronH_Omni_Reasoning_V3ProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: ImagesKwargs
     videos_kwargs: VideosKwargs
-    _defaults = {"videos_kwargs": {"return_metadata": True}}
+    _defaults = {}
 
 
 @auto_docstring
@@ -104,7 +104,11 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
 
         if videos is not None:
-            videos_kwargs = {"temporal_patch_size": self.video_temporal_patch_dim, **output_kwargs["videos_kwargs"]}
+            videos_kwargs = {
+                "temporal_patch_size": self.video_temporal_patch_dim,
+                "return_metadata": True,
+                **output_kwargs["videos_kwargs"],
+            }
             videos_inputs = self.video_processor(videos=videos, **videos_kwargs)
 
         audio_num_tokens = []
