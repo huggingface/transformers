@@ -577,6 +577,9 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
     if (plan := saved_plan or user_plan) is not None:
         # One quantizer per pattern. Loading attributes update the saved configs: for every pattern (e.g.
         # `{"dequantize": True}`), or per pattern (a plan of them)
+        # A single config only brings its loading attributes: the saved plan may mix methods (e.g. fp8 + mxfp4)
+        if isinstance(quantization_config, QuantizationConfigMixin):
+            quantization_config = quantization_config.get_loading_attributes()
         loading_attributes = user_plan if user_plan is not None else dict.fromkeys(plan, quantization_config)
         quantizers, shared = {}, {}  # patterns with equal configs share one quantizer
         for pattern, pattern_config in plan.items():
