@@ -54,6 +54,8 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         return 1
 
     def validate_environment(self, *args, **kwargs):
+        if self.dequantizing:
+            return  # the `dequantize` load operation is pure torch
         if not is_accelerate_available():
             raise ImportError(
                 f"Using `bitsandbytes` 8-bit quantization requires accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"

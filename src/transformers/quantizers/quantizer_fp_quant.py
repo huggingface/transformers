@@ -40,6 +40,8 @@ class FPQuantHfQuantizer(HfQuantizer):
     quantization_config: "FPQuantConfig"
 
     def validate_environment(self, device_map, **kwargs):
+        if self.dequantizing:
+            return  # the `dequantize` load operation is pure torch
         if not torch.cuda.is_available() and not is_torch_xpu_available():
             raise NotImplementedError(
                 "FPQuant quantization is only supported on GPU or Intel XPU. Please use a different quantizer."

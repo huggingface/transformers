@@ -53,6 +53,8 @@ class FbgemmFp8HfQuantizer(HfQuantizer):
         return 1
 
     def validate_environment(self, *args, **kwargs):
+        if self.dequantizing:
+            return  # the `dequantize` load operation is pure torch
         if not is_torch_cuda_available() and not is_torch_xpu_available():
             raise ImportError("Using fbgemm fp8 quantization requires a GPU or XPU")
         if is_torch_xpu_available() and not is_kernels_available():
