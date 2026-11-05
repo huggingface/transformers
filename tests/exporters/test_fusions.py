@@ -11,9 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""OpenVINO fusion tests.
+"""Fusion tests, one class per backend.
 
-OpenVINO's CPU plugin only fuses the patterns it recognizes, and a graph that misses them still runs, just decomposed
+OpenVINO: its CPU plugin only fuses the patterns it recognizes, and a graph that misses them still runs, just decomposed
 and slower. These tests check that the decode graph `export_for_generation` produces keeps the fused attention with its
 KV cache, RoPE and compressed-weight matmuls, on the tiny models of each decoder family's own tests.
 """
