@@ -315,23 +315,20 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"attn\.wq_du", target_patterns=r"self_attn.q_proj"),
             WeightRenaming(source_patterns=r"attn\.wk_dv", target_patterns=r"self_attn.k_proj"),
             WeightRenaming(source_patterns=r"attn\.wv_dv", target_patterns=r"self_attn.v_proj"),
-            WeightRenaming(source_patterns=r"attn\.wr_du", target_patterns=r"self_attn.relative_proj"),
+            WeightRenaming(source_patterns=r"attn\.wr_du", target_patterns=r"self_attn.r_proj"),
             WeightRenaming(source_patterns=r"attn\.wo_ud", target_patterns=r"self_attn.o_proj"),
             WeightRenaming(source_patterns=r"attn\.gate_attn", target_patterns=r"self_attn.gate_proj"),
             WeightRenaming(source_patterns=r"attn\.attn_sink_proj", target_patterns=r"self_attn.sink_proj"),
-            WeightRenaming(source_patterns=r"\.attn\.(q|k)_l2_clip", target_patterns=r".self_attn.\1_l2_clip"),
-            WeightRenaming(source_patterns=r"\.attn\.rel_l2_clip", target_patterns=r".self_attn.relative_l2_clip"),
-            WeightRenaming(source_patterns=r"\.attn\.k_sconv\.", target_patterns=r".self_attn.key_convolution."),
-            WeightRenaming(source_patterns=r"\.attn\.v_sconv\.", target_patterns=r".self_attn.value_convolution."),
+            WeightRenaming(
+                source_patterns=r"\.attn\.(q_l2_clip|k_l2_clip|rel_l2_clip|k_sconv|v_sconv|rel_logits_proj)\.",
+                target_patterns=r".self_attn.\1.",
+            ),
             WeightRenaming(source_patterns=r"attn_sconv\.", target_patterns=r"post_attention_convolution."),
             WeightRenaming(source_patterns=r"mlp_sconv\.", target_patterns=r"post_mlp_convolution."),
-            WeightRenaming(source_patterns=r"convolution\.weight", target_patterns=r"convolution.conv1d.weight"),
-            WeightRenaming(source_patterns=r"convolution\.static_w", target_patterns=r"convolution.static_weight"),
+            WeightRenaming(source_patterns=r"(convolution|sconv)\.weight", target_patterns=r"\1.conv1d.weight"),
+            WeightRenaming(source_patterns=r"(convolution|sconv)\.static_w", target_patterns=r"\1.static_weight"),
             WeightRenaming(
-                source_patterns=r"convolution\.weight_proj", target_patterns=r"convolution.weight_proj.weight"
-            ),
-            WeightRenaming(
-                source_patterns=r"\.attn\.rel_logits_proj", target_patterns=r".self_attn.relative_logits_proj"
+                source_patterns=r"(convolution|sconv)\.weight_proj", target_patterns=r"\1.weight_proj.weight"
             ),
             WeightRenaming(source_patterns=r"mlp_norm", target_patterns=r"post_attention_layernorm"),
             WeightRenaming(source_patterns=r"attn_norm", target_patterns=r"input_layernorm"),
