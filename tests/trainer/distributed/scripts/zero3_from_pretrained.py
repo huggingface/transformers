@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Loads a tiny MoE checkpoint (with weight conversions and a persistent buffer) under ZeRO-3, and checks that only
-rank 0 reads checkpoint values while every rank ends up with the right weights."""
+"""Loads a tiny MoE checkpoint (with weight conversions, a persistent and a non-persistent buffer) under ZeRO-3, and
+checks that only rank 0 reads checkpoint values while every rank ends up with the right weights and buffers."""
 
 import argparse
 import os
@@ -32,6 +32,7 @@ class Qwen3MoeWithBuffer(Qwen3MoeForCausalLM):
     def __init__(self, config):
         super().__init__(config)
         self.register_buffer("scale", torch.ones(4))
+        self.register_buffer("offset", torch.arange(1.0, 5.0), persistent=False)
 
 
 def main(output_dir):
@@ -53,7 +54,8 @@ def main(output_dir):
     torch.manual_seed(0)
     model = Qwen3MoeWithBuffer(config)
     model.scale.fill_(42.0)
-    expected = {k: v.clone() for k, v in model.state_dict().items()}
+    # `state_dict` skips non-persistent buffers: they are not saved, so they should keep their `__init__` value
+    expected = {k: v.clone() for k, v in {**model.state_dict(), **dict(model.named_buffers())}.items()}
     if rank == 0:
         model.save_pretrained(output_dir)
     dist.barrier()
@@ -68,7 +70,7 @@ def main(output_dir):
     assert map_locations == {"cpu" if rank == 0 else "meta"}, f"rank {rank} loaded with {map_locations}"
     assert not loading_info["missing_keys"], loading_info["missing_keys"]
     with deepspeed.zero.GatheredParameters(list(model.parameters())):
-        for name, value in model.state_dict().items():
+        for name, value in {**model.state_dict(), **dict(model.named_buffers())}.items():
             torch.testing.assert_close(value.cpu(), expected[name], msg=f"rank {rank}: {name} was not loaded")
 
 
