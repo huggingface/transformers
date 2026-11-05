@@ -438,8 +438,14 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         general = {}
         for quantizer in self.all_quantizers:
             own = quantizer.get_weight_conversions()
-            # `update_weight_conversions` ends with the general converters of `get_weight_conversions`
-            weight_conversions = quantizer.update_weight_conversions(weight_conversions, model)[: -len(own) or None]
+            # Taken out of `update_weight_conversions` by patterns, not position: renamings may come after them
+            general_patterns = [(c._original_source_patterns, c._original_target_patterns) for c in own]
+            weight_conversions = [
+                c
+                for c in quantizer.update_weight_conversions(weight_conversions, model)
+                if (getattr(c, "_original_source_patterns", None), getattr(c, "_original_target_patterns", None))
+                not in general_patterns
+            ]
             for converter in own:
                 general.setdefault(converter._original_target_patterns[0], []).append(converter)
         # One general converter per param collects the names of every quantizer, before the own-name ones take them
