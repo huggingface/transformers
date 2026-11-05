@@ -13,8 +13,8 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 
@@ -60,24 +60,151 @@ def changed_files(root, base):
     return sorted(set(filter(None, tracked.split("\0") + untracked.split("\0"))))
 
 
-def model_contracts(root, model, fleet_name="prototypes"):
-    """Fleet contracts with a fixture whose top-level `model_type` lives in `models/<model>`."""
-    sys.path.insert(0, str(root / "src"))
-    from huggingface_hub import hf_hub_download
-    from transformers_mic import fleet
-    from transformers_mic.hub import canonical_repo
+# The fixture files MIC's selector reads (`select_contracts.code_dirs`); never the weights.
+FIXTURE_CONFIGS = ["config.json", "tokenizer_config.json", "preprocessor_config.json", "processor_config.json"]
 
-    from transformers.models.auto.configuration_auto import model_type_to_module_name
+
+def use_local_source(root):
+    """Resolve `transformers` (and the classes MIC's selector looks up) from this checkout."""
+    if str(root / "src") not in sys.path:
+        sys.path.insert(0, str(root / "src"))
+
+
+def fleet_contracts(root, fleet_name):
+    """The contracts of the fleet pinned in `tests/contracts.lock`."""
+    from transformers_mic import fleet
 
     lock, _ = fleet.download(fleet_name, fleet.read_pin(root / "tests/contracts.lock"))
+    return json.loads(Path(lock).read_text(encoding="utf-8"))["contracts"]
+
+
+def fixture_configs(contracts):
+    """{contract: [folders with only its fixtures' config files]}, fetched in parallel and cached by the Hub."""
+
+    from huggingface_hub import snapshot_download
+    from huggingface_hub.utils import disable_progress_bars
+    from transformers_mic.hub import canonical_repo
+
+    disable_progress_bars()
+    jobs = [
+        (name, repo, pin["revision"])
+        for name, contract in contracts.items()
+        for repo, pin in contract.get("fixtures", {}).items()
+    ]
+
+    def fetch(job):
+        name, repo, revision = job
+        return name, Path(snapshot_download(canonical_repo(repo), revision=revision, allow_patterns=FIXTURE_CONFIGS))
+
+    folders = {name: [] for name in contracts}
+    started = time.perf_counter()
+    step = max(1, len(jobs) // 10)
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        for done, (name, folder) in enumerate(pool.map(fetch, jobs), 1):
+            folders[name].append(folder)
+            # Progress only when it is slow (first run); cached configs read in well under a second.
+            if (done % step == 0 or done == len(jobs)) and time.perf_counter() - started > 1:
+                print(f"Reading fixture configs: {done}/{len(jobs)}", flush=True)
+    print(f"Read fixture configs of {len(contracts)} contracts in {time.perf_counter() - started:.1f}s", flush=True)
+    return folders
+
+
+def human_size(size):
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024 or unit == "GB":
+            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+        size /= 1024
+
+
+def download_fixtures(contracts, names):
+    """Fetch the selected contracts' Hub repos before the runner does, showing what is fetched.
+
+    The runner downloads them silently; doing it here (into the same Hub cache) shows what is
+    fetched and how big it is, and the runner then finds everything cached. Checking what is
+    already cached costs one Hub call per repo, so those run in parallel.
+    """
+    from huggingface_hub import HfApi, snapshot_download, try_to_load_from_cache
+    from huggingface_hub.utils import disable_progress_bars
+    from transformers_mic.hub import canonical_repo
+
+    disable_progress_bars()
+    repos = {}
+    for name in names:
+        contract = contracts[name]
+        pins = [contract["integration"], *({"repo": r, **pin} for r, pin in contract.get("fixtures", {}).items())]
+        for pin in pins:
+            repos.setdefault((canonical_repo(pin["repo"]), pin["revision"]), name)
+    api = HfApi()
+
+    def uncached(job):
+        repo, revision = job
+        files = api.model_info(repo, revision=revision, files_metadata=True).siblings or []
+        return [f for f in files if not isinstance(try_to_load_from_cache(repo, f.rfilename, revision=revision), str)]
+
+    started = time.perf_counter()
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        missing = dict(zip(repos, pool.map(uncached, repos)))
+    to_fetch = [job for job in repos if missing[job]]
+    print(
+        f"Fixtures: {len(repos) - len(to_fetch)}/{len(repos)} repos cached "
+        f"(checked in {time.perf_counter() - started:.1f}s)",
+        flush=True,
+    )
+    for index, (repo, revision) in enumerate(to_fetch, 1):
+        files = missing[repo, revision]
+        # One line per repo, printed before the fetch: the latest line is the one in progress.
+        print(
+            f"[{index}/{len(to_fetch)}] {repos[repo, revision]}: {repo} downloading {len(files)} files, "
+            f"{human_size(sum(f.size or 0 for f in files))}",
+            flush=True,
+        )
+        snapshot_download(repo, revision=revision)
+
+
+def model_contracts(root, model, fleet_name="prototypes"):
+    """Fleet contracts with a fixture whose top-level `model_type` lives in `models/<model>`."""
+    use_local_source(root)
+    from transformers.models.auto.configuration_auto import model_type_to_module_name
+
     selected = []
-    for name, contract in json.loads(Path(lock).read_text(encoding="utf-8"))["contracts"].items():
-        for repo, pin in contract.get("fixtures", {}).items():
-            config = Path(hf_hub_download(canonical_repo(repo), "config.json", revision=pin["revision"]))
-            if model_type_to_module_name(json.loads(config.read_text(encoding="utf-8"))["model_type"]) == model:
-                selected.append(name)
-                break
+    for name, folders in fixture_configs(fleet_contracts(root, fleet_name)).items():
+        model_types = [json.loads((f / "config.json").read_text(encoding="utf-8"))["model_type"] for f in folders]
+        if any(model_type_to_module_name(model_type) == model for model_type in model_types):
+            selected.append(name)
     return selected
+
+
+def changed_contracts(root, paths, fleet_name="prototypes"):
+    """MIC's own selection for `paths`: ({contract: reason}, fleet-wide reasons, fleet contracts).
+
+    Same rules as `tmic check --changed-files`, but only fetches the fixtures' config files, and
+    not even those when a change (setup.py, the fleet pin, shared code) selects every contract:
+    the fleet-wide reasons then name every such path and the selection is empty.
+    """
+    from transformers_mic import resources
+
+    use_local_source(root)
+    sys.path.insert(0, str(resources.backend()))
+    import select_contracts
+
+    from transformers.utils import logging
+
+    # The selector resolves class names, some deprecated (`...Fast`); their warnings are noise here.
+    logging.set_verbosity_error()
+    contracts = fleet_contracts(root, fleet_name)
+    nothing = {name: [] for name in contracts}
+    fleet_wide = []
+    for path in paths:
+        selected = select_contracts.select([path], nothing)
+        if contracts and set(selected) == set(contracts):
+            fleet_wide.append(next(iter(selected.values())))
+    if fleet_wide:
+        return {}, fleet_wide, contracts
+    dirs = {
+        name: sorted({d for folder in folders for d in select_contracts.code_dirs(folder)})
+        for name, folders in fixture_configs(contracts).items()
+    }
+    return select_contracts.select(paths, dirs), [], contracts
 
 
 # A fixture whose baseline has no expectations for this platform yet (e.g. cpu-arm64 locally).
@@ -91,6 +218,13 @@ SUMMARY_WORDS = {
     "unsupported": "unsupported",
     "recorded": "recorded",
 }
+
+
+def supports_allow_missing_baseline(env):
+    """`tmic check --allow-missing-baseline` exists (transformers-mic > 0.1.1)."""
+    command = [sys.executable, "-m", "transformers_mic.cli", "check", "--help"]
+    help_text = subprocess.run(command, cwd=ROOT, env=env, capture_output=True, text=True).stdout
+    return "--allow-missing-baseline" in help_text
 
 
 def missing_baseline(record):
@@ -125,7 +259,7 @@ def format_summary(counts, elapsed):
     return f"MIC: {', '.join(parts) or 'nothing ran'} in {elapsed:.1f}s"
 
 
-def stream(command, env, fleet_name, on_record, announce=True):
+def stream(command, env, fleet_name, on_record, announce=True, total=None):
     """Run the MIC runner, print its fleet/selection messages and hand each result record to `on_record`.
 
     Returns the runner's exit code and the last non-JSON lines it printed (tracebacks, warnings).
@@ -147,6 +281,9 @@ def stream(command, env, fleet_name, on_record, announce=True):
                 print(
                     f"Fleet {fleet_name} ({message['fleet_repository']}@{message['fleet_revision'][:10]})", flush=True
                 )
+                # The runner reports a contract only once it has finished; say so instead of going quiet.
+                what = f"{total} contract{'s' if total != 1 else ''}" if total else "the selected contracts"
+                print(f"Running {what}, results print as each one finishes...", flush=True)
         elif "selection" in message:
             print("\n".join(format_selection(message["selection"])), flush=True)
         elif "status" in message and "target" in message:
@@ -167,10 +304,11 @@ def without_selection(command):
     return kept
 
 
-def run(command, env, fleet_name="prototypes"):
+def run(command, env, fleet_name="prototypes", total=None):
     """Run the selected fixtures and print a readable digest. Returns the exit code for the checker.
 
-    Fixtures without a reviewed baseline for this platform are re-run with `--no-baseline`: they
+    Fixtures without a reviewed baseline for this platform are run without comparison (in one pass
+    with `--allow-missing-baseline` when MIC supports it, else re-run with `--no-baseline`): they
     are reported as "ran without a baseline" (the usage path executes, outputs are not compared)
     instead of failing the check. Any other failure fails it.
     """
@@ -183,17 +321,21 @@ def run(command, env, fleet_name="prototypes"):
         counts[key] = counts.get(key, 0) + 1
 
     def first_pass(record):
-        if missing_baseline(record):
+        if record.get("baseline_missing"):
+            # `--allow-missing-baseline`: outputs validated in this run, not compared.
+            count(record, "unchecked")
+            print("\n".join(format_record(record, f"no {record.get('platform', 'platform')} baseline")), flush=True)
+        elif missing_baseline(record):
             missing.append(record)
         else:
             count(record)
             print("\n".join(format_record(record)), flush=True)
 
-    returncode, tail = stream(command, env, fleet_name, first_pass)
+    returncode, tail = stream(command, env, fleet_name, first_pass, total=total)
     if missing:
         names = sorted({r.get("contract_name", r["contract"]) for r in missing})
         platform = missing[0].get("platform", "this platform")
-        print(f"No reviewed {platform} baseline for {', '.join(names)}; running without comparison.", flush=True)
+        print(f"No reviewed {platform} baseline for {', '.join(names)}; running without comparison...", flush=True)
         note = f"no {platform} baseline"
 
         def second_pass(record):
@@ -244,26 +386,42 @@ def main():
     env["PYTHONPATH"] = str(ROOT / "src") + os.pathsep + env.get("PYTHONPATH", "")
     env.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
     command = [sys.executable, "-m", "transformers_mic.cli", "check", "--fleet", fleet_name, "--fixtures-only"]
-    with tempfile.TemporaryDirectory(prefix="transformers-mic-") as directory:
-        if model:
-            contracts = model_contracts(ROOT, model, fleet_name)
-            if not contracts:
-                print(
-                    f"No MIC contract has a models/{model} fixture in the pinned {fleet_name} fleet; nothing to run."
-                )
-                return 0
-            print(f"Selected for models/{model}: {', '.join(contracts)}", flush=True)
-            for name in contracts:
-                command.extend(["--contract", name])
-        elif all_fixtures == "1":
-            print("Selected: every contract (ALL=1)", flush=True)
-            command.append("--run-all")
-        else:
-            changed = Path(directory) / "changed-files.txt"
-            changed.write_text("\n".join(paths) + "\n", encoding="utf-8")
-            command.extend(["--changed-files", str(changed)])
-            print(f"Changed files vs {base}: {len(paths)}", flush=True)
-        return run(command, env, fleet_name)
+    if supports_allow_missing_baseline(env):
+        command.append("--allow-missing-baseline")
+    if model:
+        names = model_contracts(ROOT, model, fleet_name)
+        if not names:
+            print(f"No MIC contract has a models/{model} fixture in the pinned {fleet_name} fleet; nothing to run.")
+            return 0
+        print(f"Selected for models/{model}: {', '.join(names)}", flush=True)
+        contracts = fleet_contracts(ROOT, fleet_name)
+    elif all_fixtures == "1":
+        contracts = fleet_contracts(ROOT, fleet_name)
+        names = list(contracts)
+        print(f"Selected: every contract in the {fleet_name} fleet ({len(names)}, ALL=1)", flush=True)
+    else:
+        print(f"Changed files vs {base}: {len(paths)}", flush=True)
+        selection, fleet_wide, contracts = changed_contracts(ROOT, paths, fleet_name)
+        if fleet_wide:
+            print(
+                f"These changes select every contract in the {fleet_name} fleet ({len(contracts)}):\n"
+                + "\n".join(f"  {reason}" for reason in fleet_wide)
+                + "\nThat is a long local run; nothing was run. Use MODEL=<name> for one model, "
+                "or ALL=1 to run the whole fleet.",
+                flush=True,
+            )
+            return 0
+        print("\n".join(format_selection(selection)), flush=True)
+        if not selection:
+            return 0
+        names = sorted(selection)
+    download_fixtures(contracts, names)
+    if all_fixtures == "1":
+        command.append("--run-all")
+    else:
+        for name in names:
+            command.extend(["--contract", name])
+    return run(command, env, fleet_name, total=len(names))
 
 
 if __name__ == "__main__":

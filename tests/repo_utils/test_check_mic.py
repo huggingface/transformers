@@ -43,7 +43,7 @@ class CheckMicTest(unittest.TestCase):
             )
 
     def test_model_runs_only_its_contracts_and_propagates_failure(self):
-        def execute(command, env, fleet_name):
+        def execute(command, env, fleet_name, total=None):
             self.assertEqual(env["PYTHONPATH"].split(os.pathsep)[0], str(check_mic.ROOT / "src"))
             self.assertIn("--fixtures-only", command)
             self.assertIn("--fleet", command)
@@ -58,6 +58,9 @@ class CheckMicTest(unittest.TestCase):
             patch.dict(os.environ, {"MODEL": "bert", "ALL": "", "FLEET": ""}),
             patch.object(check_mic.importlib.util, "find_spec", return_value=object()),
             patch.object(check_mic, "model_contracts", return_value=["BERT"]) as model_contracts,
+            patch.object(check_mic, "fleet_contracts", return_value={"BERT": {}}),
+            patch.object(check_mic, "download_fixtures"),
+            patch.object(check_mic, "supports_allow_missing_baseline", return_value=False),
             patch.object(check_mic, "run", side_effect=execute),
         ):
             self.assertEqual(check_mic.main(), 1)
@@ -117,11 +120,13 @@ class CheckMicTest(unittest.TestCase):
             self.assertEqual(check_mic.run([sys.executable, "-c", script], os.environ.copy()), 1)
         lines = stdout.getvalue().splitlines()
         self.assertEqual(lines[0], "Fleet prototypes (huggingface-mic/transformers-fleet@276e4bec9d)")
-        self.assertEqual(lines[1], "Selected BERT: models/bert (src/transformers/models/bert/modeling_bert.py)")
-        self.assertEqual(lines[2], "✓ BERT  slim  pass  1.6s")
-        self.assertEqual(lines[3], "✗ CLIP [sdpa]  slim  fail  2.0s")
-        self.assertEqual(lines[4], "    logits differ")
-        self.assertIn("torch 2.14 (pinned 2.11)", lines[5])
+        # The runner reports a contract only when it finishes, so the wait is announced.
+        self.assertEqual(lines[1], "Running the selected contracts, results print as each one finishes...")
+        self.assertEqual(lines[2], "Selected BERT: models/bert (src/transformers/models/bert/modeling_bert.py)")
+        self.assertEqual(lines[3], "✓ BERT  slim  pass  1.6s")
+        self.assertEqual(lines[4], "✗ CLIP [sdpa]  slim  fail  2.0s")
+        self.assertEqual(lines[5], "    logits differ")
+        self.assertIn("torch 2.14 (pinned 2.11)", lines[6])
         # A failing target explains the exit code; raw runner noise stays hidden.
         self.assertNotIn("noise", stdout.getvalue())
         self.assertRegex(lines[-1], r"^MIC: 1 passed, 1 failed in [0-9.]+s$")
@@ -166,3 +171,69 @@ sys.exit(1)
         self.assertIn("No reviewed cpu-arm64 baseline for DistilBERT; running without comparison.", output)
         self.assertIn("✓ DistilBERT  slim  pass (no cpu-arm64 baseline)", output)
         self.assertRegex(output.splitlines()[-1], r"^MIC: 1 passed, 1 ran without a baseline in [0-9.]+s$")
+
+    def test_runner_flag_for_missing_baseline_is_reported_in_one_pass(self):
+        record = {
+            "contract": "r",
+            "contract_name": "DistilBERT",
+            "variant": "default",
+            "target": "slim",
+            "platform": "cpu-arm64",
+            "status": "pass",
+            "failures": [],
+            "baseline_missing": True,
+        }
+        script = f"print({json.dumps(json.dumps(record))})\n"
+        with patch("sys.stdout", new_callable=io.StringIO) as stdout:
+            self.assertEqual(check_mic.run([sys.executable, "-c", script], os.environ.copy()), 0)
+        output = stdout.getvalue()
+        self.assertIn("✓ DistilBERT  slim  pass (no cpu-arm64 baseline)", output)
+        self.assertNotIn("running without comparison", output)
+        self.assertRegex(output.splitlines()[-1], r"^MIC: 1 ran without a baseline in [0-9.]+s$")
+
+    def test_whole_fleet_change_needs_all(self):
+        with (
+            patch.dict(os.environ, {"MODEL": "", "ALL": "", "FLEET": ""}),
+            patch.object(check_mic, "changed_files", return_value=["setup.py"]),
+            patch.object(check_mic.importlib.util, "find_spec", return_value=object()),
+            patch.object(check_mic, "supports_allow_missing_baseline", return_value=False),
+            patch.object(
+                check_mic,
+                "changed_contracts",
+                return_value=(
+                    {},
+                    ["dependencies (setup.py)", "fleet revision (tests/contracts.lock)"],
+                    {"BERT": {}, "CLIP": {}},
+                ),
+            ),
+            patch.object(check_mic, "run") as execute,
+            patch("sys.stdout", new_callable=io.StringIO) as stdout,
+        ):
+            self.assertEqual(check_mic.main(), 0)
+        execute.assert_not_called()
+        self.assertIn(
+            "select every contract in the prototypes fleet (2):\n  dependencies (setup.py)\n"
+            "  fleet revision (tests/contracts.lock)\n",
+            stdout.getvalue(),
+        )
+        self.assertIn("ALL=1", stdout.getvalue())
+
+    def test_model_directory_change_runs_selected_contracts(self):
+        selection = {"DistilBERT": "models/distilbert (src/transformers/models/distilbert/modeling_distilbert.py)"}
+
+        def execute(command, env, fleet_name, total=None):
+            self.assertEqual(command[command.index("--contract") + 1], "DistilBERT")
+            self.assertNotIn("--changed-files", command)
+            return 0
+
+        with (
+            patch.dict(os.environ, {"MODEL": "", "ALL": "", "FLEET": ""}),
+            patch.object(check_mic, "changed_files", return_value=list(selection)),
+            patch.object(check_mic.importlib.util, "find_spec", return_value=object()),
+            patch.object(check_mic, "supports_allow_missing_baseline", return_value=False),
+            patch.object(check_mic, "changed_contracts", return_value=(selection, [], {"DistilBERT": {}})),
+            patch.object(check_mic, "download_fixtures") as download,
+            patch.object(check_mic, "run", side_effect=execute),
+        ):
+            self.assertEqual(check_mic.main(), 0)
+        download.assert_called_once_with({"DistilBERT": {}}, ["DistilBERT"])

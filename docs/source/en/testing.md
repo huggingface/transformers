@@ -67,6 +67,8 @@ a fixture pass does not validate the full checkpoint.
 By default, changed files are the diff between the merge base with `origin/main` and your
 working tree, plus untracked files. This includes branch commits, staged and unstaged
 changes, and both paths of renames. A clean checkout has nothing to run.
+When the changes select every contract (for example `setup.py`, shared code or the fleet pin in
+`tests/contracts.lock`), nothing runs: the command says why, and you choose `MODEL=<name>` or `ALL=1`.
 
 MIC derives model dependencies from fixture configs (including nested models), architectures,
 and tokenizer/processor classes. Model directory changes select matching contracts; changes
