@@ -253,22 +253,20 @@ class Step3p7VisionAttention(nn.Module):
             attn_outputs, attn_weights = [], []
             start = 0
             for length, (query, key, value) in zip(segment_lengths, zip(*splits)):
-                end = start + length
-                segment_mask = attention_mask[..., start:end, start:end] if attention_mask is not None else None
                 output, weights = attention_interface(
                     self,
                     query,
                     key,
                     value,
-                    segment_mask,
+                    attention_mask=None,
                     scaling=self.scale,
                     dropout=0.0 if not self.training else self.dropout,
                     **kwargs,
                 )
                 attn_outputs.append(output)
                 if weights is not None and kwargs.get("output_attentions", self.config.output_attentions):
-                    attn_weights.append(F.pad(weights, (start, input_shape[1] - end)))
-                start = end
+                    attn_weights.append(F.pad(weights, (start, input_shape[1] - start - length)))
+                start += length
             attn_output = torch.cat(attn_outputs, dim=1)
             attn_weights = torch.cat(attn_weights, dim=2) if attn_weights else None
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
