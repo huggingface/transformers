@@ -19,7 +19,6 @@
 # limitations under the License.
 import itertools
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
@@ -398,10 +397,10 @@ class Cosmos3EdgeVisionEmbeddings(nn.Module):
 
         return torch.cat(position_chunks, dim=0)
 
-    def forward(self, pixel_values: torch.FloatTensor, grid_thw: torch.LongTensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, grid_thw: torch.LongTensor) -> torch.Tensor:
         """
         Args:
-            pixel_values (`torch.FloatTensor`):
+            pixel_values (`torch.Tensor`):
                 Pixel values of shape (batch_size, max_num_patches, num_channels * patch_size * patch_size)
             spatial_shapes (`list[tuple[int, int]]`):
                 Spatial shapes of shape (batch_size, 2) to resize the positional embeddings to
@@ -654,7 +653,7 @@ class Cosmos3EdgeTextModel(Cosmos3EdgePreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPast:
@@ -720,9 +719,7 @@ class Cosmos3EdgeVisionModel(Cosmos3EdgePreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
-    def forward(
-        self, pixel_values: torch.FloatTensor, grid_thw: torch.LongTensor, **kwargs
-    ) -> BaseModelOutputWithPooling:
+    def forward(self, pixel_values: torch.Tensor, grid_thw: torch.LongTensor, **kwargs) -> BaseModelOutputWithPooling:
         r"""
         grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
             The temporal, height, and width patch-grid dimensions for each packed image or video.
@@ -750,18 +747,6 @@ class Cosmos3EdgePatchMerger(nn.Module):
         x = self.norm(x.view(-1, self.hidden_size) if self.use_postshuffle_norm else x).view(-1, self.hidden_size)
         x = self.linear_fc2(self.act_fn(self.linear_fc1(x)))
         return x
-
-
-@auto_docstring
-@dataclass
-class Cosmos3EdgeModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
 
 
 @auto_docstring
@@ -946,7 +931,7 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
     @auto_docstring
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -958,7 +943,7 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -973,9 +958,9 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor,
-        inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor | None = None,
-        video_features: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor,
+        image_features: torch.Tensor | None = None,
+        video_features: torch.Tensor | None = None,
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -1068,16 +1053,16 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Cosmos3EdgeModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
             raise ValueError(
                 "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
@@ -1135,25 +1120,7 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel):
             use_cache=use_cache,
             **kwargs,
         )
-        return Cosmos3EdgeModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            rope_deltas=self.rope_deltas,
-        )
-
-
-@auto_docstring
-@dataclass
-class Cosmos3EdgeCausalLMOutputWithPast(CausalLMOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
+        return outputs
 
 
 @auto_docstring
@@ -1163,7 +1130,7 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
     config: Cosmos3EdgeConfig
     accepts_loss_kwargs = False
 
-    def __init__(self, config):
+    def __init__(self, config: Cosmos3EdgeConfig):
         super().__init__(config)
         self.model = Cosmos3EdgeModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
@@ -1173,12 +1140,12 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
     @auto_docstring
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input videos.
         """
         return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
@@ -1186,12 +1153,12 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
         """
         return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
@@ -1204,18 +1171,18 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Cosmos3EdgeCausalLMOutputWithPast:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
         Example:
 
@@ -1254,7 +1221,7 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
         ```
         """
 
-        outputs: Cosmos3EdgeModelOutputWithPast = self.model(
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
             pixel_values_videos=pixel_values_videos,
@@ -1280,13 +1247,12 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Generation
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return Cosmos3EdgeCausalLMOutputWithPast(
+        return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=outputs.rope_deltas,
         )
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):

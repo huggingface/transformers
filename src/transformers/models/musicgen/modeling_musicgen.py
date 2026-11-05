@@ -68,7 +68,7 @@ logger = logging.get_logger(__name__)
 @dataclass
 class MusicgenUnconditionalInput(ModelOutput):
     r"""
-    encoder_outputs (`tuple[torch.FloatTensor]` of length 1, with tensor shape `(batch_size, sequence_length, hidden_size)`):
+    encoder_outputs (`tuple[torch.Tensor]` of length 1, with tensor shape `(batch_size, sequence_length, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the text encoder model.
     attention_mask (`torch.LongTensor`)  of shape `(batch_size, sequence_length)`, *optional*):
         Encoder attention mask to avoid performing attention on padding token indices. Mask values selected in `[0,
@@ -78,7 +78,7 @@ class MusicgenUnconditionalInput(ModelOutput):
         from the prompts) and the unconditional logits (predicted without prompts).
     """
 
-    encoder_outputs: tuple[torch.FloatTensor] | None = None
+    encoder_outputs: tuple[torch.Tensor] | None = None
     attention_mask: torch.LongTensor | None = None
     guidance_scale: float | None = None
 
@@ -334,12 +334,12 @@ class MusicgenDecoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
+            hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.Tensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            encoder_hidden_states (`torch.FloatTensor`):
+            encoder_hidden_states (`torch.Tensor`):
                 cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
-            encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
+            encoder_attention_mask (`torch.Tensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             past_key_values (`Cache`): cached past key and value projection states
         """
@@ -448,10 +448,10 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
@@ -474,7 +474,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
             `input_ids`.
 
             </Tip>
-        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+        encoder_hidden_states (`torch.Tensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention of
             the decoder.
         encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
@@ -568,10 +568,10 @@ class MusicgenModel(MusicgenPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
@@ -594,7 +594,7 @@ class MusicgenModel(MusicgenPreTrainedModel):
             `input_ids`.
 
             </Tip>
-        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+        encoder_hidden_states (`torch.Tensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention of
             the decoder.
         encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
@@ -660,10 +660,10 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -687,7 +687,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
             `input_ids`.
 
             </Tip>
-        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+        encoder_hidden_states (`torch.Tensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention of
             the decoder.
         encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
@@ -940,7 +940,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
 
         Return:
             [`~utils.ModelOutput`] or `torch.LongTensor`: A [`~utils.ModelOutput`] (if `return_dict_in_generate=True`
-            or when `config.return_dict_in_generate=True`) or a `torch.FloatTensor`.
+            or when `config.return_dict_in_generate=True`) or a `torch.Tensor`.
 
                 If the model is *not* an encoder-decoder model (`model.config.is_encoder_decoder=False`), the possible
                 [`~utils.ModelOutput`] types are:
@@ -1423,14 +1423,14 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.BoolTensor | None = None,
-        input_values: torch.FloatTensor | None = None,
+        input_values: torch.Tensor | None = None,
         padding_mask: torch.BoolTensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.BoolTensor | None = None,
-        encoder_outputs: tuple[torch.FloatTensor] | None = None,
+        encoder_outputs: tuple[torch.Tensor] | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1931,7 +1931,7 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
 
         Return:
             [`~utils.ModelOutput`] or `torch.LongTensor`: A [`~utils.ModelOutput`] (if `return_dict_in_generate=True`
-            or when `config.return_dict_in_generate=True`) or a `torch.FloatTensor`.
+            or when `config.return_dict_in_generate=True`) or a `torch.Tensor`.
 
                 If the model is *not* an encoder-decoder model (`model.config.is_encoder_decoder=False`), the possible
                 [`~utils.ModelOutput`] types are:

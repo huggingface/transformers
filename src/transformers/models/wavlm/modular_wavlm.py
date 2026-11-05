@@ -119,10 +119,10 @@ class WavLMAttention(nn.Module):
 
     def torch_multi_head_self_attention(
         self,
-        hidden_states: torch.FloatTensor,
+        hidden_states: torch.Tensor,
         attention_mask: torch.LongTensor | torch.BoolTensor,
-        gated_position_bias: torch.FloatTensor,
-    ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
+        gated_position_bias: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """simple wrapper around torch's multi_head_attention_forward function"""
         # self-attention assumes q = k = v
         query = key = value = hidden_states.transpose(0, 1)
@@ -171,7 +171,7 @@ class WavLMAttention(nn.Module):
 
         return attn_output, attn_weights
 
-    def compute_bias(self, query_length: int, key_length: int) -> torch.FloatTensor:
+    def compute_bias(self, query_length: int, key_length: int) -> torch.Tensor:
         device = self.rel_attn_embed.weight.device
         context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None]
         memory_position = torch.arange(key_length, dtype=torch.long, device=device)[None, :]
@@ -181,7 +181,7 @@ class WavLMAttention(nn.Module):
         values = values.permute([2, 0, 1])
         return values
 
-    def _relative_positions_bucket(self, relative_positions: torch.FloatTensor) -> torch.FloatTensor:
+    def _relative_positions_bucket(self, relative_positions: torch.Tensor) -> torch.Tensor:
         num_buckets = self.num_buckets // 2
 
         relative_buckets = (relative_positions > 0).to(torch.long) * num_buckets
@@ -495,6 +495,12 @@ class WavLMPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 init.uniform_(module.bias, a=-k, b=k)
+        elif isinstance(module, WavLMModel) and hasattr(module, "masked_spec_embed"):
+            init.uniform_(module.masked_spec_embed)
+        elif isinstance(module, WavLMAttention):
+            init.ones_(module.gru_rel_pos_const)
+        elif isinstance(module, AMSoftmaxLoss):  # noqa: F821
+            init.normal_(module.weight)
 
     def _get_adapters(self):
         raise AttributeError("Not needed for WavLM")

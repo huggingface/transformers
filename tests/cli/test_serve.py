@@ -22,7 +22,7 @@ import socket
 import tempfile
 import time
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from huggingface_hub.utils import httpx
 
@@ -30,7 +30,7 @@ from transformers import DecisionConfig
 from transformers.cli.serve import Serve
 from transformers.cli.serving.chat_completion import ChatCompletionHandler
 from transformers.cli.serving.completion import CompletionHandler
-from transformers.cli.serving.model_manager import ModelManager, TimedModel
+from transformers.cli.serving.model_manager import METAL_FLASH_ATTN, ModelManager, TimedModel
 from transformers.cli.serving.response import ResponseHandler, compute_usage
 from transformers.cli.serving.server import build_server
 from transformers.cli.serving.systemone import SystemOneHandler
@@ -400,6 +400,20 @@ class TestBuildGenerationConfig(unittest.TestCase):
         result = self._make_handler()._build_generation_config({"max_tokens": 7}, GenerationConfig())
         self.assertEqual(result.max_new_tokens, 7)
 
+    def test_max_completion_tokens(self):
+        from transformers import GenerationConfig
+
+        result = self._make_handler()._build_generation_config({"max_completion_tokens": 7}, GenerationConfig())
+        self.assertEqual(result.max_new_tokens, 7)
+
+    def test_max_completion_tokens_overrides_max_tokens(self):
+        from transformers import GenerationConfig
+
+        result = self._make_handler()._build_generation_config(
+            {"max_completion_tokens": 7, "max_tokens": 50}, GenerationConfig()
+        )
+        self.assertEqual(result.max_new_tokens, 7)
+
     def test_temperature_zero_disables_sampling(self):
         from transformers import GenerationConfig
 
@@ -533,6 +547,13 @@ class TestModelManager(unittest.TestCase):
     def test_quantization_config_none(self):
         mm = ModelManager()
         self.assertIsNone(mm.get_quantization_config())
+
+    def test_metal_flash_attn_default_only_with_continuous_batching(self):
+        resolve = ModelManager._resolve_attn_implementation
+        with patch("transformers.utils.import_utils.is_kernels_available", return_value=True):
+            self.assertEqual(resolve(None, "mps", continuous_batching=True), METAL_FLASH_ATTN)
+            self.assertIsNone(resolve(None, "mps", continuous_batching=False))
+            self.assertEqual(resolve("sdpa", "mps", continuous_batching=True), "sdpa")
 
 
 class TestTimedModel(unittest.TestCase):
