@@ -30,9 +30,8 @@ layers. The attention layers apply an RMSNorm to the query and key heads and gat
 Full-attention layers use partial rotary embeddings, sliding-window layers use their own RoPE base, and every layer
 applies a sandwich norm to the operator and feed-forward outputs before the residual addition.
 
-Packed documents follow the LFM2 contract: the flattening collator's `seq_idx` keeps the short-conv window inside each
-document and the attention masks come from the mask utilities. The short convolution runs in PyTorch, since the Hub
-`causal-conv1d` kernels only serve widths 2 to 4 and LFM3 uses 7.
+The short convolution runs in PyTorch, since the Hub `causal-conv1d` kernels only serve widths 2 to 4 and LFM3 uses 7.
+It does not keep packed sequences (`seq_idx`) apart yet.
 
 ## Example
 

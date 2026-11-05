@@ -24,6 +24,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
+from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
@@ -68,7 +69,7 @@ class Lfm3RotaryEmbedding(nn.Module):
         self.original_max_seq_len = config.max_position_embeddings
         self.config = config
         # diff -> only the attention layer types have a RoPE entry, `conv` layers have none
-        self.layer_types = sorted(set(config.layer_types) & set(config.rope_parameters))
+        self.layer_types = [layer_type for layer_type in config._rope_type_labels if layer_type in config.layer_types]
         self.rope_type = {}
         for layer_type in self.layer_types:
             self.rope_type[layer_type] = config.rope_parameters[layer_type]["rope_type"]
@@ -295,6 +296,50 @@ def apply_mask_to_padding_states(hidden_states, attention_mask):
     return hidden_states
 
 
+# torch only: the hub causal_conv1d kernels serve widths 2-4, LFM3 uses 7
+def causal_conv1d_update(
+    hidden_states: torch.Tensor,
+    conv_state: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
+):
+    _, hidden_size, seq_len = hidden_states.shape
+    state_len = conv_state.shape[-1]
+
+    hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
+    conv_state.copy_(hidden_states_new[:, :, -state_len:])
+    out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
+    out = out[:, :, -seq_len:]
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
+
+
+def causal_conv1d_fn(
+    hidden_states: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    activation: str | None = None,
+    **kwargs,
+):
+    if kwargs.get("seq_idx") is not None:
+        raise ValueError("The LFM3 short convolution can't keep packed sequences (`seq_idx`) apart yet.")
+    _, hidden_size, seq_len = hidden_states.shape
+    padding = weight.shape[-1] - 1
+
+    out = F.conv1d(
+        hidden_states.to(weight.dtype),
+        weight=weight.unsqueeze(1),
+        bias=bias,
+        padding=padding,
+        groups=hidden_size,
+    )[:, :, :seq_len]
+    if activation is not None:
+        out = ACT2FN[activation](out)
+    return out.to(hidden_states.dtype)
+
+
 class Lfm3ShortConv(nn.Module):
     def __init__(
         self,
@@ -329,29 +374,38 @@ class Lfm3ShortConv(nn.Module):
         **kwargs,
     ):
         seq_len = hidden_states.shape[1]
+
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
-        B, C, x = self.in_proj(hidden_states).transpose(-1, -2).chunk(3, dim=-2)
+        BCx = self.in_proj(hidden_states).transpose(-1, -2)
+        B, C, x = BCx.chunk(3, dim=-2)
         hidden_states = B * x
+
         if past_key_values is not None:
-            hidden_states = past_key_values.update_conv_state(
-                hidden_states, self.layer_idx, conv_kernel_size=self.conv_kernel_size
-            )
-        conv_len = hidden_states.shape[-1]
-        seq_idx = kwargs.get("seq_idx")
-        if seq_idx is None:
-            hidden_states = self.conv(hidden_states)[..., conv_len - seq_len : conv_len]
+            conv_state = past_key_values.get_conv_state(self.layer_idx, state_idx=0)
         else:
-            # packed documents (`seq_idx` from the collator): a position only reads its own document's window
-            padding = self.conv_kernel_size - 1
-            windows = F.pad(hidden_states, (padding, 0)).unfold(-1, self.conv_kernel_size, 1)
-            seq_idx = F.pad(seq_idx, (conv_len - seq_idx.shape[-1] + padding, 0), value=-1).unfold(
-                -1, self.conv_kernel_size, 1
+            conv_state = None
+
+        if conv_state is not None and seq_len == 1 and not past_key_values.is_recording_past(self.layer_idx):
+            # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
+            hidden_states = causal_conv1d_update(
+                hidden_states, conv_state, self.conv.weight.squeeze(1), self.conv.bias
             )
-            windows = windows * (seq_idx == seq_idx[..., -1:]).unsqueeze(1).to(windows.dtype)
-            hidden_states = torch.einsum("bdtk,dk->bdt", windows, self.conv.weight.squeeze(1))[..., -seq_len:]
-            if self.conv.bias is not None:
-                hidden_states = hidden_states + self.conv.bias[:, None]
-        return self.out_proj((C * hidden_states).transpose(-1, -2).contiguous())
+        else:
+            if past_key_values is not None:
+                hidden_states = past_key_values.update_conv_state(
+                    hidden_states, self.layer_idx, conv_kernel_size=self.conv_kernel_size
+                )
+
+            hidden_states = causal_conv1d_fn(hidden_states, self.conv.weight.squeeze(1), self.conv.bias, **kwargs)
+
+            # Drop the additional previous states
+            if past_key_values is not None:
+                hidden_states = hidden_states[:, :, -seq_len:]
+
+        y = C * hidden_states
+        y = y.transpose(-1, -2).contiguous()
+        y = self.out_proj(y)
+        return y
 
 
 class Lfm3DecoderLayer(GradientCheckpointingLayer):
@@ -399,8 +453,14 @@ class Lfm3DecoderLayer(GradientCheckpointingLayer):
                 attention_mask=attention_mask,
                 **kwargs,
             )
-        hidden_states = self.post_operator_norm(hidden_states) + residual
-        hidden_states = hidden_states + self.post_ffn_norm(self.feed_forward(self.ffn_norm(hidden_states)))
+        hidden_states = self.post_operator_norm(hidden_states)
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.ffn_norm(hidden_states)
+        hidden_states = self.feed_forward(hidden_states)
+        hidden_states = self.post_ffn_norm(hidden_states)
+        hidden_states = residual + hidden_states
 
         return hidden_states
 
