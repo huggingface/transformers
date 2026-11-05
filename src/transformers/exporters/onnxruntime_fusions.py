@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Fuses an exported ONNX graph into ONNX Runtime's own ops for one of its providers (`OnnxConfig(ort_fusions="cpu" |
-"cuda")`): `fuse_for_onnxruntime`.
+"cuda")`): `fuse_for_onnxruntime`, on a model set up by `prepare_for_ort_fusions`.
 
 onnxscript's ORT fusions (`optimize_for_ort`) do most of it: RMS / layer norms and their skip variants, attention,
 GELU. Around them, in order (`_STEPS`, which also says which provider each step is for):
@@ -1290,10 +1290,13 @@ _STEPS = (
 )
 
 
-def fuse_for_onnxruntime(model: ir.Model, ort_fusions: str = "cpu", steps: int | None = None) -> dict[str, int]:
+def fuse_for_onnxruntime(
+    model: ir.Model, ort_fusions: str = "cpu", steps: int | None = None, original_model=None
+) -> dict[str, int]:
     """Fuse `model` in place into ONNX Runtime's own ops, for the device it runs on, `ort_fusions` (`"cpu"` or
     `"cuda"`, which has more ops, `MoE`). Returns how many times each step applied. `steps` runs only the first ones
-    (to measure each step's share)."""
+    (to measure each step's share). `original_model`, the model `model` was exported from, says how many
+    mixture-of-experts blocks should fuse into `MoE`."""
     if ort_fusions == "cuda":
         installed, installed_version = _is_package_available("onnxruntime", return_version=True)
         if installed and version.parse(installed_version) < version.parse("1.28.0"):
@@ -1305,4 +1308,25 @@ def fuse_for_onnxruntime(model: ir.Model, ort_fusions: str = "cpu", steps: int |
     counts = {name: step(model) if ort_fusions in providers else 0 for name, step, providers in _STEPS[:steps]}
     # 7. What every layer computes alike (its mask's unattended rows), computed once.
     _merge_equal_computations(model)
+    if ort_fusions == "cuda" and original_model is not None:
+        blocks = sum(
+            hasattr(module, "has_gate") and hasattr(module, "is_concatenated") for module in original_model.modules()
+        )
+        if counts["mixture_of_experts"] < blocks:
+            logger.warning(
+                f"Only {counts['mixture_of_experts']} of {blocks} mixture-of-experts blocks fused into ONNX Runtime's "
+                "`MoE` (it takes SiLU-gated experts behind a softmax / top-k router): the others run as `batched_mm`, "
+                "whose prefill is slow. Export with `ort_fusions='cpu'` or `None` to keep them as `grouped_mm`."
+            )
     return counts
+
+
+def prepare_for_ort_fusions(model, ort_fusions: str):
+    """Set `model` up to trace in the forms `fuse_for_onnxruntime(ort_fusions=...)` fuses.
+
+    For `"cuda"`, the mixture-of-experts layers run as `batched_mm`, which fuses into `MoE`: a graph a fraction of the
+    size of `grouped_mm`'s per-expert one, so faster to export and to fuse. Elsewhere `MoE` doesn't fuse, and
+    `grouped_mm` keeps the prefill fast.
+    """
+    if ort_fusions == "cuda" and getattr(model, "_can_set_experts_implementation", lambda: False)():
+        model.set_experts_implementation("batched_mm")
