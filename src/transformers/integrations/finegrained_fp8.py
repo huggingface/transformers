@@ -24,7 +24,7 @@ from torch.nn import functional as F
 
 from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps
-from ..quantizers.quantizers_utils import get_module_from_name
+from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 from ..utils import logging
 from ..utils.import_utils import is_kernels_available
 from .deepgemm import (
@@ -913,6 +913,22 @@ def _disable_deepgemm_on_multi_device(model: nn.Module) -> None:
         "single CUDA context and corrupt across devices). Run tensor/expert parallel (one device per "
         "process) to use the faster DeepGEMM path."
     )
+
+
+def replace_with_fp8_embedding(model, patterns: list[str], modules_to_not_convert: list[str] | None = None):
+    """Swap every `nn.Embedding` whose name ends with one of `patterns` for `FP8Embedding`.
+
+    Also runs under `dequantize=True`: a table worth quantizing is one we cannot afford to expand.
+    """
+    for name, module in list(model.named_modules()):
+        if type(module) is nn.Embedding and any(name.endswith(p) for p in patterns):
+            if not should_convert_module(name, modules_to_not_convert):
+                continue
+            with torch.device("meta"):
+                new_module = FP8Embedding(module.num_embeddings, module.embedding_dim, module.padding_idx)
+            new_module._hf_quantized_needs_local_tp = True
+            model.set_submodule(name, new_module)
+    return model
 
 
 def build_fp8_experts(experts, quantization_config, text_config):
