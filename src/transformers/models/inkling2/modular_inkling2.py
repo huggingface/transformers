@@ -1111,12 +1111,21 @@ class Inkling2ForCausalLM(InklingForCausalLM):
         ```python
         >>> from transformers import AutoTokenizer, Inkling2ForCausalLM
 
-        >>> model = Inkling2ForCausalLM.from_pretrained("thinkingmachines/Inkling-2-Small")
         >>> tokenizer = AutoTokenizer.from_pretrained("thinkingmachines/Inkling-2-Small")
+        >>> model = Inkling2ForCausalLM.from_pretrained("thinkingmachines/Inkling-2-Small", device_map="auto")
 
-        >>> inputs = tokenizer("What is your favorite condiment?", return_tensors="pt")
-        >>> generate_ids = model.generate(**inputs, max_new_tokens=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True)[0]
+        >>> messages = [{"role": "user", "content": "Explain in one sentence why the sky is usually blue."}]
+        >>> inputs = tokenizer.apply_chat_template(
+        ...     messages,
+        ...     tokenize=True,
+        ...     add_generation_prompt=True,
+        ...     return_dict=True,
+        ...     return_tensors="pt",
+        ... ).to(model.device)
+        >>> input_len = inputs["input_ids"].shape[-1]
+
+        >>> outputs = model.generate(**inputs, max_new_tokens=256)
+        >>> print(tokenizer.decode(outputs[0][input_len:], skip_special_tokens=True))
         ```"""
         outputs = self.model(
             input_ids=input_ids,
@@ -1250,6 +1259,39 @@ class Inkling2Model(InklingModel):
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             Temporal, height and width of each image, counted in language model image tokens.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, Inkling2Model
+
+        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/Inkling-2-Small")
+        >>> model = Inkling2Model.from_pretrained("thinkingmachines/Inkling-2-Small", device_map="auto")
+
+        >>> messages = [
+        ...     {
+        ...         "role": "user",
+        ...         "content": [
+        ...             {
+        ...                 "type": "image",
+        ...                 "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+        ...             },
+        ...             {"type": "text", "text": "What animal is in this image, and where is it?"},
+        ...         ],
+        ...     },
+        ... ]
+
+        >>> inputs = processor.apply_chat_template(
+        ...     messages,
+        ...     tokenize=True,
+        ...     add_generation_prompt=True,
+        ...     return_dict=True,
+        ...     return_tensors="pt",
+        ... ).to(model.device)
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        ```
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1324,6 +1366,42 @@ class Inkling2ForConditionalGeneration(InklingForConditionalGeneration):
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             Temporal, height and width of each image, counted in language model image tokens.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, Inkling2ForConditionalGeneration
+
+        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/Inkling-2-Small")
+        >>> model = Inkling2ForConditionalGeneration.from_pretrained(
+        ...     "thinkingmachines/Inkling-2-Small", device_map="auto"
+        ... )
+
+        >>> messages = [
+        ...     {
+        ...         "role": "user",
+        ...         "content": [
+        ...             {
+        ...                 "type": "image",
+        ...                 "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+        ...             },
+        ...             {"type": "text", "text": "What animal is in this image, and where is it?"},
+        ...         ],
+        ...     },
+        ... ]
+
+        >>> inputs = processor.apply_chat_template(
+        ...     messages,
+        ...     tokenize=True,
+        ...     add_generation_prompt=True,
+        ...     return_dict=True,
+        ...     return_tensors="pt",
+        ... ).to(model.device)
+        >>> input_len = inputs["input_ids"].shape[-1]
+
+        >>> outputs = model.generate(**inputs, max_new_tokens=256)
+        >>> print(processor.decode(outputs[0][input_len:], skip_special_tokens=True))
+        ```
         """
         outputs = self.model(
             input_ids=input_ids,
