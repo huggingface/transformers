@@ -61,7 +61,7 @@ class GemmaQuantizer(HfQuantizer):
 
     def _process_model_before_weight_loading(self, model, **kwargs):
         if self.dequantizing:
-            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
+            # The model stays unquantized: the `dequantize` load operation runs on every checkpoint weight
             return
         from ..integrations.gemma_quant import replace_with_quant_layers
 
@@ -92,7 +92,6 @@ class GemmaQuantizer(HfQuantizer):
             if style and (name.endswith("activation_scale") or name.endswith(".weight_scale") and "rowwise" in style):
                 plan[name] = "replicate"
 
-    @property
     def is_serializable(self):
         return True
 

@@ -328,6 +328,8 @@
     title: Optimum
   - local: quantization/contribute
     title: Contribute a quantization method
+  - local: quantization/add_format
+    title: Add a quantized format
   title: Quantization
 - isExpanded: false
   sections:

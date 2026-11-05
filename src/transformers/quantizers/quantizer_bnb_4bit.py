@@ -54,6 +54,8 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         return 0.5
 
     def validate_environment(self, *args, **kwargs):
+        if self.dequantizing:
+            return  # the `dequantize` load operation is pure torch
         if not is_accelerate_available():
             raise ImportError(
                 f"Using `bitsandbytes` 4-bit quantization requires accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
@@ -117,7 +119,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         **kwargs,
     ):
         if self.dequantizing:
-            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
+            # The model stays unquantized: the `dequantize` load operation runs on every checkpoint weight
             return
         from ..integrations import replace_with_bnb_linear
 

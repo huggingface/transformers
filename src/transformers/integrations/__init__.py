@@ -17,7 +17,6 @@ from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_availa
 
 
 _import_structure = {
-    "aqlm": ["replace_with_aqlm_linear"],
     "awq": [
         "post_init_awq_exllama_modules",
         "replace_quantization_scales",
@@ -26,7 +25,6 @@ _import_structure = {
     "bitnet": [
         "BitLinear",
         "pack_weights",
-        "replace_with_bitnet_linear",
         "unpack_weights",
     ],
     "bitsandbytes": [
@@ -47,9 +45,9 @@ _import_structure = {
         "set_hf_deepspeed_config",
         "unset_hf_deepspeed_config",
     ],
-    "eetq": ["replace_with_eetq_linear"],
+    "eetq": ["load_eetq_kernels"],
     "fbgemm_fp8": ["FbgemmFp8Linear", "FbgemmFp8Llama4TextExperts", "replace_with_fbgemm_fp8_linear"],
-    "finegrained_fp8": ["FP8Embedding", "FP8Linear", "replace_with_fp8_embedding", "replace_with_fp8_linear"],
+    "finegrained_fp8": ["FP8Embedding", "FP8Linear"],
     "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module"],
     "gemma_quant": [
         "QuantizedEmbedding",
@@ -65,7 +63,6 @@ _import_structure = {
     "higgs": [
         "HiggsLinear",
         "quantize_with_higgs",
-        "replace_with_higgs_linear",
     ],
     "hqq": ["prepare_for_hqq_linear"],
     "hub_kernels": [
@@ -125,7 +122,6 @@ _import_structure = {
     "liger": ["apply_liger_kernel"],
     "metal_quantization": [
         "MetalLinear",
-        "replace_with_metal_linear",
     ],
     "moe": [
         "batched_mm_experts_forward",
@@ -144,7 +140,7 @@ _import_structure = {
         "deactivate_neftune",
         "neftune_post_forward_hook",
     ],
-    "nvfp4": ["NVFP4Linear", "NVFP4Quantize", "replace_with_nvfp4_linear"],
+    "nvfp4": ["NVFP4Linear", "NVFP4Quantize"],
     "peft": ["PeftAdapterMixin"],
     "quanto": ["replace_with_quanto_layers"],
     "sinq": ["SinqDeserialize", "SinqQuantize"],
@@ -172,7 +168,6 @@ _import_structure["flex_attention"] = [
 ]
 
 if TYPE_CHECKING:
-    from .aqlm import replace_with_aqlm_linear
     from .awq import (
         post_init_awq_exllama_modules,
         replace_quantization_scales,
@@ -181,7 +176,6 @@ if TYPE_CHECKING:
     from .bitnet import (
         BitLinear,
         pack_weights,
-        replace_with_bitnet_linear,
         unpack_weights,
     )
     from .bitsandbytes import (
@@ -202,9 +196,9 @@ if TYPE_CHECKING:
         set_hf_deepspeed_config,
         unset_hf_deepspeed_config,
     )
-    from .eetq import replace_with_eetq_linear
+    from .eetq import load_eetq_kernels
     from .fbgemm_fp8 import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts, replace_with_fbgemm_fp8_linear
-    from .finegrained_fp8 import FP8Embedding, FP8Linear, replace_with_fp8_embedding, replace_with_fp8_linear
+    from .finegrained_fp8 import FP8Embedding, FP8Linear
     from .fsdp import is_fsdp_enabled, is_fsdp_managed_module
     from .gemma_quant import (
         QuantizedEmbedding,
@@ -217,7 +211,7 @@ if TYPE_CHECKING:
         GGUF_CONFIG_MAPPING,
         _gguf_parse_value,
     )
-    from .higgs import HiggsLinear, quantize_with_higgs, replace_with_higgs_linear
+    from .higgs import HiggsLinear, quantize_with_higgs
     from .hqq import prepare_for_hqq_linear
     from .hub_kernels import (
         LayerRepository,
@@ -276,7 +270,6 @@ if TYPE_CHECKING:
     from .liger import apply_liger_kernel
     from .metal_quantization import (
         MetalLinear,
-        replace_with_metal_linear,
     )
     from .moe import (
         batched_mm_experts_forward,
@@ -290,7 +283,7 @@ if TYPE_CHECKING:
         swizzle_mxfp4,
     )
     from .neftune import activate_neftune, deactivate_neftune, neftune_post_forward_hook
-    from .nvfp4 import NVFP4Linear, NVFP4Quantize, replace_with_nvfp4_linear
+    from .nvfp4 import NVFP4Linear, NVFP4Quantize
     from .peft import PeftAdapterMixin
     from .quanto import replace_with_quanto_layers
     from .sinq import SinqDeserialize, SinqQuantize

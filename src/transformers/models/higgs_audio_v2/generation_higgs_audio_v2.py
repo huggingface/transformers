@@ -45,12 +45,12 @@ LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. [What are input IDs?](../glossary#input-ids)
-        scores (`torch.FloatTensor` of shape `(batch_size, config.vocab_size)`):
+        scores (`torch.Tensor` of shape `(batch_size, config.vocab_size)`):
             Prediction scores of a language modeling head. These can be logits for each vocabulary when not using beam
             search or log softmax for each vocabulary token when using beam search
 
     Return:
-        `torch.FloatTensor` of shape `(batch_size, config.vocab_size)`: The processed prediction scores.
+        `torch.Tensor` of shape `(batch_size, config.vocab_size)`: The processed prediction scores.
 
 """
 
@@ -106,7 +106,7 @@ class HiggsAudioV2DelayPatternLogitsProcessor(LogitsProcessor):
         self.vocab_mask_eos = torch.arange(codebook_size) != audio_stream_eos_id
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor) -> torch.Tensor:
         scores = scores.clone().reshape(-1, self.num_codebooks, self.codebook_size)
         batch_size = scores.shape[0]
 
@@ -169,25 +169,25 @@ class HiggsAudioV2GenerationOutput(GenerateDecoderOnlyOutput):
         sequences (`torch.LongTensor` of shape `(batch_size, audio_sequence_length, num_codebooks)`):
             The generated text sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
-        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True`):
+        scores (`tuple(torch.Tensor)` *optional*, returned when `output_scores=True`):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
+            at each generation step. Tuple of `torch.Tensor` with up to `max_new_tokens` elements (one element for
             each generated token).
             If the generated token is a text token, the tensor will have shape `(batch_size, config.vocab_size)`.
             If the generated token is an audio token, the tensor will have shape `(config.num_codebooks, self.model.codebook_size)`
-        logits (`tuple(torch.FloatTensor)` *optional*, returned when `output_logits=True`):
+        logits (`tuple(torch.Tensor)` *optional*, returned when `output_logits=True`):
             Unprocessed prediction scores of the language modeling head or the audio head (scores for each vocabulary token before SoftMax)
-            at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
+            at each generation step. Tuple of `torch.Tensor` with up to `max_new_tokens` elements (one element for
             each generated token).
             If the generated token is a text token, the tensor will have shape `(batch_size, config.vocab_size)`.
             If the generated token is an audio token, the tensor will have shape `(config.num_codebooks, self.model.codebook_size)`
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
+        attentions (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
-        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*):
+            `torch.Tensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
+        hidden_states (`tuple(tuple(torch.Tensor))`, *optional*):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
-        past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True`):
+            `torch.Tensor` of shape `(batch_size, generated_length, hidden_size)`.
+        past_key_values (`tuple(tuple(torch.Tensor)))`, *optional*, returned when `use_cache=True`):
             Returns the model cache, used to speed up decoding. Different models have a different cache format, check
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
         audio_sequences (`tuple(torch.LongTensor)` *optional*):

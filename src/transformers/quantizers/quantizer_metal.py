@@ -87,17 +87,22 @@ class MetalHfQuantizer(HfQuantizer):
         return False
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        from ..integrations.metal_quantization import replace_with_metal_linear
-
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
-        model = replace_with_metal_linear(
-            model,
-            modules_to_not_convert=self.modules_to_not_convert,
-            quantization_config=self.quantization_config,
-            pre_quantized=self.pre_quantized,
+    def quantized_module(self, name, module):
+        from ..integrations.metal_quantization import MetalLinear
+
+        if not isinstance(module, torch.nn.Linear):
+            return None
+        return MetalLinear(
+            in_features=module.in_features,
+            out_features=module.out_features,
+            bias=module.bias is not None,
+            bits=self.quantization_config.bits,
+            group_size=self.quantization_config.group_size,
+            **({} if self.pre_quantized else {"dtype": None}),
         )
 
     def is_serializable(self):

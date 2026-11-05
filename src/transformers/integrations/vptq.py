@@ -27,7 +27,7 @@ logger = logging.get_logger(__name__)
 
 class VptqDequantize(ConversionOps):
     """
-    Dense weights from the VPTQ `indices` into the `centroids`, with the optional outliers, residuals, permutation and
+    Dequantized weights from the VPTQ `indices` into the `centroids`, with the optional outliers, residuals, permutation and
     norm, through the torch `vptq.ops.dequant` (what `vptq.ops.quant_gemm` runs without the CUDA kernels).
     """
 

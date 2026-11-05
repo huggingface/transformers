@@ -26,6 +26,7 @@ from .quantizers_utils import get_module_from_name
 
 if is_torch_available():
     import torch
+    import torch.nn as nn
 
 
 logger = logging.get_logger(__name__)
@@ -42,6 +43,8 @@ class EetqHfQuantizer(HfQuantizer):
     quantization_config: "EetqConfig"
 
     def validate_environment(self, *args, **kwargs):
+        if self.dequantizing:
+            return  # dequantizing falls back to torch without the kernel or a GPU
         if not is_kernels_available():
             raise ImportError("Loading an EETQ quantized model requires kernels (`pip install kernels`)")
 
@@ -87,17 +90,22 @@ class EetqHfQuantizer(HfQuantizer):
         **kwargs,
     ):
         if self.dequantizing:
-            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
-            return
-        from ..integrations import replace_with_eetq_linear
+            return  # no kernel: the `dequantize` load operation runs on every checkpoint weight
+        from ..integrations import load_eetq_kernels
 
+        load_eetq_kernels()
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
-        model = replace_with_eetq_linear(
-            model, modules_to_not_convert=self.modules_to_not_convert, pre_quantized=self.pre_quantized
-        )
+    def quantized_module(self, name, module):
+        from ..integrations.eetq import EetqLinear
+
+        if not isinstance(module, nn.Linear):
+            return None
+        # we need this to correctly materialize the weights during quantization
+        module_kwargs = {} if self.pre_quantized else {"dtype": None}
+        return EetqLinear(module.in_features, module.out_features, bias=module.bias is not None, **module_kwargs)
 
     def is_serializable(self):
         return True

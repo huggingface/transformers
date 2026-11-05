@@ -23,7 +23,11 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
     from ..utils.quantization_config import AqlmConfig
 
-from ..utils import is_accelerate_available, is_aqlm_available, logging
+from ..utils import is_accelerate_available, is_aqlm_available, is_torch_available, logging
+
+
+if is_torch_available():
+    import torch.nn as nn
 
 
 logger = logging.get_logger(__name__)
@@ -51,16 +55,23 @@ class AqlmHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
-        if self.dequantizing:
-            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
-            return
-        from ..integrations import replace_with_aqlm_linear
+        self.modules_to_not_convert = self.quantization_config.linear_weights_not_to_quantize
 
-        replace_with_aqlm_linear(
-            model,
-            modules_to_not_convert=self.quantization_config.linear_weights_not_to_quantize,
-            quantization_config=self.quantization_config,
+    def quantized_module(self, name, module):
+        from aqlm import QuantizedLinear
+
+        if not isinstance(module, nn.Linear):
+            return None
+        new_module = QuantizedLinear(
+            module.in_features,
+            module.out_features,
+            bias=module.bias is not None,
+            in_group_size=self.quantization_config.in_group_size,
+            out_group_size=self.quantization_config.out_group_size,
+            num_codebooks=self.quantization_config.num_codebooks,
+            nbits_per_codebook=self.quantization_config.nbits_per_codebook,
         )
+        return new_module.requires_grad_(False)
 
     @property
     def is_trainable(self) -> bool:

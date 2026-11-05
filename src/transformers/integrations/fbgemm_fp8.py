@@ -103,7 +103,7 @@ class FbgemmFp8Quantize(ConversionOps):
 
 
 class FbgemmFp8Dequantize(ConversionOps):
-    """Dense weights from the serialized fp8 `weight` and its per output channel `weight_scale`."""
+    """Dequantized weights from the serialized fp8 `weight` and its per output channel `weight_scale`."""
 
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer

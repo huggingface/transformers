@@ -17,7 +17,6 @@ import functools
 from math import sqrt
 
 from ..core_model_loading import ConversionOps
-from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import is_flute_available, is_hadamard_available, is_torch_available, logging
 
 
@@ -549,49 +548,6 @@ class HiggsLinear(torch.nn.Module):
         )
 
 
-def replace_with_higgs_linear(model, modules_to_not_convert: list[str] | None = None, quantization_config=None):
-    """
-    Public method that replaces the Linear layers of the given model with HIGGS quantized layers.
-
-    Args:
-        model (`torch.nn.Module`):
-            The model to convert, can be any `torch.nn.Module` instance.
-        modules_to_not_convert (`list[str]`, *optional*, defaults to `None`):
-            A list of nn.Linear weights to not convert. If a parameter path is in the list (e.g. `lm_head.weight`), the corresponding module will not be
-            converted.
-        quantization_config (`HiggsConfig`):
-            The quantization config object that contains the quantization parameters.
-    """
-
-    has_been_replaced = False
-    # we need this to correctly materialize the weights during quantization
-    for module_name, module in model.named_modules():
-        if not should_convert_module(module_name, modules_to_not_convert):
-            continue
-        with torch.device("meta"):
-            if isinstance(module, nn.Linear):
-                new_module = HiggsLinear(
-                    module.in_features,
-                    module.out_features,
-                    bias=module.bias is not None,
-                    num_bits=quantization_config.bits,
-                    hadamard_size=quantization_config.hadamard_size,
-                    group_size=quantization_config.group_size,
-                )
-                new_module.source_cls = type(module)
-                new_module.requires_grad_(False)
-                model.set_submodule(module_name, new_module)
-                has_been_replaced = True
-
-    if not has_been_replaced:
-        logger.warning(
-            "You are loading your model using eetq but no linear modules were found in your model."
-            " Please double check your model architecture, or submit an issue on github if you think this is"
-            " a bug."
-        )
-    return model
-
-
 class HiggsDeserialize(ConversionOps):
     """
     FLUTE packs the `weight` of a `HiggsLinear` for the number of SMs (GPU streaming multiprocessors) of the device it
@@ -633,7 +589,7 @@ class HiggsDeserialize(ConversionOps):
 
 class HiggsDequantize(HiggsDeserialize):
     """
-    Dense weights from the FLUTE-packed `weight`, its `scales` and lookup `tables` / `tables2`. The packing is specific
+    Dequantized weights from the FLUTE-packed `weight`, its `scales` and lookup `tables` / `tables2`. The packing is specific
     to the FLUTE kernels (tiles, number of SMs), so the weights are repacked as when deserializing, then the HIGGS
     matmul runs on the identity, as in `HiggsLinear.forward`, which also undoes the Hadamard rotation.
     """
@@ -661,7 +617,7 @@ class HiggsDequantize(HiggsDeserialize):
         config = self.hf_quantizer.quantization_config
         weight, tune_metadata = self.repack(weight, scales, module_name)
         identity = torch.eye(scales.shape[1] * config.group_size, dtype=scales.dtype, device=scales.device)
-        dense = qgemm_v2(
+        dequantized = qgemm_v2(
             pad_to_block(identity, [-1], config.hadamard_size),
             weight,
             scales,
@@ -671,4 +627,4 @@ class HiggsDequantize(HiggsDeserialize):
             tune_metadata,
             hadamard_size=config.hadamard_size,
         )
-        return dense.T.contiguous()
+        return dequantized.T.contiguous()

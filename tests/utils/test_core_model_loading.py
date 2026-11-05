@@ -49,6 +49,7 @@ from transformers.core_model_loading import (
     spawn_materialize,
 )
 from transformers.modeling_utils import LoadStateDictConfig
+from transformers.quantizers.auto import QuantizationPlanHfQuantizer
 from transformers.utils.import_utils import is_triton_available
 
 from ..test_modeling_common import compare_state_dicts
@@ -574,11 +575,16 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                 seen.extend(name for name in tensors if model.get_parameter(name) is not None)
                 return {name: (value[0] if isinstance(value, list) else value) * 2 for name, value in tensors.items()}
 
-        quantizer = SimpleNamespace(
-            pre_quantized=False,
-            param_needs_quantization=lambda model, name: "down_proj" not in name or name.startswith("mlp."),
-            get_load_operations=lambda: {"quantize": DoubleQuantize},
-        )
+        class Quantizer:
+            pre_quantized, quantization_config = False, None
+
+            def param_needs_quantization(self, model, name):
+                return "down_proj" not in name or name.startswith("mlp.")
+
+            def get_load_operations(self):
+                return {"quantize": DoubleQuantize}
+
+        quantizer = QuantizationPlanHfQuantizer({"*": Quantizer()})
         raw = {
             "model.layers.0.experts.0.w1.weight": torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
             "model.layers.0.experts.1.w1.weight": torch.tensor([[10.0, 11.0], [12.0, 13.0]]),

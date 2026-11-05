@@ -26,6 +26,7 @@ from ..utils import is_accelerate_available, is_flute_available, is_hadamard_ava
 
 if is_torch_available():
     import torch
+    import torch.nn as nn
 
 logger = logging.get_logger(__name__)
 
@@ -78,20 +79,24 @@ class HiggsHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
-        if self.dequantizing:
-            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
-            return
-        from ..integrations import replace_with_higgs_linear
-
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
-        replace_with_higgs_linear(
-            model,
-            quantization_config=self.quantization_config,
-            modules_to_not_convert=self.modules_to_not_convert,
+    def quantized_module(self, name, module):
+        from ..integrations import HiggsLinear
+
+        if not isinstance(module, nn.Linear):
+            return None
+        new_module = HiggsLinear(
+            module.in_features,
+            module.out_features,
+            bias=module.bias is not None,
+            num_bits=self.quantization_config.bits,
+            hadamard_size=self.quantization_config.hadamard_size,
+            group_size=self.quantization_config.group_size,
         )
+        return new_module.requires_grad_(False)
 
     @property
     def is_trainable(self) -> bool:

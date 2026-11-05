@@ -7,6 +7,7 @@ from .quantizers_utils import get_module_from_name
 
 if is_torch_available():
     import torch
+    from torch import nn
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -114,31 +115,51 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
-        from ..integrations.finegrained_fp8 import replace_with_fp8_embedding, replace_with_fp8_linear
-
         self._normalize_modules_to_not_convert(model)
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
+        self.text_config = model.config.get_text_config()
 
-        modules_to_convert = self.quantization_config.modules_to_convert
-        if self.pre_quantized and modules_to_convert:
-            replace_with_fp8_embedding(model, modules_to_convert, self.modules_to_not_convert)
-
-        model = replace_with_fp8_linear(
-            model,
-            modules_to_not_convert=self.modules_to_not_convert,
-            quantization_config=self.quantization_config,
-            pre_quantized=self.pre_quantized,
+    def quantized_module(self, name, module):
+        from ..integrations.finegrained_fp8 import (
+            ALL_FP8_EXPERTS_FUNCTIONS,
+            FP8Embedding,
+            FP8Experts,
+            FP8GroupedLinear,
+            FP8Linear,
         )
+        from ..integrations.moe import use_experts_implementation
 
-    def _process_model_after_weight_loading(self, model, **kwargs):
-        # Single-process multi-device is unsafe for DeepGEMM (its kernels are bound to one CUDA
-        # context); route those models through Triton/grouped_mm instead.
-        from ..integrations.finegrained_fp8 import _disable_deepgemm_on_multi_device
-
-        _disable_deepgemm_on_multi_device(model)
-        return model
+        config = self.quantization_config
+        kwargs = {
+            "block_size": config.weight_block_size,
+            "activation_scheme": config.activation_scheme,
+            "scale_fmt": config.scale_fmt,
+        }
+        modules_to_convert = config.modules_to_convert if self.pre_quantized else None
+        if modules_to_convert and type(module) is nn.Embedding and name.endswith(tuple(modules_to_convert)):
+            new_module = FP8Embedding(module.num_embeddings, module.embedding_dim, module.padding_idx)
+        elif name.endswith(".experts"):
+            has_gate, has_bias = getattr(module, "has_gate", True), getattr(module, "has_bias", False)
+            experts_class = use_experts_implementation(
+                experts_class=FP8Experts,
+                experts_interface=ALL_FP8_EXPERTS_FUNCTIONS,
+                has_bias=has_bias,
+                has_gate=has_gate,
+            )
+            experts_config = getattr(module, "config", self.text_config)
+            new_module = experts_class(experts_config, has_bias=has_bias, has_gate=has_gate, **kwargs)
+        elif type(module) is nn.Linear:
+            new_module = FP8Linear(module.in_features, module.out_features, has_bias=module.bias is not None, **kwargs)
+        elif isinstance(module, nn.Linear) and "GroupedLinear" in type(module).__name__:
+            new_module = FP8GroupedLinear(
+                module.in_features, module.out_features, module.n_groups, has_bias=module.bias is not None, **kwargs
+            )
+        else:
+            return None
+        new_module._hf_quantized_needs_local_tp = True
+        return new_module
 
     def update_parallel_plan(self, model, plan):
         from ..distributed.parallel_utils import _get_parameter_plan, replace_layer_number_by_wildcard
@@ -162,20 +183,28 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     def is_compileable(self) -> bool:
         return True
 
-    serialized_names = {"weight": ["weight", "weight_scale_inv", "activation_scale"]}
+    serialized_names = {
+        "weight": ["weight", "weight_scale_inv", "activation_scale"],
+        "gate_up_proj": ["gate_up_proj", "gate_up_proj_scale_inv"],
+        "down_proj": ["down_proj", "down_proj_scale_inv"],
+    }
 
     def get_load_operations(self):
-        from ..integrations.finegrained_fp8 import Fp8Dequantize, Fp8Quantize
+        from ..integrations.finegrained_fp8 import Fp8Dequantize, Fp8Deserialize, Fp8Quantize
 
-        return {"dequantize": Fp8Dequantize, "quantize": Fp8Quantize}
+        return {"deserialize": Fp8Deserialize, "dequantize": Fp8Dequantize, "quantize": Fp8Quantize}
 
-    def update_weight_conversions(self, weight_conversions, model):
-        from ..core_model_loading import WeightRenaming
+    def get_weight_conversions(self):
+        # Quantized, the experts load through the model's converters: only the linears need ours
+        conversions = super().get_weight_conversions()
+        if self.quantization_config.dequantize:
+            return conversions
+        return [c for c in conversions if c._original_target_patterns == ["weight"]]
 
-        # Some FP8 checkpoints ship per-block scales under `.scale` (e.g. DeepSeek-V4-Flash) or `.qscale_weight`
-        # (e.g. Mistral Large 4)
-        scale_renames = [
-            WeightRenaming(source_patterns=r"^(.+)\.scale", target_patterns=r"\1.weight_scale_inv"),
-            WeightRenaming(source_patterns=r"\.qscale_weight", target_patterns=".weight_scale_inv"),
-        ]
-        return scale_renames + super().update_weight_conversions(weight_conversions, model)
+    # DeepSeek-V4-Flash's per-block `.scale`, Mistral Large 4's `.qscale_weight`, ModelOpt's names (and FP8 embeddings')
+    renamed_names = {
+        "scale": "weight_scale_inv",
+        "qscale_weight": "weight_scale_inv",
+        "weight_scale": "weight_scale_inv",
+        "input_scale": "activation_scale",
+    }

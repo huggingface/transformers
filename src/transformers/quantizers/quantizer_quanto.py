@@ -46,6 +46,8 @@ class QuantoHfQuantizer(HfQuantizer):
         return {"int8": 1, "float8": 1, "int4": 0.5, "int2": 0.25}.get(self.quantization_config.weights)
 
     def validate_environment(self, *args, **kwargs):
+        if self.dequantizing:
+            return  # the `dequantize` load operation is pure torch
         if not is_optimum_quanto_available():
             raise ImportError(
                 "Loading an optimum-quanto quantized model requires optimum-quanto library (`pip install optimum-quanto`)"
@@ -85,7 +87,7 @@ class QuantoHfQuantizer(HfQuantizer):
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         if self.dequantizing:
-            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
+            # The model stays unquantized: the `dequantize` load operation runs on every checkpoint weight
             return
         from ..integrations import replace_with_quanto_layers
 

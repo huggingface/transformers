@@ -239,7 +239,7 @@ class TorchAoDeserialize(ConversionOps):
 
 
 class TorchAoDequantize(TorchAoDeserialize):
-    """Dense weights: the tensor subclass rebuilt as in `TorchAoDeserialize`, then its own `dequantize()`."""
+    """Dequantized weights: the tensor subclass rebuilt as in `TorchAoDeserialize`, then its own `dequantize()`."""
 
     def convert(self, input_dict, source_patterns=None, model=None, full_layer_name=None, **kwargs):
         return {full_layer_name: self.unflatten(input_dict, source_patterns, full_layer_name).dequantize()}

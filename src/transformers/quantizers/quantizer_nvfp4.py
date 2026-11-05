@@ -23,6 +23,7 @@ from .quantizers_utils import get_module_from_name
 
 if is_torch_available():
     import torch
+    from torch import nn
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -50,8 +51,8 @@ class NVFP4HfQuantizer(HfQuantizer):
         return 0.5
 
     def validate_environment(self, device_map, **kwargs):
-        if self.pre_quantized:
-            raise ValueError("Loading pre-quantized NVFP4 checkpoints is not supported yet.")
+        if self.pre_quantized and self.quantization_config.dequantize:
+            return  # the `dequantize` load operation is pure torch
         if not is_kernels_available():
             raise ImportError(
                 "NVFP4 quantization requires the `kernels` package. "
@@ -94,19 +95,27 @@ class NVFP4HfQuantizer(HfQuantizer):
         return isinstance(module, NVFP4Linear) and tensor_name == "weight"
 
     def _process_model_before_weight_loading(self, model: PreTrainedModel, **kwargs):
-        from ..integrations.nvfp4 import replace_with_nvfp4_linear
-
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
-        replace_with_nvfp4_linear(model, modules_to_not_convert=self.modules_to_not_convert)
+
+    def quantized_module(self, name, module):
+        from ..integrations.nvfp4 import NVFP4Experts, NVFP4Linear, is_nvfp4_compatible
+
+        if name.endswith(".experts") and self.pre_quantized and is_nvfp4_compatible(module):
+            return NVFP4Experts(module)  # TODO: quantize experts from a full-precision checkpoint too
+        if isinstance(module, nn.Linear) and is_nvfp4_compatible(module):
+            return NVFP4Linear(module.in_features, module.out_features)
+        return None
+
+    # As ModelOpt saves them
+    serialized_names = {"weight": ["weight", "weight_scale", "weight_scale_2", "input_scale"]}
 
     def get_load_operations(self):
-        from ..integrations.nvfp4 import NVFP4Quantize
+        from ..integrations.nvfp4 import NVFP4Dequantize, NVFP4Deserialize, NVFP4Quantize
 
-        return {"quantize": NVFP4Quantize}
+        return {"deserialize": NVFP4Deserialize, "dequantize": NVFP4Dequantize, "quantize": NVFP4Quantize}
 
-    @property
     def is_serializable(self) -> bool:
         return False
 

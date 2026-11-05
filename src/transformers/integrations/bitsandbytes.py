@@ -1,3 +1,6 @@
+import json
+import math
+
 from ..core_model_loading import ConversionOps, expand_target_names
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 from ..utils import (
@@ -90,8 +93,8 @@ class Bnb4bitDeserialize(ConversionOps):
         return {key_weight: new_value}
 
 
-def _to_dense_layout(weights, key, model, full_layer_name):
-    """Undo the `Conv1D` transpose done at quantization time and cast to the dtype of the dense param."""
+def _to_model_layout(weights, key, model, full_layer_name):
+    """Undo the `Conv1D` transpose done at quantization time and cast to the dtype of the model param."""
     if model is None:
         return weights
     name = next(iter(expand_target_names({key: None}, full_layer_name)))
@@ -107,8 +110,31 @@ def _to_dense_layout(weights, key, model, full_layer_name):
     ]
 
 
+def _dequantize_4bit(packed: "torch.Tensor", stats: dict) -> "torch.Tensor":
+    """
+    bitsandbytes' `dequantize_4bit` in torch, from the serialized quant state: each 4-bit code (high nibble first) is
+    looked up in `quant_map` and scaled by the `absmax` of its block, itself 8-bit quantized when nested.
+    """
+    state = json.loads(bytes(stats["quant_state"].tolist()))
+    absmax = stats["absmax"]
+    if "nested_absmax" in stats:
+        absmax = _scale_blocks(
+            stats["nested_quant_map"][absmax.int()], stats["nested_absmax"], state["nested_blocksize"]
+        )
+        absmax = absmax + state["nested_offset"]
+    packed = packed.view(-1)
+    codes = torch.stack([packed >> 4, packed & 0xF], dim=-1).view(-1)[: math.prod(state["shape"])]
+    weight = _scale_blocks(stats["quant_map"][codes.int()], absmax, state["blocksize"])
+    return weight.view(state["shape"]).to(getattr(torch, state["dtype"]))
+
+
+def _scale_blocks(values: "torch.Tensor", absmax: "torch.Tensor", blocksize: int) -> "torch.Tensor":
+    "Each block of `blocksize` values times its `absmax`, the last block possibly shorter"
+    return values * absmax.float().repeat_interleave(blocksize)[: values.numel()]
+
+
 class Bnb4bitDequantize(ConversionOps):
-    """Dense weights from the serialized `weight` and its quant state, saved under `weight.*`."""
+    """Dequantized weights from the serialized `weight` and its quant state, saved under `weight.*`."""
 
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
@@ -119,25 +145,24 @@ class Bnb4bitDequantize(ConversionOps):
             if any(key.startswith(f"{base}.") for base in input_dict):
                 continue  # the quant state of `base`
             weights = weights if isinstance(weights, list) else [weights]
-            stats = {name: value for name, value in input_dict.items() if name.startswith(f"{key}.")}
+            # `weight.absmax` -> `absmax`, `weight.quant_state.bitsandbytes__nf4` -> `quant_state`
+            stats = {
+                name.removeprefix(f"{key}.").split(".")[0]: value
+                for name, value in input_dict.items()
+                if name.startswith(f"{key}.")
+            }
             if stats:
                 weights = [
-                    bnb.functional.dequantize_4bit(
-                        weight,
-                        bnb.functional.QuantState.from_dict(
-                            {name: value[i] if isinstance(value, list) else value for name, value in stats.items()},
-                            device=weight.device,
-                        ),
-                    )
+                    _dequantize_4bit(weight, {name: v[i] if isinstance(v, list) else v for name, v in stats.items()})
                     for i, weight in enumerate(weights)
                 ]
-                weights = _to_dense_layout(weights, key, model, full_layer_name)
+                weights = _to_model_layout(weights, key, model, full_layer_name)
             output[key] = weights
         return output
 
 
 class Bnb8bitDequantize(ConversionOps):
-    """Dense weights from the serialized int8 `weight` and its row-wise scales `SCB`."""
+    """Dequantized weights from the serialized int8 `weight` and its row-wise scales `SCB`."""
 
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
@@ -152,7 +177,7 @@ class Bnb8bitDequantize(ConversionOps):
             if scales is not None:
                 scales = scales if isinstance(scales, list) else [scales]
                 weights = [weight.float() * scale.view(-1, 1) / 127 for weight, scale in zip(weights, scales)]
-                weights = _to_dense_layout(weights, key, model, full_layer_name)
+                weights = _to_model_layout(weights, key, model, full_layer_name)
             output[key] = weights
         return output
 

@@ -21,7 +21,31 @@ from ..utils import is_hqq_available, is_torch_available, logging
 if is_torch_available():
     import torch
 
+if is_hqq_available():
+    from hqq.core.quantize import HQQLinear
+else:
+    HQQLinear = object
+
 logger = logging.get_logger(__name__)
+
+
+class HqqLinear(HQQLinear):
+    """
+    An `HQQLinear` swapped in empty before loading, keeping the `weight` (on meta) of the `nn.Linear` it replaces:
+    while empty, its `state_dict` lists that `weight`, so the loader routes the checkpoint tensors to it (the
+    serialized `W_q` and meta data, or the unquantized weight to quantize). The load operations then fill it in place.
+    """
+
+    def state_dict(self, *args, destination=None, prefix="", keep_vars=False):
+        if self.is_initialized():
+            return super().state_dict(destination=destination, prefix=prefix, keep_vars=keep_vars)
+        # hqq's own empty `state_dict` doesn't write into `destination`, so the model's would not list this layer
+        state = {"weight": self.weight}
+        if self.bias is not None:
+            state["bias"] = self.bias
+        if destination is not None:
+            destination.update({prefix + name: value for name, value in state.items()})
+        return state
 
 
 # Name all modules inside the model
@@ -57,14 +81,8 @@ def _prepare_for_hqq_linear(model, patch_params, has_been_replaced, current_key_
             # Get linear tag
             linear_tag = name_to_linear_tag(module.name)
 
-            # We put the module quant_config into the nn.Linear layer so we can access it later in quantizer_hqq.create_quantized_param()
-            if linear_tag in patch_params:
-                if patch_params[linear_tag] is not None:
-                    model._modules[name].quant_config = patch_params[linear_tag]
-                    # Store the module class in case we need to transpose the weight later
-                    model._modules[name].source_cls = type(module)
-                    # Force requires grad to False to avoid unexpected errors
-                    model._modules[name].requires_grad_(False)
+            if patch_params.get(linear_tag) is not None:
+                model._modules[name] = _empty_hqq_linear(module, patch_params[linear_tag])
 
             has_been_replaced = True
 
@@ -82,6 +100,20 @@ def _prepare_for_hqq_linear(model, patch_params, has_been_replaced, current_key_
         current_key_name.pop(-1)
 
     return model, has_been_replaced
+
+
+def _empty_hqq_linear(linear, quant_config):
+    "The `HqqLinear` replacing `linear` before loading, keeping its `weight` and `bias` params"
+    layer = HqqLinear(None, quant_config, del_orig=False, compute_dtype=linear.weight.dtype, initialize=False)
+    weight_quant_params = layer.quant_config["weight_quant_params"]
+    if weight_quant_params["group_size"] is None:
+        weight_quant_params["group_size"] = (
+            linear.in_features if weight_quant_params["axis"] == 1 else linear.out_features
+        )
+    layer.name, layer.source_cls = linear.name, type(linear)
+    layer.weight, layer.bias = linear.weight, linear.bias
+    layer.requires_grad_(False)
+    return layer
 
 
 def prepare_for_hqq_linear(model, quantization_config=None, modules_to_not_convert=None, has_been_replaced=False):
@@ -149,46 +181,49 @@ def _hqq_linears(input_dict, prefix=""):
 
 
 class HqqDeserialize(ConversionOps):
-    """The serialized state of a quantized `nn.Linear` (`W_q` and its meta data) is loaded in an `HQQLinear` replacing it."""
+    """The serialized state of an `HqqLinear` (`W_q` and its meta data) is loaded in it."""
 
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
     def convert(self, input_dict, model=None, full_layer_name=None, missing_keys=None, **kwargs):
-        return _swap_in(model, full_layer_name, _hqq_linears(input_dict)[0], missing_keys)
+        state = {name: input_dict[name] for name in HQQ_SERIALIZED_NAMES if name in input_dict}
+        state = {name: value[0] if isinstance(value, list) else value for name, value in state.items()}
+        module = model.get_submodule(full_layer_name.rpartition(".")[0])
+        module.device, module.compute_dtype = state["W_q"].device, state["scale"].dtype
+        bias, module.bias = module.bias, None  # hqq resets and moves it, loaded before or after this op
+        module.load_state_dict(state)
+        module.bias = bias
+        return _loaded(module, full_layer_name, missing_keys)
 
 
 class HqqQuantize(ConversionOps):
-    """The dense weight of an `nn.Linear` is quantized with the `quant_config` it was tagged with, in an `HQQLinear`."""
+    """The unquantized weight of an `HqqLinear` is quantized in it, with its `quant_config`."""
 
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
     def convert(self, input_dict, model=None, full_layer_name=None, missing_keys=None, **kwargs):
-        from hqq.core.quantize import HQQLinear
-
         weight = next(iter(input_dict.values()))
         weight = weight[0] if isinstance(weight, list) else weight
         module = model.get_submodule(full_layer_name.rpartition(".")[0])
-        layer = HQQLinear.from_weights(
-            weight, None, module.quant_config, compute_dtype=weight.dtype, device=weight.device
-        )
-        return _swap_in(model, full_layer_name, layer, missing_keys)
+        module.device, module.compute_dtype = weight.device, weight.dtype
+        bias, module.bias = module.bias, None  # hqq moves it, loaded before or after this op
+        module.quantize(weight, **module.quant_config)
+        module.bias = bias
+        return _loaded(module, full_layer_name, missing_keys)
 
 
-def _swap_in(model, full_layer_name, layer, missing_keys):
-    "Replaces the `nn.Linear` owning `full_layer_name` (its weight) with the `HQQLinear` `layer`"
-    module_name = full_layer_name.rpartition(".")[0]
-    # loaded before or after the weight, the bias of the `nn.Linear` is the one of the `HQQLinear`
-    layer.bias = model.get_submodule(module_name).bias
-    model.set_submodule(module_name, layer)
+def _loaded(module, full_layer_name, missing_keys):
+    "Drops the placeholder `weight` of the now loaded `module`: its state is `W_q` and the meta data, not params"
+    del module.weight
     if missing_keys is not None:
         missing_keys.discard(full_layer_name)
-    return {}  # the module was swapped in place
+    return {}
 
 
 class HqqDequantize(ConversionOps):
-    """Dense weights from the serialized `HQQLinear` states, dequantized by hqq itself."""
+    """Dequantized weights from the serialized `HQQLinear` states, dequantized by hqq itself."""
 
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer

@@ -635,22 +635,22 @@ class ParakeetCTCGenerateOutput(ModelOutput):
         sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or shorter
             if all batches finished early due to the `eos_token_id`.
-        logits (`tuple(torch.FloatTensor)` *optional*, returned when `output_logits=True`):
+        logits (`tuple(torch.Tensor)` *optional*, returned when `output_logits=True`):
             Unprocessed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for
+            at each generation step. Tuple of `torch.Tensor` with up to `max_new_tokens` elements (one element for
             each generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
+        attentions (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
-        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
+            `torch.Tensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
+        hidden_states (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
+            `torch.Tensor` of shape `(batch_size, generated_length, hidden_size)`.
     """
 
     sequences: torch.LongTensor
-    logits: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[tuple[torch.FloatTensor]] | None = None
-    hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
+    logits: tuple[torch.Tensor] | None = None
+    attentions: tuple[tuple[torch.Tensor]] | None = None
+    hidden_states: tuple[tuple[torch.Tensor]] | None = None
 
 
 @dataclass
@@ -880,17 +880,17 @@ class ParakeetRNNTOutput(BaseModelOutputWithPooling):
     Output of the Parakeet RNN-T forward pass.
 
     Args:
-        loss (`torch.FloatTensor`, *optional*):
+        loss (`torch.Tensor`, *optional*):
             RNN-T loss, returned when `labels` are provided.
-        logits (`torch.FloatTensor`):
+        logits (`torch.Tensor`):
             Joint token logits. Shape is `(batch, T, U+1, vocab)` for training
             or `(batch, 1, 1, vocab)` for single-step inference.
         decoder_cache (`ParakeetRNNTDecoderCache`, *optional*):
             Decoder LSTM cache containing hidden state, cell state, and last output.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
     decoder_cache: ParakeetRNNTDecoderCache | None = None
 
 
@@ -938,7 +938,7 @@ class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_cache: ParakeetRNNTDecoderCache | None = None,
         use_decoder_cache: bool | None = None,
-        encoder_outputs: ParakeetEncoderModelOutput | tuple[torch.FloatTensor] | None = None,
+        encoder_outputs: ParakeetEncoderModelOutput | tuple[torch.Tensor] | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ParakeetRNNTOutput:
@@ -952,7 +952,7 @@ class ParakeetForRNNT(ParakeetPreTrainedModel, ParakeetRNNTGenerationMixin):
         use_decoder_cache (`bool`, *optional*):
             Whether to use a decoder cache. When `True` and `decoder_cache` is `None`, a new cache
             is created automatically during the forward pass.
-        encoder_outputs (`tuple(torch.FloatTensor)`, *optional*):
+        encoder_outputs (`tuple(torch.Tensor)`, *optional*):
             Pre-computed encoder outputs (last_hidden_state, pooler_output, hidden_states, attentions, attention_mask).
             Can be a tuple or `ParakeetEncoderModelOutput`.
 
@@ -1047,7 +1047,7 @@ class ParakeetForTDT(ParakeetTDTGenerationMixin, ParakeetForRNNT):
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_cache: ParakeetRNNTDecoderCache | None = None,
         use_decoder_cache: bool | None = None,
-        encoder_outputs: ParakeetEncoderModelOutput | tuple[torch.FloatTensor] | None = None,
+        encoder_outputs: ParakeetEncoderModelOutput | tuple[torch.Tensor] | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ParakeetRNNTOutput:
@@ -1061,7 +1061,7 @@ class ParakeetForTDT(ParakeetTDTGenerationMixin, ParakeetForRNNT):
         use_decoder_cache (`bool`, *optional*):
             Whether to use a decoder cache. When `True` and `decoder_cache` is `None`, a new cache
             is created automatically during the forward pass.
-        encoder_outputs (`tuple(torch.FloatTensor)`, *optional*):
+        encoder_outputs (`tuple(torch.Tensor)`, *optional*):
             Pre-computed encoder outputs (last_hidden_state, pooler_output, hidden_states, attentions, attention_mask).
             Can be a tuple or `ParakeetEncoderModelOutput`.
 

@@ -69,20 +69,40 @@ class BitNetHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
-        if self.dequantizing:
-            # The model stays dense: the `dequantize` load operation runs on every checkpoint weight
-            return
-        from ..integrations import replace_with_bitnet_linear
-
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
-        model = replace_with_bitnet_linear(
-            model,
-            modules_to_not_convert=self.modules_to_not_convert,
-            quantization_config=self.quantization_config,
+    def quantized_module(self, name, module):
+        from ..integrations.bitnet import AutoBitLinear, BitLinear
+
+        if not isinstance(module, torch.nn.Linear):
+            return None
+        config = self.quantization_config
+        if config.linear_class == "autobitlinear":
+            new_module = AutoBitLinear(
+                in_features=module.in_features,
+                out_features=module.out_features,
+                bias=module.bias is not None,
+                device=module.weight.device,
+                dtype=module.weight.dtype,
+                online_quant=(config.quantization_mode == "online"),
+                use_rms_norm=config.use_rms_norm,
+                rms_norm_eps=config.rms_norm_eps,
+            )
+            if config.quantization_mode == "offline":
+                new_module.requires_grad_(False)
+            return new_module
+        new_module = BitLinear(
+            in_features=module.in_features,
+            out_features=module.out_features,
+            bias=module.bias is not None,
+            device=module.weight.device,
+            dtype=module.weight.dtype,
+            use_rms_norm=config.use_rms_norm,
+            rms_norm_eps=config.rms_norm_eps,
         )
+        return new_module.requires_grad_(False)
 
     def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
@@ -115,5 +135,5 @@ class BitNetHfQuantizer(HfQuantizer):
         if config.linear_class == "autobitlinear" and config.quantization_mode == "offline":
             return {"deserialize": BitNetDeserialize, "dequantize": BitNetDequantize}
         if config.linear_class == "autobitlinear":
-            return {}  # online: the checkpoint is dense
+            return {}  # online: the checkpoint is unquantized
         return {"dequantize": BitNetDequantize}
