@@ -201,8 +201,7 @@ def apply_fully_sharded_data_parallelism(
                 module.set_gradient_divide_factor(float(distributed_config.fsdp_size))
                 # FSDP2 applies a divide factor other than the group size through PREMUL_SUM, which non-NCCL backends
                 # reject and NCCL zeroes in bfloat16 up to torch 2.13 (pytorch/pytorch#190747): sum, divide locally.
-                # With efsdp_size == 1 there is no reduce-scatter: FSDP2 divides while copying the gradient, and a forced
-                # sum would divide it a second time.
+                # No reduce-scatter when efsdp_size == 1: FSDP2 already divides, so a forced sum would divide twice.
                 if distributed_config.efsdp_size > 1:
                     module.set_force_sum_reduction_for_comms(True)
 
