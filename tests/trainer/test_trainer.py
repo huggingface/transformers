@@ -564,7 +564,8 @@ class TrainerGradientCheckpointingTest(TestCasePlus):
                 report_to="none",
             )
             trainer = Trainer(model=model, args=args, train_dataset=RegressionDataset())
-            trainer.train()
+            with self.assertWarnsRegex(FutureWarning, "only defines `gradient_checkpointing_enable`"):
+                trainer.train()
 
         self.assertEqual(model.checkpointing_kwargs, {"use_reentrant": False})
 
