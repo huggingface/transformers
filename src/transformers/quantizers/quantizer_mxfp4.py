@@ -243,6 +243,9 @@ class Mxfp4HfQuantizer(HfQuantizer):
         # A `weight` only loads through the model's converters (`update_weight_conversions`)
         return [c for c in super().get_weight_conversions() if c._original_target_patterns != ["weight"]]
 
+    # DeepSeek-V4 saves the expert scales under `.scale`
+    renamed_names = {"scale": "weight_scale_inv"}
+
     def get_load_operations(self):
         from ..integrations.mxfp4 import Mxfp4Dequantize, Mxfp4Deserialize
 

@@ -186,20 +186,10 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             return conversions
         return [c for c in conversions if c._original_target_patterns == ["weight"]]
 
-    def update_weight_conversions(self, weight_conversions, model):
-        from ..core_model_loading import WeightRenaming
-
-        # Some FP8 checkpoints ship per-block scales under `.scale` (e.g. DeepSeek-V4-Flash) or `.qscale_weight`
-        # (e.g. Mistral Large 4)
-        scale_renames = [
-            WeightRenaming(source_patterns=r"^(.+)\.scale", target_patterns=r"\1.weight_scale_inv"),
-            WeightRenaming(source_patterns=r"\.qscale_weight", target_patterns=".weight_scale_inv"),
-        ]
-        conversions = scale_renames + super().update_weight_conversions(weight_conversions, model)
-        # ModelOpt's names (and FP8 embeddings' `weight_scale`), after the model's renamings. In a plan, only on our
-        # params (NVFP4 has its own `weight_scale`)
-        conversions += [
-            WeightRenaming(r"\.weight_scale$", ".weight_scale_inv"),
-            WeightRenaming(r"\.input_scale$", ".activation_scale"),
-        ]
-        return conversions
+    # DeepSeek-V4-Flash's per-block `.scale`, Mistral Large 4's `.qscale_weight`, ModelOpt's names (and FP8 embeddings')
+    renamed_names = {
+        "scale": "weight_scale_inv",
+        "qscale_weight": "weight_scale_inv",
+        "weight_scale": "weight_scale_inv",
+        "input_scale": "activation_scale",
+    }

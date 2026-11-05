@@ -14,6 +14,7 @@
 # limitations under the License.
 import warnings
 from collections.abc import Callable
+from itertools import chain
 from typing import TypeGuard
 
 from ..models.auto.configuration_auto import AutoConfig
@@ -401,7 +402,6 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         self.module_quantizers, self.prefix = {}, ""
         self.set_quantizers(quantizers)
         self.pre_quantized = all(quantizer.pre_quantized for quantizer in self.all_quantizers)
-        self.conversions = {}
 
     @property
     def all_quantizers(self):
@@ -428,32 +428,68 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         tiers = [build_glob_alternation(tier)[:2] for tier in tiers if tier]
         self.prefix = f"{model.base_model_prefix}."
         self.module_quantizers = {}
-        for name, _ in model.named_modules():
-            matches = ((alternation.search(name), group_to_pattern) for alternation, group_to_pattern in tiers)
+        for name, module in model.named_modules():
+            # A pattern may name the module or one of its params (e.g. `*.experts.*` for `experts.gate_up_proj`)
+            names = [name, *(f"{name}.{param}" for param in chain(module._parameters, module._buffers))]
+            matches = (
+                (alternation.search(key), group_to_pattern) for alternation, group_to_pattern in tiers for key in names
+            )
             pattern = next((patterns[match.lastgroup] for match, patterns in matches if match), "*")
             self.module_quantizers[name] = self.quantizers.get(pattern)
 
     def get_quantizer(self, name):
         "The quantizer of the module owning `name` (a param, or a module), as matched by `match_modules`"
-        if not name.startswith(self.prefix) and f"{self.prefix}{name}" in self.module_quantizers:
-            name = f"{self.prefix}{name}"  # e.g. a checkpoint saved from the base model
-        while name not in self.module_quantizers and "." in name:
-            name = name.rpartition(".")[0]
-        return self.module_quantizers.get(name)
+        # Also under the model's prefix, e.g. the keys of a checkpoint saved from the base model
+        for name in (name, f"{self.prefix}{name}"):
+            while name not in self.module_quantizers and "." in name:
+                name = name.rpartition(".")[0]
+            if name in self.module_quantizers:
+                return self.module_quantizers[name]
+        return None
 
     def update_weight_conversions(self, weight_conversions, model):
         """
-        The model's conversions: each quantizer updates its own copy of them (`conversions`), which core loading uses
-        for the keys of the layers it quantizes
+        The model's conversions, each converter updated by the quantizer of its target's module only (e.g. FP8 must
+        not add its names to the merge of NVFP4 experts), then each quantizer's renamings on its own layers
         """
-        self.conversions = {
-            q: q.update_weight_conversions(list(weight_conversions), model) for q in self.all_quantizers
-        }
-        return weight_conversions
+        from ..core_model_loading import WeightConverter
+
+        def owner(converter):
+            module = converter._original_target_patterns[0].replace("\\", "").rpartition(".")[0].lstrip("^.")
+            names = (name for name in self.module_quantizers if name == module or name.endswith(f".{module}"))
+            return self.module_quantizers.get(next(names, None))
+
+        param_names = "\n".join(name for name, _ in chain(model.named_parameters(), model.named_buffers()))
+        updated, general = [], {}
+        for converter in weight_conversions:
+            quantizer = owner(converter) if isinstance(converter, WeightConverter) else None
+            updated += quantizer.update_weight_converter(converter, param_names) if quantizer else [converter]
+        for quantizer in self.all_quantizers:
+            layers = [name for name, module in model.named_modules() if self.module_quantizers.get(name) is quantizer]
+            updated += quantizer.get_weight_renamings(model, layers)
+            for converter in quantizer.get_weight_conversions():
+                general.setdefault(converter._original_target_patterns[0], []).append(converter)
+        # One general converter per param collects the names of every quantizer, `weight` first (it takes
+        # `*.down_proj.weight` before the experts' own-name `down_proj` does). `update_weight_transform` gives a param
+        # its quantizer's ops
+        general = dict(sorted(general.items(), key=lambda item: item[0] != "weight"))
+        return updated + [
+            WeightConverter(
+                list(dict.fromkeys(name for c in converters for name in c._original_source_patterns)),
+                target,
+                converters[0].operations,
+            )
+            for target, converters in general.items()
+        ]
 
     def update_weight_transform(self, transform, model, name):
         quantizer = self.get_quantizer(name)
-        return transform if quantizer is None else quantizer.update_weight_transform(transform, model, name)
+        if quantizer is None:
+            return transform
+        # A general converter may carry another quantizer's ops: swap in this one's
+        targets = getattr(transform, "_original_target_patterns", None)
+        own = next((c for c in quantizer.get_weight_conversions() if c._original_target_patterns == targets), None)
+        return quantizer.update_weight_transform(own or transform, model, name)
 
     def param_element_size(self, model, param_name, param):
         if not self.module_quantizers:

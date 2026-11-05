@@ -1699,15 +1699,6 @@ def convert_and_load_state_dict_in_model(
         dtype_policy_alt, dtype_policy_by_group_name, _ = build_glob_alternation(list(dtype_plan.keys()))
 
     pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
-    # A quantization plan: each quantizer's own conversions, for the keys of the layers it quantizes
-    quantizer_conversions = {
-        quantizer: (
-            [entry for entry in conversions if isinstance(entry, WeightRenaming)],
-            quantizer_converters := [entry for entry in conversions if isinstance(entry, WeightConverter)],
-            {k: converter for converter in quantizer_converters for k in converter.source_patterns},
-        )
-        for quantizer, conversions in getattr(hf_quantizer, "conversions", {}).items()
-    }
 
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
@@ -1720,13 +1711,6 @@ def convert_and_load_state_dict_in_model(
             renamed_key, source_pattern = rename_source_key(
                 original_key, [], [], base_model_prefix=base_model_prefix, meta_state_dict=meta_model_state_dict
             )
-        # The layer's name gives its quantizer, whose conversions rename the key again (e.g. its scales)
-        key_converters = pattern_to_converter
-        if quantizer_conversions and (quantizer := hf_quantizer.get_quantizer(renamed_key)) in quantizer_conversions:
-            quantizer_renamings, quantizer_converters, key_converters = quantizer_conversions[quantizer]
-            renamed_key, source_pattern = rename_source_key(
-                original_key, quantizer_renamings, quantizer_converters, base_model_prefix, meta_model_state_dict
-            )
 
         # 2. finally, collect the tensor into the proper converter
         if renamed_key in meta_model_state_dict:
@@ -1735,7 +1719,7 @@ def convert_and_load_state_dict_in_model(
                 # If we enter here, we have a WeightConverter operation to perform: each target key gets its own
                 # converter instance. Otherwise, only potential renaming
                 mapping = (
-                    deepcopy(key_converters[source_pattern])
+                    deepcopy(pattern_to_converter[source_pattern])
                     if source_pattern is not None
                     else WeightRenaming(original_key, renamed_key)
                 )
@@ -1789,7 +1773,7 @@ def convert_and_load_state_dict_in_model(
 
             mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
         elif source_pattern is not None:  # add all target keys as unexpected
-            mapping = key_converters[source_pattern]
+            mapping = pattern_to_converter[source_pattern]
             for k in mapping.target_patterns:
                 _add_unmatched_checkpoint_key(
                     renamed_key.replace(mapping.target_patterns[0], k),
