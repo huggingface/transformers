@@ -35,6 +35,7 @@ from transformers import (
     Wav2Vec2ForCTC,
     WhisperForConditionalGeneration,
 )
+from transformers.audio_utils import load_audio
 from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
 from transformers.pipelines.audio_utils import chunk_bytes_iter, ffmpeg_microphone_live
 from transformers.pipelines.automatic_speech_recognition import _to_mono, chunk_iter
@@ -62,6 +63,20 @@ if is_torch_available():
 
 @is_pipeline_test
 class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
+    @slow
+    @require_torch_accelerator
+    @require_librosa
+    def test_qwen3_asr(self):
+        recognizer = pipeline(
+            "automatic-speech-recognition", model="Qwen/Qwen3-ASR-0.6B-hf", device=torch_device, dtype=torch.float32
+        )
+        audio_file = hf_hub_download("Narsil/asr_dummy", "1.flac", repo_type="dataset")
+        output = recognizer(load_audio(audio_file, sampling_rate=16000))
+        self.assertIn("stew for dinner", output["text"])
+        self.assertNotIn("<asr_text>", output["text"])
+        with self.assertRaisesRegex(ValueError, "Chunking and stride"):
+            recognizer(np.zeros(16000, dtype=np.float32), chunk_length_s=1)
+
     model_mapping = dict(
         (list(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items()) if MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING else [])
         + (MODEL_FOR_CTC_MAPPING.items() if MODEL_FOR_CTC_MAPPING else [])
