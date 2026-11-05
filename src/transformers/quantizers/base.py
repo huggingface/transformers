@@ -234,6 +234,8 @@ class HfQuantizer(ABC):
             del model.config.quantization_config
         if hasattr(model, "quantization_method"):
             del model.quantization_method
+        if hasattr(model, "_weight_conversions"):
+            del model._weight_conversions
         model.is_quantized = False
 
     def dequantize(self, model, dtype=None):
