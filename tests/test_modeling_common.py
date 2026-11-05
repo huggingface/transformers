@@ -3373,7 +3373,11 @@ class ModelTesterMixin(
         for model_class in self.all_model_classes:
             if not hasattr(model_class, f"get_{modality}_features"):
                 continue
+
             config, inputs_dict = self._features_prepare_config_and_inputs(modality)
+            if len(inputs_dict) == 0:
+                self.skipTest(f"We didn't find any inputs for {modality}!")
+
             if return_dict is not None:
                 config.return_dict = return_dict
 
@@ -3412,7 +3416,11 @@ class ModelTesterMixin(
         for model_class in self.all_model_classes:
             if not hasattr(model_class, f"get_{modality}_features"):
                 continue
+
             config, inputs_dict = self._features_prepare_config_and_inputs(modality)
+            if len(inputs_dict) == 0:
+                self.skipTest(f"We didn't find any inputs for {modality}!")
+
             inputs_dict["output_hidden_states"] = True
             check(inputs_dict, config, model_class)
 
@@ -3441,6 +3449,7 @@ class ModelTesterMixin(
             )
 
         def has_timm_config(config):
+            "Recursive check over all sub-configs"
             for key in config.sub_configs_defaults:
                 sub_config = getattr(config, key)
                 if "Timm" in sub_config.__class__.__name__:
@@ -3451,9 +3460,13 @@ class ModelTesterMixin(
         for model_class in self.all_model_classes:
             if not hasattr(model_class, f"get_{modality}_features"):
                 continue
+
             config, inputs_dict = self._features_prepare_config_and_inputs(modality)
             if has_timm_config(config):
                 self.skipTest("Cannot set `output_attentions` for timm models.")
+
+            if len(inputs_dict) == 0:
+                self.skipTest(f"We didn't find any inputs for {modality}!")
 
             inputs_dict["output_hidden_states"] = False
             inputs_dict["output_attentions"] = True
