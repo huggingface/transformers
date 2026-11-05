@@ -452,6 +452,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIn(torch.device("cpu"), total_byte_count)
         self.assertGreater(total_byte_count[torch.device("cpu")], 0)
 
+<<<<<<< HEAD
     def test_get_compiled_call_recompiles_after_config_mutation(self):
         from transformers import CompileConfig
 
@@ -485,6 +486,8 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(compile_config.backend, "inductor")
         self.assertEqual(compile_config.mode, expected_mode)
 
+=======
+>>>>>>> 924266c478f7defb9841e9a759672b1234d6145c
     @parameterized.expand(
         [
             ("fsdp", {"fsdp_size": 8}),
