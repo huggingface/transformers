@@ -67,12 +67,14 @@ fix-repo:
 test:
 	python -m pytest -p random_order -n auto --dist=loadfile -s -v --random-order-bucket=module ./tests/
 
-# Run pinned MIC fixtures against this checkout (MODEL=bert, ALL=1, BASE=origin/main).
+# Run pinned MIC fixtures against this checkout (MODEL=bert, ALL=1, BASE=origin/main, FLEET=prototypes|control).
+# Opt-in checker (network + model runtimes), deliberately not in any CI checker list above.
 run-mic: export MODEL := $(MODEL)
 run-mic: export ALL := $(ALL)
 run-mic: export BASE := $(BASE)
+run-mic: export FLEET := $(FLEET)
 run-mic:
-	python utils/run_mic.py
+	@python utils/checkers.py mic
 
 codex:
 	mkdir -p .agents

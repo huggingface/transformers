@@ -48,15 +48,19 @@ python -m pip install "transformers-mic[runtime]" "hf-doc-builder @ git+https://
 Then run:
 
 ```bash
-make run-mic MODEL=bert  # model directory name under src/transformers/models/
+make run-mic MODEL=bert  # only the contracts for this model directory under src/transformers/models/
 make run-mic             # contracts affected by local changes
-make run-mic ALL=1       # all control-fleet fixtures
+make run-mic ALL=1       # all fixtures in the fleet
 make run-mic BASE=main   # use a different Git comparison base
+make run-mic FLEET=control  # the control fleet instead of the default prototypes fleet
 ```
 
 The command uses this checkout's source and the fleet revision in `tests/contracts.lock`.
+It runs the prototypes fleet by default; `FLEET=control` selects the smaller control fleet.
 It downloads the pinned contracts, fixtures and baselines as needed, executes them locally,
-and propagates the runner's failure status. It does not create or publish contracts.
+and prints one line per fixture plus a summary; any failing fixture fails the command.
+`make run-mic` is a wrapper around the `mic` checker (`python utils/checkers.py mic`), which is opt-in
+and not part of `make check-repo` or CI because it needs network access and model runtimes. It does not create or publish contracts.
 Model-specific runtime dependencies and a reviewed baseline for your platform are required;
 a fixture pass does not validate the full checkpoint.
 
@@ -72,6 +76,10 @@ can also select composite models that use BERT. Docs and ordinary test-only chan
 nothing. The runner prints its selection and reasons; no matching contract means no coverage,
 not a successful model check. Selection is a heuristic, not a complete Python dependency graph;
 use `ALL=1` when unsure whether indirect dependencies are covered.
+
+`MODEL=bert` is narrower: it runs only the contracts whose fixture `config.json` has a
+`model_type` defined in `models/bert`. Composite models that merely embed BERT are not run;
+use the default changed-files selection (or `ALL=1`) to include them.
 
 ## Pick a base test class
 
