@@ -1732,19 +1732,24 @@ class CacheExportIntegrationTest(unittest.TestCase):
         past_key_values_eager = res_eager.past_key_values
         past_key_values = res.past_key_values
 
+        # With a cache, the attention mask covers the cached tokens and the new ones
+        attention_mask_2 = torch.cat([attention_mask, attention_mask], dim=-1)
+        attention_mask_3 = torch.cat([attention_mask_2, attention_mask], dim=-1)
+
         shapes = torch.export.ShapesCollection()
         dyn = torch.export.Dim.DYNAMIC(max=512)
 
         for ix in range(len(past_key_values)):
             shapes[past_key_values.layers[ix].keys] = (None, None, dyn, None)
             shapes[past_key_values.layers[ix].values] = (None, None, dyn, None)
+        shapes[attention_mask_2] = (None, torch.export.Dim.DYNAMIC(max=1024))
 
         ep_second = torch.export.export(
             model,
             (),
             {
                 "input_ids": input_ids,
-                "attention_mask": attention_mask,
+                "attention_mask": attention_mask_2,
                 "past_key_values": past_key_values,
                 "use_cache": True,
             },
@@ -1753,27 +1758,27 @@ class CacheExportIntegrationTest(unittest.TestCase):
         )
         res_export = ep_second.module()(
             input_ids=input_ids,
-            attention_mask=attention_mask,
+            attention_mask=attention_mask_2,
             past_key_values=past_key_values,
             use_cache=True,
         )
         # It should work with variable len
         res_export_2 = ep_second.module()(
             input_ids=input_ids,
-            attention_mask=attention_mask,
+            attention_mask=attention_mask_3,
             past_key_values=res_export.past_key_values,
             use_cache=True,
         )
 
         res_eager = model(
             input_ids=input_ids,
-            attention_mask=attention_mask,
+            attention_mask=attention_mask_2,
             past_key_values=past_key_values_eager,
             use_cache=True,
         )
         res_eager_2 = model(
             input_ids=input_ids,
-            attention_mask=attention_mask,
+            attention_mask=attention_mask_3,
             past_key_values=res_eager.past_key_values,
             use_cache=True,
         )
