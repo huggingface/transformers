@@ -1222,8 +1222,8 @@ def is_torchcodec_usable(decode: Literal["image", "audio", "video"]) -> bool:
         while error.__cause__ is not None:  # "Could not load this library" hides the missing library / symbol
             error = error.__cause__
         logger.warning_once(
-            f"torchcodec is installed but failed to load ({error}), so it will not be used. This usually means its "
-            "build doesn't match the installed torch: see "
+            f"torchcodec is installed but failed to load ({error}), so it will not be used. Check its requirements "
+            "(e.g. a build matching the installed torch): see "
             "https://github.com/meta-pytorch/torchcodec#installing-torchcodec."
         )
         return False
