@@ -2202,6 +2202,49 @@ def _build_checkpoint_conversion_mapping():
         ),
     ]
 
+    mapping["clef"] = [
+        WeightRenaming(r"^evidence_layers.(\d+).query_norm.", r"evidence_layers.\1.input_layernorm."),
+        WeightRenaming(r"^evidence_layers.(\d+).memory_norm.", r"evidence_layers.\1.memory_layernorm."),
+        WeightRenaming(r"^evidence_layers.(\d+).attention.out_proj.", r"evidence_layers.\1.cross_attn.o_proj."),
+        WeightRenaming(r"^evidence_layers.(\d+).feedforward_norm.", r"evidence_layers.\1.post_attention_layernorm."),
+        WeightRenaming(r"^evidence_layers.(\d+).feedforward.0.", r"evidence_layers.\1.mlp.fc1."),
+        WeightRenaming(r"^evidence_layers.(\d+).feedforward.3.", r"evidence_layers.\1.mlp.fc2."),
+        WeightRenaming(r"^layers.(\d+).norm1.", r"layers.\1.input_layernorm."),
+        WeightRenaming(r"^layers.(\d+).norm2.", r"layers.\1.post_attention_layernorm."),
+        WeightRenaming(r"^layers.(\d+).norm3.", r"layers.\1.final_layernorm."),
+        WeightRenaming(r"^layers.(\d+).self_attn.out_proj.", r"layers.\1.self_attn.o_proj."),
+        WeightRenaming(r"^layers.(\d+).multihead_attn.out_proj.", r"layers.\1.encoder_attn.o_proj."),
+        WeightRenaming(r"^layers.(\d+).linear1.", r"layers.\1.mlp.fc1."),
+        WeightRenaming(r"^layers.(\d+).linear2.", r"layers.\1.mlp.fc2."),
+        WeightRenaming(r"^residual_scorer.0.", "residual_scorer.fc1."),
+        WeightRenaming(r"^residual_scorer.3.", "residual_scorer.fc2."),
+        # The embeddings, encoder and scorer of the head
+        WeightRenaming(r"^(hidden_norm|\w+_projection|type_embedding).", r"embeddings.\1."),
+        WeightRenaming(r"^(evidence_layers|option_summary_norm|layers|field_norm).", r"encoder.\1."),
+        WeightRenaming(
+            r"^(option_norm|residual_scorer|prior_logit_scale|joint_logit_scale|residual_gate)", r"scorer.\1"
+        ),
+        WeightConverter(
+            r"attention.in_proj_",
+            ["cross_attn.q_proj.", "cross_attn.k_proj.", "cross_attn.v_proj."],
+            operations=[Chunk(dim=0)],
+            scope_prefix="encoder",  # the model it reads has its own `self_attn`
+        ),
+        WeightConverter(
+            r"self_attn.in_proj_",
+            ["self_attn.q_proj.", "self_attn.k_proj.", "self_attn.v_proj."],
+            operations=[Chunk(dim=0)],
+            scope_prefix="encoder",  # the model it reads has its own `self_attn`
+        ),
+        WeightConverter(
+            r"multihead_attn.in_proj_",
+            ["encoder_attn.q_proj.", "encoder_attn.k_proj.", "encoder_attn.v_proj."],
+            operations=[Chunk(dim=0)],
+            scope_prefix="encoder",  # the model it reads has its own `self_attn`
+        ),
+    ]
+    # The attention of the head only, not the `self_attn` of the model it reads
+
     # The `readout.safetensors` of the decision models of vLLM (pplx-decider, d3): the weight of the head, no bias
     mapping["jev"] = [WeightRenaming(r"^weight", "proj.weight")]
 
@@ -2398,7 +2441,9 @@ def get_model_conversion_mapping(
             scope_prefix = module_name.removeprefix(model.base_model_prefix)
             scope_prefix = scope_prefix.removeprefix(".")
             for transform in conversions:
-                transform.scope_prefix = scope_prefix
+                # A transform scoped within its own model, e.g. to `encoder`, stays scoped within the sub-module
+                own_scope = transform.scope_prefix
+                transform.scope_prefix = f"{scope_prefix}.{own_scope}".strip(".") if own_scope else scope_prefix
                 transform.base_model_prefix = model.base_model_prefix
         weight_conversions.extend(conversions)
 

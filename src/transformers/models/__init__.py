@@ -72,6 +72,7 @@ if TYPE_CHECKING:
     from .chinese_clip import *
     from .chmv2 import *
     from .clap import *
+    from .clef import *
     from .clip import *
     from .clipseg import *
     from .clm import *
@@ -252,6 +253,7 @@ if TYPE_CHECKING:
     from .jev import *
     from .jeva import *
     from .jina_embeddings_v3 import *
+    from .kev import *
     from .kimi_k25 import *
     from .kimi_linear import *
     from .kolibri1 import *
@@ -537,6 +539,7 @@ if TYPE_CHECKING:
     from .vits import *
     from .vivit import *
     from .vjepa2 import *
+    from .von import *
     from .voxtral import *
     from .voxtral_realtime import *
     from .wav2vec2 import *

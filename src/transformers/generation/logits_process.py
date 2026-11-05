@@ -303,6 +303,80 @@ class TemperatureLogitsWarper(LogitsProcessor):
         return scores_processed
 
 
+class CalibratedTemperatureLogitsWarper(LogitsProcessor):
+    r"""
+    [`LogitsProcessor`] dividing the scores by an input-conditioned temperature
+    `clamp(bias + entropy * H + log_tokens * log10(n) / 4 + n_options * K / 8, lo, hi)`, with `H` the normalized entropy
+    of the scores, `n` the length of `input_ids` and `K` the size of the last dimension of the scores. Used by decision
+    models, on the option scores of a question.
+
+    Args:
+        lo (`float`):
+            Lowest temperature.
+        hi (`float`):
+            Highest temperature.
+        bias (`float`, *optional*, defaults to 0.0):
+            Constant term of the temperature.
+        entropy (`float`, *optional*, defaults to 0.0):
+            Weight of the normalized entropy of the scores.
+        log_tokens (`float`, *optional*, defaults to 0.0):
+            Weight of the log of the number of input tokens.
+        n_options (`float`, *optional*, defaults to 0.0):
+            Weight of the number of options.
+    """
+
+    def __init__(
+        self,
+        lo: float,
+        hi: float,
+        bias: float = 0.0,
+        entropy: float = 0.0,
+        log_tokens: float = 0.0,
+        n_options: float = 0.0,
+    ):
+        self.lo, self.hi = lo, hi
+        self.bias, self.entropy, self.log_tokens, self.n_options = bias, entropy, log_tokens, n_options
+
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        n_options, probabilities = scores.shape[-1], scores.softmax(-1)
+        entropy = -(probabilities * probabilities.clamp_min(1e-12).log()).sum(-1, keepdim=True)
+        temperature = (
+            self.bias
+            + self.entropy * entropy / math.log(max(n_options, 2))
+            + self.log_tokens * math.log10(max(input_ids.shape[-1], 1)) / 4
+            + self.n_options * n_options / 8
+        )
+        return scores / temperature.clamp(self.lo, self.hi).clamp_min(1e-4)
+
+
+class NoulBandLogitsWarper(LogitsProcessor):
+    r"""
+    [`LogitsProcessor`] for the two scores of a yes/no question: keeps the probability `p` of `true` within a band,
+    `edge + slope * (p - 0.5)` above 0.5 and mirrored below. Returns log-probabilities. Used by decision models.
+
+    Args:
+        edge (`float`):
+            Probability of `true` at `p = 0.5`.
+        slope (`float`):
+            Slope of the band.
+        true_index (`int`, *optional*, defaults to 0):
+            Index of `true` in the last dimension of the scores.
+    """
+
+    def __init__(self, edge: float, slope: float, true_index: int = 0):
+        self.edge, self.slope, self.true_index = edge, slope, true_index
+
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        p_true = scores.softmax(-1)[..., self.true_index]
+        p_true = torch.where(
+            p_true >= 0.5, self.edge + self.slope * (p_true - 0.5), 1 - self.edge - self.slope * (0.5 - p_true)
+        ).clamp(0, 1)
+        probabilities = [p_true, 1 - p_true] if self.true_index == 0 else [1 - p_true, p_true]
+        return torch.stack(probabilities, -1).log()
+
+
 class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that prevents the repetition of previous tokens through a penalty. This penalty is applied at

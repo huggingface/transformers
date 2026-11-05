@@ -575,6 +575,8 @@
         title: CamemBERT
       - local: model_doc/canine
         title: CANINE
+      - local: model_doc/clef
+        title: Clef
       - local: model_doc/clm
         title: CLM
       - local: model_doc/codegen
@@ -753,6 +755,8 @@
         title: Jeva
       - local: model_doc/jina_embeddings_v3
         title: jina_embeddings_v3
+      - local: model_doc/kev
+        title: kev
       - local: model_doc/kimi_linear
         title: KimiLinear
       - local: model_doc/kolibri1
@@ -963,6 +967,8 @@
         title: UMT5
       - local: model_doc/vaultgemma
         title: VaultGemma
+      - local: model_doc/von
+        title: von
       - local: model_doc/xmod
         title: X-MOD
       - local: model_doc/xglm
