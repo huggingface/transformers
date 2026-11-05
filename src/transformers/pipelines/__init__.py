@@ -31,7 +31,6 @@ from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, Aut
 from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoImageProcessor
 from ..models.auto.modeling_auto import (
     MODEL_FOR_DECISION_MAPPING,
-    MODEL_FOR_DECISION_MAPPING_NAMES,
     AutoModelForDepthEstimation,
     AutoModelForImageToImage,
 )
@@ -1033,12 +1032,12 @@ def pipeline(
 
         config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
         # A checkpoint shipping a decision head next to its weights: the decision model whose config files it has
-        if task == "decision" and config.model_type not in MODEL_FOR_DECISION_MAPPING_NAMES:
-            files_kwargs = {"revision": hub_kwargs["revision"], "token": hub_kwargs["token"]}
-            for model_class in MODEL_FOR_DECISION_MAPPING.values():
-                if (checkpoint_config := model_class.checkpoint_config(model, **files_kwargs)[0]) is not None:
-                    config = checkpoint_config
-                    break
+        if task == "decision":
+            from ..decision.modeling_utils import decision_checkpoint_config
+
+            config = decision_checkpoint_config(
+                model, config, revision=hub_kwargs["revision"], token=hub_kwargs["token"]
+            )
 
     custom_tasks = {}
     if config is not None and len(getattr(config, "custom_pipelines", {})) > 0:

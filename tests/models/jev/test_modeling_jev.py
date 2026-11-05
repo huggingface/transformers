@@ -71,6 +71,11 @@ class JevForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
             save_file({"weight": readout}, f"{tmp}/readout.safetensors", metadata={"format": "pt"})
             model = JevForDecision.from_pretrained(tmp)
             decide = pipeline("decision", model=tmp)
+        with tempfile.TemporaryDirectory() as tmp:  # saved as a decision model, with its decision config
+            model.save_pretrained(tmp)
+            reloaded = JevForDecision.from_pretrained(tmp)
+        self.assertEqual(reloaded.decision_config, model.decision_config)
+        torch.testing.assert_close(reloaded.proj.weight, readout)
         self.assertEqual(model.config.num_verbalizers, 3)
         self.assertFalse(model.config.text_config.is_causal)
         torch.testing.assert_close(model.proj.weight, readout)

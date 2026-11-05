@@ -48,6 +48,23 @@ def process_scores(decision_config, input_ids, marks, questions, scores) -> list
     return [decision_config.logits_processors[q.type](tail, s.float()) for q, s in zip(questions, scores)]
 
 
+def decision_checkpoint_config(pretrained_model_name_or_path, config: PreTrainedConfig, **kwargs) -> PreTrainedConfig:
+    """
+    The config of the decision model of a checkpoint that ships a decision head next to its weights, or `config` for
+    any other repo: what the `decision` pipeline and `transformers serve` load the checkpoint with.
+    """
+    from ..models.auto.modeling_auto import MODEL_FOR_DECISION_MAPPING, MODEL_FOR_DECISION_MAPPING_NAMES
+
+    if config.model_type in MODEL_FOR_DECISION_MAPPING_NAMES:
+        return config
+    for model_class in MODEL_FOR_DECISION_MAPPING.values():
+        if (
+            checkpoint_config := model_class.checkpoint_config(pretrained_model_name_or_path, **kwargs)[0]
+        ) is not None:
+            return checkpoint_config
+    return config
+
+
 class DecisionMixin:
     """
     The `decide` of the `XxxForDecision` models, with their `decision_config`: the decision config of their repo, or the
@@ -65,8 +82,12 @@ class DecisionMixin:
         if config is None:
             config, decision_config = cls.checkpoint_config(pretrained_model_name_or_path, **kwargs)
         model = super().from_pretrained(pretrained_model_name_or_path, *args, config=config, **kwargs)
-        if decision_config is not None:  # the decision config of the checkpoint, from the same files
-            model.decision_config = decision_config
+        if decision_config is None:  # the decision config of the repo, read now like `generation_config`
+            hub_kwargs = {
+                key: kwargs[key] for key in ("cache_dir", "local_files_only", "revision", "token") if key in kwargs
+            }
+            decision_config = DecisionConfig.from_pretrained(pretrained_model_name_or_path, **hub_kwargs)
+        model.decision_config = decision_config
         return model
 
     @classmethod
@@ -105,6 +126,12 @@ class DecisionMixin:
     @decision_config.setter
     def decision_config(self, decision_config: DecisionConfig):
         self._decision_config = decision_config
+
+    def save_pretrained(self, save_directory, *args, **kwargs):
+        """Also saves the decision config, like `generation_config`: the saved repo reloads as the same decision model."""
+        super().save_pretrained(save_directory, *args, **kwargs)
+        if kwargs.get("is_main_process", True):
+            self.decision_config.save_pretrained(save_directory)
 
     @torch.no_grad()
     def decide(

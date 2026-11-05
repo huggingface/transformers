@@ -17,6 +17,9 @@ rendered properly in your Markdown viewer.
 
 # JEV
 
+> [!WARNING]
+> Decision models, the `decision` pipeline and `DecisionConfig` are experimental: their API may change at any time, without deprecation.
+
 JEV is a decision head that scores single-token labels with a linear layer at the last token of the prompt, soft-capped like the logits of a language model head. It was introduced by [JEV](https://huggingface.co/autotrust/JEV-9B) and is also used by [GEV](https://huggingface.co/autotrust/GEV-26B-Decide).
 
 [`JevForDecision`] is the model of the checkpoint and its head, like a `ForCausalLM` is the model and its `lm_head`. It
@@ -49,7 +52,7 @@ from transformers import AutoTokenizer, JevForDecision
 repo = "autotrust/JEV-9B"
 model = JevForDecision.from_pretrained(repo, dtype=torch.bfloat16, device_map="auto")
 tokenizer, config = AutoTokenizer.from_pretrained(repo), model.decision_config  # read from the checkpoint's files
-if config.adapter:  # JEV keeps its LoRA in a subfolder
+if config.adapter:  # JEV keeps its LoRA in a subfolder: `from_pretrained` doesn't load it, the pipeline does
     model.load_adapter(repo, adapter_kwargs={"subfolder": config.adapter})
 
 request = {

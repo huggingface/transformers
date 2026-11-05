@@ -22,6 +22,7 @@ import socket
 import tempfile
 import time
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from huggingface_hub.utils import httpx
@@ -749,6 +750,29 @@ class TestSystemOneDecisionConfig(unittest.TestCase):
             pipe = SystemOneHandler(MagicMock(), GenerationState())._pipeline(repo, model, tokenizer)
         self.assertEqual(pipe.decision_config.temperature, {"noul": 2.0})
         self.assertEqual(pipe.decision_config.chat_template, template)
+
+    @require_torch
+    def test_loads_a_decision_checkpoint_as_the_pipeline_does(self):
+        # A checkpoint shipping a decision head next to its weights is served by the decision model, not as a causal LM
+        import torch
+        from safetensors.torch import save_file
+
+        from transformers import AutoTokenizer, JevForDecision, pipeline
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+        with tempfile.TemporaryDirectory() as repo:
+            tiny_qwen2(tokenizer).save_pretrained(repo)
+            tokenizer.save_pretrained(repo)
+            Path(repo, "decision_config.json").write_text(
+                json.dumps({"codes": ["A", "B"], "temperature": 2.0}), encoding="utf-8"
+            )
+            save_file({"weight": torch.randn(2, 16)}, f"{repo}/readout.safetensors", metadata={"format": "pt"})
+            manager = ModelManager(device="cpu")
+            model, _ = manager.load_model_and_processor(manager.process_model_name(repo))
+            decide = pipeline("decision", model=repo, device="cpu")
+        self.assertIsInstance(model, JevForDecision)
+        self.assertIsInstance(decide.model, JevForDecision)
+        self.assertEqual(model.decision_config.temperature, decide.decision_config.temperature)
 
 
 @slow

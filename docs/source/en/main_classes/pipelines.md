@@ -388,6 +388,9 @@ Pipelines available for natural language processing tasks include the following.
 
 ### DecisionPipeline
 
+> [!WARNING]
+> Decision models, the `decision` pipeline and `DecisionConfig` are experimental: their API may change at any time, without deprecation.
+
 Each call asks its questions: a request `{"state": ..., "questions": ...}`, or a state with `questions`:
 
 ```python

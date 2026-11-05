@@ -147,7 +147,9 @@ class JevConfig(PreTrainedConfig):
                 chat_template=settings + DECIDER_TEMPLATE,
                 noul_options=["false", "true"],
             )
-        if (spec := head_configs.get("judge_config")) is not None:  # JEV, with the LoRA of `adapter/`
+        if (
+            spec := head_configs.get("judge_config")
+        ) is not None:  # JEV, with the LoRA of `adapter/` unless merged into the weights
             verbalizers, ranges = spec["slots"]["verbalizers"], spec["slots"]["ranges"]
             return DecisionConfig(
                 labels={question_type: verbalizers[start:end] for question_type, (start, end) in ranges.items()},
@@ -155,7 +157,7 @@ class JevConfig(PreTrainedConfig):
                 # Gemma reads the prompt after `<bos>`
                 chat_template=("<bos>" if "gemma" in text_config["model_type"] else "") + JEV_TEMPLATE,
                 noul_options=["false", "true"],
-                adapter="adapter",
+                adapter=spec.get("adapter_subfolder", "adapter"),
             )
         return None
 
