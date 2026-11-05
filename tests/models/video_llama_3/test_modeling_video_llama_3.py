@@ -628,7 +628,7 @@ class VideoLlama3VisionText2TextModelTester:
         attention_mask[:, -1] = 0
         input_ids[input_ids == self.video_token_id] = config.text_config.pad_token_id
         input_ids[input_ids == self.image_token_id] = config.text_config.pad_token_id
-        input_ids[:, :self.num_image_tokens] = self.image_token_id
+        input_ids[:, : self.num_image_tokens] = self.image_token_id
 
         inputs_dict = {
             "pixel_values": pixel_values,
