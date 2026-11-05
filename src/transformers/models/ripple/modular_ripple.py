@@ -28,6 +28,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..cohere.modeling_cohere import apply_rotary_pos_emb
 from ..gemma3.modeling_gemma3 import Gemma3DecoderLayer
 from ..glm5_next.modeling_glm5_next import Glm5NextTextMLP
 from ..llama.modeling_llama import (
@@ -35,7 +36,6 @@ from ..llama.modeling_llama import (
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
-    apply_rotary_pos_emb,
     eager_attention_forward,
 )
 from ..olmo3.configuration_olmo3 import Olmo3Config
