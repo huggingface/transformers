@@ -13,6 +13,7 @@
 # limitations under the License.
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 from ..utils import is_kernels_available, is_torch_available
@@ -23,6 +24,7 @@ from .quantizers_utils import get_module_from_name
 
 if is_torch_available():
     import torch
+    from torch import nn
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -99,11 +101,15 @@ class NVFP4HfQuantizer(HfQuantizer):
         )
 
     def quantized_module(self, name, module):
-        from ..integrations.nvfp4 import NVFP4Linear, is_nvfp4_compatible
+        from ..integrations.nvfp4 import NVFP4Experts, NVFP4Linear, is_nvfp4_compatible
 
-        if (self.pre_quantized and self.quantization_config.dequantize) or not is_nvfp4_compatible(module):
+        if self.pre_quantized and self.quantization_config.dequantize:
             return None
-        return NVFP4Linear(module.in_features, module.out_features)
+        if name.endswith(".experts") and self.pre_quantized and is_nvfp4_compatible(module):
+            return NVFP4Experts(module)  # TODO: quantize experts from a full-precision checkpoint too
+        if isinstance(module, nn.Linear) and is_nvfp4_compatible(module):
+            return NVFP4Linear(module.in_features, module.out_features)
+        return None
 
     def get_quantize_ops(self):
         from ..integrations.nvfp4 import NVFP4Quantize
@@ -127,6 +133,30 @@ class NVFP4HfQuantizer(HfQuantizer):
         from ..integrations.nvfp4 import NVFP4Dequantize, NVFP4Deserialize
 
         return {"deserialize": NVFP4Deserialize, "dequantize": NVFP4Dequantize}
+
+    def update_weight_conversions(self, weight_conversions, model):
+        from ..core_model_loading import WeightConverter
+        from ..integrations.nvfp4 import NVFP4Experts, NVFP4ExpertsDeserialize
+
+        # A converter merging per-expert weights into `NVFP4Experts` also collects their ModelOpt scales
+        experts = "\n".join(
+            f"{name}.{projection}"
+            for name, module in model.named_modules()
+            if isinstance(module, NVFP4Experts)
+            for projection in module.projections
+        )
+        companions = ["weight", "weight_scale", "weight_scale_2", "input_scale"]
+
+        def to_nvfp4(converter):
+            sources, targets = converter._original_source_patterns, converter._original_target_patterns
+            if not isinstance(converter, WeightConverter) or not all(source.endswith("weight") for source in sources):
+                return converter
+            if not re.search(f"{targets[0]}$", experts, re.MULTILINE):
+                return converter
+            sources = [source.removesuffix("weight") + name for source in sources for name in companions]
+            return converter.copy(sources, targets, operations=[NVFP4ExpertsDeserialize(self)])
+
+        return super().update_weight_conversions([to_nvfp4(converter) for converter in weight_conversions], model)
 
     def is_serializable(self) -> bool:
         return False

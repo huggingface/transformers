@@ -151,6 +151,72 @@ class NVFP4Linear(nn.Module):
         return f"in_features={self.in_features}, out_features={self.out_features}, nvfp4"
 
 
+class NVFP4Experts(nn.Module):
+    """
+    Fused experts backed by packed NVFP4 weights: each projection (`gate_up_proj` / `up_proj`, `down_proj`) stacks the
+    `NVFP4Linear` buffers of every expert, e.g. `gate_up_proj_sf` of shape `(num_experts, *swizzled_sf_shape)`.
+    """
+
+    def __init__(self, experts: nn.Module):
+        super().__init__()
+        self.has_gate = getattr(experts, "has_gate", True)
+        self.act_fn, self.limit = experts.act_fn, getattr(experts, "limit", None)
+        names = ("gate_up_proj" if self.has_gate else "up_proj", "down_proj")
+        self.projections = {name: getattr(experts, name).shape for name in names}
+        self.num_experts = experts.down_proj.shape[0]
+        for name, (num_experts, out_features, in_features) in self.projections.items():
+            sf_shape = load_nvfp4_kernel().swizzled_sf_shape(out_features, in_features)
+            self.register_buffer(name, torch.empty(num_experts, out_features, in_features // 2, dtype=torch.uint8))
+            self.register_buffer(f"{name}_sf", torch.empty(num_experts, *sf_shape, dtype=torch.int32))
+            sf_rowmajor = torch.empty(num_experts, out_features, in_features // SF_VEC_SIZE, dtype=torch.uint8)
+            self.register_buffer(f"{name}_sf_rowmajor", sf_rowmajor)
+            self.register_buffer(f"{name}_global_scale", torch.empty(num_experts, dtype=torch.float32))
+            # Static activation scales (ModelOpt checkpoints), empty for dynamic activation quantization
+            self.register_buffer(f"{name}_input_scale", torch.empty(0, dtype=torch.float32))
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        if self.limit is not None:
+            gate, up = gate.clamp(max=self.limit), up.clamp(min=-self.limit, max=self.limit)
+        return self.act_fn(gate) * up
+
+    def linear(self, name: str, expert_idx: torch.Tensor, input: torch.Tensor) -> torch.Tensor:
+        _, out_features, in_features = self.projections[name]
+        input_scale = getattr(self, f"{name}_input_scale")
+        return nvfp4_linear(
+            input,
+            getattr(self, name)[expert_idx],
+            getattr(self, f"{name}_sf")[expert_idx],
+            getattr(self, f"{name}_sf_rowmajor")[expert_idx],
+            getattr(self, f"{name}_global_scale")[expert_idx, None],
+            out_features,
+            in_features,
+            input_scale[expert_idx, None] if input_scale.numel() else None,
+        )
+
+    def forward(
+        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
+    ) -> torch.Tensor:
+        final_hidden_states = torch.zeros_like(hidden_states, dtype=torch.float32)
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            if self.has_gate:
+                current = self._apply_gate(self.linear("gate_up_proj", expert_idx, hidden_states[token_idx]))
+            else:
+                current = self.act_fn(self.linear("up_proj", expert_idx, hidden_states[token_idx]))
+            current = self.linear("down_proj", expert_idx, current) * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current.to(final_hidden_states.dtype))
+        return final_hidden_states.to(hidden_states.dtype)
+
+
 class NVFP4Quantize(ConversionOps):
     """Pack a floating-point checkpoint weight into the buffers used by `NVFP4Linear`."""
 
@@ -217,6 +283,46 @@ class NVFP4Deserialize(ConversionOps):
     # TODO: a reverse op, so that NVFP4 checkpoints can be saved (`swizzle_sf` is invertible)
 
 
+class NVFP4ExpertsDeserialize(ConversionOps):
+    """
+    The `NVFP4Experts` buffers of one projection from the per-expert ModelOpt tensors (`weight`, `weight_scale`,
+    `weight_scale_2`, `input_scale`) of one or several source projections, e.g. `w1` and `w3` into `gate_up_proj`:
+    stacked over the experts and concatenated along the output features, like `MergeModulelist` + `Concatenate`.
+    """
+
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(self, input_dict, source_patterns, target_patterns, **kwargs) -> dict[str, torch.Tensor]:
+        weights = [source for source in source_patterns if source.endswith("weight") and source in input_dict]
+        scales_2 = torch.stack([torch.stack(input_dict[f"{weight}_scale_2"]).float().flatten() for weight in weights])
+        # One global scale per expert: concatenated projections with different ones (e.g. `w1`, `w3`) share the
+        # largest, their block scales rescaled to it (exact when they match, as in ModelOpt's exports)
+        global_scales_2 = scales_2.amax(0)
+        packed, sf_rowmajor = [], []
+        for weight, scale_2 in zip(weights, scales_2):
+            packed.append(torch.stack(input_dict[weight]))
+            scale = torch.stack(input_dict[f"{weight}_scale"]).float() * (scale_2 / global_scales_2)[:, None, None]
+            sf_rowmajor.append(scale.to(torch.float8_e4m3fn).view(torch.uint8))
+        packed, sf_rowmajor = torch.cat(packed, dim=1), torch.cat(sf_rowmajor, dim=1)
+        sf_shape = load_nvfp4_kernel().swizzled_sf_shape(packed.shape[1], packed.shape[2] * 2)
+        sf = torch.stack([swizzle_sf(expert).view(torch.int32).view(sf_shape) for expert in sf_rowmajor])
+        # The activations of concatenated projections are the same: one static scale, the largest
+        input_scales = [input_dict.get(f"{weight.removesuffix('weight')}input_scale") for weight in weights]
+        if None in input_scales:
+            input_scale = torch.empty(0, device=packed.device)
+        else:
+            input_scale = torch.stack([torch.stack(scale).float().flatten() for scale in input_scales]).amax(0)
+        target = target_patterns[0]
+        return {
+            target: packed,
+            f"{target}_sf": sf,
+            f"{target}_sf_rowmajor": sf_rowmajor,
+            f"{target}_global_scale": 1 / global_scales_2,
+            f"{target}_input_scale": input_scale,
+        }
+
+
 class NVFP4Dequantize(ConversionOps):
     """
     Dense weights from the packed `weight` (two e2m1 values per byte, low nibble first), its row-major FP8 block
@@ -257,9 +363,12 @@ class NVFP4Dequantize(ConversionOps):
 
 
 def is_nvfp4_compatible(module: nn.Module) -> bool:
-    return (
-        isinstance(module, nn.Linear)
-        and module.bias is None
-        and module.in_features % SF_VEC_SIZE == 0
-        and module.out_features % 16 == 0
-    )
+    "A bias-free linear, or fused experts with `(num_experts, out_features, in_features)` weights, with 16-aligned dims"
+    if isinstance(module, nn.Linear):
+        weights = [module.weight] if module.bias is None else []
+    elif getattr(module, "has_bias", False) or getattr(module, "is_transposed", False):
+        weights = []
+    else:
+        weights = [module._parameters.get(name) for name in ("gate_up_proj", "up_proj", "down_proj")]
+        weights = [weight for weight in weights if weight is not None]
+    return bool(weights) and all(w.shape[-1] % SF_VEC_SIZE == 0 and w.shape[-2] % 16 == 0 for w in weights)
