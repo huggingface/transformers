@@ -203,12 +203,29 @@ class GraniteDoclingImageProcessorKwargs(GotOcr2ImageProcessorKwargs):
     max_patches (`int`, *optional*, defaults to 32):
         The maximum number of tiles per page. Only has an effect if `crop_to_patches` is set to `True`. Can be
         overridden by the `max_patches` parameter in the `preprocess` method.
+    dense_max_patches (`int`, *optional*, defaults to 0):
+        The maximum number of tiles for the pages the spread rule selects (0 disables the rule). A page is tiled with
+        up to `dense_max_patches` tiles instead of `max_patches` when the `max_patches` grid shrinks it below
+        `dense_max_scale` and its width/height ratio is above `dense_min_aspect` (and at most `dense_max_aspect` when
+        that is set). The checkpoint must have been trained with the same rule.
+    dense_max_scale (`float`, *optional*, defaults to 0.0):
+        Ratio of the tiled canvas width to the page width at `max_patches` below which a page counts as
+        under-resolved. 0 skips this test.
+    dense_min_aspect (`float`, *optional*, defaults to 0.0):
+        Width/height ratio a page must exceed to get `dense_max_patches`. 0 skips this test.
+    dense_max_aspect (`float`, *optional*, defaults to 0.0):
+        Width/height ratio a page may not exceed to get `dense_max_patches`, which keeps strips such as single
+        formula lines on `max_patches`. 0 means no upper bound.
     fine_route (`bool`, *optional*, defaults to `False`):
         Whether the pages take the fine connector path, which yields four times as many image tokens per tile.
         Returned as `tile_fine_mask`, one value per sample.
     """
 
     fine_route: bool
+    dense_max_patches: int
+    dense_max_scale: float
+    dense_min_aspect: float
+    dense_max_aspect: float
 
 
 @lru_cache(maxsize=10)
@@ -227,15 +244,68 @@ def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) 
     return sorted(ratios, key=lambda grid: grid[0] * grid[1])
 
 
+def get_tile_budget(
+    original_image_size: tuple[int, int],
+    target_tile_size: tuple[int, int],
+    min_image_tiles: int,
+    max_image_tiles: int,
+    dense_max_patches: int = 0,
+    dense_max_scale: float = 0.0,
+    dense_min_aspect: float = 0.0,
+    dense_max_aspect: float = 0.0,
+) -> int:
+    """
+    The maximum number of tiles of one page: `dense_max_patches` when the page is under-resolved at `max_image_tiles`
+    (tiled canvas width / page width below `dense_max_scale`) and its width/height ratio lies in (`dense_min_aspect`,
+    `dense_max_aspect`], otherwise `max_image_tiles`. Newspaper spreads and large landscape scans are the pages this
+    selects.
+    """
+    if not dense_max_patches or (dense_max_scale <= 0 and dense_min_aspect <= 0):
+        return max_image_tiles
+    original_height, original_width = original_image_size
+    if original_height <= 0 or original_width <= 0:
+        return max_image_tiles
+    aspect_ratio = original_width / original_height
+    if dense_min_aspect > 0 and not aspect_ratio > dense_min_aspect:
+        return max_image_tiles
+    if dense_max_aspect > 0 and aspect_ratio > dense_max_aspect:
+        return max_image_tiles
+    if dense_max_scale > 0:
+        num_columns, _ = get_optimal_tiled_canvas(
+            original_image_size, target_tile_size, min_image_tiles, max_image_tiles
+        )
+        if not num_columns * target_tile_size[1] / original_width < dense_max_scale:
+            return max_image_tiles
+    return dense_max_patches
+
+
 def get_page_tile_grid(
-    height: int, width: int, size: SizeDict | dict, crop_to_patches: bool, min_patches: int, max_patches: int
+    height: int,
+    width: int,
+    size: SizeDict | dict,
+    crop_to_patches: bool,
+    min_patches: int,
+    max_patches: int,
+    dense_max_patches: int = 0,
+    dense_max_scale: float = 0.0,
+    dense_min_aspect: float = 0.0,
+    dense_max_aspect: float = 0.0,
 ) -> tuple[int, int]:
     """The `(num_rows, num_columns)` tile grid of a page. A page that is not split is a 1x1 grid."""
     if not crop_to_patches or max_patches <= 1:
         return 1, 1
-    num_columns, num_rows = get_optimal_tiled_canvas(
-        (height, width), (size["height"], size["width"]), min_patches, max_patches
+    tile_size = (size["height"], size["width"])
+    max_patches = get_tile_budget(
+        (height, width),
+        tile_size,
+        min_patches,
+        max_patches,
+        dense_max_patches,
+        dense_max_scale,
+        dense_min_aspect,
+        dense_max_aspect,
     )
+    num_columns, num_rows = get_optimal_tiled_canvas((height, width), tile_size, min_patches, max_patches)
     return num_rows, num_columns
 
 
@@ -253,6 +323,10 @@ class GraniteDoclingImageProcessor(GotOcr2ImageProcessor):
     crop_to_patches = True
     max_patches = 32
     fine_route = False
+    dense_max_patches = 0
+    dense_max_scale = 0.0
+    dense_min_aspect = 0.0
+    dense_max_aspect = 0.0
     model_input_names = ["pixel_values", "pixel_attention_mask"]
 
     def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> ImageInput:
@@ -303,6 +377,10 @@ class GraniteDoclingImageProcessor(GotOcr2ImageProcessor):
         min_patches: int = 1,
         max_patches: int = 32,
         fine_route: bool = False,
+        dense_max_patches: int = 0,
+        dense_max_scale: float = 0.0,
+        dense_min_aspect: float = 0.0,
+        dense_max_aspect: float = 0.0,
         **kwargs,
     ) -> BatchFeature:
         grid_kwargs = {
@@ -310,6 +388,10 @@ class GraniteDoclingImageProcessor(GotOcr2ImageProcessor):
             "min_patches": min_patches,
             "max_patches": max_patches,
             "size": size,
+            "dense_max_patches": dense_max_patches,
+            "dense_max_scale": dense_max_scale,
+            "dense_min_aspect": dense_min_aspect,
+            "dense_max_aspect": dense_max_aspect,
         }
         # Pages of the same size get the same grid, so they are tiled together
         grouped_images, grouped_images_index = group_images_by_shape(
@@ -357,6 +439,10 @@ class GraniteDoclingImageProcessor(GotOcr2ImageProcessor):
             images_kwargs.get("crop_to_patches", self.crop_to_patches),
             images_kwargs.get("min_patches", self.min_patches),
             images_kwargs.get("max_patches", self.max_patches),
+            images_kwargs.get("dense_max_patches", self.dense_max_patches),
+            images_kwargs.get("dense_max_scale", self.dense_max_scale),
+            images_kwargs.get("dense_min_aspect", self.dense_min_aspect),
+            images_kwargs.get("dense_max_aspect", self.dense_max_aspect),
         )
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
@@ -376,6 +462,10 @@ class GraniteDoclingImageProcessorPil(GotOcr2ImageProcessorPil):
     crop_to_patches = True
     max_patches = 32
     fine_route = False
+    dense_max_patches = 0
+    dense_max_scale = 0.0
+    dense_min_aspect = 0.0
+    dense_max_aspect = 0.0
     model_input_names = ["pixel_values", "pixel_attention_mask"]
 
     def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> ImageInput:
@@ -433,6 +523,10 @@ class GraniteDoclingImageProcessorPil(GotOcr2ImageProcessorPil):
         min_patches: int = 1,
         max_patches: int = 32,
         fine_route: bool = False,
+        dense_max_patches: int = 0,
+        dense_max_scale: float = 0.0,
+        dense_min_aspect: float = 0.0,
+        dense_max_aspect: float = 0.0,
         **kwargs,
     ) -> BatchFeature:
         grid_kwargs = {
@@ -440,6 +534,10 @@ class GraniteDoclingImageProcessorPil(GotOcr2ImageProcessorPil):
             "min_patches": min_patches,
             "max_patches": max_patches,
             "size": size,
+            "dense_max_patches": dense_max_patches,
+            "dense_max_scale": dense_max_scale,
+            "dense_min_aspect": dense_min_aspect,
+            "dense_max_aspect": dense_max_aspect,
         }
         # Pages are tiled one by one (grouping by shape is a torchvision-backend utility)
         tiles, rows, cols = [], [], []
@@ -490,6 +588,10 @@ class GraniteDoclingImageProcessorPil(GotOcr2ImageProcessorPil):
             images_kwargs.get("crop_to_patches", self.crop_to_patches),
             images_kwargs.get("min_patches", self.min_patches),
             images_kwargs.get("max_patches", self.max_patches),
+            images_kwargs.get("dense_max_patches", self.dense_max_patches),
+            images_kwargs.get("dense_max_scale", self.dense_max_scale),
+            images_kwargs.get("dense_min_aspect", self.dense_min_aspect),
+            images_kwargs.get("dense_max_aspect", self.dense_max_aspect),
         )
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
@@ -526,6 +628,11 @@ class GraniteDoclingProcessor(Idefics3Processor):
         ProcessorMixin.__init__(self, image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
     def __call__(self, images=None, text=None, **kwargs):
+        r"""
+        Returns:
+            [`BatchEncoding`]: The tokenized prompts with `pixel_values` and `pixel_attention_mask`, and
+            `tile_fine_mask` when `fine_route=True`. The tile grids only build the prompt and are not returned.
+        """
         outputs = super().__call__(images=images, text=text, **kwargs)
         # The tile grids only build the prompt
         outputs.pop("rows", None)

@@ -146,6 +146,32 @@ class GraniteDoclingImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             self.assertEqual(image_processor.get_number_of_image_patches(20, 1000), 17)
             self.assertEqual(image_processor.get_tile_grid(20, 1000), (1, 16))
 
+    def test_spread_rule_tile_budget(self):
+        rule = {"dense_max_patches": 24, "dense_max_scale": 0.75, "dense_min_aspect": 1.2, "dense_max_aspect": 2.5}
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(
+                **{**self.image_processor_dict, "crop_to_patches": True, "max_patches": 6, **rule}
+            )
+            # A 3:2 spread is shrunk to 60/90 = 0.67 by its 3x2 grid at `max_patches`, so it gets the dense budget: 6x4
+            spread = np.random.randint(0, 255, size=(60, 90, 3), dtype=np.uint8)
+            encoding = image_processor(spread, return_tensors="pt")
+            self.assertEqual((encoding["rows"], encoding["cols"]), ([[4]], [[6]]))
+            self.assertEqual(encoding["pixel_values"].shape, (1, 25, 3, 20, 20))
+            self.assertEqual(image_processor.get_tile_grid(60, 90), (4, 6))
+            self.assertEqual(image_processor.get_number_of_image_patches(60, 90), 25)
+
+            # A portrait page, a landscape page already at full resolution and a strip keep `max_patches`
+            for height, width, grid in ((60, 40, (3, 2)), (30, 45, (2, 3)), (20, 300, (1, 6))):
+                image = np.random.randint(0, 255, size=(height, width, 3), dtype=np.uint8)
+                encoding = image_processor(image, return_tensors="pt")
+                self.assertEqual((encoding["rows"][0][0], encoding["cols"][0][0]), grid)
+                self.assertEqual(image_processor.get_tile_grid(height, width), grid)
+
+            # Without the rule the spread stays on the `max_patches` grid
+            plain = image_processing_class(**{**self.image_processor_dict, "crop_to_patches": True, "max_patches": 6})
+            encoding = plain(spread, return_tensors="pt")
+            self.assertEqual((encoding["rows"], encoding["cols"]), ([[2]], [[3]]))
+
     def test_nested_images_are_padded(self):
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**{**self.image_processor_dict, "crop_to_patches": True})

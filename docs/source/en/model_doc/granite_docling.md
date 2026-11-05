@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-10-16.*
+*This model was contributed to Hugging Face Transformers on 2026-11-05.*
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
@@ -216,6 +216,7 @@ The [DocLang](https://doclang.ai/) spec and `doclang` toolkit (validate / pack) 
 
 - A full page is long: budget `max_new_tokens` in the thousands, otherwise the DocLang is cut off silently.
 - Tiles are 512x512, laid out on the grid that best matches the page's aspect ratio, capped by `max_patches` (default 32) and 16 tiles per side. A page that fits in one tile gets no thumbnail.
+- A checkpoint can carry a spread rule in its image processor config: `dense_max_patches` tiles instead of `max_patches` for a wide landscape page (`dense_min_aspect` < width/height <= `dense_max_aspect`) that the `max_patches` grid would shrink below `dense_max_scale`. Newspaper spreads are the typical case. The rule is off by default (`dense_max_patches=0`) and must match what the checkpoint was trained with.
 - On the 500M model the fine path quadruples the image tokens per tile, from 64 to 256. Use it for dense pages only, or let the router decide with [`~GraniteDoclingModel.predict_fine_route`]. The 2B model uses 256 image tokens per tile throughout (pixel-shuffle ratio 2).
 
 ## GraniteDoclingConfig

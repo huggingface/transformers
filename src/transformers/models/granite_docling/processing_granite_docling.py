@@ -62,9 +62,9 @@ class GraniteDoclingProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(self, images=None, text=None, **kwargs) -> BatchEncoding:
         r"""
-        image_seq_len (`int`, *optional*):
-            The length of the image sequence. If not provided, the default value of self.image_seq_len is used.
-            image_seq_len should be equal to int(((image_size // patch_size) ** 2) / (scale_factor**2))
+        Returns:
+            [`BatchEncoding`]: The tokenized prompts with `pixel_values` and `pixel_attention_mask`, and
+            `tile_fine_mask` when `fine_route=True`. The tile grids only build the prompt and are not returned.
         """
         outputs = super().__call__(images=images, text=text, **kwargs)
         # The tile grids only build the prompt
