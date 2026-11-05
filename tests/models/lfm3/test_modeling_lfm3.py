@@ -143,7 +143,7 @@ class Lfm3ModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch_accelerator
 @slow
 class Lfm3IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
-    model_id = "LiquidAI/LFM3-1.7B-Preview"
+    model_id = "LiquidAI/LFM3-1.7B"
 
     def test_model_logits(self):
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
@@ -157,17 +157,17 @@ class Lfm3IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [
-                    -1.9214,
-                    -1.6632,
-                    -1.0323,
-                    -1.0694,
-                    0.0741,
-                    0.2619,
-                    0.3455,
-                    0.2205,
-                    0.2545,
-                    0.1654,
-                    -1.9167,
+                    -2.011,
+                    -1.6384,
+                    -0.9821,
+                    -1.04,
+                    0.102,
+                    0.2768,
+                    0.394,
+                    0.1954,
+                    0.3067,
+                    0.1384,
+                    -1.8187,
                 ]
             }
         )
@@ -176,22 +176,22 @@ class Lfm3IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [
-                    -0.0203,
-                    -2.5232,
-                    -0.4502,
-                    -1.087,
-                    1.0517,
-                    0.6892,
-                    0.7451,
-                    2.0436,
-                    9.0642,
-                    5.4245,
-                    7.058,
-                    3.5806,
-                    5.2226,
-                    2.1968,
-                    0.0952,
-                    2.6452,
+                    0.003,
+                    -2.5842,
+                    -0.466,
+                    -1.0637,
+                    1.0272,
+                    0.7583,
+                    0.8549,
+                    2.1026,
+                    9.1433,
+                    5.2328,
+                    6.8524,
+                    3.6501,
+                    5.1763,
+                    2.2282,
+                    0.1462,
+                    2.784,
                 ]
             }
         )
@@ -211,8 +211,8 @@ class Lfm3IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): (
-                    'We need to answer the question: "Simply put, what does the theory of relativity state?" '
-                    "This is a straightforward question about the theory of relativity. The"
+                    'We need to answer: "Simply put, what does the theory of relativity state?" '
+                    "This is a broad question about Einstein's theories of relativity. There are"
                 )
             }
         )

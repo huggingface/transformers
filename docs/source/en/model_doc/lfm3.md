@@ -31,7 +31,7 @@ Full-attention layers use partial rotary embeddings, sliding-window layers use t
 applies a sandwich norm to the operator and feed-forward outputs before the residual addition.
 
 The short convolution runs in PyTorch, since the Hub `causal-conv1d` kernels only serve widths 2 to 4 and LFM3 uses 7.
-It does not keep packed sequences (`seq_idx`) apart yet.
+Packing (padding-free training) is not supported yet.
 
 ## Example
 
@@ -41,7 +41,7 @@ The following example shows how to generate an answer using the `AutoModelForCau
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # Load model and tokenizer
-model_id = "LiquidAI/LFM3-1.7B-Preview"
+model_id = "LiquidAI/LFM3-1.7B"
 model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 

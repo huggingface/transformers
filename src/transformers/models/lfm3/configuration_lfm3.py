@@ -23,7 +23,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="LiquidAI/LFM3-1.7B-Preview")
+@auto_docstring(checkpoint="LiquidAI/LFM3-1.7B")
 @strict
 class Lfm3Config(PreTrainedConfig):
     r"""

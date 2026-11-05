@@ -323,8 +323,6 @@ def causal_conv1d_fn(
     activation: str | None = None,
     **kwargs,
 ):
-    if kwargs.get("seq_idx") is not None:
-        raise ValueError("The LFM3 short convolution can't keep packed sequences (`seq_idx`) apart yet.")
     _, hidden_size, seq_len = hidden_states.shape
     padding = weight.shape[-1] - 1
 
@@ -609,7 +607,7 @@ class Lfm3ForCausalLM(Lfm3PreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -621,8 +619,8 @@ class Lfm3ForCausalLM(Lfm3PreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, Lfm3ForCausalLM
 
-        >>> model = Lfm3ForCausalLM.from_pretrained("LiquidAI/LFM3-1.7B-Preview")
-        >>> tokenizer = AutoTokenizer.from_pretrained("LiquidAI/LFM3-1.7B-Preview")
+        >>> model = Lfm3ForCausalLM.from_pretrained("LiquidAI/LFM3-1.7B")
+        >>> tokenizer = AutoTokenizer.from_pretrained("LiquidAI/LFM3-1.7B")
 
         >>> inputs = tokenizer.apply_chat_template(
         ...     [{"role": "user", "content": "What is C. elegans?"}], add_generation_prompt=True, return_tensors="pt"
