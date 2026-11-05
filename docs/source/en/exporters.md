@@ -215,8 +215,6 @@ ov_inputs = {k: v.numpy() for k, v in inputs.items()}
 outputs = compiled(ov_inputs)
 ```
 
-A bfloat16 or float16 model exports as a float32 graph with 16-bit weights, so it takes float32 inputs.
-
 </hfoption>
 </hfoptions>
 
