@@ -13,15 +13,28 @@
 # limitations under the License.
 """Fusion tests, one class per backend.
 
-ONNX Runtime (`OnnxConfig(ort_fusions=...)`), on a tiny Llama: the expected ONNX Runtime ops appear in the fused graph
-and it gives the same outputs as the plain export. `test_export.py` already compares every architecture's fused export
-against eager, but it would still pass if a fusion stopped matching."""
+A backend only runs its fused kernels on the patterns it recognizes, and a graph that misses them still runs, decomposed
+and slower. Each class exports the tiny model of each decoder family's own tests and counts, per layer, the fused ops
+the backend runs, and that none of the ops they replace are left.
+"""
 
 import collections
 import unittest
 
-from transformers import GenerationConfig, LlamaConfig, LlamaForCausalLM
-from transformers.testing_utils import require_onnxruntime, require_onnxscript, require_torch
+from parameterized import parameterized
+
+from tests.models.gemma3.test_modeling_gemma3 import Gemma3TextModelTester
+from tests.models.granite.test_modeling_granite import GraniteModelTester
+from tests.models.llama.test_modeling_llama import LlamaModelTester
+from tests.models.mistral.test_modeling_mistral import MistralModelTester
+from tests.models.mixtral.test_modeling_mixtral import MixtralModelTester
+from tests.models.olmo2.test_modeling_olmo2 import Olmo2ModelTester
+from tests.models.phi3.test_modeling_phi3 import Phi3ModelTester
+from tests.models.qwen2.test_modeling_qwen2 import Qwen2ModelTester
+from tests.models.qwen3.test_modeling_qwen3 import Qwen3ModelTester
+from tests.models.qwen3_moe.test_modeling_qwen3_moe import Qwen3MoeModelTester
+from transformers import AutoModelForCausalLM, GenerationConfig, LlamaConfig, LlamaForCausalLM, set_seed
+from transformers.testing_utils import require_onnxruntime, require_onnxscript, require_torch, slow
 from transformers.utils import is_torch_available
 
 
@@ -30,6 +43,31 @@ if is_torch_available():
     import torch
 
     from transformers.exporters import OnnxConfig, OnnxExporter
+
+
+# model type: the tester of its tiny model
+TESTERS = {
+    "llama": LlamaModelTester,
+    "qwen2": Qwen2ModelTester,
+    "qwen3": Qwen3ModelTester,  # per-head query and key norms
+    "phi3": Phi3ModelTester,
+    "olmo2": Olmo2ModelTester,
+    "granite": GraniteModelTester,
+    "mistral": MistralModelTester,  # sliding-window attention
+    "gemma3": Gemma3TextModelTester,  # sliding-window and full attention layers
+    "mixtral": MixtralModelTester,  # mixture of experts
+    "qwen3_moe": Qwen3MoeModelTester,  # mixture of experts
+}
+MOE_MODELS = {"mixtral", "qwen3_moe"}
+
+
+def _model(model_type, dtype=None, **config):
+    """The tiny causal LM the model's own tests use, with `config` overriding its config."""
+    set_seed(0)
+    model_config = TESTERS[model_type](parent=None).get_config()
+    for name, value in config.items():
+        setattr(model_config, name, value)
+    return AutoModelForCausalLM.from_config(model_config).to(dtype or torch.float32).eval()
 
 
 def _ops(program) -> collections.Counter:
@@ -48,6 +86,44 @@ def _run(program, feeds):
 @require_onnxscript
 @require_onnxruntime
 class OnnxRuntimeFusionTest(unittest.TestCase):
+    """`OnnxConfig(ort_fusions=...)`: the ONNX Runtime ops of the fused graph, for either provider (building a `"cuda"`
+    graph needs no GPU), and on CPU its outputs against the plain export."""
+
+    @slow
+    @parameterized.expand([(model_type, ort_fusions) for model_type in TESTERS for ort_fusions in ("cpu", "cuda")])
+    def test_generation_fuses(self, model_type, ort_fusions):
+        """Every layer of the prefill and the decode runs ONNX Runtime's attention (CUDA's prefill, with a mask,
+        `MultiHeadAttention`; otherwise `GroupQueryAttention`) and, on CUDA, its `MoE`, with no rotary (`Neg`),
+        attention (`Softmax`) or RMS norm (`ReduceMean`) left decomposed."""
+        # A CUDA graph is fused in float16, which the per-head query and key norms need to fold into
+        # `GroupQueryAttention`. The experts are SiLU-gated, as checkpoints are: ONNX Runtime's `MoE` miscomputes
+        # gated GELU experts (microsoft/onnxruntime#33863), so those stay unfused.
+        dtype = torch.float16 if ort_fusions == "cuda" else None
+        model = _model(model_type, dtype, **({"hidden_act": "silu"} if model_type in MOE_MODELS else {}))
+        programs = OnnxExporter().export_for_generation(
+            model,
+            {"input_ids": torch.tensor([[1, 5, 7, 9, 11]]), "attention_mask": torch.ones(1, 5, dtype=torch.long)},
+            OnnxConfig(dynamic=True, ort_fusions=ort_fusions),
+            GenerationConfig(max_new_tokens=3),
+        )
+        layers = model.config.num_hidden_layers
+        moe = model_type in MOE_MODELS
+        for component, program in programs.items():
+            ops = collections.Counter(node.op_type for node in program.model.graph.all_nodes())
+            attention = (
+                "MultiHeadAttention" if ort_fusions == "cuda" and component == "prefill" else "GroupQueryAttention"
+            )
+            expected = {
+                attention: layers,
+                "MoE": layers if moe and ort_fusions == "cuda" else 0,
+                # The CPU keeps the router's softmax: it has no `MoE` (microsoft/onnxruntime#33866).
+                "Softmax": layers if moe and ort_fusions == "cpu" else 0,
+                # A float16 OLMo2 rotates in float32: fused, it would rotate in float16.
+                "Neg": 2 * layers if model_type == "olmo2" and ort_fusions == "cuda" else 0,
+                "ReduceMean": 0,
+            }
+            self.assertEqual({op: ops[op] for op in expected}, expected, component)
+
     def setUp(self):
         torch.manual_seed(0)
         # GroupQueryAttention only applies rotary itself for head sizes that are multiples of 16.

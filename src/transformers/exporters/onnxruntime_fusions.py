@@ -886,8 +886,8 @@ def _gate(value: ir.Value):
 def _router(weights: ir.Value):
     """`(logits, k, normalize, indices)` if the routing `weights` are `TopK(Softmax(logits))`'s values, renormalized (`Div`
     by their `ReduceSum`) or not, or `Softmax(TopK(logits))` (Granite's: the same experts and weights as the
-    renormalized). A float16 model's router computes in float32: the casts around it are stepped over, the logits
-    returned in the model's dtype."""
+    renormalized). A float16 model's router computes in float32, its softmax or its top-k: the casts around them are
+    stepped over, the logits returned in the model's dtype."""
     if (downcast := _producer(weights, "Cast")) is not None:
         weights = downcast.inputs[0]
     normalize = 0
@@ -905,7 +905,7 @@ def _router(weights: ir.Value):
         logits, normalize = top_k.inputs[0], 1
     else:
         top_k = _producer(weights, "TopK")
-        softmax = _producer(top_k.inputs[0], "Softmax") if top_k is not None else None
+        softmax = _producer(_uncast(top_k.inputs[0]), "Softmax") if top_k is not None else None
         if softmax is None or weights is not top_k.outputs[0] or top_k.attributes.get_int("largest", 1) != 1:
             return None
         logits = softmax.inputs[0]
@@ -935,7 +935,8 @@ def _fuse_mixture_of_experts(model: ir.Model) -> int:
         if axes is None or axes.tolist() != [1] or weighted is None:
             continue
         for projected, scale in (weighted.inputs, weighted.inputs[::-1]):
-            down = _batched_matmul(projected)
+            # A float16 model weights the experts' outputs in float32.
+            down = _batched_matmul(_uncast(projected))
             if down is not None:
                 break
         gate = _gate(down[0]) if down is not None else None
