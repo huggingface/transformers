@@ -951,40 +951,30 @@ class IdeficsModel(IdeficsPreTrainedModel):
             )
 
         elif pixel_values is not None:
-            pixel_values = pixel_values.to(dtype=self.dtype, device=device)  # fp16 compatibility
-            batch_size, num_images = pixel_values.shape[:2]
-            pixel_values = pixel_values.contiguous().view(batch_size * num_images, *pixel_values.shape[2:])
-            image_outputs = self.vision_model(
+            pixel_values = pixel_values.flatten(0, 1).to(dtype=self.dtype, device=device).contiguous()
+            mm_encoder_outputs["image"] = self.vision_model(
                 pixel_values=pixel_values, interpolate_pos_encoding=interpolate_pos_encoding
             )
-            mm_encoder_outputs["image"] = image_outputs
-            image_hidden_states = image_outputs.last_hidden_state
+            image_hidden_states = mm_encoder_outputs["image"].last_hidden_state
 
         elif image_encoder_embeddings is not None:
-            if image_encoder_embeddings.ndim == 4:
-                batch_size, num_images, image_seq_len, image_hidden_size = image_encoder_embeddings.size()
-                image_encoder_embeddings = image_hidden_states.view(
-                    batch_size * num_images, image_seq_len, image_hidden_size
-                )
-            image_hidden_states = image_encoder_embeddings.to(dtype=self.dtype, device=device)
-
-        if self.config.use_resampler:
-            if perceiver_embeddings is None:
-                perceiver_embeddings = self.perceiver_resampler(image_hidden_states)
-                image_seq_len, image_hidden_size = perceiver_embeddings.size(1), perceiver_embeddings.size(2)
-            else:
-                batch_size, num_images, image_seq_len, image_hidden_size = perceiver_embeddings.size()
-            image_hidden_states = perceiver_embeddings
-        elif perceiver_embeddings is None:
-            image_seq_len, image_hidden_size = image_hidden_states.size(1), image_hidden_states.size(2)
+            image_hidden_states = (
+                image_encoder_embeddings.flatten(1, 2)
+                if image_encoder_embeddings.ndim == 4
+                else image_encoder_embeddings
+            )
         else:
-            raise ValueError("If `perceiver_embeddings` are passed, use_resampler should be True")
+            image_hidden_states = perceiver_embeddings
 
-        image_hidden_states = image_hidden_states.view(batch_size, num_images * image_seq_len, image_hidden_size)
+        if self.config.use_resampler and perceiver_embeddings is None:
+            perceiver_embeddings = self.perceiver_resampler(image_hidden_states)
+        elif perceiver_embeddings is not None:
+            raise ValueError("If `perceiver_embeddings` are passed, use_resampler should be True")
 
         # Mask is in 3D (incompatible with our mask API --> manual expansion)
         # image_attention_mask:    [batch_size,    text_seq_length,       num_images          ]
         #                       -> [batch_size, 1, text_seq_length, num_images * image_seq_len]
+        image_seq_len = image_hidden_states.size(1) // image_attention_mask.size(2)
         image_attention_mask = (
             image_attention_mask[..., None]
             .expand(-1, -1, -1, image_seq_len)
@@ -1006,7 +996,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         # embed positions
         if attention_mask is None:
             attention_mask = torch.ones(
-                (batch_size, seq_length_with_past), dtype=torch.bool, device=inputs_embeds.device
+                (inputs_embeds.shape[0], seq_length_with_past), dtype=torch.bool, device=inputs_embeds.device
             )
 
         causal_mask = create_causal_mask(
@@ -1018,7 +1008,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
         )
 
         hidden_states = inputs_embeds
-
         for idx, decoder_layer in enumerate(self.layers):
             # TODO(ls): Add cross attention values to respective lists
             if idx % self.cross_layer_interval == 0:
@@ -1042,8 +1031,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
             )
 
         hidden_states = self.norm(hidden_states)
-        image_hidden_states = image_hidden_states.view(batch_size, num_images, image_seq_len, image_hidden_size)
-
         return IdeficsBaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
@@ -1228,7 +1215,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
                 model_kwargs["image_attention_mask"] = torch.cat([image_attention_mask, last_mask], dim=1)
 
         # Get the precomputed image_hidden_states
-        model_kwargs["image_hidden_states"] = outputs.image_hidden_states
+        model_kwargs["image_hidden_states"] = outputs.image_last_hidden_state
         return model_kwargs
 
 
