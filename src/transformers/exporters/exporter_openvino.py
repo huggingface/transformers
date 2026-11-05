@@ -461,7 +461,8 @@ def _state_init_dims(
     outputs_names: list[str],
 ) -> dict[str, list]:
     """Compute a per-dim init spec for every state input: ``"batch"`` (follow the main input's
-    batch at runtime), ``0`` (the growing dim — empty on first inference), or a concrete length.
+    batch at runtime), ``"grow"`` (the growing dim — empty on first inference), or a concrete length (a NoPE
+    layer's empty rotary cache keeps its ``0``).
 
     The growing dim is identified from the ``ExportedProgram``'s symbolic shapes: a state input
     dim whose SymInt expression differs from the paired output's (e.g. ``s2`` vs ``s2 + s3``)
@@ -498,7 +499,7 @@ def _state_init_dims(
             elif str(in_val.shape[axis]) == str(out_val.shape[axis]):
                 dims.append(int(sample.shape[axis]))
             else:
-                dims.append(0)
+                dims.append("grow")
         # ``apply_make_stateful_transformation`` names each variable by concatenating the input
         # and output tensor names — key the specs the same way for the ReadValue lookup.
         init_dims[f"{input_name}{output_name}"] = dims
@@ -570,7 +571,7 @@ def _build_state_initializers(ov_model: openvino.Model, init_dims: dict[str, lis
         if update_is_static:
             dims = [update_shape[axis].get_length() if d == "batch" else d for axis, d in enumerate(dims)]
         info = variables[op.get_variable_id()].get_info()
-        info.data_shape = openvino.PartialShape([-1 if d in ("batch", 0) else d for d in dims])
+        info.data_shape = openvino.PartialShape([-1 if d in ("batch", "grow") else d for d in dims])
         variables[op.get_variable_id()].update(info)
         # The growing dim's zero length is emitted as ``batch - batch`` rather than a literal
         # ``[0]``: the CPU plugin fuses single-consumer init subgraphs into
@@ -579,7 +580,7 @@ def _build_state_initializers(ov_model: openvino.Model, init_dims: dict[str, lis
         zero = ov_ops.subtract(batch, batch)
         shape = ov_ops.concat(
             [
-                batch if d == "batch" else zero if d == 0 else ov_ops.constant(np.array([d], dtype=np.int64))
+                batch if d == "batch" else zero if d == "grow" else ov_ops.constant(np.array([d], dtype=np.int64))
                 for d in dims
             ],
             axis=0,
@@ -1097,9 +1098,13 @@ def _fix_empty_cat(gm, node):
         # which is always correct (the empty-cat optimisation just doesn't fire).
         return guard_or_false(val.numel() == 0)
 
-    if _is_empty(operands[0]):
+    first_empty, second_empty = _is_empty(operands[0]), _is_empty(operands[1])
+    # a NoPE layer's zero-width rotary cache: empty with the same rank on both sides, the cat still grows it
+    if first_empty and second_empty and operands[0].meta["val"].ndim == operands[1].meta["val"].ndim:
+        return False
+    if first_empty:
         keep = operands[1]
-    elif _is_empty(operands[1]):
+    elif second_empty:
         keep = operands[0]
     else:
         return False
