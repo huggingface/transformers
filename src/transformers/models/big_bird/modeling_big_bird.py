@@ -1590,6 +1590,14 @@ class BigBirdModel(BigBirdPreTrainedModel):
             )
             self.set_attention_type("original_full")
 
+        if self.attention_type == "block_sparse" and self.config.is_decoder and past_key_values is not None:
+            # Block-sparse attention is bidirectional and never writes to the cache, so it cannot be used to decode
+            logger.warning_once(
+                "Attention type 'block_sparse' does not support `past_key_values`. "
+                "Changing attention type to 'original_full'..."
+            )
+            self.set_attention_type("original_full")
+
         if self.attention_type == "block_sparse":
             (
                 padding_len,
