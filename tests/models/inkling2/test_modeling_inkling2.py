@@ -48,10 +48,7 @@ class Inkling2ModelTestMixin:
             (batch_size, config.hidden_size, config.conv_kernel_size)
         ] * 2
 
-    @unittest.skip(
-        "The dequantizing converter reads scales a dense save never writes, and chained renames leave no "
-        "intermediate key after the reverse mapping"
-    )
+    @unittest.skip("Chained renames leave no intermediate key after the reverse mapping")
     def test_reverse_loading_mapping(self):
         pass
 

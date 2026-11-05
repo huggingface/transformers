@@ -21,7 +21,6 @@ from typing import TYPE_CHECKING
 from .core_model_loading import (
     Chunk,
     Concatenate,
-    DequantizeInkling2Experts,
     ErnieFuseAndSplitTextVisionExperts,
     GroupWeightRename,
     IndexOffsetWeightRename,
@@ -307,28 +306,11 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"model\.llm\.", target_patterns=r"model."),
             WeightRenaming(source_patterns=r"embed\.weight", target_patterns=r"embed_tokens.weight"),
             WeightRenaming(source_patterns=r"embed_norm\.", target_patterns=r"embed_tokens.embed_norm."),
-            WeightConverter(
-                source_patterns=[
-                    "mlp.experts.w13_weight",
-                    "mlp.experts.w13_weight_scale",
-                    "mlp.experts.w13_weight_amax",
-                    "mlp.experts.w13_weight_outer_scale_denominator",
-                ],
-                target_patterns=["mlp.experts.gate_up_proj"],
-                operations=[DequantizeInkling2Experts()],
-                force_cpu=True,
-            ),
-            WeightConverter(
-                source_patterns=[
-                    "mlp.experts.w2_weight",
-                    "mlp.experts.w2_weight_scale",
-                    "mlp.experts.w2_weight_amax",
-                    "mlp.experts.w2_weight_outer_scale_denominator",
-                ],
-                target_patterns=["mlp.experts.down_proj"],
-                operations=[DequantizeInkling2Experts()],
-                force_cpu=True,
-            ),
+            # also renames the quantization companions, e.g. `w13_weight_scale`, loaded by the plan's quantizers
+            WeightRenaming(source_patterns=r"mlp\.experts\.w13_weight", target_patterns=r"mlp.experts.gate_up_proj"),
+            WeightRenaming(source_patterns=r"mlp\.experts\.w13_weight_", target_patterns=r"mlp.experts.gate_up_proj_"),
+            WeightRenaming(source_patterns=r"mlp\.experts\.w2_weight", target_patterns=r"mlp.experts.down_proj"),
+            WeightRenaming(source_patterns=r"mlp\.experts\.w2_weight_", target_patterns=r"mlp.experts.down_proj_"),
             WeightRenaming(source_patterns=r"mlp.gate.bias", target_patterns=r"mlp.gate.e_score_correction_bias"),
             WeightRenaming(source_patterns=r"attn\.wq_du", target_patterns=r"self_attn.q_proj"),
             WeightRenaming(source_patterns=r"attn\.wk_dv", target_patterns=r"self_attn.k_proj"),
