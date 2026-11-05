@@ -48,7 +48,7 @@ _import_structure = {
     ],
     "eetq": ["load_eetq_kernels"],
     "fbgemm_fp8": ["FbgemmFp8Linear", "FbgemmFp8Llama4TextExperts", "replace_with_fbgemm_fp8_linear"],
-    "finegrained_fp8": ["FP8Embedding", "FP8Linear", "replace_with_fp8_embedding"],
+    "finegrained_fp8": ["FP8Embedding", "FP8Linear"],
     "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module"],
     "gemma_quant": [
         "QuantizedEmbedding",
@@ -201,7 +201,7 @@ if TYPE_CHECKING:
     )
     from .eetq import load_eetq_kernels
     from .fbgemm_fp8 import FbgemmFp8Linear, FbgemmFp8Llama4TextExperts, replace_with_fbgemm_fp8_linear
-    from .finegrained_fp8 import FP8Embedding, FP8Linear, replace_with_fp8_embedding
+    from .finegrained_fp8 import FP8Embedding, FP8Linear
     from .fsdp import is_fsdp_enabled, is_fsdp_managed_module
     from .gemma_quant import (
         QuantizedEmbedding,

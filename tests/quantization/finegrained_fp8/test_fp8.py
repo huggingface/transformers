@@ -552,13 +552,16 @@ class FP8EmbeddingTest(unittest.TestCase):
 
     def test_patterns_match_by_suffix_and_honour_the_skip_list(self):
         """Suffixes match whether or not the text model is nested under a multimodal wrapper."""
-        from transformers.integrations import FP8Embedding, replace_with_fp8_embedding
+        from transformers.integrations import FP8Embedding
+        from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 
         model = torch.nn.ModuleDict(
             {n: torch.nn.ModuleDict({"table": torch.nn.Embedding(8, 4)}) for n in ("layers", "language_model")}
         )
         model.other = torch.nn.Embedding(8, 4)
-        replace_with_fp8_embedding(model, ["table"], modules_to_not_convert=["language_model.table"])
+        quantizer = FineGrainedFP8HfQuantizer(FineGrainedFP8Config(modules_to_convert=["table"]), pre_quantized=True)
+        quantizer.modules_to_not_convert = ["language_model.table"]
+        quantizer.replace_modules(model)
 
         self.assertIsInstance(model["layers"]["table"], FP8Embedding)  # matched by suffix
         self.assertIs(type(model["language_model"]["table"]), torch.nn.Embedding)  # skip-listed
