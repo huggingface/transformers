@@ -312,7 +312,6 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
     def test_generate_compilation_all_outputs(self):
         pass
 
-
     def _image_features_get_expected_num_hidden_states(self, model_tester=None):
         # For models that rely on timm for their vision backend, it's hard to infer how many layers the model has
         # from the timm config alone. So, we're just hardcoding the expected number of hidden states here.

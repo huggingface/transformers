@@ -17,7 +17,6 @@ import copy
 import unittest
 
 import requests
-from parameterized import parameterized
 
 from transformers import BitsAndBytesConfig, ChameleonConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
@@ -239,6 +238,7 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     @unittest.skip("Chameleon forces some token ids to be -inf!")
     def test_batching_equivalence(self):
         pass
+
 
 class ChameleonVision2SeqModelTester(ChameleonModelTester):
     def __init__(self, parent, image_size=10, **kwargs):

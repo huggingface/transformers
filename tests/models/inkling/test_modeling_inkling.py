@@ -18,7 +18,6 @@ import tempfile
 import unittest
 
 from huggingface_hub import download_bucket_files
-from parameterized import parameterized
 from safetensors.torch import load_file
 
 from transformers import (

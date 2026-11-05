@@ -615,6 +615,7 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_sdpa_can_compile_dynamic(self):
         self.skipTest(reason="CLIP model can't be compiled dynamic, error in clip_loss`")
 
+
 class CLIPForImageClassificationModelTester(CLIPModelTester):
     def __init__(self, parent):
         super().__init__(parent)

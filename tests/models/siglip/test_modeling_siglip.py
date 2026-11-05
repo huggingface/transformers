@@ -504,7 +504,6 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
             text_config = SiglipTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "google/siglip-base-patch16-224"
