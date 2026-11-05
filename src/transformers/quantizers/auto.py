@@ -489,42 +489,48 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         from ..core_model_loading import WeightConverter, WeightRenaming
 
         prefix = rf"(?:{re.escape(model.base_model_prefix)}\.)?"
-        params = [name.removeprefix(self.prefix) for name, _ in model.named_parameters()]
+        modules = dict(model.named_modules())
         renamings, copies, general = [], [], []
         for quantizer in self.all_quantizers:
             weight_conversions = quantizer.update_weight_conversions(weight_conversions, model)
-            layers = [name.removeprefix(self.prefix) for name, q in self.module_quantizers.items() if q is quantizer]
-            # A layer's own tensors or those of its submodules (e.g. the per-expert ones of fused experts), never a
-            # param the model already has under that name (e.g. an `attn_hc.scale`)
-            layer_names = "|".join(re.escape(name) for name in layers)
-            for stored, ours in quantizer.renamed_names.items():
-                kept = "|".join(re.escape(name) for name in params if name.endswith(f".{stored}"))
-                exclude = rf"(?!{prefix}(?:{kept})$)" if kept else ""
-                renamings.append(
-                    WeightRenaming(rf"^{exclude}({prefix}(?:{layer_names})(?:\..+)?)\.{stored}$", rf"\1.{ours}")
-                )
-            modules = {layer.rpartition(".")[2] for layer in layers}
+            params = [
+                f"{name.removeprefix(self.prefix)}.{param}"
+                for name, q in self.module_quantizers.items()
+                if q is quantizer
+                for param in chain(modules[name]._parameters, modules[name]._buffers)
+            ]
+            # Renamed: the tensors of its layers holding a param of its format (not e.g. a hyper-connection's own
+            # `scale`), or of their submodules (the per-expert ones of fused experts)
+            layers = dict.fromkeys(
+                re.escape(param.rpartition(".")[0])
+                for param in params
+                if param.rpartition(".")[2] in quantizer.serialized_names
+            )
+            renamings += [
+                WeightRenaming(rf"^({prefix}(?:{'|'.join(layers)})(?:\..+)?)\.{stored}$", rf"\1.{ours}")
+                for stored, ours in quantizer.renamed_names.items()
+            ]
+            params = "\n".join(params)
             dequantize = getattr(quantizer.quantization_config, "dequantize", False)
             for converter in weight_conversions:
                 if not isinstance(converter, WeightConverter):
                     continue
                 sources, targets = converter._original_source_patterns, converter._original_target_patterns
-                module = (
-                    targets[0].replace("\\", "").rpartition(".")[0].rpartition(".")[2]
-                )  # `experts` of `mlp.experts.gate_up_proj`
                 param = sources[0].rpartition(".")[2]
-                if module not in modules or not all(source.endswith(f".{param}") for source in sources):
+                # The model's converters loading one param of its format into one of its params
+                if not all(source.endswith(f".{param}") for source in sources):
+                    continue
+                if not re.search(rf"{targets[0]}$", params, re.MULTILINE):
                     continue
                 for name in quantizer.serialized_names.get(param, []):
+                    if name == param:
+                        continue
                     # e.g. `weight_scale_inv` -> `gate_up_proj_scale_inv`, `input_scale` -> `gate_up_proj_input_scale`.
                     # Dequantized, it loads with its weight
                     suffix = name.removeprefix(param) if name.startswith(param) else f"_{name}"
                     named_sources = [source.removesuffix(param) + name for source in sources]
                     named_targets = targets if dequantize else [target + suffix for target in targets]
-                    if name != param:
-                        copies.append(
-                            converter.copy(named_sources, named_targets, operations=list(converter.operations))
-                        )
+                    copies.append(converter.copy(named_sources, named_targets, operations=list(converter.operations)))
             general += quantizer.get_weight_conversions()
         # The general converters of a fused param (e.g. MXFP4's `down_proj`) last: a `*.down_proj.weight` is a `weight`
         fused = {
@@ -550,20 +556,18 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
             return transform
         dequantize = getattr(quantizer.quantization_config, "dequantize", False)
         operation = quantizer.get_load_operations().get("dequantize" if dequantize else "deserialize")
-        # The serialized names of the params it loads, by prefix: `experts.*.gate_proj.` -> [weight, weight_scale, ...]
-        serialized = {
-            source.removesuffix(stored): names
-            for source in getattr(transform, "_original_source_patterns", [])
-            for names in quantizer.serialized_names.values()
-            for stored in names
-            if source == stored or source.endswith(f".{stored}")
-        }
-        if operation is None or not isinstance(transform, WeightConverter) or not serialized:
+        if operation is None or not isinstance(transform, WeightConverter):
+            return transform
+        sources = transform._original_source_patterns
+        stored = sources[0].rpartition(".")[2]  # e.g. `weight_scale` of `experts.*.gate_proj.weight_scale`
+        names = next((names for names in quantizer.serialized_names.values() if stored in names), None)
+        if names is None:  # not a tensor of this format
             return transform
         if not dequantize:
             transform.operations = [*transform.operations, operation(quantizer)]
             return transform
-        sources = [prefix + name for prefix, names in serialized.items() for name in names]
+        # Dequantized together: the weight and all its serialized names, whichever key came first
+        sources = [source.removesuffix(stored) + name for source in sources for name in names]
         operations = [operation(quantizer), *transform.operations]
         return transform.copy(sources, transform._original_target_patterns, operations=operations)
 
