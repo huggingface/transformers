@@ -373,8 +373,22 @@ def modelopt_plan(config: dict) -> dict | None:
     return plan | {"*": base} if base else plan
 
 
-# Saved formats that quantize per module, turned into a plan keyed by checkpoint module names
-PLAN_CONVERTERS: dict[str, Callable[[dict], dict | None]] = {"modelopt": modelopt_plan}
+def fp4_experts_plan(config: dict) -> dict | None:
+    "DeepSeek-V4's FP8 checkpoints, whose routed experts are MXFP4 (`expert_dtype: fp4`)"
+    if config.get("quant_method") != "fp8" or config.get("expert_dtype") != "fp4":
+        return None
+    return {
+        "*.mlp.experts": Mxfp4Config(),
+        "*": {key: value for key, value in config.items() if key != "expert_dtype"},
+    }
+
+
+# Saved formats that quantize per module, turned into a plan keyed by checkpoint module names. ModelOpt first: its
+# per-layer configs (e.g. NVFP4 experts) override DeepSeek's `expert_dtype`
+PLAN_CONVERTERS: dict[str, Callable[[dict], dict | None]] = {
+    "modelopt": modelopt_plan,
+    "fp4_experts": fp4_experts_plan,
+}
 
 
 class QuantizationPlanHfQuantizer(HfQuantizer):

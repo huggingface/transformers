@@ -22,7 +22,9 @@ if is_torch_available():
 from ..core_model_loading import ConversionOps, _IdentityOp
 from ..distributed.utils import _is_torch_distributed_initialized
 from ..quantizers.quantizers_utils import get_module_from_name, on_device, should_convert_module
+from .finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS, FP8Experts, _get_ue8m0_dtype
 from .hub_kernels import use_kernel_forward_from_hub
+from .moe import use_experts_implementation
 
 
 logger = logging.get_logger(__name__)
@@ -107,6 +109,14 @@ class Mxfp4Dequantize(ConversionOps):
         missing_keys: list[str] | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
+        if not any(key.endswith("_blocks") for key in input_dict):
+            # `Mxfp4Experts`: the `weight` and `weight_scale_inv` of each expert, before the model's converters merge them
+            dtype = getattr(*get_module_from_name(model, full_layer_name)).dtype
+            return {
+                key: [dequantize_mxfp4(w, s, dtype) for w, s in zip(value, input_dict[f"{key}_scale_inv"])]
+                for key, value in input_dict.items()
+                if not key.endswith("_scale_inv")
+            }
         param_data = {}
         proj = "gate_up_proj" if "gate_up_proj" in full_layer_name else "down_proj"
         if f"{proj}_blocks" in input_dict.keys():
@@ -469,6 +479,37 @@ class Mxfp4GptOssMLP(nn.Module):
         routed_out = self.experts(hidden_states, routing_data, gather_idx, scatter_idx=scatter_idx)
         routed_out = routed_out.reshape(batch_size, -1, self.router.hidden_dim)
         return routed_out, router_logits
+
+
+class Mxfp4Experts(FP8Experts):
+    """
+    MoE experts with MXFP4 weights, e.g. DeepSeek-V4's routed experts: e2m1 pairs packed in `int8`, a ue8m0
+    `*_scale_inv` per 32 of them. They run W4A8 on the FP8 experts' kernels, which take the MXFP4 path for `int8` weights
+    """
+
+    def __init__(self, config, has_bias: bool = False, has_gate: bool = True):
+        super().__init__(config, scale_fmt="ue8m0", has_bias=has_bias, has_gate=has_gate)
+
+    def _weight_format(self, block_size, scale_fmt):
+        sf_dtype = _get_ue8m0_dtype()
+        return {"weight_dtype": torch.int8, "sf_dtype": sf_dtype, "weight_k_div": 2, "sf_gran_n": 1, "sf_gran_k": 32}
+
+
+def build_mxfp4_experts(experts, text_config):
+    "Builds the `Mxfp4Experts` replacing `experts`"
+    has_gate, has_bias = getattr(experts, "has_gate", True), getattr(experts, "has_bias", False)
+    new_class = use_experts_implementation(
+        experts_class=Mxfp4Experts, experts_interface=ALL_FP8_EXPERTS_FUNCTIONS, has_bias=has_bias, has_gate=has_gate
+    )
+    return new_class(getattr(experts, "config", text_config), has_bias=has_bias, has_gate=has_gate)
+
+
+def dequantize_mxfp4(weight, scale, dtype):
+    "`(..., N, K // 2)` e2m1 pairs packed in `int8` (low nibble first), times their `(..., N, K // 32)` ue8m0 scales"
+    lut = torch.tensor(FP4_VALUES, dtype=torch.float32, device=weight.device)
+    weight = weight.view(torch.uint8)
+    values = torch.stack([lut[(weight & 0xF).int()], lut[(weight >> 4).int()]], dim=-1).flatten(-2)
+    return (values.unflatten(-1, (-1, 32)) * scale.float().unsqueeze(-1)).flatten(-2).to(dtype)
 
 
 def dequantize_convertops(blocks, scales, dtype):

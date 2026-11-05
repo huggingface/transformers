@@ -733,7 +733,6 @@ class FP8Experts(nn.Module):
         scale_fmt: str = "float",
         has_bias: bool = False,
         has_gate: bool = True,
-        expert_dtype: str = "fp8",
     ):
         super().__init__()
 
@@ -753,28 +752,7 @@ class FP8Experts(nn.Module):
         self.swiglu_limit = getattr(config, "swiglu_limit", None)
         self.act_fn = ACT2FN[_first_attr(config, "hidden_activation", "hidden_act")]
         self.limit = getattr(config, "swiglu_limit", None)
-
-        # Expert weight precision is FP8 by default; DeepSeek V4-style models declare
-        # `expert_dtype = "fp4"` for FP4-packed expert weights. FP4 storage:
-        #   - weight is `int8`, K dim halved (2 e2m1 values per byte).
-        #   - per-row SF at gran_k=32 (no block-wise SF; `block_size` ignored).
-        is_fp4 = expert_dtype == "fp4"
-        sf_dtype = _get_ue8m0_dtype() if scale_fmt == "ue8m0" else torch.float32
-        if is_fp4:
-            alloc_kwargs = {
-                "weight_dtype": torch.int8,
-                "sf_dtype": sf_dtype,
-                "weight_k_div": 2,
-                "sf_gran_n": 1,
-                "sf_gran_k": 32,
-            }
-        else:
-            alloc_kwargs = {
-                "weight_dtype": _FP8_DTYPE,
-                "sf_dtype": sf_dtype,
-                "sf_gran_n": block_size[0] if block_size is not None else None,
-                "sf_gran_k": block_size[1] if block_size is not None else None,
-            }
+        alloc_kwargs = self._weight_format(block_size, scale_fmt)
 
         if self.has_gate:
             self.gate_up_proj, self.gate_up_proj_scale_inv = _alloc_expert_proj(
@@ -795,6 +773,15 @@ class FP8Experts(nn.Module):
         if self.activation_scheme == "static":
             self.gate_up_proj_activation_scale = nn.Parameter(torch.ones(self.num_experts, dtype=torch.float32))
             self.down_proj_activation_scale = nn.Parameter(torch.ones(self.num_experts, dtype=torch.float32))
+
+    def _weight_format(self, block_size: tuple[int, int] | None, scale_fmt: str) -> dict:
+        "The `_alloc_expert_proj` kwargs of the expert weights and their scales"
+        return {
+            "weight_dtype": _FP8_DTYPE,
+            "sf_dtype": _get_ue8m0_dtype() if scale_fmt == "ue8m0" else torch.float32,
+            "sf_gran_n": block_size[0] if block_size is not None else None,
+            "sf_gran_k": block_size[1] if block_size is not None else None,
+        }
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)
@@ -932,7 +919,6 @@ def build_fp8_experts(experts, quantization_config, text_config):
         scale_fmt=quantization_config.scale_fmt,
         has_bias=has_bias,
         has_gate=has_gate,
-        expert_dtype=quantization_config.expert_dtype,
     )
 
 
@@ -1066,34 +1052,13 @@ class Fp8Dequantize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
-    # E2M1 (FP4) value table — checkpoints sometimes ship MoE experts as packed FP4
-    # (two e2m1 nibbles per int8 byte), so the "weight" dtype lands as ``int8`` /
-    # ``float4_e2m1fn_x2`` and we have to unpack before applying the scale grid.
-    _FP4_E2M1_LUT = (0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0)
-
-    def _unpack_fp4(self, packed: torch.Tensor) -> torch.Tensor:
-        """Two ``e2m1`` FP4 values per byte → float32 tensor twice as wide on the last dim."""
-        lut = torch.tensor(self._FP4_E2M1_LUT, dtype=torch.float32, device=packed.device)
-        u8 = packed.contiguous().view(torch.uint8)
-        low = (u8 & 0xF).long()
-        high = ((u8 >> 4) & 0xF).long()
-        unpacked = torch.stack([lut[low], lut[high]], dim=-1)
-        return unpacked.reshape(*packed.shape[:-1], 2 * packed.shape[-1])
-
     def _dequantize_one(
         self, quantized: torch.Tensor, scales: torch.Tensor, output_dtype: torch.dtype | None = None
     ) -> torch.Tensor:
-        # FP4 path: int8 / float4_e2m1fn_x2 stores two nibbles per byte. Unpack to fp32
-        # first so the rest of the routine sees a normal (rows, cols) float matrix.
-        fp4_dtype = getattr(torch, "float4_e2m1fn_x2", None)
-        if quantized.dtype == torch.int8 or (fp4_dtype is not None and quantized.dtype == fp4_dtype):
-            quantized_fp32 = self._unpack_fp4(quantized)
-        else:
-            quantized_fp32 = quantized.to(torch.float32)
+        quantized_fp32 = quantized.to(torch.float32)
         rows, cols = quantized_fp32.shape[-2:]
-        # Derive block size from the scale grid rather than the global config: MoE experts
-        # ship MXFP4 with a ``[1, 32]`` block, dense linears ship FP8 with ``[128, 128]``,
-        # and the same dequant has to handle both within one checkpoint.
+        # Derive block size from the scale grid rather than the global config, which a checkpoint's
+        # layers do not always follow.
         try:
             scale_rows, scale_cols = scales.shape[-2:]
         except Exception:

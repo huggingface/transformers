@@ -165,6 +165,21 @@ class Mxfp4HfQuantizer(HfQuantizer):
         **kwargs,
     ):
         from ..integrations import replace_with_mxfp4_linear
+        from ..models.gpt_oss.modeling_gpt_oss import GptOssMLP
+
+        self.text_config = model.config.get_text_config()
+        self.modules_to_not_convert = self.get_modules_to_not_convert(
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
+        )
+        if not any(isinstance(module, GptOssMLP) for module in model.modules()):
+            # `quantized_module` swaps the experts for `Mxfp4Experts`, which run on the FP8 experts' kernels
+            fp8_gpu = torch.cuda.is_available() and torch.cuda.get_device_capability() >= (8, 9)
+            if not (fp8_gpu or torch.xpu.is_available()) and not self.quantization_config.dequantize:
+                logger.warning_once(
+                    "MXFP4 experts need a GPU with compute capability >= 8.9 or an XPU, we will dequantize them."
+                )
+                self.quantization_config.dequantize = True
+            return
 
         # if we are using kernels, we can't use the quantized model, since the forward pass is different and needs special handling
         # only CPU and XPU kernels can work with pre-quantized models
@@ -183,13 +198,20 @@ class Mxfp4HfQuantizer(HfQuantizer):
             )
             self.quantization_config.dequantize = True
 
-        self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
-        )
-
         model = replace_with_mxfp4_linear(
             model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
         )
+
+    def quantized_module(self, name, module):
+        from ..integrations.mxfp4 import Mxfp4GptOssExperts, build_mxfp4_experts
+
+        if isinstance(module, Mxfp4GptOssExperts):
+            return module  # swapped with its MLP by `replace_with_mxfp4_linear`
+        if self.quantization_config.dequantize or not self.pre_quantized or not name.endswith(".experts"):
+            return None
+        new_module = build_mxfp4_experts(module, self.text_config)
+        new_module._hf_quantized_needs_local_tp = True
+        return new_module
 
     def get_state_dict_and_metadata(self, model):
         from ..integrations.mxfp4 import Mxfp4GptOssExperts, Mxfp4ReverseDeserialize
@@ -220,7 +242,13 @@ class Mxfp4HfQuantizer(HfQuantizer):
     serialized_names = {
         "gate_up_proj": ["gate_up_proj_blocks", "gate_up_proj_scales"],
         "down_proj": ["down_proj_blocks", "down_proj_scales"],
+        # `Mxfp4Experts`: the model's converters merge the experts' weights, and their scales
+        "weight": ["weight", "weight_scale_inv"],
     }
+
+    def get_weight_conversions(self):
+        # A `weight` only loads through the model's converters (`update_weight_conversions`)
+        return [c for c in super().get_weight_conversions() if c._original_target_patterns != ["weight"]]
 
     def get_load_operations(self):
         from ..integrations.mxfp4 import Mxfp4Dequantize, Mxfp4Deserialize
