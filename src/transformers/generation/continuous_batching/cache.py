@@ -427,6 +427,23 @@ class PagedAttentionCache:
 
         return key_states, value_states
 
+    def release_memory(self) -> int:
+        """Frees the GPU memory of the cache tensor and returns the number of bytes released. The tensor and every view
+        of it stay valid objects, so nothing has to be rebuilt, but their content is lost: no live request may hold a
+        block, and nothing may read the cache until `restore_memory`."""
+        storage = self.cache_tensor.untyped_storage()
+        released_bytes = storage.nbytes()
+        self._released_address = self.cache_tensor.data_ptr()
+        storage.resize_(0)
+        return released_bytes
+
+    def restore_memory(self) -> bool:
+        """Reallocates the memory freed by `release_memory`, zeroed as at initialization since padding tokens read the
+        trash sectors. Returns whether the cache came back at the same address, which captured CUDA graphs rely on."""
+        self.cache_tensor.untyped_storage().resize_(self.cache_tensor.numel())
+        self.cache_tensor.zero_()
+        return self.cache_tensor.data_ptr() == self._released_address
+
     def reset(self) -> None:
         """Frees the cache of all requests and returns all sectors to the global pool."""
         self.free_all_requests(clear_ledgers=True)
