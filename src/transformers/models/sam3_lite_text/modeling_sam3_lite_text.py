@@ -546,7 +546,7 @@ class Sam3LiteTextImageSegmentationOutput(ModelOutput):
     auxiliary_outputs (`list[Dict]`, *optional*):
         It is a list of dictionaries containing the two above keys (`pred_logits` and
         `pred_boxes` in normalized [cx, cy, w, h] format) for each decoder layer.
-    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` are provided):
         Total loss as a weighted sum of binary cross-entropy (IoU-adaptive), bounding box (L1 and GIoU),
         and mask (focal and dice) losses.
     loss_dict (`Dict`, *optional*):
@@ -2077,6 +2077,8 @@ class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
               format, normalized to [0, 1].
             - 'masks' (`torch.Tensor` of shape `(num_boxes, H, W)`, *optional*): binary instance masks
               for each box. Can be omitted for detection-only training.
+            - 'is_valid_mask' (`torch.BoolTensor` of shape `(num_boxes,)`, *optional*): boolean mask
+              indicating which ground-truth masks are valid. When omitted, all masks are assumed valid.
 
         Example:
 

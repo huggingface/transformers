@@ -22,7 +22,9 @@ from transformers.image_utils import load_image
 from transformers.testing_utils import (
     backend_empty_cache,
     require_deterministic_for_xpu,
+    require_scipy,
     require_torch,
+    require_vision,
     slow,
     torch_device,
 )
@@ -38,6 +40,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
+    from transformers.loss.loss_sam3 import Sam3Loss
     from transformers.models.sam3.configuration_sam3 import (
         Sam3Config,
         Sam3DETRDecoderConfig,
@@ -744,6 +747,8 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     ):
                         raise ValueError("The eager model should not have SDPA attention layers")
 
+    @require_scipy
+    @require_vision
     def test_training(self):
         """Override: Sam3Model IS in MODEL_MAPPING_NAMES so inherited test_training
         skips it. Without this, training is never tested on this model."""
@@ -756,6 +761,8 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loss = model(**inputs).loss
             loss.backward()
 
+    @require_scipy
+    @require_vision
     def test_forward_with_labels(self):
         """Forward with labels produces loss, loss_dict, and flowing gradients."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -775,6 +782,8 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             has_grad = any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.parameters())
             self.assertTrue(has_grad, "No non-zero gradients after backward")
 
+    @require_scipy
+    @require_vision
     def test_auxiliary_loss(self):
         """Aux loss enabled + multilayers produces aux outputs and aux loss keys."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -791,6 +800,145 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertEqual(len(outputs.auxiliary_outputs), 2)
             aux_keys = [k for k in outputs.loss_dict if "aux" in k]
             self.assertGreater(len(aux_keys), 0)
+
+    @require_scipy
+    @require_vision
+    def test_loss_mixed_masks_and_detection_only(self):
+        """Verify loss handling for mixed-mask batches (some samples without masks) and detection-only batches."""
+        config = Sam3Config()
+        loss_fn = Sam3Loss(config)
+
+        b0_boxes = torch.tensor([[0.1, 0.1, 0.4, 0.4], [0.5, 0.5, 0.8, 0.8]])
+        b0_masks = torch.ones(2, 16, 16)
+        b1_boxes = torch.tensor([[0.2, 0.2, 0.6, 0.6]])
+
+        labels_mixed = [
+            {"boxes": b0_boxes, "masks": b0_masks},
+            {"boxes": b1_boxes, "masks": None},
+        ]
+        pred_logits = torch.randn(2, 5, 1, requires_grad=True)
+        pred_boxes = torch.rand(2, 5, 4, requires_grad=True)
+        pred_masks = torch.randn(2, 5, 16, 16, requires_grad=True)
+
+        outputs_mixed = {"pred_logits": pred_logits, "pred_boxes": pred_boxes, "pred_masks": pred_masks}
+        loss_mixed, loss_dict_mixed = loss_fn(outputs_mixed, labels_mixed)
+
+        self.assertGreater(loss_mixed.item(), 0.0)
+        self.assertGreater(loss_dict_mixed["loss_mask"].item(), 0.0)
+        self.assertGreater(loss_dict_mixed["loss_dice"].item(), 0.0)
+
+        loss_mixed.backward()
+        self.assertIsNotNone(pred_logits.grad)
+        self.assertIsNotNone(pred_boxes.grad)
+        self.assertIsNotNone(pred_masks.grad)
+
+        labels_det = [
+            {"boxes": b0_boxes},
+            {"boxes": b1_boxes},
+        ]
+        pred_logits_det = torch.randn(2, 5, 1, requires_grad=True)
+        pred_boxes_det = torch.rand(2, 5, 4, requires_grad=True)
+        pred_masks_det = torch.randn(2, 5, 16, 16, requires_grad=True)
+
+        outputs_det = {"pred_logits": pred_logits_det, "pred_boxes": pred_boxes_det, "pred_masks": pred_masks_det}
+        loss_det, loss_dict_det = loss_fn(outputs_det, labels_det)
+
+        self.assertGreater(loss_det.item(), 0.0)
+        self.assertEqual(loss_dict_det["loss_mask"].item(), 0.0)
+        self.assertEqual(loss_dict_det["loss_dice"].item(), 0.0)
+        self.assertGreater(loss_dict_det["loss_bbox"].item(), 0.0)
+        self.assertGreater(loss_dict_det["loss_giou"].item(), 0.0)
+        self.assertGreater(loss_dict_det["loss_ce"].item(), 0.0)
+
+        loss_det.backward()
+        self.assertIsNotNone(pred_logits_det.grad)
+        self.assertIsNotNone(pred_boxes_det.grad)
+
+    @require_scipy
+    @require_vision
+    def test_loss_dict_matches_reference(self):
+        """Verify that Sam3Loss matches reference loss values from Meta SAM3 original implementation."""
+        config = Sam3Config(
+            auxiliary_loss=False,
+            ce_loss_coefficient=20.0,
+            bbox_loss_coefficient=5.0,
+            giou_loss_coefficient=2.0,
+            mask_loss_coefficient=200.0,
+            dice_loss_coefficient=10.0,
+            ce_pos_weight=10.0,
+            ce_alpha=0.25,
+            ce_gamma=2.0,
+            mask_focal_alpha=0.25,
+            mask_focal_gamma=2.0,
+            matcher_class_cost=2.0,
+            matcher_bbox_cost=5.0,
+            matcher_giou_cost=2.0,
+        )
+        loss_fn = Sam3Loss(config)
+
+        pred_logits = torch.tensor(
+            [[[1.2], [-0.5], [0.1], [-1.0]], [[-0.8], [0.9], [-0.2], [-1.5]]],
+            dtype=torch.float32,
+            requires_grad=True,
+        )
+        pred_boxes = torch.tensor(
+            [
+                [[0.52, 0.48, 0.39, 0.41], [0.22, 0.19, 0.21, 0.18], [0.8, 0.8, 0.2, 0.2], [0.5, 0.5, 0.8, 0.8]],
+                [[0.3, 0.3, 0.3, 0.3], [0.68, 0.72, 0.42, 0.38], [0.1, 0.9, 0.1, 0.1], [0.5, 0.5, 0.2, 0.2]],
+            ],
+            dtype=torch.float32,
+            requires_grad=True,
+        )
+        pred_masks = torch.tensor(
+            [
+                [[[0.8] * 8] * 8, [[-0.5] * 8] * 8, [[0.1] * 8] * 8, [[-1.2] * 8] * 8],
+                [[[-0.3] * 8] * 8, [[1.1] * 8] * 8, [[-0.9] * 8] * 8, [[0.4] * 8] * 8],
+            ],
+            dtype=torch.float32,
+            requires_grad=True,
+        )
+
+        outputs = {
+            "pred_logits": pred_logits,
+            "pred_boxes": pred_boxes,
+            "pred_masks": pred_masks,
+        }
+
+        labels = [
+            {
+                "boxes": torch.tensor([[0.3, 0.3, 0.7, 0.7], [0.1, 0.1, 0.3, 0.3]], dtype=torch.float32),
+                "masks": torch.ones(2, 8, 8, dtype=torch.float32),
+                "is_valid_mask": torch.tensor([True, True]),
+            },
+            {
+                "boxes": torch.tensor([[0.5, 0.5, 0.9, 0.9]], dtype=torch.float32),
+                "masks": torch.ones(1, 8, 8, dtype=torch.float32),
+                "is_valid_mask": torch.tensor([True]),
+            },
+        ]
+
+        total_loss, loss_dict = loss_fn(outputs, labels)
+
+        # Reference from facebookresearch/sam3
+        expected_loss_dict = {
+            "loss_ce": torch.tensor(46.2093773),
+            "loss_bbox": torch.tensor(0.3333333),
+            "loss_giou": torch.tensor(0.4183969),
+            "loss_mask": torch.tensor(7.1833558),
+            "loss_dice": torch.tensor(2.5666299),
+        }
+        expected_total = torch.tensor(56.7110939)
+
+        for k, expected_v in expected_loss_dict.items():
+            self.assertIn(k, loss_dict)
+            torch.testing.assert_close(loss_dict[k], expected_v, atol=1e-5, rtol=1e-5)
+
+        torch.testing.assert_close(total_loss, expected_total, atol=1e-5, rtol=1e-5)
+
+        total_loss.backward()
+        self.assertIsNotNone(pred_logits.grad)
+        self.assertIsNotNone(pred_boxes.grad)
+        self.assertIsNotNone(pred_masks.grad)
 
     def test_forward_with_text_embeds(self):
         """Test that text_embeds parameter works correctly."""
