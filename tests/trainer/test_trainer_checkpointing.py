@@ -454,6 +454,66 @@ class TrainerResumeTrainingTest(TestCasePlus, TrainerIntegrationCommon):
             self.check_trainer_state_are_the_same(state, state1)
 
     @require_torch_up_to_2_accelerators
+    def test_resume_training_with_stateful_dataloader_override(self):
+        # Simulates a stateful/streaming loader that restores its mid-epoch cursor inside
+        # get_resumed_dataloader, then returns without a second skip. With
+        # gradient_accumulation_steps=2, checkpoint-5 means 10 micro-batches into the epoch.
+        # Final weights must match uninterrupted training.
+
+        class AlreadyRestoredDataLoader:
+            """Skips the first num_batches on iteration while preserving __len__."""
+
+            def __init__(self, dataloader, num_batches):
+                self.dataloader = dataloader
+                self.num_batches = num_batches
+
+            def __len__(self):
+                return len(self.dataloader)
+
+            def __iter__(self):
+                it = iter(self.dataloader)
+                for _ in range(self.num_batches):
+                    next(it)
+                yield from it
+
+            def __getattr__(self, name):
+                return getattr(self.dataloader, name)
+
+        args_kwargs = {
+            "gradient_accumulation_steps": 2,
+            "per_device_train_batch_size": 4,
+            "save_steps": 5,
+            "learning_rate": 0.1,
+        }
+        # global_step=5 * gradient_accumulation_steps=2
+        micro_batches_to_skip = 10
+
+        class StatefulLoaderTrainer(Trainer):
+            def get_resumed_dataloader(self, dataloader, num_batches):
+                self.resumed_num_batches.append(num_batches)
+                # Restore once at the resume hook; do not also call skip_first_batches.
+                return AlreadyRestoredDataLoader(dataloader, num_batches)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(output_dir=tmpdir, train_len=128, **args_kwargs)
+            trainer.train()
+            (a, b) = trainer.model.a.item(), trainer.model.b.item()
+            checkpoint = os.path.join(tmpdir, "checkpoint-5")
+
+            args = RegressionTrainingArguments(tmpdir, a=0, b=0, **args_kwargs)
+            trainer = StatefulLoaderTrainer(
+                model=RegressionPreTrainedModel(RegressionModelConfig(a=0, b=0)),
+                args=args,
+                train_dataset=RegressionDataset(length=128),
+            )
+            trainer.model_accepts_loss_kwargs = False
+            trainer.resumed_num_batches = []
+            trainer.train(resume_from_checkpoint=checkpoint)
+            self.assertEqual(trainer.resumed_num_batches, [micro_batches_to_skip])
+            self.assertEqual(trainer.model.a.item(), a)
+            self.assertEqual(trainer.model.b.item(), b)
+
+    @require_torch_up_to_2_accelerators
     def test_resume_training_with_checkpoint(self):
         # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
         # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model

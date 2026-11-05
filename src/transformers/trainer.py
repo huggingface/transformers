@@ -933,6 +933,21 @@ class Trainer:
             is_training=True,
         )
 
+    def get_resumed_dataloader(self, dataloader: DataLoader, num_batches: int) -> DataLoader:
+        """
+        Returns a dataloader that skips the first `num_batches` batches when resuming from a checkpoint mid-epoch.
+
+        By default uses accelerate's `skip_first_batches`. Subclass and override this method if you want to customize
+        the behavior, e.g. for stateful or streaming dataloaders that cannot be skipped this way.
+
+        Args:
+            dataloader (`torch.utils.data.DataLoader`):
+                The training dataloader to skip batches from.
+            num_batches (`int`):
+                The number of batches to skip.
+        """
+        return skip_first_batches(dataloader, num_batches)
+
     def get_eval_dataloader(self, eval_dataset: str | Dataset | None = None) -> DataLoader:
         """
         Returns the evaluation [`~torch.utils.data.DataLoader`].
@@ -1827,7 +1842,7 @@ class Trainer:
         num_update_steps_trained = 0
         if epoch == epochs_trained and resume_from_checkpoint is not None:
             if steps_trained_in_current_epoch > 0 and not self.args.ignore_data_skip:
-                train_dataloader = skip_first_batches(train_dataloader, steps_trained_in_current_epoch)
+                train_dataloader = self.get_resumed_dataloader(train_dataloader, steps_trained_in_current_epoch)
                 step = steps_trained_in_current_epoch - 1
                 num_update_steps_trained = steps_trained_in_current_epoch // self.args.gradient_accumulation_steps
                 rng_to_sync = True
