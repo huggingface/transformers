@@ -4316,8 +4316,14 @@ class PreTrainedModel(
             use_kernels = True
 
         if dummy:
-            if hf_quantizer is not None or gguf_file or state_dict is not None:
-                raise ValueError("`dummy=True` can't be combined with quantization, a GGUF file or a `state_dict`.")
+            if gguf_file or state_dict is not None:
+                raise ValueError("`dummy=True` can't be combined with a GGUF file or a `state_dict`.")
+            if hf_quantizer is not None:
+                # Dummy weights are never quantized: build the model in its unquantized dtype
+                logger.warning_once("`dummy=True` ignores the quantization config: the dummy model is not quantized.")
+                hf_quantizer = None
+                if hasattr(config, "quantization_config"):
+                    del config.quantization_config
             # Only the config is needed: the weights are generated on the fly
             distributed_checkpoint_dir, checkpoint_files, sharded_metadata = None, None, None
         else:
