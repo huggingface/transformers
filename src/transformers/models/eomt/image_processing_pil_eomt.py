@@ -334,8 +334,8 @@ class EomtImageProcessorPil(PilBackend):
                     "resample": PILImageResampling.NEAREST,
                 }
             )
-
-            processed_segmentation_maps, _ = self._preprocess(
+            
+            processed_segmentation_maps, segmentation_patch_offsets = self._preprocess(
                 images=processed_segmentation_maps, **segmentation_maps_kwargs
             )
             processed_segmentation_maps = [
@@ -346,7 +346,14 @@ class EomtImageProcessorPil(PilBackend):
             mask_labels, class_labels = [], []
             for idx, segmentation_map in enumerate(processed_segmentation_maps):
                 if isinstance(instance_id_to_semantic_id, list):
-                    instance_id = instance_id_to_semantic_id[idx]
+                    # instance_id = instance_id_to_semantic_id[idx] # why does it leave? is there a reason? or jsut a bug?
+                    try:
+                        image_idx = segmentation_patch_offsets[idx][0] if segmentation_patch_offsets else idx
+                        instance_id = instance_id_to_semantic_id[image_idx]
+
+                    except Exception as ex:
+                        print('exception occured thanks to you', ex)
+                        instance_id = instance_id_to_semantic_id[idx] # same issue
                 else:
                     instance_id = instance_id_to_semantic_id
                 # Use instance2class_id mapping per image
