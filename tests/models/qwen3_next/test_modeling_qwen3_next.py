@@ -71,6 +71,23 @@ class Qwen3NextModelTester(CausalLMModelTester):
         self.linear_num_value_heads = 8
 
 
+def make_gated_delta_rule_inputs(
+    batch_size, seq_length, num_k_heads, num_v_heads, k_head_dim, v_head_dim, requires_grad=False
+):
+    query = torch.randn(
+        batch_size, seq_length, num_k_heads, k_head_dim, device=torch_device, requires_grad=requires_grad
+    )
+    key = torch.randn(
+        batch_size, seq_length, num_k_heads, k_head_dim, device=torch_device, requires_grad=requires_grad
+    )
+    value = torch.randn(
+        batch_size, seq_length, num_v_heads, v_head_dim, device=torch_device, requires_grad=requires_grad
+    )
+    g = -torch.rand(batch_size, seq_length, num_v_heads, device=torch_device)  # log-decays, must be <= 0
+    beta = torch.rand(batch_size, seq_length, num_v_heads, device=torch_device)
+    return query, key, value, g, beta
+
+
 @require_torch
 class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Qwen3NextModelTester
@@ -298,11 +315,9 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
         """
         torch.manual_seed(0)
         batch_size, num_heads, k_head_dim, v_head_dim = 2, 3, 8, 16
-        query = torch.randn(batch_size, seq_length, num_heads, k_head_dim, device=torch_device)
-        key = torch.randn(batch_size, seq_length, num_heads, k_head_dim, device=torch_device)
-        value = torch.randn(batch_size, seq_length, num_heads, v_head_dim, device=torch_device)
-        g = -torch.rand(batch_size, seq_length, num_heads, device=torch_device)  # log-decays, must be <= 0
-        beta = torch.rand(batch_size, seq_length, num_heads, device=torch_device)
+        query, key, value, g, beta = make_gated_delta_rule_inputs(
+            batch_size, seq_length, num_heads, num_heads, k_head_dim, v_head_dim
+        )
         initial_state = None
         if with_initial_state:
             initial_state = torch.randn(batch_size, num_heads, k_head_dim, v_head_dim, device=torch_device)
@@ -341,11 +356,9 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
         torch.manual_seed(0)
         batch_size, seq_length, num_k_heads, num_v_heads, k_head_dim, v_head_dim = 2, 13, 2, 6, 8, 16
         group_size = num_v_heads // num_k_heads
-        query = torch.randn(batch_size, seq_length, num_k_heads, k_head_dim, device=torch_device, requires_grad=True)
-        key = torch.randn(batch_size, seq_length, num_k_heads, k_head_dim, device=torch_device, requires_grad=True)
-        value = torch.randn(batch_size, seq_length, num_v_heads, v_head_dim, device=torch_device, requires_grad=True)
-        g = -torch.rand(batch_size, seq_length, num_v_heads, device=torch_device)  # log-decays, must be <= 0
-        beta = torch.rand(batch_size, seq_length, num_v_heads, device=torch_device)
+        query, key, value, g, beta = make_gated_delta_rule_inputs(
+            batch_size, seq_length, num_k_heads, num_v_heads, k_head_dim, v_head_dim, requires_grad=True
+        )
         gated_delta_rule = torch_chunk_gated_delta_rule if chunked else torch_recurrent_gated_delta_rule
         # By keyword: FLA's fused recurrent kernel takes `gk` and `gv` between `g` and `beta`
         kwargs = {"g": g, "beta": beta, "output_final_state": True, "use_qk_l2norm_in_kernel": True}
