@@ -46,7 +46,11 @@ class DistributedConfig:
         dp_replicate_size (`int`, *optional*):
             Number of FSDP replicas (HSDP). Parameters are sharded across `fsdp_size` devices and replicated
             `dp_replicate_size` times: gradients are reduce-scattered within a replica, then all-reduced across
-            replicas. Place a replica on each node to keep the sharding traffic on the intra-node links. Defaults to 1.
+            replicas. Defaults to 1. We suggest it for multi-node training: plain FSDP all-gathers parameters and
+            reduce-scatters gradients across all devices at every step, so this traffic goes over the slower
+            inter-node links. Set `dp_replicate_size` to the number of nodes and `fsdp_size * tp_size` to the number
+            of devices per node: the sharding traffic then stays on the fast intra-node links, and only the gradient
+            all-reduce crosses nodes. The cost is more memory per device, since parameters are sharded within a node.
         fsdp_plan (`dict[str, str]`, *optional*):
             FSDP2 sharding plan. Leave as `None` to use the model's predefined `base_model_fsdp_plan` and
             class-level `_fsdp_plan`. Pass a dictionary to override individual rules; unspecified rules are kept.
