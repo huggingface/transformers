@@ -135,7 +135,3 @@ class Emu3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     )
     def test_call_pytorch(self):
         pass
-
-
-if __name__ == "__main__":
-    unittest.main()
