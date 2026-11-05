@@ -36,6 +36,7 @@ if is_torch_available():
         create_chunked_causal_mask,
         create_masks_for_generate,
         create_recurrent_attention_mask,
+        create_sliding_window_causal_mask,
         find_packed_sequence_indices,
     )
 
@@ -70,6 +71,48 @@ EXPECTED_PACKED_MASK = torch.tensor([[[
 
 @require_torch
 class MaskTest(MemoryCleanupMixin, unittest.TestCase):
+    def test_packed_blockwise_overlay_preserves_isolation(self):
+        config = LlamaConfig()
+        config.sliding_window = 4
+        config.attention_chunk_size = 3
+
+        position_ids = torch.tensor([[0, 1, 2, 0, 1, 2]])
+        block_ids = torch.tensor([[0, 0, -1, 0, 0, -1]])
+
+        expected = torch.tensor(
+            [
+                [1, 1, 0, 0, 0, 0],
+                [1, 1, 0, 0, 0, 0],
+                [1, 1, 1, 0, 0, 0],
+                [0, 0, 0, 1, 1, 0],
+                [0, 0, 0, 1, 1, 0],
+                [0, 0, 0, 1, 1, 1],
+            ],
+            dtype=torch.bool,
+        )
+
+        for backend in ("sdpa", "eager"):
+            config._attn_implementation = backend
+
+            for mask_fn in (
+                create_causal_mask,
+                create_sliding_window_causal_mask,
+                create_chunked_causal_mask,
+            ):
+                with self.subTest(backend=backend, mask_fn=mask_fn.__name__):
+                    mask = mask_fn(
+                        config=config,
+                        inputs_embeds=torch.zeros(1, 6, config.hidden_size),
+                        attention_mask=None,
+                        past_key_values=None,
+                        position_ids=position_ids,
+                        block_sequence_ids=block_ids,
+                        allow_is_causal_skip=False,
+                    )
+
+                    allowed = mask[0, 0] if backend == "sdpa" else mask[0, 0] == 0
+                    self.assertTrue(torch.equal(allowed, expected))
+
     def test_packed_sequence_mask_sdpa(self):
         config = LlamaConfig()
         config._attn_implementation = "sdpa"
