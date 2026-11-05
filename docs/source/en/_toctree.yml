@@ -14,8 +14,6 @@
       title: Loading models
     - local: weightconverter
       title: Dynamic weight loading
-    - local: core_model_loading_design_principles
-      title: Core model loading design principles
     - local: backbones
       title: Backbones
     - local: custom_models
