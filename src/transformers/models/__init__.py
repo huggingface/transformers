@@ -74,6 +74,7 @@ if TYPE_CHECKING:
     from .clap import *
     from .clip import *
     from .clipseg import *
+    from .clm import *
     from .clvp import *
     from .code_llama import *
     from .codegen import *
@@ -249,6 +250,7 @@ if TYPE_CHECKING:
     from .janus import *
     from .jetmoe import *
     from .jev import *
+    from .jeva import *
     from .jina_embeddings_v3 import *
     from .kimi_k25 import *
     from .kimi_linear import *

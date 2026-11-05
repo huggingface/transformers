@@ -1,0 +1,540 @@
+# Copyright 2020-2026 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Jeva: System One Models from First Principles
+# Copyright 2026 Qi Li and Xinchao Wang.
+
+import math
+from contextlib import nullcontext
+from dataclasses import dataclass
+
+import torch
+import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
+from torch import nn
+from torch.distributed.nn.functional import all_gather, all_reduce
+
+from ... import initialization as init
+from ...activations import ACT2FN
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...decision import DecisionConfig, DecisionMixin, process_scores, read_marks
+from ...integrations import is_deepspeed_zero3_enabled
+from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, is_peft_available
+from ..auto import AutoConfig, AutoModel
+from ..mixtral.modeling_mixtral import load_balancing_loss_func
+
+
+if is_peft_available():
+    from peft import get_peft_config, get_peft_model
+
+
+JEVA_TEMPLATE = r"""
+{%- macro text(x) %}{{ "" if x is none else x if x is string else x|tojson }}{% endmacro -%}
+{{- (bos_token or "") ~ "Decision type: " ~ question.type ~ "\nQuestion: " ~ text(question.instructions) ~ "\nState:\n" ~ text(state) ~ "<|mark|>" -}}
+{%- for option in question.options -%}
+{%- set description = question.descriptions[loop.index0] -%}
+{{- (bos_token or "") ~ "Option for " ~ question.type ~ ": " ~ text(option ~ ": " ~ text(description) if question.type == "choice" and description is not none else description if description is not none else option) ~ "<|mark|>" -}}
+{%- endfor -%}
+"""
+
+
+@auto_docstring(checkpoint="LIQIIIII/Jeva-4B")
+@strict
+class JevaConfig(PreTrainedConfig):
+    r"""
+    text_config (`PreTrainedConfig` or `dict`, *optional*):
+        Configuration of the shared text encoder. Defaults to a Qwen2 configuration.
+    projection_dim (`int`, *optional*, defaults to `768`):
+        Width of the state and option projections and decision stack.
+    decision_depth (`int`, *optional*, defaults to `1`):
+        Number of state-update blocks.
+    decision_num_heads (`int`, *optional*, defaults to `8`):
+        Number of heads in each decision block.
+    decision_ffn_ratio (`float`, *optional*, defaults to `4.0`):
+        Feed-forward expansion ratio. Set to zero to omit the feed-forward layers.
+    decision_dropout (`float`, *optional*, defaults to `0.0`):
+        Dropout in the decision feed-forward layers.
+    decision_zero_init_ffn (`bool`, *optional*, defaults to `True`):
+        Initialize feed-forward output projections to zero.
+    decision_final_norm (`bool`, *optional*, defaults to `False`):
+        Apply RMS normalization before reading the decision scores.
+    normalize_state (`bool`, *optional*, defaults to `False`):
+        Normalize the initial state representation.
+    pooling (`str`, *optional*, defaults to `"last"`):
+        Encoder pooling: `"last"`, `"mean"`, or `"cls"`.
+    tau_set_init (`float`, *optional*, defaults to `0.15`):
+        Initial state-update attention temperature.
+    tau_dec_init (`float`, *optional*, defaults to `0.1`):
+        Initial candidate-distribution temperature.
+    tau_cov_init (`float`, *optional*, defaults to `0.1`):
+        Initial coverage temperature.
+    alpha_over_tau_init (`float`, *optional*, defaults to `0.6`):
+        Initial ratio controlling the state-update step size.
+    coverage_bias_init (`float`, *optional*, defaults to `0.0`):
+        Initial coverage threshold.
+    min_temperature (`float`, *optional*, defaults to `1e-4`):
+        Lower bound of the learned temperatures.
+    adapter_config (`dict`, *optional*):
+        PEFT configuration for an adapter inside the shared encoder.
+    router_aux_loss_coef (`float`, *optional*, defaults to `0.0`):
+        Weight of the MoE load-balancing loss. Zero disables router-logit collection.
+    """
+
+    model_type = "jeva"
+    sub_configs_defaults = {"text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen2")}
+
+    text_config: dict | PreTrainedConfig | None = None
+    projection_dim: int = 768
+    decision_depth: int = 1
+    decision_num_heads: int = 8
+    decision_ffn_ratio: float = 4.0
+    decision_dropout: float = 0.0
+    decision_zero_init_ffn: bool = True
+    decision_final_norm: bool = False
+    normalize_state: bool = False
+    pooling: str = "last"
+    tau_set_init: float = 0.15
+    tau_dec_init: float = 0.1
+    tau_cov_init: float = 0.1
+    alpha_over_tau_init: float = 0.6
+    coverage_bias_init: float = 0.0
+    min_temperature: float = 1e-4
+    adapter_config: dict | None = None
+    router_aux_loss_coef: float = 0.0
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.text_config, PreTrainedConfig):
+            kwargs.setdefault("attn_implementation", self.text_config._attn_implementation)
+        super().__post_init__(**kwargs)
+        if self.decision_depth < 1 or self.decision_num_heads < 1 or self.projection_dim % self.decision_num_heads:
+            raise ValueError("decision_depth must be positive and decision_num_heads must divide projection_dim")
+        if self.pooling not in {"last", "mean", "cls"}:
+            raise ValueError("pooling must be last, mean, or cls")
+        self.base_model_tp_plan = {
+            f"model.{key}": value for key, value in (self.text_config.base_model_tp_plan or {}).items()
+        }
+        self.base_model_ep_plan = {
+            f"model.{key}": value for key, value in (self.text_config.base_model_ep_plan or {}).items()
+        }
+        if self.adapter_config is not None:
+            self.adapter_config = {
+                key: list(value) if isinstance(value, set) else value for key, value in self.adapter_config.items()
+            }
+
+
+def _log_softmax(logits: torch.Tensor) -> torch.Tensor:
+    logits = logits.float()
+    max_indices = logits.argmax(dim=-1, keepdim=True)
+    shifted_logits = (logits - logits.gather(-1, max_indices)).scatter(-1, max_indices, 0.0)
+    exp_others = shifted_logits.exp().scatter(-1, max_indices, 0.0)
+    return shifted_logits - torch.log1p(exp_others.sum(dim=-1, keepdim=True))
+
+
+class JevaPositiveScalar(nn.Module):
+    def __init__(self, value: float, minimum: float) -> None:
+        super().__init__()
+        self.minimum = minimum
+        self.initial_value = math.log(math.expm1(max(value - minimum, 1e-6)))
+        self.raw = nn.Parameter(torch.tensor([self.initial_value]))
+
+    def forward(self) -> torch.Tensor:
+        return self.minimum + F.softplus(self.raw)
+
+
+class JevaSwiGLU(nn.Module):
+    def __init__(self, config: JevaConfig) -> None:
+        super().__init__()
+        self.hidden_size = config.projection_dim
+        self.intermediate_size = round(self.hidden_size * config.decision_ffn_ratio)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN["silu"]
+        self.dropout = nn.Dropout(config.decision_dropout)
+        self.zero_init_output = config.decision_zero_init_ffn
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
+        return self.dropout(hidden_states)
+
+
+class JevaDecisionBlock(nn.Module):
+    def __init__(self, config: JevaConfig) -> None:
+        super().__init__()
+        self.hidden_size = config.projection_dim
+        self.num_heads = config.decision_num_heads
+        self.head_dim = self.hidden_size // self.num_heads
+        self.depth_scale = 1 / math.sqrt(config.decision_depth)
+        self.q_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+        self.k_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+        self.v_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+        self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+        self.tau_set = JevaPositiveScalar(config.tau_set_init, config.min_temperature)
+        ratio = min(max(config.alpha_over_tau_init, 1e-4), 1 - 1e-4)
+        self.initial_gamma = math.log(ratio / (1 - ratio))
+        self.gamma = nn.Parameter(torch.tensor([self.initial_gamma]))
+        self.ffn_norm = nn.RMSNorm(self.hidden_size, eps=1e-6) if config.decision_ffn_ratio > 0 else None
+        self.ffn = JevaSwiGLU(config) if config.decision_ffn_ratio > 0 else None
+
+    def forward(
+        self, hidden_states: torch.Tensor, option_states: torch.Tensor, option_mask: torch.Tensor
+    ) -> torch.Tensor:
+        residual = hidden_states
+        batch_size, num_options = option_states.shape[:2]
+        key_states = self.k_proj(option_states).reshape(batch_size, num_options, self.num_heads, self.head_dim)
+        value_states = self.v_proj(option_states).reshape(batch_size, num_options, self.num_heads, self.head_dim)
+        key_states = F.normalize(key_states.float(), dim=-1)
+        query_states = self.q_proj(hidden_states).reshape(batch_size, self.num_heads, self.head_dim)
+        query_states = F.normalize(query_states.float(), dim=-1)
+        attn_weights = torch.einsum("bhd,bkhd->bhk", query_states, key_states)
+        attn_weights = _log_softmax(
+            (attn_weights / self.tau_set().float()).masked_fill(~option_mask[:, None], -torch.inf)
+        ).exp()
+        attn_weights = torch.where(option_mask[:, None], attn_weights, torch.zeros_like(attn_weights))
+        attn_output = torch.einsum("bhk,bkhd->bhd", attn_weights, value_states.float())
+        attn_output = attn_output.reshape(batch_size, self.hidden_size)
+        attn_output = self.o_proj(attn_output.to(self.o_proj.weight.dtype)).to(residual.dtype)
+        alpha = self.tau_set() * torch.sigmoid(self.gamma) * self.depth_scale
+        hidden_states = residual + alpha.to(residual.dtype) * attn_output
+        if self.ffn is not None:
+            residual = hidden_states
+            hidden_states = self.ffn_norm(hidden_states.to(self.ffn_norm.weight.dtype))
+            hidden_states = self.ffn(hidden_states).to(residual.dtype)
+            hidden_states = residual + self.depth_scale * hidden_states
+        return hidden_states
+
+
+class JevaDecisionStack(nn.Module):
+    def __init__(self, config: JevaConfig) -> None:
+        super().__init__()
+        self.normalize_initial_state = config.normalize_state
+        self.blocks = nn.ModuleList([JevaDecisionBlock(config) for _ in range(config.decision_depth)])
+        self.final_norm = nn.RMSNorm(config.projection_dim, eps=1e-6) if config.decision_final_norm else nn.Identity()
+        self.tau_dec = JevaPositiveScalar(config.tau_dec_init, config.min_temperature)
+        self.tau_cov = JevaPositiveScalar(config.tau_cov_init, config.min_temperature)
+        self.initial_coverage_bias = config.coverage_bias_init
+        self.coverage_bias = nn.Parameter(torch.tensor([float(config.coverage_bias_init)]))
+
+    def forward(
+        self, hidden_states: torch.Tensor, option_states: torch.Tensor, option_mask: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        option_states = F.normalize(option_states, dim=-1)
+        if self.normalize_initial_state:
+            hidden_states = F.normalize(hidden_states, dim=-1)
+        for block in self.blocks:
+            hidden_states = block(hidden_states, option_states, option_mask)
+        hidden_states = self.final_norm(hidden_states)
+        scores = torch.einsum("bd,bkd->bk", hidden_states.float(), option_states.float())
+        masked_scores = scores.masked_fill(~option_mask, -torch.inf)
+        log_q = _log_softmax((scores / self.tau_dec().float()).masked_fill(~option_mask, -torch.inf))
+        coverage_logit = (masked_scores.max(dim=-1).values - self.coverage_bias.float()) / self.tau_cov().float()
+        return log_q, coverage_logit
+
+
+@auto_docstring
+@dataclass
+class JevaDecisionOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Candidate cross-entropy and, for nullable choices, binary coverage loss, plus the weighted MoE auxiliary loss.
+    logits (`torch.FloatTensor` of shape `(batch_size, max_num_options)`):
+        Conditional candidate log probabilities. Padded options have value `-inf`.
+    coverage_logits (`torch.FloatTensor` of shape `(batch_size,)`):
+        Logits of the probability that one of the supplied options applies.
+    aux_loss (`torch.FloatTensor`, *optional*):
+        Unweighted MoE load-balancing loss.
+    """
+
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    coverage_logits: torch.FloatTensor | None = None
+    aux_loss: torch.FloatTensor | None = None
+
+
+@auto_docstring
+class JevaPreTrainedModel(PreTrainedModel):
+    config: JevaConfig
+    base_model_prefix = "model"
+    _supports_sdpa = _supports_flash_attn = _supports_flex_attn = True
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["JevaDecisionBlock"]
+    _keep_in_fp32_modules = ["context_proj", "option_proj", "core"]
+    _keep_in_fp32_modules_strict = ["context_proj", "option_proj", "core"]
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, nn.Linear):
+            init.kaiming_uniform_(module.weight, a=math.sqrt(5))
+        elif isinstance(module, nn.RMSNorm):
+            init.ones_(module.weight)
+        elif isinstance(module, JevaPositiveScalar):
+            init.constant_(module.raw, module.initial_value)
+        elif isinstance(module, JevaDecisionBlock):
+            for projection in (module.q_proj, module.k_proj, module.v_proj, module.o_proj):
+                init.eye_(projection.weight)
+            init.constant_(module.gamma, module.initial_gamma)
+        elif isinstance(module, JevaSwiGLU) and module.zero_init_output:
+            init.zeros_(module.down_proj.weight)
+        elif isinstance(module, JevaDecisionStack):
+            init.constant_(module.coverage_bias, module.initial_coverage_bias)
+
+
+@auto_docstring(
+    custom_intro="""
+    Jeva encodes the state and each option independently with a shared text model. A matrix decision stack updates the
+    state against its candidate set and returns conditional candidate probabilities and a separate coverage estimate.
+    No language-model vocabulary projection is constructed.
+    """
+)
+class JevaForDecision(DecisionMixin, JevaPreTrainedModel):
+    accepts_loss_kwargs = False
+
+    def __init__(self, config: JevaConfig, model: PreTrainedModel | None = None):
+        r"""
+        model (`PreTrainedModel`, *optional*):
+            An already loaded text encoder. Otherwise, initialize it from `config.text_config`.
+        """
+        super().__init__(config)
+        self.model = model if model is not None else AutoModel.from_config(config.text_config)
+        if config.adapter_config is not None:
+            if not is_peft_available():
+                raise ImportError("Install `peft` to load an encoder adapter")
+            self.model = get_peft_model(self.model, get_peft_config(config.adapter_config))
+        self.context_proj = nn.Linear(config.text_config.hidden_size, config.projection_dim, bias=False)
+        self.option_proj = nn.Linear(config.text_config.hidden_size, config.projection_dim, bias=False)
+        self.core = JevaDecisionStack(config)
+        if is_deepspeed_zero3_enabled():
+            self._keep_in_fp32_modules = []
+            self._keep_in_fp32_modules_strict = []
+            for module in (self.context_proj, self.option_proj, self.core):
+                module.to(dtype=self.model.dtype)
+        self.freeze_backbone = False
+        self.router_aux_loss_coef = config.router_aux_loss_coef
+        self._decision_config = None
+        self.post_init()
+
+    @DecisionMixin.decision_config.getter
+    def decision_config(self):
+        if self._decision_config is None:
+            self._decision_config = DecisionConfig.from_pretrained(self.name_or_path)
+            if self._decision_config.chat_template is None:
+                self._decision_config.chat_template = JEVA_TEMPLATE
+                self._decision_config.labels.setdefault("choice", None)
+                self._decision_config.labels.setdefault("score", None)
+        return self._decision_config
+
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
+
+    def train(self, mode=True):
+        super().train(mode)
+        if self.freeze_backbone:
+            self.model.eval()
+        return self
+
+    def _encode(self, inputs, cp_group=None, loss_mask=None, **kwargs):
+        encoder_inputs = {key: value for key, value in inputs.items() if key != "sequence_lengths"}
+        if self.router_aux_loss_coef:
+            encoder_inputs["output_router_logits"] = True
+        with torch.no_grad() if self.freeze_backbone else nullcontext():
+            kwargs.pop("use_cache", None)
+            outputs = self.model(**encoder_inputs, use_cache=False, return_dict=True, **kwargs)
+        hidden = outputs.last_hidden_state
+        mask = inputs["attention_mask"]
+        positions = inputs.get("position_ids", torch.arange(mask.shape[1], device=mask.device)[None, :])
+        lengths = inputs.get("sequence_lengths", mask.sum(-1))
+        if self.config.pooling == "last":
+            pool_mask = positions == lengths[:, None] - 1
+        elif self.config.pooling == "cls":
+            pool_mask = positions == 0
+        else:
+            pool_mask = mask.bool()
+        pooled = (hidden * pool_mask.unsqueeze(-1).to(hidden.dtype)).sum(1)
+        if cp_group is not None:
+            pooled = all_reduce(pooled, group=cp_group)
+        if self.config.pooling == "mean":
+            pooled = pooled / lengths[:, None].clamp(min=1)
+
+        aux_loss = hidden.new_zeros((), dtype=torch.float32)
+        aux_tokens = mask.sum()
+        if self.router_aux_loss_coef:
+            router_logits = outputs.router_logits
+            aux_mask = mask if loss_mask is None else mask * loss_mask[:, None]
+            if cp_group is not None:
+                router_logits = tuple(torch.cat(all_gather(logits, group=cp_group)) for logits in router_logits)
+                aux_mask = torch.cat(all_gather(aux_mask, group=cp_group))
+            aux_tokens = aux_mask.sum()
+            if aux_tokens > 0:
+                text_config = self.config.get_text_config()
+                aux_loss = load_balancing_loss_func(
+                    router_logits, text_config.num_experts, text_config.num_experts_per_tok, aux_mask
+                )
+            else:
+                aux_loss = sum(logits.sum() for logits in router_logits) * 0.0
+        return pooled, aux_loss, aux_tokens
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor,
+        option_input_ids: torch.LongTensor,
+        num_options: torch.LongTensor,
+        attention_mask: torch.Tensor | None = None,
+        option_attention_mask: torch.Tensor | None = None,
+        option_mask: torch.BoolTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        option_position_ids: torch.LongTensor | None = None,
+        sequence_lengths: torch.LongTensor | None = None,
+        option_sequence_lengths: torch.LongTensor | None = None,
+        option_chunk_size: int | None = None,
+        cp_group=None,
+        labels: torch.FloatTensor | None = None,
+        allow_null: torch.BoolTensor | None = None,
+        num_items_in_batch: torch.Tensor | int | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> JevaDecisionOutput:
+        r"""
+        option_input_ids (`torch.LongTensor` of shape `(total_options, option_sequence_length)`):
+            Token IDs of the options, flattened in decision order.
+        num_options (`torch.LongTensor` of shape `(batch_size,)`):
+            Number of options for each decision.
+        option_attention_mask (`torch.Tensor` of shape `(total_options, option_sequence_length)`, *optional*):
+            Mask of valid option tokens. Both state and option inputs use right padding.
+        option_mask (`torch.BoolTensor` of shape `(batch_size, max_num_options)`, *optional*):
+            Mask of valid options. Defaults to the mask implied by `num_options`.
+        option_position_ids (`torch.LongTensor` of shape `(total_options, option_sequence_length)`, *optional*):
+            Positions of the option tokens.
+        sequence_lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Unsharded state sequence lengths for context-parallel pooling. Defaults to the attention-mask sums.
+        option_sequence_lengths (`torch.LongTensor` of shape `(total_options,)`, *optional*):
+            Unsharded option sequence lengths for context-parallel pooling. Defaults to the option attention-mask sums.
+        option_chunk_size (`int`, *optional*):
+            Number of options encoded in one forward pass. Defaults to all options.
+        cp_group (`torch.distributed.ProcessGroup`, *optional*):
+            Context-parallel group used to reduce pooled encoder states and router statistics.
+        labels (`torch.FloatTensor` of shape `(batch_size, max_num_options + 1)`, *optional*):
+            Target probability distributions, with null mass first and zero mass on padded options.
+        allow_null (`torch.BoolTensor` of shape `(batch_size,)`, *optional*):
+            Whether to train coverage for each decision. Defaults to false for all decisions.
+        num_items_in_batch (`int` or `torch.Tensor`, *optional*):
+            Number of decisions used to normalize the supervised loss. Defaults to the local batch size.
+        """
+        if attention_mask is None:
+            attention_mask = torch.ones_like(input_ids)
+        if option_attention_mask is None:
+            option_attention_mask = torch.ones_like(option_input_ids)
+        if option_mask is None:
+            option_mask = torch.arange(num_options.max(), device=num_options.device)[None] < num_options[:, None]
+        state_inputs = {"input_ids": input_ids, "attention_mask": attention_mask}
+        option_inputs = {"input_ids": option_input_ids, "attention_mask": option_attention_mask}
+        if position_ids is not None:
+            state_inputs["position_ids"] = position_ids
+        if option_position_ids is not None:
+            option_inputs["position_ids"] = option_position_ids
+        if sequence_lengths is not None:
+            state_inputs["sequence_lengths"] = sequence_lengths
+        if option_sequence_lengths is not None:
+            option_inputs["sequence_lengths"] = option_sequence_lengths
+        state, aux_loss, aux_tokens = self._encode(state_inputs, cp_group, **kwargs)
+        weighted_aux_loss = aux_loss * aux_tokens
+        chunk_size = option_chunk_size or option_inputs["input_ids"].shape[0]
+        option_embeddings = []
+        real_options = num_options.sum()
+        for start in range(0, option_inputs["input_ids"].shape[0], chunk_size):
+            chunk = {key: value[start : start + chunk_size] for key, value in option_inputs.items()}
+            loss_mask = (
+                torch.arange(start, start + chunk["input_ids"].shape[0], device=num_options.device) < real_options
+            )
+            embeddings, chunk_aux_loss, chunk_aux_tokens = self._encode(chunk, cp_group, loss_mask, **kwargs)
+            option_embeddings.append(embeddings)
+            weighted_aux_loss = weighted_aux_loss + chunk_aux_loss * chunk_aux_tokens
+            aux_tokens = aux_tokens + chunk_aux_tokens
+        flat_options = torch.cat(option_embeddings)
+        offsets = num_options.cumsum(0) - num_options
+        indices = offsets[:, None] + torch.arange(option_mask.shape[1], device=num_options.device)[None, :]
+        options = flat_options[indices.clamp(max=flat_options.shape[0] - 1)]
+        options = options.masked_fill(~option_mask[:, :, None], 0)
+        with torch.autocast(device_type=state.device.type, enabled=False):
+            log_q, coverage_logit = self.core(
+                self.context_proj(state.to(self.context_proj.weight.dtype)),
+                self.option_proj(options.to(self.option_proj.weight.dtype)),
+                option_mask,
+            )
+        aux_loss = weighted_aux_loss / aux_tokens.clamp(min=1) if self.router_aux_loss_coef else None
+        loss = None
+        if labels is not None:
+            candidates = labels[:, 1:].to(device=log_q.device, dtype=torch.float32)
+            candidate_loss = -(candidates * log_q.masked_fill(~option_mask, 0.0)).sum(-1)
+            coverage = candidates.sum(-1)
+            coverage_loss = coverage * F.softplus(-coverage_logit) + (1 - coverage) * F.softplus(coverage_logit)
+            if allow_null is None:
+                allow_null = torch.zeros_like(coverage, dtype=torch.bool)
+            per_example_loss = candidate_loss + coverage_loss * allow_null.to(log_q.device)
+            normalizer = len(per_example_loss) if num_items_in_batch is None else num_items_in_batch
+            loss = per_example_loss.sum() / normalizer
+            if aux_loss is not None:
+                loss = loss + self.router_aux_loss_coef * aux_loss
+        return JevaDecisionOutput(loss=loss, logits=log_q, coverage_logits=coverage_logit, aux_loss=aux_loss)
+
+    @torch.no_grad()
+    def decide(self, input_ids, decision_questions, decision_config=None, **kwargs):
+        """Return conditional option scores for a question rendered with the Jeva decision template."""
+        decision_config = decision_config or self.decision_config
+        inputs, marks = read_marks({"input_ids": input_ids, **kwargs}, decision_config._sentinel_ids)
+        if len(decision_questions) != 1 or len(marks) != len(decision_questions[0].options) + 1:
+            raise ValueError("Jeva expects one state span followed by one span per option, each ending in <|mark|>")
+        segments = inputs["input_ids"][0].split(torch.diff(marks, prepend=marks.new_zeros(1)).tolist())
+
+        def pad_segments(segments):
+            lengths = torch.tensor([len(segment) for segment in segments], device=self.device)
+            ids = nn.utils.rnn.pad_sequence(
+                [segment.to(self.device) for segment in segments],
+                batch_first=True,
+                padding_value=self.config.text_config.pad_token_id or 0,
+            )
+            mask = torch.arange(ids.shape[1], device=self.device)[None] < lengths[:, None]
+            return {"input_ids": ids, "attention_mask": mask.long()}
+
+        num_options = torch.tensor([len(segments) - 1], device=self.device)
+        state_inputs = pad_segments(segments[:1])
+        option_inputs = pad_segments(segments[1:])
+        output = self(
+            **state_inputs,
+            **{f"option_{key}": value for key, value in option_inputs.items()},
+            num_options=num_options,
+            option_mask=torch.ones(1, num_options.item(), dtype=torch.bool, device=self.device),
+            return_dict=True,
+        )
+        scores = process_scores(decision_config, inputs["input_ids"], marks, decision_questions, [output.logits[0]])
+        if decision_questions[0].allow_null:
+            scores = [
+                torch.cat(
+                    [
+                        F.logsigmoid(-output.coverage_logits),
+                        F.logsigmoid(output.coverage_logits) + _log_softmax(scores[0]),
+                    ]
+                )
+            ]
+        return scores
+
+
+__all__ = ["JevaConfig", "JevaForDecision", "JevaPreTrainedModel"]
