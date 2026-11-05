@@ -24,16 +24,13 @@ from dataclasses import dataclass
 import torch
 from torch import nn
 
-from ...modeling_outputs import MultimodalBaseModelOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple
 from ..auto.modeling_auto import AutoModel
 from .configuration_colmodernvbert import ColModernVBertConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 @auto_docstring
@@ -57,21 +54,16 @@ class ColModernVBertPreTrainedModel(PreTrainedModel):
     """
 )
 @dataclass
-class ColModernVBertForRetrievalOutput(MultimodalBaseModelOutputWithPast):
+class ColModernVBertForRetrievalOutput(BaseModelOutputWithPast):
     r"""
     embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
         The embeddings of the model.
+    image_pooler_output (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        The embeddings of the embedded images from vision backbone.
     """
 
     embeddings: torch.Tensor | None = None
-
-    @property
-    def image_hidden_states(self):
-        logger.warning_once(
-            "`image_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
-        )
-        return self.image_pooler_output
+    image_pooler_output: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -132,7 +124,13 @@ class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
             attention_mask = attention_mask.to(dtype=embeddings.dtype, device=embeddings.device)
             embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
 
-        return ColModernVBertForRetrievalOutput(embeddings=embeddings, **vlm_output)
+        return ColModernVBertForRetrievalOutput(
+            embeddings=embeddings,
+            last_hidden_state=vlm_output.last_hidden_state,
+            hidden_states=vlm_output.hidden_states,
+            attentions=vlm_output.attentions,
+            image_pooler_output=vlm_output.image_pooler_output,
+        )
 
 
 __all__ = ["ColModernVBertForRetrieval", "ColModernVBertPreTrainedModel"]

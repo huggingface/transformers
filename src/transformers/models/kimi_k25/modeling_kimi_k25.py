@@ -54,6 +54,8 @@ logger = logging.get_logger(__name__)
 @auto_docstring
 @dataclass
 class Kimi_K25ModelOutputWithPast(MultimodalBaseModelOutputWithPast):
+    router_logits: tuple[torch.FloatTensor] | None = None
+
     @property
     def image_hidden_states(self):
         logger.warning_once(
@@ -66,6 +68,8 @@ class Kimi_K25ModelOutputWithPast(MultimodalBaseModelOutputWithPast):
 @auto_docstring
 @dataclass
 class Kimi_K25CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
+    router_logits: tuple[torch.FloatTensor] | None = None
+
     @property
     def image_hidden_states(self):
         logger.warning_once(

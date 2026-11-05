@@ -352,7 +352,13 @@ class ColModernVBertForRetrieval(ColPaliForRetrieval):
             attention_mask = attention_mask.to(dtype=embeddings.dtype, device=embeddings.device)
             embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
 
-        return ColModernVBertForRetrievalOutput(embeddings=embeddings, **vlm_output)
+        return ColModernVBertForRetrievalOutput(
+            embeddings=embeddings,
+            last_hidden_state=vlm_output.last_hidden_state,
+            hidden_states=vlm_output.hidden_states,
+            attentions=vlm_output.attentions,
+            image_pooler_output=vlm_output.image_pooler_output,
+        )
 
 
 __all__ = [

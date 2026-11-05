@@ -21,7 +21,7 @@ from torch import nn
 from transformers import AutoModel
 
 from ...backbone_utils import filter_output_hidden_states
-from ...modeling_outputs import MultimodalBaseModelOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -52,21 +52,16 @@ class ColPaliPreTrainedModel(PreTrainedModel):
     """
 )
 @dataclass
-class ColPaliForRetrievalOutput(MultimodalBaseModelOutputWithPast):
+class ColPaliForRetrievalOutput(BaseModelOutputWithPast):
     r"""
     embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
         The embeddings of the model.
+    image_pooler_output (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        The embeddings of the embedded images from vision backbone.
     """
 
     embeddings: torch.Tensor | None = None
-
-    @property
-    def image_hidden_states(self):
-        logger.warning_once(
-            "`image_hidden_states` is deprecated and will return a list of all hidden "
-            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
-        )
-        return self.image_pooler_output
+    image_pooler_output: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -127,7 +122,14 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         if attention_mask is not None:
             embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
 
-        return ColPaliForRetrievalOutput(embeddings=embeddings, **vlm_output)
+        return ColPaliForRetrievalOutput(
+            embeddings=embeddings,
+            last_hidden_state=vlm_output.last_hidden_state,
+            hidden_states=vlm_output.hidden_states,
+            attentions=vlm_output.attentions,
+            past_key_values=vlm_output.past_key_values,
+            image_pooler_output=vlm_output.image_pooler_output,
+        )
 
 
 __all__ = [

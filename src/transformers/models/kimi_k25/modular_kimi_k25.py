@@ -168,11 +168,11 @@ class Kimi_K25Config(PreTrainedConfig):
 
 
 class Kimi_K25ModelOutputWithPast(LlavaModelOutputWithPast):
-    pass
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 class Kimi_K25CausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
-    pass
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 class Kimi_K25VisionPositionEmbeddings(nn.Module):

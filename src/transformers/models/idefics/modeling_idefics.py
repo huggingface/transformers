@@ -954,8 +954,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
             pixel_values = pixel_values.to(dtype=self.dtype, device=device)  # fp16 compatibility
             batch_size, num_images = pixel_values.shape[:2]
             pixel_values = pixel_values.contiguous().view(batch_size * num_images, *pixel_values.shape[2:])
-
-            # Get sequence from the vision encoder
             image_outputs = self.vision_model(
                 pixel_values=pixel_values, interpolate_pos_encoding=interpolate_pos_encoding
             )
@@ -963,9 +961,12 @@ class IdeficsModel(IdeficsPreTrainedModel):
             image_hidden_states = image_outputs.last_hidden_state
 
         elif image_encoder_embeddings is not None:
-            batch_size, num_images, image_seq_len, image_hidden_size = image_encoder_embeddings.size()
+            if image_encoder_embeddings.ndim == 4:
+                batch_size, num_images, image_seq_len, image_hidden_size = image_encoder_embeddings.size()
+                image_encoder_embeddings = image_hidden_states.view(
+                    batch_size * num_images, image_seq_len, image_hidden_size
+                )
             image_hidden_states = image_encoder_embeddings.to(dtype=self.dtype, device=device)
-            image_hidden_states = image_hidden_states.view(batch_size * num_images, image_seq_len, image_hidden_size)
 
         if self.config.use_resampler:
             if perceiver_embeddings is None:
