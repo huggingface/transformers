@@ -267,6 +267,7 @@ if TYPE_CHECKING:
     from .lfm2_moe import *
     from .lfm2_vl import *
     from .lfm3 import *
+    from .lfm3_audio import *
     from .lfm3_vl import *
     from .lightglue import *
     from .lighton_ocr import *

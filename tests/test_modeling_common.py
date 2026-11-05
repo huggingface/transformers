@@ -874,6 +874,7 @@ class ModelTesterMixin(ExportTesterMixin):
             "ZambaModelTest": 5,  # The minimum number to test beyond the initial ["mamba", "mamba", "hybrid"] in `ZambaConfig._layers_block_type`
             "Wav2Vec2BertModelTest": 4,
             "Lfm3ModelTest": 3,  # One layer per operator type: ["full_attention", "sliding_attention", "conv"]
+            "Lfm3AudioCommonTest": 3,  # One language model layer per operator type, as for `Lfm3ModelTest`
         }
         target_num_hidden_layers = exceptional_num_hidden_layers.get(type(self).__name__, 2)
 
@@ -6776,8 +6777,8 @@ def _set_config_rope_params(config: PreTrainedConfig, rope_params: dict) -> bool
     layer_types = getattr(config, "_rope_type_labels", getattr(config, "layer_types", None))
     if layer_types is not None and set(config.rope_parameters.keys()).issubset(layer_types):
         for layer_type in layer_types:
-            # skip NoPE layers if any
-            if config.rope_parameters[layer_type] is None:
+            # skip NoPE layers if any, and labels a config has no layer of (e.g. LFM3's speech encoder)
+            if config.rope_parameters.get(layer_type) is None:
                 continue
             # Don't update gemma4 proportional rope, it is quite special and return `dim // 4` freqs
             if config.rope_parameters[layer_type].get("rope_type") != "proportional":
