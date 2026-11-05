@@ -22,9 +22,9 @@ from transformers.distributed import expert_parallel
 from transformers.distributed.expert_parallel import (
     AllReduceEP,
     AllToAllEP,
+    AutoEP,
     EpDispatchExpertsParallel,
     EPImplementation,
-    EPImplementationInterface,
 )
 from transformers.distributed.parallel_utils import ALL_PARALLEL_STYLES
 from transformers.testing_utils import TestCasePlus, is_expert_parallel_test
@@ -86,29 +86,39 @@ class TestExpertParallelLayer(TestCasePlus):
         it, and experts that launch kernels on raw pointers would read it: the dispatch waits before any experts run."""
         run_distributed(world_size=2, backend="gloo")(_dispatch_hands_experts_the_received_rows)()
 
-    def test_ep_implementations_match_one_process(self):
-        """Every built-in implementation of `ep_dispatch_experts` gives the single-process output and input gradients,
-        and `"auto"` runs the all-reduce on a shared batch at inference and the all-to-all in training."""
-        run_distributed(world_size=2, backend="gloo")(_ep_implementations_match_one_process)()
+    @parameterized.expand(
+        [
+            ("all_to_all", "train"),
+            ("all_to_all", "inference"),
+            ("all_reduce", "train"),
+            ("all_reduce", "inference"),
+            ("auto", "checkpoint"),
+            ("auto", "reentrant_checkpoint"),
+        ]
+    )
+    def test_ep_implementation_matches_one_process(self, ep_implementation, mode):
+        """Each implementation gives the single-process output and input gradients, also under gradient checkpointing,
+        where the reentrant mode runs `"auto"` without gradients first (all-reduce) and recomputes it with them
+        (all-to-all)."""
+        run_distributed(world_size=2, backend="gloo")(_ep_implementation_matches_one_process)(ep_implementation, mode)
 
-    @parameterized.expand([(False,), (True,)])
-    def test_ep_auto_implementation_with_gradient_checkpointing(self, use_reentrant):
-        """Gradient checkpointing keeps the `"auto"` choice and the gradients correct in both checkpoint modes."""
-        run_distributed(world_size=2, backend="gloo")(_ep_gradient_checkpointing_matches_reference)(use_reentrant)
+    def test_auto_ep_picks_all_reduce_only_at_inference_on_a_shared_batch(self):
+        run_distributed(world_size=2, backend="gloo")(_auto_ep_picks_all_reduce_only_at_inference_on_a_shared_batch)()
 
-    def test_ep_implementation_names_a_registered_implementation(self):
-        """`install_forward` runs the implementation registered under `ep_implementation` and refuses an unknown name."""
-        with self.assertRaisesRegex(ValueError, "names no registered implementation"):
+    def test_install_forward_checks_ep_implementation(self):
+        """An unknown name and `"all_reduce"` without a shared batch are refused; a registered implementation runs."""
+        with self.assertRaises(ValueError):
             EpDispatchExpertsParallel().install_forward(_DummyExperts(), None, ep_implementation="fast")
+        with self.assertRaises(ValueError):
+            EpDispatchExpertsParallel().install_forward(
+                _DummyExperts(), self.MockDeviceMesh(2, 0), ep_implementation="all_reduce"
+            )
 
         class Custom(EPImplementation):
-            def __init__(self, experts, ep_mesh, tp_mesh=None):
-                self.experts = experts
-
             def __call__(self, hidden_states, top_k_index, top_k_weights):
                 return hidden_states + 1
 
-        with patch.dict(EPImplementationInterface._global_mapping, {"custom": Custom}):
+        with patch.dict(EpDispatchExpertsParallel.ep_implementations, {"custom": Custom}):
             experts = EpDispatchExpertsParallel().install_forward(_DummyExperts(), None, ep_implementation="custom")
         torch.testing.assert_close(experts(torch.zeros(2, 4), None, torch.ones(2, 1)), torch.ones(2, 4))
 
@@ -134,119 +144,78 @@ def _dispatch_hands_experts_the_received_rows(rank):
     experts(hidden_states, torch.tensor([[0, 3], [1, 2], [2, 1], [3, 0]]), torch.ones(4, 2))
 
 
+def _auto_ep_picks_all_reduce_only_at_inference_on_a_shared_batch(rank):
+    mesh = init_device_mesh("cpu", (2, 1), mesh_dim_names=("ep", "tp"))
+    ep_mesh, single = mesh["ep"], mesh["tp"]
+    for tp_mesh, grad, all_reduce in ((ep_mesh, False, True), (ep_mesh, True, False), (single, False, False)):
+        with (
+            patch.object(AllReduceEP, "__call__") as all_reduce_call,
+            patch.object(AllToAllEP, "__call__") as all_to_all_call,
+            torch.set_grad_enabled(grad),
+        ):
+            AutoEP(_DummyExperts(), ep_mesh, tp_mesh)(None, None, None)
+        assert (all_reduce_call.called, all_to_all_call.called) == (all_reduce, not all_reduce), (tp_mesh, grad)
+
+
 class _ScaledExperts(torch.nn.Module):
-    """Experts that scale their tokens by a per-expert factor, masking the out-of-range id `num_experts`."""
+    """Toy experts: expert `i` multiplies a token by `scales[i]`. The id `num_experts` marks a route to another rank's
+    expert (`AllReduceEP` masks them that way) and adds nothing."""
 
     def __init__(self, scales):
         super().__init__()
-        self.scales = scales
         self.num_experts = len(scales)
+        # one extra scale of 0 for the id `num_experts`
+        self.scales = torch.cat([scales, torch.zeros(1)])
 
     def forward(self, hidden_states, top_k_index, top_k_weights):
-        on_rank = top_k_index < self.num_experts
-        scale = self.scales[top_k_index.clamp(max=self.num_experts - 1)] * on_rank
-        return (hidden_states.unsqueeze(1) * (scale * top_k_weights).unsqueeze(-1)).sum(dim=1)
+        # each expert is a scalar, so a token's output is the token times the weighted sum of its experts' scales
+        factor = (self.scales[top_k_index] * top_k_weights).sum(dim=-1, keepdim=True)
+        return hidden_states * factor
 
 
-_SCALES = torch.tensor([1.0, 2.0, 3.0, 4.0])
-_HIDDEN_STATES = torch.arange(32.0).view(4, 8) / 10
-_TOP_K_INDEX = torch.tensor([[0, 3], [1, 2], [2, 0], [3, 1]])
-_TOP_K_WEIGHTS = torch.tensor([[0.6, 0.4], [0.7, 0.3], [0.5, 0.5], [0.9, 0.1]])
-_GRAD_OUTPUT = torch.linspace(-1, 1, 32).view(4, 8)
+def _ep_implementation_matches_one_process(rank, ep_implementation, mode):
+    """`ep_implementation` on 2 ranks gives the output and input gradients of all 4 experts on one process."""
+    # 4 experts with distinct scales: rank 0 owns experts 0 and 1, rank 1 owns experts 2 and 3
+    scales = torch.tensor([1.0, 2.0, 3.0, 4.0])
+    # 4 tokens, top-2: every token picks one expert on each rank
+    hidden_states = torch.arange(32.0).view(4, 8) / 10
+    top_k_index = torch.tensor([[0, 3], [1, 2], [2, 0], [3, 1]])
+    top_k_weights = torch.tensor([[0.6, 0.4], [0.7, 0.3], [0.5, 0.5], [0.9, 0.1]])
+    grad_output = torch.linspace(-1, 1, 32).view(4, 8)
 
+    def forward(experts, hidden_states, top_k_weights):
+        # squared, so the backward needs the forward's output (under checkpointing, the recomputed one)
+        return experts(hidden_states, top_k_index, top_k_weights).square()
 
-def _ep_experts(rank, ep_implementation):
-    """This rank's half of the experts, on a 2-rank EP group that shares one batch (tp == ep)."""
+    # expected: all 4 experts on one process
+    expected_inputs = [t.clone().requires_grad_() for t in (hidden_states, top_k_weights)]
+    expected = forward(_ScaledExperts(scales), *expected_inputs)
+    expected.backward(grad_output)
+
+    # actual: the same batch through this rank's 2 experts, behind `ep_implementation`. Both ranks hold the batch
+    # (the EP group is the TP group), so every implementation applies.
     mesh = init_device_mesh("cpu", (2,))
-    experts = _ScaledExperts(_SCALES[2 * rank : 2 * rank + 2])
-    return EpDispatchExpertsParallel().install_forward(
-        experts, mesh, tp_mesh=mesh, ep_implementation=ep_implementation
+    experts = EpDispatchExpertsParallel().install_forward(
+        _ScaledExperts(scales[2 * rank : 2 * rank + 2]), mesh, tp_mesh=mesh, ep_implementation=ep_implementation
     )
+    inputs = [t.clone().requires_grad_() for t in (hidden_states, top_k_weights)]
+    if mode == "inference":
+        with torch.no_grad():
+            output = forward(experts, *inputs)
+    elif mode == "train":
+        output = forward(experts, *inputs)
+    elif mode == "checkpoint":
+        output = checkpoint(forward, experts, *inputs, use_reentrant=False)
+    elif mode == "reentrant_checkpoint":
+        output = checkpoint(forward, experts, *inputs, use_reentrant=True)
+
+    torch.testing.assert_close(output, expected)
+    if mode != "inference":
+        output.backward(grad_output)
+        torch.testing.assert_close([t.grad for t in inputs], [t.grad for t in expected_inputs])
 
 
-def _ep_implementations_match_one_process(rank):
-    # the same experts on one process: the expected output and input gradients
-    h_ref, w_ref = _HIDDEN_STATES.clone().requires_grad_(), _TOP_K_WEIGHTS.clone().requires_grad_()
-    expected = _ScaledExperts(_SCALES)(h_ref, _TOP_K_INDEX, w_ref)
-    expected.backward(_GRAD_OUTPUT)
-
-    # an implementation that needs a shared batch refuses an EP group whose ranks hold different batches
-    try:
-        AllReduceEP(_ScaledExperts(_SCALES[:2]), init_device_mesh("cpu", (2,)))
-    except ValueError as error:
-        assert "same batch" in str(error), error
-    else:
-        raise AssertionError("AllReduceEP accepted an EP group without a shared batch")
-
-    exchanged = []
-    all_to_all_dispatch = AllToAllEP.dispatch
-    for ep_implementation, training, exchanges in (
-        ("auto", True, True),
-        ("auto", False, False),
-        ("all_reduce", True, False),
-        ("all_to_all", False, True),
-    ):
-        exchanged.clear()
-        with patch.object(AllToAllEP, "dispatch", lambda *args: exchanged.append(True) or all_to_all_dispatch(*args)):
-            module = _ep_experts(rank, ep_implementation)
-            h, w = _HIDDEN_STATES.clone().requires_grad_(), _TOP_K_WEIGHTS.clone().requires_grad_()
-            with torch.set_grad_enabled(training):
-                output = module(h, _TOP_K_INDEX, w)
-            if training:
-                output.backward(_GRAD_OUTPUT)
-        assert bool(exchanged) == exchanges, (ep_implementation, training, exchanged)
-        torch.testing.assert_close(output, expected.detach())
-        if training:
-            torch.testing.assert_close(h.grad, h_ref.grad)
-            torch.testing.assert_close(w.grad, w_ref.grad)
-
-
-def _ep_gradient_checkpointing_matches_reference(rank, use_reentrant):
-    reference = _ep_experts(rank, "auto")
-    h_ref, w_ref = _HIDDEN_STATES.clone().requires_grad_(), _TOP_K_WEIGHTS.clone().requires_grad_()
-    reference_output = reference(h_ref, _TOP_K_INDEX, w_ref).square()
-    reference_output.backward(_GRAD_OUTPUT)
-
-    all_to_all_calls, all_reduce_calls = [], []
-    all_to_all_dispatch, all_reduce_dispatch = AllToAllEP.dispatch, AllReduceEP.dispatch
-
-    def record_all_to_all(self, *args):
-        all_to_all_calls.append(True)
-        return all_to_all_dispatch(self, *args)
-
-    def record_all_reduce(self, *args):
-        all_reduce_calls.append(True)
-        return all_reduce_dispatch(self, *args)
-
-    with (
-        patch.object(AllToAllEP, "dispatch", record_all_to_all),
-        patch.object(AllReduceEP, "dispatch", record_all_reduce),
-    ):
-        module = _ep_experts(rank, "auto")
-        h, w = _HIDDEN_STATES.clone().requires_grad_(), _TOP_K_WEIGHTS.clone().requires_grad_()
-        output = checkpoint(
-            lambda inputs, indices, weights: module(inputs, indices, weights).square(),
-            h,
-            _TOP_K_INDEX,
-            w,
-            use_reentrant=use_reentrant,
-        )
-        output.backward(_GRAD_OUTPUT)
-
-    # Reentrant checkpointing runs the forward without gradients (all-reduce) and recomputes it with them
-    # (all-to-all); the non-reentrant mode keeps gradients on throughout.
-    if use_reentrant:
-        assert len(all_to_all_calls) == 1
-        assert len(all_reduce_calls) == 1
-    else:
-        assert len(all_to_all_calls) >= 1
-        assert not all_reduce_calls
-    torch.testing.assert_close(output, reference_output.detach())
-    torch.testing.assert_close(h.grad, h_ref.grad)
-    torch.testing.assert_close(w.grad, w_ref.grad)
-
-
-class _MegaMoEExperts(torch.nn.Module):
+class _MegaMoeExperts(torch.nn.Module):
     """Experts that exchange tokens themselves: record what they get and return a per-rank output."""
 
     num_experts = 2
@@ -260,12 +229,14 @@ def _megamoe_hands_experts_a_slice_of_the_shared_batch(rank):
     mesh = init_device_mesh("cpu", (2,))
     layers = [
         EpDispatchExpertsParallel().install_forward(
-            _MegaMoEExperts(), mesh, tp_mesh=mesh, ep_implementation="deepgemm_megamoe"
+            _MegaMoeExperts(), mesh, tp_mesh=mesh, ep_implementation="deepgemm_megamoe"
         )
         for _ in range(2)
     ]
     # 3 tokens on 2 ranks: rank 1 gets the last token and one skipped slot
-    hidden_states, top_k_index, top_k_weights = _HIDDEN_STATES[:3], _TOP_K_INDEX[:3], _TOP_K_WEIGHTS[:3]
+    hidden_states = torch.arange(24.0).view(3, 8) / 10
+    top_k_index = torch.tensor([[0, 3], [1, 2], [2, 0]])
+    top_k_weights = torch.tensor([[0.6, 0.4], [0.7, 0.3], [0.5, 0.5]])
     outputs = [layer(hidden_states, top_k_index, top_k_weights) for layer in layers]
 
     received_hidden, received_index, received_weights, process_group, symm_buffers = layers[0].received
