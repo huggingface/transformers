@@ -852,6 +852,25 @@ def _fix_sym_float(gm, node):
 
 
 @register_fx_node_fix("openvino")
+def _fix_mm_dtype(gm, node):
+    """Rewrite ``aten.mm.dtype`` (``torch.mm(..., out_dtype=...)``, which OV can't convert) as an ``mm`` on its
+    inputs cast to ``out_dtype``, the dtype the CUDA kernel accumulates in."""
+    if node.target is not torch.ops.aten.mm.dtype:
+        return False
+    *matrices, out_dtype = node.args
+    with gm.graph.inserting_before(node):
+        casts = [
+            gm.graph.call_function(torch.ops.aten._to_copy.default, args=(matrix,), kwargs={"dtype": out_dtype})
+            for matrix in matrices
+        ]
+        result = gm.graph.call_function(torch.ops.aten.mm.default, args=tuple(casts))
+        result.meta.update(node.meta)
+    node.replace_all_uses_with(result)
+    gm.graph.erase_node(node)
+    return True
+
+
+@register_fx_node_fix("openvino")
 def _fix_sym_min_max(gm, node):
     """Rewrite ``torch.sym_min``/``torch.sym_max`` to the built-in ``min``/``max``.
 
