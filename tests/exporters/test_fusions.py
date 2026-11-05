@@ -33,6 +33,7 @@ from tests.models.phi3.test_modeling_phi3 import Phi3ModelTester
 from tests.models.qwen2.test_modeling_qwen2 import Qwen2ModelTester
 from tests.models.qwen3.test_modeling_qwen3 import Qwen3ModelTester
 from tests.models.qwen3_moe.test_modeling_qwen3_moe import Qwen3MoeModelTester
+from tests.test_memory_cleanup_mixin import MemoryCleanupMixin
 from transformers import AutoModelForCausalLM, GenerationConfig, LlamaConfig, LlamaForCausalLM, set_seed
 from transformers.testing_utils import require_onnxruntime, require_onnxscript, require_torch, slow
 from transformers.utils import is_torch_available
@@ -85,7 +86,7 @@ def _run(program, feeds):
 @require_torch
 @require_onnxscript
 @require_onnxruntime
-class OnnxRuntimeFusionTest(unittest.TestCase):
+class OnnxRuntimeFusionTest(MemoryCleanupMixin, unittest.TestCase):
     """`OnnxConfig(ort_fusions=...)`: the ONNX Runtime ops of the fused graph, for each provider (building a `"cuda"` or
     `"webgpu"` graph needs no GPU), and on CPU its outputs against the plain export."""
 
@@ -136,6 +137,7 @@ class OnnxRuntimeFusionTest(unittest.TestCase):
                 self.assertEqual(ops["FusedMatMul"], 0, component)
 
     def setUp(self):
+        super().setUp()
         torch.manual_seed(0)
         # GroupQueryAttention only applies rotary itself for head sizes that are multiples of 16.
         config = LlamaConfig(

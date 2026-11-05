@@ -875,6 +875,7 @@ if it's using something else.
 - `grouped_mm` traces fine through `DynamoExporter` and is auto-translated for `OnnxExporter`.
 For `ExecutorchExporter` with either XNNPACK or MLX, the exporter swaps MoE experts to
 `batched_mm` before export.
+- Sliding-window layers (Mistral, Gemma 3) export with a full key-value cache; the sliding mask still applies the window.
 
 ## Next steps
 
