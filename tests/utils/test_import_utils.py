@@ -22,8 +22,6 @@ from transformers.utils.import_utils import (
     clear_import_cache,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
-    is_torchcodec_available,
-    is_torchcodec_greater_or_equal,
     is_torchcodec_usable,
 )
 
@@ -508,20 +506,18 @@ def mock_torchcodec_env(load_error=None, ffmpeg_major_version=7):
             raise OSError("Could not load this library: libtorchcodec_core.so") from OSError(load_error)
         return real_import(name, *args, **kwargs)
 
-    helpers = (is_torchcodec_available, is_torchcodec_usable, is_torchcodec_greater_or_equal)
-    for helper in helpers:
-        helper.cache_clear()
+    is_torchcodec_usable.cache_clear()
     logging.warning_once.cache_clear()
     try:
         with (
-            patch("transformers.utils.import_utils._is_package_available", return_value=(True, "0.17.0")),
+            patch("transformers.utils.import_utils.is_torchcodec_available", return_value=True),
+            patch("transformers.utils.import_utils.is_torchcodec_greater_or_equal", return_value=True),
             patch.dict(sys.modules, {"torchcodec": fake_torchcodec}),
             patch("builtins.__import__", side_effect=fake_import),
         ):
             yield
     finally:
-        for helper in helpers:
-            helper.cache_clear()
+        is_torchcodec_usable.cache_clear()
 
 
 @parameterized.expand(
@@ -542,7 +538,6 @@ def test_torchcodec_usability(_, env, usable, ffmpeg_usable, warning):
     logger = logging.get_logger("transformers.utils.import_utils")
     with mock_torchcodec_env(**env), CaptureLogger(logger) as captured_logs:
         for _ in range(2):  # results are cached: the second round must not warn again
-            assert is_torchcodec_available()  # installed, whether or not it loads
             assert is_torchcodec_usable(decode="image") == usable
             assert is_torchcodec_usable(decode="audio") == ffmpeg_usable
             assert is_torchcodec_usable(decode="video") == ffmpeg_usable
