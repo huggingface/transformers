@@ -126,12 +126,11 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         from ..integrations.finegrained_fp8 import FP8Embedding, build_fp8_experts, build_fp8_linear
 
         config = self.quantization_config
+        if config.dequantize:
+            return None
         modules_to_convert = config.modules_to_convert if self.pre_quantized else None
         if modules_to_convert and type(module) is nn.Embedding and name.endswith(tuple(modules_to_convert)):
-            # Also under `dequantize=True`: a table worth quantizing is one we cannot afford to expand
             new_module = FP8Embedding(module.num_embeddings, module.embedding_dim, module.padding_idx)
-        elif config.dequantize:
-            return None
         elif name.endswith(".experts"):
             new_module = build_fp8_experts(module, config, self.text_config)
         elif isinstance(module, nn.Linear):

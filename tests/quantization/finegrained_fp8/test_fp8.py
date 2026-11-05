@@ -696,6 +696,33 @@ class FP8ModelOptLoadingTest(unittest.TestCase):
             self.assertIs(type(linear), torch.nn.Linear, prefix)
             self.assert_within_one_fp8_step(linear.weight, weight, prefix)
 
+    def test_dequantized_embedding(self):
+        # `dequantize=True` gives a plain model: an FP8 embedding table is dequantized too
+        from safetensors.torch import load_file, save_file
+
+        from transformers import LlamaConfig, LlamaForCausalLM
+
+        config = LlamaConfig(
+            vocab_size=64, hidden_size=256, intermediate_size=384, num_hidden_layers=1, num_attention_heads=4,
+            num_key_value_heads=2,
+        )  # fmt: skip
+        with tempfile.TemporaryDirectory() as tmp:
+            LlamaForCausalLM(config).save_pretrained(tmp)
+            state_dict = load_file(f"{tmp}/model.safetensors")
+            weight = state_dict["model.embed_tokens.weight"]
+            state_dict["model.embed_tokens.weight"], state_dict["model.embed_tokens.weight_scale"] = _modelopt_fp8(
+                weight
+            )
+            save_file(state_dict, f"{tmp}/model.safetensors", metadata={"format": "pt"})
+            config.quantization_config = {"quant_method": "fp8", "modules_to_convert": ["embed_tokens"]}
+            config.save_pretrained(tmp)
+            model, info = AutoModelForCausalLM.from_pretrained(
+                tmp, quantization_config=FineGrainedFP8Config(dequantize=True), output_loading_info=True
+            )
+        self.assertFalse(any(info.values()), info)
+        self.assertIs(type(model.model.embed_tokens), torch.nn.Embedding)
+        self.assert_within_one_fp8_step(model.model.embed_tokens.weight, weight, "embed_tokens")
+
     @patch.object(FineGrainedFP8HfQuantizer, "validate_environment", lambda *args, **kwargs: None)
     def test_quantized(self):
         from transformers.integrations import FP8Linear
