@@ -34,11 +34,7 @@ from ...utils.generic import accepts_precomputed_kwargs, is_flash_attention_requ
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_max_seqlen, get_vision_attention_seqlens, get_vision_position_ids
 from ..auto import AutoConfig, AutoModel
-from ..lfm2_vl.modeling_lfm2_vl import (
-    Lfm2VlForConditionalGeneration,
-    Lfm2VlMultiModalProjector,
-    Lfm2VlPreTrainedModel,
-)
+from ..lfm2_vl.modeling_lfm2_vl import Lfm2VlForConditionalGeneration, Lfm2VlPreTrainedModel
 from ..lfm3.modeling_lfm3 import Lfm3MLP, Lfm3RMSNorm
 from ..llama.modeling_llama import eager_attention_forward
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLModel, Qwen2VLVisionRotaryEmbedding, apply_rotary_pos_emb_vision
@@ -77,11 +73,6 @@ class Lfm3VlVisionConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="LiquidAI/LFM3-VL-2B")
 @strict
 class Lfm3VlConfig(PreTrainedConfig):
-    r"""
-    projector_layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-        The epsilon of the layer normalization applied to the vision features before projection.
-    """
-
     model_type = "lfm3_vl"
     sub_configs_defaults = {
         "vision_config": Lfm3VlVisionConfig,
@@ -97,7 +88,6 @@ class Lfm3VlConfig(PreTrainedConfig):
     projector_hidden_act: str = "gelu"
     projector_hidden_size: int = 4096
     projector_bias: bool = True
-    projector_layer_norm_eps: float = 1e-6
     tie_word_embeddings: bool = True
 
 
@@ -349,12 +339,12 @@ class Lfm3VlVisionModel(Lfm3VlPreTrainedModel):
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 
-class Lfm3VlMultiModalProjector(Lfm2VlMultiModalProjector):
+class Lfm3VlMultiModalProjector(nn.Module):
     """Merges each block of `spatial_merge_size**2` vision tokens, normalized before the merge, into one language token."""
 
     def __init__(self, config: Lfm3VlConfig):
-        nn.Module.__init__(self)
-        self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size, eps=config.projector_layer_norm_eps)
+        super().__init__()
+        self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size, eps=1e-6)
         self.linear_1 = nn.Linear(
             config.vision_config.hidden_size * config.vision_config.spatial_merge_size**2,
             config.projector_hidden_size,
@@ -372,9 +362,6 @@ class Lfm3VlMultiModalProjector(Lfm2VlMultiModalProjector):
         hidden_states = self.linear_2(hidden_states)
         return hidden_states
 
-    def pixel_unshuffle(self, hidden_states: torch.Tensor):
-        raise AttributeError("Not needed for Lfm3Vl")
-
 
 @auto_docstring(
     custom_intro="""
@@ -384,11 +371,6 @@ class Lfm3VlMultiModalProjector(Lfm2VlMultiModalProjector):
 @dataclass
 class Lfm3VlModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
     image_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(num_image_tokens, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.

@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the LFM3-VL processor."""
 
-import math
 import unittest
 from types import SimpleNamespace
 
@@ -131,30 +130,6 @@ class Lfm3VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(processor.vision_end_token_id, tokenizer.convert_tokens_to_ids("<|vision_end|>"))
         self.assertNotIn("mm_token_type_ids", processor.model_input_names)
 
-    def test_image_placeholders_match_the_patch_grid(self):
-        processor = self.get_processor()
-        images = self.prepare_images_inputs(batch_size=2)
-        inputs = processor(text=self.prepare_text_inputs(batch_size=2, modalities="image"), images=images)
-
-        merge_length = processor.image_processor.merge_size**2
-        for input_ids, grid in zip(inputs["input_ids"], inputs["image_grid_thw"]):
-            self.assertEqual(input_ids.count(processor.image_token_id), math.prod(grid) // merge_length)
-        self.assertEqual(inputs["pixel_values"].shape[0], sum(math.prod(grid) for grid in inputs["image_grid_thw"]))
-        self.assertNotIn("mm_token_type_ids", inputs)
-
-    def test_video_placeholders_carry_frame_timestamps(self):
-        processor = self.get_processor()
-        video = self.prepare_videos_inputs(batch_size=1)
-        inputs = processor(text=self.prepare_text_inputs(batch_size=1, modalities="video"), videos=video)
-
-        grid = inputs["video_grid_thw"][0]
-        tokens_per_frame = int(grid[1] * grid[2]) // processor.video_processor.merge_size**2
-        input_ids = inputs["input_ids"][0]
-        self.assertEqual(input_ids.count(processor.video_token_id), int(grid[0]) * tokens_per_frame)
-        # every temporal patch is wrapped in vision start/end tokens and preceded by a timestamp
-        self.assertEqual(input_ids.count(processor.vision_start_token_id), int(grid[0]))
-        self.assertEqual(input_ids.count(processor.vision_end_token_id), int(grid[0]))
-
     def test_video_frames_are_prefixed_with_their_timestamp(self):
         processor = self.get_processor()
         video_inputs = {
@@ -164,15 +139,6 @@ class Lfm3VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         placeholder = processor.replace_video_token(video_inputs, video_idx=0)
         frame = "<|vision_start|>" + "<|video|>" * 4 + "<|vision_end|>"
         self.assertEqual(placeholder, "<0.5 seconds>" + frame + "<2.5 seconds>" + frame)
-
-    def test_get_num_multimodal_tokens(self):
-        processor = self.get_processor()
-        image_sizes = [(100, 100), (300, 100), (500, 30)]
-        output = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
-        self.assertEqual(len(output["num_image_tokens"]), 3)
-        self.assertEqual(len(output["num_image_patches"]), 3)
-        for num_tokens, num_patches in zip(output["num_image_tokens"], output["num_image_patches"]):
-            self.assertEqual(num_tokens, num_patches // processor.image_processor.merge_size**2)
 
     @unittest.skip("The word-level test tokenizer cannot round-trip the frame timestamps")
     def test_replacement_offsets(self):

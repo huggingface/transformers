@@ -425,7 +425,7 @@ class Lfm3VlMultiModalProjector(nn.Module):
 
     def __init__(self, config: Lfm3VlConfig):
         super().__init__()
-        self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size, eps=config.projector_layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size, eps=1e-6)
         self.linear_1 = nn.Linear(
             config.vision_config.hidden_size * config.vision_config.spatial_merge_size**2,
             config.projector_hidden_size,
@@ -452,11 +452,6 @@ class Lfm3VlMultiModalProjector(nn.Module):
 @dataclass
 class Lfm3VlModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
     image_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(num_image_tokens, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.

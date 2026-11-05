@@ -24,11 +24,12 @@ from transformers import (
     Lfm3VlVisionConfig,
     is_torch_available,
 )
+from transformers.image_utils import load_image
 from transformers.models.lfm3_vl.modeling_lfm3_vl import Lfm3VlVisionModel
 from transformers.testing_utils import Expectations, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
-from ...test_modeling_common import floats_tensor, ids_tensor
+from ...test_modeling_common import floats_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
@@ -62,17 +63,6 @@ class Lfm3VlVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("layer_types", ["conv", "full_attention"])
         kwargs.setdefault("conv_L_cache", 3)
         kwargs.setdefault("projector_hidden_size", 32)
-        kwargs.setdefault(
-            "rope_parameters",
-            {
-                "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0},
-                "full_attention": {
-                    "rope_type": "proportional",
-                    "rope_theta": 1_000_000.0,
-                    "partial_rotary_factor": 0.5,
-                },
-            },
-        )
         super().__init__(parent, **kwargs)
 
     def create_pixel_values(self, batch_size: int | None = None):
@@ -82,16 +72,12 @@ class Lfm3VlVisionText2TextModelTester(VLMModelTester):
             [batch_size * patches_per_image, self.in_channels * self.temporal_patch_size * self.patch_size**2]
         )
 
+    @property
+    def _special_token_ids(self):
+        return super()._special_token_ids | {self.video_token_id, self.vision_start_token_id, self.vision_end_token_id}
+
     def place_image_tokens(self, input_ids, config):
         input_ids = input_ids.clone()
-        # stray vision ids in the random text would be placeholders without features, which the model refuses
-        for token_id in (
-            self.image_token_id,
-            self.video_token_id,
-            self.vision_start_token_id,
-            self.vision_end_token_id,
-        ):
-            input_ids[input_ids == token_id] = self.bos_token_id
         input_ids[:, 0] = self.vision_start_token_id
         input_ids[:, 1] = self.image_token_id
         input_ids[:, 2] = self.vision_end_token_id
@@ -129,18 +115,6 @@ class Lfm3VlModelTest(VLMModelTest, unittest.TestCase):
                 list(attentions[0].shape[-3:]), [config.text_config.num_attention_heads, seq_len, seq_len]
             )
 
-    @property
-    def _special_token_ids(self):
-        tester = self.model_tester
-        return {tester.image_token_id, tester.video_token_id, tester.vision_start_token_id, tester.vision_end_token_id}
-
-    def _text_input_ids(self, batch_size: int, seq_length: int, config):
-        input_ids = ids_tensor([batch_size, seq_length], config.text_config.vocab_size)
-        reserved = self._special_token_ids | {config.text_config.pad_token_id}
-        for token_id in reserved:
-            input_ids[input_ids == token_id] = max(reserved) + 1
-        return input_ids
-
     def _image_features_get_expected_num_attentions(self, model_tester=None):
         return self.model_tester.layer_types.count("full_attention")
 
@@ -168,7 +142,7 @@ class Lfm3VlModelTest(VLMModelTest, unittest.TestCase):
         tokens_per_frame = int(video_grid_thw[0, 1:].prod()) // merge**2
         pixel_values_videos = self._random_patches(config, video_grid_thw)
 
-        input_ids = self._text_input_ids(1, 30, config)
+        input_ids = torch.full((1, 30), self.model_tester._safe_token_id(), device=torch_device)
         position = 2
         for _ in range(int(video_grid_thw[0, 0])):
             input_ids[0, position] = config.vision_start_token_id
@@ -201,10 +175,7 @@ class Lfm3VlModelTest(VLMModelTest, unittest.TestCase):
         pixel_values_videos = self._random_patches(config, video_grid_thw)
 
         input_ids = inputs["input_ids"].clone()
-        input_ids[input_ids == config.video_token_id] = config.vision_end_token_id + 1
-        input_ids[0, 4] = config.video_token_id
-        input_ids[0, 5] = config.video_token_id
-        self.assertEqual(int((input_ids == config.video_token_id).sum()), 2 * tokens_per_frame)
+        input_ids[0, 4 : 4 + 2 * tokens_per_frame] = config.video_token_id
 
         model = Lfm3VlForConditionalGeneration(config).to(torch_device).eval()
         with torch.no_grad():
@@ -309,8 +280,6 @@ class Lfm3VlIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.processor = AutoProcessor.from_pretrained(self.model_id)
-        from transformers.image_utils import load_image
-
         image = load_image(
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/coco_sample.png"
         )

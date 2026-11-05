@@ -56,11 +56,6 @@ class Lfm3VlVisionConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="LiquidAI/LFM3-VL-2B")
 @strict
 class Lfm3VlConfig(PreTrainedConfig):
-    r"""
-    projector_layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-        The epsilon of the layer normalization applied to the vision features before projection.
-    """
-
     model_type = "lfm3_vl"
     sub_configs_defaults = {
         "vision_config": Lfm3VlVisionConfig,
@@ -76,7 +71,6 @@ class Lfm3VlConfig(PreTrainedConfig):
     projector_hidden_act: str = "gelu"
     projector_hidden_size: int = 4096
     projector_bias: bool = True
-    projector_layer_norm_eps: float = 1e-6
     tie_word_embeddings: bool = True
 
 
