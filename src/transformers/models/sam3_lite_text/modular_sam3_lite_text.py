@@ -370,7 +370,6 @@ class Sam3LiteTextPreTrainedModel(Sam3PreTrainedModel):
 )
 class Sam3LiteTextTextModel(Sam3LiteTextPreTrainedModel):
     config: Sam3LiteTextTextConfig
-    config: Sam3LiteTextTextConfig
     _can_record_outputs = {
         "hidden_states": Sam3LiteTextTextEncoderLayer,
         "attentions": Sam3LiteTextTextAttention,

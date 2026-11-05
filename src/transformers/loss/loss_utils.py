@@ -28,6 +28,7 @@ from .loss_lw_detr import LwDetrForObjectDetectionLoss
 from .loss_rf_detr import RfDetrForSegmentationLoss
 from .loss_rnnt import ParakeetForRNNTLoss
 from .loss_rt_detr import RTDetrForObjectDetectionLoss
+from .loss_sam3 import Sam3ForObjectDetectionLoss
 from .loss_tdt import ParakeetForTDTLoss
 
 
@@ -203,4 +204,6 @@ LOSS_MAPPING = {
     "ParakeetForTDT": ParakeetForTDTLoss,
     "RfDetrForObjectDetection": LwDetrForObjectDetectionLoss,
     "RfDetrForInstanceSegmentation": RfDetrForSegmentationLoss,
+    "Sam3Model": Sam3ForObjectDetectionLoss,
+    "Sam3LiteTextModel": Sam3ForObjectDetectionLoss,
 }

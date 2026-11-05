@@ -24,7 +24,6 @@ from torch import Tensor
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...loss.loss_sam3 import Sam3Loss
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -190,7 +189,7 @@ class Sam3ImageSegmentationOutput(ModelOutput):
     mask_decoder_attentions (`tuple[torch.Tensor]`, *optional*):
         Attention weights from mask decoder layers.
     auxiliary_outputs (`list[Dict]`, *optional*):
-        It is a list of dictionaries containing the two above keys (`logits` and
+        It is a list of dictionaries containing the two above keys (`pred_logits` and
         `pred_boxes`) for each decoder layer.
     loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
         Total loss as a weighted sum of binary cross-entropy (IoU-adaptive), bounding box (L1 and GIoU),
@@ -2234,8 +2233,6 @@ class Sam3Model(Sam3PreTrainedModel):
         # Dot product scoring to compute classification scores
         self.dot_product_scoring = Sam3DotProductScoring(config)
 
-        self._loss_function = Sam3Loss(config)
-
         self.post_init()
 
     @can_return_tuple
@@ -2338,11 +2335,11 @@ class Sam3Model(Sam3PreTrainedModel):
             Labels for boxes: 1 (positive), 0 (negative).
         labels (`list[dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing the
-        following keys:
-        - 'boxes' (`torch.Tensor` of shape `(num_boxes, 4)`): bounding boxes in (x1, y1, x2, y2)
-          format, normalized to [0, 1].
-        - 'masks' (`torch.Tensor` of shape `(num_boxes, H, W)`, *optional*): binary instance masks
-          for each box. Can be omitted for detection-only training.
+            following keys:
+            - 'boxes' (`torch.Tensor` of shape `(num_boxes, 4)`): bounding boxes in (x1, y1, x2, y2)
+              format, normalized to [0, 1].
+            - 'masks' (`torch.Tensor` of shape `(num_boxes, H, W)`, *optional*): binary instance masks
+              for each box. Can be omitted for detection-only training.
 
         Example:
 
@@ -2495,25 +2492,28 @@ class Sam3Model(Sam3PreTrainedModel):
             **kwargs,
         )
 
-        auxiliary_outputs = [
-            {
-                "pred_logits": all_pred_logits[i],
-                "pred_boxes": all_pred_boxes_cxcywh[i],
-                "pred_masks": None,
-            }
-            for i in range(len(all_pred_logits) - 1)
-        ]
+        auxiliary_outputs = None
+        if self.config.auxiliary_loss:
+            auxiliary_outputs = [
+                {
+                    "pred_logits": all_pred_logits[i],
+                    "pred_boxes": all_pred_boxes_cxcywh[i],
+                    "pred_masks": None,
+                }
+                for i in range(len(all_pred_logits) - 1)
+            ]
+
         loss, loss_dict = None, None
 
         if labels is not None:
-            loss, loss_dict = self.loss_function(
-                outputs={
-                    "pred_logits": all_pred_logits[-1],
-                    "pred_boxes": all_pred_boxes_cxcywh[-1],
-                    "pred_masks": mask_outputs.pred_masks,
-                    "auxiliary_outputs": auxiliary_outputs,
-                },
-                targets=labels,
+            loss, loss_dict, auxiliary_outputs = self.loss_function(
+                logits=pred_logits,
+                labels=labels,
+                device=self.device,
+                pred_boxes=all_pred_boxes_cxcywh[-1],
+                pred_masks=mask_outputs.pred_masks,
+                config=self.config,
+                auxiliary_outputs=auxiliary_outputs,
             )
 
         return Sam3ImageSegmentationOutput(

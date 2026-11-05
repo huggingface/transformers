@@ -412,3 +412,32 @@ class Sam3Loss(nn.Module):
 
         total_loss = sum(loss_dict.values())
         return total_loss, loss_dict
+
+
+def Sam3ForObjectDetectionLoss(
+    logits: torch.Tensor,
+    labels: list[dict[str, torch.Tensor]],
+    device: torch.device | str | None = None,
+    pred_boxes: torch.Tensor | None = None,
+    pred_masks: torch.Tensor | None = None,
+    config=None,
+    auxiliary_outputs: list[dict[str, torch.Tensor]] | None = None,
+    **kwargs,
+) -> tuple[torch.Tensor, dict[str, torch.Tensor], list[dict[str, torch.Tensor]] | None]:
+    if device is None and logits is not None:
+        device = logits.device
+
+    criterion = Sam3Loss(config)
+    if device is not None:
+        criterion.to(device)
+
+    outputs = {
+        "pred_logits": logits,
+        "pred_boxes": pred_boxes,
+        "pred_masks": pred_masks,
+    }
+    if auxiliary_outputs is not None:
+        outputs["auxiliary_outputs"] = auxiliary_outputs
+
+    loss, loss_dict = criterion(outputs, labels)
+    return loss, loss_dict, auxiliary_outputs
