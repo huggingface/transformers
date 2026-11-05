@@ -88,6 +88,7 @@ PRIVATE_MODELS = [
     "Qwen2VisionTransformerPretrainedModel",
     "Qwen2_5_VisionTransformerPretrainedModel",
     "Qwen3VLVisionModel",
+    "Lfm3VlVisionModel",
     "Qwen3VLMoeVisionModel",
     "Qwen3_5VisionModel",
     "Qwen3_5MoeVisionModel",
