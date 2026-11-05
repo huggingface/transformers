@@ -137,14 +137,16 @@ class OnnxExporter(DynamoExporter):
             raise TypeError(f"Expected config to be an OnnxConfig or dict, got {type(config)}")
 
         quantizer = config.quantizer
-        fusions = config.ort_fusions and config.optimize and (quantizer is None or not quantizer.quantizes_fx_graph)
+        ort_fusions = (
+            config.ort_fusions if config.optimize and (quantizer is None or not quantizer.quantizes_fx_graph) else None
+        )
 
-        if fusions:
-            prepare_for_ort_fusions(model, config.ort_fusions)
+        if ort_fusions:
+            prepare_for_ort_fusions(model, ort_fusions)
 
         with (
-            patch_model_outputs(model) as (inputs_names, outputs_names),
             apply_patches("onnx"),
+            patch_model_outputs(model) as (inputs_names, outputs_names),
         ):
             exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
             inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
@@ -162,8 +164,8 @@ class OnnxExporter(DynamoExporter):
 
         apply_onnx_ir_fixes(onnx_program)
 
-        if fusions:
-            fuse_for_onnxruntime(onnx_program.model, ort_fusions=config.ort_fusions, original_model=model)
+        if ort_fusions:
+            fuse_for_onnxruntime(onnx_program.model, ort_fusions=ort_fusions, original_model=model)
 
         if quantizer is not None and not quantizer.quantizes_fx_graph:
             onnx_program.model = quantizer.quantize(onnx_program.model, sample_inputs, config.export_format)
