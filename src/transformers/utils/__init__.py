@@ -254,7 +254,6 @@ from .import_utils import (
     is_torchao_available,
     is_torchaudio_available,
     is_torchcodec_available,
-    is_torchcodec_ffmpeg_usable,
     is_torchcodec_greater_or_equal,
     is_torchcodec_usable,
     is_torchdistx_available,

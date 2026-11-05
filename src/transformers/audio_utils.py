@@ -34,8 +34,8 @@ from .utils import (
     is_soundfile_available,
     is_torch_tensor,
     is_torchaudio_available,
-    is_torchcodec_ffmpeg_usable,
     is_torchcodec_greater_or_equal,
+    is_torchcodec_usable,
     requires_backends,
 )
 from .utils.generic import retry
@@ -229,7 +229,9 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None, backe
     # torchcodec handles audio/video; librosa only plain audio. `backend` lets callers pin one.
     if backend == "auto":
         resolved_backend = (
-            "torchcodec" if is_torchcodec_greater_or_equal("0.3.0") and is_torchcodec_ffmpeg_usable() else "librosa"
+            "torchcodec"
+            if is_torchcodec_greater_or_equal("0.3.0") and is_torchcodec_usable(decode="audio")
+            else "librosa"
         )
     elif backend in ("torchcodec", "librosa", "torchaudio"):
         resolved_backend = backend

@@ -34,7 +34,7 @@ from enum import Enum
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import packaging.version
 from packaging import version
@@ -1200,15 +1200,24 @@ def is_torchcodec_available() -> bool:
 
 @lru_cache
 @_make_compile_constant
-def is_torchcodec_usable() -> bool:
+def is_torchcodec_usable(decode: Literal["image", "audio", "video"]) -> bool:
     """
-    Whether torchcodec is installed *and* loads (its native libraries must match the installed torch, which pip doesn't
-    enforce). Enough for image decoding; audio and video also need FFmpeg, see `is_torchcodec_ffmpeg_usable`.
+    Checks if torchcodec can decode the given modality: its native libraries must load (they must match the installed
+    torch, which pip doesn't enforce) and, for audio and video, it must have found FFmpeg.
+
+    Only use it when transformers picks torchcodec as a default backend (e.g. `load_audio(backend="auto")`), so a
+    broken install falls back to another backend instead of failing users who never asked for torchcodec. When
+    torchcodec is explicitly requested, import it directly to surface its own error.
+
+    Args:
+        decode (`str`):
+            The modality to decode, one of `"image"`, `"audio"` or `"video"`.
     """
     if not is_torchcodec_available():
         return False
+
     try:
-        import torchcodec  # noqa: F401
+        import torchcodec
     except Exception as error:
         while error.__cause__ is not None:  # "Could not load this library" hides the missing library / symbol
             error = error.__cause__
@@ -1218,22 +1227,10 @@ def is_torchcodec_usable() -> bool:
             "https://github.com/meta-pytorch/torchcodec#installing-torchcodec."
         )
         return False
-    return True
 
-
-@lru_cache
-@_make_compile_constant
-def is_torchcodec_ffmpeg_usable() -> bool:
-    """
-    Whether torchcodec is usable (see `is_torchcodec_usable`) *and* found FFmpeg, i.e. can decode audio and video.
-    """
-    if not is_torchcodec_usable():
-        return False
-    import torchcodec
-
-    # Since 0.16, torchcodec imports even when its FFmpeg-based core library fails to load (its image decoders don't
-    # need it) and sets `ffmpeg_major_version` to None. Older versions fail to import instead.
-    if getattr(torchcodec, "ffmpeg_major_version", True) is None:
+    # Since 0.16, torchcodec imports even when FFmpeg can't be loaded (its image decoders don't need it) and sets
+    # `ffmpeg_major_version` to None. Older versions fail to import instead.
+    if decode != "image" and is_torchcodec_greater_or_equal("0.16") and torchcodec.ffmpeg_major_version is None:
         logger.warning_once(
             "torchcodec loaded but could not load FFmpeg, so it will not be used to decode audio or video. Install a "
             "supported FFmpeg: https://github.com/meta-pytorch/torchcodec#installing-torchcodec."

@@ -36,7 +36,7 @@ from .utils import (
     auto_docstring,
     copy_func,
     is_torch_available,
-    is_torchcodec_ffmpeg_usable,
+    is_torchcodec_usable,
     is_torchvision_v2_available,
     is_vision_available,
     logging,
@@ -564,7 +564,7 @@ class VideoProcessorMixin(BaseImageProcessor):
         returned.
         """
         backend = "torchcodec"
-        if not is_torchcodec_ffmpeg_usable():
+        if not is_torchcodec_usable(decode="video"):
             # `torchvision` is only a valid fallback while it still ships the (now removed) video decoding API.
             if not is_torchvision_video_decoding_available():
                 raise ImportError(

@@ -536,7 +536,7 @@ def load_image_as_tensor(
     """
     import torch
 
-    if is_torchcodec_greater_or_equal("0.16.0") and is_torchcodec_usable():
+    if is_torchcodec_greater_or_equal("0.16.0") and is_torchcodec_usable(decode="image"):
         # Try with torchcodec first and warn only if torchvision is used
         from torchcodec.decoders import ImageReadMode, decode_image
     else:
