@@ -1507,11 +1507,25 @@ class Trainer:
             gc_kwargs = dict(args.activation_checkpointing_kwargs or {})
             every_n_layers = gc_kwargs.pop("every_n_layers", 1)
             offload = gc_kwargs.pop("offload", False)
-            self.model.activation_checkpointing_enable(
-                activation_checkpointing_kwargs=gc_kwargs or None,
-                every_n_layers=every_n_layers,
-                offload=offload,
-            )
+            if hasattr(self.model, "activation_checkpointing_enable"):
+                self.model.activation_checkpointing_enable(
+                    activation_checkpointing_kwargs=gc_kwargs or None,
+                    every_n_layers=every_n_layers,
+                    offload=offload,
+                )
+            else:
+                # Models outside `PreTrainedModel` that only define the deprecated `gradient_checkpointing_enable`
+                # (e.g. sentence-transformers) keep working until v6. Remove the fallback in v6.
+                warnings.warn(
+                    f"`{type(self.model).__name__}` only defines `gradient_checkpointing_enable`, which is deprecated "
+                    "and will no longer be called in v6. Define `activation_checkpointing_enable` instead.",
+                    FutureWarning,
+                )
+                self.model.gradient_checkpointing_enable(
+                    gradient_checkpointing_kwargs=gc_kwargs or None,
+                    every_n_layers=every_n_layers,
+                    offload=offload,
+                )
 
         # If the model uses a tokenizer, it may have a new tokens for fine-tuning purposes.
         if isinstance(self.processing_class, (PreTrainedTokenizerBase, ProcessorMixin)) and hasattr(

@@ -57,8 +57,8 @@ from .utils import (
     direct_transformers_import,
     hf_api,
     is_torch_available,
-    is_torchcodec_available,
     is_torchcodec_greater_or_equal,
+    is_torchcodec_usable,
     list_repo_templates,
     logging,
     resolve_revision,
@@ -77,9 +77,6 @@ from .utils.type_validators import (
 )
 from .video_utils import VideoInput, VideoMetadataType, make_batched_videos
 
-
-if is_torchcodec_available():
-    import torchcodec
 
 if is_torch_available():
     import torch
@@ -2570,8 +2567,12 @@ class OmniModalProcessorMixin(ProcessorMixin):
                 f"`audio_from_video_indices` has {audio_from_video_indices.count(None)} standalone slots but {len(audio)} audio inputs."
             )
 
-        if not is_torchcodec_greater_or_equal("0.17"):
-            raise ValueError("Loading audio track from video file requires torchcodec>=0.17 installed!")
+        if not (is_torchcodec_greater_or_equal("0.17") and is_torchcodec_usable(decode="audio")):
+            raise ImportError(
+                "`load_audio_from_video=True` requires torchcodec>=0.17 with FFmpeg. See "
+                "https://github.com/meta-pytorch/torchcodec#installing-torchcodec."
+            )
+        from torchcodec.decoders import get_container_metadata
 
         standalone_audio = iter(audio)
         audio_resolved = []
@@ -2584,7 +2585,7 @@ class OmniModalProcessorMixin(ProcessorMixin):
 
             # Only `torchcodec` can decode audio track from all types of video file formats
             # Don't raise a load-error if video is silent and instead skip it
-            cont_metadata = torchcodec.decoders.get_container_metadata(videos[video_idx])
+            cont_metadata = get_container_metadata(videos[video_idx])
             if not any(stream.media_type == "audio" for stream in cont_metadata.streams):
                 continue
 
@@ -2714,6 +2715,7 @@ def prepare_prompt_input(
     inputs: str | list[str] | None,
     batch_size: int,
     input_name: str = "inputs",
+    broadcast: bool = True,
 ) -> list[str | None]:
     """
     Normalize a string, list of strings, or ``None`` into a list of length ``batch_size``.
@@ -2726,6 +2728,9 @@ def prepare_prompt_input(
             Expected length of the output list.
         input_name (`str`, *optional*, defaults to `"inputs"`):
             Name used in error messages to identify the argument.
+        broadcast (`bool`, *optional*, defaults to `True`):
+            Whether a single string is broadcast to all batch items. If `False`, it is treated as a list of one item,
+            so it is only valid for a batch of one (e.g. a target transcription, which is specific to each audio).
 
     Returns:
         `list[str | None]`: A list of length ``batch_size``.
@@ -2733,7 +2738,9 @@ def prepare_prompt_input(
     if inputs is None:
         return [None] * batch_size
     if isinstance(inputs, str):
-        return [inputs] * batch_size
+        if broadcast:
+            return [inputs] * batch_size
+        inputs = [inputs]
     if isinstance(inputs, (list, tuple)):
         if len(inputs) != batch_size:
             raise ValueError(

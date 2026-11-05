@@ -201,7 +201,9 @@ def apply_fully_sharded_data_parallelism(
                 module.set_gradient_divide_factor(float(distributed_config.fsdp_size))
                 # FSDP2 applies a divide factor other than the group size through PREMUL_SUM, which non-NCCL backends
                 # reject and NCCL zeroes in bfloat16 up to torch 2.13 (pytorch/pytorch#190747): sum, divide locally.
-                module.set_force_sum_reduction_for_comms(True)
+                if distributed_config.efsdp_size > 1:
+                    # No reduce-scatter if efsdp_size == 1: FSDP2 already divides, so a forced sum would divide twice.
+                    module.set_force_sum_reduction_for_comms(True)
 
     reshard_targets, no_reshard_targets = [], []
     for name, style in fsdp_plan.items():

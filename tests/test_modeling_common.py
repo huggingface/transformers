@@ -873,6 +873,7 @@ class ModelTesterMixin(ExportTesterMixin):
             "BeitModelTest": 4,  # BeitForSemanticSegmentation requires config.out_indices to be a list of 4 integers
             "ZambaModelTest": 5,  # The minimum number to test beyond the initial ["mamba", "mamba", "hybrid"] in `ZambaConfig._layers_block_type`
             "Wav2Vec2BertModelTest": 4,
+            "Lfm3ModelTest": 3,  # One layer per operator type: ["full_attention", "sliding_attention", "conv"]
         }
         target_num_hidden_layers = exceptional_num_hidden_layers.get(type(self).__name__, 2)
 
@@ -4577,14 +4578,19 @@ class ModelTesterMixin(ExportTesterMixin):
 
             # 3d rope also depends on the head dim
             # (we assume easy shapes here where we get to the requested head dim at least)
-            if (
-                getattr(config, "rope_parameters", None) is not None
-                and len(config.rope_parameters.get("mrope_section", [])) > 0
-            ):
-                scaling_factor = max(requested_dim // (sum(config.rope_parameters["mrope_section"]) * 2), 1)
-                config.rope_parameters["mrope_section"] = [
-                    section * scaling_factor for section in config.rope_parameters["mrope_section"]
-                ]
+            rope_parameters = config._getattr_without_heterogeneous_validation("rope_parameters", None)
+            if rope_parameters is not None:
+                rope_configs = (
+                    [rope_parameters]
+                    if "mrope_section" in rope_parameters
+                    else [params for params in rope_parameters.values() if isinstance(params, dict)]
+                )
+
+                for rope_config in rope_configs:
+                    sections = rope_config.get("mrope_section", [])
+                    if sections:
+                        scaling_factor = max(requested_dim // (sum(sections) * 2), 1)
+                        rope_config["mrope_section"] = [section * scaling_factor for section in sections]
 
         def update_config_headdim_recursive(config, requested_dim):
             # Needs to recurse since we have some models with 3-level nesting
@@ -6766,7 +6772,7 @@ def _set_config_rope_params(config: PreTrainedConfig, rope_params: dict) -> bool
     config.rope_parameters = copy.deepcopy(getattr(config, "rope_parameters", {}) or {})
 
     # Nested rope parameters per layer type, not all models with `layer-types` use different RoPE thus we check `issubset`
-    # Deepseekv4 has `layer_types` which are different from `_rope_type_labels`
+    # `_rope_type_labels` names the RoPE entries when they differ from `layer_types` (e.g. DeepSeek-V4, LFM3)
     layer_types = getattr(config, "_rope_type_labels", getattr(config, "layer_types", None))
     if layer_types is not None and set(config.rope_parameters.keys()).issubset(layer_types):
         for layer_type in layer_types:
