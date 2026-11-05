@@ -334,6 +334,7 @@ class Inkling2ShortConvolution(InklingShortConvolution):
                 hidden_states = hidden_states[:, :, -seq_len:]
 
         hidden_states = hidden_states.transpose(1, 2)
+        # Different from Inkling which has no output scale
         hidden_states = (hidden_states + residual) / math.sqrt(self.conv_kernel_size + 1)
         return hidden_states.to(dtype=input_dtype)
 
