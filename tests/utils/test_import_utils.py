@@ -541,7 +541,7 @@ def mock_torchcodec_env(load_error=None, ffmpeg_major_version=7):
 def test_torchcodec_usability(_, env, usable, ffmpeg_usable, warning):
     logger = logging.get_logger("transformers.utils.import_utils")
     with mock_torchcodec_env(**env), CaptureLogger(logger) as captured_logs:
-        for _call in range(2):  # results are cached: the second round must not warn again
+        for _ in range(2):  # results are cached: the second round must not warn again
             assert is_torchcodec_available()  # installed, whether or not it loads
             assert is_torchcodec_usable(decode="image") == usable
             assert is_torchcodec_usable(decode="audio") == ffmpeg_usable
