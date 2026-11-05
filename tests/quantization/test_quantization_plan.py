@@ -149,7 +149,10 @@ class QuantizationPlanTest(unittest.TestCase):
                 {"mtp.layers.0*": None, "mtp*": None} | dict.fromkeys(list(QWEN["quantized_layers"])[:2], fp8_static),
             ),
             (DEEPSEEK, dict.fromkeys(DEEPSEEK["quantized_layers"], NVFP4Config())),
-            (MISTRAL, dict.fromkeys(list(MISTRAL["quantized_layers"])[:2], FineGrainedFP8Config())),
+            (
+                MISTRAL,
+                dict.fromkeys(list(MISTRAL["quantized_layers"])[:2], FineGrainedFP8Config(activation_scheme="none")),
+            ),
         ]:
             hf_quantizer, config = self.plan_from_config(saved)
             # Each layer keeps its own config, one quantizer per distinct config
