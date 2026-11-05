@@ -274,43 +274,49 @@ class Bnb4BitTest(Base4bitTest):
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
-    def _load_dequantized(self):
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            self.model_4bit.save_pretrained(tmpdirname)
-            return AutoModelForCausalLM.from_pretrained(
-                tmpdirname,
-                quantization_config=BitsAndBytesConfig(load_in_4bit=True, dequantize=True),
-                device_map="auto",
-            )
-
     def test_generate_quality_dequantize(self):
         r"""
-        Test that loading a 4-bit checkpoint with `dequantize=True` produce correct results
+        Test that loading the model and unquantize it produce correct results
         """
-        model = self._load_dequantized()
+        bnb_config = BitsAndBytesConfig(load_in_4bit=True)
+        model_4bit = AutoModelForCausalLM.from_pretrained(
+            self.model_name, quantization_config=bnb_config, device_map="auto"
+        )
+
+        model_4bit.dequantize()
+
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
-        output_sequences = model.generate(input_ids=encoded_input["input_ids"].to(model.device), max_new_tokens=10)
+        output_sequences = model_4bit.generate(
+            input_ids=encoded_input["input_ids"].to(model_4bit.device), max_new_tokens=10
+        )
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     def test_clear_quantization_trace(self):
         r"""
-        Test that loading with `dequantize=True` won't leave any attribute relative to quantization in the model
+        Test that dequantizing the model won't leave any attribute relative to quantization in the model's configuration
         """
-        model = self._load_dequantized()
+        bnb_config = BitsAndBytesConfig(load_in_4bit=True)
+        model_4bit = AutoModelForCausalLM.from_pretrained(
+            self.model_name, quantization_config=bnb_config, device_map="auto"
+        )
+        model_4bit.dequantize()
 
-        self.assertFalse(hasattr(model, "hf_quantizer"))
-        self.assertFalse(hasattr(model.config, "quantization_config"))
-        self.assertFalse(hasattr(model, "quantization_method"))
-        self.assertFalse(model.is_quantized)
-        self.assertFalse(any(isinstance(m, bnb.nn.Linear4bit) for m in model.modules()))
+        self.assertFalse(hasattr(model_4bit, "hf_quantizer"))
+        self.assertFalse(hasattr(model_4bit.config, "quantization_config"))
+        self.assertFalse(hasattr(model_4bit, "quantization_method"))
+        self.assertFalse(model_4bit.is_quantized)
 
     def test_to_device_dequantized(self):
         r"""
-        Test that loading with `dequantize=True` won't prevent converting the model to a different dtype
+        Test that dequantizing the model won't prevent converting it to a different dtype
         """
-        model = self._load_dequantized()
-        model.to(dtype=torch.float16)
+        bnb_config = BitsAndBytesConfig(load_in_4bit=True)
+        model_4bit = AutoModelForCausalLM.from_pretrained(
+            self.model_name, quantization_config=bnb_config, device_map="auto"
+        )
+        model_4bit.dequantize()
+        model_4bit.to(dtype=torch.float16)
 
     def test_device_assignment(self):
         mem_before = self.model_4bit.get_memory_footprint()

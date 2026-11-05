@@ -132,6 +132,8 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         from ..integrations.moe import use_experts_implementation
 
         config = self.quantization_config
+        if config.dequantize:
+            return None
         kwargs = {
             "block_size": config.weight_block_size,
             "activation_scheme": config.activation_scheme,
@@ -183,6 +185,12 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     def is_compileable(self) -> bool:
         return True
 
+    def get_quantize_ops(self):
+        from ..integrations.finegrained_fp8 import Fp8Quantize
+
+        return Fp8Quantize(self)
+
+    # `weight` first: its converter takes `*.down_proj.weight` before the experts' own-name `down_proj` does
     serialized_names = {
         "weight": ["weight", "weight_scale_inv", "activation_scale"],
         "gate_up_proj": ["gate_up_proj", "gate_up_proj_scale_inv"],
@@ -190,9 +198,9 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     }
 
     def get_load_operations(self):
-        from ..integrations.finegrained_fp8 import Fp8Dequantize, Fp8Deserialize, Fp8Quantize
+        from ..integrations.finegrained_fp8 import Fp8Dequantize, Fp8Deserialize
 
-        return {"deserialize": Fp8Deserialize, "dequantize": Fp8Dequantize, "quantize": Fp8Quantize}
+        return {"deserialize": Fp8Deserialize, "dequantize": Fp8Dequantize}
 
     def get_weight_conversions(self):
         # Quantized, the experts load through the model's converters: only the linears need ours

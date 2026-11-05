@@ -15,7 +15,7 @@
 from functools import lru_cache
 
 from ..activations import ACT2FN
-from ..core_model_loading import ConversionOps, expand_target_names
+from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name, on_device, should_convert_module
 from ..utils import (
     is_accelerate_available,
@@ -49,10 +49,9 @@ class FbgemmFp8Quantize(ConversionOps):
         self,
         input_dict: dict[str, torch.Tensor | list[torch.Tensor]],
         model: torch.nn.Module | None = None,
-        full_layer_name: str | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        target_key, value = tuple(expand_target_names(input_dict, full_layer_name).items())[0]
+        target_key, value = tuple(input_dict.items())[0]
         value = value[0]
 
         from ..integrations import FbgemmFp8Llama4TextExperts
@@ -102,36 +101,15 @@ class FbgemmFp8Quantize(ConversionOps):
         return {target_key: torch.nn.Parameter(new_value), f"{target_key}_scale": weight_scale}
 
 
-class FbgemmFp8Dequantize(ConversionOps):
-    """Dequantized weights from the serialized fp8 `weight` and its per output channel `weight_scale`."""
-
-    def __init__(self, hf_quantizer):
-        self.hf_quantizer = hf_quantizer
-
-    def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, list[torch.Tensor]]:
-        output = {}
-        for key, weights in input_dict.items():
-            if not key.endswith("weight"):
-                continue  # `weight_scale`
-            weights = weights if isinstance(weights, list) else [weights]
-            scales = input_dict.get(f"{key}_scale")
-            if scales is not None:
-                scales = scales if isinstance(scales, list) else [scales]
-                weights = [weight.float() * scale.view(-1, 1) for weight, scale in zip(weights, scales)]
-            output[key] = weights
-        return output
-
-
 class FbgemmFp8Linear(torch.nn.Linear):
-    def __init__(self, in_features, out_features, bias, dtype=torch.float8_e4m3fn, activation_scale_ub=1200.0):
+    def __init__(self, in_features, out_features, bias, dtype=torch.float8_e4m3fn):
         super().__init__(in_features, out_features, bias)
         self.in_features = in_features
         self.out_features = out_features
 
         self.weight = torch.nn.Parameter(torch.zeros((out_features, in_features), dtype=dtype))
         self.weight_scale = torch.nn.Parameter(torch.zeros((out_features, 1), dtype=torch.float32))
-        # Off meta, so loading keeps its value
-        self.input_scale_ub = nn.Buffer(torch.full([1], activation_scale_ub, device="cpu"), persistent=False)
+        self.input_scale_ub = nn.Buffer(torch.zeros([1], dtype=torch.float), persistent=False)
 
         if bias:
             self.bias = torch.nn.Parameter(torch.zeros((self.out_features), dtype=torch.float32))
@@ -170,7 +148,7 @@ class FbgemmFp8Linear(torch.nn.Linear):
 
 
 class FbgemmFp8Llama4TextExperts(nn.Module):
-    def __init__(self, config, dtype=torch.float32, activation_scale_ub=1200.0):
+    def __init__(self, config, dtype=torch.float32):
         super().__init__()
         self.num_experts = config.num_local_experts
         self.intermediate_size = config.intermediate_size
@@ -191,8 +169,8 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
         self.down_proj_scale = torch.nn.Parameter(
             torch.zeros((self.num_experts, self.hidden_size, 1), dtype=torch.float32)
         )
-        # Off meta, so loading keeps its value
-        self.input_scale_ub = nn.Buffer(torch.full([1], activation_scale_ub, device="cpu"), persistent=False)
+        # Register input scale upper bound
+        self.input_scale_ub = nn.Buffer(torch.zeros([1], dtype=torch.float), persistent=False)
 
     def forward(self, hidden_states):
         """
@@ -312,7 +290,6 @@ def replace_with_fbgemm_fp8_linear(
 
     has_been_replaced = False
     module_kwargs = {} if pre_quantized else {"dtype": None}
-    activation_scale_ub = quantization_config.activation_scale_ub
 
     for module_name, module in model.named_modules():
         if not should_convert_module(module_name, modules_to_not_convert):
@@ -323,15 +300,12 @@ def replace_with_fbgemm_fp8_linear(
             if isinstance(module, Llama4TextExperts):
                 # TODO: make sure tp works later
                 text_config = getattr(model.config, "text_config", model.config)
-                new_module = FbgemmFp8Llama4TextExperts(
-                    text_config or model.config, activation_scale_ub=activation_scale_ub
-                )
+                new_module = FbgemmFp8Llama4TextExperts(text_config or model.config)
             elif isinstance(module, nn.Linear):
                 new_module = FbgemmFp8Linear(
                     module.in_features,
                     module.out_features,
                     module.bias is not None,
-                    activation_scale_ub=activation_scale_ub,
                     **module_kwargs,
                 )
                 new_module.requires_grad_(False)

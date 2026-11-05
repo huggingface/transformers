@@ -1339,6 +1339,18 @@ class PreTrainedModel(
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
 
+    def dequantize(self, dtype=None):
+        """
+        Potentially dequantize the model in case it has been quantized by a quantization method that support
+        dequantization.
+        """
+        hf_quantizer = getattr(self, "hf_quantizer", None)
+
+        if hf_quantizer is None:
+            raise ValueError("You need to first quantize your model in order to dequantize it")
+
+        return hf_quantizer.dequantize(self, dtype=dtype)
+
     def _backward_compatibility_gradient_checkpointing(self):
         if self.supports_gradient_checkpointing and getattr(self.config, "gradient_checkpointing", False):
             self.activation_checkpointing_enable()
@@ -4849,11 +4861,10 @@ class PreTrainedModel(
                     requires_grad=param.requires_grad,
                 )
             _load_parameter_into_model(self, key, value)
-        # We need to move back non-persistent buffers as well, as they are not part of loaded weights anyway. The ones
-        # that already hold a value (e.g. set by a load operation or created off meta) keep it
+        # We need to move back non-persistent buffers as well, as they are not part of loaded weights anyway
         for key, buffer in self.named_non_persistent_buffers():
             buffer_device = get_device(device_map, key, valid_torch_device=True)
-            value = torch.empty_like(buffer, device=buffer_device) if buffer.is_meta else buffer.to(buffer_device)
+            value = torch.empty_like(buffer, device=buffer_device)
             _load_parameter_into_model(self, key, value)
 
     def _initialize_missing_keys(self, is_quantized: bool) -> None:

@@ -99,12 +99,6 @@ class QuantizationConfigMixin:
     """
 
     quant_method: QuantizationMethod
-    # Dequantize a pre-quantized checkpoint while loading: the `dequantize` load operation runs on every quantized weight
-    dequantize = False
-
-    def get_loading_attributes(self) -> dict[str, Any]:
-        """Attributes of a config passed to `from_pretrained` that override the ones of the checkpoint's config."""
-        return {"dequantize": self.dequantize}
 
     @classmethod
     def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
@@ -250,7 +244,8 @@ class AutoRoundConfig(QuantizationConfigMixin):
             raise ValueError("group_size must be greater than 0 or equal to -1")
 
     def get_loading_attributes(self):
-        return super().get_loading_attributes() | {"backend": self.backend}
+        loading_attributes_dict = {"backend": self.backend}
+        return loading_attributes_dict
 
     def to_dict(self):
         config_dict = super().to_dict()
@@ -297,8 +292,6 @@ class HqqConfig(QuantizationConfigMixin):
             If set, each layer specified by its id will use its dedicated quantization configuration.
         skip_modules (`list[str]`, *optional*, defaults to `['lm_head']`):
             List of `nn.Linear` layers to skip.
-        dequantize (`bool`, *optional*, defaults to `False`):
-            Whether to dequantize a pre-quantized checkpoint while loading it.
         kwargs (`dict[str, Any]`, *optional*):
             Additional parameters from which to initialize the configuration object.
     """
@@ -311,10 +304,8 @@ class HqqConfig(QuantizationConfigMixin):
         axis: int | None = None,
         dynamic_config: dict | None = None,
         skip_modules: list[str] = ["lm_head"],
-        dequantize: bool = False,
         **kwargs,
     ):
-        self.dequantize = dequantize
         if is_hqq_available():
             from hqq.core.quantize import BaseQuantizeConfig as HQQBaseQuantizeConfig
         else:
@@ -442,8 +433,6 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             quantized again.
         bnb_4bit_quant_storage (`torch.dtype` or str, *optional*, defaults to `torch.uint8`):
             This sets the storage type to pack the quantized 4-bit params.
-        dequantize (`bool`, *optional*, defaults to `False`):
-            Whether to dequantize a pre-quantized checkpoint while loading it.
         kwargs (`dict[str, Any]`, *optional*):
             Additional parameters from which to initialize the configuration object.
     """
@@ -460,11 +449,9 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         bnb_4bit_quant_type="fp4",
         bnb_4bit_use_double_quant=False,
         bnb_4bit_quant_storage=None,
-        dequantize=False,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.BITS_AND_BYTES
-        self.dequantize = dequantize
 
         if load_in_4bit and load_in_8bit:
             raise ValueError("load_in_4bit and load_in_8bit are both True, but only one can be used at the same time")
@@ -746,7 +733,7 @@ class GPTQConfig(QuantizationConfigMixin):
         attributes_dict = copy.deepcopy(self.__dict__)
         loading_attributes = ["max_input_length", "backend"]
         loading_attributes_dict = {i: j for i, j in attributes_dict.items() if i in loading_attributes}
-        return super().get_loading_attributes() | loading_attributes_dict
+        return loading_attributes_dict
 
     def post_init(self):
         r"""
@@ -890,8 +877,6 @@ class AqlmConfig(QuantizationConfigMixin):
             Number of bits encoding a single codebook vector. Codebooks size is 2**nbits_per_codebook.
         linear_weights_not_to_quantize (`Optional[list[str]]`, *optional*):
             List of full paths of `nn.Linear` weight parameters that shall not be quantized.
-        dequantize (`bool`, *optional*, defaults to `False`):
-            Whether to dequantize a pre-quantized checkpoint while loading it.
         kwargs (`dict[str, Any]`, *optional*):
             Additional parameters from which to initialize the configuration object.
     """
@@ -903,10 +888,8 @@ class AqlmConfig(QuantizationConfigMixin):
         num_codebooks: int = 1,
         nbits_per_codebook: int = 16,
         linear_weights_not_to_quantize: list[str] | None = None,
-        dequantize: bool = False,
         **kwargs,
     ):
-        self.dequantize = dequantize
         self.quant_method = QuantizationMethod.AQLM
         self.in_group_size = in_group_size
         self.out_group_size = out_group_size
@@ -1005,8 +988,6 @@ class VptqConfig(QuantizationConfigMixin):
         modules_to_not_convert (`list`, *optional*, default to `None`):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision (e.g. Whisper encoder, Llava encoder, Mixtral gate layers).
-        dequantize (`bool`, *optional*, defaults to `False`):
-            Whether to dequantize a pre-quantized checkpoint while loading it.
         kwargs (`dict[str, Any]`, *optional*):
             Additional parameters from which to initialize the configuration object.
     """
@@ -1017,10 +998,8 @@ class VptqConfig(QuantizationConfigMixin):
         config_for_layers: dict[str, Any] = {},
         shared_layer_config: dict[str, Any] = {},
         modules_to_not_convert: list | None = None,
-        dequantize: bool = False,
         **kwargs,
     ):
-        self.dequantize = dequantize
         self.quant_method = QuantizationMethod.VPTQ
         self.enable_proxy_error = enable_proxy_error
         self.config_for_layers: dict[str, Any] = config_for_layers
@@ -1052,8 +1031,6 @@ class QuantoConfig(QuantizationConfigMixin):
         modules_to_not_convert (`list`, *optional*, default to `None`):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision (e.g. Whisper encoder, Llava encoder, Mixtral gate layers).
-        dequantize (`bool`, *optional*, defaults to `False`):
-            Whether to dequantize a pre-quantized checkpoint while loading it.
     """
 
     def __init__(
@@ -1061,10 +1038,8 @@ class QuantoConfig(QuantizationConfigMixin):
         weights="int8",
         activations=None,
         modules_to_not_convert: list | None = None,
-        dequantize: bool = False,
         **kwargs,
     ):
-        self.dequantize = dequantize
         self.quant_method = QuantizationMethod.QUANTO
         self.weights = weights
         self.activations = activations
@@ -1095,18 +1070,14 @@ class EetqConfig(QuantizationConfigMixin):
         modules_to_not_convert (`list`, *optional*, default to `None`):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision.
-        dequantize (`bool`, *optional*, defaults to `False`):
-            Whether to dequantize a pre-quantized checkpoint while loading it.
     """
 
     def __init__(
         self,
         weights: str = "int8",
         modules_to_not_convert: list | None = None,
-        dequantize: bool = False,
         **kwargs,
     ):
-        self.dequantize = dequantize
         self.quant_method = QuantizationMethod.EETQ
         self.weights = weights
         self.modules_to_not_convert = modules_to_not_convert
@@ -1280,7 +1251,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         return serializable_config_dict
 
     def get_loading_attributes(self):
-        return super().get_loading_attributes() | {"use_optimized_inference": self.use_optimized_inference}
+        return {"dequantize": self.dequantize, "use_optimized_inference": self.use_optimized_inference}
 
     @property
     def has_fp8_modules(self):
@@ -1321,18 +1292,14 @@ class FbgemmFp8Config(QuantizationConfigMixin):
         modules_to_not_convert (`list`, *optional*, default to `None`):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision.
-        dequantize (`bool`, *optional*, defaults to `False`):
-            Whether to dequantize a pre-quantized checkpoint while loading it.
     """
 
     def __init__(
         self,
         activation_scale_ub: float = 1200.0,
         modules_to_not_convert: list | None = None,
-        dequantize: bool = False,
         **kwargs,
     ):
-        self.dequantize = dequantize
         self.quant_method = QuantizationMethod.FBGEMM_FP8
         self.activation_scale_ub = activation_scale_ub
         self.modules_to_not_convert = modules_to_not_convert
@@ -1341,7 +1308,7 @@ class FbgemmFp8Config(QuantizationConfigMixin):
         attributes_dict = copy.deepcopy(self.__dict__)
         loading_attributes = ["activation_scale_ub"]
         loading_attributes_dict = {i: j for i, j in attributes_dict.items() if i in loading_attributes}
-        return super().get_loading_attributes() | loading_attributes_dict
+        return loading_attributes_dict
 
 
 @dataclass
@@ -1362,8 +1329,6 @@ class HiggsConfig(QuantizationConfigMixin):
             Group size for the HIGGS method. Can be 64, 128 or 256. Decreasing it barely affects the performance. Default is 256. Must be a divisor of hadamard_size.
         tune_metadata ('dict', *optional*, defaults to {}):
             Module-wise metadata (gemm block shapes, GPU metadata, etc.) for saving the kernel tuning results. Default is an empty dictionary. Is set automatically during tuning.
-        dequantize (`bool`, *optional*, defaults to `False`):
-            Whether to dequantize a pre-quantized checkpoint while loading it.
     """
 
     def __init__(
@@ -1374,10 +1339,8 @@ class HiggsConfig(QuantizationConfigMixin):
         hadamard_size: int = 512,
         group_size: int = 256,
         tune_metadata: dict[str, Any] | None = None,
-        dequantize: bool = False,
         **kwargs,
     ):
-        self.dequantize = dequantize
         if tune_metadata is None:
             tune_metadata = {}
         self.quant_method = QuantizationMethod.HIGGS
@@ -1426,8 +1389,6 @@ class FPQuantConfig(QuantizationConfigMixin):
         modules_to_not_convert (`list`, *optional*):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision.
-        dequantize (`bool`, *optional*, defaults to `False`):
-            Whether to dequantize a pre-quantized checkpoint while loading it.
     """
 
     def __init__(
@@ -1440,10 +1401,8 @@ class FPQuantConfig(QuantizationConfigMixin):
         pseudoquantization: bool = False,
         transform_init: str = "hadamard",
         modules_to_not_convert: list[str] | None = None,
-        dequantize: bool = False,
         **kwargs,
     ):
-        self.dequantize = dequantize
         self.forward_dtype = forward_dtype
         self.forward_method = forward_method
         self.backward_dtype = backward_dtype
@@ -1515,8 +1474,6 @@ class TorchAoConfig(QuantizationConfigMixin):
         untie_embedding_weights (`bool`, *optional*, defaults to `False`):
             Whether to untie the weights when we are quantizing input embedding weights that is tied
             to other weights.
-        dequantize (`bool`, *optional*, defaults to `False`):
-            Whether to dequantize a pre-quantized checkpoint while loading it.
 
     Example:
 
@@ -1542,10 +1499,8 @@ class TorchAoConfig(QuantizationConfigMixin):
         modules_to_not_convert: list | None = None,
         include_input_output_embeddings: bool = False,
         untie_embedding_weights: bool = False,
-        dequantize: bool = False,
         **kwargs,
     ):
-        self.dequantize = dequantize
         self.quant_method = QuantizationMethod.TORCHAO
         self.quant_type = quant_type
         self.modules_to_not_convert = modules_to_not_convert
@@ -1628,8 +1583,6 @@ class BitNetQuantConfig(QuantizationConfigMixin):
             of normalizing activations before quantization/packing.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon value used in the RMSNorm layer for numerical stability.
-        dequantize (`bool`, *optional*, defaults to `False`):
-            Whether to dequantize a pre-quantized checkpoint while loading it.
         kwargs (`dict[str, Any]`, *optional*):
             Additional keyword arguments that may be used by specific quantization
             backends or future versions.
@@ -1642,10 +1595,8 @@ class BitNetQuantConfig(QuantizationConfigMixin):
         quantization_mode: str = "offline",
         use_rms_norm: bool = False,
         rms_norm_eps: float | None = 1e-6,
-        dequantize: bool = False,
         **kwargs,
     ):
-        self.dequantize = dequantize
         if linear_class not in ["bitlinear", "autobitlinear"]:
             raise ValueError(f"linear_class must be either 'bitlinear' or 'autobitlinear', but got {linear_class}")
         if quantization_mode not in ["online", "offline"]:
@@ -1683,8 +1634,6 @@ class SpQRConfig(QuantizationConfigMixin):
         modules_to_not_convert (`Optional[list[str]]`, *optional*):
             Optionally, provides a list of full paths of `nn.Linear` weight parameters that shall not be quantized.
             Defaults to None.
-        dequantize (`bool`, *optional*, defaults to `False`):
-            Whether to dequantize a pre-quantized checkpoint while loading it.
         kwargs (`dict[str, Any]`, *optional*):
             Additional parameters from which to initialize the configuration object.
     """
@@ -1696,10 +1645,8 @@ class SpQRConfig(QuantizationConfigMixin):
         beta2: int = 16,
         shapes: dict[str, int] | None = None,
         modules_to_not_convert: list[str] | None = None,
-        dequantize: bool = False,
         **kwargs,
     ):
-        self.dequantize = dequantize
         if shapes is None:
             shapes = {}
         self.shapes = shapes
@@ -1791,7 +1738,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             raise ValueError(f"scale_fmt must be 'float' or 'ue8m0'; got {self.scale_fmt!r}")
 
     def get_loading_attributes(self):
-        return super().get_loading_attributes() | {"modules_to_not_convert": self.modules_to_not_convert}
+        return {"dequantize": self.dequantize, "modules_to_not_convert": self.modules_to_not_convert}
 
 
 class QuarkConfig(QuantizationConfigMixin):
@@ -1859,6 +1806,9 @@ class Mxfp4Config(QuantizationConfigMixin):
         self.modules_to_not_convert = modules_to_not_convert
         self.dequantize = dequantize
 
+    def get_loading_attributes(self):
+        return {"dequantize": self.dequantize}
+
     def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary. Returns:
@@ -1897,6 +1847,9 @@ class MetalConfig(QuantizationConfigMixin):
             raise ValueError(f"Metal quantization only supports bits in {{2, 4, 8}}, got {self.bits}")
         if self.group_size <= 0:
             raise ValueError(f"group_size must be positive, got {self.group_size}")
+
+    def get_loading_attributes(self):
+        return {"dequantize": self.dequantize}
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -1963,8 +1916,6 @@ class FourOverSixConfig(QuantizationConfigMixin):
             This can be used to override the default configuration for specific modules.
         modules_to_not_convert (`list[str]`, *optional*, defaults to `['lm_head']`):
             The list of modules to exclude from quantization. By default, the `lm_head` is excluded.
-        dequantize (`bool`, *optional*, defaults to `False`):
-            Whether to dequantize a pre-quantized checkpoint while loading it.
     """
 
     def __init__(
@@ -1984,10 +1935,8 @@ class FourOverSixConfig(QuantizationConfigMixin):
         weight_scale_rule: str | None = None,
         module_config_overrides: dict[str, dict[str, Any]] | None = None,
         modules_to_not_convert: list[str] | None = ["lm_head"],
-        dequantize: bool = False,
         **kwargs,
     ):
-        self.dequantize = dequantize
         self.quant_method = QuantizationMethod.FOUR_OVER_SIX
 
         self.activation_dtype = activation_dtype
@@ -2030,8 +1979,6 @@ class SinqConfig(QuantizationConfigMixin):
 
         **kwargs:
             Extra user arguments (kept in `_extra_kwargs` for round-tripping).
-        dequantize (`bool`, *optional*, defaults to `False`):
-            Whether to dequantize a pre-quantized checkpoint while loading it.
     """
 
     def __init__(
@@ -2041,10 +1988,8 @@ class SinqConfig(QuantizationConfigMixin):
         tiling_mode: str = "1D",
         method: str = "sinq",  # "sinq" | "asinq"
         modules_to_not_convert: list[str] | None = None,
-        dequantize: bool = False,
         **kwargs: Any,
     ):
-        self.dequantize = dequantize
         self.quant_method = QuantizationMethod.SINQ
 
         self.nbits = nbits
@@ -2097,8 +2042,6 @@ class GemmaQuantizationConfig(QuantizationConfigMixin):
             `"num_bits"` (2, 4, or 8).
         modules_to_not_convert (`list[str]`, *optional*):
             Module names to skip during quantized-layer replacement.
-        dequantize (`bool`, *optional*, defaults to `False`):
-            Whether to dequantize a pre-quantized checkpoint while loading it.
     """
 
     def __init__(
@@ -2107,10 +2050,8 @@ class GemmaQuantizationConfig(QuantizationConfigMixin):
         quantize_embeddings: bool = False,
         module_quant_configs: dict[str, dict] | None = None,
         modules_to_not_convert: list[str] | None = None,
-        dequantize: bool = False,
         **kwargs,
     ):
-        self.dequantize = dequantize
         self.quant_method = QuantizationMethod.GEMMA
         self.num_bits = num_bits
         self.quantize_embeddings = quantize_embeddings

@@ -5,7 +5,7 @@ from ..utils import is_fouroversix_available
 
 
 if is_fouroversix_available():
-    from fouroversix import ModelQuantizationConfig, QuantizedTensor, dequantize
+    from fouroversix import ModelQuantizationConfig
 
 from transformers.utils.quantization_config import FourOverSixConfig
 
@@ -55,49 +55,6 @@ class FourOverSixQuantize(ConversionOps):
             f"{module_name}.{quantized_key}": quantized_parameters[quantized_key]
             for quantized_key in quantized_parameters
         }
-
-
-class FourOverSixDequantize(ConversionOps):
-    """
-    Dequantized weights from the buffers of `FourOverSixLinear`: `quantized_weight_values`, `quantized_weight_scale_factors`,
-    `quantized_weight_amax` and `quantized_weight_metadata` (original and padded shapes, packing and scale layout).
-    The value and scale formats (`nvfp4`, `mxfp4`, `if4`, ...) come from the config of the module, so fouroversix
-    dequantizes them.
-    """
-
-    def __init__(self, hf_quantizer):
-        self.hf_quantizer = hf_quantizer
-        self.config = adapt_fouroversix_config(hf_quantizer.quantization_config)
-
-    def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, list[torch.Tensor]]:
-        config = self.config.get_module_config(full_layer_name.rpartition(".")[0])
-        output = {}
-        for key, values in input_dict.items():
-            if not key.endswith("quantized_weight_values"):
-                continue  # the scales and metadata, read along with their values
-            prefix = key.removesuffix("quantized_weight_values")
-            tensors = [
-                input_dict[f"{prefix}quantized_weight_{name}"] for name in ("scale_factors", "amax", "metadata")
-            ]
-            weights = []
-            for values, scale_factors, amax, metadata in zip(
-                *[tensor if isinstance(tensor, list) else [tensor] for tensor in [values, *tensors]]
-            ):
-                metadata = metadata.tolist()
-                quantized = QuantizedTensor(
-                    values,
-                    scale_factors,
-                    amax,
-                    config.weight_dtype,
-                    tuple(metadata[:2]),
-                    config.weight_scale_rule,
-                    tuple(metadata[2:4]),
-                    values_are_packed=metadata[4] == 1,
-                    scale_factors_are_in_blackwell_layout=metadata[5] == 1,
-                )
-                weights.append(dequantize(quantized, dtype=torch.float32))
-            output[f"{prefix}weight"] = weights
-        return output
 
 
 def adapt_fouroversix_config(config: FourOverSixConfig):

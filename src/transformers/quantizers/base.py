@@ -13,7 +13,6 @@
 # limitations under the License.
 import re
 from abc import ABC, abstractmethod
-from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
 from ..utils import is_torch_available, logging
@@ -217,7 +216,7 @@ class HfQuantizer(ABC):
                 continue
             param = next(iter(module._parameters), None)
             quantizer = self.get_quantizer(f"{name}.{param}") if param is not None else None
-            if quantizer is None or not quantizer.replaces_modules or quantizer.dequantizing:
+            if quantizer is None or not quantizer.replaces_modules:
                 continue
             if not should_convert_module(name, getattr(quantizer, "modules_to_not_convert", None)):
                 continue
@@ -230,7 +229,7 @@ class HfQuantizer(ABC):
             replaced.add(quantizer)
             swapped += (f"{name}.",)
         for quantizer in self.all_quantizers:
-            if quantizer.replaces_modules and not quantizer.dequantizing and quantizer not in replaced:
+            if quantizer.replaces_modules and quantizer not in replaced:
                 logger.warning(
                     f"No module was quantized with {quantizer.quantization_config.quant_method}: please double check "
                     "the model architecture and `modules_to_not_convert`."
@@ -259,11 +258,6 @@ class HfQuantizer(ABC):
             quantizer.update_parallel_plan(model, model.tp_plan)
             quantizer.update_parallel_plan(model, model.ep_plan)
 
-    @property
-    def dequantizing(self) -> bool:
-        "Whether a pre-quantized checkpoint is dequantized while loading, through the `dequantize` load operations"
-        return self.pre_quantized and getattr(self.quantization_config, "dequantize", False)
-
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         return model
 
@@ -280,7 +274,7 @@ class HfQuantizer(ABC):
         """
         model.config.quantization_config = self.quantization_config
 
-        if self.dequantizing:
+        if self.pre_quantized and getattr(self.quantization_config, "dequantize", False):
             self.remove_quantization_config(model)
         else:
             _assign_is_quantized(model)
@@ -298,6 +292,25 @@ class HfQuantizer(ABC):
         if hasattr(model, "quantization_method"):
             del model.quantization_method
         model.is_quantized = False
+
+    def dequantize(self, model, dtype=None):
+        """
+        Potentially dequantize the model to retrieve the original model, with some loss in accuracy / performance.
+        Note not all quantization schemes support this.
+        """
+        if dtype is None:
+            # using the same dtype we used to load the model. If we don't do that, we might have issues with modules we didn't quantize.
+            # or we need to upcast everything to the same dtype
+            dtype = model.config.dtype
+        model = self._dequantize(model, dtype=dtype)
+        self.remove_quantization_config(model)
+
+        return model
+
+    def _dequantize(self, model, dtype=None):
+        raise NotImplementedError(
+            f"{self.quantization_config.quant_method} has no implementation of `dequantize`, please raise an issue on GitHub."
+        )
 
     def get_modules_to_not_convert(
         self,
@@ -331,27 +344,8 @@ class HfQuantizer(ABC):
         return False
 
     def get_state_dict_and_metadata(self, model):
-        """
-        The state dict to save: the `serialize` load operation, if any, writes the tensors of each module under their
-        serialized names (e.g. torchao flattens its tensor subclasses). Its `metadata`, if any, goes in the file.
-        """
-        serialize = self.get_load_operations().get("serialize")
-        if serialize is None:
-            return None, {}
-        operation = serialize(self)
-        modules = defaultdict(dict)
-        for name, tensor in model.state_dict().items():
-            modules[name.rpartition(".")[0]][name] = tensor
-        state_dict = {}
-        # Every module: a quantized one may keep its tensors outside of its state dict (e.g. mxfp4's triton tensors)
-        for module_name, _ in model.named_modules():
-            state_dict.update(
-                operation.convert(modules.pop(module_name, {}), model=model, full_layer_name=module_name)
-            )
-        # Names that aren't `module.tensor`, e.g. bnb's `q_proj.weight.absmax`
-        for tensors in modules.values():
-            state_dict.update(tensors)
-        return state_dict, getattr(operation, "metadata", {})
+        """Get state dict and metadata. Useful when we need to modify a bit the state dict due to quantization"""
+        return None, {}
 
     @abstractmethod
     def is_serializable(self): ...
@@ -373,6 +367,11 @@ class HfQuantizer(ABC):
                         model.config.get_text_config()
                     )
 
+    def get_quantize_ops(self):
+        raise NotImplementedError(
+            f"{self.quantization_config.quant_method} is not available yet and will be supported soon."
+        )
+
     # Maps a non quantized parameter name to its corresponding quantized names
     # e.g. `{"weight": ["weight", "weight_scale_inv"]}` means a weight becomes weight + scale inv.
     serialized_names: dict[str, list[str]] = {}
@@ -381,9 +380,7 @@ class HfQuantizer(ABC):
         """
         Op classes loading the serialized tensors, e.g. `{"deserialize": Mxfp4Deserialize, "dequantize": Mxfp4Dequantize}`.
         A deserialization builds the params of one module, so it only runs on the general converters. A dequantization
-        also runs before the ops of the model's converters, e.g. before a per-expert merge. A quantization (e.g.
-        `{"quantize": Fp8Quantize}`) quantizes a non pre-quantized checkpoint on the fly: it is the last op of every
-        param that `param_needs_quantization`.
+        also runs before the ops of the model's converters, e.g. before a per-expert merge.
         """
         return {}
 
@@ -391,7 +388,7 @@ class HfQuantizer(ABC):
         "General converters: a param's serialized names load together. Their ops are set per param, by the plan"
         from ..core_model_loading import WeightConverter, _IdentityOp
 
-        mode = "dequantize" if self.dequantizing else "deserialize"
+        mode = "dequantize" if getattr(self.quantization_config, "dequantize", False) else "deserialize"
         if not self.pre_quantized or mode not in self.get_load_operations():
             return []
         return [WeightConverter(names, param, [_IdentityOp()]) for param, names in self.serialized_names.items()]

@@ -43,51 +43,6 @@ class EetqQuantize(ConversionOps):
         return {full_layer_name: int8_weight, f"{full_layer_name}_scales": scales}
 
 
-class EetqDequantize(ConversionOps):
-    """Dequantized weights from the serialized int8 `weight` and its `weight_scales`. The int8 weight is stored in the
-    CUTLASS mixed gemm layout: the kernel dequantizes it with a gemm with the identity, and without the kernel (or a GPU)
-    the layout is undone in torch."""
-
-    def __init__(self, hf_quantizer):
-        from .hub_kernels import get_kernel
-
-        self.hf_quantizer = hf_quantizer
-        try:
-            self.kernel = (
-                get_kernel("kernels-community/quantization-eetq", version=1) if torch.cuda.is_available() else None
-            )
-        except Exception:
-            self.kernel = None
-
-    def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, list[torch.Tensor]]:
-        output = {}
-        for key, weights in input_dict.items():
-            if not key.endswith("weight"):
-                continue  # `weight_scales`
-            weights = weights if isinstance(weights, list) else [weights]
-            scales = input_dict.get(f"{key}_scales")
-            if scales is not None:
-                scales = scales if isinstance(scales, list) else [scales]
-                weights = [self._dequantize(weight, scale) for weight, scale in zip(weights, scales)]
-            output[key] = weights
-        return output
-
-    def _dequantize(self, weight, scales):
-        if self.kernel is not None:
-            # `weight` is (in_features, out_features): `identity @ weight` is the transposed dequantized weight
-            identity = torch.eye(weight.shape[0], dtype=scales.dtype, device="cuda")
-            return self.kernel.w8_a16_gemm(identity, weight.cuda(), scales.cuda()).t().to(weight.device)
-        # Inverse of EETQ's `preprocess_weights_for_mixed_gemm` for sm75-sm89, in reverse order:
-        # +128 bias and swap of bytes 1 and 2 in every 4, then 2-column interleave of 64-row tiles of the transposed
-        # (column-major) weight, then the permutation of each 16 rows (`permute_B_rows_for_mixed_gemm`)
-        in_features, out_features = weight.shape
-        weight = weight.view(torch.uint8).reshape(-1, 4)[:, [0, 2, 1, 3]].to(torch.int16) - 128
-        weight = weight.reshape(out_features // 2, in_features // 64, 2, 64).transpose(1, 2)
-        rows = torch.tensor([0, 1, 4, 5, 8, 9, 12, 13, 2, 3, 6, 7, 10, 11, 14, 15], device=weight.device)
-        weight = weight.reshape(out_features, in_features // 16, 16)[..., rows].reshape(out_features, in_features)
-        return weight.to(scales.dtype) * scales[:, None].to(weight.device)
-
-
 class EetqLinearMMFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, weight, scales, bias=None):

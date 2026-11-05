@@ -141,6 +141,18 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "gemma": GemmaQuantizationConfig,
 }
 
+LOADING_ATTRIBUTES_CONFIG_TYPES = (
+    GPTQConfig,
+    AwqConfig,
+    AutoRoundConfig,
+    FbgemmFp8Config,
+    CompressedTensorsConfig,
+    Mxfp4Config,
+    MetalConfig,
+    FineGrainedFP8Config,
+    NVFP4Config,
+)
+
 logger = logging.get_logger(__name__)
 
 
@@ -258,7 +270,9 @@ class AutoHfQuantizer:
                 "Please make sure to pass the same quantization config class to `from_pretrained` with different loading attributes."
             )
 
-        if quantization_config_from_args is not None:
+        if isinstance(quantization_config, LOADING_ATTRIBUTES_CONFIG_TYPES) and isinstance(
+            quantization_config_from_args, LOADING_ATTRIBUTES_CONFIG_TYPES
+        ):
             loading_attr_dict = quantization_config_from_args.get_loading_attributes()
             for attr, val in loading_attr_dict.items():
                 setattr(quantization_config, attr, val)
@@ -458,8 +472,6 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
 
     def get_quantizer(self, name):
         "The quantizer of the module owning `name` (a param, or a module), as matched by `match_modules`"
-        if self.quantizer is not None:
-            return self.quantizer
         # Also under the model's prefix, e.g. the keys of a checkpoint saved from the base model
         for name in (name, f"{self.prefix}{name}"):
             while name not in self.module_quantizers and "." in name:
@@ -499,7 +511,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
                 for stored, ours in quantizer.renamed_names.items()
             ]
             params = "\n".join(params)
-            dequantize = quantizer.dequantizing
+            dequantize = getattr(quantizer.quantization_config, "dequantize", False)
             for converter in weight_conversions:
                 if not isinstance(converter, WeightConverter):
                     continue
@@ -538,15 +550,12 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         quantizer = self.get_quantizer(name)
         if quantizer is None:
             return transform
-        mode = "quantize" if not quantizer.pre_quantized else "dequantize" if quantizer.dequantizing else "deserialize"
-        operation = quantizer.get_load_operations().get(mode)
-        if mode == "quantize":
-            if operation is None or not quantizer.param_needs_quantization(model, name):
-                return transform
-            if not isinstance(transform, WeightConverter):  # a renaming: collect the tensor under its target name
-                return WeightConverter(name, name, [operation(quantizer)])
-            transform.operations = [*transform.operations, operation(quantizer)]
+        if not quantizer.pre_quantized:
+            if quantizer.param_needs_quantization(model, name):
+                transform.quantization_operation = quantizer.get_quantize_ops()
             return transform
+        dequantize = getattr(quantizer.quantization_config, "dequantize", False)
+        operation = quantizer.get_load_operations().get("dequantize" if dequantize else "deserialize")
         if operation is None or not isinstance(transform, WeightConverter):
             return transform
         sources = transform._original_source_patterns
@@ -554,7 +563,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         names = next((names for names in quantizer.serialized_names.values() if stored in names), None)
         if names is None:  # not a tensor of this format
             return transform
-        if mode == "deserialize":
+        if not dequantize:
             transform.operations = [*transform.operations, operation(quantizer)]
             return transform
         # Dequantized together: the weight and all its serialized names, whichever key came first
@@ -579,6 +588,9 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
 
     def get_new_dtype(self, converter, param, dtype):
         return (self.quantizer or super()).get_new_dtype(converter, param, dtype)
+
+    def dequantize(self, model, dtype=None):
+        return (self.quantizer or super()).dequantize(model, dtype)
 
     def get_state_dict_and_metadata(self, model):
         return (self.quantizer or super()).get_state_dict_and_metadata(model)
@@ -621,7 +633,11 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         """
         for quantizer in self.all_quantizers:
             quantizer._process_model_after_weight_loading(model, **kwargs)
-        dequantized = {quantizer for quantizer in self.all_quantizers if quantizer.dequantizing}
+        dequantized = {
+            quantizer
+            for quantizer in self.all_quantizers
+            if quantizer.pre_quantized and getattr(quantizer.quantization_config, "dequantize", False)
+        }
         self.set_quantizers({p: None if q in dequantized else q for p, q in self.quantizers.items()})
         self.module_quantizers = {n: None if q in dequantized else q for n, q in self.module_quantizers.items()}
         if not self.all_quantizers:

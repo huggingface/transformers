@@ -29,6 +29,7 @@ _import_structure = {
     ],
     "bitsandbytes": [
         "Bnb4bitQuantize",
+        "dequantize_and_replace",
         "replace_with_bnb_linear",
         "validate_bnb_backend_availability",
     ],
@@ -62,6 +63,7 @@ _import_structure = {
     ],
     "higgs": [
         "HiggsLinear",
+        "dequantize_higgs",
         "quantize_with_higgs",
     ],
     "hqq": ["prepare_for_hqq_linear"],
@@ -180,6 +182,7 @@ if TYPE_CHECKING:
     )
     from .bitsandbytes import (
         Bnb4bitQuantize,
+        dequantize_and_replace,
         replace_with_bnb_linear,
         validate_bnb_backend_availability,
     )
@@ -211,7 +214,7 @@ if TYPE_CHECKING:
         GGUF_CONFIG_MAPPING,
         _gguf_parse_value,
     )
-    from .higgs import HiggsLinear, quantize_with_higgs
+    from .higgs import HiggsLinear, dequantize_higgs, quantize_with_higgs
     from .hqq import prepare_for_hqq_linear
     from .hub_kernels import (
         LayerRepository,

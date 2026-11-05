@@ -40,8 +40,6 @@ class FPQuantHfQuantizer(HfQuantizer):
     quantization_config: "FPQuantConfig"
 
     def validate_environment(self, device_map, **kwargs):
-        if self.dequantizing:
-            return  # the `dequantize` load operation is pure torch
         if not torch.cuda.is_available() and not is_torch_xpu_available():
             raise NotImplementedError(
                 "FPQuant quantization is only supported on GPU or Intel XPU. Please use a different quantizer."
@@ -112,9 +110,6 @@ class FPQuantHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
-        if self.dequantizing:
-            # The model stays unquantized: the `dequantize` load operation runs on every checkpoint weight
-            return
         from fp_quant import replace_with_fp_quant_linear
 
         from ..integrations.fp_quant import adapt_fp_quant_config
@@ -136,15 +131,17 @@ class FPQuantHfQuantizer(HfQuantizer):
     def is_serializable(self):
         return True
 
+    def get_quantize_ops(self):
+        from ..integrations.fp_quant import FpQuantQuantize
+
+        return FpQuantQuantize(self)
+
     @property
     def serialized_names(self):
-        if self.quantization_config.store_master_weights:
-            return {}  # the checkpoint holds the unquantized `weight`
-        if self.quantization_config.pseudoquantization:
-            return {"weight": ["dqweight", "forward_hadamard_matrix"]}
-        return {"weight": ["qweight", "scales", "weight_global_scale", "forward_hadamard_matrix"]}
+        name = ".dqweight" if self.quantization_config.pseudoquantization else ".qweight"
+        return {name: [name]}
 
     def get_load_operations(self):
-        from ..integrations.fp_quant import FpQuantDequantize, FpQuantDeserialize, FpQuantQuantize
+        from ..integrations.fp_quant import FpQuantDeserialize
 
-        return {"deserialize": FpQuantDeserialize, "dequantize": FpQuantDequantize, "quantize": FpQuantQuantize}
+        return {"deserialize": FpQuantDeserialize}

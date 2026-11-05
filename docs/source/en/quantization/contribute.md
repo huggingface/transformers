@@ -64,7 +64,7 @@ Some quantization methods may require "pre-quantizing" the model through data ca
 
 You can define module replacement logic or any other utility method by creating a new file in [transformers/src/integrations/](https://github.com/huggingface/transformers/tree/abbffc4525566a48a9733639797c812301218b83/src/transformers/integrations) and exposing the relevant methods in that folder's `__init__.py` file.
 
-6. Add a `"quantize"` entry to `get_load_operations` in the quantizer class if the quantization supports quantizing on the fly. In transformers, we materialize each tensor and apply a sequence of different operations on it. The quantization op is appended last, for every param that `param_needs_quantization`. You need to create a `XXXQuantize`, a subclass of `ConversionOps`, and add a `convert` method. In the `convert` method, you need to quantize the weights and return a dictionary of quantized params.
+6. Add the `get_quantize_ops` method to the quantizer class if the quantization supports quantizing on the fly. In transformers, we materialize each tensor and apply a sequence of different operations on it. In our case, the quantization operation happens at the end. You need to create a `XXXQuantize`, a subclass of `ConversionOps`, and add a `convert` method. In the `convert` method, you need to quantize the weights and return a dictionary of quantized params.
 
 7. Add the `get_weight_conversions` method to the quantizer class if the quantization supports loading pre-quantized weights. In transformers, we can collect multiple tensors and apply operations on them. This is particularly useful when we have tensors in the checkpoint that require to be regrouped to re-create the quantized tensors.
 
@@ -85,18 +85,18 @@ You can define module replacement logic or any other utility method by creating 
 | `docs/source/en/quantization/your_method.md` | Document usage for users                                                                         |
 | `tests/quantization/your_method/`            | Add integration tests                                                                            |
 
-## Understanding the quantize operation vs `get_weight_conversions`
+## Understanding `get_quantize_ops` vs `get_weight_conversions`
 
 These two methods handle different scenarios for loading weights. Understanding when to use each is essential.
 
-### The quantize operation — Quantize on the fly
+### `get_quantize_ops` — Quantize on the fly
 
 Use this when loading a **non-quantized checkpoint** (e.g., float16/bfloat16 weights) and quantizing during load.
 
 ```text
 Checkpoint: model.safetensors (float16 weights for example)
      ↓
-get_load_operations()["quantize"] → YourQuantize.convert()
+get_quantize_ops → YourQuantize.convert()
      ↓
 Result: Quantized weights in memory
 ```

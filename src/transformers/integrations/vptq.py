@@ -13,7 +13,6 @@
 # limitations under the License.
 "VPTQ (Vector Post-Training Quantization) integration file"
 
-from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import is_torch_available, logging
 
@@ -23,64 +22,6 @@ if is_torch_available():
     import torch.nn as nn
 
 logger = logging.get_logger(__name__)
-
-
-class VptqDequantize(ConversionOps):
-    """
-    Dequantized weights from the VPTQ `indices` into the `centroids`, with the optional outliers, residuals, permutation and
-    norm, through the torch `vptq.ops.dequant` (what `vptq.ops.quant_gemm` runs without the CUDA kernels).
-    """
-
-    def __init__(self, hf_quantizer):
-        self.hf_quantizer = hf_quantizer
-
-    def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, list[torch.Tensor]]:
-        from vptq.ops import dequant
-
-        if "indices" not in input_dict:
-            # A model converter (e.g. merging experts) also collected the companions: unsupported, its sources load as before
-            names = self.hf_quantizer.serialized_names["weight"]
-            return {key: value for key, value in input_dict.items() if not key.endswith(tuple(names))}
-        config = self.hf_quantizer.quantization_config
-        module_name = full_layer_name.rpartition(".")[0]
-        params = config.config_for_layers.get(module_name) or config.shared_layer_config.get(
-            module_name.rsplit(".")[1]
-        )
-        out_features = model.get_submodule(module_name).out_features
-        tensors = {name: value[0] if isinstance(value, list) else value for name, value in input_dict.items()}
-        (outlier_vector_len, vector_len), (num_outlier_centroids, num_centroids) = (
-            params["vector_lens"],
-            params["num_centroids"],
-        )
-        num_res_centroids = params["num_res_centroids"][1]
-        enable_outlier = outlier_vector_len > 1 and num_outlier_centroids > 0
-        weight = dequant(
-            indices=tensors["indices"],
-            centroids=tensors["centroids.weight"].view(params["group_num"], num_centroids, vector_len),
-            outlier_indices=tensors.get("outlier_indices"),
-            outlier_centroids=tensors.get("outlier_centroids.weight"),
-            res_indices=tensors.get("res_indices"),
-            res_centroids=tensors.get("res_centroids.weight"),
-            perm=tensors.get("perm"),
-            weight_scale=tensors.get("weight_scale"),
-            weight_bias=tensors.get("weight_bias"),
-            is_indice_packed=True,
-            enable_outlier=enable_outlier,
-            enable_residual=num_res_centroids > 0,
-            enable_perm=params["enable_perm"],
-            enable_norm=params["enable_norm"],
-            num_centroids=num_centroids,
-            num_outlier_centroids=num_outlier_centroids,
-            num_res_centroids=num_res_centroids,
-            padding=-out_features % vector_len,
-            outlier_padding=-out_features % outlier_vector_len if enable_outlier else 0,
-            num_codebooks=params["group_num"],
-            group_size=params["group_size"],
-            outlier_size=params["outlier_size"],
-            vector_len=vector_len,
-            outlier_vector_len=outlier_vector_len,
-        )
-        return {"weight": [weight]}
 
 
 def replace_with_vptq_linear(model, modules_to_not_convert: list[str] | None = None, quantization_config=None):

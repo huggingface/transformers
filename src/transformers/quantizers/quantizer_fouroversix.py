@@ -24,15 +24,6 @@ class FourOverSixHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
-    # The buffers of `FourOverSixLinear`, they replace its `weight` unless `keep_master_weights`
-    serialized_names = {
-        "weight": [
-            "quantized_weight_values",
-            "quantized_weight_scale_factors",
-            "quantized_weight_amax",
-            "quantized_weight_metadata",
-        ]
-    }
     quantization_config: "FourOverSixConfig"
 
     def validate_environment(self, *args, **kwargs):
@@ -74,9 +65,6 @@ class FourOverSixHfQuantizer(HfQuantizer):
         device_map,
         **kwargs,
     ):
-        if self.dequantizing:
-            # The model stays unquantized: the `dequantize` load operation runs on every checkpoint weight
-            return
         from fouroversix import QuantizedModule, quantize_model
 
         from ..integrations.fouroversix import adapt_fouroversix_config
@@ -101,16 +89,16 @@ class FourOverSixHfQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return self.quantization_config.keep_master_weights
 
-    def get_load_operations(self):
-        from ..integrations.fouroversix import FourOverSixDequantize, FourOverSixQuantize
+    def get_quantize_ops(self):
+        from ..integrations.fouroversix import FourOverSixQuantize
 
-        return {"dequantize": FourOverSixDequantize, "quantize": FourOverSixQuantize}
+        return FourOverSixQuantize(self)
 
     def get_weight_conversions(self):
         # Pre-quantized checkpoints of other formats are converted by fouroversix itself
         model_config_type = getattr(self.quantization_config, "pre_quantized_model_config_type", None)
-        if model_config_type is None or self.quantization_config.dequantize:
-            return super().get_weight_conversions()
+        if model_config_type is None:
+            return []
         from fouroversix import WeightConversions
 
         return WeightConversions.get_weight_conversions(model_config_type)

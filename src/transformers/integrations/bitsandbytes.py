@@ -1,10 +1,10 @@
-import json
-import math
+import inspect
 
-from ..core_model_loading import ConversionOps, expand_target_names
+from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 from ..utils import (
     get_available_devices,
+    is_accelerate_available,
     is_bitsandbytes_available,
     is_torch_available,
     logging,
@@ -20,6 +20,9 @@ if is_torch_available():
 
     from ..pytorch_utils import Conv1D
 
+if is_accelerate_available():
+    import accelerate
+    from accelerate.hooks import add_hook_to_module, remove_hook_from_module
 
 logger = logging.get_logger(__name__)
 
@@ -39,7 +42,7 @@ class Bnb4bitQuantize(ConversionOps):
         we need to store some parameters to create the quantized weight. For example, bnb requires 6 values that are stored in the checkpoint to recover the quantized weight. So we store them in a dict that is stored in hf_quantizer for now as we can't save it in the op since we create an op per tensor.
         """
         result = {}
-        for param_name, value in expand_target_names(input_dict, full_layer_name).items():
+        for param_name, value in input_dict.items():
             if isinstance(value, list):
                 value = value[0]
 
@@ -93,95 +96,6 @@ class Bnb4bitDeserialize(ConversionOps):
         return {key_weight: new_value}
 
 
-def _to_model_layout(weights, key, model, full_layer_name):
-    """Undo the `Conv1D` transpose done at quantization time and cast to the dtype of the model param."""
-    if model is None:
-        return weights
-    name = next(iter(expand_target_names({key: None}, full_layer_name)))
-    try:
-        module, param_name = get_module_from_name(model, name)
-    except AttributeError:
-        return weights  # e.g. a source of a fused param: the converter ops that follow handle it
-    param = getattr(module, param_name, None)
-    transpose = isinstance(module, Conv1D)
-    return [
-        (weight.T if transpose else weight).to(param.dtype if param is not None else weight.dtype)
-        for weight in weights
-    ]
-
-
-def _dequantize_4bit(packed: "torch.Tensor", stats: dict) -> "torch.Tensor":
-    """
-    bitsandbytes' `dequantize_4bit` in torch, from the serialized quant state: each 4-bit code (high nibble first) is
-    looked up in `quant_map` and scaled by the `absmax` of its block, itself 8-bit quantized when nested.
-    """
-    state = json.loads(bytes(stats["quant_state"].tolist()))
-    absmax = stats["absmax"]
-    if "nested_absmax" in stats:
-        absmax = _scale_blocks(
-            stats["nested_quant_map"][absmax.int()], stats["nested_absmax"], state["nested_blocksize"]
-        )
-        absmax = absmax + state["nested_offset"]
-    packed = packed.view(-1)
-    codes = torch.stack([packed >> 4, packed & 0xF], dim=-1).view(-1)[: math.prod(state["shape"])]
-    weight = _scale_blocks(stats["quant_map"][codes.int()], absmax, state["blocksize"])
-    return weight.view(state["shape"]).to(getattr(torch, state["dtype"]))
-
-
-def _scale_blocks(values: "torch.Tensor", absmax: "torch.Tensor", blocksize: int) -> "torch.Tensor":
-    "Each block of `blocksize` values times its `absmax`, the last block possibly shorter"
-    return values * absmax.float().repeat_interleave(blocksize)[: values.numel()]
-
-
-class Bnb4bitDequantize(ConversionOps):
-    """Dequantized weights from the serialized `weight` and its quant state, saved under `weight.*`."""
-
-    def __init__(self, hf_quantizer):
-        self.hf_quantizer = hf_quantizer
-
-    def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, list[torch.Tensor]]:
-        output = {}
-        for key, weights in input_dict.items():
-            if any(key.startswith(f"{base}.") for base in input_dict):
-                continue  # the quant state of `base`
-            weights = weights if isinstance(weights, list) else [weights]
-            # `weight.absmax` -> `absmax`, `weight.quant_state.bitsandbytes__nf4` -> `quant_state`
-            stats = {
-                name.removeprefix(f"{key}.").split(".")[0]: value
-                for name, value in input_dict.items()
-                if name.startswith(f"{key}.")
-            }
-            if stats:
-                weights = [
-                    _dequantize_4bit(weight, {name: v[i] if isinstance(v, list) else v for name, v in stats.items()})
-                    for i, weight in enumerate(weights)
-                ]
-                weights = _to_model_layout(weights, key, model, full_layer_name)
-            output[key] = weights
-        return output
-
-
-class Bnb8bitDequantize(ConversionOps):
-    """Dequantized weights from the serialized int8 `weight` and its row-wise scales `SCB`."""
-
-    def __init__(self, hf_quantizer):
-        self.hf_quantizer = hf_quantizer
-
-    def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, list[torch.Tensor]]:
-        output = {}
-        for key, weights in input_dict.items():
-            if not key.endswith("weight"):
-                continue  # `SCB` and `weight_format`
-            weights = weights if isinstance(weights, list) else [weights]
-            scales = input_dict.get(key.removesuffix("weight") + "SCB")
-            if scales is not None:
-                scales = scales if isinstance(scales, list) else [scales]
-                weights = [weight.float() * scale.view(-1, 1) / 127 for weight, scale in zip(weights, scales)]
-                weights = _to_model_layout(weights, key, model, full_layer_name)
-            output[key] = weights
-        return output
-
-
 class Bnb8bitQuantize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
@@ -194,7 +108,7 @@ class Bnb8bitQuantize(ConversionOps):
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         result = {}
-        for param_name, value in expand_target_names(input_dict, full_layer_name).items():
+        for param_name, value in input_dict.items():
             value = value[0] if isinstance(value, list) else value
 
             module, _ = get_module_from_name(model, param_name)
@@ -323,6 +237,96 @@ def replace_with_bnb_linear(
 
 
 # Copied from PEFT: https://github.com/huggingface/peft/blob/47b3712898539569c02ec5b3ed4a6c36811331a1/src/peft/utils/integrations.py#L41
+def dequantize_bnb_weight(weight: "torch.nn.Parameter", state=None):
+    """
+    Helper function to dequantize 4bit or 8bit bnb weights.
+
+    If the weight is not a bnb quantized weight, it will be returned as is.
+    """
+    if not isinstance(weight, torch.nn.Parameter):
+        raise TypeError(f"Input weight should be of type nn.Parameter, got {type(weight)} instead")
+
+    cls_name = weight.__class__.__name__
+    if cls_name not in ("Params4bit", "Int8Params"):
+        return weight
+
+    if cls_name == "Params4bit":
+        output_tensor = bnb.functional.dequantize_4bit(weight.data, weight.quant_state)
+        return output_tensor
+
+    if state.SCB is None:
+        state.SCB = weight.SCB
+
+    if hasattr(bnb.functional, "int8_vectorwise_dequant"):
+        # Use bitsandbytes API if available (requires v0.45.0+)
+        dequantized = bnb.functional.int8_vectorwise_dequant(weight.data, state.SCB)
+    else:
+        # Multiply by (scale/127) to dequantize.
+        dequantized = weight.data * state.SCB.view(-1, 1) * 7.874015718698502e-3
+
+    return dequantized
+
+
+def _create_accelerate_new_hook(old_hook):
+    r"""
+    Creates a new hook based on the old hook. Use it only if you know what you are doing !
+    This method is a copy of: https://github.com/huggingface/peft/blob/748f7968f3a31ec06a1c2b0328993319ad9a150a/src/peft/utils/other.py#L245
+    with some changes
+    """
+    old_hook_cls = getattr(accelerate.hooks, old_hook.__class__.__name__)
+    old_hook_attr = old_hook.__dict__
+    filtered_old_hook_attr = {}
+    old_hook_init_signature = inspect.signature(old_hook_cls.__init__)
+    for k in old_hook_attr:
+        if k in old_hook_init_signature.parameters:
+            filtered_old_hook_attr[k] = old_hook_attr[k]
+    new_hook = old_hook_cls(**filtered_old_hook_attr)
+    return new_hook
+
+
+def dequantize_and_replace(model, quantization_config=None, dtype=None):
+    """
+    Converts a quantized model into its dequantized original version. The newly converted model will have
+    some performance drop compared to the original model before quantization - use it only for specific usecases
+    such as QLoRA adapters merging.
+
+    Returns the converted model.
+    """
+    quant_method = quantization_config.quantization_method()
+
+    target_cls = bnb.nn.Linear8bitLt if quant_method == "llm_int8" else bnb.nn.Linear4bit
+    for module_name, module in model.named_modules():
+        if isinstance(module, target_cls):
+            with torch.device("meta"):
+                bias = getattr(module, "bias", None)
+                new_module = torch.nn.Linear(module.in_features, module.out_features, bias=bias is not None)
+            state = module.state if quant_method == "llm_int8" else None
+            new_module.weight = torch.nn.Parameter(dequantize_bnb_weight(module.weight, state))
+            weight = dequantize_bnb_weight(module.weight, state)
+            if dtype is None:
+                logger.warning_once(
+                    f"The modules are dequantized in {weight.dtype}. If you want to change the dtype, please specify `dtype` in `dequantize`. "
+                )
+            else:
+                logger.warning_once(f"The modules are dequantized in {weight.dtype} and casted to {dtype}.")
+                weight = weight.to(dtype)
+            new_module.weight = torch.nn.Parameter(weight)
+            if bias is not None:
+                new_module.bias = bias
+            if hasattr(module, "_hf_hook"):
+                old_hook = module._hf_hook
+                new_hook = _create_accelerate_new_hook(old_hook)
+                remove_hook_from_module(module)
+                add_hook_to_module(new_module, new_hook)
+            new_module.to(module.weight.device)
+            model.set_submodule(module_name, new_module)
+            has_been_replaced = True
+
+    if not has_been_replaced:
+        logger.warning(
+            "For some reason the model has not been properly dequantized. You might see unexpected behavior."
+        )
+    return model
 
 
 def validate_bnb_backend_availability(raise_exception=False):

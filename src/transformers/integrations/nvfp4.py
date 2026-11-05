@@ -277,8 +277,8 @@ class NVFP4Experts(nn.Module):
 class NVFP4Quantize(ConversionOps):
     """Pack a floating-point checkpoint weight into the buffers used by `NVFP4Linear`."""
 
-    def __init__(self, hf_quantizer):
-        self.device = hf_quantizer.quantization_device
+    def __init__(self, device: torch.device):
+        self.device = device
 
     def convert(self, input_dict, **kwargs):
         kernel = load_nvfp4_kernel()

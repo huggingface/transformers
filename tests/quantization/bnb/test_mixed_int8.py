@@ -270,19 +270,20 @@ class MixedInt8Test(BaseMixedInt8Test):
 
     def test_generate_quality_dequantize(self):
         r"""
-        Test that loading an 8-bit checkpoint with `dequantize=True` produce correct results
+        Test that loading the model and dequantizing it produce correct results
         """
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            self.model_8bit.save_pretrained(tmpdirname)
-            model = AutoModelForCausalLM.from_pretrained(
-                tmpdirname,
-                quantization_config=BitsAndBytesConfig(load_in_8bit=True, dequantize=True),
-                device_map="auto",
-            )
+        bnb_config = BitsAndBytesConfig(load_in_8bit=True)
 
-        self.assertFalse(model.is_quantized)
+        model_8bit = AutoModelForCausalLM.from_pretrained(
+            self.model_name, quantization_config=bnb_config, device_map="auto"
+        )
+
+        model_8bit.dequantize()
+
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
-        output_sequences = model.generate(input_ids=encoded_input["input_ids"].to(model.device), max_new_tokens=10)
+        output_sequences = model_8bit.generate(
+            input_ids=encoded_input["input_ids"].to(model_8bit.device), max_new_tokens=10
+        )
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 

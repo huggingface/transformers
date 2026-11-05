@@ -327,14 +327,13 @@ model_double_quant = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-13
 
 ## Dequantizing bitsandbytes models
 
-Pass `dequantize=True` to load a pre-quantized bitsandbytes checkpoint as unquantized weights in the model's dtype. They hold the quantized values, so nothing is lost beyond the original quantization (and rounding to that dtype), but the model needs the memory of its unquantized size.
+Once quantized, you can [`~PreTrainedModel.dequantize`] a model to the original precision but this may result in some quality loss. Make sure you have enough GPU memory to fit the dequantized model.
 
 ```python
-from transformers import AutoModelForCausalLM, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained(
-    "unsloth/Llama-3.2-1B-Instruct-bnb-4bit", quantization_config=BitsAndBytesConfig(load_in_4bit=True, dequantize=True)
-)
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-125m", BitsAndBytesConfig(load_in_4bit=True))
+model.dequantize()
 ```
 
 ## Resources

@@ -126,14 +126,12 @@ class BitNetHfQuantizer(HfQuantizer):
             and self.quantization_config.quantization_mode == "online"
         )
 
-    serialized_names = {"weight": ["weight", "weight_scale"]}
+    serialized_names = {"weight": ["weight"]}
 
     def get_load_operations(self):
-        from ..integrations.bitnet import BitNetDequantize, BitNetDeserialize
+        from ..integrations.bitnet import BitNetDeserialize
 
         config = self.quantization_config
         if config.linear_class == "autobitlinear" and config.quantization_mode == "offline":
-            return {"deserialize": BitNetDeserialize, "dequantize": BitNetDequantize}
-        if config.linear_class == "autobitlinear":
-            return {}  # online: the checkpoint is unquantized
-        return {"dequantize": BitNetDequantize}
+            return {"deserialize": BitNetDeserialize}
+        return {}

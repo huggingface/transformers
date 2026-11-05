@@ -13,6 +13,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
+from ..utils.logging import tqdm
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
 
@@ -98,6 +99,31 @@ class HiggsHfQuantizer(HfQuantizer):
         )
         return new_module.requires_grad_(False)
 
+    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        from flute.tune import TuneMetaData, maybe_tune_and_repack
+        from flute.utils import make_workspace_streamk
+
+        from ..integrations import HiggsLinear
+
+        flute_workspaces = {}
+        flute_modules = {name: module for name, module in model.named_modules() if isinstance(module, HiggsLinear)}
+        for name, module in tqdm(flute_modules.items(), desc="Repacking HIGGS modules", leave=False):
+            # Every HiggsLinear needs a "workspace": a buffer for the unpacking operation.
+            # This buffer needs to be on the same device as the weights, but can be reused across modules otherwise.
+            if module.weight.device not in flute_workspaces:
+                flute_workspaces[module.weight.device] = make_workspace_streamk(device=module.weight.device)
+            module.workspace = flute_workspaces[module.weight.device]
+
+            # FLUTE weights are packed in a way that is optimized for a specific number of SMs (GPU streaming multiprocessors).
+            # If the model is loaded on a different device than the one it was saved on, we need to repack the weights.
+            module.tune_metadata = TuneMetaData.from_dict(self.quantization_config.tune_metadata[name])
+            module.weight.data, module.tune_metadata = maybe_tune_and_repack(
+                weight=module.weight.data,
+                scales=module.scales.data,
+                metadata=module.tune_metadata,
+            )
+            self.quantization_config.tune_metadata[name] = module.tune_metadata.to_dict()
+
     @property
     def is_trainable(self) -> bool:
         return False
@@ -115,9 +141,8 @@ class HiggsHfQuantizer(HfQuantizer):
         else:
             return False
 
-    serialized_names = {"weight": ["weight", "scales", "tables", "tables2"]}
+    def _dequantize(self, model, dtype=None):
+        from ..integrations import dequantize_higgs
 
-    def get_load_operations(self):
-        from ..integrations.higgs import HiggsDequantize, HiggsDeserialize
-
-        return {"deserialize": HiggsDeserialize, "dequantize": HiggsDequantize}
+        model = dequantize_higgs(model)
+        return model

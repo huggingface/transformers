@@ -59,48 +59,6 @@ class QuantoQuantize(ConversionOps):
         return {}
 
 
-class QuantoDequantize(ConversionOps):
-    """
-    Dequantized weights from the flattened quanto weight: `weight._data` (int8 / fp8, or `weight._data._data` for int4 / int2
-    values packed along the rows), its `weight._scale` and, for int4 / int2, its `weight._shift`. int4 / int2 weights
-    are grouped along the input features, as `(out_features * in_features // group_size, group_size)`.
-    """
-
-    def __init__(self, hf_quantizer):
-        self.hf_quantizer = hf_quantizer
-
-    def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, list[torch.Tensor]]:
-        output = {}
-        for key, scales in input_dict.items():
-            if not key.endswith("._scale"):
-                continue  # `_data` and `_shift`, read along with their scale
-            prefix = key.removesuffix("_scale")
-            scales = scales if isinstance(scales, list) else [scales]
-            datas = input_dict.get(f"{prefix}_data._data", input_dict.get(f"{prefix}_data"))
-            datas = datas if isinstance(datas, list) else [datas]
-            shifts = input_dict.get(f"{prefix}_shift", [None] * len(datas))
-            shifts = shifts if isinstance(shifts, list) else [shifts]
-            module, _ = get_module_from_name(model, full_layer_name)
-            output[prefix.removesuffix(".")] = [
-                self._dequantize(data, scale, shift).view(module.out_features, -1)
-                for data, scale, shift in zip(datas, scales, shifts)
-            ]
-        return output
-
-    def _dequantize(self, data, scale, shift):
-        if shift is None:
-            return scale * data.to(scale.dtype)
-        bits = {"int4": 4, "int2": 2}[self.hf_quantizer.quantization_config.weights]
-        values_per_byte = 8 // bits
-        data = torch.cat([(data >> (bits * i)) & (2**bits - 1) for i in range(values_per_byte)])[: scale.shape[0]]
-        if not shift.dtype.is_floating_point:
-            data = data.to(torch.int8) - shift.to(torch.int8)
-        weight = scale * data.to(scale.dtype)
-        if shift.dtype.is_floating_point:
-            weight = weight - shift
-        return weight
-
-
 def replace_with_quanto_layers(
     model,
     quantization_config=None,

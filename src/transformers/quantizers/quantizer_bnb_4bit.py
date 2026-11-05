@@ -54,8 +54,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         return 0.5
 
     def validate_environment(self, *args, **kwargs):
-        if self.dequantizing:
-            return  # the `dequantize` load operation is pure torch
         if not is_accelerate_available():
             raise ImportError(
                 f"Using `bitsandbytes` 4-bit quantization requires accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
@@ -118,9 +116,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         device_map,
         **kwargs,
     ):
-        if self.dequantizing:
-            # The model stays unquantized: the `dequantize` load operation runs on every checkpoint weight
-            return
         from ..integrations import replace_with_bnb_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
@@ -140,7 +135,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         )
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        setattr(model, "is_loaded_in_4bit", not self.quantization_config.dequantize)
+        setattr(model, "is_loaded_in_4bit", True)
         return model
 
     def is_serializable(self):
@@ -149,6 +144,17 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     @property
     def is_trainable(self) -> bool:
         return True
+
+    def _dequantize(self, model, dtype=None):
+        from ..integrations import dequantize_and_replace
+
+        model = dequantize_and_replace(model, quantization_config=self.quantization_config, dtype=dtype)
+        return model
+
+    def get_quantize_ops(self):
+        from ..integrations.bitsandbytes import Bnb4bitQuantize
+
+        return Bnb4bitQuantize(self)
 
     serialized_names = {
         "weight": [
@@ -163,6 +169,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     }
 
     def get_load_operations(self):
-        from ..integrations.bitsandbytes import Bnb4bitDequantize, Bnb4bitDeserialize, Bnb4bitQuantize
+        from ..integrations.bitsandbytes import Bnb4bitDeserialize
 
-        return {"deserialize": Bnb4bitDeserialize, "dequantize": Bnb4bitDequantize, "quantize": Bnb4bitQuantize}
+        return {"deserialize": Bnb4bitDeserialize}

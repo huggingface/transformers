@@ -34,6 +34,11 @@ MIN_TORCH_VERSION = "2.6.0"
 if is_torch_available():
     import torch
 
+if is_torchao_available():
+    from torchao.prototype.safetensors.safetensors_support import (
+        flatten_tensor_state_dict,
+    )
+
 
 logger = logging.get_logger(__name__)
 
@@ -73,6 +78,12 @@ class TorchAoHfQuantizer(HfQuantizer):
                         "You are attempting to perform disk offload with a pre-quantized torchao model "
                         "This is not supported yet . Please remove the disk device from the device_map."
                     )
+
+    def get_state_dict_and_metadata(self, model):
+        """
+        We flatten the state dict of tensor subclasses so that it is compatible with the safetensors format.
+        """
+        return flatten_tensor_state_dict(model.state_dict())
 
     def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         # need more space for the quantization parameters (e.g. scale). Tested with int4 wo and group size = 128
@@ -144,6 +155,11 @@ class TorchAoHfQuantizer(HfQuantizer):
             # Save it
             self.metadata = metadata
 
+    def get_quantize_ops(self):
+        from ..integrations.torchao import TorchAoQuantize
+
+        return TorchAoQuantize(self)
+
     def _discover_quantized_param_names(self) -> set[str]:
         """Extract unique parameter names of quantized params from torchao safetensors metadata.
 
@@ -183,11 +199,6 @@ class TorchAoHfQuantizer(HfQuantizer):
         return {name: [f"_{name}_{s}" for s in suffixes] for name in sorted(self._discover_quantized_param_names())}
 
     def get_load_operations(self):
-        from ..integrations.torchao import TorchAoDequantize, TorchAoDeserialize, TorchAoQuantize, TorchAoSerialize
+        from ..integrations.torchao import TorchAoDeserialize
 
-        return {
-            "deserialize": TorchAoDeserialize,
-            "dequantize": TorchAoDequantize,
-            "quantize": TorchAoQuantize,
-            "serialize": TorchAoSerialize,
-        }
+        return {"deserialize": TorchAoDeserialize}

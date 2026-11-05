@@ -174,7 +174,7 @@ class NVFP4IntegrationTest(unittest.TestCase):
 
     @patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel)
     def test_conversion_produces_all_registered_buffers(self, _):
-        conversion = NVFP4Quantize(SimpleNamespace(quantization_device=torch.device("cpu")))
+        conversion = NVFP4Quantize(torch.device("cpu"))
 
         output = conversion.convert({"model.proj.weight": torch.randn(32, 64)})
 
