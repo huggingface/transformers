@@ -326,7 +326,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
             **kwargs,
         )
 
-        return DeepseekVLHybridBaseModelOutputWithPast(**lm_output, mm_encoder_outputs=mm_encoder_outputs)
+        return DeepseekVLHybridBaseModelOutputWithPast(**lm_output, modality_outputs=mm_encoder_outputs)
 
 
 class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneration):

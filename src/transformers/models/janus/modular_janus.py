@@ -807,7 +807,7 @@ class JanusModel(JanusPreTrainedModel):
             **kwargs,
         )
 
-        return JanusBaseModelOutputWithPast(**lm_output, mm_encoder_outputs=mm_encoder_outputs)
+        return JanusBaseModelOutputWithPast(**lm_output, modality_outputs=mm_encoder_outputs)
 
 
 class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):

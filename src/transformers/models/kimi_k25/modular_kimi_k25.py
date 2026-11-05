@@ -702,7 +702,7 @@ class Kimi_K25ForConditionalGeneration(Glm4vForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            mm_encoder_outputs=mm_encoder_outputs,
+            modality_outputs=outputs.modality_outputs,
         )
 
     def _prepare_position_ids_for_generation(self, **kwargs):

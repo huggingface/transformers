@@ -192,7 +192,7 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
             **kwargs,
         )
 
-        return DeepseekVLBaseModelOutputWithPast(**lm_output, mm_encoder_outputs=mm_encoder_outputs)
+        return DeepseekVLBaseModelOutputWithPast(**lm_output, modality_outputs=mm_encoder_outputs)
 
 
 class DeepseekVLForConditionalGeneration(DeepseekVLPreTrainedModel, GenerationMixin):

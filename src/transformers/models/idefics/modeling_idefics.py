@@ -1046,7 +1046,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         return IdeficsBaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            mm_encoder_outputs=mm_encoder_outputs,
+            modality_outputs=mm_encoder_outputs,
         )
 
 

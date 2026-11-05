@@ -342,7 +342,7 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
             **kwargs,
         )
 
-        return DeepseekVLHybridBaseModelOutputWithPast(**lm_output, mm_encoder_outputs=mm_encoder_outputs)
+        return DeepseekVLHybridBaseModelOutputWithPast(**lm_output, modality_outputs=mm_encoder_outputs)
 
     def get_low_res_image_features(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
         return self.vision_model(pixel_values, return_dict=True, **kwargs)
