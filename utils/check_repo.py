@@ -326,6 +326,7 @@ IGNORE_NON_TESTED = (
         "MuseSparkTextModel",  # Building part of bigger (tested) model. Tested implicitly through MuseSparkForConditionalGeneration.
         "MuseSparkVisionModel",  # Building part of bigger (tested) model. Tested implicitly through MuseSparkForConditionalGeneration.
         "MuseSparkAudioModel",  # Building part of bigger (tested) model. Tested implicitly through MuseSparkForConditionalGeneration.
+        "Ovis2_5VisionModel",  # Building part of bigger (tested) model. Tested implicitly through Ovis2_5ForConditionalGeneration.
         "HunYuanVLTextModel",
         "HunYuanVLVisionTransformer",
         "InklingForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
