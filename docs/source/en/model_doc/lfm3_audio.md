@@ -77,6 +77,8 @@ template as above, or leave it open and let the model choose; pass
 `suppress_tokens=[model.config.audio_start_token_id, model.config.mixed_start_token_id]` to keep a reply in text.
 Every speech frame occupies one `<|audio_out|>` slot of `sequences`, end-of-audio frames included, so the output can
 be fed back as a prompt.
+Inputs are not validated: every `<|audio|>` and `<|audio_out|>` placeholder needs its features or codes, as the
+processor returns them.
 
 The frames of a finished turn are decoded with the processor's codec as above. `generate` returns the frames once the
 loop completes (the streamer only carries token ids); the codec can then decode them a frame at a time through

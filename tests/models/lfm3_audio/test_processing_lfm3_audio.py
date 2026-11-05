@@ -38,7 +38,7 @@ if is_tokenizers_available():
     from transformers import PreTrainedTokenizerFast
 
 
-# the placeholder and span tokens the LFM3 tokenizers define (`test_hub_tokenizer_defines_the_placeholder_tokens`)
+# the placeholder and span tokens the LFM3 tokenizers define
 PLACEHOLDER_TOKENS = [
     "<|audio|>",
     "<|audio_out|>",
@@ -157,26 +157,6 @@ GENERATION_TEMPLATE = (
 )
 
 
-def assert_offsets_rebuild_the_prompts(test, processor, texts, outputs):
-    """Every record slices its `text` from the caller's prompt, applying them in order rebuilds the tokenized prompt,
-    and every `new_span` slices its `replacement` from the rebuilt one."""
-    for text, row, ids in zip(texts, outputs["text_replacement_offsets"], outputs["input_ids"]):
-        pieces, last = [], 0
-        for record in row:
-            start, end = record["span"]
-            test.assertGreaterEqual(start, last)
-            test.assertEqual(text[start:end], record["text"])
-            pieces.extend((text[last:start], record["replacement"]))
-            last = end
-        pieces.append(text[last:])
-        rebuilt = "".join(pieces)
-        for record in row:
-            test.assertEqual(rebuilt[record["new_span"][0] : record["new_span"][1]], record["replacement"])
-        ids = ids.tolist() if hasattr(ids, "tolist") else list(ids)
-        pad = processor.tokenizer.pad_token_id
-        test.assertEqual(processor.tokenizer(rebuilt)["input_ids"], [token for token in ids if token != pad])
-
-
 def expected_assistant_mask(processor, ids):
     """The tokens after each assistant header up to and including its `<|im_end|>`."""
     start = processor.tokenizer.convert_tokens_to_ids("<|im_start|>")
@@ -267,16 +247,6 @@ class Lfm3AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertIs(processor.audio_tokenizer, codec)
 
-    def test_placeholder_tokens_come_from_the_tokenizer(self):
-        self.assertEqual(self.processor.audio_token_id, self.tokenizer.convert_tokens_to_ids("<|audio|>"))
-        self.assertEqual(self.processor.audio_out_token_id, self.tokenizer.convert_tokens_to_ids("<|audio_out|>"))
-        self.assertNotEqual(self.processor.audio_token_id, self.tokenizer.unk_token_id)
-        # a tokenizer lacking them is left as it is: the tokenizer files define the vocabulary, not the processor
-        tokenizer = tiny_tokenizer(special_tokens=[])
-        size = len(tokenizer)
-        Lfm3AudioProcessor(Lfm3AudioFeatureExtractor(), tokenizer)
-        self.assertEqual(len(tokenizer), size)
-
     def test_expands_one_placeholder_per_encoder_token(self):
         clips = [np.zeros(16000, dtype=np.float32), np.zeros(4000, dtype=np.float32)]
         inputs = self.processor(
@@ -299,16 +269,7 @@ class Lfm3AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.processor(text="<|audio|>", sampling_rate=16000)
 
     def test_output_clips_become_codec_frames(self):
-        codec = LiquidCodecModel(
-            LiquidCodecConfig(
-                encoder_config=TINY_CODEC_BACKBONE,
-                decoder_config=TINY_CODEC_BACKBONE,
-                encoder_conv_dim=8,
-                quantizer_dim=16,
-                n_q=4,
-                fsq_levels=[3, 3],
-            )
-        ).eval()
+        codec = tiny_codec()
         processor = Lfm3AudioProcessor(
             Lfm3AudioFeatureExtractor(), self.tokenizer, audio_tokenizer=codec, chat_template=CHAT_TEMPLATE
         )

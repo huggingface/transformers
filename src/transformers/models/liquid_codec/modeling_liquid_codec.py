@@ -27,9 +27,8 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...modeling_utils import PreTrainedAudioTokenizerBase
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ...utils.generic import maybe_autocast
-from ...utils.import_utils import is_tracing
 from ..auto import AutoModel
 from .configuration_liquid_codec import LiquidCodecConfig
 
@@ -208,12 +207,6 @@ class LiquidCodecFiniteScalarQuantization(nn.Module):
 
     def encode(self, latents: torch.Tensor) -> torch.Tensor:
         latents = self.project_in(latents.movedim(1, -1).contiguous()).float()
-        if not is_tracing(latents):
-            # audio far above full scale overflows the float32 STFT; NaN latents round to INT64_MIN codes
-            torch_compilable_check(
-                torch.isfinite(latents),
-                "The audio overflows the codec (non-finite latents); expected samples in [-1, 1]",
-            )
         _, indices = self(latents.reshape(*latents.shape[:-1], self.num_codebooks, self.codebook_dim))
         return indices.long().transpose(1, 2)
 
@@ -339,17 +332,11 @@ class LiquidCodecModel(PreTrainedAudioTokenizerBase):
     @can_return_tuple
     def encode(self, input_values: torch.FloatTensor, *, return_dict: bool | None = None) -> LiquidCodecEncoderOutput:
         r"""
-        Non-finite audio, or audio that overflows the codec, is refused eagerly; a compiled `encode` skips the check.
-
         input_values (`torch.FloatTensor` of shape `(batch_size, num_samples)`):
             24 kHz audio. The tail is zero-padded to a whole codec frame of 1920 samples.
         return_dict (`bool`, *optional*):
             Whether to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        if input_values.ndim != 2 or input_values.shape[-1] == 0:
-            raise ValueError(
-                f"Expected non-empty audio of shape (batch_size, num_samples), got {tuple(input_values.shape)}"
-            )
         frame_size = self.config.frame_size
         num_samples = -(input_values.shape[-1] // -frame_size) * frame_size
         input_values = F.pad(input_values, (0, num_samples - input_values.shape[-1]))
@@ -384,14 +371,6 @@ class LiquidCodecModel(PreTrainedAudioTokenizerBase):
         return_dict (`bool`, *optional*):
             Whether to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        if audio_codes.ndim != 3 or audio_codes.shape[1] != self.config.n_q:
-            raise ValueError(
-                f"Expected codes of shape (batch_size, {self.config.n_q}, num_frames), got {tuple(audio_codes.shape)}"
-            )
-        torch_compilable_check(
-            (audio_codes >= 0) & (audio_codes < self.config.codebook_size),
-            f"Codes must be in [0, {self.config.codebook_size})",
-        )
         if use_streaming and decoder_past_key_values is None:
             decoder_past_key_values = DynamicCache(config=self.config.decoder_config)
         if use_streaming and overlap_cache is None:

@@ -111,5 +111,3 @@ class Lfm3AudioFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
                 pieces.append(features["input_features"])
                 torch.testing.assert_close(torch.cat(pieces, dim=-1), expected, atol=2e-6, rtol=2e-6)
                 self.assertIsNone(state.samples)
-                with self.assertRaises(ValueError):
-                    self.extractor.stream(wave, state)

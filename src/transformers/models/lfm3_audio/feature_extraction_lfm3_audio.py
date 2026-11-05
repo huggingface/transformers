@@ -34,7 +34,6 @@ class Lfm3AudioFeatureStreamingCache:
     samples: torch.Tensor | None = None
     num_samples: int = 0
     num_frames: int = 0
-    finished: bool = False
 
 
 class Lfm3AudioFeatureExtractor(SequenceFeatureExtractor):
@@ -141,11 +140,7 @@ class Lfm3AudioFeatureExtractor(SequenceFeatureExtractor):
             raise ValueError(f"Expected {self.sampling_rate} Hz, got {sampling_rate} Hz")
         if cache is None:
             cache = Lfm3AudioFeatureStreamingCache()
-        if cache.finished:
-            raise ValueError("This stream is finalized; start with a new cache")
         chunk = torch.as_tensor(raw_speech, dtype=torch.float32)
-        if chunk.ndim != 1:
-            raise ValueError("stream expects one mono waveform")
         samples = chunk if cache.samples is None else torch.cat((cache.samples, chunk))
         num_samples = cache.num_samples + chunk.numel()
         if is_final:
@@ -160,7 +155,6 @@ class Lfm3AudioFeatureExtractor(SequenceFeatureExtractor):
         cache.samples = samples[count * self.hop_length :].clone() if not is_final else None
         cache.num_samples = num_samples
         cache.num_frames += count
-        cache.finished = is_final
         return BatchFeature(
             {
                 "input_features": features[None],

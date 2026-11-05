@@ -13,7 +13,6 @@
 # limitations under the License.
 """Processor class for LFM3-Audio."""
 
-import math
 import re
 from typing import TypedDict
 
@@ -221,7 +220,7 @@ class Lfm3AudioProcessor(ProcessorMixin):
     @property
     def audio_eos_code(self) -> int:
         """The end-of-speech code: the first id after the codec's vocabulary."""
-        return math.prod(self.audio_tokenizer.config.fsq_levels)
+        return self.audio_tokenizer.config.codebook_size
 
     @torch.no_grad()
     def encode_audio(self, audio) -> torch.Tensor:

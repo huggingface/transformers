@@ -436,33 +436,11 @@ class Lfm3AudioGenerationMixin(GenerationMixin):
             [`Lfm3AudioLiveTranscriptionOutput`]: the chunk's text tokens (the final block starts with
             `<|mixed_end|>`), the number of audio tokens it completed, and the updated state.
         """
-        if self.training:
-            raise ValueError("Live transcription requires eval mode")
         config = self.config
-        num_mel_bins = config.audio_encoder_config.num_mel_bins
-        if input_features.ndim != 3 or input_features.shape[0] != 1 or input_features.shape[1] != num_mel_bins:
-            raise ValueError(
-                f"Live transcription takes one stream: features of shape (1, {num_mel_bins}, num_frames), got "
-                f"{tuple(input_features.shape)}"
-            )
-        if input_ids is not None:
-            if input_ids.ndim != 2 or input_ids.shape[0] != 1:
-                raise ValueError("Live transcription takes one prompt of shape (1, prompt_length)")
-            if bool(
-                torch.isin(
-                    input_ids,
-                    torch.tensor([config.audio_token_id, config.audio_out_token_id], device=input_ids.device),
-                ).any()
-            ):
-                raise ValueError(
-                    "Live transcription prompts cannot hold speech placeholders: the audio arrives as `input_features`"
-                )
         if state is None:
             if input_ids is None:
                 raise ValueError("A new stream needs the prompt `input_ids`")
             state = Lfm3AudioLiveTranscriptionState()
-        if state.finished:
-            raise ValueError("This stream is finalized; start with a new state")
         eos_token_ids = config.text_config.eos_token_id
         eos_token_ids = (
             [] if eos_token_ids is None else [eos_token_ids] if isinstance(eos_token_ids, int) else list(eos_token_ids)
@@ -474,9 +452,6 @@ class Lfm3AudioGenerationMixin(GenerationMixin):
         if not is_final:
             suppress |= {*eos_token_ids, *(suppress_token_ids or [])}
         suppress -= {text_end}
-        vocab_size = config.text_config.vocab_size
-        if any(not 0 <= token_id < vocab_size for token_id in suppress):
-            raise ValueError(f"Suppressed token ids must lie in [0, {vocab_size}), got {sorted(suppress)}")
 
         # the encoder runs before a restart replaces the context, so a rejected chunk leaves the context intact
         embeddings, state.encoder_cache = self.model.get_audio_features_stream(

@@ -141,14 +141,6 @@ class Lfm3AudioConfig(PreTrainedConfig):
     audio_loss_weight: float = 1.0
     initializer_range: float = 0.02
 
-    _token_id_fields = (
-        "audio_token_id",
-        "audio_out_token_id",
-        "audio_start_token_id",
-        "text_end_token_id",
-        "mixed_start_token_id",
-    )
-
     def __post_init__(self, **kwargs):
         if isinstance(self.depth_config, dict):
             # the depth decoder consumes embeddings only; its token ids are placeholders
@@ -158,17 +150,6 @@ class Lfm3AudioConfig(PreTrainedConfig):
     @property
     def audio_config(self):
         return self.audio_encoder_config
-
-    def validate_speech_fields(self):
-        """Part of ``@strict``-powered validation."""
-        if not 0 <= self.audio_eos_code < self.codebook_size:
-            raise ValueError(
-                f"audio_eos_code={self.audio_eos_code} must lie in [0, codebook_size={self.codebook_size})"
-            )
-        vocab_size = self.text_config.vocab_size
-        for name in self._token_id_fields:
-            if not 0 <= getattr(self, name) < vocab_size:
-                raise ValueError(f"{name}={getattr(self, name)} must lie in [0, text_config.vocab_size={vocab_size})")
 
 
 __all__ = ["Lfm3AudioConfig", "Lfm3AudioEncoderConfig"]

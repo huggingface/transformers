@@ -83,7 +83,6 @@ class Lfm3AudioEncoderStreamingCache:
         self.offset = 0
         self.num_frames = 0
         self.num_tokens = 0
-        self.finished = False
 
 
 class Lfm3AudioEncoder(nn.Module):
@@ -114,15 +113,9 @@ class Lfm3AudioEncoder(nn.Module):
         is_final: bool = False,
     ) -> tuple[torch.Tensor, Lfm3AudioEncoderStreamingCache]:
         """Encode complete stride-8 windows, with seven frames of lookahead and bounded left context."""
-        if self.training:
-            raise ValueError("Streaming audio encoding requires eval mode")
         if cache is None:
             cache = Lfm3AudioEncoderStreamingCache(self.config)
-        if cache.finished:
-            raise ValueError("This stream is finalized; start with a new cache")
         features = input_features.to(self.downsample.conv_in.weight.dtype)
-        if features.ndim != 3 or features.shape[1] != self.config.num_mel_bins:
-            raise ValueError("Expected features of shape (batch_size, num_mel_bins, num_frames)")
         if cache.features is not None:
             features = torch.cat((cache.features, features), dim=-1)
         num_frames = cache.num_frames + input_features.shape[-1]
@@ -142,7 +135,7 @@ class Lfm3AudioEncoder(nn.Module):
             encoded = features.new_empty((features.shape[0], 0, self.config.text_config.hidden_size))
         offset = max(0, (num_tokens - 1) * 8)
         cache.features = features[..., offset - cache.offset :].clone() if not is_final else None
-        cache.num_frames, cache.offset, cache.num_tokens, cache.finished = num_frames, offset, num_tokens, is_final
+        cache.num_frames, cache.offset, cache.num_tokens = num_frames, offset, num_tokens
         return encoded, cache
 
 
@@ -266,10 +259,6 @@ class Lfm3AudioPreTrainedModel(PreTrainedModel):
 @dataclass
 class Lfm3AudioModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
     audio_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(num_audio_tokens, hidden_size)`.
         audio_hidden_states of the model produced by the speech encoder and after projecting the last hidden state.
@@ -336,17 +325,6 @@ class Lfm3AudioModel(Lfm3AudioPreTrainedModel):
         feature_attention_mask (`torch.Tensor` of shape `(num_clips, num_frames)`):
             The mask of the valid spectrogram frames of each clip.
         """
-        num_mel_bins = self.config.audio_encoder_config.num_mel_bins
-        if input_features.ndim != 3 or input_features.shape[1] != num_mel_bins:
-            raise ValueError(
-                f"Expected input_features of shape (num_clips, {num_mel_bins}, num_frames), got "
-                f"{tuple(input_features.shape)}"
-            )
-        if feature_attention_mask.shape != (input_features.shape[0], input_features.shape[-1]):
-            raise ValueError(
-                f"Expected feature_attention_mask of shape {(input_features.shape[0], input_features.shape[-1])}, "
-                f"got {tuple(feature_attention_mask.shape)}"
-            )
         feature_lengths = feature_attention_mask.sum(-1)
         input_features = input_features.to(self.audio_encoder.downsample.conv_in.weight.dtype)
         encoder_outputs, encoded_lengths = self.audio_encoder(input_features, feature_lengths, **kwargs)
@@ -382,10 +360,6 @@ class Lfm3AudioModel(Lfm3AudioPreTrainedModel):
             `torch.FloatTensor` of shape `(num_frames, hidden_size)`: the sum of the codebook embeddings of each frame.
         """
         num_codebooks, codebook_size = self.config.num_codebooks, self.config.codebook_size
-        if audio_out_codes.ndim != 2 or audio_out_codes.shape[-1] != num_codebooks:
-            raise ValueError(
-                f"Expected audio_out_codes of shape (num_frames, {num_codebooks}), got {tuple(audio_out_codes.shape)}"
-            )
         # data-dependent, so a traced or captured forward skips it; an out-of-range code would read another codebook
         if not is_tracing(audio_out_codes):
             torch_compilable_check(
@@ -395,30 +369,14 @@ class Lfm3AudioModel(Lfm3AudioPreTrainedModel):
         offsets = torch.arange(num_codebooks, device=audio_out_codes.device) * codebook_size
         return self.codebook_embedding(audio_out_codes + offsets).sum(-2)
 
-    def get_placeholder_positions(self, input_ids, inputs_embeds, token_id: int) -> torch.Tensor:
-        if input_ids is not None:
-            return input_ids == token_id
-        token_embed = self.get_input_embeddings()(
-            torch.full((), token_id, dtype=torch.long, device=inputs_embeds.device)
-        )
-        return (inputs_embeds == token_embed).all(-1)
-
-    def check_speech_placeholders(self, input_ids, inputs_embeds, input_features=None, audio_out_codes=None) -> None:
-        """Refuse speech placeholders without features or codes; data-dependent, so a traced forward skips it."""
-        if is_tracing(input_ids if input_ids is not None else inputs_embeds):
-            return
-        for field, supplied, name in (
-            ("audio_token_id", input_features is not None, "input_features"),
-            ("audio_out_token_id", audio_out_codes is not None, "audio_out_codes"),
-        ):
-            if not supplied:
-                torch_compilable_check(
-                    ~self.get_placeholder_positions(input_ids, inputs_embeds, getattr(self.config, field)),
-                    f"{field} placeholders require `{name}`",
-                )
-
     def get_placeholder_mask(self, input_ids, inputs_embeds, token_id: int, num_features: int) -> torch.Tensor:
-        mask = self.get_placeholder_positions(input_ids, inputs_embeds, token_id)
+        if input_ids is not None:
+            mask = input_ids == token_id
+        else:
+            token_embed = self.get_input_embeddings()(
+                torch.full((), token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            mask = (inputs_embeds == token_embed).all(-1)
         if not is_tracing(mask):
             torch_compilable_check(
                 mask.sum() == num_features,
@@ -448,16 +406,13 @@ class Lfm3AudioModel(Lfm3AudioPreTrainedModel):
         feature_attention_mask (`torch.Tensor` of shape `(num_clips, num_frames)`, *optional*):
             The mask of the valid spectrogram frames of each clip.
         audio_out_codes (`torch.LongTensor` of shape `(num_frames, num_codebooks)`, *optional*):
-            The codes of the speech frames in the prompt, one row per `audio_out_token_id` placeholder. A speech
-            placeholder without its features or codes is refused, except in a compiled or captured forward, which
-            skips the check.
+            The codes of the speech frames in the prompt, one row per `audio_out_token_id` placeholder.
         """
         # both may come: `inputs_embeds` with features merged, `input_ids` for the placeholders
         if input_ids is None and inputs_embeds is None:
             raise ValueError("You must specify input_ids or inputs_embeds")
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
-        self.check_speech_placeholders(input_ids, inputs_embeds, input_features, audio_out_codes)
 
         audio_features = None
         if input_features is not None:
@@ -610,13 +565,7 @@ class Lfm3AudioForConditionalGeneration(Lfm3AudioPreTrainedModel, Lfm3AudioGener
         feature_attention_mask (`torch.Tensor` of shape `(num_clips, num_frames)`, *optional*):
             The mask of the valid spectrogram frames of each clip.
         audio_out_codes (`torch.LongTensor` of shape `(num_frames, num_codebooks)`, *optional*):
-            The codes of the speech frames in the sequence, one row per `audio_out_token_id` placeholder. A speech
-            placeholder without its features or codes is refused, except in a compiled or captured forward, which
-            skips the check.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+            The codes of the speech frames in the sequence, one row per `audio_out_token_id` placeholder.
         audio_labels (`torch.LongTensor` of shape `(num_frames, num_codebooks)`, *optional*):
             The codes of the speech frames to learn, one row per `audio_out_token_id` placeholder; rows of `-100` are
             ignored. The depth decoder predicts a random subset of each frame's codebooks from the others and the
@@ -639,6 +588,7 @@ class Lfm3AudioForConditionalGeneration(Lfm3AudioPreTrainedModel, Lfm3AudioGener
         logits = self.lm_head(kept_hidden_states)
 
         loss = text_loss = audio_loss = None
+        audio_count = 0
         if labels is not None:
             text_loss = (
                 self.loss_function(
@@ -650,9 +600,9 @@ class Lfm3AudioForConditionalGeneration(Lfm3AudioPreTrainedModel, Lfm3AudioGener
         if audio_labels is not None:
             if input_ids is None:
                 raise ValueError("`audio_labels` requires `input_ids` to locate the speech frames")
-            audio_loss = self.audio_loss(input_ids, hidden_states, audio_labels)
+            audio_loss, audio_count = self.audio_loss(input_ids, hidden_states, audio_labels)
         if text_loss is not None or audio_loss is not None:
-            loss = self.combined_loss(input_ids, labels, audio_labels, text_loss, audio_loss)
+            loss = self.combined_loss(labels, audio_count, text_loss, audio_loss)
 
         return Lfm3AudioCausalLMOutputWithPast(
             loss=loss,
@@ -668,21 +618,12 @@ class Lfm3AudioForConditionalGeneration(Lfm3AudioPreTrainedModel, Lfm3AudioGener
 
     def audio_loss(
         self, input_ids: torch.LongTensor, hidden_states: torch.FloatTensor, audio_labels: torch.LongTensor
-    ) -> torch.FloatTensor:
+    ) -> tuple[torch.FloatTensor, torch.LongTensor]:
+        """The depth decoder loss and the number of speech frames it supervises."""
         config = self.config
         # under `device_map` the hidden states sit on the last layer's device
         input_ids, audio_labels = input_ids.to(hidden_states.device), audio_labels.to(hidden_states.device)
         placeholders = input_ids == config.audio_out_token_id
-        if audio_labels.shape != (int(placeholders.sum()), config.num_codebooks):
-            raise ValueError(
-                f"Expected audio_labels of shape (num_frames, {config.num_codebooks}), one row per "
-                f"`audio_out_token_id` placeholder, got {tuple(audio_labels.shape)}"
-            )
-        ignored = (audio_labels == -100).all(-1, keepdim=True)
-        torch_compilable_check(
-            ignored | ((audio_labels >= 0) & (audio_labels < config.codebook_size)),
-            f"audio_labels must be in [0, {config.codebook_size}) or rows of -100",
-        )
         # a frame is predicted from the position before it: the first position of a row has none
         preceding = placeholders.clone()
         preceding[:, 0] = False
@@ -690,7 +631,7 @@ class Lfm3AudioForConditionalGeneration(Lfm3AudioPreTrainedModel, Lfm3AudioGener
         latents = hidden_states[preceding.roll(-1, dims=1)][supervised]
         codes = audio_labels[preceding[placeholders]][supervised]
         if codes.shape[0] == 0:
-            return hidden_states.sum() * 0.0
+            return hidden_states.sum() * 0.0, supervised.sum()
         ratio = torch.rand(codes.shape[0], 1, device=codes.device)
         masked = torch.rand(codes.shape, device=codes.device) < ratio
         masked |= ~masked.any(-1, keepdim=True)
@@ -699,19 +640,15 @@ class Lfm3AudioForConditionalGeneration(Lfm3AudioPreTrainedModel, Lfm3AudioGener
         # under `device_map` the depth decoder answers on its own device
         codes, masked = codes.to(logits.device), masked.to(logits.device)
         losses = F.cross_entropy(logits.transpose(1, 2).float(), codes, reduction="none")
-        return (losses * masked).sum() / masked.sum().clamp_min(1)
+        return (losses * masked).sum() / masked.sum().clamp_min(1), supervised.sum()
 
-    def combined_loss(self, input_ids, labels, audio_labels, text_loss, audio_loss) -> torch.Tensor:
+    def combined_loss(self, labels, audio_count, text_loss, audio_loss) -> torch.Tensor:
         """Mean over the supervised text tokens and speech frames, each modality weighted by count and config."""
         # under `device_map` the labels and the two losses can sit on three devices
         device = (text_loss if text_loss is not None else audio_loss).device
         text_count = 0 if labels is None else (labels[..., 1:] != -100).sum().to(device)
-        audio_count = 0
-        if audio_labels is not None:
-            placeholders = input_ids.to(audio_labels.device) == self.config.audio_out_token_id
-            preceding = placeholders.clone()
-            preceding[:, 0] = False
-            audio_count = (audio_labels != -100).all(-1)[preceding[placeholders]].sum().to(device)
+        if audio_loss is not None:
+            audio_count = audio_count.to(device)
         text_weight = self.config.text_loss_weight * text_count
         audio_weight = self.config.audio_loss_weight * audio_count
         return (

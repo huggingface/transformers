@@ -55,10 +55,6 @@ class LiquidCodecConfig(PreTrainedConfig):
         The number of levels of each finite-scalar-quantization dimension; their product is the codebook size.
     n_q (`int`, *optional*, defaults to 12):
         The number of codebooks.
-    sampling_rate (`int`, *optional*, defaults to 24000):
-        The sampling rate of the audio.
-    initializer_range (`float`, *optional*, defaults to 0.02):
-        The standard deviation of the truncated normal initializer of the weights.
     """
 
     model_type = "liquid_codec"

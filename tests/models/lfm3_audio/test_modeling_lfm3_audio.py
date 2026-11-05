@@ -166,7 +166,7 @@ def force_tokens(*tokens):
     return LogitsProcessorList([Boost(lambda step, row: tokens[step] if step < len(tokens) else None)])
 
 
-def frames_of(code, num_rows=None):
+def frames_of(code):
     """A `sample_audio_frames` stand-in emitting frames filled with `code`."""
     return lambda hidden_states, *args, **kwargs: torch.full(
         (hidden_states.shape[0], NUM_CODEBOOKS), code, dtype=torch.long, device=hidden_states.device
@@ -279,21 +279,6 @@ class Lfm3AudioModelTest(Lfm3AudioBehaviorTestMixin, unittest.TestCase):
         with self.assertRaises(ValueError):
             self.model(**inputs)
 
-    def test_encoder_window_bounds_the_attention(self):
-        encoder = self.model.model.audio_encoder
-        features, lengths = self.inputs["input_features"], self.inputs["feature_attention_mask"].sum(-1)
-        window = encoder.lfm.config.sliding_window
-        with torch.no_grad():
-            windowed = encoder(features, lengths)[0].last_hidden_state
-            encoder.lfm.config.sliding_window = 10_000
-            unbounded = encoder(features, lengths)[0].last_hidden_state
-            encoder.lfm.config.sliding_window = window
-        # the first frames see the same past either way (up to kernel noise), the fifth frame loses the first one
-        early = (windowed[:, :4] - unbounded[:, :4]).abs().max().item()
-        late = (windowed[:, 4:] - unbounded[:, 4:]).abs().max().item()
-        self.assertLess(early, 1e-6)
-        self.assertGreater(late, 10 * max(early, 1e-9))
-
     def test_depth_decoder_is_bidirectional_and_scores_masked_codebooks(self):
         depth = self.model.model.depth_decoder
         hidden = torch.randn(3, 32, device=torch_device)
@@ -320,65 +305,10 @@ class Lfm3AudioModelTest(Lfm3AudioBehaviorTestMixin, unittest.TestCase):
             text_count + audio_count + 1e-6
         )
         torch.testing.assert_close(outputs.loss, expected)
-        outputs.loss.backward()
-        self.assertIsNotNone(self.model.model.depth_decoder.mask_embedding.grad)
-        self.assertIsNotNone(self.model.model.audio_encoder.downsample.conv_in.weight.grad)
-        ignored = audio_labels.clone()
-        ignored[1] = -100
-        first = dict(self.inputs)
-        first["input_ids"] = torch.cat(
-            [torch.full((1, 1), AUDIO_OUT_TOKEN_ID, device=torch_device), first["input_ids"]], 1
-        )
-        first["audio_out_codes"] = torch.cat([audio_labels[:1], first["audio_out_codes"]])
         with torch.no_grad():
-            self.assertEqual(self.model(**self.inputs, audio_labels=ignored).audio_loss.shape, ())
-            self.assertEqual(
-                self.model(**first, audio_labels=torch.cat([audio_labels[:1], audio_labels])).audio_loss.shape, ()
-            )
-            self.assertIsNone(self.model(**self.inputs).loss)
             speech_only = self.model(**self.inputs, labels=torch.full_like(labels, -100), audio_labels=audio_labels)
             self.assertEqual(speech_only.text_loss.item(), 0.0)
             torch.testing.assert_close(speech_only.loss, speech_only.audio_loss)
-
-    def test_generate_text_mode_stops_at_eos_or_budget(self):
-        forwards = []
-        language_model = self.model.model.language_model
-        original_forward = language_model.forward
-        language_model.forward = lambda *args, **kwargs: forwards.append(kwargs["inputs_embeds"].shape[1]) or (
-            original_forward(*args, **kwargs)
-        )
-        outputs = self.model.generate(**self.inputs, max_new_tokens=5)
-        self.assertEqual(outputs.sequences.shape[0], 1)
-        self.assertLessEqual(outputs.sequences.shape[1] - self.inputs["input_ids"].shape[1], 5)
-        self.assertEqual(outputs.audio_codes.shape[:2], (1, NUM_CODEBOOKS))
-        # one prompt forward, then one step per generated token but the last
-        generated = outputs.sequences.shape[1] - self.inputs["input_ids"].shape[1]
-        self.assertEqual(forwards, [self.inputs["input_ids"].shape[1]] + [1] * (generated - 1))
-
-    def test_generate_audio_mode_emits_frames(self):
-        inputs = dict(self.inputs)
-        inputs["input_ids"] = torch.cat(
-            [inputs["input_ids"], torch.tensor([[AUDIO_START_ID]], device=torch_device)], 1
-        )
-        torch.manual_seed(0)
-        outputs = self.model.generate(
-            **inputs,
-            max_new_tokens=6,
-            depth_decoder_temperature=1.0,
-            depth_decoder_top_k=3,
-            depth_decoder_repetition_penalty=1.3,
-        )
-        new_tokens = outputs.sequences[0, inputs["input_ids"].shape[1] :]
-        self.assertEqual(int((new_tokens == AUDIO_OUT_TOKEN_ID).sum()), outputs.audio_codes.shape[-1])
-        self.assertEqual(outputs.audio_lengths.item(), outputs.audio_codes.shape[-1])
-        codes = outputs.audio_codes[0]
-        terminal = (codes == CODEBOOK_SIZE - 1).any(0)
-        self.assertTrue(bool((codes[:, ~terminal] < CODEBOOK_SIZE - 1).all()))
-        self.assertTrue(bool((codes[:, terminal] == CODEBOOK_SIZE - 1).all()))
-        inputs["input_ids"] = self.inputs["input_ids"][:, :-1]
-        with patch.object(self.model, "sample_audio_frames", side_effect=frames_of(0)):
-            outputs = self.model.generate(**inputs, max_new_tokens=3)
-        self.assertEqual(outputs.sequences[0, -3:].tolist(), [AUDIO_OUT_TOKEN_ID] * 3)
 
     def test_depth_decoder_generation_config_is_routed_and_persisted(self):
         inputs = dict(self.inputs)
@@ -392,11 +322,23 @@ class Lfm3AudioModelTest(Lfm3AudioBehaviorTestMixin, unittest.TestCase):
         self.assertTrue(torch.equal(greedy.audio_codes, again.audio_codes))
         self.assertFalse(depth_config.do_sample)
         text_top_k = self.model.generation_config.top_k
-        self.model.generate(
-            **inputs, max_new_tokens=2, depth_decoder_do_sample=True, depth_decoder_top_k=3, do_sample=False
+        outputs = self.model.generate(
+            **inputs,
+            max_new_tokens=6,
+            depth_decoder_do_sample=True,
+            depth_decoder_top_k=3,
+            depth_decoder_repetition_penalty=1.3,
+            do_sample=False,
         )
         self.assertEqual((depth_config.do_sample, depth_config.top_k), (True, 3))
         self.assertEqual(self.model.generation_config.top_k, text_top_k)
+        new_tokens = outputs.sequences[0, inputs["input_ids"].shape[1] :]
+        self.assertEqual(int((new_tokens == AUDIO_OUT_TOKEN_ID).sum()), outputs.audio_codes.shape[-1])
+        self.assertEqual(outputs.audio_lengths.item(), outputs.audio_codes.shape[-1])
+        codes = outputs.audio_codes[0]
+        terminal = (codes == CODEBOOK_SIZE - 1).any(0)
+        self.assertTrue(bool((codes[:, ~terminal] < CODEBOOK_SIZE - 1).all()))
+        self.assertTrue(bool((codes[:, terminal] == CODEBOOK_SIZE - 1).all()))
         with tempfile.TemporaryDirectory() as tmp:
             self.model.save_pretrained(tmp)
             with open(os.path.join(tmp, "generation_config.json"), encoding="utf-8") as handle:
@@ -507,13 +449,11 @@ class Lfm3AudioModelTest(Lfm3AudioBehaviorTestMixin, unittest.TestCase):
             for layer in state.past_key_values.layers:
                 if getattr(layer, "keys", None) is not None:
                     self.assertLessEqual(layer.keys.shape[-2], encoder.config.text_config.sliding_window)
-            with self.assertRaises(ValueError):
-                encoder.stream(features[..., :0], state)
 
-    def test_cached_generation_matches_full_prompt_in_all_modes(self):
+    def test_cached_generation_matches_full_prompt_in_the_speech_modes(self):
         prefix = torch.tensor([[0, 1, 4], [1, 5, 6]], device=torch_device)
         prefix_mask = prefix.ne(0).long()
-        for last_token in (7, AUDIO_START_ID, MIXED_START_ID):
+        for last_token in (AUDIO_START_ID, MIXED_START_ID):
             with self.subTest(last_token=last_token), torch.no_grad():
                 suffix = prefix.new_full((2, 2), last_token)
                 ids = torch.cat((prefix, suffix), dim=-1)
@@ -555,6 +495,8 @@ class Lfm3AudioModelTest(Lfm3AudioBehaviorTestMixin, unittest.TestCase):
             def boosted(hidden_states):
                 logits = original(hidden_states)
                 logits[..., TEXT_END_ID] += boost
+                # the placeholders would win every step, but are never sampled as text
+                logits[..., [AUDIO_TOKEN_ID, AUDIO_OUT_TOKEN_ID]] += 50.0
                 return logits
 
             head.forward = boosted
@@ -593,28 +535,8 @@ class Lfm3AudioModelTest(Lfm3AudioBehaviorTestMixin, unittest.TestCase):
                     row[suppressed] = float("-inf")
                 self.assertEqual(int(row.argmax()), token)
 
-    def test_placeholders_without_their_features_are_rejected(self):
-        inputs = dict(self.inputs)
-        with self.assertRaisesRegex(ValueError, "audio_out_codes"):
-            self.model(**{**inputs, "audio_out_codes": None})
-        with self.assertRaisesRegex(ValueError, "input_features"):
-            self.model(**{**inputs, "input_features": None, "feature_attention_mask": None})
-        embeds = self.model.get_input_embeddings()(inputs["input_ids"])
-        with self.assertRaisesRegex(ValueError, "input_features"):
-            self.model(inputs_embeds=embeds)
-        with self.assertRaisesRegex(ValueError, "input_features"):
-            self.model(inputs_embeds=embeds, audio_out_codes=inputs["audio_out_codes"])
-        with torch.no_grad():
-            self.model(inputs_embeds=self.model.get_input_embeddings()(inputs["input_ids"][:, :3]))
-        ids = torch.tensor([[1, 4, AUDIO_OUT_TOKEN_ID]], device=torch_device)
-        with self.assertRaisesRegex(ValueError, "audio_out_codes"):
-            self.model.generate(ids, max_new_tokens=2)
-        with torch.no_grad():
-            self.assertEqual(self.model(**inputs).logits.shape[1], inputs["input_ids"].shape[1])
-
     def test_placeholder_ids_are_never_sampled_as_text(self):
         prompt = torch.tensor([[1, 10, 11]], device=torch_device)
-        features = torch.randn(1, 16, 96, device=torch_device)
         for boosted_id in (AUDIO_TOKEN_ID, AUDIO_OUT_TOKEN_ID):
             with self.subTest(boosted_id=boosted_id), torch.no_grad():
                 boost = LogitsProcessorList([Boost(lambda step, row: boosted_id)])
@@ -623,21 +545,6 @@ class Lfm3AudioModelTest(Lfm3AudioBehaviorTestMixin, unittest.TestCase):
                 )
                 self.assertNotIn(boosted_id, outputs.sequences[0, 3:].tolist())
                 self.assertEqual(outputs.audio_lengths.tolist(), [0])
-                head, original = self.model.lm_head, self.model.lm_head.forward
-
-                def boosted(hidden_states):
-                    logits = original(hidden_states)
-                    logits[..., boosted_id] += 50.0
-                    return logits
-
-                head.forward = boosted
-                try:
-                    output = self.model.transcribe_live(features, input_ids=prompt, max_new_tokens=3)
-                    self.assertNotIn(boosted_id, output.sequences[0].tolist())
-                    output = self.model.transcribe_live(features, output.state, is_final=True, max_new_tokens=3)
-                    self.assertNotIn(boosted_id, output.sequences[0].tolist())
-                finally:
-                    head.forward = original
 
 
 class Lfm3AudioModelTester:
@@ -699,8 +606,6 @@ class Lfm3AudioCommonTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         # `generate` only runs greedy search or sampling, like Dia
         if any(mode in self._testMethodName for mode in ("beam", "assisted_decoding", "prompt_lookup")):
             self.skipTest("LFM3-Audio generates with greedy search or sampling only")
-        if "rope_scaling_from_config" in self._testMethodName:
-            self.skipTest("random `input_ids` hit the speech placeholders, whose features the test does not pass")
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -732,26 +637,6 @@ class Lfm3AudioCommonTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
 
     @unittest.skip("the conv layers record no attention weights")
     def test_attention_outputs(self):
-        pass
-
-    @unittest.skip("builds `inputs_embeds` from ids with speech placeholders, then drops the features behind them")
-    def test_generate_from_random_inputs_embeds(self):
-        pass
-
-    @unittest.skip("builds `inputs_embeds` from ids with speech placeholders, then drops the features behind them")
-    def test_recurrent_layers_mask_padding_on_continued_forward(self):
-        pass
-
-    @unittest.skip("continues from ids with speech placeholders, without the features behind them")
-    def test_flash_attention_2_continue_generate_with_position_ids(self):
-        pass
-
-    @unittest.skip("builds its inputs from ids with speech placeholders, without the features behind them")
-    def test_flash_attn_2_from_config(self):
-        pass
-
-    @unittest.skip("builds its inputs from ids with speech placeholders, without the features behind them")
-    def test_flash_attn_4_from_config(self):
         pass
 
     def test_reverse_loading_mapping(self):

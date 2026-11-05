@@ -147,16 +147,6 @@ class LiquidCodecModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertTrue(torch.equal(reconstructed, outputs.audio_values))
         self.assertTrue(torch.equal(codes, same_codes))
 
-    def test_invalid_inputs_raise(self):
-        with self.assertRaises(ValueError):
-            self.codec.encode(torch.zeros(0, device=torch_device))
-        with self.assertRaises(ValueError):
-            self.codec.encode(torch.zeros(2, 0, device=torch_device))
-        with self.assertRaises(ValueError):
-            self.codec.decode(torch.zeros(1, 3, 2, dtype=torch.long, device=torch_device))
-        with self.assertRaises(ValueError):
-            self.codec.decode(torch.full((1, 4, 2), 9, dtype=torch.long, device=torch_device))
-
     def test_streaming_decode_matches_offline(self):
         """Every chunk, the first and the final flush included, returns exactly the samples of the offline decode
         that no later frame changes; empty chunks leave the stream untouched."""
