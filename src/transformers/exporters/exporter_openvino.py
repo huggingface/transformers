@@ -91,7 +91,6 @@ if is_openvino_available():
 
 
 if TYPE_CHECKING:
-    from ..generation import GenerationConfig
     from ..modeling_utils import PreTrainedModel
 
 
@@ -114,29 +113,6 @@ class OpenVINOExporter(DynamoExporter):
 
     required_packages = ["torch", "openvino"]
     tested_versions = {"torch": "2.12.0", "openvino": "2026.3.1"}
-
-    def export_for_generation(
-        self,
-        model: PreTrainedModel,
-        sample_inputs: MutableMapping[str, Any],
-        config: OpenVINOConfig | dict[str, OpenVINOConfig],
-        generation_config: GenerationConfig | None = None,
-        multi_token_decode: bool = False,
-    ) -> dict[str, openvino.Model]:
-        """[`~exporters.base.HfExporter.export_for_generation`], with the sliding-window layers of a stateful export's
-        dynamic cache keeping every token (`DynamicCache(full_sliding_layers=True)`), unless `generation_config` sets
-        a `cache_config`. OpenVINO's CPU plugin only fuses a KV cache into its attention when the cache update feeds the
-        state as is, and a sliding-window layer slices it to its window; the mask still applies the window. A stateful
-        model keeps its cache inside, so nothing rebuilds it from the generation config at runtime."""
-        configs = [
-            OpenVINOConfig(**c) if isinstance(c, dict) else c
-            for c in (config.values() if isinstance(config, dict) else [config])
-        ]
-        generation_config = copy.deepcopy(generation_config or model.generation_config)
-        dynamic_cache = generation_config.cache_implementation in (None, "dynamic")
-        if all(c.stateful for c in configs) and dynamic_cache and generation_config.cache_config is None:
-            generation_config.cache_config = {"full_sliding_layers": True}
-        return super().export_for_generation(model, sample_inputs, config, generation_config, multi_token_decode)
 
     def export(
         self,
