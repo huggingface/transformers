@@ -11,11 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for `OnnxConfig(ort_fusions=...)` on a tiny Llama.
+"""Fusion tests, one class per backend.
 
-They check that the expected ONNX Runtime ops appear in the fused graph and that it gives the same outputs as the
-plain export. `test_export.py` already compares every architecture's fused export against eager, but it would still
-pass if a fusion stopped matching."""
+ONNX Runtime (`OnnxConfig(ort_fusions=...)`), on a tiny Llama: the expected ONNX Runtime ops appear in the fused graph
+and it gives the same outputs as the plain export. `test_export.py` already compares every architecture's fused export
+against eager, but it would still pass if a fusion stopped matching."""
 
 import collections
 import unittest
@@ -47,7 +47,7 @@ def _run(program, feeds):
 @require_torch
 @require_onnxscript
 @require_onnxruntime
-class OnnxRuntimeFusionsTest(unittest.TestCase):
+class OnnxRuntimeFusionTest(unittest.TestCase):
     def setUp(self):
         torch.manual_seed(0)
         # GroupQueryAttention only applies rotary itself for head sizes that are multiples of 16.
@@ -82,8 +82,9 @@ class OnnxRuntimeFusionsTest(unittest.TestCase):
         np.testing.assert_allclose(_run(fused, feeds)[0], _run(plain, feeds)[0], atol=1e-4, rtol=1e-4)
 
     def test_decode_fuses_cache_update_and_rotary_into_group_query_attention(self):
-        """Each layer of a decode step should become a single GroupQueryAttention that updates the cache and applies
-        rotary itself. Its logits and updated cache should match the plain export's."""
+        """Each layer of a decode step should become a single GroupQueryAttention that updates the cache, applies
+        rotary itself and reads the packed query, key and value projection. Its logits and updated cache should match
+        the plain export's."""
         generation_config = GenerationConfig(max_new_tokens=4, do_sample=False)
         fused, plain = (
             OnnxExporter().export_for_generation(
@@ -94,6 +95,7 @@ class OnnxRuntimeFusionsTest(unittest.TestCase):
         attentions = [node for node in fused.model.graph.all_nodes() if node.op_type == "GroupQueryAttention"]
         self.assertEqual(len(attentions), self.model.config.num_hidden_layers)
         self.assertTrue(all(node.attributes.get_int("do_rotary", 0) for node in attentions))
+        self.assertTrue(all(node.inputs[1] is None and node.inputs[2] is None for node in attentions))
         self.assertNotIn(("com.microsoft", "RotaryEmbedding"), _ops(fused))
         # Feed one new token after a random past cache.
         generator = np.random.default_rng(0)

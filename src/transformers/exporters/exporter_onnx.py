@@ -309,10 +309,10 @@ def _patch_sdpa(original):
 
     def patch(query, key, value, attn_mask=None, *args, **kwargs):
         torch._check(key.shape[-2] == value.shape[-2])
-        if attn_mask is not None and attn_mask.shape[-1] != 1:
-            torch._check(attn_mask.shape[-1] == key.shape[-2])
         if attn_mask is None:
             return original(query, key, value, attn_mask, *args, **kwargs)
+        if attn_mask.shape[-1] != 1:
+            torch._check(attn_mask.shape[-1] == key.shape[-2])
         # Built from scalars only, so every layer's copy of this, reading the same mask, is one after CSE.
         if attn_mask.dtype == torch.bool:
             attended = attn_mask.to(query.dtype)
@@ -1094,10 +1094,12 @@ def _aten_grouped_mm(mat_a: TReal, mat_b: TReal, offs: INT64, bias=None, out_dty
     if not isinstance(G, int):
         raise ValueError("_aten_grouped_mm: number of experts (mat_b.shape[0]) must be static at translation time")
 
+    def per_group(x):
+        return op.Split(x, axis=0, num_outputs=G) if G > 1 else [x]
+
     axes_0 = op.Constant(value_ints=[0])
-    ends = op.Split(op.Cast(offs, to=7), axis=0, num_outputs=G) if G > 1 else [op.Cast(offs, to=7)]
-    weights = op.Split(mat_b, axis=0, num_outputs=G) if G > 1 else [mat_b]
-    biases = (op.Split(bias, axis=0, num_outputs=G) if G > 1 else [bias]) if bias is not None else None
+    ends, weights = per_group(op.Cast(offs, to=7)), per_group(mat_b)
+    biases = per_group(bias) if bias is not None else None
 
     outputs = []
     prev_end = op.Constant(value_ints=[0])

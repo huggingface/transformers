@@ -22,11 +22,11 @@ GELU. Around them, in order (`_STEPS`, which also says which provider each step 
    broadcast, or the `[batch, length, heads, head_dim]` layout), and attentions sharing a key (Gemma 4's).
 3. **onnxscript's ORT fusions.**
 4. **Repair**: undo the fusions of theirs ONNX Runtime rejects.
-5. **More fusions**: norms without a scale, norms a float16 model computes in float32, the projections reading one
-   input as one `MatMul`; on the CPU, `GroupQueryAttention` over a key-value cache, and the attentions left back to
-   plain ops (its `MultiHeadAttention` is slower); on CUDA, `MoE`.
-6. **CUDA provider**: rewrite the ops its kernels lack, which would run on the CPU (and keep CUDA graphs from
-   capturing the graph).
+5. **More fusions**: norms without a scale, norms a float16 model computes in float32; `GroupQueryAttention` over a
+   key-value cache (on CUDA, decode only, with the per-head q/k norms); on CUDA, `MoE`; on the CPU, the attentions
+   left back to plain ops (its `MultiHeadAttention` is slower); the layout transposes around each attention
+   cancelled; the projections reading one input as one `MatMul`, which `GroupQueryAttention` reads packed.
+6. **CUDA provider**: rewrite what CUDA graphs can't replay.
 7. **Clean up**: what every layer computes alike, computed once.
 
 Every rewrite matches exactly what it replaces: the fused graph's outputs are the unfused one's.
@@ -97,6 +97,28 @@ def _replace(old: ir.Value, new: ir.Value) -> None:
     old.replace_all_uses_with(new, replace_graph_outputs=True)
     if is_output:
         old.name, new.name = f"{name}_unfused", name
+
+
+def _add_node(graph: ir.Graph, before: ir.Node, op_type: str, inputs, shape, dtype, domain: str = "", **attributes):
+    """A one-output `op_type` node inserted before `before`: its output, with `shape` and `dtype`."""
+    node = ir.node(op_type, inputs, attributes=attributes, domain=domain)
+    node.outputs[0].shape, node.outputs[0].dtype = (ir.Shape(shape) if shape is not None else None), dtype
+    graph.insert_before(before, node)
+    return node.outputs[0]
+
+
+def _swapped_heads(value: ir.Value | None) -> ir.Value | None:
+    """`x` if `value` is `Transpose(x, perm=[0, 2, 1, 3])`: `[batch, length, heads, head_dim]` and
+    `[batch, heads, length, head_dim]` swapped."""
+    transpose = _producer(value, "Transpose")
+    return transpose.inputs[0] if transpose is not None and _perm(transpose) == [0, 2, 1, 3] else None
+
+
+def _merged_heads(value: ir.Value | None) -> ir.Value | None:
+    """`states`, `[batch, heads, length, head_dim]`, if `value` is their merge into `[batch, length, heads * head_dim]`
+    (a transpose, then a reshape)."""
+    reshape = _producer(value, "Reshape")
+    return _swapped_heads(reshape.inputs[0]) if reshape is not None else None
 
 
 # ── 1. Prepare ────────────────────────────────────────────────────────────────
@@ -355,15 +377,10 @@ def _unshare_key_transposes(graph: ir.Graph) -> int:
         for user, index in uses[1:]:
             value = chain[0].inputs[0]
             for original in chain:
-                copy = ir.node(
-                    original.op_type,
-                    [value, *original.inputs[1:]],
-                    attributes=dict(original.attributes),
-                    domain=original.domain,
-                )
-                copy.outputs[0].dtype, copy.outputs[0].shape = original.outputs[0].dtype, original.outputs[0].shape
-                graph.insert_before(user, copy)
-                value = copy.outputs[0]
+                attributes = {key: attribute.value for key, attribute in original.attributes.items()}
+                output = original.outputs[0]
+                inputs = [value, *original.inputs[1:]]
+                value = _add_node(graph, user, original.op_type, inputs, output.shape, output.dtype, **attributes)
             user.replace_input_with(index, value)
             copies += 1
     return copies
@@ -388,17 +405,17 @@ def _unfuse_mixed_dtype_skip_norms(model: ir.Model) -> int:
         input, skip, scale = node.inputs[:3]
         if len({input.dtype, skip.dtype, scale.dtype}) == 1:
             continue
-        total = ir.node("Add", [input, skip])
-        total.outputs[0].dtype, total.outputs[0].shape = input.dtype, input.shape
+        graph, output = node.graph, node.outputs[0]
+        total = _add_node(graph, node, "Add", [input, skip], input.shape, input.dtype)
         attributes = {"axis": -1, "stash_type": 1}
         if "epsilon" in node.attributes:
             attributes["epsilon"] = node.attributes["epsilon"].as_float()
-        normalized = ir.node("SimplifiedLayerNormalization", [total.outputs[0], scale], attributes=attributes)
-        normalized.outputs[0].dtype, normalized.outputs[0].shape = node.outputs[0].dtype, node.outputs[0].shape
-        node.graph.insert_before(node, [total, normalized])
-        ir.convenience.replace_all_uses_with(node.outputs[0], normalized.outputs[0])
+        normalized = _add_node(
+            graph, node, "SimplifiedLayerNormalization", [total, scale], output.shape, output.dtype, **attributes
+        )
+        ir.convenience.replace_all_uses_with(output, normalized)
         if len(node.outputs) > 3:
-            ir.convenience.replace_all_uses_with(node.outputs[3], total.outputs[0])
+            ir.convenience.replace_all_uses_with(node.outputs[3], total)
         node.graph.remove(node, safe=True)
         count += 1
     return count
@@ -425,12 +442,9 @@ def _untranspose_batch_matmuls(model: ir.Model) -> int:
                 if node.attributes.get_int(f"trans{side}", 0)
                 else [*range(1, rank - 1), 0, rank - 1]
             )
-            transposed = ir.node("Transpose", [source], attributes={"perm": perm})
-            transposed.outputs[0].dtype = source.dtype
-            if source.shape is not None:
-                transposed.outputs[0].shape = ir.Shape([source.shape[axis] for axis in perm])
-            node.graph.insert_before(node, transposed)
-            node.replace_input_with(index, transposed.outputs[0])
+            shape = [source.shape[axis] for axis in perm] if source.shape is not None else None
+            transposed = _add_node(node.graph, node, "Transpose", [source], shape, source.dtype, perm=perm)
+            node.replace_input_with(index, transposed)
             for attribute in (f"transBatch{side}", f"trans{side}"):
                 node.attributes[attribute] = ir.Attr(attribute, ir.AttributeType.INT, 0)
             count += 1
@@ -531,11 +545,8 @@ def _cache_update(value: ir.Value):
     dynamic cache appends (`Concat(past, new, axis=2)`, no `start`); a static one writes at `start` into its buffer
     (`ScatterND` on its `[length, batch, heads, head_dim]` view); a prefill, with no past, returns the new states as
     they are (no `past`)."""
-    reshape = _producer(value, "Reshape")
-    transpose = _producer(reshape.inputs[0], "Transpose") if reshape is not None else None
-    if transpose is None or _perm(transpose) != [0, 2, 1, 3]:
+    if (states := _merged_heads(value)) is None:
         return None
-    states = transpose.inputs[0]
     if (repeat := _producer(states, "Reshape")) is not None:
         expand = _producer(repeat.inputs[0], "Expand")
         unsqueeze = _producer(expand.inputs[0], "Unsqueeze") if expand is not None else None
@@ -607,11 +618,9 @@ def _query_states(query: ir.Value, kv_heads: int, num_heads: int):
     `[batch, length, heads * head_dim]`; `groups` set when, for one new token, they were folded onto their key-value
     heads (`[batch, kv_heads, groups, head_dim]`, how transformers decodes grouped-query attention without repeating
     the key-value heads), the attention then running over the key-value heads."""
-    reshape = _producer(query, "Reshape")
-    transpose = _producer(reshape.inputs[0], "Transpose") if reshape is not None else None
-    if transpose is None or _perm(transpose) != [0, 2, 1, 3]:
+    if (states := _merged_heads(query)) is None:
         return None
-    states, fold = transpose.inputs[0], _producer(transpose.inputs[0], "Reshape")
+    fold = _producer(states, "Reshape")
     if num_heads != kv_heads or fold is None:
         return states, None
     groups, heads = _static_dim(states, 2), _static_dim(fold.inputs[0], 1)
@@ -748,21 +757,22 @@ def _fuse_group_query_attention(model: ir.Model, prefill: bool = True, head_norm
             rotary_attributes = {"do_rotary": 1, "rotary_interleaved": interleaved}
         if rotation is not None or groups is not None:
             query = merged(query_states)
-        # Read off the query's heads, which keep their shape, rather than off their merge built here.
-        heads, length_axis = query_states, 2
+        # The lengths are read off the query's heads, which keep their shape, rather than off their merge built here.
+        sized, length_axis = query_states, 2
         key_states, norms = merged(new_key), []
         # CUDA's kernel takes half precision only: a float32 one runs on the CPU, which has no norms.
         half = dtype in (ir.DataType.FLOAT16, ir.DataType.BFLOAT16)
-        found = (_head_norm(query_states), _head_norm(new_key)) if head_norms and half else (None,)
-        if isinstance(new_key, ir.Value) and None not in found and found[0][2] == found[1][2]:
-            # Normalized by the attention itself, before its rotary.
-            (query, query_norm, epsilon), (key_states, key_norm, _) = found
-            weights = (constant(_constant(w).astype(dtype.numpy()), dtype.numpy()) for w in (query_norm, key_norm))
-            norms = [None, None, None, *weights]
-            rotary_attributes["qk_norm_epsilon"] = epsilon
-            heads, length_axis = query, 1
-        batch = tape.op("Shape", [heads], attributes={"start": 0, "end": 1})
-        new_length = tape.op("Shape", [heads], attributes={"start": length_axis, "end": length_axis + 1})
+        if head_norms and half and isinstance(new_key, ir.Value):
+            found = _head_norm(query_states), _head_norm(new_key)
+            if None not in found and found[0][2] == found[1][2]:
+                # Normalized by the attention itself, before its rotary.
+                (query, query_norm, epsilon), (key_states, key_norm, _) = found
+                weights = (constant(_constant(w).astype(dtype.numpy()), dtype.numpy()) for w in (query_norm, key_norm))
+                norms = [None, None, None, *weights]
+                rotary_attributes["qk_norm_epsilon"] = epsilon
+                sized, length_axis = query, 1
+        batch = tape.op("Shape", [sized], attributes={"start": 0, "end": 1})
+        new_length = tape.op("Shape", [sized], attributes={"start": length_axis, "end": length_axis + 1})
         if past_key is None:
             length = new_length
         elif start is None:
@@ -970,20 +980,21 @@ def _fuse_mixture_of_experts(model: ir.Model) -> int:
             _initializer(graph, f"mixture_of_experts_{count}_{index}", array) if array is not None else None
             for index, array in enumerate(weights)
         ]
-        moe = ir.node(
+        combined = combine.outputs[0]
+        attributes = {"k": k, "normalize_routing_weights": normalize, "activation_type": "silu"}
+        output = _add_node(
+            graph,
+            combine,
             "MoE",
             [tokens, logits, *weights],
-            attributes={"k": k, "normalize_routing_weights": normalize, "activation_type": "silu"},
-            domain="com.microsoft",
+            combined.shape,
+            tokens.dtype,
+            "com.microsoft",
+            **attributes,
         )
-        moe.outputs[0].dtype, moe.outputs[0].shape = tokens.dtype, combine.outputs[0].shape
-        nodes, output = [moe], moe.outputs[0]
         if upcast is not None:
-            cast = ir.node("Cast", [output], attributes={"to": combine.outputs[0].dtype})
-            cast.outputs[0].dtype, cast.outputs[0].shape = combine.outputs[0].dtype, combine.outputs[0].shape
-            nodes, output = [moe, cast], cast.outputs[0]
-        graph.insert_before(combine, nodes)
-        _replace(combine.outputs[0], output)
+            output = _add_node(graph, combine, "Cast", [output], combined.shape, combined.dtype, to=combined.dtype)
+        _replace(combined, output)
         count += 1
     return count
 
@@ -1030,20 +1041,6 @@ def _unfuse_attentions(model: ir.Model) -> int:
         graph.remove(node, safe=True)
         count += 1
     return count
-
-
-def _swapped_heads(value: ir.Value | None) -> ir.Value | None:
-    """`x` if `value` is `Transpose(x, perm=[0, 2, 1, 3])`: `[batch, length, heads, head_dim]` and
-    `[batch, heads, length, head_dim]` swapped."""
-    transpose = _producer(value, "Transpose")
-    return transpose.inputs[0] if transpose is not None and _perm(transpose) == [0, 2, 1, 3] else None
-
-
-def _add_node(graph: ir.Graph, before: ir.Node, op_type: str, inputs, shape, dtype, domain: str = "", **attributes):
-    node = ir.node(op_type, inputs, attributes=attributes, domain=domain)
-    node.outputs[0].shape, node.outputs[0].dtype = (ir.Shape(shape) if shape is not None else None), dtype
-    graph.insert_before(before, node)
-    return node.outputs[0]
 
 
 def _swap_heads(graph: ir.Graph, before: ir.Node, x: ir.Value, replacing: ir.Value | None = None) -> ir.Value:
@@ -1107,9 +1104,8 @@ def _sink_head_transposes(model: ir.Model) -> int:
             batch, length = x.shape[0], x.shape[1]
             single = _initializer(graph, f"{name}_single", np.array([0, 0, kv_heads, 1, head_size]))
             states = _add_node(graph, node, "Reshape", [x, single], [batch, length, kv_heads, 1, head_size], x.dtype)
-            leading = _add_node(graph, node, "Shape", [x], [2], ir.DataType.INT64, start=0, end=2)
-            trailing = _initializer(graph, f"{name}_groups", np.array([kv_heads, groups, head_size]))
-            target = _add_node(graph, node, "Concat", [leading, trailing], [5], ir.DataType.INT64, axis=0)
+            # `Expand` broadcasts: ones keep the other axes.
+            target = _initializer(graph, f"{name}_groups", np.array([1, 1, 1, groups, 1]))
             states = _add_node(
                 graph, node, "Expand", [states, target], [batch, length, kv_heads, groups, head_size], x.dtype
             )
@@ -1201,9 +1197,7 @@ def _pack_group_query_attention_inputs(model: ir.Model) -> int:
             continue
         parts = [_unmerged(value) for value in node.inputs[:3]]
         split = _producer(parts[0], "Split")
-        if split is None or len(split.outputs) != 3 or [part.index() for part in parts] != [0, 1, 2]:
-            continue
-        if any(part.producer() is not split for part in parts) or split.attributes.get_int("axis", 0) not in (-1, 2):
+        if split is None or parts != list(split.outputs) or split.attributes.get_int("axis", 0) not in (-1, 2):
             continue
         node.replace_input_with(0, split.inputs[0])
         node.replace_input_with(1, None)
@@ -1320,7 +1314,8 @@ def fuse_for_onnxruntime(model: ir.Model, device: str = "cpu", steps: int | None
         if installed and version.parse(installed_version) < version.parse("1.28.0"):
             logger.warning(
                 f"Graphs fused for ONNX Runtime's CUDA provider need onnxruntime>=1.28.0 (installed: "
-                f"{installed_version}): before it, its float16 skip norms overflow on large activations."
+                f"{installed_version}): before it, `GroupQueryAttention` has no query and key norms and float16 skip "
+                "norms overflow on large activations."
             )
     counts = {name: step(model) if device in providers else 0 for name, step, providers in _STEPS[:steps]}
     # 7. What every layer computes alike (its mask's unattended rows), computed once.
