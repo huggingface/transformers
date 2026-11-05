@@ -4305,6 +4305,11 @@ class PreTrainedModel(
         if "experts_implementation" in kwargs:
             config._experts_implementation = kwargs.pop("experts_implementation")
 
+        if dummy:
+            # Dummy weights are never quantized: build the model in its unquantized dtype
+            quantization_config = None
+            if getattr(config, "quantization_config", None) is not None:
+                del config.quantization_config
         hf_quantizer, config, device_map = get_hf_quantizer(
             config, quantization_config, device_map, weights_only, user_agent, gguf_file=gguf_file
         )
@@ -4318,12 +4323,6 @@ class PreTrainedModel(
         if dummy:
             if gguf_file or state_dict is not None:
                 raise ValueError("`dummy=True` can't be combined with a GGUF file or a `state_dict`.")
-            if hf_quantizer is not None:
-                # Dummy weights are never quantized: build the model in its unquantized dtype
-                logger.warning_once("`dummy=True` ignores the quantization config: the dummy model is not quantized.")
-                hf_quantizer = None
-                if hasattr(config, "quantization_config"):
-                    del config.quantization_config
             # Only the config is needed: the weights are generated on the fly
             distributed_checkpoint_dir, checkpoint_files, sharded_metadata = None, None, None
         else:
@@ -4438,11 +4437,12 @@ class PreTrainedModel(
             model.tie_weights()  # tie on meta first, so tied parameters share one procedural tensor
             make_procedural(model, dummy_seed, device_map)
             model._is_dummy = True
-            # Only the buffers (e.g. RoPE frequencies) are left to create and initialize
+            # Only the buffers (e.g. RoPE frequencies) are left to create and initialize; they are not reported as
+            # missing, since a dummy model has no checkpoint
             buffers = {name for name, _ in model.named_buffers()}
-            loading_info = cls._finalize_model_loading(
-                model, load_config, LoadStateDictInfo(buffers, set(), set(), [], {}, set())
-            )
+            model._move_missing_keys_from_meta_to_device(buffers, device_map, device_mesh, None)
+            model._initialize_missing_keys(is_quantized=False)
+            loading_info = LoadStateDictInfo(set(), set(), set(), [], {}, set())
             disk_offload_index = None
         elif distributed_checkpoint_dir is not None:
             loading_info = model._load_and_finalize_distributed_pretrained_model(
