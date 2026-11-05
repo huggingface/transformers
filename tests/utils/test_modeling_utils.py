@@ -3260,6 +3260,36 @@ class TestAttentionImplementation(unittest.TestCase):
             attn_output, _ = sdpa_attention_forward(module, query, key, value, attention_mask=attention_mask)
         self.assertEqual(attn_output.shape, (1, 16, 8, value_head_dim))
 
+    @parameterized.expand([(False,), (True,)])
+    def test_gqa_in_sdpa_decoding_packs_query_heads(self, use_position_bias):
+        from transformers.integrations.sdpa_attention import repeat_kv, sdpa_attention_forward
+
+        module = torch.nn.Module()
+        module.num_key_value_groups = 4  # 8 query heads, 2 key/value heads
+        query = torch.randn(2, 8, 1, 64, device=torch_device)
+        key = torch.randn(2, 2, 16, 64, device=torch_device)
+        value = torch.randn(2, 2, 16, 64, device=torch_device)
+        attention_mask = torch.ones(2, 1, 1, 16, device=torch_device, dtype=torch.bool)
+        attention_mask[1, ..., :5] = False  # left padding
+        # makes the mask per-head
+        position_bias = torch.randn(1, 8, 1, 16, device=torch_device) if use_position_bias else None
+
+        expected, _ = sdpa_attention_forward(
+            torch.nn.Module(),
+            query,
+            repeat_kv(key, 4),
+            repeat_kv(value, 4),
+            attention_mask,
+            position_bias=position_bias,
+        )
+        with patch(
+            "transformers.integrations.sdpa_attention.repeat_kv", side_effect=AssertionError("K/V were repeated")
+        ):
+            attn_output, _ = sdpa_attention_forward(
+                module, query, key, value, attention_mask, position_bias=position_bias
+            )
+        torch.testing.assert_close(attn_output, expected)
+
     @parameterized.expand(
         [
             # (use_mask, is_causal): the `create_position_bias_mask` branches taken by T5-style models

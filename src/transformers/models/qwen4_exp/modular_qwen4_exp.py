@@ -26,7 +26,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -53,7 +53,6 @@ from ..qwen3_5_moe.modeling_qwen3_5_moe import (
     Qwen3_5MoeForCausalLM,
     Qwen3_5MoeForConditionalGeneration,
     Qwen3_5MoeModel,
-    Qwen3_5MoeModelOutputWithPast,
     Qwen3_5MoePreTrainedModel,
     Qwen3_5MoeTextModel,
     Qwen3_5MoeVisionModel,
@@ -806,7 +805,7 @@ class Qwen4ExpTextDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Cache | None = None,
         ple_input_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         if self.ple is not None:
             hidden_states = hidden_states + self.ple(
                 hidden_states, ple_input_ids, past_key_values, conv_mask=conv_mask
@@ -881,10 +880,6 @@ class Qwen4ExpPreTrainedModel(Qwen3_5MoePreTrainedModel):
             init.zeros_(module.conv1d.weight)
 
 
-class Qwen4ExpModelOutputWithPast(Qwen3_5MoeModelOutputWithPast):
-    pass
-
-
 @auto_docstring
 class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
     config: Qwen4ExpTextConfig
@@ -936,7 +931,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         ple_input_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1025,7 +1020,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
 
         hidden_states = self.hyper_connection_mixer(hidden_states)
 
-        return Qwen4ExpModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
@@ -1051,15 +1046,15 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Qwen4ExpModelOutputWithPast:
+    ) -> tuple | MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1129,10 +1124,7 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
             **kwargs,
         )
 
-        return Qwen4ExpModelOutputWithPast(
-            **outputs,
-            rope_deltas=self.rope_deltas,
-        )
+        return outputs
 
 
 @auto_docstring
