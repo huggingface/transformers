@@ -357,11 +357,12 @@ def _fuse_rotary_embeddings(model: ir.Model) -> int:
     return _ROTARY_CONSTANT_CACHE.apply_to_model(model) + _ROTARY_TOKEN_CACHE.apply_to_model(model)
 
 
-def _unshare_key_transposes(graph: ir.Graph) -> int:
-    """Give each attention its own copy of a key transpose (torchlib's `Reshape` -> `Transpose` -> `Reshape`, or a 4D
-    `Transpose`) several share (layers reading another layer's cached keys, Gemma 4's): the attention fusion only
-    replaces nodes nothing else reads. Returns how many copies."""
-    copies = 0
+def _fuse_shared_key_attentions(model: ir.Model) -> int:
+    """Fuse the attentions of layers reading another layer's cached keys (Gemma 4's), before onnxscript's ORT fusions,
+    whose optimizer merges the copies made here back: each attention gets its own copy of the key transpose they
+    share (torchlib's `Reshape` -> `Transpose` -> `Reshape`, or a 4D `Transpose`), since the attention fusion only
+    replaces nodes nothing else reads. Returns how many attentions fused."""
+    graph, copies = model.graph, 0
     for node in list(graph.all_nodes()):
         chain = None
         if node.op_type == "Reshape":
@@ -383,12 +384,7 @@ def _unshare_key_transposes(graph: ir.Graph) -> int:
                 value = _add_node(graph, user, original.op_type, inputs, output.shape, output.dtype, **attributes)
             user.replace_input_with(index, value)
             copies += 1
-    return copies
-
-
-def _fuse_shared_key_attentions(model: ir.Model) -> int:
-    # Fused before onnxscript's ORT fusions, whose optimizer merges the copies back.
-    return fuse_sdpa(model, apply_shape_inference=True) if _unshare_key_transposes(model.graph) else 0
+    return fuse_sdpa(model, apply_shape_inference=True) if copies else 0
 
 
 # ── 4. Repair ─────────────────────────────────────────────────────────────────
@@ -578,19 +574,6 @@ def _cache_update(value: ir.Value):
     return None
 
 
-def _same_dims(x: ir.Node, y: ir.Node) -> bool:
-    """Whether two `Shape` nodes read the same dims (known or the same symbol) off their inputs."""
-    a, b = x.inputs[0].shape, y.inputs[0].shape
-    attributes = ({k: v.value for k, v in node.attributes.items()} for node in (x, y))
-    if a is None or b is None or len(a) != len(b) or next(attributes) != next(attributes):
-        return False
-    start, end = x.attributes.get_int("start", 0), x.attributes.get_int("end", len(a))
-    return all(
-        p == q and (isinstance(p, int) or getattr(p, "value", None) is not None)
-        for p, q in zip(a[start:end], b[start:end])
-    )
-
-
 def _same_value(a: ir.Value | None, b: ir.Value | None, depth: int = 12) -> bool:
     """Whether `a` and `b` hold the same values: one value, equal constants, or the same op on the same inputs (the
     rotary caches each rotation computes its own copy of)."""
@@ -603,12 +586,18 @@ def _same_value(a: ir.Value | None, b: ir.Value | None, depth: int = 12) -> bool
     x, y = a.producer(), b.producer()
     if x is None or y is None or (x.op_type, x.domain) != (y.op_type, y.domain) or len(x.inputs) != len(y.inputs):
         return False
-    if x.op_type == "Shape" and _same_dims(x, y):
-        # The batch and length of the query and of the key, read off each.
-        return True
-    if a.index() != b.index() or {k: v.value for k, v in x.attributes.items()} != {
-        k: v.value for k, v in y.attributes.items()
-    }:
+    attributes = {k: v.value for k, v in x.attributes.items()}
+    if attributes != {k: v.value for k, v in y.attributes.items()}:
+        return False
+    if x.op_type == "Shape":
+        # The batch and length of the query and of the key, read off each: the same dims, known or the same symbol.
+        a_shape, b_shape = x.inputs[0].shape, y.inputs[0].shape
+        if a_shape is not None and b_shape is not None and len(a_shape) == len(b_shape):
+            start, end = attributes.get("start", 0), attributes.get("end", len(a_shape))
+            dims = list(zip(a_shape[start:end], b_shape[start:end]))
+            if all(p == q and (isinstance(p, int) or getattr(p, "value", None) is not None) for p, q in dims):
+                return True
+    if a.index() != b.index():
         return False
     return all(_same_value(p, q, depth - 1) for p, q in zip(x.inputs, y.inputs))
 
@@ -1239,9 +1228,10 @@ _CONSTANT_GATHER_ND = pattern.RewriteRule(_gather_nd, _flat_gather, _gathers_con
 # ── Pipeline ──────────────────────────────────────────────────────────────────
 
 
-def _merge_equal_shapes(model: ir.Model) -> None:
-    """Read each run of dims (known, or the same symbol) once: the `Shape` nodes reading it off different values all
-    read it off the first."""
+def _merge_equal_computations(model: ir.Model) -> None:
+    """Compute once what's computed alike. Equal constants and shapes first become one, so the nodes reading them
+    compare equal: the `Shape` nodes reading one run of dims (known, or the same symbol) off different values all read
+    it off the first."""
     first = {}
     for node in model.graph:
         if node.op_type != "Shape" or node.domain != "" or (shape := node.inputs[0].shape) is None:
@@ -1254,12 +1244,6 @@ def _merge_equal_shapes(model: ir.Model) -> None:
             _replace(node.outputs[0], first[key])
         else:
             first[key] = node.outputs[0]
-
-
-def _merge_equal_computations(model: ir.Model) -> None:
-    """Compute once what's computed alike: equal constants and shapes first become one, so the nodes reading them
-    compare equal."""
-    _merge_equal_shapes(model)
     common_passes.DeduplicateInitializersPass()(model)
     common_passes.CommonSubexpressionEliminationPass()(model)
     common_passes.RemoveUnusedNodesPass()(model)
