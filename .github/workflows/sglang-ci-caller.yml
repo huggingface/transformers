@@ -79,13 +79,13 @@ jobs:
 
     steps:
       - name: Checkout Transformers under test
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
           path: transformers
 
       - name: Checkout SGLang
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           repository: sgl-project/sglang
           ref: 55b4f4f19506c5571d7c4b04b1b47e85790b6db3
@@ -156,7 +156,7 @@ jobs:
 
       - name: Upload integration test results
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: sglang-${{ matrix.suite }}-results
           path: ${{ github.workspace }}/reports/
