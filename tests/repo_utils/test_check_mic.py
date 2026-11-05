@@ -15,6 +15,33 @@ spec.loader.exec_module(check_mic)
 
 
 class CheckMicTest(unittest.TestCase):
+    def test_cached_snapshot_is_verified_offline_against_the_fleet_hashes(self):
+        from transformers_mic import resources
+
+        sys.path.insert(0, str(resources.backend()))
+        import run as mic_run
+
+        with tempfile.TemporaryDirectory() as cache:
+            folder = Path(cache) / "models--org--fixture" / "snapshots" / "abc"
+            folder.mkdir(parents=True)
+            (folder / "config.json").write_text("{}")
+            (folder / "model.safetensors").write_text("weights")
+            files = mic_run.file_hashes(folder)
+            (folder / "build.json").write_text(json.dumps({"sha256": files}))
+            (folder / "integration.json").write_text("{}")
+            pins = [
+                ("contract", {"files_sha256": mic_run.digest(mic_run.contract_files(folder))}),
+                ("fixture", {"files_sha256": mic_run.digest(files)}),
+            ]
+            with patch("huggingface_hub.constants.HF_HUB_CACHE", cache):
+                self.assertTrue(check_mic.cached_snapshot("org/fixture", "abc", pins))
+                # Another revision, or a pin the cached files do not match, is not cached.
+                self.assertFalse(check_mic.cached_snapshot("org/fixture", "def", pins))
+                self.assertFalse(check_mic.cached_snapshot("org/fixture", "abc", [("fixture", {"files_sha256": "x"})]))
+                # A partial snapshot (weights never fetched) is not cached either.
+                (folder / "model.safetensors").unlink()
+                self.assertFalse(check_mic.cached_snapshot("org/fixture", "abc", pins[1:]))
+
     def test_git_selection_includes_branch_and_working_tree(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -130,6 +157,22 @@ class CheckMicTest(unittest.TestCase):
         # A failing target explains the exit code; raw runner noise stays hidden.
         self.assertNotIn("noise", stdout.getvalue())
         self.assertRegex(lines[-1], r"^MIC: 1 passed, 1 failed in [0-9.]+s$")
+
+    def test_progress_counts_contracts_and_beats_while_the_runner_is_quiet(self):
+        record = {"contract": "r", "contract_name": "BERT", "target": "slim", "status": "pass", "failures": []}
+        script = (
+            "import json, time\n"
+            "time.sleep(1.5)\n"
+            f"print(json.dumps({record!r}))\n"
+            f"print(json.dumps({ {**record, 'target': 'other'}!r}))\n"
+        )
+        with patch.object(check_mic, "HEARTBEAT_SECONDS", 1), patch("sys.stdout", new_callable=io.StringIO) as stdout:
+            self.assertEqual(check_mic.run([sys.executable, "-c", script], os.environ.copy(), total=2), 0)
+        lines = stdout.getvalue().splitlines()
+        self.assertRegex(lines[0], r"^\.\.\. 1s in, 0/2 contracts done, loading the first contract$")
+        # Both targets belong to one contract: the counter counts contracts.
+        self.assertEqual(lines[1], "[1/2] ✓ BERT  slim  pass")
+        self.assertEqual(lines[2], "[1/2] ✓ BERT  other  pass")
 
     def test_runner_crash_shows_raw_tail(self):
         script = "import sys\nprint('Traceback: boom')\nsys.exit(2)\n"

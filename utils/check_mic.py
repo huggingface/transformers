@@ -13,6 +13,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -116,12 +117,44 @@ def human_size(size):
         size /= 1024
 
 
+def cached_snapshot(repo, revision, pins):
+    """Whether the Hub cache already holds every file the fleet pins for `repo@revision`, checked offline.
+
+    A cached folder can be partial (earlier config-only fetches), so its files are checked against the
+    pins' `files_sha256`, the way the runner checks them: a fixture's `build.json` lists its files, a
+    contract pin hashes the contract files.
+    """
+    from huggingface_hub.constants import HF_HUB_CACHE
+    from transformers_mic import resources
+
+    sys.path.insert(0, str(resources.backend()))
+    import run as mic_run
+
+    folder = Path(HF_HUB_CACHE) / f"models--{repo.replace('/', '--')}" / "snapshots" / revision
+    if not folder.is_dir():
+        return False
+    try:
+        for kind, pin in pins:
+            if kind == "fixture":
+                build = json.loads((folder / "build.json").read_text(encoding="utf-8"))
+                if mic_run.digest(build["sha256"]) != pin["files_sha256"]:
+                    return False
+                # The cache is addressed by commit, so a present file is the pinned one.
+                if not all((folder / name).is_file() for name in build["sha256"]):
+                    return False
+            elif mic_run.digest(mic_run.contract_files(folder)) != pin["files_sha256"]:
+                return False
+    except (OSError, ValueError, KeyError):
+        return False
+    return True
+
+
 def download_fixtures(contracts, names):
     """Fetch the selected contracts' Hub repos before the runner does, showing what is fetched.
 
     The runner downloads them silently; doing it here (into the same Hub cache) shows what is
-    fetched and how big it is, and the runner then finds everything cached. Checking what is
-    already cached costs one Hub call per repo, so those run in parallel.
+    fetched and how big it is, and the runner then finds everything cached. Cached repos are
+    verified offline against the fleet's hashes; only the others cost a Hub call.
     """
     from huggingface_hub import HfApi, snapshot_download, try_to_load_from_cache
     from huggingface_hub.utils import disable_progress_bars
@@ -131,9 +164,21 @@ def download_fixtures(contracts, names):
     repos = {}
     for name in names:
         contract = contracts[name]
-        pins = [contract["integration"], *({"repo": r, **pin} for r, pin in contract.get("fixtures", {}).items())]
-        for pin in pins:
-            repos.setdefault((canonical_repo(pin["repo"]), pin["revision"]), name)
+        pins = [("contract", contract["integration"])]
+        pins += [("fixture", {"repo": r, **pin}) for r, pin in contract.get("fixtures", {}).items()]
+        for kind, pin in pins:
+            entry = repos.setdefault((canonical_repo(pin["repo"]), pin["revision"]), {"name": name, "pins": []})
+            entry["pins"].append((kind, pin))
+
+    started = time.perf_counter()
+    to_fetch = [job for job, entry in repos.items() if not cached_snapshot(*job, entry["pins"])]
+    print(
+        f"Fixtures: {len(repos) - len(to_fetch)}/{len(repos)} repos cached "
+        f"(verified in {time.perf_counter() - started:.1f}s)",
+        flush=True,
+    )
+    if not to_fetch:
+        return
     api = HfApi()
 
     def uncached(job):
@@ -141,20 +186,13 @@ def download_fixtures(contracts, names):
         files = api.model_info(repo, revision=revision, files_metadata=True).siblings or []
         return [f for f in files if not isinstance(try_to_load_from_cache(repo, f.rfilename, revision=revision), str)]
 
-    started = time.perf_counter()
     with ThreadPoolExecutor(max_workers=16) as pool:
-        missing = dict(zip(repos, pool.map(uncached, repos)))
-    to_fetch = [job for job in repos if missing[job]]
-    print(
-        f"Fixtures: {len(repos) - len(to_fetch)}/{len(repos)} repos cached "
-        f"(checked in {time.perf_counter() - started:.1f}s)",
-        flush=True,
-    )
+        missing = dict(zip(to_fetch, pool.map(uncached, to_fetch)))
     for index, (repo, revision) in enumerate(to_fetch, 1):
         files = missing[repo, revision]
         # One line per repo, printed before the fetch: the latest line is the one in progress.
         print(
-            f"[{index}/{len(to_fetch)}] {repos[repo, revision]}: {repo} downloading {len(files)} files, "
+            f"[{index}/{len(to_fetch)}] {repos[repo, revision]['name']}: {repo} downloading {len(files)} files, "
             f"{human_size(sum(f.size or 0 for f in files))}",
             flush=True,
         )
@@ -259,36 +297,92 @@ def format_summary(counts, elapsed):
     return f"MIC: {', '.join(parts) or 'nothing ran'} in {elapsed:.1f}s"
 
 
+HEARTBEAT_SECONDS = 15
+
+
+def elapsed(seconds):
+    minutes, seconds = divmod(int(seconds), 60)
+    return f"{minutes}m{seconds:02d}s" if minutes else f"{seconds}s"
+
+
+class Progress:
+    """Counts the contracts the runner reported and prints a heartbeat when it goes quiet.
+
+    The runner prints a target's record only once it has run (loading a model can take a while),
+    so without this a long run looks stuck between results.
+    """
+
+    def __init__(self, total):
+        self.total, self.every = total, HEARTBEAT_SECONDS
+        self.done, self.last = set(), None
+        self.started = self.quiet_since = time.perf_counter()
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._beat, daemon=True)
+
+    def __enter__(self):
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc):
+        self._stop.set()
+        self._thread.join()
+
+    def position(self, record):
+        """`[k/total] ` for a record (k counts contracts, not targets), and resets the quiet timer."""
+        name = record.get("contract_name", record["contract"])
+        self.done.add(name)
+        self.last = name
+        self.touch()
+        return f"[{len(self.done)}/{self.total}] " if self.total else ""
+
+    def touch(self):
+        self.quiet_since = time.perf_counter()
+
+    def _beat(self):
+        while not self._stop.wait(1):
+            now = time.perf_counter()
+            if now - self.quiet_since >= self.every:
+                done = f"{len(self.done)}/{self.total} contracts done" if self.total else f"{len(self.done)} done"
+                last = f", last: {self.last}" if self.last else ", loading the first contract"
+                print(f"... {elapsed(now - self.started)} in, {done}{last}", flush=True)
+                self.quiet_since = now
+
+
 def stream(command, env, fleet_name, on_record, announce=True, total=None):
     """Run the MIC runner, print its fleet/selection messages and hand each result record to `on_record`.
 
+    `on_record(record, position)` gets the `[k/total] ` progress prefix along with the record.
     Returns the runner's exit code and the last non-JSON lines it printed (tracebacks, warnings).
     """
     tail = []
     process = subprocess.Popen(
         command, cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
     )
-    for line in process.stdout:
-        try:
-            message = json.loads(line)
-        except ValueError:
-            message = None
-        if not isinstance(message, dict):
-            if line.strip():
-                tail = [*tail, line.rstrip()][-TAIL_LINES:]
-        elif "fleet_revision" in message:
-            if announce:
-                print(
-                    f"Fleet {fleet_name} ({message['fleet_repository']}@{message['fleet_revision'][:10]})", flush=True
-                )
-                # The runner reports a contract only once it has finished; say so instead of going quiet.
-                what = f"{total} contract{'s' if total != 1 else ''}" if total else "the selected contracts"
-                print(f"Running {what}, results print as each one finishes...", flush=True)
-        elif "selection" in message:
-            print("\n".join(format_selection(message["selection"])), flush=True)
-        elif "status" in message and "target" in message:
-            on_record(message)
-    return process.wait(), tail
+    with Progress(total) as progress:
+        for line in process.stdout:
+            try:
+                message = json.loads(line)
+            except ValueError:
+                message = None
+            if not isinstance(message, dict):
+                if line.strip():
+                    tail = [*tail, line.rstrip()][-TAIL_LINES:]
+            elif "fleet_revision" in message:
+                if announce:
+                    print(
+                        f"Fleet {fleet_name} ({message['fleet_repository']}@{message['fleet_revision'][:10]})",
+                        flush=True,
+                    )
+                    # The runner reports a contract only once it has finished; say so instead of going quiet.
+                    what = f"{total} contract{'s' if total != 1 else ''}" if total else "the selected contracts"
+                    print(f"Running {what}, results print as each one finishes...", flush=True)
+                progress.touch()
+            elif "selection" in message:
+                print("\n".join(format_selection(message["selection"])), flush=True)
+                progress.touch()
+            elif "status" in message and "target" in message:
+                on_record(message, progress.position(message))
+        return process.wait(), tail
 
 
 def without_selection(command):
@@ -320,16 +414,23 @@ def run(command, env, fleet_name="prototypes", total=None):
         key = key or record["status"]
         counts[key] = counts.get(key, 0) + 1
 
-    def first_pass(record):
+    def first_pass(record, position):
         if record.get("baseline_missing"):
             # `--allow-missing-baseline`: outputs validated in this run, not compared.
             count(record, "unchecked")
-            print("\n".join(format_record(record, f"no {record.get('platform', 'platform')} baseline")), flush=True)
+            note = f"no {record.get('platform', 'platform')} baseline"
+            print(position + "\n".join(format_record(record, note)), flush=True)
         elif missing_baseline(record):
+            # Re-run without comparison after this pass; say so, or a fleet without local baselines looks stuck.
             missing.append(record)
+            name = record.get("contract_name", record["contract"])
+            platform = record.get("platform", "platform")
+            print(
+                f"{position}· {name}  {record['target']}  no {platform} baseline, rerun without comparison", flush=True
+            )
         else:
             count(record)
-            print("\n".join(format_record(record)), flush=True)
+            print(position + "\n".join(format_record(record)), flush=True)
 
     returncode, tail = stream(command, env, fleet_name, first_pass, total=total)
     if missing:
@@ -338,12 +439,14 @@ def run(command, env, fleet_name="prototypes", total=None):
         print(f"No reviewed {platform} baseline for {', '.join(names)}; running without comparison...", flush=True)
         note = f"no {platform} baseline"
 
-        def second_pass(record):
+        def second_pass(record, position):
             count(record, "unchecked" if record["status"] == "pass" else None)
-            print("\n".join(format_record(record, note)), flush=True)
+            print(position + "\n".join(format_record(record, note)), flush=True)
 
         retry = without_selection(command) + [arg for name in names for arg in ("--contract", name)]
-        retry_code, retry_tail = stream([*retry, "--no-baseline"], env, fleet_name, second_pass, announce=False)
+        retry_code, retry_tail = stream(
+            [*retry, "--no-baseline"], env, fleet_name, second_pass, announce=False, total=len(names)
+        )
         # The first run's non-zero code came from the missing baselines, now accounted for.
         returncode, tail = retry_code, retry_tail
     failed = counts.get("fail", 0) + counts.get("error", 0)
