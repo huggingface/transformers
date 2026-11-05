@@ -13,7 +13,6 @@
 # limitations under the License.
 import time
 from collections.abc import Callable
-from contextlib import nullcontext
 
 import torch
 from torch import nn
@@ -22,8 +21,17 @@ from ...generation.configuration_utils import ContinuousBatchingConfig
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
-from .requests import RequestState, RequestStatus, logger
-from .utils import create_warmup_future_states, get_cuda_pools, mem_pool_ctx, pad_to_interval, pad_to_pow2
+from .requests import RequestState, RequestStatus, create_warmup_future_states
+from .utils import (
+    accelerator_graph_capture_context,
+    create_accelerator_graph,
+    get_memory_pools,
+    logger,
+    memory_pool_context,
+    pad_to_interval,
+    pad_to_pow2,
+    stream_context,
+)
 
 
 def infer_max_single_request_tokens(cache: PagedAttentionCache) -> int:
@@ -72,7 +80,7 @@ class ModelRunner:
 
         # Set up the graph pool. This allows all graphs to share the same memory pool, greatly saving memory.
         if self.use_cuda_graph_varlen or self.use_cuda_graph_decode:
-            self.mem_pool, self.graph_pool_id = get_cuda_pools()
+            self.mem_pool, self.graph_pool_id = get_memory_pools()
         else:
             self.mem_pool, self.graph_pool_id = None, None
 
@@ -133,16 +141,15 @@ class ModelRunner:
 
         # If we are not using CUDA graphs, we perform the generation step and return
         if not use_cuda_graph:
-            maybe_stream = torch.cuda.stream(compute_stream) if compute_stream is not None else nullcontext()
-            with maybe_stream:
+            with stream_context(compute_stream):
                 forward_fn(model, batch_data, carry_over_ids, prev_output_ids, output_ids)
 
-        # Otherwise, we either create or replay the graph (CUDA is available in this path)
+        # Otherwise, we either create or replay the graph (an accelerator is available in this path)
         else:
             graph = self.inputs_and_outputs.get_graph()
             # Case: the graph already exists, so we replay it
             if graph is not None:
-                with torch.cuda.stream(compute_stream):
+                with stream_context(compute_stream):
                     graph.replay()
             # Otherwise, the graph does not exist, so we create it
             else:
@@ -162,13 +169,11 @@ class ModelRunner:
     def _capture_graph(self, forward_fn: Callable, compute_stream: torch.cuda.Stream, *args) -> None:
         """Helper function to capture and store a graph for a given forward function."""
         # Warmup (ensures the right result is computed before capturing the graph)
-        with torch.cuda.stream(compute_stream), mem_pool_ctx(self.mem_pool):
+        with stream_context(compute_stream), memory_pool_context(self.mem_pool):
             forward_fn(*args)
         # Capture using a thread-local capture mode to avoid capturing GPU operations from outside the model forward
-        graph = torch.cuda.CUDAGraph()
-        with torch.cuda.graph(
-            graph, stream=compute_stream, pool=self.graph_pool_id, capture_error_mode="thread_local"
-        ):
+        graph = create_accelerator_graph()
+        with accelerator_graph_capture_context(graph, stream=compute_stream, pool=self.graph_pool_id):
             forward_fn(*args)
         # Store
         self.inputs_and_outputs.set_graph(graph)
@@ -294,10 +299,12 @@ class ModelRunner:
             num_requests = 1
             status = RequestStatus.PREFILLING
             logger.debug(f"Warming up varlen path for {num_q_tokens = }, {max_kv_read = }.")
-        future_states = create_warmup_future_states(num_requests, status, num_q_tokens, max_kv_read, self.cache)
+        # To limit the compute cost of prefill warmup, we cap the past length to the page size
+        past_length = min(max_kv_read, self.cb_config.page_size)
+        future_states = create_warmup_future_states(num_requests, status, num_q_tokens, past_length, self.cache)
         if not future_states:
             logger.warning(
-                f"Failed to warm up: no blocks allocated for {num_requests = }, {num_q_tokens = }, {max_kv_read = }."
+                f"Failed to warm up: no blocks allocated for {num_requests = }, {num_q_tokens = }, {past_length = }."
             )
             return 0.0
 
@@ -315,6 +322,17 @@ class ModelRunner:
                 future_states, self.logit_processor, use_decode_fast_path, padded_q, padded_kv, use_padding=True
             )
             batch_data = self.inputs_and_outputs.get_model_kwargs(use_padding=True)
+            # Flash sizes the workspace according to max_length_k, so we set it to the maximum value for one request
+            if not use_decode_fast_path:
+                # The graph key is read from the IO holding the graphs, so we update it there as well
+                io = self.inputs_and_outputs
+                io = io.io_pairs[io.current_pair].device_io if isinstance(io, ContinuousBatchingAsyncIOs) else io
+                for allocator in self.cache.cache_allocators.values():
+                    max_length_k = allocator.get_seqlen_k(max_kv_read, num_q_tokens)
+                    if self.use_cuda_graph_varlen:
+                        max_length_k = pad_to_pow2(max_length_k, self.cache.max_tokens_read, 1024)
+                    batch_data["max_length_k"][allocator.layer_type] = max_length_k
+                    io.max_length_k[allocator.layer_type] = max_length_k
             self.compute_batch(model, batch_data)
             duration = time.perf_counter() - start
             logger.debug(f"Warmup completed in {duration:.2f}s")

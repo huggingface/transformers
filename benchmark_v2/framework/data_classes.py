@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import numpy as np
@@ -70,7 +70,7 @@ class BenchmarkMetadata:
         self, model_id: str, commit_id: str, branch_name: str = "main", commit_message: str = "", success: bool = True
     ) -> None:
         self.model_id = model_id
-        self.timestamp = datetime.now(timezone.utc).isoformat()
+        self.timestamp = datetime.now(UTC).isoformat()
         self.branch_name = branch_name
         self.commit_id = commit_id
         self.commit_message = commit_message

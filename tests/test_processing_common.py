@@ -24,10 +24,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
-from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
-from transformers import ProcessorMixin
 from transformers.processing_utils import MODALITY_TO_AUTOPROCESSOR_MAPPING
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
@@ -1124,7 +1122,10 @@ class ProcessorTesterMixin:
 
         inputs = processor(**inputs_dict, **extra_kwargs, text_kwargs={}, return_tensors="pt")
         for k, v in inputs.items():
-            self.assertIsInstance(v, torch.Tensor, msg=f"{k} should be a torch.Tensor")
+            if k in processor.skip_tensor_conversion:
+                self.assertNotIsInstance(v, torch.Tensor, msg=f"{k} should not be a torch.Tensor")
+            else:
+                self.assertIsInstance(v, torch.Tensor, msg=f"{k} should be a torch.Tensor")
 
     def test_args_overlap_kwargs(self):
         if "image_processor" not in self.processor_class.get_attributes():
@@ -1289,6 +1290,9 @@ class ProcessorTesterMixin:
         # calculate expected video token count based on video_grid_thw
         if (grid_thw := out_dict.get(f"{modality}_grid_thw")) is not None:
             mm_len = sum(thw[0] * thw[1] * thw[2] for thw in grid_thw)
+        elif (num_frames_per_video := out_dict.get("num_frames_per_video")) is not None:
+            # Models that concatenate the frames of every video along a single axis
+            mm_len = sum(num_frames_per_video)
         else:
             mm_len = batch_size
 
@@ -1296,7 +1300,10 @@ class ProcessorTesterMixin:
 
         return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}
         for k in out_dict:
-            self.assertIsInstance(out_dict[k], return_tensor_to_type[return_tensors])
+            if k in processor.skip_tensor_conversion:
+                self.assertNotIsInstance(out_dict[k], (torch.Tensor, np.ndarray))
+            else:
+                self.assertIsInstance(out_dict[k], return_tensor_to_type[return_tensors])
 
         # Test continue from final message
         assistant_message = {
@@ -1308,6 +1315,52 @@ class ProcessorTesterMixin:
         continue_prompt = processor.apply_chat_template(batch_messages, continue_final_message=True, tokenize=False)
         for prompt in continue_prompt:
             self.assertTrue(prompt.endswith("It is the sound of"))  # no `eos` token at the end
+
+    def _get_transcription_training_processor(self):
+        """Processor whose `apply_transcription_request` accepts a target `transcription`, or skip the test."""
+        processor = self.get_processor()
+        apply_transcription_request = getattr(processor, "apply_transcription_request", None)
+        if (
+            apply_transcription_request is None
+            or "transcription" not in inspect.signature(apply_transcription_request).parameters
+        ):
+            self.skipTest(
+                f"{self.processor_class.__name__} does not support training with `apply_transcription_request`."
+            )
+        return processor
+
+    @require_torch
+    def test_apply_transcription_request_with_transcription(self):
+        processor = self._get_transcription_training_processor()
+        audio = self.prepare_audio_inputs(batch_size=2)
+        transcriptions = ["Hello world.", "A longer transcription so that padding is applied."]
+        outputs = processor.apply_transcription_request(audio=audio, transcription=transcriptions)
+
+        # the same as processing the untokenized prompts, with labels
+        prompts = processor.apply_transcription_request(audio=audio, transcription=transcriptions, tokenize=False)
+        expected_outputs = processor(text=prompts, audio=audio, output_labels=True)
+        self.assertIn("labels", outputs)
+        self.assertEqual(set(outputs.keys()), set(expected_outputs.keys()))
+        for key in outputs:
+            self.assertTrue(outputs[key].equal(expected_outputs[key]))
+
+        # each target transcription is in the labels of its audio
+        for labels, transcription in zip(outputs["labels"], transcriptions):
+            self.assertIn(transcription, processor.tokenizer.decode(labels[labels != -100]))
+
+        # user `processor_kwargs` are merged with the labels request
+        merged_outputs = processor.apply_transcription_request(
+            audio=audio, transcription=transcriptions, processor_kwargs={"text_kwargs": {"padding": True}}
+        )
+        self.assertTrue(merged_outputs["labels"].equal(outputs["labels"]))
+
+    @require_torch
+    def test_apply_transcription_request_single_transcription_not_broadcast(self):
+        # a transcription is specific to its audio, so a single one is not broadcast to the batch
+        processor = self._get_transcription_training_processor()
+        audio = self.prepare_audio_inputs(batch_size=2)
+        with self.assertRaises(ValueError):
+            processor.apply_transcription_request(audio=audio, transcription="Hello world.")
 
     @require_librosa
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
@@ -1480,34 +1533,32 @@ class ProcessorTesterMixin:
                 processor_kwargs={"do_sample_frames": True},
             )
 
-    @require_librosa
     @require_torchcodec
     def test_chat_template_audio_from_video(self):
         processor = self.get_processor()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
-        signature = inspect.signature(processor.__call__)
-        if "videos" not in {*signature.parameters.keys()} or (
-            signature.parameters.get("videos") is not None
-            and signature.parameters["videos"].annotation == inspect._empty
-        ):
-            self.skipTest(f"{self.processor_class} does not support video inputs")
+        if "video_processor" not in self.processor_class.get_attributes():
+            self.skipTest(f"{self.processor_class.__name__} does not support video inputs")
 
         if (
             "feature_extractor" not in self.processor_class.get_attributes()
-            or "audio_processor" not in self.processor_class.get_attributes()
+            and "audio_processor" not in self.processor_class.get_attributes()
         ):
-            self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
+            self.skipTest(f"{self.processor_class.__name__} does not support audio inputs")
 
-        video_file_path = hf_hub_download(
-            repo_id="hf-internal-testing/test-videos", filename="sample_demo_1_320x240.mp4", repo_type="dataset"
+        video_file_path = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/sample_demo_1_320x240.mp4"
         )
-        messages = [
+        video_expected_shape = processor.video_processor(videos=video_file_path)[self.videos_input_name].shape
+
+        Video_audio_message = [
             {
                 "role": "user",
                 "content": [
                     {"type": "video", "path": video_file_path},
+                    {"type": "audio"},
                     {"type": "text", "text": "Which of these animals is making the sound?"},
                 ],
             },
@@ -1523,25 +1574,52 @@ class ProcessorTesterMixin:
             },
         ]
 
-        formatted_prompt = processor.apply_chat_template([messages], add_generation_prompt=True, tokenize=False)
-        self.assertEqual(len(formatted_prompt), 1)  # batch size=1
-
         out_dict = processor.apply_chat_template(
-            messages,
+            Video_audio_message,
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
+            load_audio_backend="torchcodec",
             load_audio_from_video=True,
         )
         self.assertTrue(self.audio_input_name in out_dict)
         self.assertTrue(self.videos_input_name in out_dict)
 
-        # should always have input_ids and attention_mask
-        self.assertEqual(len(out_dict["input_ids"]), 1)  # batch-size=1
-        self.assertEqual(len(out_dict["attention_mask"]), 1)  # batch-size=1
-        self.assertEqual(len(out_dict[self.audio_input_name]), 1)  # 1 audio in the conversation
-        self.assertEqual(len(out_dict[self.videos_input_name]), 1)  # 1 video in the conversation
+        self.assertEqual(out_dict["input_ids"].shape[0], 1)  # batch-size=1
+        self.assertEqual(out_dict["attention_mask"].shape[0], 1)  # batch-size=1
+        self.assertEqual(out_dict[self.audio_input_name].shape[0], 1)  # 1 audio from video
+        self.assertListEqual(list(out_dict[self.videos_input_name].shape), list(video_expected_shape))
+
+        audio_file_path = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/glass-breaking-151256.mp3"
+        )
+        audio_message = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "audio", "path": audio_file_path},
+                    {"type": "text", "text": "What do you hear in this track?"},
+                ],
+            },
+        ]
+        out_dict = processor.apply_chat_template(
+            [Video_audio_message, audio_message],
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
+            load_audio_backend="torchcodec",
+            load_audio_from_video=True,
+        )
+        self.assertTrue(self.audio_input_name in out_dict)
+        self.assertTrue(self.videos_input_name in out_dict)
+
+        self.assertEqual(out_dict["input_ids"].shape[0], 2)
+        self.assertEqual(out_dict["attention_mask"].shape[0], 2)
+        self.assertEqual(out_dict[self.audio_input_name].shape[0], 2)  # 2 audios
+        self.assertListEqual(list(out_dict[self.videos_input_name].shape), list(video_expected_shape))
 
     def test_chat_template_jinja_kwargs(self):
         """Tests that users can pass any kwargs and they will be used in jinja templates."""
@@ -1588,72 +1666,76 @@ class ProcessorTesterMixin:
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
+        # The second conversation is shorter, so it gets padded when the two are batched together
         messages = [
             [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "What is the capital of France?"},
-                    ],
-                },
-                {
-                    "role": "assistant",
-                    "content": [
-                        {"type": "text", "text": "The capital of France is Paris."},
-                    ],
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "What about Italy?"},
-                    ],
-                },
-                {
-                    "role": "assistant",
-                    "content": [
-                        {"type": "text", "text": "The capital of Italy is Rome."},
-                    ],
-                },
-            ]
+                {"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]},
+                {"role": "assistant", "content": [{"type": "text", "text": "The capital of France is Paris."}]},
+                {"role": "user", "content": [{"type": "text", "text": "What about Italy?"}]},
+                {"role": "assistant", "content": [{"type": "text", "text": "The capital of Italy is Rome."}]},
+            ],
+            [
+                {"role": "user", "content": [{"type": "text", "text": "What is the capital of Spain?"}]},
+                {"role": "assistant", "content": [{"type": "text", "text": "The capital of Spain is Madrid."}]},
+            ],
         ]
-
         dummy_template = (
             "{% for message in messages %}"
             "{% if (message['role'] != 'assistant') %}"
-            "{{'<|special_start|>' + message['role'] + '\n' + message['content'][0]['text'] + '<|special_end|>' + '\n'}}"
+            "{{'<|special_start|>' + message['role'] + '\n'}}"
+            "{% for content in message['content'] %}"
+            "{{ image_token if content['type'] == 'image' else content['text'] }}"
+            "{% endfor %}"
+            "{{'<|special_end|>' + '\n'}}"
             "{% elif (message['role'] == 'assistant')%}"
             "{{'<|special_start|>' + message['role'] + '\n'}}"
             "{% generation %}"
-            "{{message['content'][0]['text'] + '<|special_end|>' + '\n'}}"
+            "{{message['content'][0]['text'] + '<|special_end|>'}}"
             "{% endgeneration %}"
+            "{{'\n'}}"
             "{% endif %}"
             "{% endfor %}"
         )
 
-        inputs = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=False,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            return_assistant_tokens_mask=True,
-            chat_template=dummy_template,
+        # The tokenizer's own implementation on the text-only conversations is the reference for the assistant ids. Note
+        # that the generation span ends on a non-whitespace char above: `char_to_token` has no token for stripped whitespace
+        reference = processor.tokenizer.apply_chat_template(
+            messages, tokenize=True, return_dict=True, return_assistant_tokens_mask=True, chat_template=dummy_template
         )
-        self.assertTrue("assistant_masks" in inputs)
-        self.assertEqual(len(inputs["assistant_masks"]), len(inputs["input_ids"]))
+        expected_ids = [
+            [token_id for token_id, is_assistant in zip(input_ids, assistant_mask) if is_assistant]
+            for input_ids, assistant_mask in zip(reference["input_ids"], reference["assistant_masks"])
+        ]
 
-        mask = inputs["assistant_masks"].bool()
-        assistant_ids = inputs["input_ids"][mask]
+        # Regression test for #44521: expanding each placeholder into N image tokens must not shift the assistant spans.
+        # Use several images in one turn and images in several turns, since every expansion shifts the spans after it
+        image_token = getattr(self, "image_token", None)
+        if image_token and self.does_processor_return_mm_offsets(processor.__class__, "replace_image_token"):
+            for turn, num_images in ((0, 2), (2, 1)):
+                for _ in range(num_images):
+                    messages[0][turn]["content"].insert(0, {"type": "image", "image": self.prepare_images_inputs()})
 
-        assistant_text = (
-            "The capital of France is Paris.<|special_end|>\nThe capital of Italy is Rome.<|special_end|>\n"
-        )
+        # A single conversation first, then a batch mixing it with the text-only one. Padding tokens have `(0, 0)`
+        # offsets, so the spans must be mapped correctly whichever side the padding is on
+        for batch, padding_side in ((messages[:1], None), (messages, "right"), (messages, "left")):
+            inputs = processor.apply_chat_template(
+                batch,
+                add_generation_prompt=False,
+                tokenize=True,
+                return_dict=True,
+                return_tensors="pt",
+                return_assistant_tokens_mask=True,
+                chat_template=dummy_template,
+                image_token=image_token,
+                padding=True,
+                padding_side=padding_side,
+            )
+            self.assertIn("assistant_masks", inputs)
+            self.assertEqual(len(inputs["assistant_masks"]), len(inputs["input_ids"]))
 
-        # Some tokenizers add extra spaces which aren't then removed when decoding, so we need to check token ids
-        # if we can't get identical text outputs
-        text_is_same = assistant_text == processor.decode(assistant_ids, clean_up_tokenization_spaces=True)
-        ids_is_same = processor.tokenizer.encode(assistant_text, add_special_tokens=False), assistant_ids.tolist()
-        self.assertTrue(text_is_same or ids_is_same)
+            masks = inputs["assistant_masks"].bool()
+            for input_ids, mask, expected in zip(inputs["input_ids"], masks, expected_ids):
+                self.assertEqual(input_ids[mask].tolist(), expected)
 
     def test_apply_chat_template_tool_calls_no_content(self):
         processor = self.get_processor()
@@ -1671,7 +1753,7 @@ class ProcessorTesterMixin:
             },
             {
                 "role": "assistant",
-                "tool_calls": [{"type": "function", "function": {"name": "get_weather", "arguments": "{}"}}],
+                "tool_calls": [{"type": "function", "function": {"name": "get_weather", "arguments": {}}}],
             },
         ]
 
@@ -1740,7 +1822,8 @@ class ProcessorTesterMixin:
             self.skipTest("Processor doesn't count video tokens yet")
 
         video_inputs = self.prepare_videos_inputs(batch_size=2)
-        video_inputs = [video_inputs[0], video_inputs[1][:, :, :, :200]]
+        # An odd frame count, so that the temporal padding of the counters is covered
+        video_inputs = [video_inputs[0][:7], video_inputs[1][:7, :, :, :200]]
         video_sizes = [(len(video), *get_video_size(video)) for video in video_inputs]
 
         try:
@@ -1788,8 +1871,9 @@ class ProcessorTesterMixin:
         Updated processor need to override a `replace_xxx_method` which is the only
         reliable way to tell if processor is old format or not.
         """
+        parent_class = processor_class.__mro__[1]
         child_method = getattr(processor_class, method_name)
-        base_method = getattr(ProcessorMixin, method_name)
+        base_method = getattr(parent_class, method_name)
         return child_method is not base_method
 
     def test_replacement_offsets(self):

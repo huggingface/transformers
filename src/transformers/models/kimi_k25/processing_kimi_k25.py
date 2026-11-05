@@ -17,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
 import time
 
 import numpy as np
@@ -131,10 +132,17 @@ class Kimi_K25Processor(ProcessorMixin):
             videos_kwargs = Kimi_K25ProcessorKwargs._defaults.get("videos_kwargs", {})
             videos_kwargs.update(kwargs)
             merge_size = videos_kwargs.get("merge_size", None) or self.video_processor.merge_size
+            temporal_patch_size = (
+                videos_kwargs.get("temporal_patch_size", None) or self.video_processor.temporal_patch_size
+            )
             num_video_patches = [
                 self.video_processor.get_num_of_video_patches(*video_size, videos_kwargs) for video_size in video_sizes
             ]
-            num_video_tokens = [(num_patches // merge_size**2) for num_patches in num_video_patches]
+            # Each of the `num_chunks_per_video` chunks costs one frame's worth of merged patches
+            num_video_tokens = [
+                math.ceil(num_frames / temporal_patch_size) * (num_patches // num_frames) // merge_size**2
+                for (num_frames, _, _), num_patches in zip(video_sizes, num_video_patches)
+            ]
             vision_data["num_video_tokens"] = num_video_tokens
 
         return MultiModalData(**vision_data)

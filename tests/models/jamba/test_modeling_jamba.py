@@ -36,8 +36,10 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -177,7 +179,6 @@ class JambaModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=True,
             initializer_range=self.initializer_range,
-            use_mamba_kernels=False,
             num_experts=2,
         )
 
@@ -301,7 +302,14 @@ class JambaModelTester:
 
 
 @require_torch
-class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class JambaModelTest(
+    ModelTesterMixin,
+    GenerationTesterMixin,
+    PipelineTesterMixin,
+    TensorParallelTesterMixin,
+    ExpertParallelTesterMixin,
+    unittest.TestCase,
+):
     all_model_classes = (
         (
             JambaModel,
@@ -524,19 +532,17 @@ class JambaModelIntegrationTest(unittest.TestCase):
         cls.model = JambaForCausalLM.from_pretrained(
             model_id,
             dtype=torch.bfloat16,
-            use_mamba_kernels=False,
         )
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
         cls.device_properties = get_device_properties()
 
     def test_simple_generate(self):
-        # ("cuda", 8) for A100/A10, and ("cuda", 7) for T4.
+        # ("cuda", 8) for A100/A10.
         #
         # considering differences in hardware processing and potential deviations in generated text.
         # fmt: off
         EXPECTED_TEXTS = Expectations(
             {
-                ("cuda", 7): "<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh<|reserved_797|>cw algunas",
                 ("cuda", 8): "<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.",
                 ("rocm", 9): "<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh Hebrew llam bb",
                 ("xpu", 3): "<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.",
@@ -555,14 +561,13 @@ class JambaModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output_sentence, expected_sentence)
 
     def test_simple_batched_generate_with_padding(self):
-        # ("cuda", 8) for A100/A10, and ("cuda", 7) for T4.
+        # ("cuda", 8) for A100/A10.
         #
         # considering differences in hardware processing and potential deviations in generated text.
         # fmt: off
         EXPECTED_TEXTS = Expectations(
             {
-                ("cuda", 7): ["<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh Hebrew cases Cats", "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a storyptus Nets Madison El chamadamodern updximVaparsed",],
-                ("cuda", 8): ["<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.", "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a story about a woman who was born in the United States",],
+                ("cuda", 8): ["<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.", "<|startoftext|>Tell me a story<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|>, I'm not sure, but I'",],
                 ("cuda", 9): ["<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.", "<|startoftext|>Tell me a story<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|>, I'm not sure, but I'",],
                 ("rocm", 9): ["<|startoftext|>Hey how are you doing on this lovely evening? Canyon rins hugaughter glamour Rutgers Singh<|reserved_797|>cw algunas", "<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|><|startoftext|>Tell me a storyptus Nets Madison El chamadamodern updximVaparsed",],
                 ("xpu", 3): ["<|startoftext|>Hey how are you doing on this lovely evening? I'm so glad you're here.", "<|startoftext|>Tell me a story<|pad|><|pad|><|pad|><|pad|><|pad|><|pad|>, I'm not sure, but I'"]

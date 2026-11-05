@@ -16,6 +16,7 @@ import glob
 import json
 import os
 import os.path
+import re
 import subprocess
 import sys
 import tempfile
@@ -43,6 +44,7 @@ from transformers import (
     BartForConditionalGeneration,
     BartModel,
     CLIPTextModelWithProjection,
+    DistributedConfig,
     DynamicCache,
     GPT2Config,
     GPT2LMHeadModel,
@@ -76,9 +78,11 @@ from transformers.testing_utils import (
     require_accelerate,
     require_kernels,
     require_non_hpu,
+    require_rocm,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
+    require_torch_greater_or_equal,
     require_torch_multi_accelerator,
     slow,
     torch_device,
@@ -90,14 +94,16 @@ from transformers.utils import (
     WEIGHTS_NAME,
 )
 from transformers.utils.import_utils import (
-    PACKAGE_DISTRIBUTION_MAPPING,
+    _package_distribution_mapping,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_flash_attn_4_available,
     is_kernels_available,
+    is_torch_distributed_available,
     is_torch_npu_available,
 )
 
+from ..test_memory_cleanup_mixin import MemoryCleanupMixin
 from ..test_modeling_common import compare_state_dicts
 
 
@@ -124,6 +130,7 @@ if is_torch_available():
         LlamaConfig,
         LlamaForCausalLM,
         MixtralConfig,
+        MixtralForCausalLM,
         MixtralModel,
         MusicgenConfig,
         MusicgenForConditionalGeneration,
@@ -137,7 +144,11 @@ if is_torch_available():
         _find_disjoint,
         _find_identical,
         get_total_byte_count,
+        slice_logits_to_keep,
     )
+
+    if is_torch_distributed_available():
+        from torch.testing._internal.distributed.fake_pg import FakeStore
 
     # Fake pretrained models for tests
     class BaseModel(PreTrainedModel):
@@ -440,6 +451,102 @@ class ModelUtilsTest(TestCasePlus):
         mock_world_size.assert_not_called()
         self.assertIn(torch.device("cpu"), total_byte_count)
         self.assertGreater(total_byte_count[torch.device("cpu")], 0)
+
+    @parameterized.expand(
+        [
+            ("fsdp", {"fsdp_size": 8}),
+            ("tp", {"tp_size": 8}),
+            ("fsdp_tp", {"fsdp_size": 4, "tp_size": 2}),
+            ("fsdp_ep_efsdp2", {"fsdp_size": 8, "ep_size": 4}),  # EP without TP, efsdp = 8 / 4 = 2
+            ("fsdp_tp_ep_efsdp1", {"fsdp_size": 4, "tp_size": 2, "ep_size": 8}),  # ep == fsdp * tp, no expert FSDP
+            ("fsdp_tp_ep_efsdp2", {"fsdp_size": 4, "tp_size": 2, "ep_size": 4}),  # efsdp = 4 * 2 / 4 = 2
+            ("fsdp_tp_ep_efsdp4", {"fsdp_size": 4, "tp_size": 2, "ep_size": 2}),  # ep == tp, efsdp == fsdp = 4
+        ]
+    )
+    @require_torch_greater_or_equal("2.7")
+    @unittest.skipUnless(is_torch_distributed_available(), "test requires torch.distributed")
+    def test_get_total_byte_count_counts_require_process_group(self, _, parallel_sizes):
+        import transformers.modeling_utils as modeling_utils
+
+        config = MixtralConfig(
+            vocab_size=64,
+            hidden_size=32,
+            intermediate_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=8,
+            num_key_value_heads=8,
+            head_dim=4,
+            num_local_experts=8,
+            num_experts_per_tok=2,
+            tied_word_embeddings=True,
+        )
+
+        # Mixtral's default plans would also work, since EP rules take precedence over TP rules on shared keys, but the
+        # plans are spelled out so that readers can easily understand the intent.
+        base_model_tp_plan = {
+            "embed_tokens": "embedding_rowwise",
+            "layers.*.self_attn.q_proj": "colwise",
+            "layers.*.self_attn.k_proj": "colwise",
+            "layers.*.self_attn.v_proj": "colwise",
+            "layers.*.self_attn.o_proj": "rowwise",
+        }
+        base_model_ep_plan = {
+            "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+            "layers.*.mlp.experts.down_proj": "grouped_gemm",
+            "layers.*.mlp.experts": "ep_dispatch_experts",
+        }
+        # This is tied with the head
+        head_tp_plan = {"lm_head": "colwise_gather_output"}
+
+        def expected_local_byte_count(model, tp_size=1, fsdp_size=1, ep_size=1):
+            full_tp_plan = {f"model.{key}": style for key, style in base_model_tp_plan.items()} | head_tp_plan
+            full_ep_plan = {f"model.{key}": style for key, style in base_model_ep_plan.items()}
+
+            def in_plan(name, plan):
+                generic_name = re.sub(r"\.\d+\.", ".*.", name)
+                return generic_name in plan or generic_name.removesuffix(".weight") in plan
+
+            total = 0
+            for name, param in model.named_parameters():
+                if ep_size > 1 and in_plan(name, full_ep_plan):
+                    # Split by EP, then by FSDP across the ranks holding the same experts (efsdp).
+                    efsdp_size = fsdp_size * tp_size // ep_size
+                    num_shards = ep_size * efsdp_size
+                elif tp_size > 1 and in_plan(name, full_tp_plan):
+                    # Split by TP, then by FSDP
+                    num_shards = tp_size * fsdp_size
+                else:
+                    # only FSDP splits it
+                    num_shards = fsdp_size
+
+                total += param.numel() * param.element_size() // num_shards
+            return total
+
+        byte_counts = []
+
+        def capture_total_byte_count(model, expanded_device_map, hf_quantizer):
+            # Because we are running from_pretrained to make sure all the parallelisms are applied before calling
+            # get_total_byte_count(), we need to capture its value at the point where the warmup runs.
+            byte_counts.append(sum(get_total_byte_count(model, expanded_device_map, hf_quantizer).values()))
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            MixtralForCausalLM(config).save_pretrained(tmp_dir)
+
+            torch.distributed.init_process_group("fake", rank=0, world_size=8, store=FakeStore())
+            try:
+                with (
+                    patch.object(MixtralConfig, "base_model_tp_plan", base_model_tp_plan),
+                    patch.object(MixtralConfig, "base_model_ep_plan", base_model_ep_plan),
+                    patch.object(MixtralForCausalLM, "_tp_plan", head_tp_plan),
+                    patch.object(modeling_utils, "caching_allocator_warmup", side_effect=capture_total_byte_count),
+                ):
+                    model = MixtralForCausalLM.from_pretrained(
+                        tmp_dir, distributed_config=DistributedConfig(**parallel_sizes)
+                    )
+            finally:
+                torch.distributed.destroy_process_group()
+
+        self.assertEqual(byte_counts, [expected_local_byte_count(model, **parallel_sizes)])
 
     def test_hub_retry(self):
         @hub_retry(max_attempts=2)
@@ -1289,7 +1396,7 @@ class ModelUtilsTest(TestCasePlus):
         _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         # Under the mock environment we get a 500 error when trying to reach the model.
-        with mock.patch("httpx.Client.request", return_value=response_mock) as mock_head:
+        with mock.patch.object(httpx.Client, "request", return_value=response_mock) as mock_head:
             _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
@@ -2143,11 +2250,10 @@ class ModelUtilsTest(TestCasePlus):
             device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
             device = torch.device(f"{device_type}:0")
 
-            torch_accelerator_module = getattr(torch, device_type, torch.cuda)
-            torch_accelerator_module.synchronize(device)
+            torch.accelerator.synchronize(device)
             t0 = time.time()
             model = AutoModelForCausalLM.from_pretrained(args.model_id, dtype=torch.float16, device_map=device)
-            torch_accelerator_module.synchronize(device)
+            torch.accelerator.synchronize(device)
             dt = time.time() - t0
 
             # Assert loading is faster (it should be more than enough in both cases)
@@ -2641,18 +2747,24 @@ class ModelUtilsTest(TestCasePlus):
 class ModelOnTheFlyConversionTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.user = "huggingface-hub-ci"
-        cls.token = os.getenv("HUGGINGFACE_PRODUCTION_USER_TOKEN", None)
+        cls.org = "hf-ci-ephemeral-repos"
+        # Requires a fine-grained token with repo create/delete + discussion access on cls.org
+        cls.token = os.getenv("HF_CI_EPHEMERAL_REPO_MANIPULATION_TOKEN") or os.getenv("HF_TOKEN")
 
-        if cls.token is None:
-            raise ValueError("Cannot run tests as secret isn't setup.")
+        if not cls.token:
+            raise unittest.SkipTest("HF_CI_EPHEMERAL_REPO_MANIPULATION_TOKEN (or HF_TOKEN) not set, skipping.")
 
         cls.api = HfApi(token=cls.token)
 
     def setUp(self) -> None:
-        self.repo_name = f"{self.user}/test-model-on-the-fly-{uuid.uuid4()}"
+        self.repo_name = f"{self.org}/test-model-on-the-fly-{uuid.uuid4()}"
+        # conftest.py disables conversion globally to avoid Hub traffic in regular tests;
+        # this class specifically tests conversion, so we re-enable it.
+        self._prev_disable = os.environ.pop("DISABLE_SAFETENSORS_CONVERSION", None)
 
     def tearDown(self) -> None:
+        if self._prev_disable is not None:
+            os.environ["DISABLE_SAFETENSORS_CONVERSION"] = self._prev_disable
         self.api.delete_repo(self.repo_name)
 
     def test_safetensors_on_the_fly_conversion(self):
@@ -2696,9 +2808,10 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         with self.subTest("PR was open with the safetensors account"):
             discussions = self.api.get_repo_discussions(self.repo_name, token=self.token)
             discussion = next(discussions)
-            self.assertEqual(discussion.author, self.user)
+            self.assertEqual(discussion.author, "hf-transformers-bot")
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
+    @unittest.skip(reason="SFconvertbot cannot agree to gating on dynamically-created repos")
     def test_safetensors_on_the_fly_conversion_gated(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -2763,9 +2876,10 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         with self.subTest("PR was open with the safetensors account"):
             discussions = self.api.get_repo_discussions(self.repo_name)
             discussion = next(discussions)
-            self.assertEqual(discussion.author, self.user)
+            self.assertEqual(discussion.author, "hf-transformers-bot")
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
+    @unittest.skip(reason="SFconvertbot cannot agree to gating on dynamically-created repos")
     def test_safetensors_on_the_fly_sharded_conversion_gated(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -2809,7 +2923,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         with self.subTest("PR was open with the safetensors account"):
             discussions = self.api.get_repo_discussions(self.repo_name)
             discussion = next(discussions)
-            self.assertEqual(discussion.author, self.user)
+            self.assertEqual(discussion.author, "hf-transformers-bot")
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
         # We now switch the repo visibility to public
@@ -2870,8 +2984,10 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         BertModel.from_pretrained(self.repo_name, token=self.token)
 
         for thread in threading.enumerate():
-            if thread.name == "Thread-autoconversion":
-                thread.join(timeout=10)
+            if thread.name == "Thread-auto_conversion":
+                # The conversion is spawned as a background thread by from_pretrained. Wait up to 60s for
+                # it to finish (it makes an API call to the conversion Space, which can take several seconds).
+                thread.join(timeout=60)
 
         discussions = self.api.get_repo_discussions(self.repo_name)
 
@@ -3144,16 +3260,114 @@ class TestAttentionImplementation(unittest.TestCase):
             attn_output, _ = sdpa_attention_forward(module, query, key, value, attention_mask=attention_mask)
         self.assertEqual(attn_output.shape, (1, 16, 8, value_head_dim))
 
+    @parameterized.expand([(False,), (True,)])
+    def test_gqa_in_sdpa_decoding_packs_query_heads(self, use_position_bias):
+        from transformers.integrations.sdpa_attention import repeat_kv, sdpa_attention_forward
+
+        module = torch.nn.Module()
+        module.num_key_value_groups = 4  # 8 query heads, 2 key/value heads
+        query = torch.randn(2, 8, 1, 64, device=torch_device)
+        key = torch.randn(2, 2, 16, 64, device=torch_device)
+        value = torch.randn(2, 2, 16, 64, device=torch_device)
+        attention_mask = torch.ones(2, 1, 1, 16, device=torch_device, dtype=torch.bool)
+        attention_mask[1, ..., :5] = False  # left padding
+        # makes the mask per-head
+        position_bias = torch.randn(1, 8, 1, 16, device=torch_device) if use_position_bias else None
+
+        expected, _ = sdpa_attention_forward(
+            torch.nn.Module(),
+            query,
+            repeat_kv(key, 4),
+            repeat_kv(value, 4),
+            attention_mask,
+            position_bias=position_bias,
+        )
+        with patch(
+            "transformers.integrations.sdpa_attention.repeat_kv", side_effect=AssertionError("K/V were repeated")
+        ):
+            attn_output, _ = sdpa_attention_forward(
+                module, query, key, value, attention_mask, position_bias=position_bias
+            )
+        torch.testing.assert_close(attn_output, expected)
+
+    @parameterized.expand(
+        [
+            # (use_mask, is_causal): the `create_position_bias_mask` branches taken by T5-style models
+            (False, False),  # position_bias used as is
+            (False, True),  # causal mask applied to position_bias
+            (True, False),  # bool mask applied to position_bias
+        ]
+    )
+    @require_torch_gpu
+    def test_position_bias_in_sdpa_uses_a_fused_kernel(self, use_mask, is_causal):
+        # Regression test for https://github.com/huggingface/transformers/issues/49516.
+        # Restricting SDPA to the efficient backend (which excludes `math`) proves the mask built from a T5-style
+        # `position_bias` by `create_position_bias_mask` stays on a fused kernel: the call must succeed.
+        from torch.nn.attention import SDPBackend, sdpa_kernel
+
+        from transformers.integrations.sdpa_attention import sdpa_attention_forward
+
+        query = torch.randn(1, 8, 16, 64, device=torch_device, dtype=torch.float16)
+        key = torch.randn(1, 8, 16, 64, device=torch_device, dtype=torch.float16)
+        value = torch.randn(1, 8, 16, 64, device=torch_device, dtype=torch.float16)
+        # same layout as T5's `compute_bias`, whose last dim is not stride 1
+        position_bias = torch.randn(16, 16, 8, device=torch_device, dtype=torch.float16).permute(2, 0, 1).unsqueeze(0)
+        attention_mask = torch.ones(1, 1, 16, 16, device=torch_device, dtype=torch.bool) if use_mask else None
+
+        with sdpa_kernel([SDPBackend.EFFICIENT_ATTENTION]):
+            attn_output, _ = sdpa_attention_forward(
+                torch.nn.Module(), query, key, value, attention_mask, is_causal=is_causal, position_bias=position_bias
+            )
+        self.assertEqual(attn_output.shape, (1, 16, 8, 64))
+
+    @parameterized.expand([("0", False), ("1", True)])
+    def test_transformers_sdpa_force_gqa_env_var_overrides_use_gqa_in_sdpa_attention_forward(
+        self, env_var_value, expected_enable_gqa
+    ):
+        from transformers.integrations.sdpa_attention import sdpa_attention_forward
+
+        module = torch.nn.Module()
+        module.num_key_value_groups = 2
+        query = torch.randn(1, 4, 16, 1, dtype=torch.float16)
+        key = torch.randn(1, 2, 16, 1, dtype=torch.float16)
+        value = torch.randn(1, 2, 16, 1, dtype=torch.float16)
+
+        # use an attention mask and set _is_torch_{xpu,mps}_available to False, so that use_gqa_in_sdpa
+        # falls back to returning False when the env var is not set to 1
+        attention_mask = torch.zeros(1, 1, 16, 16, dtype=torch.float16)
+
+        with (
+            patch("transformers.integrations.sdpa_attention._is_torch_xpu_available", False),
+            patch("transformers.integrations.sdpa_attention._is_torch_mps_available", False),
+            patch(
+                "torch.nn.functional.scaled_dot_product_attention",
+                wraps=torch.nn.functional.scaled_dot_product_attention,
+            ) as mock_sdpa,
+            patch.dict(os.environ, {"TRANSFORMERS_SDPA_FORCE_GQA": env_var_value}),
+        ):
+            sdpa_attention_forward(module, query, key, value, attention_mask=attention_mask)
+
+        mock_sdpa.assert_called_once()
+        self.assertEqual(mock_sdpa.call_args.kwargs.get("enable_gqa", False), expected_enable_gqa)
+        self.assertEqual(
+            mock_sdpa.call_args.args[1].shape[1], 2 if expected_enable_gqa else 4
+        )  # check if key was repeated
+        self.assertEqual(
+            mock_sdpa.call_args.args[2].shape[1], 2 if expected_enable_gqa else 4
+        )  # check if value was repeated
+
     def test_flash_attn_available_no_keyerror_when_missing_from_distribution_map(self):
         # Regression test for https://github.com/huggingface/transformers/issues/45520.
-        # When flash_attn is importable but not present in PACKAGE_DISTRIBUTION_MAPPING
+        # When flash_attn is importable but not present in the package distribution mapping
         # (e.g. installed via a non-standard wheel), the availability checks must not raise
         # a KeyError; they should simply return False.
         stripped_map = {
-            k: v for k, v in PACKAGE_DISTRIBUTION_MAPPING.items() if k not in ("flash_attn", "flash_attn_interface")
+            k: v for k, v in _package_distribution_mapping().items() if k not in ("flash_attn", "flash_attn_interface")
         }
-        with patch("transformers.utils.import_utils.PACKAGE_DISTRIBUTION_MAPPING", stripped_map):
-            with patch("transformers.modeling_flash_attention_utils.PACKAGE_DISTRIBUTION_MAPPING", stripped_map):
+        with patch("transformers.utils.import_utils._package_distribution_mapping", return_value=stripped_map):
+            with patch(
+                "transformers.modeling_flash_attention_utils._package_distribution_mapping", return_value=stripped_map
+            ):
                 self.assertFalse(is_flash_attn_2_available())
                 self.assertFalse(is_flash_attn_3_available())
                 self.assertFalse(is_flash_attn_4_available())
@@ -3322,6 +3536,41 @@ class TestAttentionImplementation(unittest.TestCase):
         self.assertTrue(MixtralModel._can_set_experts_implementation())
         self.assertFalse(LlamaModel._can_set_experts_implementation())
 
+    @require_kernels
+    @require_rocm
+    def test_flash_fallback_skips_implementations_not_built_for_the_device(self):
+        # The CUDA-only kernel comes first, so the fallback must skip it and pick the ROCm one
+        compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "kernels-community/aiter-flash-attn"]
+        with patch.object(MistralForCausalLM, "_compatible_flash_implementations", compatible_flash_implementations):
+            model = MistralForCausalLM.from_pretrained(TINY_MISTRAL, attn_implementation="flash_attention_2")
+            self.assertEqual(model.config._attn_implementation, "kernels-community/aiter-flash-attn")
+
+            model.set_attn_implementation("eager")
+            model.set_attn_implementation("flash_attention_2")
+            self.assertEqual(model.config._attn_implementation, "kernels-community/aiter-flash-attn")
+
+    @require_kernels
+    @require_rocm
+    def test_flash_attention_2_falls_back_to_aiter_kernel_on_rocm(self):
+        # `kernels-community/flash-attn2` has no ROCm build, so FA2 must fall back to the AITER kernel instead
+        from transformers.modeling_flash_attention_utils import FLASH_ATTENTION_COMPATIBILITY_MATRIX
+
+        self.assertEqual(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"], "kernels-community/aiter-flash-attn")
+
+        # Hide the `flash-attn` package (installed in the AMD CI image) so that the kernel fallback is used
+        with patch.dict(FLASH_ATTENTION_COMPATIBILITY_MATRIX[2], {"general_availability_check": lambda: False}):
+            model = MistralForCausalLM.from_pretrained(
+                TINY_MISTRAL, attn_implementation="flash_attention_2", dtype=torch.bfloat16
+            ).to(torch_device)
+        self.assertEqual(model.config._attn_implementation, "kernels-community/aiter-flash-attn")
+
+        input_ids = torch.randint(0, model.config.vocab_size, (2, 16), device=torch_device)
+        with torch.no_grad():
+            logits = model(input_ids).logits
+            model.set_attn_implementation("sdpa")
+            expected_logits = model(input_ids).logits
+        torch.testing.assert_close(logits, expected_logits, atol=2e-2, rtol=2e-2)
+
 
 @require_torch
 class TestTensorSharing(TestCasePlus):
@@ -3452,6 +3701,62 @@ class TestSaveAndLoadModelWithExtraState(TestCasePlus):
             self.assertEqual(len(loading_info["unexpected_keys"]), 0)
             self.assertEqual(len(loading_info["mismatched_keys"]), 0)
             self.assertEqual(len(loading_info["error_msgs"]), 0)
+
+
+@require_torch
+class TestSliceLogitsToKeep(MemoryCleanupMixin, unittest.TestCase):
+    """`slice_logits_to_keep` is called by the models right before the `lm_head` projection."""
+
+    def setUp(self):
+        super().setUp()
+        # (batch_size=3, sequence_length=7, hidden_size=2), all values are unique so a wrong position shows up
+        self.hidden_states = torch.arange(3 * 7 * 2, dtype=torch.float32).reshape(3, 7, 2)
+
+    def test_int(self):
+        hidden_states = self.hidden_states
+        # `0` is a special case: keep all the positions
+        self.assertTrue(slice_logits_to_keep(hidden_states, 0).equal(hidden_states))
+        self.assertTrue(slice_logits_to_keep(hidden_states, 1).equal(hidden_states[:, -1:]))
+        self.assertTrue(slice_logits_to_keep(hidden_states, 3).equal(hidden_states[:, -3:]))
+
+    def test_1d_tensor(self):
+        hidden_states = self.hidden_states
+        # same positions for every sample
+        out = slice_logits_to_keep(hidden_states, torch.tensor([1, 4]))
+        self.assertEqual(out.shape, (3, 2, 2))
+        self.assertTrue(out.equal(hidden_states[:, [1, 4]]))
+        # negative positions are supported
+        self.assertTrue(slice_logits_to_keep(hidden_states, torch.tensor([-1])).equal(hidden_states[:, -1:]))
+
+    def test_2d_integer_tensor(self):
+        hidden_states = self.hidden_states
+        # different positions for each sample, same count
+        positions = torch.tensor([[1, 2], [3, 4], [0, 6]])
+        out = slice_logits_to_keep(hidden_states, positions)
+        self.assertEqual(out.shape, (3, 2, 2))
+        for i in range(3):
+            self.assertTrue(out[i].equal(hidden_states[i, positions[i]]))
+
+    def test_2d_boolean_tensor(self):
+        hidden_states = self.hidden_states
+        # the count can differ per sample, the output is flattened over batch and sequence
+        mask = torch.zeros(3, 7, dtype=torch.bool)
+        mask[0, [1, 2, 3]] = True
+        mask[1, 0] = True
+        mask[2, [4, 5]] = True
+        out = slice_logits_to_keep(hidden_states, mask)
+        self.assertEqual(out.shape, (6, 2))
+        self.assertTrue(out.equal(torch.cat([hidden_states[0, 1:4], hidden_states[1, :1], hidden_states[2, 4:6]])))
+        # nothing to keep
+        self.assertEqual(slice_logits_to_keep(hidden_states, torch.zeros(3, 7, dtype=torch.bool)).shape, (0, 2))
+
+    def test_2d_integer_and_boolean_tensors_select_the_same_values(self):
+        # (sorted) positions or a mask selecting them give the same values, only the layout differs
+        positions = torch.tensor([[1, 2], [3, 4], [0, 6]])
+        mask = torch.zeros(3, 7, dtype=torch.bool).scatter_(1, positions, True)
+        from_positions = slice_logits_to_keep(self.hidden_states, positions)
+        from_mask = slice_logits_to_keep(self.hidden_states, mask)
+        self.assertTrue(from_positions.flatten(0, 1).equal(from_mask))
 
 
 class TestGetDecoder(unittest.TestCase):
@@ -3973,9 +4278,68 @@ class RemoteAndCustomCodeModelTests(unittest.TestCase):
         self.assertFalse(model.is_remote_code())
 
 
+class GradientCheckpointingDeprecatedAliasTest(unittest.TestCase):
+    """The `gradient_checkpointing*` methods are deprecated aliases of `activation_checkpointing*`."""
+
+    def test_aliases_warn_and_forward(self):
+        from transformers import LlamaModel
+
+        config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=64, num_attention_heads=4)
+        model = LlamaModel(config)
+        with self.assertWarns(FutureWarning):
+            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+        self.assertTrue(model.is_activation_checkpointing)
+        with self.assertWarns(FutureWarning):
+            self.assertTrue(model.is_gradient_checkpointing)
+        with self.assertWarns(FutureWarning):
+            model.gradient_checkpointing_disable()
+        self.assertFalse(model.is_activation_checkpointing)
+
+    def test_subclass_overrides_of_the_aliases_are_called(self):
+        from transformers import LlamaModel
+
+        class LegacyLlamaModel(LlamaModel):
+            def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None, **kwargs):
+                self.calls.append("enable")
+                super().gradient_checkpointing_enable(gradient_checkpointing_kwargs, **kwargs)
+
+            def gradient_checkpointing_disable(self):
+                self.calls.append("disable")
+                super().gradient_checkpointing_disable()
+
+        config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=64, num_attention_heads=4)
+        model = LegacyLlamaModel(config)
+        model.calls = []
+        with self.assertWarns(FutureWarning):
+            model.activation_checkpointing_enable()
+        self.assertTrue(model.is_activation_checkpointing)
+        with self.assertWarns(FutureWarning):
+            model.activation_checkpointing_disable()
+        self.assertFalse(model.is_activation_checkpointing)
+        self.assertEqual(model.calls, ["enable", "disable"])
+
+    def test_wrappers_of_the_aliases_are_called(self):
+        from transformers import LlamaModel
+
+        config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=64, num_attention_heads=4)
+        model = LlamaModel(config)
+        original_enable = model.gradient_checkpointing_enable
+        received_kwargs = []
+
+        def gradient_checkpointing_enable(gradient_checkpointing_kwargs=None, **kwargs):
+            received_kwargs.append(gradient_checkpointing_kwargs)
+            original_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs, **kwargs)
+
+        model.gradient_checkpointing_enable = gradient_checkpointing_enable
+        with self.assertWarns(FutureWarning):
+            model.activation_checkpointing_enable({"use_reentrant": False}, every_n_layers=2)
+        self.assertEqual(received_kwargs, [{"use_reentrant": False}])
+        self.assertEqual([layer.gradient_checkpointing for layer in model.layers], [True, False])
+
+
 @require_torch_accelerator
 class GradientCheckpointingOffloadTest(unittest.TestCase):
-    """`gradient_checkpointing_enable(offload=True)` holds the saved activations in host memory."""
+    """`activation_checkpointing_enable(offload=True)` holds the saved activations in host memory."""
 
     def _model(self, num_hidden_layers=8, hidden_size=256):
         from transformers import LlamaModel, set_seed
@@ -3998,12 +4362,12 @@ class GradientCheckpointingOffloadTest(unittest.TestCase):
         model = self._model()
         input_ids = torch.randint(0, 128, (1, 64), device=torch_device)
 
-        model.gradient_checkpointing_enable()
+        model.activation_checkpointing_enable()
         self._backward(model, input_ids)
         expected = [p.grad.clone() for p in model.parameters()]
 
         model.zero_grad(set_to_none=True)
-        model.gradient_checkpointing_enable(offload=True)
+        model.activation_checkpointing_enable(offload=True)
         self._backward(model, input_ids)
 
         for expected_grad, param in zip(expected, model.parameters()):
@@ -4017,7 +4381,7 @@ class GradientCheckpointingOffloadTest(unittest.TestCase):
         resident = []
         for offload in (False, True):
             model = self._model(num_hidden_layers, hidden_size)
-            model.gradient_checkpointing_enable(offload=offload)
+            model.activation_checkpointing_enable(offload=offload)
             input_ids = torch.randint(0, 128, (1, seq_len), device=torch_device)
             self._backward(model, input_ids)  # warm the allocator
             model.zero_grad(set_to_none=True)

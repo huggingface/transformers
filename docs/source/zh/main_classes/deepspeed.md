@@ -172,19 +172,6 @@ deepspeed --num_gpus=2 your_program.py <normal cl args> --deepspeed ds_config.js
 
 当您使用 `deepspeed` 启动器并且希望使用所有可用的 GPU 时，您可以简单地省略 `--num_gpus` 标志。
 
-以下是在 DeepSpeed 中启用使用所有可用 GPU情况下， 运行 `run_translation.py` 的示例：
-
-
-```bash
-deepspeed examples/pytorch/translation/run_translation.py \
---deepspeed tests/deepspeed/ds_config_zero3.json \
---model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
---output_dir output_dir --fp16 \
---do_train --max_train_samples 500 --num_train_epochs 1 \
---dataset_name wmt16 --dataset_config "ro-en" \
---source_lang en --target_lang ro
-```
-
 请注意，在 DeepSpeed 文档中，您可能会看到 `--deepspeed --deepspeed_config ds_config.json` - 即两个与 DeepSpeed 相关的参数，但为简单起见，并且因为已经有很多参数要处理，我们将两者合并为一个单一参数。
 
 有关一些实际使用示例，请参阅 [此帖](https://github.com/huggingface/transformers/issues/8771#issuecomment-759248400)。
@@ -194,19 +181,6 @@ deepspeed examples/pytorch/translation/run_translation.py \
 <a id='deepspeed-one-gpu'></a>
 
 ### 单GPU启用
-
-要使用一张 GPU 启用 DeepSpeed，调整 [`Trainer`] 的命令行参数如下：
-
-
-```bash
-deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
---deepspeed tests/deepspeed/ds_config_zero2.json \
---model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
---output_dir output_dir --fp16 \
---do_train --max_train_samples 500 --num_train_epochs 1 \
---dataset_name wmt16 --dataset_config "ro-en" \
---source_lang en --target_lang ro
-```
 
 这与多 GPU 的情况几乎相同，但在这里我们通过 `--num_gpus=1` 明确告诉 DeepSpeed 仅使用一张 GPU。默认情况下，DeepSpeed 启用给定节点上可以看到的所有 GPU。如果您一开始只有一张 GPU，那么您不需要这个参数。以下 [文档](https://www.deepspeed.ai/getting-started/#resource-configuration-multi-node) 讨论了启动器的选项。
 
@@ -245,16 +219,6 @@ deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
 
 <!--- TODO: Benchmark whether we can get better performance out of ZeRO-3 vs. ZeRO-2 on a single GPU, and then
 recommend ZeRO-3 config as starting one. -->
-
-注意：
-
-- 如果您需要在特定的 GPU 上运行，而不是 GPU 0，则无法使用 `CUDA_VISIBLE_DEVICES` 来限制可用 GPU 的可见范围。相反，您必须使用以下语法：
-
-  ```bash
-  deepspeed --include localhost:1 examples/pytorch/translation/run_translation.py ...
-  ```
-
-  在这个例子中，我们告诉 DeepSpeed 使用 GPU 1（第二个 GPU）。
 
 
 
@@ -443,22 +407,7 @@ cat <<'EOT' > ds_config_zero3.json
 EOT
 ```
 
-如果训练脚本在一个普通文件中而不是在notebook cells中，您可以通过笔记本中的 shell 正常启动 `deepspeed`。例如，要使用 `run_translation.py`，您可以这样启动：
-
-```python no-style
-!git clone https://github.com/huggingface/transformers
-!cd transformers; deepspeed examples/pytorch/translation/run_translation.py ...
-```
-
-或者使用 `%%bash` 魔术命令，您可以编写多行代码，用于运行 shell 程序：
-
-```python no-style
-%%bash
-
-git clone https://github.com/huggingface/transformers
-cd transformers
-deepspeed examples/pytorch/translation/run_translation.py ...
-```
+如果训练脚本在一个普通文件中而不是在notebook cells中，您可以通过笔记本中的 shell 正常启动 `deepspeed`。
 
 在这种情况下，您不需要本节开头呈现的任何代码。
 
@@ -1610,8 +1559,6 @@ model = AutoModel.from_pretrained("google-t5/t5-small")
 trainer = Trainer(model=model, args=training_args, ...)
 ```
 
-如果您使用的是官方示例脚本，并且命令行参数中包含`--deepspeed ds_config.json`且启用了ZeRO-3配置，那么一切都已经为您准备好了，因为这是示例脚本的编写方式。
-
 注意：如果模型的fp16权重无法适应单个GPU的内存，则必须使用此功能。
 
 有关此方法和其他相关功能的完整详细信息，请参阅[构建大模型](https://deepspeed.readthedocs.io/en/latest/zero3.html#constructing-massive-models)。
@@ -1650,20 +1597,6 @@ deepspeed --num_gpus=2 your_program.py <normal cl args> --do_eval --deepspeed ds
 ```
 
 唯一的重要事情是您需要使用ZeRO-3配置，因为ZeRO-2对于推理没有任何优势，因为只有ZeRO-3才对参数进行分片，而ZeRO-1则对梯度和优化器状态进行分片。
-
-以下是在DeepSpeed下运行`run_translation.py`启用所有可用GPU的示例：
-
-```bash
-deepspeed examples/pytorch/translation/run_translation.py \
---deepspeed tests/deepspeed/ds_config_zero3.json \
---model_name_or_path google-t5/t5-small --output_dir output_dir \
---do_eval --max_eval_samples 50 --warmup_steps 50  \
---max_source_length 128 --val_max_target_length 128 \
---per_device_eval_batch_size 4 \
---predict_with_generate --dataset_config "ro-en" --fp16 \
---source_lang en --target_lang ro --dataset_name wmt16 \
---source_prefix "translate English to Romanian: "
-```
 
 由于在推理阶段，优化器状态和梯度不需要额外的大量内存，您应该能够将更大的批次和/或序列长度放到相同的硬件上。
 
@@ -1745,7 +1678,6 @@ SW: Model with 2783M total params, 65M largest layer params.
 
 4. 如果可能，请包含一个Google Colab notebook链接，我们可以使用它来重现问题。您可以使用这个[notebook](https://github.com/stas00/porting/blob/master/transformers/deepspeed/DeepSpeed_on_colab_CLI.ipynb)作为起点。
 5. 除非不可能，否则请始终使用标准数据集，而不是自定义数据集。
-6. 如果可能，尝试使用现有[示例](https://github.com/huggingface/transformers/tree/main/examples/pytorch)之一来重现问题。
 
 需要考虑的因素：
 
@@ -2041,13 +1973,7 @@ rank1:
 要运行DeepSpeed测试，请至少运行以下命令：
 
 ```bash
-RUN_SLOW=1 pytest tests/deepspeed/test_deepspeed.py
-```
-
-如果你更改了任何模型或PyTorch示例代码，请同时运行多模型测试。以下将运行所有DeepSpeed测试：
-
-```bash
-RUN_SLOW=1 pytest tests/deepspeed
+RUN_SLOW=1 pytest tests/trainer/distributed/test_trainer_distributed_deepspeed.py
 ```
 
 ## 主要的DeepSpeed资源

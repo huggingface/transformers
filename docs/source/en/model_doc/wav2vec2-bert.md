@@ -49,12 +49,10 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
 
 <PipelineTag pipeline="automatic-speech-recognition"/>
 
-- [`Wav2Vec2BertForCTC`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/speech-recognition).
 - You can also adapt these notebooks on [how to finetune a speech recognition model in English](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/speech_recognition.ipynb), and [how to finetune a speech recognition model in any language](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multi_lingual_speech_recognition.ipynb).
 
 <PipelineTag pipeline="audio-classification"/>
 
-- [`Wav2Vec2BertForSequenceClassification`] can be used by adapting this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/audio-classification).
 - See also: [Audio classification task guide](../tasks/audio_classification)
 
 ## Wav2Vec2BertConfig

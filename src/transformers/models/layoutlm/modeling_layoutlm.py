@@ -168,7 +168,7 @@ class LayoutLMSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -222,7 +222,7 @@ class LayoutLMAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -279,7 +279,7 @@ class LayoutLMLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         hidden_states = self.attention(
@@ -311,7 +311,7 @@ class LayoutLMEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         for layer_module in self.layer:
@@ -393,6 +393,7 @@ class LayoutLMPreTrainedModel(PreTrainedModel):
     config: LayoutLMConfig
     base_model_prefix = "layoutlm"
     supports_gradient_checkpointing = True
+    _supports_sdpa = True
     _can_record_outputs = {
         "hidden_states": LayoutLMLayer,
         "attentions": LayoutLMSelfAttention,
@@ -410,7 +411,7 @@ class LayoutLMPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class LayoutLMModel(LayoutLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMConfig):
         super().__init__(config)
         self.config = config
 
@@ -434,10 +435,10 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         bbox: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -531,7 +532,7 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
         "cls.predictions.decoder.weight": "layoutlm.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMConfig):
         super().__init__(config)
 
         self.layoutlm = LayoutLMModel(config)
@@ -556,10 +557,10 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         bbox: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MaskedLMOutput:
@@ -643,7 +644,7 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
     """
 )
 class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.layoutlm = LayoutLMModel(config)
@@ -662,10 +663,10 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         bbox: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutput:
@@ -767,7 +768,7 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
     """
 )
 class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.layoutlm = LayoutLMModel(config)
@@ -786,10 +787,10 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         bbox: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | TokenClassifierOutput:
@@ -867,7 +868,7 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
 
 @auto_docstring
 class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
-    def __init__(self, config, has_visual_segment_embedding=True):
+    def __init__(self, config: LayoutLMConfig, has_visual_segment_embedding=True):
         r"""
         has_visual_segment_embedding (`bool`, *optional*, defaults to `True`):
             Whether or not to add visual segment embeddings.
@@ -890,10 +891,10 @@ class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         bbox: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],

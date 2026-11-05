@@ -273,24 +273,14 @@ class Tipsv2Config(PreTrainedConfig):
     ```"""
 
     model_type = "tipsv2"
-    sub_configs = {"text_config": Tipsv2TextConfig, "vision_config": Tipsv2VisionConfig}
+    sub_configs_defaults = {
+        "text_config": Tipsv2TextConfig,
+        "vision_config": Tipsv2VisionConfig,
+    }
 
     text_config: dict | Tipsv2TextConfig | None = None
     vision_config: dict | Tipsv2VisionConfig | None = None
     temperature_init_value: float = 0.005065968260169029
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"]()
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         super().validate_architecture()
@@ -412,8 +402,12 @@ class Tipsv2VisionModel(Dinov2WithRegistersModel):
 
 
 class Tipsv2VisionBackbone(Dinov2WithRegistersBackbone):
+    # trf-ignore: TRF055
+    config: Tipsv2VisionConfig
+
     def __init__(self, config: "Tipsv2Config | Tipsv2VisionConfig"):
         # reassign config to vision_config for compatibility with AutoBackbone
+        # FIXME raushan should not happen in practice!
         if isinstance(config, Tipsv2Config):
             config = config.vision_config
             super().__init__(config)
@@ -478,7 +472,7 @@ class Tipsv2TextEmbeddings(CLIPTextEmbeddings):
         self,
         input_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor:
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
         max_position_embedding = self.position_ids.shape[-1]
@@ -632,7 +626,7 @@ class Tipsv2TextModel(Tipsv2TextPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -731,7 +725,7 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         return self.text_model(
@@ -746,7 +740,7 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         bool_masked_pos: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -772,10 +766,10 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         bool_masked_pos: torch.Tensor | None = None,
         return_loss: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],

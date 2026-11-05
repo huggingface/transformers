@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 
 En esta guía puedes encontrar información para instalar 🤗 Transformers para cualquier biblioteca de Machine Learning con la que estés trabajando. Además, encontrarás información sobre cómo establecer el caché y cómo configurar 🤗 Transformers para correrlo de manera offline (opcional).
 
-🤗 Transformers ha sido probada en Python 3.10+ y PyTorch 2.4+. Para instalar la biblioteca de deep learning con la que desees trabajar, sigue las instrucciones correspondientes listadas a continuación:
+🤗 Transformers ha sido probada en Python 3.11+ y PyTorch 2.4+. Para instalar la biblioteca de deep learning con la que desees trabajar, sigue las instrucciones correspondientes listadas a continuación:
 
 * [PyTorch](https://pytorch.org/get-started/locally/)
 
@@ -98,7 +98,7 @@ cd transformers
 pip install -e .
 ```
 
-Éstos comandos van a ligar el directorio desde donde clonamos el repositorio al path de las bibliotecas de Python. Python ahora buscará dentro de la carpeta que clonaste además de los paths normales de la biblioteca. Por ejemplo, si los paquetes de Python se encuentran instalados en `~/anaconda3/envs/main/lib/python3.10/site-packages/`, Python también buscará en el directorio desde donde clonamos el repositorio `~/transformers/`.
+Éstos comandos van a ligar el directorio desde donde clonamos el repositorio al path de las bibliotecas de Python. Python ahora buscará dentro de la carpeta que clonaste además de los paths normales de la biblioteca. Por ejemplo, si los paquetes de Python se encuentran instalados en `~/anaconda3/envs/main/lib/python3.11/site-packages/`, Python también buscará en el directorio desde donde clonamos el repositorio `~/transformers/`.
 
 <Tip warning={true}>
 
@@ -141,21 +141,6 @@ Los modelos preentrenados se descargan y almacenan en caché localmente en: `~/.
 Puedes añadir [🤗 Datasets](https://huggingface.co/docs/datasets/) al flujo de entrenamiento offline declarando la variable de entorno  `HF_DATASETS_OFFLINE=1`.
 
 </Tip>
-
-Por ejemplo, normalmente ejecutarías un programa en una red normal con firewall para instancias externas con el siguiente comando:
-
-```bash
-python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
-```
-
-Ejecuta este mismo programa en una instancia offline con el siguiente comando:
-
-```bash
-HF_DATASETS_OFFLINE=1 HF_HUB_OFFLINE=1 \
-python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
-```
-
-El script ahora debería ejecutarse sin bloquearse ni esperar a que se agote el tiempo de espera porque sabe que solo debe buscar archivos locales.
 
 ### Obtener modelos y tokenizers para uso offline
 

@@ -4,11 +4,12 @@ on:
   schedule:
     - cron: "17 5 * * *"
 
-permissions:
-  contents: read
+
+permissions: {}
 
 jobs:
   run_scheduled_amd_ci:
+    permissions: {}
     name: Trigger Scheduled AMD CI
     runs-on: ubuntu-22.04
     if: ${{ always() }}

@@ -46,18 +46,18 @@ logger = logging.get_logger(__name__)
 # Copied from transformers.models.swin.modeling_swin.SwinEncoderOutput with Swin->Swinv2
 class Swinv2EncoderOutput(ModelOutput):
     r"""
-    reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+    reshaped_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each stage) of
         shape `(batch_size, hidden_size, height, width)`.
 
         Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
         include the spatial dimensions.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
-    reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    last_hidden_state: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
+    reshaped_hidden_states: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring(
@@ -69,21 +69,21 @@ class Swinv2EncoderOutput(ModelOutput):
 # Copied from transformers.models.swin.modeling_swin.SwinModelOutput with Swin->Swinv2
 class Swinv2ModelOutput(ModelOutput):
     r"""
-    pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*, returned when `add_pooling_layer=True` is passed):
+    pooler_output (`torch.Tensor` of shape `(batch_size, hidden_size)`, *optional*, returned when `add_pooling_layer=True` is passed):
         Average pooling of the last layer hidden-state.
-    reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+    reshaped_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each stage) of
         shape `(batch_size, hidden_size, height, width)`.
 
         Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
         include the spatial dimensions.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    pooler_output: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
-    reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    last_hidden_state: torch.Tensor | None = None
+    pooler_output: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
+    reshaped_hidden_states: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring(
@@ -95,23 +95,23 @@ class Swinv2ModelOutput(ModelOutput):
 # Copied from transformers.models.swin.modeling_swin.SwinMaskedImageModelingOutput with Swin->Swinv2
 class Swinv2MaskedImageModelingOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `bool_masked_pos` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `bool_masked_pos` is provided):
         Masked image modeling (MLM) loss.
-    reconstruction (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+    reconstruction (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
         Reconstructed pixel values.
-    reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+    reshaped_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each stage) of
         shape `(batch_size, hidden_size, height, width)`.
 
         Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
         include the spatial dimensions.
     """
 
-    loss: torch.FloatTensor | None = None
-    reconstruction: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
-    reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    loss: torch.Tensor | None = None
+    reconstruction: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
+    reshaped_hidden_states: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring(
@@ -123,23 +123,23 @@ class Swinv2MaskedImageModelingOutput(ModelOutput):
 # Copied from transformers.models.swin.modeling_swin.SwinImageClassifierOutput with Swin->Swinv2
 class Swinv2ImageClassifierOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Classification (or regression if config.num_labels==1) loss.
-    logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+    logits (`torch.Tensor` of shape `(batch_size, config.num_labels)`):
         Classification (or regression if config.num_labels==1) scores (before SoftMax).
-    reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+    reshaped_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each stage) of
         shape `(batch_size, hidden_size, height, width)`.
 
         Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
         include the spatial dimensions.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
-    reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
+    reshaped_hidden_states: tuple[torch.Tensor, ...] | None = None
 
 
 # Copied from transformers.models.swin.modeling_swin.window_partition
@@ -233,7 +233,7 @@ class Swinv2Embeddings(nn.Module):
 
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None,
+        pixel_values: torch.Tensor | None,
         bool_masked_pos: torch.BoolTensor | None = None,
         interpolate_pos_encoding: bool = False,
     ) -> tuple[torch.Tensor]:
@@ -290,7 +290,7 @@ class Swinv2PatchEmbeddings(nn.Module):
             pixel_values = nn.functional.pad(pixel_values, pad_values)
         return pixel_values
 
-    def forward(self, pixel_values: torch.FloatTensor | None) -> tuple[torch.Tensor, tuple[int]]:
+    def forward(self, pixel_values: torch.Tensor | None) -> tuple[torch.Tensor, tuple[int]]:
         _, num_channels, height, width = pixel_values.shape
         # pad the input to be divisible by self.patch_size, if needed
         pixel_values = self.maybe_pad(pixel_values, height, width)
@@ -389,7 +389,7 @@ class Swinv2SelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor]:
         batch_size, dim, num_channels = hidden_states.shape
@@ -523,7 +523,7 @@ class Swinv2Attention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor]:
         self_outputs = self.self(hidden_states, attention_mask, output_attentions)
@@ -617,7 +617,7 @@ class Swinv2Layer(nn.Module):
         shift_size = [0 if r <= w else s for r, w, s in zip(self.input_resolution, window_size, target_shift_size)]
         return window_size, shift_size
 
-    def get_attn_mask(self, height, width, dtype):
+    def get_attn_mask(self, height, width, dtype, device=None):
         """Build the cyclic-shift attention mask for shifted-window MSA; returns None when shift_size is 0.
 
         Each (h, w) position belongs to one of 9 cyclic-shift regions (3 along each axis), encoded
@@ -631,8 +631,8 @@ class Swinv2Layer(nn.Module):
         """
         if self.shift_size <= 0:
             return None
-        h_idx = torch.arange(height)
-        w_idx = torch.arange(width)
+        h_idx = torch.arange(height, device=device)
+        w_idx = torch.arange(width, device=device)
         h_region = (h_idx >= height - self.window_size).long() + (h_idx >= height - self.shift_size).long()
         w_region = (w_idx >= width - self.window_size).long() + (w_idx >= width - self.shift_size).long()
         img_mask = (h_region[None, :, None, None] * 3 + w_region[None, None, :, None]).to(dtype)
@@ -672,9 +672,9 @@ class Swinv2Layer(nn.Module):
         # partition windows
         hidden_states_windows = window_partition(shifted_hidden_states, self.window_size)
         hidden_states_windows = hidden_states_windows.view(-1, self.window_size * self.window_size, channels)
-        attn_mask = self.get_attn_mask(height_pad, width_pad, dtype=hidden_states.dtype)
-        if attn_mask is not None:
-            attn_mask = attn_mask.to(hidden_states_windows.device)
+        attn_mask = self.get_attn_mask(
+            height_pad, width_pad, dtype=hidden_states.dtype, device=hidden_states_windows.device
+        )
 
         attention_outputs = self.attention(hidden_states_windows, attn_mask, output_attentions=output_attentions)
 
@@ -889,7 +889,7 @@ class Swinv2PreTrainedModel(PreTrainedModel):
 @auto_docstring
 # Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinModel with SWIN->SWINV2,Swin->Swinv2
 class Swinv2Model(Swinv2PreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
+    def __init__(self, config: Swinv2Config, add_pooling_layer=True, use_mask_token=False):
         r"""
         add_pooling_layer (`bool`, *optional*, defaults to `True`):
             Whether or not to apply pooling layer.
@@ -916,7 +916,7 @@ class Swinv2Model(Swinv2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         bool_masked_pos: torch.BoolTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
@@ -975,18 +975,11 @@ class Swinv2Model(Swinv2PreTrainedModel):
     custom_intro="""
         Swinv2 Model with a decoder on top for masked image modeling, as proposed in
     [SimMIM](https://huggingface.co/papers/2111.09886).
-
-        <Tip>
-
-        Note that we provide a script to pre-train this model on custom data in our [examples
-        directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-
-        </Tip>
     """
 )
 # Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinForMaskedImageModeling with swin->swinv2, base-simmim-window6-192->tiny-patch4-window8-256,SWIN->SWINV2,Swin->Swinv2,192->256
 class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Swinv2Config):
         super().__init__(config)
 
         self.swinv2 = Swinv2Model(config, add_pooling_layer=False, use_mask_token=True)
@@ -1005,7 +998,7 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         bool_masked_pos: torch.BoolTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
@@ -1105,7 +1098,7 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
 )
 # Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinForImageClassification with SWIN->SWINV2,Swin->Swinv2,swin->swinv2
 class Swinv2ForImageClassification(Swinv2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Swinv2Config):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -1122,7 +1115,7 @@ class Swinv2ForImageClassification(Swinv2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
@@ -1167,7 +1160,7 @@ class Swinv2ForImageClassification(Swinv2PreTrainedModel):
     """
 )
 class Swinv2Backbone(BackboneMixin, Swinv2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Swinv2Config):
         super().__init__(config)
 
         self.num_features = [config.embed_dim] + [int(config.embed_dim * 2**i) for i in range(len(config.depths))]

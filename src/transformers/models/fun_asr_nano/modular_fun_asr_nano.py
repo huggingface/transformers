@@ -28,7 +28,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import ProcessingKwargs, Unpack, prepare_prompt_input
+from ...processing_utils import ProcessingKwargs, Unpack, prepare_keyword_inputs, prepare_prompt_input
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
@@ -64,15 +64,6 @@ LANGUAGE_CODE_TO_NAME = {
     "ja": "日文",
     "japanese": "日文",
 }
-
-
-def _prepare_keyword_inputs(keywords, batch_size: int) -> list[list[str] | None]:
-    """Broadcast / validate the hotword argument to match batch_size."""
-    if isinstance(keywords, str):
-        keywords = [keywords]
-    if isinstance(keywords, list | tuple) and all(isinstance(item, str) for item in keywords):
-        keywords = [list(keywords)] * batch_size
-    return prepare_prompt_input(keywords, batch_size, input_name="keywords")
 
 
 class FunAsrNanoProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF019
@@ -127,9 +118,12 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
         language: str | list[str] | None = None,
         prompt: str | list[str] | None = None,
         keywords: str | list[str] | list[list[str]] | None = None,
+        transcription: str | list[str] | None = None,
+        tokenize: bool = True,
         **kwargs: Unpack[FunAsrNanoProcessorKwargs],
-    ) -> BatchFeature:
-        """Prepare inputs for ASR using the checkpoint's structured transcription chat template.
+    ) -> BatchFeature | list[str]:
+        """Prepare inputs for ASR using the checkpoint's structured transcription chat template, either for inference
+        or, when `transcription` is given, for training.
 
         Args:
             audio (`AudioInput` or `list[AudioInput]`):
@@ -143,13 +137,23 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
             keywords (`str`, `list[str]`, or `list[list[str]]`, *optional*):
                 Hotwords to bias recognition. A string or flat list is shared across the batch; a nested list
                 supplies separate hotwords for each audio sample.
+            transcription (`str` or `list[str]`, *optional*):
+                Target transcript(s) for training, one per audio. When given, each transcript is written as the
+                assistant turn and `labels` are returned (see `output_labels` in [`~FunAsrNanoProcessor.__call__`]).
+            tokenize (`bool`, *optional*, defaults to `True`):
+                Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
+                the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
+                audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
+                `tokenize=True`.
             **kwargs:
-                Additional keyword arguments forwarded to [`~FunAsrNanoProcessor.apply_chat_template`]
-                and the underlying processor call (for example `text_kwargs`, `audio_kwargs`, ...).
+                Additional keyword arguments forwarded to [`~FunAsrNanoProcessor.apply_chat_template`].
+                Processor kwargs (for example `text_kwargs`, `audio_kwargs`, ...) should be passed as
+                `processor_kwargs={...}`.
 
         Returns:
-            [`BatchFeature`]: Processor outputs ready to be passed to
-            [`FunAsrNanoForConditionalGeneration.generate`].
+            [`BatchFeature`] or `list[str]`: One prompt per audio when `tokenize=False`, otherwise processor
+            outputs ready to be passed to [`FunAsrNanoForConditionalGeneration.generate`], or to
+            [`FunAsrNanoForConditionalGeneration.forward`] to compute the loss when `transcription` is given.
         """
         audio_items = list(make_list_of_audio_chat_template(audio))
 
@@ -159,11 +163,16 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
 
         languages = prepare_language_inputs(language, batch_size, LANGUAGE_CODE_TO_NAME, return_code=False)
         prompts = prepare_prompt_input(prompt, batch_size, input_name="prompt")
-        keyword_batches = _prepare_keyword_inputs(keywords, batch_size)
+        keyword_batches = prepare_keyword_inputs(keywords, batch_size)
+
+        is_training = transcription is not None
+        transcriptions = prepare_prompt_input(transcription, batch_size, input_name="transcription", broadcast=False)
+        if is_training:
+            kwargs["processor_kwargs"] = {"output_labels": True, **kwargs.get("processor_kwargs", {})}
 
         conversations = []
-        for audio_item, prompt_text, keyword_list, language_name in zip(
-            audio_items, prompts, keyword_batches, languages
+        for audio_item, prompt_text, keyword_list, language_name, transcript in zip(
+            audio_items, prompts, keyword_batches, languages, transcriptions
         ):
             content = [make_audio_chat_template_content(audio_item)]
             if prompt_text is not None:
@@ -172,12 +181,15 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
                 content.append({"type": "keywords", "keywords": keyword_list})
             if language_name is not None:
                 content.append({"type": "language", "language": language_name})
-            conversations.append([{"role": "user", "content": content}])
+            conversation = [{"role": "user", "content": content}]
+            if transcript is not None:
+                conversation.append({"role": "assistant", "content": [{"type": "text", "text": transcript}]})
+            conversations.append(conversation)
 
         return self.apply_chat_template(
             conversations,
-            tokenize=True,
-            add_generation_prompt=True,
+            tokenize=tokenize,
+            add_generation_prompt=not is_training,
             return_dict=True,
             **kwargs,
         )
@@ -475,12 +487,12 @@ class FunAsrNanoModel(AudioFlamingo3Model):
     )
     def get_audio_features(
         self,
-        input_features: torch.FloatTensor,
+        input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
-        input_features (`torch.FloatTensor`):
+        input_features (`torch.Tensor`):
             Audio features `(batch, time, feature_dim)` produced by the feature extractor (after LFR stacking).
         input_features_mask (`torch.Tensor`):
             Padding mask for the audio feature sequence, as returned by the processor.

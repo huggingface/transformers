@@ -34,12 +34,8 @@ Swin Transformer v2의 사용을 도울 수 있는 Hugging Face 및 커뮤니티
 
 <PipelineTag pipeline="image-classification"/>
 
-- [`Swinv2ForImageClassification`]은 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)을 통해 지원됩니다.
+- [`Swinv2ForImageClassification`]은 이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)을 통해 지원됩니다.
 - 관련 자료: [이미지 분류 작업 가이드](../tasks/image_classification)
-
-또한:
-
-- [`Swinv2ForMaskedImageModeling`]는 이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining)를 통해 지원됩니다.
 
 새로운 자료를 추가하고 싶으시다면, 언제든지 Pull Request를 열어주세요! 저희가 검토해 드릴게요. 이때, 추가하는 자료는 기존 자료와 중복되지 않고 새로운 내용을 보여주는 자료여야 합니다.
 

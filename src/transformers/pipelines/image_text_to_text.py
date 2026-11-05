@@ -249,8 +249,9 @@ class ImageTextToTextPipeline(Pipeline):
             return_full_text (`bool`, *optional*, defaults to `True`):
                 If set to `False` only added text is returned, otherwise the full text is returned. Cannot be
                 specified at the same time as `return_text`.
-            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
-                Whether or not to clean up the potential extra spaces in the text output.
+            clean_up_tokenization_spaces (`bool`, *optional*):
+                Whether or not to clean up the potential extra spaces in the text output. Defaults to the tokenizer's
+                `clean_up_tokenization_spaces` setting.
             continue_final_message( `bool`, *optional*): This indicates that you want the model to continue the
                 last message in the input chat rather than starting a new one, allowing you to "prefill" its response.
                 By default this is `True` when the final message in the input chat has the `assistant` role and
@@ -388,13 +389,12 @@ class ImageTextToTextPipeline(Pipeline):
             model_inputs["input_ids"] if "input_ids" in model_inputs else model_inputs["decoder_input_ids"]
         )  # for decoder-only models
 
-        # User-defined `generation_config` passed to the pipeline call take precedence
-        if "generation_config" not in generate_kwargs:
-            generate_kwargs["generation_config"] = self.generation_config
-        generate_kwargs["return_dict_in_generate"] = False
+        generate_kwargs = self._prepare_generate_kwargs(generate_kwargs, return_dict_in_generate=False)
 
         generated_sequence = self.model.generate(**model_inputs, **generate_kwargs)
 
+        if input_ids is not None and generated_sequence.ndim == 2 and generated_sequence.shape[0] > input_ids.shape[0]:
+            generated_sequence = generated_sequence.reshape(input_ids.shape[0], -1, generated_sequence.shape[-1])
         return {"generated_sequence": generated_sequence, "prompt_text": prompt_text, "input_ids": input_ids}
 
     def postprocess(
@@ -409,6 +409,10 @@ class ImageTextToTextPipeline(Pipeline):
         input_texts = [input_texts] if isinstance(input_texts, (str, Chat)) else input_texts
         generated_sequence = model_outputs["generated_sequence"]
         input_ids = model_outputs["input_ids"]
+        if generated_sequence.ndim == 3:
+            generated_sequence = generated_sequence.flatten(0, 1)
+        candidates_per_input = len(generated_sequence) // len(input_texts)
+        input_texts = [text for text in input_texts for _ in range(candidates_per_input)]
         if return_type == ReturnType.TENSORS:
             return [
                 {"input_text": input_texts[i], "generated_token_ids": generated_sequence[i]}
@@ -431,6 +435,7 @@ class ImageTextToTextPipeline(Pipeline):
             # Remove the input text from the generated text if the generated text starts with the input text
             # (accounting for the possibility of a space between the input and generated text)
             new_generated_texts = []
+            decoded_inputs = [text for text in decoded_inputs for _ in range(candidates_per_input)]
             for text_generated, decoded_input in zip(generated_texts, decoded_inputs):
                 # There can be added characters before the input text, so we need to find the beginning of the input text in the generated text
                 index_input_text = text_generated.find(decoded_input)

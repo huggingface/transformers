@@ -68,6 +68,7 @@ class HYV4Config(PreTrainedConfig):
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.self_attn.gate_proj": "colwise",
         "layers.*.self_attn.sinks": "colwise",
+        "layers.*.self_attn": "local_params",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
@@ -110,6 +111,7 @@ class HYV4Config(PreTrainedConfig):
     attention_bias: bool = False
     attention_dropout: float = 0.0
     n_routed_experts: int = 256
+    output_router_logits: bool = False
     n_shared_experts: int = 1
     num_experts_per_tok: int = 8
     routed_scaling_factor: float = 2.827

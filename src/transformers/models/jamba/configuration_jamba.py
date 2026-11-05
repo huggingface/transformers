@@ -34,9 +34,7 @@ class JambaConfig(PreTrainedConfig):
     attn_layer_offset (`int`, *optional*, defaults to 4):
         The first layer index that contains a vanilla attention mlp layer
     use_mamba_kernels (`bool`, *optional*, defaults to `True`):
-        Flag indicating whether or not to use the fast mamba kernels. These are available only if `mamba-ssm` and
-        `causal-conv1d` are installed, and the mamba modules are running on a CUDA device. Raises ValueError if
-        `True` and kernels are not available
+        Deprecated and has no effect. The fast Mamba kernels are used automatically when available.
     mamba_dt_rank (`Union[int,str]`, *optional*, defaults to `"auto"`):
         Rank of the mamba discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
     use_mambapy (`bool`, *optional*, defaults to `False`):
@@ -52,6 +50,16 @@ class JambaConfig(PreTrainedConfig):
 
     model_type = "jamba"
     keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {
+        "layers.*.feed_forward.experts.gate_up_proj": "packed_colwise",
+        "layers.*.feed_forward.experts.down_proj": "rowwise",
+        "layers.*.feed_forward.experts": "moe_tp_experts",
+    }
+    base_model_ep_plan = {
+        "layers.*.feed_forward.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.feed_forward.experts.down_proj": "grouped_gemm",
+        "layers.*.feed_forward.experts": "ep_dispatch_experts",
+    }
     attribute_map = {
         "num_local_experts": "num_experts",
     }

@@ -71,11 +71,13 @@ class LlavaNextVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("image_token_index", kwargs.get("image_token_id", 3))
         super().__init__(parent, **kwargs)
 
-    def create_pixel_values(self):
+    def create_pixel_values(self, batch_size: int | None = None):
+        # Override to 5D for patch-based models
+        batch_size = batch_size if batch_size is not None else self.batch_size
         """LlavaNext expects 5D pixel_values: (batch_size, num_patches, channels, height, width)"""
         return floats_tensor(
             [
-                self.batch_size,
+                batch_size,
                 self.num_patches_per_image,
                 self.num_channels,
                 self.image_size,
@@ -83,10 +85,10 @@ class LlavaNextVisionText2TextModelTester(VLMModelTester):
             ]
         )
 
-    def get_additional_inputs(self, config, input_ids, modality_inputs):
-        """LlavaNext requires image_sizes tensor"""
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         return {
-            "image_sizes": torch.tensor([[self.image_size, self.image_size]] * self.batch_size),
+            "image_sizes": torch.tensor([[self.image_size, self.image_size]] * batch_size),
         }
 
     def get_config(self):

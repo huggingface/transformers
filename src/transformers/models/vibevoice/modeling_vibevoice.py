@@ -29,7 +29,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ..auto import AutoModel
@@ -41,28 +41,28 @@ from .generation_vibevoice import VibeVoiceGenerationMixin
 @dataclass
 class VibeVoiceBaseModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    audio_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`, *optional*):
+    audio_features (`torch.Tensor` of shape `(batch_size, sequence_length, feature_size)`, *optional*):
         Extracted audio features that can be used for conditioning the language model.
     """
 
-    audio_features: torch.FloatTensor | None = None
+    audio_features: torch.Tensor | None = None
 
 
 @auto_docstring(custom_intro="""VibeVoice causal language model outputs.""")
 @dataclass
 class VibeVoiceCausalLMOutputWithPast(BaseModelOutputWithPast):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    audio_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`, *optional*):
+    audio_features (`torch.Tensor` of shape `(batch_size, sequence_length, feature_size)`, *optional*):
         Extracted audio features that can be used for conditioning the language model.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    audio_features: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    audio_features: torch.Tensor | None = None
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -239,7 +239,7 @@ class VibeVoicePreTrainedModel(PreTrainedModel):
     """
 )
 class VibeVoiceModel(VibeVoicePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: VibeVoiceConfig):
         super().__init__(config)
         self.audio_tower = AutoModel.from_config(config.audio_config)
         self.language_model = AutoModel.from_config(config.text_config)
@@ -262,22 +262,28 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
     )
     def get_audio_features(
         self,
-        input_values: torch.FloatTensor,
+        input_values: torch.Tensor,
         padding_mask: torch.Tensor,
+        sample: bool = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        input_values (`torch.FloatTensor`):
+        input_values (`torch.Tensor`):
             Float values of (normalized) audio waveform.
         padding_mask (`torch.Tensor` of shape `(batch_size, padded_audio_length)`):
             Padding mask to remove padded parts of audio.
+        sample (`bool`, *optional*, defaults to `True`):
+            Whether to add Gaussian noise to the acoustic latents, as in the original model (σ-VAE: the noise
+            scale is drawn per batch item from N(0, `vae_std`)). If False, the encoder output is used as is, so the
+            output is deterministic.
         """
 
         # Acoustic tokenizer is not meant to be trainable (see p. 3 of https://huggingface.co/papers/2508.19205)
         with torch.no_grad():
-            acoustic_features = self.audio_tower.encode(input_values, sample=True).latents
-        acoustic_features += self.latent_bias_factor.to(acoustic_features.device)
-        acoustic_features *= self.latent_scaling_factor.to(acoustic_features.device)
+            acoustic_features = self.audio_tower.encode(input_values, sample=sample).latents
+        acoustic_features = (acoustic_features + self.latent_bias_factor.to(acoustic_features.device)) * (
+            self.latent_scaling_factor.to(acoustic_features.device)
+        )
 
         # adjust padding mask according to tokenizer compression
         num_audio_tokens = torch.ceil(padding_mask.sum(dim=-1) / self.config.audio_config.hop_length).to(torch.int64)
@@ -290,7 +296,7 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         )
 
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, audio_features: torch.FloatTensor
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, audio_features: torch.Tensor
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -318,21 +324,26 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        input_values: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        input_values: torch.Tensor | None = None,
         padding_mask: torch.BoolTensor | None = None,
+        sample: bool = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
         padding_mask (`torch.Tensor` of shape `(batch_size, padded_audio_length)`):
             Padding mask to remove padded parts of audio.
+        sample (`bool`, *optional*, defaults to `True`):
+            Whether to add Gaussian noise to the acoustic latents, as in the original model (σ-VAE: the noise
+            scale is drawn per batch item from N(0, `vae_std`)). If False, the encoder output is used as is, so the
+            output is deterministic.
         """
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         audio_features = None
         if input_values is not None:
-            audio_outputs = self.get_audio_features(input_values, padding_mask)
+            audio_outputs = self.get_audio_features(input_values, padding_mask, sample=sample)
             audio_embeds = audio_outputs.pooler_output
             audio_features = audio_outputs.last_hidden_state
 
@@ -355,7 +366,7 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
-    def __init__(self, config):
+    def __init__(self, config: VibeVoiceConfig):
         super().__init__(config)
         self.model = VibeVoiceModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
@@ -364,12 +375,12 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
     @staticmethod
     def compute_diffusion_loss(
         diffusion_head: nn.Module,
-        audio_features: torch.FloatTensor,
-        condition_features: torch.FloatTensor,
+        audio_features: torch.Tensor,
+        condition_features: torch.Tensor,
         noise_scheduler: object,
         ddpm_batch_multiplier: int,
         num_diffusion_steps: int,
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         audio_len, latent_size = audio_features.shape
         audio_features_repeated = audio_features.repeat_interleave(ddpm_batch_multiplier, dim=0)
         condition_features_repeated = condition_features.repeat_interleave(ddpm_batch_multiplier, dim=0)
@@ -411,19 +422,20 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         logits_to_keep: int | slice = 0,
-        input_values: torch.FloatTensor | None = None,
+        input_values: torch.Tensor | None = None,
         padding_mask: torch.BoolTensor | None = None,
         acoustic_loss_mask: torch.BoolTensor | None = None,
         noise_scheduler: object | None = None,
         ddpm_batch_multiplier: int = 4,
         num_diffusion_steps: int = 10,
+        sample: bool = True,
         **kwargs,
     ) -> tuple | VibeVoiceCausalLMOutputWithPast:
         r"""
-        input_values (`torch.FloatTensor`, *optional*):
+        input_values (`torch.Tensor`, *optional*):
             Preprocessed audio waveform for voice cloning.
         padding_mask (`torch.BoolTensor`, *optional*):
             Masks indicating valid input frames.
@@ -437,6 +449,10 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
             help stabilize training.
         num_diffusion_steps (`int`, *optional*, defaults to 10):
             For training, the number of diffusion steps to use. Defaults to 10 if not provided.
+        sample (`bool`, *optional*, defaults to `True`):
+            Whether to add Gaussian noise to the acoustic latents, as in the original model (σ-VAE: the noise
+            scale is drawn per batch item from N(0, `vae_std`)). If False, the encoder output is used as is, so the
+            output is deterministic.
         """
 
         outputs = self.model(
@@ -444,12 +460,13 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
             inputs_embeds=inputs_embeds,
             input_values=input_values,
             padding_mask=padding_mask,
+            sample=sample,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

@@ -33,7 +33,7 @@ from ...masking_utils import create_causal_mask, create_sliding_window_causal_ma
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
-from ...modeling_utils import AttentionInterface, PreTrainedModel
+from ...modeling_utils import AttentionInterface, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torch_flex_attn_available, logging
 from ...utils.output_capturing import OutputRecorder
@@ -91,8 +91,8 @@ class DogeConfig(PreTrainedConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
         "layers.*.mlp.router_gate": "colwise_gather_output",
-        "layers.*.mlp.down_embed": "rowwise_split_input",
-        "layers.*.mlp.up_embed": "rowwise_split_input",
+        "layers.*.mlp.down_embed": "embedding_rowwise",
+        "layers.*.mlp.up_embed": "embedding_rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -381,6 +381,7 @@ class DogeCDMoE(nn.Module):
 class DogeDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: DogeConfig, layer_idx: int | None = None):
         super().__init__()
+        self.config = config
         self.hidden_dropout = config.hidden_dropout
 
         self.input_layernorm = DogeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -400,7 +401,7 @@ class DogeDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         # sequence transformation
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
@@ -420,6 +421,8 @@ class DogeDecoderLayer(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
+        if self.config.is_moe:  # MoE returns a tuple of outputs
+            hidden_states = hidden_states[0]
         hidden_states = F.dropout(hidden_states, p=self.hidden_dropout, training=self.training)
         hidden_states = self.post_attention_residual * residual + hidden_states
 
@@ -456,7 +459,7 @@ class DogeModel(MixtralModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
@@ -560,7 +563,7 @@ def load_balancing_loss_func(
         _, position_indices = all_scores.topk(top_k, dim=-1)
         expert_indices = all_indices.gather(-1, position_indices)
 
-        routing_weights = F.softmax(all_scores, dim=-1)
+        routing_weights = torch.zeros_like(all_scores).scatter(-1, all_indices, F.softmax(all_scores, dim=-1))
 
         all_expert_indices.append(expert_indices)
         all_routing_weights.append(routing_weights)
@@ -614,7 +617,7 @@ def load_balancing_loss_func(
 
 
 class DogeForCausalLM(MixtralForCausalLM):
-    def __init__(self, config):
+    def __init__(self, config: DogeConfig):
         super().__init__(config)
         self.model = DogeModel(config)
         self.num_experts = config.num_experts
@@ -638,7 +641,7 @@ class DogeForCausalLM(MixtralForCausalLM):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -664,7 +667,7 @@ class DogeForCausalLM(MixtralForCausalLM):
         ```"""
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.output_router_logits
-        )
+        ) and self.config.is_moe
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs: MoeModelOutputWithPast = self.model(
@@ -674,13 +677,13 @@ class DogeForCausalLM(MixtralForCausalLM):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

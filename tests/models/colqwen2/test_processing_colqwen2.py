@@ -49,6 +49,10 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_with_multiple_inputs(self):
         pass
 
+    @unittest.skip("ColQwen2 can't process text+image inputs at the same time")
+    def test_apply_chat_template_assistant_mask(self):
+        pass
+
     @unittest.skip("Model doesn't take images+text as input")
     def test_replacement_offsets(self):
         pass
