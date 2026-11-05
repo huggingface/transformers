@@ -704,6 +704,15 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         # EOG tokens to match generation_config.json: <eos>(1),
         # <|tool_response>(50), <turn|>(106).
         parsed_parameters["config"]["eos_token_id"] = [1, 106, 50]
+        parsed_parameters["config"]["attention_k_eq_v"] = True
+        parsed_parameters["config"]["hidden_size_per_layer_input"] = 0
+        parsed_parameters["config"]["vocab_size_per_layer_input"] = 0
+        
+        gguf_num_key_value_heads = parsed_parameters["config"].get("num_key_value_heads")
+        if isinstance(gguf_num_key_value_heads, list):
+            parsed_parameters["config"]["num_key_value_heads"] = gguf_num_key_value_heads[0]
+            if len(set(gguf_num_key_value_heads)) > 1:
+                parsed_parameters["config"]["num_global_key_value_heads"] = min(gguf_num_key_value_heads)
 
     # MiniMax-M2: convert expert_gating_func integer to scoring_func string
     if parsed_parameters["config"].get("model_type") == "minimax_m2":
