@@ -17,6 +17,7 @@ checks that only rank 0 reads checkpoint values while every rank ends up with th
 
 import argparse
 import os
+import weakref
 from unittest.mock import patch
 
 import deepspeed
@@ -25,6 +26,7 @@ import torch.distributed as dist
 from deepspeed.accelerator import get_accelerator
 
 from transformers import Qwen3MoeConfig, Qwen3MoeForCausalLM, modeling_utils
+from transformers.core_model_loading import WeightConverter
 from transformers.integrations.deepspeed import HfDeepSpeedConfig
 
 
@@ -63,8 +65,21 @@ def main(output_dir):
     # `from_pretrained` only sees the DeepSpeed config while this object is alive
     hf_ds_config = HfDeepSpeedConfig({"train_batch_size": dist.get_world_size(), "zero_optimization": {"stage": 3}})
     assert hf_ds_config.is_zero3()
-    with patch.object(modeling_utils, "load_state_dict", wraps=modeling_utils.load_state_dict) as load_state_dict:
+    converted_refs = []
+    convert = WeightConverter.convert
+
+    def convert_one_group_at_a_time(self, *args, **kwargs):
+        assert all(ref() is None for ref in converted_refs), f"rank {rank}: a previous converted group is still alive"
+        converted = convert(self, *args, **kwargs)
+        converted_refs.extend(weakref.ref(tensor) for tensor in converted.values())
+        return converted
+
+    with (
+        patch.object(modeling_utils, "load_state_dict", wraps=modeling_utils.load_state_dict) as load_state_dict,
+        patch.object(WeightConverter, "convert", convert_one_group_at_a_time),
+    ):
         model, loading_info = Qwen3MoeWithBuffer.from_pretrained(output_dir, output_loading_info=True)
+    assert converted_refs, "no weight conversion was applied"
 
     map_locations = {call.kwargs["map_location"] for call in load_state_dict.call_args_list}
     assert map_locations == {"cpu" if rank == 0 else "meta"}, f"rank {rank} loaded with {map_locations}"

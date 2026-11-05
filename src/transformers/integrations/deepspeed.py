@@ -423,23 +423,24 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
 
     # Apply the conversions one at a time
     for renamed_key, mapping in conversion_mapping.items():
-        converted_state_dict = {}
         try:
             realized_value = mapping.convert(
                 renamed_key,
                 model=model,
                 config=model.config,
             )
-            for target_name, param in realized_value.items():
-                param = param[0] if isinstance(param, list) else param
-                converted_state_dict[target_name] = param
         except Exception as e:
             raise RuntimeError(
                 f"Failed to apply weight conversion for '{renamed_key}'. "
                 f"This likely means the checkpoint format is incompatible with the current model version. "
                 f"Error: {e}"
             ) from e
-        yield converted_state_dict
+        # Do not keep a reference to this group in the generator, so it can be freed before the next conversion
+        yield {
+            target_name: param[0] if isinstance(param, list) else param
+            for target_name, param in realized_value.items()
+        }
+        del realized_value
 
     # Attach metadata to the new state dict
     if metadata is not None:
@@ -546,6 +547,8 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, load_config=Non
             for k, v in converted.items()
         }
         load(model_to_load, state_dict, assign_to_params_buffers=False)
+        # Free this group before the next one is converted
+        del converted, state_dict
 
     return error_msgs, missing_keys
 
