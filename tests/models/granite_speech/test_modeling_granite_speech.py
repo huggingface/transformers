@@ -20,6 +20,7 @@ import pytest
 from transformers import (
     AutoProcessor,
     GraniteConfig,
+    GraniteForCausalLM,
     GraniteSpeechConfig,
     GraniteSpeechEncoderConfig,
     GraniteSpeechForConditionalGeneration,
@@ -157,6 +158,24 @@ class GraniteSpeechForConditionalGenerationModelTest(ALMModelTest, unittest.Test
     @unittest.skip(reason="ConformerAttention block forces MATH backend")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
+
+    def test_logits_match_granite_causal_lm(self):
+        """Text-only logits should match `GraniteForCausalLM` with the same weights, including `logits_scaling`."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.has_lora_adapter = False
+        config.text_config.logits_scaling = 8.0
+
+        model = self.model_tester.conditional_generation_class(config).to(torch_device).eval()
+        lm = GraniteForCausalLM(config.text_config).to(torch_device).eval()
+        lm.model.load_state_dict(model.model.language_model.state_dict())
+        lm.lm_head.load_state_dict(model.lm_head.state_dict())
+
+        input_ids = inputs_dict["input_ids"].to(torch_device)
+        attention_mask = inputs_dict["attention_mask"].to(torch_device)
+        with torch.no_grad():
+            logits = model(input_ids=input_ids, attention_mask=attention_mask).logits
+            expected_logits = lm(input_ids=input_ids, attention_mask=attention_mask).logits
+        torch.testing.assert_close(logits, expected_logits)
 
 
 class GraniteSpeechForConditionalGenerationIntegrationTest(unittest.TestCase):
