@@ -208,6 +208,7 @@ class PagedAttentionCache:
         non_trash_bytes = self.num_sectors * self.bytes_per_sector
         trash_bytes = 2 * self.bytes_per_sector
         self.cache_tensor = torch.zeros(non_trash_bytes + trash_bytes, dtype=torch.uint8, device=self.device)
+        self._host_copy: torch.Tensor | None = None  # where the cache waits while it is released, see release_memory
         # Cache pool, which keeps track of the free sectors and their allocation
         self.pool = CachePool(self.num_sectors, len(self.cache_allocators))
         # Distribute the cache across all allocators
@@ -428,20 +429,25 @@ class PagedAttentionCache:
         return key_states, value_states
 
     def release_memory(self) -> int:
-        """Frees the GPU memory of the cache tensor and returns the number of bytes released. The tensor and every view
-        of it stay valid objects, so nothing has to be rebuilt, but their content is lost: no live request may hold a
-        block, and nothing may read the cache until `restore_memory`."""
-        storage = self.cache_tensor.untyped_storage()
-        released_bytes = storage.nbytes()
+        """Copies the cache tensor to host memory and frees its GPU memory, returning the number of bytes released.
+        The tensor and every view of it stay valid objects and the requests keep their blocks, but nothing may read or
+        write the cache until `restore_memory` copies it back."""
+        if self._host_copy is None:
+            self._host_copy = torch.empty(self.cache_tensor.numel(), dtype=torch.uint8, pin_memory=True)
+        self._host_copy.copy_(self.cache_tensor, non_blocking=True)
+        # The copy reads the memory about to be freed
+        torch.accelerator.synchronize()
         self._released_address = self.cache_tensor.data_ptr()
-        storage.resize_(0)
-        return released_bytes
+        self.cache_tensor.untyped_storage().resize_(0)
+        return self._host_copy.numel()
 
     def restore_memory(self) -> bool:
-        """Reallocates the memory freed by `release_memory`, zeroed as at initialization since padding tokens read the
-        trash sectors. Returns whether the cache came back at the same address, which captured CUDA graphs rely on."""
-        self.cache_tensor.untyped_storage().resize_(self.cache_tensor.numel())
-        self.cache_tensor.zero_()
+        """Reallocates the memory freed by `release_memory` and copies the cache back into it. Returns whether the cache
+        came back at the same address, which captured CUDA graphs rely on."""
+        self.cache_tensor.untyped_storage().resize_(self._host_copy.numel())
+        self.cache_tensor.copy_(self._host_copy, non_blocking=True)
+        # The generation loop reads the cache on its own stream
+        torch.accelerator.synchronize()
         return self.cache_tensor.data_ptr() == self._released_address
 
     def reset(self) -> None:

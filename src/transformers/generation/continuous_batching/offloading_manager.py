@@ -24,7 +24,6 @@ sectors.
 """
 
 import logging
-from collections import deque
 from math import ceil
 
 import torch
@@ -208,48 +207,6 @@ class OffloadingManager:
 
         # Requeue victims oldest-first so they will become active again in (roughly) their original order
         offloaded.reverse()
-        self._requeue(offloaded, cpu_offloaded)
-
-        scheduler.block_new_requests = True
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(
-                f"Offloaded {len(offloaded)} requests ({len(cpu_offloaded)} to CPU, {len(offloaded) - len(cpu_offloaded)} "
-                f"soft reset): {len(starved)} starved requests remain."
-            )
-        return True
-
-    def offload_all_requests(self) -> None:
-        """Offload every active request, to the CPU swap pool when it fits and by soft reset otherwise, so that no block
-        of the GPU cache is in use anymore. Cached blocks are evicted too, since their content is about to be lost."""
-        self.cache.evict_cached_blocks()
-        offloaded = list(self.scheduler.active_requests.values())
-        block_tables = {}
-        for state in offloaded:
-            # Copy the block tables before freeing the blocks (which destroys the block tables)
-            block_tables[state.request_id] = {
-                name: allocator.block_table.get(state.request_id, [])[:]
-                for name, allocator in self.cache.cache_allocators.items()
-            }
-            self.cache.free_blocks(state.request_id, no_cache=True)
-        cpu_offloaded = self._offload_to_cpu(offloaded, block_tables)
-        # Active requests are kept oldest-first, which is the order in which they are requeued
-        self._requeue(offloaded, cpu_offloaded)
-        # They were generating, so they resume before the requests that were still waiting
-        resumed = {state.request_id for state in offloaded}
-        order = self.scheduler.waiting_requests_order
-        self.scheduler.waiting_requests_order = deque(
-            [request_id for request_id in order if request_id in resumed]
-            + [request_id for request_id in order if request_id not in resumed]
-        )
-        logger.info(
-            f"Offloaded all {len(offloaded)} active requests ({len(cpu_offloaded)} to CPU, "
-            f"{len(offloaded) - len(cpu_offloaded)} soft reset)."
-        )
-
-    def _requeue(self, offloaded: list[RequestState], cpu_offloaded: set[str]) -> None:
-        """Moves the offloaded requests, given oldest-first, back to the waiting queue: the ones copied to the CPU pool
-        resume from there, the others start over with an equivalent initial request."""
-        scheduler = self.scheduler
         for state in offloaded:
             request_id = state.request_id
             if request_id in cpu_offloaded:
@@ -275,6 +232,14 @@ class OffloadingManager:
                 state._status = RequestStatus.FINISHED
             scheduler.finish_request(request_id)
             scheduler.add_waiting_request(new_state)
+
+        scheduler.block_new_requests = True
+        if logger.isEnabledFor(logging.INFO):
+            logger.info(
+                f"Offloaded {len(offloaded)} requests ({len(cpu_offloaded)} to CPU, {len(offloaded) - len(cpu_offloaded)} "
+                f"soft reset): {len(starved)} starved requests remain."
+            )
+        return True
 
     def restore_scheduled_requests(self, requests_in_batch: list[FutureRequestState]) -> None:
         """Restore KV caches from CPU for any CPU-offloaded requests in the scheduled batch. The scheduler has already

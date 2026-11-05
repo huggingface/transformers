@@ -380,7 +380,7 @@ cb_config = ContinuousBatchingConfig(cpu_offload_space=8.0)
 
 By default, `cpu_offload_space_safety_threshold=0.8` limits the requested space to 80% of available system RAM when `psutil` is installed. Set `cpu_offload_space=None` to size the swap pool from the safety threshold.
 
-The swap pool also lets a caller that shares the device, like a training step, take the KV cache's memory while generation is paused. [`~ContinuousBatchingManager.release_memory`] moves every in-flight request to the swap pool and frees the cache, and [`~ContinuousBatchingManager.restore_memory`] brings it back before generation resumes. Size `cpu_offload_space` to hold the whole cache, since a request that doesn't fit restarts from its prompt. Releasing requires `use_async_batching=False`.
+A caller that shares the device, like a training step, can also take the KV cache's memory while generation is paused. [`~ContinuousBatchingManager.release_memory`] copies the cache to pinned host memory and frees it, and [`~ContinuousBatchingManager.restore_memory`] copies it back before generation resumes, so every request carries on where it was.
 
 ```py
 with manager.pause():

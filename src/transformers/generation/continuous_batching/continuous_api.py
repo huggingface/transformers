@@ -911,10 +911,9 @@ class ContinuousBatchingManager:
 
     def release_memory(self) -> int:
         """Frees the GPU memory of the KV cache, so the calling thread can use it during a pause, and returns the number
-        of bytes released. Every in-flight request is offloaded first, to the CPU swap pool when it fits (size it with
-        `cpu_offload_space`) and by soft reset otherwise, and resumes where it was once `restore_memory` has brought the
-        cache back. Both must be called inside `pause()`, and on every rank of a TP group. Requires
-        `use_async_batching=False`.
+        of bytes released. The cache waits in pinned host memory, allocated at the first call, and `restore_memory`
+        copies it back before generation resumes, so every request carries on exactly where it was. Both must be called
+        inside `pause()`, and on every rank of a TP group.
 
         ```python
         with manager.pause():
@@ -923,13 +922,6 @@ class ContinuousBatchingManager:
             manager.restore_memory()
         ```
         """
-        # With async batching, the pause lands while the last batch's outputs are not applied yet: they would then be
-        # applied to the requests this moves back to the queue, which may already be scheduled again
-        if self.batch_processor.use_async_batching:
-            raise RuntimeError("release_memory() requires use_async_batching=False in the continuous batching config.")
-        self.batch_processor.offloading_manager.offload_all_requests()
-        # The copies to the CPU pool are queued on the compute stream, and read the memory about to be freed
-        torch.accelerator.synchronize()
         return self.batch_processor.cache.release_memory()
 
     def restore_memory(self) -> None:
@@ -938,8 +930,6 @@ class ContinuousBatchingManager:
         if not self.batch_processor.cache.restore_memory():
             self.batch_processor.inputs_and_outputs.clear_graphs()
             logger.info("The KV cache moved while it was released, so the captured CUDA graphs were dropped")
-        # The cache is zeroed on this thread's stream, and the generation loop reads it on its own
-        torch.accelerator.synchronize()
 
     # ---------------------------- REQUEST SUBMISSION, CANCELLATION AND RETRIEVAL METHODS ---------------------------- #
 

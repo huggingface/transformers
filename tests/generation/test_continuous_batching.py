@@ -2018,19 +2018,19 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         )
         self.assertEqual(len(outputs), num_requests, "some requests did not complete")
 
-    @parameterized.expand([("eager", False), ("cuda_graphs", True)])
+    @parameterized.expand([("eager", False, False), ("cuda_graphs", True, False), ("async", True, True)])
     @with_flush_memory
-    def test_release_memory_during_generation(self, _, use_cuda_graph: bool) -> None:
+    def test_release_memory_during_generation(self, _, use_cuda_graph: bool, use_async_batching: bool) -> None:
         """Frees the KV cache while requests are in flight, like a trainer that needs the memory for its step would,
         then brings it back. The memory must really be freed, and every request must finish with the tokens it gets
-        without the release, since its cache went to the CPU swap pool and back."""
+        without the release, since its cache went to host memory and back."""
         tokenizer, model = get_tokenizer_and_model("TinyLlama/TinyLlama-1.1B-Chat-v1.0", "sdpa", torch_device)
         input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES, tokenizer, for_continuous_batching=True)
         cb_config = ContinuousBatchingConfig(
             use_cuda_graph=use_cuda_graph,
-            use_async_batching=False,
+            use_async_batching=use_async_batching,
             auto_switch_to_flash=False,
-            cpu_offload_space=4.0,
+            max_memory_percent=0.3,  # the cache is copied to host memory, keep it small
         )
 
         def generate(release: bool) -> list[list[int]]:
