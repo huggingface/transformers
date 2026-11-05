@@ -24,7 +24,8 @@ from dataclasses import dataclass
 import torch
 from torch import nn
 
-from ...modeling_outputs import BaseModelOutputWithPast
+from ...cache_utils import Cache
+from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
@@ -54,15 +55,26 @@ class ColModernVBertPreTrainedModel(PreTrainedModel):
     """
 )
 @dataclass
-class ColModernVBertForRetrievalOutput(BaseModelOutputWithPast):
+class ColModernVBertForRetrievalOutput(ModelOutput):
     r"""
-    embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    embeddings (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         The embeddings of the model.
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
     image_pooler_output (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
         The embeddings of the embedded images from vision backbone.
     """
 
+    loss: torch.Tensor | None = None
     embeddings: torch.Tensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
     image_pooler_output: torch.Tensor | None = None
 
 

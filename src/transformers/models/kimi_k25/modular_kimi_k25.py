@@ -703,6 +703,7 @@ class Kimi_K25ForConditionalGeneration(Glm4vForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             modality_outputs=outputs.modality_outputs,
+            router_logits=outputs.router_logits,
         )
 
     def _prepare_position_ids_for_generation(self, **kwargs):

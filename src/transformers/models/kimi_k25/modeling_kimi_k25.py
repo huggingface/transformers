@@ -838,6 +838,7 @@ class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, GenerationMixin)
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             modality_outputs=outputs.modality_outputs,
+            router_logits=outputs.router_logits,
         )
 
 
