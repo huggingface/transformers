@@ -498,17 +498,19 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
 
     def postprocess_model(self, model, **kwargs):
         """
-        Runs the after-load hook of every quantizer. The patterns loaded with `dequantize=True` leave the plan: with
-        none left, the model is plain unquantized.
+        Runs the after-load hook of every quantizer. The patterns loaded with `dequantize=True` become unquantized
+        (`None`): with none quantized left, the model is plain unquantized.
         """
         for quantizer in self.all_quantizers:
             quantizer._process_model_after_weight_loading(model, **kwargs)
+        # Dequantized patterns stay in the plan as `None`, so a broader pattern (e.g. `"*"`) can't claim their modules
         self.set_quantizers(
             {
-                pattern: quantizer
-                for pattern, quantizer in self.quantizers.items()
+                pattern: None
                 if quantizer is None
-                or not (quantizer.pre_quantized and getattr(quantizer.quantization_config, "dequantize", False))
+                or (quantizer.pre_quantized and getattr(quantizer.quantization_config, "dequantize", False))
+                else quantizer
+                for pattern, quantizer in self.quantizers.items()
             }
         )
         if not self.all_quantizers:

@@ -128,7 +128,8 @@ class QuantizationPlanTest(unittest.TestCase):
         with patch("transformers.integrations.finegrained_fp8._disable_deepgemm_on_multi_device") as fp8_hook:
             plan.postprocess_model(model)
         fp8_hook.assert_called_once_with(model)  # each quantizer's after-load hook runs
-        self.assertEqual(list(model.config.quantization_config), ["*.mlp.*"])
+        self.assertIsNone(model.config.quantization_config["*.self_attn.*"])  # stays, so no broader pattern claims it
+        self.assertIsNotNone(model.config.quantization_config["*.mlp.*"])
         self.assertIsNone(plan.get_quantizer("model.layers.0.self_attn.q_proj.weight"))
         self.assertFalse(plan.is_serializable())  # NVFP4 can't be saved
 
