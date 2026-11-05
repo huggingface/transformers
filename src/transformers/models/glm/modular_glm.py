@@ -14,19 +14,17 @@
 # limitations under the License.
 
 import torch
-import torch.nn as nn
 
 from ...utils import logging
 from ...utils.generic import no_inherit_decorator
 from ..gpt_neox.modeling_gpt_neox import GPTNeoXRotaryEmbedding
 from ..llama.modeling_llama import (
-    LlamaAttention,
     LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
 )
 from ..phi3.modeling_phi3 import Phi3MLP
-from .configuration_glm import GlmConfig
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeAttention
 
 
 logger = logging.get_logger(__name__)
@@ -90,10 +88,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 
 
 @no_inherit_decorator
-class GlmAttention(LlamaAttention):
-    def __init__(self, config: GlmConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+class GlmAttention(Qwen2MoeAttention):
+    pass
 
 
 class GlmForCausalLM(LlamaForCausalLM):

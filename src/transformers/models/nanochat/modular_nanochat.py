@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import math
-from collections.abc import Callable
 
 import torch
 import torch.nn as nn
@@ -22,18 +21,16 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ..gemma2.modeling_gemma2 import Gemma2ForCausalLM
+from ..hunyuan_v1_dense.modeling_hunyuan_v1_dense import HunYuanDenseV1Attention
 from ..llama.modeling_llama import (
-    LlamaAttention,
     LlamaDecoderLayer,
     LlamaModel,
     LlamaPreTrainedModel,
     LlamaRotaryEmbedding,
-    apply_rotary_pos_emb,
-    eager_attention_forward,
 )
 from ..llama4.modeling_llama4 import Llama4TextL2Norm
 from ..mimi.modeling_mimi import MimiMLP
@@ -55,55 +52,12 @@ def rotate_half(x):
     return torch.cat((x2, -x1), dim=-1)
 
 
-class NanoChatAttention(LlamaAttention):
+class NanoChatAttention(HunYuanDenseV1Attention):
     def __init__(self, config: NanoChatConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        # RoPE -> Norm (instead of usual Norm -> RoPE)
         self.q_norm = NanoChatRMSNorm(eps=config.rms_norm_eps)
         self.k_norm = NanoChatRMSNorm(eps=config.rms_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        # RoPE -> Norm (instead of usual Norm -> RoPE)
-        query_states = self.q_norm(query_states)
-        key_states = self.k_norm(key_states)
-
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
 
 
 class NanoChatMLP(MimiMLP):

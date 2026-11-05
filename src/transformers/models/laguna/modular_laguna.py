@@ -32,11 +32,11 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ...utils.generic import TransformersKwargs, no_inherit_decorator
-from ..afmoe.modeling_afmoe import AfmoeAttention
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..llama.modeling_llama import LlamaDecoderLayer, LlamaModel, LlamaRMSNorm, eager_attention_forward
 from ..qwen2_moe.configuration_qwen2_moe import Qwen2MoeConfig
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeForCausalLM, Qwen2MoeMLP, Qwen2MoePreTrainedModel
+from ..qwen3.modeling_qwen3 import Qwen3Attention
 from ..qwen3_5_moe.modeling_qwen3_5_moe import Qwen3_5MoeTopKRouter, apply_rotary_pos_emb
 from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
 
@@ -124,7 +124,6 @@ class LagunaConfig(Qwen2MoeConfig):
     # tells modular to drop these from the materialized child.
     decoder_sparse_step = AttributeError()
     mlp_only_layers = AttributeError()
-    qkv_bias = AttributeError()
     norm_topk_prob = AttributeError()
     use_sliding_window = AttributeError()
     max_window_layers = AttributeError()
@@ -270,7 +269,7 @@ class LagunaSparseMoeBlock(Qwen3MoeSparseMoeBlock):
 
 
 @no_inherit_decorator
-class LagunaAttention(AfmoeAttention):
+class LagunaAttention(Qwen3Attention):
     """Afmoe-style SWA/GQA attention with Laguna-specific gating and per-layer head count."""
 
     def __init__(self, config: LagunaConfig, layer_idx: int, num_heads: int):
@@ -283,7 +282,6 @@ class LagunaAttention(AfmoeAttention):
         self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=config.attention_bias)
 
-        del self.gate_proj
         self.gate_per_head = config.gating is True or config.gating == "per-head"
         g_proj_dim = self.num_heads if self.gate_per_head else self.num_heads * self.head_dim
         self.g_proj = nn.Linear(config.hidden_size, g_proj_dim, bias=False)
@@ -299,13 +297,9 @@ class LagunaAttention(AfmoeAttention):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape)
-        key_states = self.k_proj(hidden_states).view(hidden_shape)
-        value_states = self.v_proj(hidden_states).view(hidden_shape)
-
-        query_states = self.q_norm(query_states).transpose(1, 2)
-        key_states = self.k_norm(key_states).transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)

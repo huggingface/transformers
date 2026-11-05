@@ -175,7 +175,7 @@ class TimesFm2_5Attention(Qwen3Attention):
 
     def __init__(self, config: TimesFm2_5Config, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.scaling = nn.Parameter(torch.empty((self.head_dim,)))
+        self.per_dim_scale = nn.Parameter(torch.empty((self.head_dim,)))
         self.sliding_window = None
 
     def forward(
@@ -199,7 +199,7 @@ class TimesFm2_5Attention(Qwen3Attention):
         query_states = self.q_norm(query_states)
         key_states = self.k_norm(key_states)
 
-        scale = F.softplus(self.scaling).mul(1.442695041 / math.sqrt(self.head_dim))
+        scale = F.softplus(self.per_dim_scale).mul(1.442695041 / math.sqrt(self.head_dim))
         query_states = query_states * scale[None, None, None, :]
 
         if past_key_values is not None:

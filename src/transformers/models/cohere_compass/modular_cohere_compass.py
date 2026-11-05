@@ -41,12 +41,12 @@ from ...utils.generic import no_inherit_decorator
 from ..cohere.modeling_cohere import CohereLayerNorm
 from ..cohere2.configuration_cohere2 import Cohere2Config
 from ..cohere2.modeling_cohere2 import (
+    Cohere2Attention,
     Cohere2DecoderLayer,
     Cohere2ForCausalLM,
     eager_attention_forward,
 )
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
-from ..llama.modeling_llama import LlamaAttention
 from ..mistral.modeling_mistral import MistralMLP
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
@@ -252,10 +252,10 @@ class CohereCompassLayerNorm(CohereLayerNorm):
 
 
 @no_inherit_decorator
-class CohereCompassAttention(LlamaAttention):
+class CohereCompassAttention(Cohere2Attention):
     def __init__(self, config: CohereCompassTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+        self.use_rope = config.rope_parameters[config.layer_types[layer_idx]] is not None
 
     def forward(
         self,
@@ -272,8 +272,9 @@ class CohereCompassAttention(LlamaAttention):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        if position_embeddings is not None:
+        if self.use_rope:
             cos, sin = position_embeddings
+            # diff from parent: Llama-style (half-split) RoPE instead of Cohere's interleaved RoPE
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:

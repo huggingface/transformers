@@ -50,7 +50,7 @@ class Qwen2MoeConfig(PreTrainedConfig):
     """
 
     model_type = "qwen2_moe"
-    attribute_map = {"num_local_experts": "num_experts"}
+    attribute_map = {"num_local_experts": "num_experts", "qkv_bias": "attention_bias"}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     # Default tensor parallel plan for base model `Qwen2Moe`
@@ -103,7 +103,7 @@ class Qwen2MoeConfig(PreTrainedConfig):
     output_router_logits: bool = False
     router_aux_loss_coef: float = 0.001
     mlp_only_layers: list[int] | None = None
-    qkv_bias: bool = True
+    attention_bias: bool = True
     layer_types: list[str] | None = None
     pad_token_id: int | None = None
     bos_token_id: int | None = None

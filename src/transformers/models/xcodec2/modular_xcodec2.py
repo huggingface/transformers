@@ -34,9 +34,9 @@ from ...utils import (
 from ...utils.generic import maybe_autocast
 from ..auto import AutoConfig, AutoModel
 from ..dac.modeling_dac import DacEncoder, DacEncoderBlock, DacResidualUnit
+from ..eurobert.modeling_eurobert import EuroBertAttention
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
-    LlamaAttention,
     LlamaDecoderLayer,
     LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
@@ -182,10 +182,9 @@ class Xcodec2MLP(MimiMLP):
     pass
 
 
-class Xcodec2Attention(LlamaAttention):
+class Xcodec2Attention(EuroBertAttention):
     def __init__(self, config: Xcodec2Config, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.is_causal = False
 
     def forward(
         self,

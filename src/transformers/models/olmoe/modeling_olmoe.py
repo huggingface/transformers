@@ -221,7 +221,6 @@ class OlmoeAttention(nn.Module):
         )
         self.q_norm = OlmoeRMSNorm(config.num_attention_heads * self.head_dim, config.rms_norm_eps)
         self.k_norm = OlmoeRMSNorm(config.num_key_value_heads * self.head_dim, config.rms_norm_eps)
-        self.sliding_window = None
 
     def forward(
         self,

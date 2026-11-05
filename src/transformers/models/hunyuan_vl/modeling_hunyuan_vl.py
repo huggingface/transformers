@@ -516,8 +516,8 @@ class HunYuanVLDenseV1Attention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.query_layernorm = HunYuanVLRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.key_layernorm = HunYuanVLRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = HunYuanVLRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = HunYuanVLRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         rope_parameters = getattr(config, "rope_parameters", None) or {}
         self.mrope_section = rope_parameters.get("mrope_section")
 
@@ -538,9 +538,8 @@ class HunYuanVLDenseV1Attention(nn.Module):
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        query_states = self.query_layernorm(query_states)
-        key_states = self.key_layernorm(key_states)
+        query_states = self.q_norm(query_states)
+        key_states = self.k_norm(key_states)
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
@@ -548,6 +547,7 @@ class HunYuanVLDenseV1Attention(nn.Module):
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
+
         attn_output, attn_weights = attention_interface(
             self,
             query_states,

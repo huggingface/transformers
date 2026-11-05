@@ -57,8 +57,8 @@ class HunYuanDenseV1MLP(MistralMLP):
 class HunYuanDenseV1Attention(LlamaAttention):
     def __init__(self, config: HunYuanDenseV1Config, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.query_layernorm = HunYuanDenseV1RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.key_layernorm = HunYuanDenseV1RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = HunYuanDenseV1RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = HunYuanDenseV1RMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -77,8 +77,8 @@ class HunYuanDenseV1Attention(LlamaAttention):
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-        query_states = self.query_layernorm(query_states)
-        key_states = self.key_layernorm(key_states)
+        query_states = self.q_norm(query_states)
+        key_states = self.k_norm(key_states)
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)

@@ -130,6 +130,12 @@ class FalconH1Config(PreTrainedConfig):
             raise ValueError("The dimensions for the Mamba head state do not match the model intermediate_size")
 
     @property
+    def attention_multiplier(self):
+        # `key_multiplier` scales the keys, which is the same as scaling the attention scores
+        head_dim = getattr(self, "head_dim", self.hidden_size // self.num_attention_heads)
+        return head_dim**-0.5 * self.key_multiplier
+
+    @property
     def layers_block_type(self):
         return ["hybrid" for i in range(self.num_hidden_layers)]
 

@@ -273,6 +273,7 @@ class CohereCompassAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+        self.use_rope = config.rope_parameters[config.layer_types[layer_idx]] is not None
 
     def forward(
         self,
@@ -289,8 +290,9 @@ class CohereCompassAttention(nn.Module):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        if position_embeddings is not None:
+        if self.use_rope:
             cos, sin = position_embeddings
+            # diff from parent: Llama-style (half-split) RoPE instead of Cohere's interleaved RoPE
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
@@ -615,9 +617,11 @@ class CohereCompassVisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
         self.act_fn = ACT2FN[config.hidden_act]
-        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))

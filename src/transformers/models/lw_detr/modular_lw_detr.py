@@ -40,7 +40,8 @@ from ..deformable_detr.modeling_deformable_detr import (
     DeformableDetrModel,
     DeformableDetrMultiscaleDeformableAttention,
 )
-from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
+from ..eurobert.modeling_eurobert import EuroBertAttention
+from ..llama.modeling_llama import eager_attention_forward
 from ..rt_detr.modeling_rt_detr import RTDetrConvNormLayer
 from ..vit.modeling_vit import ViTAttention
 from ..vitdet.configuration_vitdet import VitDetConfig
@@ -582,13 +583,12 @@ class LwDetrConvEncoder(nn.Module):
 
 
 @no_inherit_decorator
-class LwDetrAttention(LlamaAttention):
+class LwDetrAttention(EuroBertAttention):
     """LW-DETR self-attention with group-DETR training technique."""
 
     def __init__(self, config: LwDetrConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.head_dim = getattr(config, "head_dim", config.d_model // config.decoder_self_attention_heads)
-        self.is_causal = False
         self.num_key_value_groups = 1
         self.q_proj = nn.Linear(
             config.d_model, config.decoder_self_attention_heads * self.head_dim, bias=config.attention_bias

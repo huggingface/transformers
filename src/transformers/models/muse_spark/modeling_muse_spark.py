@@ -351,6 +351,7 @@ class MuseSparkTextAttention(nn.Module):
 
     def __init__(self, config: MuseSparkTextConfig, layer_idx: int):
         super().__init__()
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -371,10 +372,9 @@ class MuseSparkTextAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
         # Parent LlamaAttention already sets: layer_idx, num_heads, num_key_value_heads, num_key_value_groups, head_dim
         # We only add MuseSparkText-specific attributes
-        self.is_local_attention = config.layer_types[layer_idx] == "sliding_attention"
-        self.sliding_window = config.sliding_window if self.is_local_attention else None
         self.gate_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.qk_norm = MuseSparkRMSNorm(eps=config.rms_norm_eps, with_scale=False)
         self.qk_scale_factor = config.qk_scale_factor

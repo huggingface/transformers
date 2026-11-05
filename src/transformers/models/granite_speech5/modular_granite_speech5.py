@@ -27,7 +27,8 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
-from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
+from ..eurobert.modeling_eurobert import EuroBertAttention
+from ..llama.modeling_llama import eager_attention_forward
 from ..parakeet.configuration_parakeet import ParakeetCTCConfig
 from ..parakeet.modeling_parakeet import (
     ParakeetEncoder,
@@ -153,12 +154,11 @@ class GraniteSpeech5EncoderModelOutput(ParakeetEncoderModelOutput): ...
 
 
 @no_inherit_decorator
-class GraniteSpeech5EncoderAttention(LlamaAttention):
+class GraniteSpeech5EncoderAttention(EuroBertAttention):
     """Block-wise self-attention with Shaw's relative positional embeddings."""
 
     def __init__(self, config: GraniteSpeech5EncoderConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.is_causal = False
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)

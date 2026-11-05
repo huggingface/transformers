@@ -152,9 +152,8 @@ class ExaoneMoeAttention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_attention_heads * self.head_dim, self.hidden_size, bias=False)
-        self.sliding_window = config.sliding_window
-        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
-        self.is_sliding = layer_type == "sliding_attention"
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
         self.q_norm = ExaoneMoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = ExaoneMoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
@@ -179,7 +178,7 @@ class ExaoneMoeAttention(nn.Module):
 
         cos, sin = position_embeddings
         # We use global NoPE for hybrid attention model
-        if self.sliding_window is None or self.is_sliding:
+        if self.config.sliding_window is None or self.layer_type == "sliding_attention":
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
@@ -197,7 +196,7 @@ class ExaoneMoeAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=self.sliding_window if self.is_sliding else None,
+            sliding_window=self.sliding_window,
             **kwargs,
         )
 

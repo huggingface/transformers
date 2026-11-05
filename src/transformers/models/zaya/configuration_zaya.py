@@ -78,6 +78,7 @@ class ZayaConfig(PreTrainedConfig):
     num_experts_per_tok: int = 1
     num_experts: int = 16
     output_router_logits: bool = False
+    attention_bias: bool = False
     layer_types: list[str] | None = None
     pad_token_id: int | None = 0
     bos_token_id: int | None = 2
@@ -85,7 +86,6 @@ class ZayaConfig(PreTrainedConfig):
 
     # Zaya-specific attention
     head_dim: int = 128
-    attention_bias: bool = False
 
     lm_head_bias: bool = False
     router_hidden_size: int = 256

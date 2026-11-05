@@ -45,7 +45,7 @@ class FlintConfig(PreTrainedConfig):
     """
 
     model_type = "flint"
-    attribute_map = {"num_local_experts": "num_experts"}
+    attribute_map = {"num_local_experts": "num_experts", "qkv_bias": "attention_bias"}
     keys_to_ignore_at_inference = ["past_key_values"]
     # Attention is replicated: tensor parallelism cannot shard the per-head `sinks` along with the heads yet
     base_model_tp_plan = {
@@ -94,12 +94,12 @@ class FlintConfig(PreTrainedConfig):
     output_router_logits: bool = False
     router_aux_loss_coef: float = 0.0005
     mlp_only_layers: list[int] | None = None
+    attention_bias: bool = False
     layer_types: list[str] | None = None
     pad_token_id: int | None = None
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
     head_dim: int = 128
-    attention_bias: bool = False
 
     def __post_init__(self, **kwargs):
         # Full attention on the first two layers, every fourth layer and the last layer; sliding window elsewhere

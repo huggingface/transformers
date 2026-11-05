@@ -278,9 +278,7 @@ class Qwen3VLTextRotaryEmbedding(Qwen2_5_VLRotaryEmbedding):
 
 
 class Qwen3VLTextAttention(Qwen3Attention):
-    def __init__(self, config: Qwen3VLTextConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.sliding_window = None
+    pass
 
 
 class Qwen3VLTextDecoderLayer(Qwen3DecoderLayer):

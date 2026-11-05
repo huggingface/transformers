@@ -38,7 +38,8 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
 )
 from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
 from ..clip.modeling_clip import CLIPMLP
-from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer
+from ..eurobert.modeling_eurobert import EuroBertAttention
+from ..llama.modeling_llama import LlamaDecoderLayer
 from ..qwen3_asr.modeling_qwen3_asr import (
     Qwen3ASRForConditionalGeneration,
     SinusoidsPositionEmbedding,
@@ -196,7 +197,7 @@ class FunAsrNanoPreTrainedModel(AudioFlamingo3PreTrainedModel):
 
 
 @no_inherit_decorator
-class FunAsrNanoAttention(LlamaAttention):
+class FunAsrNanoAttention(EuroBertAttention):
     """Multi-headed attention with the SAN-M FSMN value gate."""
 
     def __init__(
@@ -209,7 +210,6 @@ class FunAsrNanoAttention(LlamaAttention):
         hidden_size = hidden_size or config.hidden_size
         super().__init__(config, layer_idx)
         self.num_key_value_groups = 1  # the model has no GQA
-        self.is_causal = False
         self.q_proj = nn.Linear(hidden_size, config.hidden_size, bias=True)
         self.k_proj = nn.Linear(hidden_size, config.hidden_size, bias=True)
         self.v_proj = nn.Linear(hidden_size, config.hidden_size, bias=True)

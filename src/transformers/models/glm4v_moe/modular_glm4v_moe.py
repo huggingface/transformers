@@ -40,9 +40,8 @@ from ..glm4v.modeling_glm4v import (
     Glm4vVisionModel,
 )
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb  # noqa: F401
-from ..llama.modeling_llama import LlamaAttention
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeAttention, Qwen2MoeExperts, Qwen2MoeMLP
 from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
     Qwen3VLMoeCausalLMOutputWithPast,
     Qwen3VLMoeModelOutputWithPast,
@@ -140,10 +139,8 @@ class Glm4vMoeTextRotaryEmbedding(Glm4vTextRotaryEmbedding):
 
 
 @no_inherit_decorator
-class Glm4vMoeTextAttention(LlamaAttention):
-    def __init__(self, config: Glm4vMoeTextConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+class Glm4vMoeTextAttention(Qwen2MoeAttention):
+    pass
 
 
 class Glm4vMoeTextTopKRouter(Glm4MoeTopKRouter, nn.Module):

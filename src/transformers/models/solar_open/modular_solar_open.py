@@ -14,7 +14,6 @@
 """PyTorch SolarOpen model."""
 
 from huggingface_hub.dataclasses import strict
-from torch import nn
 
 from ...utils import auto_docstring, logging
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2SparseMoeBlock
@@ -25,8 +24,8 @@ from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoePreTrainedModel,
     Glm4MoeTopKRouter,
 )
-from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaRMSNorm
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
+from ..llama.modeling_llama import LlamaDecoderLayer, LlamaRMSNorm
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeAttention, Qwen2MoeMLP
 
 
 logger = logging.get_logger(__name__)
@@ -90,10 +89,8 @@ class SolarOpenSparseMoeBlock(DeepseekV2SparseMoeBlock):
     pass
 
 
-class SolarOpenAttention(LlamaAttention):
-    def __init__(self, config: SolarOpenConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+class SolarOpenAttention(Qwen2MoeAttention):
+    pass
 
 
 class SolarOpenRMSNorm(LlamaRMSNorm):

@@ -216,13 +216,11 @@ class EsmcAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_norm(self.q_proj(hidden_states)).to(hidden_states.dtype)
-        key_states = self.k_norm(self.k_proj(hidden_states)).to(hidden_states.dtype)
-        value_states = self.v_proj(hidden_states)
-
-        query_states = query_states.view(hidden_shape).transpose(1, 2)
-        key_states = key_states.view(hidden_shape).transpose(1, 2)
-        value_states = value_states.view(hidden_shape).transpose(1, 2)
+        query_states = (
+            self.q_norm(self.q_proj(hidden_states)).to(hidden_states.dtype).view(hidden_shape).transpose(1, 2)
+        )
+        key_states = self.k_norm(self.k_proj(hidden_states)).to(hidden_states.dtype).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)

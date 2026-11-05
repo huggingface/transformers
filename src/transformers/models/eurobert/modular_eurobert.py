@@ -24,8 +24,9 @@ from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
 from ...utils import auto_docstring
 from ...utils.generic import TransformersKwargs, can_return_tuple
+from ..gemma.modeling_gemma import GemmaAttention
 from ..llama.configuration_llama import LlamaConfig
-from ..llama.modeling_llama import LlamaAttention, LlamaModel, LlamaPreTrainedModel, LlamaRMSNorm
+from ..llama.modeling_llama import LlamaModel, LlamaPreTrainedModel, LlamaRMSNorm
 
 
 @auto_docstring(checkpoint="EuroBERT/EuroBERT-210m")
@@ -86,7 +87,7 @@ class EuroBertRMSNorm(LlamaRMSNorm):
         super().__init__(hidden_size, eps)
 
 
-class EuroBertAttention(LlamaAttention):
+class EuroBertAttention(GemmaAttention):
     def __init__(self, config: EuroBertConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.is_causal = False

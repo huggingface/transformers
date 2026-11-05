@@ -678,6 +678,7 @@ class Step3p7Attention(nn.Module):
         num_heads = config.num_attention_heads
         # Number of heads is controlled via `config.num_attention_heads_per_layer`
         self.num_heads = num_heads
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -694,13 +695,10 @@ class Step3p7Attention(nn.Module):
             config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=config.attention_bias)
-        # Parent LlamaAttention already sets: layer_idx, num_heads, num_key_value_heads, num_key_value_groups, head_dim
-        # We only add Step3p7-specific attributes
-        self.is_local_attention = config.layer_types[layer_idx] == "sliding_attention"
-        self.sliding_window = config.sliding_window if self.is_local_attention else None
+        self.q_norm = Step3p7RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
+        self.k_norm = Step3p7RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
-        self.q_norm = Step3p7RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = Step3p7RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.gate_per_head = config.gating is True or config.gating == "per-head"
         g_proj_dim = self.num_heads if self.gate_per_head else self.num_heads * self.head_dim
         self.g_proj = nn.Linear(config.hidden_size, g_proj_dim, bias=False)

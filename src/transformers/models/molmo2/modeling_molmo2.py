@@ -271,7 +271,6 @@ class Molmo2Attention(nn.Module):
             self.head_dim if config.qk_norm_type == "qwen3" else config.num_key_value_heads * self.head_dim,
             eps=config.rms_norm_eps,
         )
-        self.sliding_window = None
         self.qk_norm_type = config.qk_norm_type
 
     def forward(

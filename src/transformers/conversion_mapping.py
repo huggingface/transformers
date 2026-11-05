@@ -173,6 +173,12 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(r"((?:layers?|svtr_block)\.\d+)\.layer_norm1\.", r"\1.input_layernorm."),
         WeightRenaming(r"((?:layers?|svtr_block)\.\d+)\.layer_norm2\.", r"\1.post_attention_layernorm."),
     ]
+    # HunYuan's per-head q/k norms were called `query_layernorm` / `key_layernorm`; every other model names them
+    # `q_norm` / `k_norm`.
+    hunyuan_qk_norm_renames = [
+        WeightRenaming(r"\.self_attn\.query_layernorm\.", ".self_attn.q_norm."),
+        WeightRenaming(r"\.self_attn\.key_layernorm\.", ".self_attn.k_norm."),
+    ]
     granitemoe_block_renames = [
         WeightRenaming(r"(layers\.\d+)\.block_sparse_moe\.router\.", r"\1.mlp.gate."),
         WeightRenaming(r"(layers\.\d+)\.block_sparse_moe\.experts\.", r"\1.mlp.experts."),
@@ -377,7 +383,10 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightRenaming(source_patterns=r"^model\.vit", target_patterns="model.vision_tower"),
             WeightRenaming(source_patterns=r"^vit", target_patterns="model.vision_tower"),
+            *hunyuan_qk_norm_renames,
         ],
+        "hunyuan_vl_text": [*hunyuan_qk_norm_renames],
+        "hunyuan_v1_dense": [*hunyuan_qk_norm_renames],
         "ViTModel": [
             WeightRenaming(r"encoder\.layer\.", "layers."),
             WeightRenaming("attention.query", "q_proj"),
@@ -1155,9 +1164,11 @@ def _build_checkpoint_conversion_mapping():
         "yolos": [
             WeightRenaming(r"encoder.mid_position_embeddings", r"encoder.interpolation.mid_position_embeddings")
         ],
+        "timesfm": [WeightRenaming(r"\.self_attn\.scaling", ".self_attn.per_dim_scale")],
         "timesfm2_5": [
             WeightRenaming("ff0", "up_proj"),
             WeightRenaming("ff1", "down_proj"),
+            WeightRenaming(r"\.self_attn\.scaling", ".self_attn.per_dim_scale"),
         ],
         "olmo_hybrid": [
             WeightRenaming("attention_layer_norm", "input_layernorm"),
@@ -2206,6 +2217,7 @@ def _build_checkpoint_conversion_mapping():
     mapping["hunyuan_v1_moe"] = mapping["qwen2_moe"].copy()
     mapping["hunyuan_v1_moe"] += [
         WeightRenaming(r"\.mlp\.shared_mlp\.", ".mlp.shared_experts."),
+        *hunyuan_qk_norm_renames,
     ]
     mapping["exaone_moe"] = mapping["qwen2_moe"].copy()
     mapping["exaone_moe"] += [WeightRenaming("mlp.e_score_correction_bias", "mlp.gate.e_score_correction_bias")]

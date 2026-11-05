@@ -57,8 +57,8 @@ from ..glm4v_moe.modeling_glm4v_moe import (  # noqa: F401
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..llama.modeling_llama import LlamaAttention
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionAttention
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeAttention
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLVisionBlock
@@ -327,10 +327,8 @@ class GlmImageVisionBlock(Qwen2VLVisionBlock):
 
 
 @no_inherit_decorator
-class GlmImageTextAttention(LlamaAttention):
-    def __init__(self, config: GlmImageTextConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+class GlmImageTextAttention(Qwen2MoeAttention):
+    pass
 
 
 class GlmImagePreTrainedModel(Glm4vPreTrainedModel):

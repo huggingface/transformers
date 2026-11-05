@@ -111,6 +111,7 @@ class LagunaConfig(PreTrainedConfig):
     num_experts: int = 256
     output_router_logits: bool = False
     router_aux_loss_coef: float = 0.001
+    attention_bias: bool = False
     layer_types: list[str] | None = None
     pad_token_id: int | None = None
     bos_token_id: int | None = None
@@ -118,7 +119,6 @@ class LagunaConfig(PreTrainedConfig):
 
     # Laguna-specific attention
     head_dim: int = 128
-    attention_bias: bool = False
     gating: bool | str = True
     num_attention_heads_per_layer: list[int] | None = None
     # Laguna-specific MoE

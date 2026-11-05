@@ -175,9 +175,7 @@ class Qwen3VLMoeTextSparseMoeBlock(Qwen3MoeSparseMoeBlock):
 
 
 class Qwen3VLMoeTextAttention(Qwen3Attention):
-    def __init__(self, config: Qwen3VLMoeTextConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.sliding_window = None
+    pass
 
 
 class Qwen3VLMoeTextDecoderLayer(Qwen3MoeDecoderLayer):

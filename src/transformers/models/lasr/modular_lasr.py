@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import itertools
-from collections.abc import Callable
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -23,14 +22,14 @@ from torch import nn
 
 from ...audio_utils import AudioInput
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding, apply_rotary_pos_emb, eager_attention_forward
+from ..eurobert.modeling_eurobert import EuroBertAttention
+from ..llama.modeling_llama import LlamaRotaryEmbedding
 from ..parakeet.configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig
 from ..parakeet.modeling_parakeet import (
     ParakeetEncoderBlock,
@@ -338,46 +337,8 @@ class LasrEncoderSubsampling(nn.Module):
 class LasrEncoderRotaryEmbedding(LlamaRotaryEmbedding): ...
 
 
-class LasrEncoderAttention(LlamaAttention):
-    def __init__(self, config: LasrEncoderConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.is_causal = False
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
+class LasrEncoderAttention(EuroBertAttention):
+    pass
 
 
 class LasrEncoderConvolutionModule(ParakeetEncoderConvolutionModule):

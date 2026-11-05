@@ -204,6 +204,7 @@ class BeamAttention(nn.Module):
 
     def __init__(self, config: BeamConfig, layer_idx: int):
         super().__init__()
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -226,8 +227,7 @@ class BeamAttention(nn.Module):
         )
         self.q_norm = BeamRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = BeamRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
-
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
         self.gate_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         # One gate bias per head, broadcast over `head_dim`.
         self.gate_bias = nn.Parameter(torch.zeros(config.num_attention_heads))

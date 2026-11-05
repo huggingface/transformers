@@ -40,9 +40,9 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
 from ..deepseek_v32.modeling_deepseek_v32 import DeepseekV32DecoderLayer
 from ..olmo3.modeling_olmo3 import Olmo3RMSNorm, Olmo3RotaryEmbedding, apply_rotary_pos_emb
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
+from ..qwen3.modeling_qwen3 import Qwen3Attention
 from ..qwen3_moe.configuration_qwen3_moe import Qwen3MoeConfig
 from ..qwen3_moe.modeling_qwen3_moe import (
-    Qwen3MoeAttention,
     Qwen3MoeMLP,
     Qwen3MoeModel,
     Qwen3MoeSparseMoeBlock,
@@ -173,11 +173,9 @@ def compute_attention_scaling(position_ids: torch.LongTensor) -> torch.Tensor:
     return torch.exp(0.1 * torch.log1p((position_ids.float() + 1) / 2048))[:, None, :, None]
 
 
-class BeamAttention(Qwen3MoeAttention):
+class BeamAttention(Qwen3Attention):
     def __init__(self, config: BeamConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
-
         self.gate_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         # One gate bias per head, broadcast over `head_dim`.
         self.gate_bias = nn.Parameter(torch.zeros(config.num_attention_heads))

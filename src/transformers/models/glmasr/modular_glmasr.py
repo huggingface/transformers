@@ -35,8 +35,9 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
 )
 from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor, AudioFlamingo3ProcessorKwargs
 from ..clip.modeling_clip import CLIPMLP
+from ..eurobert.modeling_eurobert import EuroBertAttention
 from ..gpt_neox.modeling_gpt_neox import GPTNeoXRotaryEmbedding
-from ..llama.modeling_llama import LlamaAttention, eager_attention_forward, rotate_half
+from ..llama.modeling_llama import eager_attention_forward, rotate_half
 from .configuration_glmasr import GlmAsrConfig, GlmAsrEncoderConfig
 
 
@@ -186,10 +187,9 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 
 @no_inherit_decorator
-class GlmAsrAttention(LlamaAttention):
+class GlmAsrAttention(EuroBertAttention):
     def __init__(self, config: GlmAsrConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.is_causal = False
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)

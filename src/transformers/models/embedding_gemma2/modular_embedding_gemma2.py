@@ -41,6 +41,7 @@ from ...utils import (
 from ...video_processing_utils import VideoMetadata
 from ...video_utils import VideoInput, is_valid_video, make_batched_videos
 from ..auto import AutoConfig
+from ..eurobert.modeling_eurobert import EuroBertAttention
 from ..gemma3.modeling_gemma3 import Gemma3DecoderLayer, Gemma3TextModel, apply_rotary_pos_emb
 from ..gemma3n.modeling_gemma3n import Gemma3nRMSNorm
 from ..gemma4.modeling_gemma4 import (
@@ -58,7 +59,6 @@ from ..gemma4.video_processing_gemma4 import (
     Gemma4VideoProcessorKwargs,
     get_aspect_ratio_preserving_size,  # noqa: F401
 )
-from ..llama.modeling_llama import LlamaAttention
 from ..mistral.modeling_mistral import MistralMLP
 
 
@@ -284,7 +284,7 @@ class EmbeddingGemma2TextPLEBlock(nn.Module):
         return residual + hidden_states
 
 
-class EmbeddingGemma2Attention(LlamaAttention):
+class EmbeddingGemma2Attention(EuroBertAttention):
     """Multi-headed attention from 'Attention Is All You Need' paper.
 
     EmbeddingGemma 2 is an encoder: attention is bidirectional on every layer and no key-value
@@ -297,7 +297,6 @@ class EmbeddingGemma2Attention(LlamaAttention):
         self.head_dim = layer_config.head_dim
         self.num_key_value_groups = config.num_attention_heads // layer_config.num_key_value_heads
         self.scaling = 1.0
-        self.is_causal = False
         self.k_proj = nn.Linear(
             config.hidden_size, layer_config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )

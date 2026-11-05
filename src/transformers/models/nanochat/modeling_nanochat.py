@@ -199,17 +199,18 @@ class NanoChatAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+        # RoPE -> Norm (instead of usual Norm -> RoPE)
         self.q_norm = NanoChatRMSNorm(eps=config.rms_norm_eps)
         self.k_norm = NanoChatRMSNorm(eps=config.rms_norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        attention_mask: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -219,8 +220,6 @@ class NanoChatAttention(nn.Module):
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        # RoPE -> Norm (instead of usual Norm -> RoPE)
         query_states = self.q_norm(query_states)
         key_states = self.k_norm(key_states)
 

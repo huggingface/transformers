@@ -264,7 +264,7 @@ class TimesFm2_5Attention(nn.Module):
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = nn.Parameter(torch.empty((self.head_dim,)))
+        self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
 
@@ -285,6 +285,7 @@ class TimesFm2_5Attention(nn.Module):
             self.head_dim, eps=config.rms_norm_eps
         )  # thus post q_norm does not need reshape
         self.sliding_window = None
+        self.per_dim_scale = nn.Parameter(torch.empty((self.head_dim,)))
 
     def forward(
         self,
@@ -307,7 +308,7 @@ class TimesFm2_5Attention(nn.Module):
         query_states = self.q_norm(query_states)
         key_states = self.k_norm(key_states)
 
-        scale = F.softplus(self.scaling).mul(1.442695041 / math.sqrt(self.head_dim))
+        scale = F.softplus(self.per_dim_scale).mul(1.442695041 / math.sqrt(self.head_dim))
         query_states = query_states * scale[None, None, None, :]
 
         if past_key_values is not None:
@@ -442,7 +443,7 @@ class TimesFm2_5PreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, TimesFm2_5Attention):
             # Initialize scaling parameter
-            init.ones_(module.scaling)
+            init.ones_(module.per_dim_scale)
         elif isinstance(module, TimesFm2_5PositionalEmbedding):
             num_timescales = module.embedding_dims // 2
             max_timescale, min_timescale = module.max_timescale, module.min_timescale
