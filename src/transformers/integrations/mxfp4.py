@@ -155,6 +155,8 @@ class Mxfp4Deserialize(ConversionOps):
     ) -> dict[str, torch.Tensor]:
         param_data = {}
         proj = "gate_up_proj" if "gate_up_proj" in full_layer_name else "down_proj"
+        if f"{proj}_blocks" not in input_dict:  # not GPT-OSS's layout (e.g. merged DeepSeek-V4 experts): as is
+            return input_dict
 
         if f"{proj}_blocks" in input_dict.keys():
             if isinstance(input_dict[f"{proj}_blocks"], list):
