@@ -136,3 +136,33 @@ class CheckMicTest(unittest.TestCase):
     def test_unknown_fleet_fails(self):
         with patch.dict(os.environ, {"MODEL": "bert", "ALL": "", "FLEET": "nightly"}):
             self.assertEqual(check_mic.main(), 2)
+
+    def test_missing_platform_baseline_reruns_without_comparison(self):
+        fake_runner = """
+import json, sys
+calls = open(sys.argv[1], "a")
+calls.write(" ".join(sys.argv[2:]) + "\\n")
+record = {"contract": "r", "contract_name": "DistilBERT", "variant": "default", "target": "slim", "platform": "cpu-arm64"}
+if "--no-baseline" in sys.argv:
+    print(json.dumps({**record, "status": "pass", "failures": []}))
+    sys.exit(0)
+print(json.dumps({**record, "status": "fail", "failures": ["no reviewed baseline at /x/cpu-arm64/slim.json"]}))
+print(json.dumps({**record, "contract_name": "BERT", "status": "pass", "failures": []}))
+sys.exit(1)
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            script = Path(directory) / "runner.py"
+            script.write_text(fake_runner, encoding="utf-8")
+            calls = Path(directory) / "calls"
+            command = [sys.executable, str(script), str(calls), "--fleet", "prototypes", "--run-all"]
+            with patch("sys.stdout", new_callable=io.StringIO) as stdout:
+                self.assertEqual(check_mic.run(command, os.environ.copy()), 0)
+            self.assertEqual(
+                calls.read_text(encoding="utf-8").splitlines(),
+                ["--fleet prototypes --run-all", "--fleet prototypes --contract DistilBERT --no-baseline"],
+            )
+        output = stdout.getvalue()
+        self.assertNotIn("✗", output)
+        self.assertIn("No reviewed cpu-arm64 baseline for DistilBERT; running without comparison.", output)
+        self.assertIn("✓ DistilBERT  slim  pass (no cpu-arm64 baseline)", output)
+        self.assertRegex(output.splitlines()[-1], r"^MIC: 1 passed, 1 ran without a baseline in [0-9.]+s$")

@@ -80,13 +80,31 @@ def model_contracts(root, model, fleet_name="prototypes"):
     return selected
 
 
-def format_record(record):
+# A fixture whose baseline has no expectations for this platform yet (e.g. cpu-arm64 locally).
+NO_BASELINE = "no reviewed baseline at "
+SUMMARY_WORDS = {
+    "pass": "passed",
+    "unchecked": "ran without a baseline",
+    "fail": "failed",
+    "error": "errored",
+    "xfail": "known failures",
+    "unsupported": "unsupported",
+    "recorded": "recorded",
+}
+
+
+def missing_baseline(record):
+    return record["status"] == "fail" and any(f.startswith(NO_BASELINE) for f in record.get("failures", []))
+
+
+def format_record(record, note=""):
     """One line per target, plus indented details for anything that is not a plain pass."""
     status = record["status"]
     name = record.get("contract_name", record["contract"])
     variant = "" if record.get("variant", "default") == "default" else f" [{record['variant']}]"
     seconds = f"  {record['seconds']:.1f}s" if "seconds" in record else ""
-    lines = [f"{STATUS.get(status, '?')} {name}{variant}  {record['target']}  {status}{seconds}"]
+    label = f"{status} ({note})" if note else status
+    lines = [f"{STATUS.get(status, '?')} {name}{variant}  {record['target']}  {label}{seconds}"]
     if status == "xfail":
         lines.append(f"    known failure: {record.get('known_failure', '?')}")
     lines += [f"    {failure}" for failure in record.get("failures", [])]
@@ -103,23 +121,16 @@ def format_selection(selection):
 
 
 def format_summary(counts, elapsed):
-    words = {
-        "pass": "passed",
-        "fail": "failed",
-        "error": "errored",
-        "xfail": "known failures",
-        "unsupported": "unsupported",
-        "recorded": "recorded",
-    }
-    parts = [f"{counts[k]} {word}" for k, word in words.items() if counts.get(k)]
+    parts = [f"{counts[k]} {word}" for k, word in SUMMARY_WORDS.items() if counts.get(k)]
     return f"MIC: {', '.join(parts) or 'nothing ran'} in {elapsed:.1f}s"
 
 
-def run(command, env, fleet_name="prototypes"):
-    """Run the MIC runner and print a readable digest of its JSON stream. Returns its exit code."""
-    counts = {}
+def stream(command, env, fleet_name, on_record, announce=True):
+    """Run the MIC runner, print its fleet/selection messages and hand each result record to `on_record`.
+
+    Returns the runner's exit code and the last non-JSON lines it printed (tracebacks, warnings).
+    """
     tail = []
-    started = time.perf_counter()
     process = subprocess.Popen(
         command, cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
     )
@@ -131,20 +142,74 @@ def run(command, env, fleet_name="prototypes"):
         if not isinstance(message, dict):
             if line.strip():
                 tail = [*tail, line.rstrip()][-TAIL_LINES:]
-            continue
-        if "fleet_revision" in message:
-            print(f"Fleet {fleet_name} ({message['fleet_repository']}@{message['fleet_revision'][:10]})", flush=True)
+        elif "fleet_revision" in message:
+            if announce:
+                print(
+                    f"Fleet {fleet_name} ({message['fleet_repository']}@{message['fleet_revision'][:10]})", flush=True
+                )
         elif "selection" in message:
             print("\n".join(format_selection(message["selection"])), flush=True)
         elif "status" in message and "target" in message:
-            counts[message["status"]] = counts.get(message["status"], 0) + 1
-            print("\n".join(format_record(message)), flush=True)
-    returncode = process.wait()
-    if returncode != 0 and not (counts.get("fail") or counts.get("error")) and tail:
+            on_record(message)
+    return process.wait(), tail
+
+
+def without_selection(command):
+    """`command` minus its contract selection (--contract/--changed-files/--run-all)."""
+    kept, skip = [], False
+    for arg in command:
+        if skip:
+            skip = False
+        elif arg in ("--contract", "--changed-files"):
+            skip = True
+        elif arg != "--run-all":
+            kept.append(arg)
+    return kept
+
+
+def run(command, env, fleet_name="prototypes"):
+    """Run the selected fixtures and print a readable digest. Returns the exit code for the checker.
+
+    Fixtures without a reviewed baseline for this platform are re-run with `--no-baseline`: they
+    are reported as "ran without a baseline" (the usage path executes, outputs are not compared)
+    instead of failing the check. Any other failure fails it.
+    """
+    counts = {}
+    missing = []
+    started = time.perf_counter()
+
+    def count(record, key=None):
+        key = key or record["status"]
+        counts[key] = counts.get(key, 0) + 1
+
+    def first_pass(record):
+        if missing_baseline(record):
+            missing.append(record)
+        else:
+            count(record)
+            print("\n".join(format_record(record)), flush=True)
+
+    returncode, tail = stream(command, env, fleet_name, first_pass)
+    if missing:
+        names = sorted({r.get("contract_name", r["contract"]) for r in missing})
+        platform = missing[0].get("platform", "this platform")
+        print(f"No reviewed {platform} baseline for {', '.join(names)}; running without comparison.", flush=True)
+        note = f"no {platform} baseline"
+
+        def second_pass(record):
+            count(record, "unchecked" if record["status"] == "pass" else None)
+            print("\n".join(format_record(record, note)), flush=True)
+
+        retry = without_selection(command) + [arg for name in names for arg in ("--contract", name)]
+        retry_code, retry_tail = stream([*retry, "--no-baseline"], env, fleet_name, second_pass, announce=False)
+        # The first run's non-zero code came from the missing baselines, now accounted for.
+        returncode, tail = retry_code, retry_tail
+    failed = counts.get("fail", 0) + counts.get("error", 0)
+    if returncode != 0 and not failed and tail:
         # The runner failed before (or without) reporting a failing target: show what it said.
         print("Runner output:\n" + "\n".join(f"  {line}" for line in tail), flush=True)
     print(format_summary(counts, time.perf_counter() - started), flush=True)
-    return returncode
+    return 1 if failed else returncode
 
 
 def main():
