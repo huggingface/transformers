@@ -636,3 +636,90 @@ class FP8Ue8m0LoadingTest(unittest.TestCase):
         for name, scale in scales.items():
             self.assertEqual(scale.dtype, torch.float8_e8m0fnu, name)
             torch.testing.assert_close(scale.float(), expected[name], rtol=0, atol=0)
+
+
+def _modelopt_fp8(weight, block=None):
+    """ModelOpt's FP8 export: `weight ~= fp8 * weight_scale`, the scale `amax / 448` per tensor or per 128x128 block"""
+    if block is None:
+        scale = weight.abs().amax() / 448
+        return (weight / scale).to(torch.float8_e4m3fn), scale
+    blocks = weight.unflatten(1, (-1, block)).unflatten(0, (-1, block))  # (out / 128, 128, in / 128, 128)
+    scale = blocks.abs().amax(dim=(1, 3), keepdim=True) / 448  # saved 4-D: (out / 128, 1, in / 128, 1)
+    return (blocks / scale).flatten(2).flatten(0, 1).to(torch.float8_e4m3fn), scale
+
+
+class FP8ModelOptLoadingTest(unittest.TestCase):
+    FP8 = ("self_attn.q_proj", "self_attn.k_proj")  # per tensor, static activation scale
+    FP8_PB_WO = ("mlp.gate_proj", "mlp.up_proj", "mlp.down_proj")  # per 128x128 block, weight-only
+
+    def save_modelopt_checkpoint(self, path):
+        from safetensors.torch import load_file, save_file
+
+        from transformers import LlamaConfig, LlamaForCausalLM
+
+        config = LlamaConfig(
+            vocab_size=64, hidden_size=256, intermediate_size=384, num_hidden_layers=1, num_attention_heads=4,
+            num_key_value_heads=2,
+        )  # fmt: skip
+        LlamaForCausalLM(config).save_pretrained(path)
+        state_dict, dense = load_file(f"{path}/model.safetensors"), {}
+        for name in self.FP8 + self.FP8_PB_WO:
+            prefix = f"model.layers.0.{name}"
+            dense[prefix] = weight = state_dict[f"{prefix}.weight"]
+            block = 128 if name in self.FP8_PB_WO else None
+            state_dict[f"{prefix}.weight"], state_dict[f"{prefix}.weight_scale"] = _modelopt_fp8(weight, block)
+            if block is None:
+                state_dict[f"{prefix}.input_scale"] = torch.tensor(0.02)
+        save_file(state_dict, f"{path}/model.safetensors", metadata={"format": "pt"})
+        config.quantization_config = {
+            "quant_method": "modelopt",
+            "quant_algo": "MIXED_PRECISION",
+            "quantized_layers": {f"model.layers.0.{name}": {"quant_algo": "FP8"} for name in self.FP8}
+            | {f"model.layers.0.{name}": {"quant_algo": "FP8_PB_WO"} for name in self.FP8_PB_WO},
+        }
+        config.save_pretrained(path)
+        return dense, state_dict
+
+    def assert_within_one_fp8_step(self, dequantized, weight, name):
+        # e4m3 has 3 mantissa bits: a step is at most 1/8 of the value, 2**-9 of the scale for subnormals
+        self.assertTrue(((dequantized - weight).abs() <= weight.abs() / 8 + weight.abs().amax() / 448 * 2**-9).all())
+
+    def test_dequantized(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dense, _ = self.save_modelopt_checkpoint(tmp)
+            model, info = AutoModelForCausalLM.from_pretrained(
+                tmp, quantization_config={"dequantize": True}, output_loading_info=True
+            )
+        self.assertFalse(any(info.values()), info)
+        for prefix, weight in dense.items():
+            linear = model.get_submodule(prefix)
+            self.assertIs(type(linear), torch.nn.Linear, prefix)
+            self.assert_within_one_fp8_step(linear.weight, weight, prefix)
+
+    @patch.object(FineGrainedFP8HfQuantizer, "validate_environment", lambda *args, **kwargs: None)
+    def test_quantized(self):
+        from transformers.integrations import FP8Linear
+
+        with tempfile.TemporaryDirectory() as tmp:
+            dense, saved = self.save_modelopt_checkpoint(tmp)
+            model, info = AutoModelForCausalLM.from_pretrained(tmp, device_map="cpu", output_loading_info=True)
+        self.assertFalse(any(info.values()), info)
+        for prefix in dense:
+            linear = model.get_submodule(prefix)
+            self.assertIsInstance(linear, FP8Linear, prefix)
+            torch.testing.assert_close(linear.weight.view(torch.uint8), saved[f"{prefix}.weight"].view(torch.uint8))
+            scale = saved[f"{prefix}.weight_scale"]
+            torch.testing.assert_close(linear.weight_scale_inv, scale.flatten(1) if scale.ndim == 4 else scale)
+        attention = model.model.layers[0].self_attn.q_proj
+        self.assertEqual((attention.activation_scheme, attention.block_size), ("static", None))
+        torch.testing.assert_close(attention.activation_scale, torch.tensor(0.02))
+
+        # Weight-only: the block-dequantized weight, in the activations' dtype
+        mlp = model.model.layers[0].mlp.down_proj
+        self.assertEqual((mlp.activation_scheme, mlp.block_size, mlp.activation_scale), ("none", (128, 128), None))
+        x = torch.randn(2, 3, 384)
+        dequantized = mlp.weight.float() * mlp.weight_scale_inv.repeat_interleave(128, 0).repeat_interleave(128, 1)
+        self.assert_within_one_fp8_step(dequantized, dense["model.layers.0.mlp.down_proj"], "down_proj")
+        torch.testing.assert_close(mlp(x), x @ dequantized.T)
+        mlp.bias = torch.nn.Parameter(torch.randn(256))
+        torch.testing.assert_close(mlp(x), x @ dequantized.T + mlp.bias)

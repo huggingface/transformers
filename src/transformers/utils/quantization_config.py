@@ -1678,14 +1678,15 @@ class SpQRConfig(QuantizationConfigMixin):
             raise TypeError("shapes must be a dict")
 
 
-@dataclass
+@dataclass(repr=False)  # the JSON repr: a quantization plan shares one quantizer between equal reprs
 class FineGrainedFP8Config(QuantizationConfigMixin):
     """
     FineGrainedFP8Config is a configuration class for fine-grained FP8 quantization used mainly for deepseek models.
 
     Args:
         activation_scheme (`str`, *optional*, defaults to `"dynamic"`):
-            The scheme used for activation, the defaults and only support scheme for now is "dynamic".
+            How activations are quantized: `"dynamic"`, `"static"` (a stored per-tensor `activation_scale`), or
+            `"none"` for weight-only FP8: the weights are dequantized to the activations' dtype in forward.
         weight_block_size (`typing.tuple[int, int]`, *optional*, defaults to `(128, 128)`):
             The size of the weight blocks for quantization, default is (128, 128).
         dequantize (`bool`, *optional*, defaults to `False`):
@@ -1731,7 +1732,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         Safety checker that arguments are correct
         """
         self.activation_scheme = self.activation_scheme.lower()
-        if self.activation_scheme not in ["dynamic", "static"]:
+        if self.activation_scheme not in ["dynamic", "static", "none"]:
             raise ValueError(f"Activation scheme {self.activation_scheme} not supported")
         if self.weight_block_size is not None and len(self.weight_block_size) != 2:
             raise ValueError("weight_block_size must be a tuple of two integers")

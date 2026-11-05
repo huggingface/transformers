@@ -1,3 +1,4 @@
+import re
 from typing import TYPE_CHECKING
 
 from ..utils import is_accelerate_available, is_torch_available, is_torch_xpu_available, logging
@@ -144,9 +145,13 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     def _process_model_after_weight_loading(self, model, **kwargs):
         # Single-process multi-device is unsafe for DeepGEMM (its kernels are bound to one CUDA
         # context); route those models through Triton/grouped_mm instead.
-        from ..integrations.finegrained_fp8 import _disable_deepgemm_on_multi_device
+        from ..integrations.finegrained_fp8 import FP8Linear, _disable_deepgemm_on_multi_device
 
         _disable_deepgemm_on_multi_device(model)
+        for module in model.modules():
+            # ModelOpt saves the per-block scales `(out / 128, 1, in / 128, 1)`
+            if isinstance(module, FP8Linear) and module.weight_scale_inv.ndim == 4:
+                module.weight_scale_inv.data = module.weight_scale_inv.data.flatten(1)
         return model
 
     def update_parallel_plan(self, model, plan):
@@ -176,9 +181,10 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
         return Fp8Quantize(self)
 
-    # `weight` first: its converter takes `*.down_proj.weight` before the experts' own-name `down_proj` does
+    # `weight` first: its converter takes `*.down_proj.weight` before the experts' own-name `down_proj` does.
+    # ModelOpt checkpoints name the scales `weight_scale` and `input_scale`
     serialized_names = {
-        "weight": ["weight", "weight_scale_inv", "activation_scale"],
+        "weight": ["weight", "weight_scale_inv", "activation_scale", "weight_scale", "input_scale"],
         "gate_up_proj": ["gate_up_proj", "gate_up_proj_scale_inv"],
         "down_proj": ["down_proj", "down_proj_scale_inv"],
     }
@@ -190,6 +196,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
     def update_weight_conversions(self, weight_conversions, model):
         from ..core_model_loading import WeightRenaming
+        from ..integrations.finegrained_fp8 import FP8Linear
 
         # Some FP8 checkpoints ship per-block scales under `.scale` (e.g. DeepSeek-V4-Flash) or `.qscale_weight`
         # (e.g. Mistral Large 4)
@@ -197,4 +204,14 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             WeightRenaming(source_patterns=r"^(.+)\.scale", target_patterns=r"\1.weight_scale_inv"),
             WeightRenaming(source_patterns=r"\.qscale_weight", target_patterns=".weight_scale_inv"),
         ]
-        return scale_renames + super().update_weight_conversions(weight_conversions, model)
+        conversions = scale_renames + super().update_weight_conversions(weight_conversions, model)
+        # ModelOpt's `weight_scale` and `input_scale`, after the model's renamings. Only those of the FP8 linears:
+        # NVFP4 and `FP8Embedding` have their own `weight_scale`
+        prefix = f"{model.base_model_prefix}."
+        modules = "|".join(
+            re.escape(n.removeprefix(prefix)) for n, m in model.named_modules() if isinstance(m, FP8Linear)
+        )
+        if modules and not self.quantization_config.dequantize:
+            for name, ours in (("weight_scale", "weight_scale_inv"), ("input_scale", "activation_scale")):
+                conversions.append(WeightRenaming(rf"({modules})\.{name}", rf"\1.{ours}"))
+        return conversions

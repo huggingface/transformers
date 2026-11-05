@@ -350,12 +350,12 @@ def is_quantization_plan(quantization_config) -> TypeGuard[dict]:
     )
 
 
-# ModelOpt `quant_algo` -> its config. Weight-only algos load with their W8A8/W4A4 config, which quantizes activations
+# ModelOpt `quant_algo` -> its config. W4A16 NVFP4 loads with the W4A4 config, which quantizes activations
 MODELOPT_ALGOS = {
     "NVFP4": NVFP4Config,
     "W4A16_NVFP4": NVFP4Config,
     "FP8": lambda: FineGrainedFP8Config(activation_scheme="static", weight_block_size=None),
-    "FP8_PB_WO": lambda: FineGrainedFP8Config(weight_block_size=(128, 128)),
+    "FP8_PB_WO": lambda: FineGrainedFP8Config(activation_scheme="none", weight_block_size=(128, 128)),
 }
 
 

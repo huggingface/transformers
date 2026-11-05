@@ -432,6 +432,9 @@ class FP8Linear(nn.Linear):
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         if self.weight.element_size() > 1:
             return F.linear(input, self.weight, self.bias)
+        if self.activation_scheme == "none":  # weight-only: the activations stay in their dtype
+            weight = _dequantize_fp8_weight(self.weight, self.weight_scale_inv, self.block_size, input.dtype)
+            return F.linear(input, weight, self.bias)
 
         return _apply_if_grad(
             FP8LinearFunction,
@@ -1023,6 +1026,25 @@ class Fp8Quantize(ConversionOps):
         return Fp8Dequantize(self.hf_quantizer)
 
 
+def _rename_modelopt_scales(tensors: dict, model=None, full_layer_name=None) -> dict:
+    """
+    ModelOpt checkpoints name the scales `weight_scale` (our `weight_scale_inv`, possibly saved as
+    `(out / 128, 1, in / 128, 1)` per block) and `input_scale` (our static `activation_scale`). `FP8Embedding` keeps
+    its own `weight_scale`. Loading `FP8Linear`s, `FineGrainedFP8HfQuantizer.update_weight_conversions` renames them.
+    """
+    if model is not None and isinstance(get_module_from_name(model, full_layer_name)[0], FP8Embedding):
+        return tensors
+    renamed = {}
+    for key, value in tensors.items():
+        if key.endswith("weight_scale"):
+            key += "_inv"
+            value = [v.flatten(1) if v.ndim == 4 else v for v in (value if isinstance(value, list) else [value])]
+        elif key.endswith("input_scale"):
+            key = key.removesuffix("input_scale") + "activation_scale"
+        renamed[key] = value
+    return renamed
+
+
 class Fp8Dequantize(ConversionOps):
     """Dequantize FP8 weights using their per-block ``weight_scale_inv``.
 
@@ -1118,6 +1140,9 @@ class Fp8Dequantize(ConversionOps):
         **kwargs,
     ) -> dict[str, list[torch.Tensor] | torch.Tensor]:
         output_dtype = self._get_target_dtype(model, full_layer_name)
+        input_dict = _rename_modelopt_scales(input_dict, model, full_layer_name)
+        if "weight_scale" in input_dict:
+            return input_dict  # an `FP8Embedding`, kept quantized
         if "weight" in input_dict:
             # The downstream renamer in `core_model_loading._convert_one_module` uses the
             # output dict's *key*, not its content, to derive prefix/suffix; if `full_layer_name`
