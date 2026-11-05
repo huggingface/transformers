@@ -90,7 +90,7 @@ class QuantizationPlanTest(unittest.TestCase):
             plan.postprocess_model(model)
         fp8_hook.assert_called_once_with(model)  # each quantizer's after-load hook runs
         self.assertEqual(list(model.config.quantization_config), ["*.mlp.*"])
-        self.assertIsNone(plan.quantizer_for("model.layers.0.self_attn.q_proj.weight"))
+        self.assertIsNone(plan.get_quantizer("model.layers.0.self_attn.q_proj.weight"))
         self.assertFalse(plan.is_serializable())  # NVFP4 can't be saved
 
     @slow

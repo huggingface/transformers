@@ -157,7 +157,7 @@ class HfQuantizer(ABC):
         """
         return False
 
-    def quantizer_for(self, name: str) -> "HfQuantizer | None":
+    def get_quantizer(self, name: str) -> "HfQuantizer | None":
         "The quantizer of the module or param `name`: this one, or in a quantization plan the one of its pattern"
         return self
 
@@ -209,7 +209,7 @@ class HfQuantizer(ABC):
             if name.startswith(swapped):  # inside a module already swapped
                 continue
             param = next(iter(module._parameters), None)
-            quantizer = self.quantizer_for(f"{name}.{param}") if param is not None else None
+            quantizer = self.get_quantizer(f"{name}.{param}") if param is not None else None
             if quantizer is None or not quantizer.replaces_modules:
                 continue
             if not should_convert_module(name, getattr(quantizer, "modules_to_not_convert", None)):
@@ -331,7 +331,7 @@ class HfQuantizer(ABC):
                 rf"{re.escape(name)}$"
                 for name, module in model.named_modules()
                 if module._parameters
-                and not any(self.plan.quantizer_for(f"{name}.{param}") is self for param in module._parameters)
+                and not any(self.plan.get_quantizer(f"{name}.{param}") is self for param in module._parameters)
             ]
 
         return modules_to_not_convert

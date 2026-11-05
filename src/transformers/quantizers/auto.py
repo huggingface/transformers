@@ -364,7 +364,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         for quantizer in quantizers.values():
             quantizer.plan = self
 
-    def quantizer_for(self, name):
+    def get_quantizer(self, name):
         match = self.alternation.search(name)
         return self.quantizers[self.group_to_pattern[match.lastgroup]] if match else None
 
@@ -391,7 +391,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         ]
 
     def update_weight_transform(self, transform, model, name):
-        quantizer = self.quantizer_for(name)
+        quantizer = self.get_quantizer(name)
         if quantizer is None:
             return transform
         # A general converter of another quantizer may have matched the first key of `name`: swap in its quantizer's
@@ -400,7 +400,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         return quantizer.update_weight_transform(own or transform, model, name)
 
     def param_element_size(self, model, param_name, param):
-        quantizer = self.quantizer_for(param_name)
+        quantizer = self.get_quantizer(param_name)
         return param.element_size() if quantizer is None else quantizer.param_element_size(model, param_name, param)
 
     def validate_environment(self, *args, **kwargs):
