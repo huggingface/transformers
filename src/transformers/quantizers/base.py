@@ -455,7 +455,9 @@ class HfQuantizer(ABC):
         for stored, ours in self.renamed_names.items():
             kept = "|".join(re.escape(name) for name in params if name.endswith(f".{stored}"))
             exclude = rf"(?!{prefix}(?:{kept})$)" if kept else ""
-            renamings.append(WeightRenaming(rf"^{exclude}({prefix}(?:{layers}))\.{stored}$", rf"\1.{ours}"))
+            # A layer's own tensors or those of its submodules (e.g. the per-expert ones of fused experts)
+            source = rf"^{exclude}({prefix}(?:{layers})(?:\..+)?)\.{stored}$"
+            renamings.append(WeightRenaming(source, rf"\1.{ours}"))
         return renamings
 
     def update_weight_transform(self, transform, model, name):
