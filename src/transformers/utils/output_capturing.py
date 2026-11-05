@@ -115,17 +115,16 @@ class CompileableContextVar:
 _active_collector = CompileableContextVar("output_collector")
 
 
-def _append_hidden_state(collected_outputs: dict, hidden_state: torch.Tensor) -> None:
-    """Append to the captured `hidden_states`, or append `None` if a requested subset of indices does not select it."""
-    hidden_states = collected_outputs["hidden_states"]
-    selection = collected_outputs.get("_hidden_states_layers")
-    hidden_states.append(hidden_state if selection is None or len(hidden_states) in selection else None)
-
-
 def install_output_capuring_hook(
     module: nn.Module, key: str, index: int, capture_initial_hidden_state: bool = True
 ) -> None:
     """Install the forward hook needed to capture the output described by `key` and `index` in `module`."""
+
+    def append_hidden_state(collected_outputs: dict, hidden_state: torch.Tensor) -> None:
+        """Append to the captured `hidden_states`, or append `None` if the requested indices do not select it."""
+        hidden_states = collected_outputs["hidden_states"]
+        selection = collected_outputs.get("_hidden_states_layers")
+        hidden_states.append(hidden_state if selection is None or len(hidden_states) in selection else None)
 
     def output_capturing_hook(module, args, output):
         # Get the current thread-local collector
@@ -138,10 +137,10 @@ def install_output_capuring_hook(
             # Historically, the first hidden_states output is actually the input of layer 0 (or inputs_embeds), so the
             # hidden_states outputs have length `num_hidden_layers + 1`
             if capture_initial_hidden_state and len(collected_outputs[key]) == 0:
-                _append_hidden_state(collected_outputs, args[0])
+                append_hidden_state(collected_outputs, args[0])
             hidden_state = output if not isinstance(output, tuple) else output[index]
             if hidden_state is not None:
-                _append_hidden_state(collected_outputs, hidden_state)
+                append_hidden_state(collected_outputs, hidden_state)
             return
 
         if not isinstance(output, tuple):
