@@ -142,6 +142,46 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
                 reference = create_causal_mask(**kwargs, past_key_values=cache)
                 self.assertTrue(torch.equal(continued, reference))
 
+    def test_empty_cache_accepts_1d_position_ids(self):
+        config = LlamaConfig(
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            head_dim=8,
+        )
+        config._attn_implementation = "sdpa"
+        embeddings = torch.empty(1, 2, 16)
+        kwargs = {
+            "config": config,
+            "inputs_embeds": embeddings,
+            "attention_mask": None,
+            "past_key_values": DynamicCache(config=config),
+            "allow_is_causal_skip": False,
+        }
+        expected = create_causal_mask(**kwargs, position_ids=None)
+        actual = create_causal_mask(**kwargs, position_ids=torch.arange(2))
+        self.assertTrue(torch.equal(actual, expected))
+
+    def test_empty_cache_ignores_monotonic_position_gaps(self):
+        config = LlamaConfig(
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            head_dim=8,
+        )
+        config._attn_implementation = "sdpa"
+        embeddings = torch.empty(1, 6, 16)
+        kwargs = {
+            "config": config,
+            "inputs_embeds": embeddings,
+            "attention_mask": None,
+            "past_key_values": DynamicCache(config=config),
+            "allow_is_causal_skip": False,
+        }
+        expected = create_causal_mask(**kwargs, position_ids=None)
+        actual = create_causal_mask(**kwargs, position_ids=2 * torch.arange(6)[None, :])
+        self.assertTrue(torch.equal(actual, expected))
+
     @with_grad
     def test_packed_sequence_model_isolation_with_cache(self):
         config = LlamaConfig(

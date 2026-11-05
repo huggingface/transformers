@@ -711,7 +711,7 @@ class AttentionMaskInterface(GeneralInterface):
 ALL_MASK_ATTENTION_FUNCTIONS: AttentionMaskInterface = AttentionMaskInterface()
 
 
-def find_packed_sequence_indices(position_ids: torch.Tensor) -> torch.Tensor | None:
+def find_packed_sequence_indices(position_ids: torch.Tensor, reset_only: bool = False) -> torch.Tensor | None:
     """
     Find the indices of the sequence to which each new query token in the sequence belongs when using packed
     tensor format (i.e. several sequences packed in the same batch dimension).
@@ -719,6 +719,8 @@ def find_packed_sequence_indices(position_ids: torch.Tensor) -> torch.Tensor | N
     Args:
         position_ids (`torch.Tensor`)
             A 2D tensor of shape (batch_size, query_length) indicating the positions of each token in the sequences.
+        reset_only (`bool`, optional):
+            Detect only non-increasing positions as boundaries, ignoring forward gaps.
 
     Returns:
         A 2D tensor where each similar integer indicates that the tokens belong to the same sequence. For example, if we
@@ -734,7 +736,8 @@ def find_packed_sequence_indices(position_ids: torch.Tensor) -> torch.Tensor | N
     # cannot be part of the end of the first batch dim and the start of the 2nd one for example
     first_dummy_value = position_ids[:, :1] - 1  # We just need the diff on this first value to be 1
     position_diff = torch.diff(position_ids, prepend=first_dummy_value, dim=-1)
-    packed_sequence_mask = (position_diff != 1).cumsum(-1)
+    boundaries = position_diff <= 0 if reset_only else position_diff != 1
+    packed_sequence_mask = boundaries.cumsum(-1)
 
     # Sadly this is a dynamic control flow, so we cannot enable this check on anything compile related
     if not is_tracing(packed_sequence_mask) and (packed_sequence_mask[:, -1] == 0).all():
@@ -839,6 +842,7 @@ def _preprocess_mask_arguments(
     packed_sequence_mask = None
     if (
         position_ids is not None
+        and position_ids.ndim == 2
         and attention_mask is None
         and (
             past_key_values is None
@@ -855,7 +859,7 @@ def _preprocess_mask_arguments(
         # The position ids are sometimes just unsqueezed, without being expanded
         if batch_size != position_ids.shape[0]:
             position_ids = position_ids.expand(batch_size, -1)
-        packed_sequence_mask = find_packed_sequence_indices(position_ids)
+        packed_sequence_mask = find_packed_sequence_indices(position_ids, reset_only=past_key_values is not None)
 
     return False, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset
 
