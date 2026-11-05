@@ -420,10 +420,19 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         The quantizer of every module, matched once against the plan with the dtype plan's globs: exact names first,
         then globs, then `"*"` for the modules no other pattern matches.
         """
+        from ..conversion_mapping import get_model_conversion_mapping
         from ..core_model_loading import build_glob_alternation
 
-        if self.checkpoint_names:
-            self.rename_patterns(model)
+        if self.checkpoint_names:  # renamed like their keys: per-expert ones collapse on the fused module
+            renamed, transforms = {}, get_model_conversion_mapping(model)
+            for pattern, quantizer in self.quantizers.items():
+                name = f"{pattern}.weight"
+                for transform in transforms:
+                    name, _ = transform.rename_source_key(name)
+                renamed.setdefault(name.removesuffix(".weight"), quantizer)
+            self.set_quantizers(renamed)
+            self.checkpoint_names = False
+            model.config.quantization_config = self.quantization_config
         tiers = [[p for p in self.quantizers if "*" not in p], [p for p in self.quantizers if "*" in p and p != "*"]]
         tiers = [build_glob_alternation(tier)[:2] for tier in tiers if tier]
         self.prefix = f"{model.base_model_prefix}."
@@ -453,7 +462,9 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
             layers = [name for name, q in self.module_quantizers.items() if q is quantizer]
             weight_conversions = quantizer.update_weight_conversions(weight_conversions, model, layers)
         # The general converters of a fused param (e.g. MXFP4's `down_proj`) last: a `*.down_proj.weight` is a `weight`
-        fused = {param for quantizer in self.all_quantizers for param in quantizer.serialized_names if param != "weight"}
+        fused = {
+            param for quantizer in self.all_quantizers for param in quantizer.serialized_names if param != "weight"
+        }
         return sorted(weight_conversions, key=lambda conversion: conversion._original_target_patterns[0] in fused)
 
     def update_weight_transform(self, transform, model, name):
@@ -484,21 +495,6 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         for quantizer in self.all_quantizers:
             max_memory = quantizer.adjust_max_memory(max_memory)
         return max_memory
-
-    def rename_patterns(self, model):
-        "Renames checkpoint module names to the model's, the way the checkpoint keys are renamed on load"
-        from ..conversion_mapping import get_model_conversion_mapping
-
-        transforms = get_model_conversion_mapping(model)
-        quantizers = {}
-        for pattern, quantizer in self.quantizers.items():
-            name = f"{pattern}.weight"  # the converters match params: per-expert ones collapse on the fused param
-            for transform in transforms:
-                name, _ = transform.rename_source_key(name)
-            quantizers.setdefault(name.removesuffix(".weight"), quantizer)
-        self.set_quantizers(quantizers)
-        self.checkpoint_names = False
-        model.config.quantization_config = self.quantization_config
 
     def preprocess_model(self, model, **kwargs):
         self.match_modules(model)
@@ -592,7 +588,7 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
                 shared[key] = AutoHfQuantizer.from_config(pattern_config, pre_quantized=plan_from_config)
             quantizers[pattern] = shared[key]
         hf_quantizer = QuantizationPlanHfQuantizer(quantizers, checkpoint_names)
-        if not checkpoint_names:  # else `rename_patterns` sets it, in the model's names
+        if not checkpoint_names:  # else `match_modules` sets it, in the model's names
             config.quantization_config = hf_quantizer.quantization_config
     elif pre_quantized or quantization_config is not None:
         if pre_quantized:
