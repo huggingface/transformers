@@ -26,7 +26,6 @@ from transformers.testing_utils import (
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
-from ...test_modeling_common import ids_tensor
 
 
 if is_torch_available():
@@ -97,11 +96,11 @@ class Lfm3ModelTest(CausalLMModelTest, unittest.TestCase):
             ["conv", "sliding_attention", "full_attention"],
             ["sliding_attention", "conv", "full_attention"],
         ):
-            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-            config.layer_types, config.sliding_window, config.conv_L_cache = layer_types, 4, 3
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.layer_types, config.sliding_window, config.conv_L_cache = layer_types, 3, 2
             # eager materializes the masks; sdpa skips an unpadded causal mask and would hide a wrongly sized one
             model = Lfm3ForCausalLM._from_config(config, attn_implementation="eager").to(torch_device).eval()
-            input_ids = ids_tensor((1, 17), config.vocab_size).to(torch_device)
+            input_ids = inputs_dict["input_ids"][:1]
             altered = input_ids.clone()
             altered[0, 0] = (input_ids[0, 0] + 1) % config.vocab_size
             with torch.no_grad():
@@ -121,10 +120,10 @@ class Lfm3ModelTest(CausalLMModelTest, unittest.TestCase):
             ["conv", "sliding_attention", "full_attention"],
             ["sliding_attention", "conv", "full_attention"],
         ):
-            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-            config.layer_types, config.sliding_window, config.conv_L_cache = layer_types, 4, 3
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.layer_types, config.sliding_window, config.conv_L_cache = layer_types, 3, 2
             model = Lfm3ForCausalLM(config).to(torch_device).eval()
-            input_ids = ids_tensor((2, 9), config.vocab_size).to(torch_device)
+            input_ids = inputs_dict["input_ids"][:2].clone()
             input_ids[1, :3] = config.pad_token_id
             attention_mask = torch.ones_like(input_ids)
             attention_mask[1, :3] = 0
