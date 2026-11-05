@@ -875,6 +875,7 @@ class ModelTesterMixin(ExportTesterMixin):
             "Wav2Vec2BertModelTest": 4,
             "Lfm3ModelTest": 3,  # One layer per operator type: ["full_attention", "sliding_attention", "conv"]
             "Lfm3AudioCommonTest": 3,  # One language model layer per operator type, as for `Lfm3ModelTest`
+            "Lfm3OmniCommonTest": 3,  # One language model layer per operator type, as for `Lfm3ModelTest`
         }
         target_num_hidden_layers = exceptional_num_hidden_layers.get(type(self).__name__, 2)
 

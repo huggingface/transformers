@@ -111,6 +111,7 @@ else:
             ("kosmos-2", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("kosmos-2.5", {"torchvision": "Kosmos2_5ImageProcessor", "pil": "Kosmos2_5ImageProcessorPil"}),
             ("layoutxlm", {"torchvision": "LayoutLMv2ImageProcessor", "pil": "LayoutLMv2ImageProcessorPil"}),
+            ("lfm3_omni", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("lfm3_vl", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("lighton_ocr", {"torchvision": "PixtralImageProcessor", "pil": "PixtralImageProcessorPil"}),
             ("llava_next_video", {"torchvision": "LlavaNextImageProcessor", "pil": "LlavaNextImageProcessorPil"}),

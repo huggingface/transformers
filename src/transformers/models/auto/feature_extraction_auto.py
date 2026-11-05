@@ -60,6 +60,7 @@ MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("lasr_ctc", "LasrFeatureExtractor"),
         ("lasr_encoder", "LasrFeatureExtractor"),
         ("lfm3_audio", "Lfm3AudioFeatureExtractor"),
+        ("lfm3_omni", "Lfm3AudioFeatureExtractor"),
         ("mimi", "EncodecFeatureExtractor"),
         ("moonshine", "Wav2Vec2FeatureExtractor"),
         ("moshi", "EncodecFeatureExtractor"),
