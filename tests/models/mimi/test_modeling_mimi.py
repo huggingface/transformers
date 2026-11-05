@@ -385,6 +385,30 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
         with self.assertRaises(ValueError):
             decoder_only.encode(input_values)
 
+    def test_encode_last_frame_matches_explicit_frame_padding(self):
+        """Non-streaming encode must match zero-padding the input to a frame multiple (kyutai/moshi behavior)."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.use_streaming = False
+        model = MimiModel(config).to(torch_device).eval()
+
+        frame_size = config.frame_size
+        input_length = 2 * frame_size + frame_size // 3
+        self.assertNotEqual(input_length % frame_size, 0)
+
+        input_values = floats_tensor([self.model_tester.batch_size, config.audio_channels, input_length], scale=0.1)
+        pad_amount = frame_size - (input_length % frame_size)
+        padded_input_values = torch.nn.functional.pad(input_values, (0, pad_amount))
+
+        with torch.no_grad():
+            audio_codes = model.encode(input_values).audio_codes
+            padded_audio_codes = model.encode(padded_input_values).audio_codes
+
+        expected_num_frames = model.get_encoded_length(
+            torch.tensor([input_length], device=torch_device, dtype=torch.long)
+        ).item()
+        self.assertEqual(audio_codes.shape[-1], expected_num_frames)
+        torch.testing.assert_close(audio_codes, padded_audio_codes[..., :expected_num_frames])
+
 
 def compute_rmse(arr1, arr2):
     return np.sqrt(((normalize_waveform(arr1) - normalize_waveform(arr2)) ** 2).mean())

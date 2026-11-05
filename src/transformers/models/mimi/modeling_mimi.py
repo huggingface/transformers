@@ -1258,6 +1258,12 @@ class MimiEncoderModel(MimiPreTrainedModel):
                 per_layer_in_channels=per_layer_in_channels,
             )
 
+        if not use_streaming and padding_cache is None:
+            frame_size = self.config.frame_size
+            remainder = input_length % frame_size
+            if remainder != 0:
+                input_values = torch.nn.functional.pad(input_values, (0, frame_size - remainder))
+
         # TODO: @eustlb, let's make the encoder support padding_mask so that batched inputs are supported.
         hidden_states = self.encoder_seanet(input_values, padding_cache=padding_cache)
         # TODO: @eustlb, convert the padding mask to attention mask.
