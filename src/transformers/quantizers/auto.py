@@ -685,7 +685,7 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
     ):
         pre_quantized = False
 
-    saved_plan = quantization_params_from_config if is_quantization_plan(quantization_params_from_config) else None
+    saved_plan = quantization_params_from_config if plan_from_config else None
     user_plan = quantization_config if is_quantization_plan(quantization_config) else None
     if (plan := saved_plan or user_plan) is not None:
         # One quantizer per pattern. Loading attributes update the saved configs: for every pattern (e.g.

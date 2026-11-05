@@ -22,9 +22,8 @@ if is_torch_available():
 from ..core_model_loading import ConversionOps, _IdentityOp
 from ..distributed.utils import _is_torch_distributed_initialized
 from ..quantizers.quantizers_utils import get_module_from_name, on_device, should_convert_module
-from .finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS, FP8Experts
+from .finegrained_fp8 import FP8Experts
 from .hub_kernels import use_kernel_forward_from_hub
-from .moe import use_experts_implementation
 
 
 logger = logging.get_logger(__name__)
@@ -484,10 +483,7 @@ class Mxfp4GptOssMLP(nn.Module):
 
 
 class Mxfp4Experts(FP8Experts):
-    """
-    MoE experts with MXFP4 weights, e.g. DeepSeek-V4's routed experts: e2m1 pairs packed in `int8`, a ue8m0
-    `*_scale_inv` per 32 of them. They run W4A8 on the FP8 experts' kernels, which take the MXFP4 path for `int8` weights
-    """
+    "MXFP4 experts (e.g. DeepSeek-V4's): e2m1 pairs packed in `int8`, a ue8m0 scale per 32, run W4A8 on the FP8 kernels"
 
     def __init__(self, config, has_bias: bool = False, has_gate: bool = True):
         super().__init__(
@@ -498,15 +494,6 @@ class Mxfp4Experts(FP8Experts):
             has_gate=has_gate,
             weight_dtype=torch.int8,
         )
-
-
-def build_mxfp4_experts(experts, text_config):
-    "Builds the `Mxfp4Experts` replacing `experts`"
-    has_gate, has_bias = getattr(experts, "has_gate", True), getattr(experts, "has_bias", False)
-    new_class = use_experts_implementation(
-        experts_class=Mxfp4Experts, experts_interface=ALL_FP8_EXPERTS_FUNCTIONS, has_bias=has_bias, has_gate=has_gate
-    )
-    return new_class(getattr(experts, "config", text_config), has_bias=has_bias, has_gate=has_gate)
 
 
 def dequantize_mxfp4(weight, scale, dtype):

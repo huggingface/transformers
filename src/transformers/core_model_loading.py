@@ -1719,19 +1719,17 @@ def convert_and_load_state_dict_in_model(
         # 2. finally, collect the tensor into the proper converter
         if renamed_key in meta_model_state_dict:
             empty_param = meta_model_state_dict.get(renamed_key)
-            if renamed_key not in param_name_to_load:
-                # If we enter here, we have a WeightConverter operation to perform: each target key gets its own
-                # converter instance. Otherwise, only potential renaming
-                mapping = (
-                    deepcopy(pattern_to_converter[source_pattern])
-                    if source_pattern is not None
-                    else WeightRenaming(original_key, renamed_key)
-                )
-                if hf_quantizer is not None:
-                    mapping = hf_quantizer.update_weight_transform(mapping, model, renamed_key)
-                param_name_to_load[renamed_key] = mapping
-            mapping = param_name_to_load[renamed_key]
-            source_pattern = source_pattern if source_pattern is not None else original_key
+            # If we enter here, we have a WeightConverter operation to perform
+            if source_pattern is not None:
+                new_converter = deepcopy(pattern_to_converter[source_pattern])
+            # Otherwise, only potential renaming
+            else:
+                new_converter = WeightRenaming(original_key, renamed_key)
+                source_pattern = original_key
+            # each target key gets its own converter instance, with the ops of its quantizer
+            if hf_quantizer is not None and renamed_key not in param_name_to_load:
+                new_converter = hf_quantizer.update_weight_transform(new_converter, model, renamed_key)
+            mapping = param_name_to_load.setdefault(renamed_key, new_converter)
 
             # 3. Handle dtype casting
             _dtype = dtype

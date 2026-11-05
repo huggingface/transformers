@@ -24,8 +24,6 @@ from transformers.integrations.nvfp4 import (
     NVFP4Experts,
     NVFP4Linear,
     NVFP4Quantize,
-    nvfp4_eager_experts_forward,
-    nvfp4_grouped_linear,
     swizzle_sf,
 )
 from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
@@ -38,11 +36,6 @@ if is_torch_available():
     import torch
     from safetensors.torch import save_file
     from torch import nn
-
-
-class _PackedWeight:
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
 
 
 def _padded_sf_shape(rows, columns):
@@ -99,7 +92,7 @@ def _fake_kernel():
         return (input.float() @ weight.T).to(input.dtype)
 
     return SimpleNamespace(
-        PackedWeight=_PackedWeight,
+        PackedWeight=SimpleNamespace,
         gemm=gemm,
         pack=pack,
         swizzled_sf_shape=_padded_sf_shape,
@@ -346,7 +339,7 @@ class NVFP4ExpertsTest(unittest.TestCase):
         input, expert_ids, tokens = input.bfloat16(), torch.tensor([0, 0, 1, 3, 3]), torch.tensor([2, 1, 0, 2])
         with patch("torch.nn.functional.scaled_grouped_mm", _fake_scaled_grouped_mm):
             offsets = torch.cumsum(tokens, 0, dtype=torch.int32)
-            grouped = nvfp4_grouped_linear(experts, "gate_up_proj", input, expert_ids, tokens, offsets)
+            grouped = experts.grouped_linear("gate_up_proj", input, expert_ids, tokens, offsets)
             for row, expert in enumerate(expert_ids.tolist()):
                 gate_up, _ = _dequantized_expert(checkpoint, MIXTRAL_EXPERTS, MIXTRAL_NAMES, expert)
                 reference = (input[row].float() @ gate_up.T).bfloat16()
@@ -360,7 +353,7 @@ class NVFP4ExpertsTest(unittest.TestCase):
             hidden_states = torch.randn(7, 128, dtype=torch.bfloat16)
             top_k_index = torch.tensor([[0, 3], [3, 0], [1, 3], [3, 1], [0, 1], [3, 0], [1, 0]])  # expert 2 is not hit
             top_k_weights = torch.rand(7, 2)
-            eager = nvfp4_eager_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
+            eager = experts.eager_forward(hidden_states, top_k_index, top_k_weights)
             experts.config._experts_implementation = "grouped_mm"
             grouped = experts(hidden_states, top_k_index, top_k_weights)
         # Same quantized operands, but the grouped path divides the activations by their scale in bf16 first

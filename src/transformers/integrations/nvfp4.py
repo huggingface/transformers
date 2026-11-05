@@ -25,7 +25,6 @@ from ..utils.import_utils import (
     is_kernels_available,
 )
 from .hub_kernels import lazy_load_kernel
-from .moe import ExpertsInterface
 from .mxfp4 import FP4_VALUES
 
 
@@ -131,11 +130,10 @@ class NVFP4Linear(nn.Module):
         self.weight = nn.Buffer(torch.empty(out_features, in_features, dtype=torch.bfloat16))
         sf_m, sf_n = load_nvfp4_kernel().swizzled_sf_shape(out_features, in_features)
         self.weight_sf = nn.Buffer(torch.empty(sf_m, sf_n, dtype=torch.int32))
-        # As ModelOpt saves them: the FP8 block scales (row-major, for the W4A16 decode GEMV; `weight_sf` is their
-        # swizzled layout for the W4A4 GEMM) and the per-tensor scale, `weight = fp4 * weight_scale * weight_scale_2`
+        # As ModelOpt saves them, `weight = fp4 * weight_scale * weight_scale_2`; the W4A16 GEMV reads row-major scales
         self.weight_scale = nn.Buffer(torch.empty(out_features, in_features // SF_VEC_SIZE, dtype=torch.uint8))
         self.weight_scale_2 = nn.Buffer(torch.empty(1, dtype=torch.float32))
-        # A static activation scale (ModelOpt checkpoints), empty for dynamic activation quantization
+        # Empty for dynamic activation quantization
         self.input_scale = nn.Buffer(torch.empty(0, dtype=torch.float32))
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
@@ -161,11 +159,9 @@ def _scale_halves(output: torch.Tensor, scales: torch.Tensor) -> torch.Tensor:
 
 class NVFP4Experts(nn.Module):
     """
-    Fused experts backed by packed NVFP4 weights, from per-expert ModelOpt checkpoints merged by the model's own
-    converters. Per projection (`gate_up_proj` / `up_proj`, `down_proj`) of `(num_experts, out_features, in_features)`:
-    - `{proj}`: e2m1 values, two per byte, and their FP8 block scales `{proj}_scale` and swizzled `{proj}_sf`
-    - `{proj}_scale_2`, `{proj}_input_scale`: ModelOpt's per-tensor weight and static activation scales, one per
-      concatenated projection (`(num_experts, 2)` for gate and up), applied to the GEMM output
+    Fused experts from per-expert ModelOpt NVFP4 checkpoints, merged by the model's converters. Per projection of
+    `(num_experts, out_features, in_features)`: e2m1 `{proj}` (two per byte), FP8 block scales `{proj}_scale` and
+    their swizzled `{proj}_sf`, per-tensor `{proj}_scale_2` and `{proj}_input_scale` (`(num_experts, 2)` for gate, up).
     """
 
     def __init__(self, experts: nn.Module):
@@ -173,8 +169,8 @@ class NVFP4Experts(nn.Module):
         self.config = experts.config
         self.has_gate = getattr(experts, "has_gate", True)
         self.act_fn, self.limit = experts.act_fn, getattr(experts, "limit", None)
-        names = ("gate_up_proj" if self.has_gate else "up_proj", "down_proj")
-        self.projections = {name: getattr(experts, name).shape for name in names}
+        self.in_proj = "gate_up_proj" if self.has_gate else "up_proj"
+        self.projections = {name: getattr(experts, name).shape for name in (self.in_proj, "down_proj")}
         self.num_experts = experts.down_proj.shape[0]
         for name, (num_experts, out_features, in_features) in self.projections.items():
             sf_shape = load_nvfp4_kernel().swizzled_sf_shape(out_features, in_features)
@@ -186,19 +182,19 @@ class NVFP4Experts(nn.Module):
             self.register_buffer(f"{name}_scale_2", torch.empty(scales_shape, dtype=torch.float32))
             self.register_buffer(f"{name}_input_scale", torch.empty(scales_shape, dtype=torch.float32))
 
-    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
-        gate, up = gate_up.chunk(2, dim=-1)
+    def _activate(self, up: torch.Tensor) -> torch.Tensor:
+        if not self.has_gate:
+            return self.act_fn(up)
+        gate, up = up.chunk(2, dim=-1)
         if self.limit is not None:
             gate, up = gate.clamp(max=self.limit), up.clamp(min=-self.limit, max=self.limit)
         return self.act_fn(gate) * up
 
     def scales(self, name: str, expert_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         "The activation scale `(rows,)` and the weight scales `(rows, num_halves)` of the experts `expert_ids`"
-        input_scale = getattr(self, f"{name}_input_scale").view(self.num_experts, -1)
-        # The concatenated projections read the same activations: one scale, the largest (they match in ModelOpt)
-        return input_scale.amax(-1)[expert_ids], getattr(self, f"{name}_scale_2").view(self.num_experts, -1)[
-            expert_ids
-        ]
+        # gate and up read the same activations: one scale, the largest (they match in ModelOpt)
+        input_scale = getattr(self, f"{name}_input_scale").view(self.num_experts, -1).amax(-1)
+        return input_scale[expert_ids], getattr(self, f"{name}_scale_2").view(self.num_experts, -1)[expert_ids]
 
     def linear(self, name: str, expert_idx: torch.Tensor, input: torch.Tensor) -> torch.Tensor:
         _, out_features, in_features = self.projections[name]
@@ -215,120 +211,67 @@ class NVFP4Experts(nn.Module):
         )
         return _scale_halves(output, scale_2).to(input.dtype)
 
-    def forward(
-        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
-    ) -> torch.Tensor:
-        implementation = self.config._experts_implementation
+    def grouped_linear(self, name, input, expert_ids, tokens_per_expert, offsets) -> torch.Tensor:
+        "W4A4 `scaled_grouped_mm` over rows sorted by expert, each divided by its expert's static activation scale"
+        from torch.nn.functional import ScalingType, SwizzleType, scaled_grouped_mm
+
+        input_scale, scale_2 = self.scales(name, expert_ids)
+        qinput, input_sf = load_nvfp4_kernel().ops.scaled_fp4_quant(
+            (input.float() / input_scale[:, None]).to(torch.bfloat16).contiguous(),
+            torch.ones(1, device=input.device),
+            False,
+        )
+        # The grouped GEMM wants each expert's block scales on a new 128-row tile; static size, so no host sync
+        input_sf = input_sf.view(torch.uint8)
+        padding = -tokens_per_expert % 128
+        rows = torch.arange(input_sf.shape[0], device=input.device) + (torch.cumsum(padding, 0) - padding)[expert_ids]
+        grouped_sf = input_sf.new_zeros(input_sf.shape[0] + 127 * self.num_experts, input_sf.shape[1])
+        grouped_sf[rows] = input_sf
+        fp4, fp8 = torch.float4_e2m1fn_x2, torch.float8_e4m3fn
+        output = scaled_grouped_mm(
+            qinput.view(fp4),
+            getattr(self, name).view(fp4).transpose(-2, -1),
+            swizzle_sf(grouped_sf).view(-1, -(-input_sf.shape[1] // 4) * 4).view(fp8),
+            ScalingType.BlockWise1x16,
+            getattr(self, f"{name}_sf").view(self.num_experts, -1).view(fp8),
+            ScalingType.BlockWise1x16,
+            swizzle_a=SwizzleType.SWIZZLE_32_4_4,
+            swizzle_b=SwizzleType.SWIZZLE_32_4_4,
+            offs=offsets,
+            output_dtype=torch.bfloat16,
+        )
+        return _scale_halves(output, input_scale[:, None] * scale_2).to(input.dtype)
+
+    def eager_forward(self, hidden_states, top_k_index, top_k_weights) -> torch.Tensor:
+        "One NVFP4 GEMM per hit expert"
+        final_hidden_states = torch.zeros_like(hidden_states, dtype=torch.float32)
+        for expert_idx in top_k_index.unique():
+            token_idx, top_k_pos = torch.where(top_k_index == expert_idx)
+            current = self._activate(self.linear(self.in_proj, expert_idx, hidden_states[token_idx]))
+            current = self.linear("down_proj", expert_idx, current) * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current.to(final_hidden_states.dtype))
+        return final_hidden_states.to(hidden_states.dtype)
+
+    def grouped_forward(self, hidden_states, top_k_index, top_k_weights) -> torch.Tensor:
+        "Tokens sorted by expert, one grouped NVFP4 GEMM per projection"
+        expert_ids, perm = torch.sort(top_k_index.reshape(-1))
+        # histc instead of bincount avoids cuda graph issues; CPU and MPS only support float input
+        histc_input = expert_ids.float() if hidden_states.device.type in ("cpu", "mps") else expert_ids.int()
+        tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1).long()
+        grouped = (expert_ids, tokens_per_expert, torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32))
+        hidden = hidden_states[perm // top_k_index.shape[-1]]
+        hidden = self._activate(self.grouped_linear(self.in_proj, hidden, *grouped))
+        hidden = self.grouped_linear("down_proj", hidden, *grouped) * top_k_weights.reshape(-1)[perm, None]
+        output = torch.empty_like(hidden, dtype=torch.float32)
+        output[perm] = hidden  # back to the token order
+        return output.view(*top_k_index.shape, -1).sum(dim=1).to(hidden_states.dtype)
+
+    def forward(self, hidden_states, top_k_index, top_k_weights) -> torch.Tensor:
+        grouped = self.config._experts_implementation == "grouped_mm"
         # torch's grouped NVFP4 GEMM only runs on sm90 / sm100 (e.g. not on sm120): one GEMM per expert elsewhere
         if hidden_states.is_cuda and torch.cuda.get_device_capability(hidden_states.device) not in ((9, 0), (10, 0)):
-            implementation = "eager"
-        experts_forward = ALL_NVFP4_EXPERTS_FUNCTIONS.get_interface(implementation, nvfp4_eager_experts_forward)
-        return experts_forward(self, hidden_states, top_k_index, top_k_weights)
-
-
-def nvfp4_eager_experts_forward(
-    self: NVFP4Experts, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
-) -> torch.Tensor:
-    "One NVFP4 GEMM per hit expert"
-    final_hidden_states = torch.zeros_like(hidden_states, dtype=torch.float32)
-    with torch.no_grad():
-        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
-        expert_mask = expert_mask.permute(2, 1, 0)
-        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-
-    for expert_idx in expert_hit:
-        expert_idx = expert_idx[0]
-        if expert_idx == self.num_experts:
-            continue
-        top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-        if self.has_gate:
-            current = self._apply_gate(self.linear("gate_up_proj", expert_idx, hidden_states[token_idx]))
-        else:
-            current = self.act_fn(self.linear("up_proj", expert_idx, hidden_states[token_idx]))
-        current = self.linear("down_proj", expert_idx, current) * top_k_weights[token_idx, top_k_pos, None]
-        final_hidden_states.index_add_(0, token_idx, current.to(final_hidden_states.dtype))
-    return final_hidden_states.to(hidden_states.dtype)
-
-
-def swizzle_grouped_sf(sf_rowmajor: torch.Tensor, expert_ids: torch.Tensor, tokens_per_expert: torch.Tensor):
-    """
-    The swizzled block scales of rows sorted by expert, each expert's group starting on a new 128-row tile: the
-    layout of the 2D operand of an NVFP4 grouped GEMM. Static size (an upper bound), so no host sync.
-    """
-    padded = (tokens_per_expert + 127) // 128 * 128
-    shift = (torch.cumsum(padded, 0) - padded) - (torch.cumsum(tokens_per_expert, 0) - tokens_per_expert)
-    rows = torch.arange(sf_rowmajor.shape[0], device=sf_rowmajor.device) + shift[expert_ids]
-    grouped = sf_rowmajor.new_zeros(sf_rowmajor.shape[0] + 127 * tokens_per_expert.numel(), sf_rowmajor.shape[1])
-    grouped[rows] = sf_rowmajor
-    return swizzle_sf(grouped).view(-1, -(-sf_rowmajor.shape[1] // 4) * 4)
-
-
-def nvfp4_grouped_linear(
-    self: NVFP4Experts, name: str, input: torch.Tensor, expert_ids: torch.Tensor, tokens_per_expert, offsets
-) -> torch.Tensor:
-    """
-    One `torch.nn.functional.scaled_grouped_mm` (W4A4, NVFP4 block scales) over rows sorted by expert. Each row is
-    divided by its expert's static activation scale before the quantization, and the activation and weight global
-    scales are applied to the output: both are per row (per half for the weights).
-    """
-    from torch.nn.functional import ScalingType, SwizzleType, scaled_grouped_mm
-
-    num_experts, out_features, in_features = self.projections[name]
-    input_scale, scale_2 = self.scales(name, expert_ids)
-    qinput, input_sf = load_nvfp4_kernel().ops.scaled_fp4_quant(
-        (input.float() / input_scale[:, None]).to(torch.bfloat16).contiguous(),
-        torch.ones(1, device=input.device),
-        False,
-    )
-    fp4, fp8 = torch.float4_e2m1fn_x2, torch.float8_e4m3fn
-    output = scaled_grouped_mm(
-        qinput.view(fp4),
-        getattr(self, name).view(fp4).transpose(-2, -1),
-        swizzle_grouped_sf(input_sf.view(torch.uint8), expert_ids, tokens_per_expert).view(fp8),
-        ScalingType.BlockWise1x16,
-        getattr(self, f"{name}_sf").view(num_experts, -1).view(fp8),
-        ScalingType.BlockWise1x16,
-        swizzle_a=SwizzleType.SWIZZLE_32_4_4,
-        swizzle_b=SwizzleType.SWIZZLE_32_4_4,
-        offs=offsets,
-        output_dtype=torch.bfloat16,
-    )
-    return _scale_halves(output, input_scale[:, None] * scale_2).to(input.dtype)
-
-
-def nvfp4_grouped_mm_experts_forward(
-    self: NVFP4Experts, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
-) -> torch.Tensor:
-    "Tokens sorted by expert, one grouped NVFP4 GEMM per projection"
-    num_tokens, hidden_dim = hidden_states.shape
-    num_top_k = top_k_index.size(-1)
-    expert_ids, perm = torch.sort(top_k_index.reshape(-1))
-    selected_hidden_states = hidden_states[perm // num_top_k]
-    sample_weights = top_k_weights.reshape(-1)[perm]
-    # histc instead of bincount avoids cuda graph issues; CPU and MPS only support float input
-    histc_input = expert_ids.float() if hidden_states.device.type in ("cpu", "mps") else expert_ids.int()
-    tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1).long()
-    offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
-
-    grouped = (expert_ids, tokens_per_expert, offsets)
-    if self.has_gate:
-        proj_out = self._apply_gate(nvfp4_grouped_linear(self, "gate_up_proj", selected_hidden_states, *grouped))
-    else:
-        proj_out = self.act_fn(nvfp4_grouped_linear(self, "up_proj", selected_hidden_states, *grouped))
-    proj_out = nvfp4_grouped_linear(self, "down_proj", proj_out, *grouped)
-
-    weighted_out = torch.empty_like(proj_out, dtype=torch.float32)
-    weighted_out[perm] = proj_out * sample_weights.unsqueeze(-1)  # back to the token order
-    return weighted_out.view(num_tokens, num_top_k, hidden_dim).sum(dim=1).to(hidden_states.dtype)
-
-
-class NVFP4ExpertsInterface(ExpertsInterface):
-    """Experts forward functions of `NVFP4Experts`: the default eager one loops over the experts."""
-
-    _global_mapping = {"grouped_mm": nvfp4_grouped_mm_experts_forward}
-
-
-ALL_NVFP4_EXPERTS_FUNCTIONS = NVFP4ExpertsInterface()
+            grouped = False
+        return (self.grouped_forward if grouped else self.eager_forward)(hidden_states, top_k_index, top_k_weights)
 
 
 class NVFP4Quantize(ConversionOps):
@@ -371,10 +314,7 @@ def swizzle_sf(sf_rowmajor: torch.Tensor) -> torch.Tensor:
 
 
 class NVFP4Deserialize(ConversionOps):
-    """
-    The kernel's layout of ModelOpt's NVFP4 tensors: the FP8 block scales `*_scale` as bytes, and their swizzled `*_sf`.
-    An `NVFP4Linear` without a static `input_scale` gets an empty one (dynamic activation quantization).
-    """
+    "ModelOpt's FP8 block scales `*_scale` as bytes, plus their swizzled `*_sf` for the kernel"
 
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
@@ -397,14 +337,9 @@ class NVFP4Deserialize(ConversionOps):
             output.setdefault("input_scale", torch.empty(0, device=output["weight"].device))
         return output
 
-    # TODO: a reverse op, so that NVFP4 checkpoints can be saved (`swizzle_sf` is invertible)
-
 
 class NVFP4Dequantize(ConversionOps):
-    """
-    Dense weights from the packed `weight` (two e2m1 values per byte, low nibble first), its FP8 block scales
-    `weight_scale` and per-tensor `weight_scale_2`: `weight = fp4 * weight_scale * weight_scale_2`.
-    """
+    "Dense weights, `fp4 * weight_scale * weight_scale_2` (two e2m1 values per byte, low nibble first)"
 
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer

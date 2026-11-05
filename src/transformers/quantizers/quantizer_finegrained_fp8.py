@@ -122,22 +122,45 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         self.text_config = model.config.get_text_config()
 
     def quantized_module(self, name, module):
-        from ..integrations.finegrained_fp8 import FP8Embedding, build_fp8_experts, build_fp8_linear
+        from ..integrations.finegrained_fp8 import (
+            ALL_FP8_EXPERTS_FUNCTIONS,
+            FP8Embedding,
+            FP8Experts,
+            FP8GroupedLinear,
+            FP8Linear,
+        )
+        from ..integrations.moe import use_experts_implementation
 
         config = self.quantization_config
         if config.dequantize:
             return None
+        kwargs = {
+            "block_size": config.weight_block_size,
+            "activation_scheme": config.activation_scheme,
+            "scale_fmt": config.scale_fmt,
+        }
         modules_to_convert = config.modules_to_convert if self.pre_quantized else None
         if modules_to_convert and type(module) is nn.Embedding and name.endswith(tuple(modules_to_convert)):
             new_module = FP8Embedding(module.num_embeddings, module.embedding_dim, module.padding_idx)
         elif name.endswith(".experts"):
-            new_module = build_fp8_experts(module, config, self.text_config)
-        elif isinstance(module, nn.Linear):
-            new_module = build_fp8_linear(module, config)
+            has_gate, has_bias = getattr(module, "has_gate", True), getattr(module, "has_bias", False)
+            experts_class = use_experts_implementation(
+                experts_class=FP8Experts,
+                experts_interface=ALL_FP8_EXPERTS_FUNCTIONS,
+                has_bias=has_bias,
+                has_gate=has_gate,
+            )
+            experts_config = getattr(module, "config", self.text_config)
+            new_module = experts_class(experts_config, has_bias=has_bias, has_gate=has_gate, **kwargs)
+        elif type(module) is nn.Linear:
+            new_module = FP8Linear(module.in_features, module.out_features, has_bias=module.bias is not None, **kwargs)
+        elif isinstance(module, nn.Linear) and "GroupedLinear" in type(module).__name__:
+            new_module = FP8GroupedLinear(
+                module.in_features, module.out_features, module.n_groups, has_bias=module.bias is not None, **kwargs
+            )
         else:
             return None
-        if new_module is not None:
-            new_module._hf_quantized_needs_local_tp = True
+        new_module._hf_quantized_needs_local_tp = True
         return new_module
 
     def update_parallel_plan(self, model, plan):
@@ -180,7 +203,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         return {"deserialize": Fp8Deserialize, "dequantize": Fp8Dequantize}
 
     def get_weight_conversions(self):
-        # Deserializing only reshapes linear scales (ModelOpt's 4-D blocks): the experts load through the model's merges
+        # Quantized, the experts load through the model's converters: only the linears need ours
         conversions = super().get_weight_conversions()
         if self.quantization_config.dequantize:
             return conversions

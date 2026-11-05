@@ -568,7 +568,6 @@ class FP8EmbeddingTest(unittest.TestCase):
 
 class FP8DeepGEMMDeviceTest(unittest.TestCase):
     def test_only_the_first_device_runs_deepgemm(self):
-        # DeepGEMM's kernels are bound to the CUDA context they first ran in: other devices take the Triton path
         from transformers.integrations import deepgemm
 
         with patch.object(deepgemm, "_DEEPGEMM_DEVICE", None):
@@ -652,12 +651,6 @@ class FP8ModelOptLoadingTest(unittest.TestCase):
         },
     }
 
-    def assert_within_one_fp8_step(self, dequantized, weight, name):
-        # e4m3 has 3 mantissa bits: a step is at most 1/8 of the value, 2**-9 of the scale for subnormals
-        self.assertTrue(
-            ((dequantized - weight).abs() <= weight.abs() / 8 + weight.abs().amax() / 448 * 2**-9).all(), name
-        )
-
     def test_load_dequantized(self):
         embedding = {"quant_method": "fp8", "modules_to_convert": ["embed_tokens"]}
         for layers, config, dequantize in [
@@ -672,7 +665,9 @@ class FP8ModelOptLoadingTest(unittest.TestCase):
             self.assertFalse(any(info.values()), info)
             for name, weight in dense.items():  # a plain model, the FP8 embedding table included
                 self.assertIn(type(model.get_submodule(name)), (torch.nn.Linear, torch.nn.Embedding), name)
-                self.assert_within_one_fp8_step(model.get_submodule(name).weight, weight, name)
+                # Within one e4m3 step: 1/8 of the value, 2**-9 of the scale for subnormals
+                error = (model.get_submodule(name).weight - weight).abs()
+                self.assertTrue((error <= weight.abs() / 8 + weight.abs().amax() / 448 * 2**-9).all(), name)
 
     @patch.object(FineGrainedFP8HfQuantizer, "validate_environment", lambda *args, **kwargs: None)
     def test_quantized(self):

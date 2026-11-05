@@ -36,7 +36,7 @@ from .deepgemm import (
     is_sm100,
 )
 from .hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel
-from .moe import ExpertsInterface, _grouped_mm, use_experts_implementation
+from .moe import ExpertsInterface, _grouped_mm
 
 
 logger = logging.get_logger(__name__)
@@ -867,39 +867,6 @@ class FP8ExpertsInterface(ExpertsInterface):
 ALL_FP8_EXPERTS_FUNCTIONS = FP8ExpertsInterface()
 
 
-def build_fp8_experts(experts, quantization_config, text_config):
-    "Builds the `FP8Experts` replacing `experts`"
-    has_gate = getattr(experts, "has_gate", True)
-    has_bias = getattr(experts, "has_bias", False)
-    new_class = use_experts_implementation(
-        experts_class=FP8Experts, experts_interface=ALL_FP8_EXPERTS_FUNCTIONS, has_bias=has_bias, has_gate=has_gate
-    )
-    return new_class(
-        config=getattr(experts, "config", text_config),
-        block_size=quantization_config.weight_block_size,
-        activation_scheme=quantization_config.activation_scheme,
-        scale_fmt=quantization_config.scale_fmt,
-        has_bias=has_bias,
-        has_gate=has_gate,
-    )
-
-
-def build_fp8_linear(linear, quantization_config):
-    "Builds the `FP8Linear` (or `FP8GroupedLinear`) replacing `linear`, `None` for other `nn.Linear` subclasses"
-    kwargs = {
-        "out_features": linear.out_features,
-        "block_size": quantization_config.weight_block_size,
-        "activation_scheme": quantization_config.activation_scheme,
-        "scale_fmt": quantization_config.scale_fmt,
-        "has_bias": linear.bias is not None,
-    }
-    if type(linear) is nn.Linear:
-        return FP8Linear(in_features=linear.in_features, **kwargs)
-    if "GroupedLinear" in type(linear).__name__:
-        return FP8GroupedLinear(in_features_per_group=linear.in_features, n_groups=linear.n_groups, **kwargs)
-    return None
-
-
 class Fp8Quantize(ConversionOps):
     """
     A quantization operation that creates two tensors, weight and scale out of a weight.
@@ -975,16 +942,13 @@ class Fp8Quantize(ConversionOps):
 
 
 class Fp8Deserialize(ConversionOps):
-    """
-    The tensors of an FP8 linear as its params: per-block scales saved with singleton dims (e.g. ModelOpt's
-    `(out / 128, 1, in / 128, 1)`) flattened, and each tensor in its param's dtype (e.g. ue8m0 scales saved as float32).
-    """
+    "Loads an FP8 linear's tensors as its params: 4-D ModelOpt scales flattened, each cast to its param's dtype"
 
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
     def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, torch.Tensor]:
-        module = get_module_from_name(model, full_layer_name)[0] if model is not None else None
+        module = get_module_from_name(model, full_layer_name)[0]
         output = {}
         for key, value in input_dict.items():
             value = value[0] if isinstance(value, list) else value
@@ -1019,9 +983,7 @@ class Fp8Dequantize(ConversionOps):
         self, quantized: torch.Tensor, scales: torch.Tensor, output_dtype: torch.dtype | None = None
     ) -> torch.Tensor:
         quantized_fp32 = quantized.to(torch.float32)
-        if (
-            scales.ndim == 4
-        ):  # per-block scales saved with singleton dims, e.g. ModelOpt's `(out / 128, 1, in / 128, 1)`
+        if scales.ndim == 4:  # ModelOpt's per-block `(out / 128, 1, in / 128, 1)`
             scales = scales.flatten(1)
         rows, cols = quantized_fp32.shape[-2:]
         # Derive block size from the scale grid rather than the global config, which a checkpoint's

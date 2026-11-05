@@ -196,13 +196,22 @@ class Mxfp4HfQuantizer(HfQuantizer):
         )
 
     def quantized_module(self, name, module):
-        from ..integrations.mxfp4 import Mxfp4GptOssExperts, build_mxfp4_experts
+        from ..integrations.finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS
+        from ..integrations.moe import use_experts_implementation
+        from ..integrations.mxfp4 import Mxfp4Experts, Mxfp4GptOssExperts
 
         if isinstance(module, Mxfp4GptOssExperts):
             return module  # swapped with its MLP by `replace_with_mxfp4_linear`
         if self.quantization_config.dequantize or not self.pre_quantized or not name.endswith(".experts"):
             return None
-        new_module = build_mxfp4_experts(module, self.text_config)
+        has_gate, has_bias = getattr(module, "has_gate", True), getattr(module, "has_bias", False)
+        experts_class = use_experts_implementation(
+            experts_class=Mxfp4Experts,
+            experts_interface=ALL_FP8_EXPERTS_FUNCTIONS,
+            has_bias=has_bias,
+            has_gate=has_gate,
+        )
+        new_module = experts_class(getattr(module, "config", self.text_config), has_bias=has_bias, has_gate=has_gate)
         new_module._hf_quantized_needs_local_tp = True
         return new_module
 
