@@ -144,8 +144,8 @@ class InstructBlipConfig(PreTrainedConfig):
     attribute_map = {"image_token_id": "image_token_index"}
     sub_configs_defaults = {
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="opt"),
-        "vision_config": SubConfigSpec(config_class=InstructBlipVisionConfig),
-        "qformer_config": SubConfigSpec(config_class=InstructBlipQFormerConfig),
+        "vision_config": InstructBlipVisionConfig,
+        "qformer_config": InstructBlipQFormerConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None

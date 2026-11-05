@@ -78,6 +78,7 @@ def _make_dtensor_shard_op(mesh, placements, param_shape, local_shape):
     op.param_ndim = len(param_shape)
     op._axis0_offset = 0
     op._axis0_local_size = local_shape[0]
+    op._axis0_size = param_shape[0]
     for mesh_dim, p in enumerate(placements):
         if hasattr(p, "dim") and (p.dim % len(param_shape)) == 0:
             sub = mesh[mesh.mesh_dim_names[mesh_dim]] if mesh.ndim > 1 else mesh
@@ -243,6 +244,25 @@ class TestDtensorShardOperation(unittest.TestCase):
                         self.assertIsNone(shard)
                     else:
                         torch.testing.assert_close(shard, exp)
+
+    def test_moe_1D_shard_wraps_list_position_over_axis0(self):
+        # One list of 8 slices fills two (4, 2, 2) params back to back (e.g. text then vision experts):
+        # positions 4..7 are slices 0..3 of the second param.
+        source = torch.ones(2, 2)
+        for rank in range(2):
+            mesh = FakeMesh(shape=(2,), rank=rank)
+            op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(4, 2, 2), local_shape=(2, 2, 2))
+            owned = [position for position in range(8) if op.shard_tensor(source, tensor_idx=position) is not None]
+            self.assertEqual(owned, [0, 1, 4, 5] if rank == 0 else [2, 3, 6, 7], msg=f"rank {rank}")
+
+    def test_list_of_whole_tensors_is_sharded_like_the_param(self):
+        # a list position only means a slice of axis 0 when the tensor has one dim less than the param
+        tensor = torch.arange(16).reshape(4, 4).float()
+        for rank in range(2):
+            mesh = FakeMesh(shape=(2,), rank=rank)
+            op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(4, 4), local_shape=(2, 4))
+            expected = tensor[:2] if rank == 0 else tensor[2:]
+            torch.testing.assert_close(op.shard_tensor(tensor, tensor_idx=3), expected, msg=f"rank {rank}")
 
     def test_moe_1D_strided_shard_on_inner_dim_degrades_to_contiguous(self):
         source = torch.arange(8).reshape(4, 2).float()

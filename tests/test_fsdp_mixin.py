@@ -28,7 +28,6 @@ from contextlib import contextmanager
 from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, is_torch_available
-from transformers.distributed.utils import get_distributed_backend
 from transformers.testing_utils import (
     SINGLE_PROCESS_DEVICES,
     backend_device_count,
@@ -40,6 +39,13 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.trainer_utils import set_seed
+
+from .distributed_testing_utils import (
+    _get_distributed_backend,
+    _get_distributed_device_type,
+    _get_rank_device,
+    _set_rank_device,
+)
 
 
 logger = logging.getLogger("transformers.training_test")
@@ -53,7 +59,7 @@ if is_torch_available():
 
     from transformers.distributed import DistributedConfig
     from transformers.distributed.checkpoint import load_optimizer_distributed, save_optimizer_distributed
-    from transformers.distributed.fsdp import _resolve_tied_embed_lm_head_plan, expand_fsdp_plan
+    from transformers.distributed.fsdp import _resolve_tied_embed_lm_head_plan
     from transformers.distributed.utils import gather_full_state_dict
 
 
@@ -68,10 +74,13 @@ LR = 3e-4
 SEED = 42
 DDP_FSDP_RTOL = 1e-5
 DDP_FSDP_ATOL = 1e-5
+BF16_GRAD_RTOL = 2e-2
 
 # Set to None to run distributed FSDP tests for every model with a plan.
 FSDP_DISTRIBUTED_TEST_MODEL_TYPES = {
     "cohere2_moe",
+    # Keeps its router weight in float32 (`_keep_in_fp32_modules_strict`)
+    "ernie4_5_moe",
     "llama",
     "mistral",
     "mixtral",
@@ -83,28 +92,6 @@ FSDP_DISTRIBUTED_TEST_MODEL_TYPES = {
 # =============================================================================
 # Distributed helpers (top-level for pickling by mp.spawn)
 # =============================================================================
-
-
-def _get_distributed_device_type():
-    device_type = torch._C._get_accelerator().type
-    return "cpu" if device_type == "mps" else device_type
-
-
-def _get_distributed_backend():
-    return get_distributed_backend(_get_distributed_device_type()) or "gloo"
-
-
-def _get_rank_device(rank):
-    device_type = _get_distributed_device_type()
-    if device_type == "cpu":
-        return torch.device("cpu")
-    return torch.device(device_type, rank)
-
-
-def _set_rank_device(rank, backend=None):
-    # gloo ranks run on CPU, and there may be fewer devices than ranks
-    if _get_distributed_device_type() != "cpu" and backend != "gloo":
-        torch.accelerator.set_device_index(rank)
 
 
 def _get_available_fsdp_workers():
@@ -374,6 +361,24 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
             logger.debug(f"FSDP2 save/load test passed: all {len(state_dict_before)} parameters match exactly.")
 
 
+def _test_fsdp2_bf16_training_impl(rank, config_class, config_dict):
+    """Train in bfloat16 with the model sharded at load time, float32-kept parameters included."""
+    init_test_logger()
+
+    config = config_class.from_dict(config_dict)
+    distributed_config = DistributedConfig(fsdp_size=dist.get_world_size())
+
+    with _deterministic_init_model_dir(rank, config, torch.bfloat16) as init_dir:
+        _set_determinism(SEED)
+        model = AutoModelForCausalLM.from_pretrained(
+            init_dir, torch_dtype=torch.bfloat16, distributed_config=distributed_config
+        )
+        optimizer = torch.optim.AdamW(model.parameters(), lr=LR)
+        batches = _build_repeated_training_batches(config, _get_rank_device(rank), num_steps=2)
+        losses, _ = _run_training_steps(model, optimizer, batches, track_grad_norms=False)
+        assert all(torch.isfinite(torch.tensor(losses))), f"Non-finite losses: {losses}"
+
+
 def _test_fsdp2_save_load_dcp_impl(rank, config_class, config_dict):
     """Save FSDP2 model via save_pretrained(distributed_checkpoint=True), reload, compare state dicts."""
     init_test_logger()
@@ -422,9 +427,8 @@ def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_wor
         model = AutoModelForCausalLM.from_pretrained(init_dir, distributed_config=distributed_config)
         dist.barrier()
 
-        adapted_fsdp_plan = _resolve_tied_embed_lm_head_plan(model._fsdp_plan, model)
-        reshard_targets, no_reshard_targets = expand_fsdp_plan(model, adapted_fsdp_plan)
-        expected_targets = {""} | {name for name, _ in reshard_targets + no_reshard_targets}
+        fsdp_plan = _resolve_tied_embed_lm_head_plan(model._fsdp_plan, model)
+        expected_targets = {""} | model._expand_parallel_plan(fsdp_plan).keys()
         actual_targets = {name for name, module in model.named_modules() if type(module).__name__.startswith("FSDP")}
 
         if rank == 0:
@@ -591,6 +595,69 @@ def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, 
         logger.debug("DDP and FSDP2+EP (2-D mesh) comparison checks passed.")
 
 
+def _test_fsdp2_expert_parallel_bf16_grads_impl(rank, config_class, config_dict):
+    """
+    Token dispatch in bfloat16 with `fsdp_size=world_size, ep_size=2`: after one backward, the loss and every gradient
+    match the whole batch on one device.
+    """
+    init_test_logger()
+
+    dtype = torch.bfloat16
+    device = _get_rank_device(rank)
+    config = config_class.from_dict(config_dict)
+    world_size = dist.get_world_size()
+    generator = torch.Generator(device=device)
+    generator.manual_seed(SEED)
+    input_ids = torch.randint(
+        0, config.vocab_size, (world_size * BATCH_SIZE, SEQ_LEN), device=device, generator=generator
+    )
+
+    with _deterministic_init_model_dir(rank, config, dtype) as init_model_dir:
+        reference = AutoModelForCausalLM.from_pretrained(init_model_dir, torch_dtype=dtype).to(device)
+        reference_loss = reference(input_ids=input_ids, labels=input_ids, use_cache=False).loss
+        reference_loss.backward()
+        expected = {name: param.grad.float() for name, param in reference.named_parameters() if param.grad is not None}
+        del reference
+
+        model = AutoModelForCausalLM.from_pretrained(
+            init_model_dir,
+            torch_dtype=dtype,
+            distributed_config=DistributedConfig(fsdp_size=world_size, ep_size=2),
+        )
+        dp_rank = model._device_mesh["fsdp"].get_local_rank()
+        dp_group = model._device_mesh["fsdp"].get_group()
+        rows = slice(dp_rank * BATCH_SIZE, (dp_rank + 1) * BATCH_SIZE)
+        loss = model(input_ids=input_ids[rows], labels=input_ids[rows], use_cache=False).loss
+        loss.backward()
+        actual = {
+            name: param.grad.full_tensor().float()
+            for name, param in model.named_parameters()
+            if param.grad is not None
+        }
+        loss = loss.detach()
+        dist.all_reduce(loss, group=dp_group)
+        loss = loss / world_size
+
+    torch.testing.assert_close(
+        loss.float(),
+        reference_loss.detach().float(),
+        rtol=BF16_GRAD_RTOL,
+        atol=0.0,
+        msg=f"Loss mismatch: one device={reference_loss.item()}, FSDP2+EP={loss.item()}",
+    )
+    for name, grad in expected.items():
+        torch.testing.assert_close(
+            actual[name].norm(),
+            grad.norm(),
+            rtol=BF16_GRAD_RTOL,
+            atol=0.0,
+            msg=f"Gradient norm mismatch for {name}: one device={grad.norm()}, FSDP2+EP={actual[name].norm()}",
+        )
+
+    if rank == 0:
+        logger.debug("FSDP2+EP (bf16) gradient checks passed.")
+
+
 # =============================================================================
 # Mixin class
 # =============================================================================
@@ -735,6 +802,11 @@ class FSDPTesterMixin(ABC):
 
     @require_torch_greater_or_equal("2.7")
     @is_fsdp_test
+    def test_fsdp2_bf16_training(self):
+        self._run_fsdp2_distributed_test("test_fsdp2_bf16_training", _test_fsdp2_bf16_training_impl)
+
+    @require_torch_greater_or_equal("2.7")
+    @is_fsdp_test
     def test_fsdp2_save_load_dcp(self):
         self._run_fsdp2_distributed_test("test_fsdp2_save_load_dcp", _test_fsdp2_save_load_dcp_impl)
 
@@ -759,4 +831,18 @@ class FSDPTesterMixin(ABC):
             self.skipTest("Model does not have an expert parallel plan (base_model_ep_plan)")
         self._run_fsdp2_distributed_test(
             "fsdp2_expert_parallel_2d_vs_ddp", _test_fsdp2_expert_parallel_2d_vs_ddp_impl, world_size=4
+        )
+
+    @parameterized.expand([("experts_sharded", 4), ("experts_not_sharded", 2)])
+    @is_fsdp_test
+    def test_fsdp2_expert_parallel_bf16_grads(self, _, world_size):
+        """
+        The loss and the gradients match one device, with experts sharded (4 ranks)
+        or not sharded (2 ranks, `efsdp_size == 1`).
+        """
+        config = self.model_tester.get_config()
+        if "ep_dispatch_experts" not in (getattr(config, "base_model_ep_plan", None) or {}).values():
+            self.skipTest("Model does not have a token-dispatch expert parallel plan")
+        self._run_fsdp2_distributed_test(
+            "fsdp2_expert_parallel_bf16_grads", _test_fsdp2_expert_parallel_bf16_grads_impl, world_size=world_size
         )

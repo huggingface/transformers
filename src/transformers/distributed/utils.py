@@ -41,7 +41,8 @@ if is_torch_available():
 
 
 def _check_distributed_checkpointing_available() -> bool:
-    return is_torch_distributed_available() and is_torch_greater_or_equal("2.7")
+    # `torch.distributed.checkpoint.hf_storage` (HuggingFaceStorageReader/Writer) first ships in torch 2.8.
+    return is_torch_distributed_available() and is_torch_greater_or_equal("2.8")
 
 
 def _is_torch_distributed_initialized() -> bool:
@@ -62,6 +63,12 @@ def _get_torch_distributed_rank() -> int:
     if not _is_torch_distributed_initialized():
         return 0
     return torch.distributed.get_rank()
+
+
+def _warning_once_on_rank_zero(message: str) -> None:
+    """Log a warning once per process, on rank 0 only."""
+    if _get_torch_distributed_rank() == 0:
+        logger.warning_once(message)
 
 
 def _get_torch_distributed_world_size() -> int:
@@ -125,7 +132,11 @@ def _ensure_torch_distributed(device_type: str | None = None):
             # Bind the accelerator before init so the process group is created with a
             # device_id, otherwise collectives like barrier() warn (and may spin up an
             # extra NCCL comm) about the missing device binding.
-            device_id = None if device_type == "cpu" else _bind_local_device(device_type, local_rank)
+            device = _bind_local_device(device_type, local_rank)
+            # Only pass device_id to backends that support communicator splitting, for now we limit
+            # it to NCCL: a bound device makes DeviceMesh create its subgroups with `split_group`,
+            # which fails on backends without split support (e.g. Neuron).
+            device_id = device if backend == "nccl" else None
             torch.distributed.init_process_group(
                 backend=backend,
                 rank=rank,
@@ -255,9 +266,9 @@ def initialize_fully_sharded_data_parallelism(distributed_config: DistributedCon
         stacklevel=2,
     )
     # `fully_shard` itself only needs torch>=2.6, but distributed checkpoint save/load
-    # (DCP + HuggingFaceStorageWriter) needs 2.7, so that is the effective requirement.
-    if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.7"):
-        raise OSError("FSDP2 requires `torch>=2.7` (distributed checkpoint save/load).")
+    # (DCP + HuggingFaceStorageWriter) needs 2.8, so that is the effective requirement.
+    if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.8"):
+        raise OSError("FSDP2 requires `torch>=2.8` (distributed checkpoint save/load).")
 
     device_type = torch._C._get_accelerator().type
 
@@ -320,7 +331,7 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
     Only rank 0 accumulates the result; other ranks return ``{}``.
     """
     if not _check_distributed_checkpointing_available():
-        raise OSError("Distributed checkpointing requires `torch>=2.7` with `torch.distributed` available.")
+        raise OSError("Distributed checkpointing requires `torch>=2.8` with `torch.distributed` available.")
 
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
     # being emitted if the function is not used

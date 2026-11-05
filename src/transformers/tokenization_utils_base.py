@@ -1068,7 +1068,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 f"Truncation side should be selected between 'right' and 'left', current value: {self.truncation_side}"
             )
 
-        self.model_input_names = kwargs.pop("model_input_names", self.model_input_names)
+        self.model_input_names = list(kwargs.pop("model_input_names", self.model_input_names))
 
         # By default, do not clean up tokenization spaces for both fast and slow tokenizers
         self.clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", False)
@@ -1236,6 +1236,24 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         Returns:
             `int`: Number of tokens added to the vocabulary.
+
+        <Tip>
+
+        Fast tokenizers with a `Metaspace` pre-tokenizer using `prepend_scheme="always"` (e.g. NLLB) prepend `"▁"` to the
+        text that follows an added token. After `tokenizer.add_tokens(["abcd"])`, `"abcdgym"` is tokenized as
+        `["abcd", "▁gym"]` and decodes to `"abcd gym"`. If added tokens can appear inside words, switch the pre-tokenizer
+        to `prepend_scheme="first"` so only the start of the input is prefixed:
+
+        ```python
+        from tokenizers import pre_tokenizers
+
+        pre_tokenizer = tokenizer.backend_tokenizer.pre_tokenizer
+        tokenizer.backend_tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
+            replacement=pre_tokenizer.replacement, prepend_scheme="first", split=pre_tokenizer.split
+        )
+        ```
+
+        </Tip>
 
         Examples:
 
