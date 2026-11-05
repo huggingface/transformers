@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -29,7 +28,7 @@ from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoBackbone
 from ..auto.modeling_auto import AutoModelForKeypointDetection
@@ -195,28 +194,19 @@ class LoMaDescriptorNetwork(nn.Module):
         super().__init__()
         self.encoder = LoMaVgg19Encoder(config.encoder_config)
         self.auxiliary_backbone = AutoBackbone.from_config(config.backbone_config)
-        self.auxiliary_backbone.eval()
         self.decoder = LoMaDescriptorDecoder(config)
+        self.eval()
+
+    def train(self, mode: bool = True):
+        """Keep the pretrained descriptor network in inference mode, including its BatchNorm layers."""
+        return super().train(False)
 
     @torch.inference_mode()
     def _extract_auxiliary_features(self, pixel_values: torch.Tensor) -> torch.Tensor:
         self.auxiliary_backbone.eval()
-        # When the backbone is a Vision Transformer (e.g. DINOv2) whose encoder uses @capture_outputs,
-        # calling backbone() directly triggers @filter_output_hidden_states which passes output_hidden_states=True
-        # to the encoder and chains @capture_outputs inside LoMa's active collector. Bypass output capturing by
-        # extracting features directly from the encoder with output_hidden_states=False.
-        if hasattr(self.auxiliary_backbone, "embeddings") and hasattr(self.auxiliary_backbone, "encoder"):
-            embedding_output = self.auxiliary_backbone.embeddings(pixel_values)
-            encoder_output = self.auxiliary_backbone.encoder(embedding_output, output_hidden_states=False)
-            backbone_features = encoder_output.last_hidden_state
-            if (
-                getattr(self.auxiliary_backbone.config, "apply_layernorm", True)
-                and getattr(self.auxiliary_backbone, "layernorm", None) is not None
-            ):
-                backbone_features = self.auxiliary_backbone.layernorm(backbone_features)
-        else:
-            backbone_output = self.auxiliary_backbone(pixel_values, output_hidden_states=False)
-            backbone_features = backbone_output.feature_maps[-1]
+        # Use the backbone API so its output-tracing decorators select the configured out_features.
+        backbone_output = self.auxiliary_backbone(pixel_values, output_hidden_states=False)
+        backbone_features = backbone_output.feature_maps[-1]
 
         # Reshape from (batch, seq, hidden) to (batch, hidden, h, w) spatial format.
         if backbone_features.ndim == 3:
@@ -267,19 +257,27 @@ class LoMaDescriptorNetwork(nn.Module):
         ].mT
 
 
+@auto_docstring(
+    custom_intro="""
+    Base class for outputs of LoMa keypoint matching models. The number of keypoints can vary between image pairs, so
+    `mask` identifies valid keypoints in the batched output.
+    """
+)
 @dataclass
 class LoMaKeypointMatchingOutput(ModelOutput):
     r"""
     Base class for LoMa keypoint matching outputs.
 
     Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+            Loss computed during training. LoMa is inference-only and returns `None`.
         matches (`torch.LongTensor` of shape `(batch_size, 2, num_keypoints)`):
             Index of keypoint matched in the other image, or -1 for unmatched points.
         matching_scores (`torch.FloatTensor` of shape `(batch_size, 2, num_keypoints)`):
             Confidence scores of predicted matches.
         keypoints (`torch.FloatTensor` of shape `(batch_size, 2, num_keypoints, 2)`):
             Normalized `(x, y)` coordinates of predicted keypoints.
-        prune (`torch.IntTensor` of shape `(batch_size, 2, num_keypoints)`):
+        prune (`torch.LongTensor` of shape `(batch_size, 2, num_keypoints)`):
             Layer index at which each keypoint was stopped.
         mask (`torch.BoolTensor` of shape `(batch_size, 2, num_keypoints)`):
             Mask indicating valid keypoints.
@@ -291,13 +289,13 @@ class LoMaKeypointMatchingOutput(ModelOutput):
     """
 
     loss: torch.FloatTensor | None = None
-    matches: torch.FloatTensor | None = None
+    matches: torch.LongTensor | None = None
     matching_scores: torch.FloatTensor | None = None
     keypoints: torch.FloatTensor | None = None
-    prune: torch.IntTensor | None = None
-    mask: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    prune: torch.LongTensor | None = None
+    mask: torch.BoolTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 class LoMaPositionalEncoder(nn.Module):
@@ -562,12 +560,13 @@ class LoMaTransformerLayer(nn.Module):
 
 
 class LoMaMatchAssignmentLayer(nn.Module):
-    def __init__(self, config: LoMaConfig):
+    def __init__(self, config: "LoMaConfig") -> None:
         super().__init__()
 
         self.descriptor_dim = config.descriptor_dim
         self.final_projection = nn.Linear(self.descriptor_dim, self.descriptor_dim, bias=True)
         self.matchability = nn.Linear(self.descriptor_dim, 1, bias=True)
+        # Keep this projection for strict loading of official checkpoints; LoMa uses dual-softmax, not matchability.
 
     def forward(
         self,
@@ -643,12 +642,14 @@ class LoMaForKeypointMatching(LoMaPreTrainedModel):
         self.num_hidden_layers = config.num_hidden_layers
         self.post_init()
 
+    @capture_outputs
     def _match_image_pair(
         self,
         keypoints: torch.Tensor,
         descriptors: torch.Tensor,
         mask: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> LoMaKeypointMatchingOutput:
         batch_size, _, num_keypoints, descriptor_dim = descriptors.shape
 
         # Interleave image pairs into (batch*2, num_keypoints, dim) for LightGlue-compatible layers
@@ -684,9 +685,14 @@ class LoMaForKeypointMatching(LoMaPreTrainedModel):
         matches = torch.stack((matches_0, matches_1), dim=1)
         matching_scores = torch.stack((matching_scores_0, matching_scores_1), dim=1)
         prune = torch.full_like(matches, self.num_hidden_layers)
-        return matches, matching_scores, prune
+        return LoMaKeypointMatchingOutput(
+            matches=matches,
+            matching_scores=matching_scores,
+            prune=prune,
+            mask=mask.reshape(batch_size, 2, num_keypoints),
+        )
 
-    @capture_outputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -694,10 +700,15 @@ class LoMaForKeypointMatching(LoMaPreTrainedModel):
         labels: torch.LongTensor | None = None,
         keypoints: torch.FloatTensor | None = None,
         mask: torch.BoolTensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | LoMaKeypointMatchingOutput:
         """
         Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, 2, num_channels, height, width)`):
+                A batch of image pairs. Each image must have one or three channels, and the two images in each pair
+                must have the same spatial dimensions.
+            labels (`torch.LongTensor`, *optional*):
+                Must be `None`. LoMa is inference-only and does not accept training labels.
             keypoints (`torch.FloatTensor` of shape `(batch_size, 2, num_keypoints, 2)`, *optional*):
                 Normalized `(x, y)` coordinates in the `[0, 1]` range. When omitted, SuperPoint detects keypoints
                 for each image in the pair.
@@ -726,7 +737,13 @@ class LoMaForKeypointMatching(LoMaPreTrainedModel):
                 raise ValueError("keypoints must have shape (batch_size, 2, num_keypoints, 2)")
             if not torch.is_floating_point(keypoints):
                 raise ValueError("keypoints must be a floating-point tensor")
-            if torch.any((keypoints < 0) | (keypoints > 1)):
+            invalid_keypoints = torch.any((keypoints < 0) | (keypoints > 1))
+            if is_torchdynamo_compiling():
+                # Keep the range check in the compiled graph instead of converting a tensor to a Python boolean.
+                torch._assert_async(
+                    ~invalid_keypoints, "keypoints must contain normalized coordinates in the [0, 1] range"
+                )
+            elif invalid_keypoints:
                 raise ValueError("keypoints must contain normalized coordinates in the [0, 1] range")
             keypoints = keypoints.to(pixel_values)
             if mask is None:
@@ -746,15 +763,18 @@ class LoMaForKeypointMatching(LoMaPreTrainedModel):
         # compressed the shorter axis for non-square images.
         normalized_keypoints = descriptor_keypoints.reshape(batch_size, 2, -1, 2)
 
-        matches, matching_scores, prune = self._match_image_pair(normalized_keypoints, descriptors, mask)
+        matching_outputs = self._match_image_pair(normalized_keypoints, descriptors, mask, return_dict=True, **kwargs)
 
-        return LoMaKeypointMatchingOutput(
-            matches=matches,
-            matching_scores=matching_scores,
+        outputs = LoMaKeypointMatchingOutput(
+            matches=matching_outputs.matches,
+            matching_scores=matching_outputs.matching_scores,
             keypoints=keypoints,
-            prune=prune,
+            prune=matching_outputs.prune,
             mask=mask,
+            hidden_states=matching_outputs.hidden_states,
+            attentions=matching_outputs.attentions,
         )
+        return outputs
 
 
 __all__ = ["LoMaPreTrainedModel", "LoMaForKeypointMatching"]

@@ -215,13 +215,36 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
             backbone_config=self.model_tester.backbone_config,
         )
         model = LoMaDescriptorNetwork(config).to(torch_device)
+        self.assertFalse(model.training)
         model.train()
+        self.assertFalse(model.training)
         pixel_values = floats_tensor([1, 3, 32, 48]).to(torch_device)
 
         features = model._extract_auxiliary_features(pixel_values)
 
         self.assertFalse(model.auxiliary_backbone.training)
         self.assertFalse(features.requires_grad)
+
+    def test_auxiliary_backbone_respects_out_features(self):
+        backbone_config = self.model_tester.backbone_config.copy()
+        backbone_config["out_features"] = ["stage1"]
+        stage1_model = LoMaDescriptorNetwork(
+            LoMaConfig(input_descriptor_dim=16, descriptor_hidden_blocks=1, backbone_config=backbone_config)
+        ).eval()
+
+        backbone_config["out_features"] = ["stage2"]
+        stage2_model = LoMaDescriptorNetwork(
+            LoMaConfig(input_descriptor_dim=16, descriptor_hidden_blocks=1, backbone_config=backbone_config)
+        ).eval()
+        stage2_model.auxiliary_backbone.load_state_dict(stage1_model.auxiliary_backbone.state_dict())
+
+        pixel_values = floats_tensor([1, 3, 70, 70])
+        with torch.inference_mode():
+            stage1_features = stage1_model._extract_auxiliary_features(pixel_values)
+            stage2_features = stage2_model._extract_auxiliary_features(pixel_values)
+
+        self.assertEqual(stage1_features.shape, stage2_features.shape)
+        self.assertFalse(torch.allclose(stage1_features, stage2_features))
 
     def test_descriptor_network_accepts_grayscale_images(self):
         config = LoMaConfig(input_descriptor_dim=16, descriptor_hidden_blocks=1)
@@ -269,11 +292,12 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(scores.shape, (2, num_kp, num_kp))  # batch=2 after de-interleave
         self.assertTrue(torch.all((scores >= 0) & (scores <= 1)))
 
-    def test_batching_equivalence(self, atol=1e-5, rtol=1e-5):
+    def test_batching_equivalence(self, atol=1e-4, rtol=1e-5):
         device_properties = get_device_properties()
         if device_properties[0] == "cuda" and device_properties[1] == 8:
             # TODO: (ydshieh) fix this
             self.skipTest(reason="After switching to A10, this test always fails, but pass on CPU or T4.")
+        # DINOv2's traced feature maps and the descriptor tower have small float32 differences across batch shapes.
         super().test_batching_equivalence(atol=atol, rtol=rtol)
 
     @unittest.skip(reason="LoMa includes a VGG-19 descriptor network and is not a small model")
@@ -351,22 +375,73 @@ class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict["output_hidden_states"] = True
             check_hidden_states_output(inputs_dict, config, model_class)
 
-            # check that output_hidden_states also work using config
+            # Check that output_hidden_states also works when configured on the model.
             del inputs_dict["output_hidden_states"]
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    def test_output_tracing_does_not_change_inference(self):
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
+        model = LoMaForKeypointMatching(config).to(torch_device).eval()
+
+        with torch.inference_mode():
+            outputs = model(pixel_values)
+            traced_outputs = model(pixel_values, output_hidden_states=True)
+            repeated_outputs = model(pixel_values)
+
+        self.assertEqual(len(traced_outputs.hidden_states), config.num_hidden_layers + 1)
+        torch.testing.assert_close(outputs.matches, repeated_outputs.matches)
+        torch.testing.assert_close(outputs.matching_scores, repeated_outputs.matching_scores)
+
+    def test_output_tracing_does_not_duplicate_backbone_features(self):
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
+        model = LoMaForKeypointMatching(config).to(torch_device).eval()
+        pixel_values_flat = pixel_values.reshape(-1, *pixel_values.shape[2:])
+
+        with torch.inference_mode():
+            features_before = model.descriptor_network._extract_auxiliary_features(pixel_values_flat)
+            model(pixel_values, output_hidden_states=True)
+            features_after = model.descriptor_network._extract_auxiliary_features(pixel_values_flat)
+
+        torch.testing.assert_close(features_before, features_after)
+
+    def test_torch_compile_with_precomputed_keypoints(self):
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
+        model = LoMaForKeypointMatching(config).eval()
+        inputs = {
+            "pixel_values": pixel_values,
+            "keypoints": torch.rand(self.model_tester.batch_size, 2, 8, 2),
+            "mask": torch.ones(self.model_tester.batch_size, 2, 8, dtype=torch.bool),
+        }
+
+        with torch.inference_mode():
+            expected = model(**inputs)
+            compiled_outputs = torch.compile(model, fullgraph=True, backend="eager")(**inputs)
+
+        torch.testing.assert_close(compiled_outputs.matches, expected.matches)
+        torch.testing.assert_close(compiled_outputs.matching_scores, expected.matching_scores)
+
     def test_training_mode_forward(self):
-        """Verify model forward pass does not crash when model is in train() mode."""
+        """Verify inference-only descriptor BatchNorm statistics remain fixed in train() mode."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
             model.train()
+            batch_norms = [
+                module for module in model.descriptor_network.modules() if isinstance(module, torch.nn.BatchNorm2d)
+            ]
+            running_stats = [(module.running_mean.clone(), module.running_var.clone()) for module in batch_norms]
+
+            self.assertTrue(model.training)
+            self.assertFalse(model.descriptor_network.training)
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             self.assertIsNotNone(outputs.matches)
             self.assertEqual(outputs.matches.shape[0], self.model_tester.batch_size)
+            for module, (running_mean, running_var) in zip(batch_norms, running_stats):
+                torch.testing.assert_close(module.running_mean, running_mean)
+                torch.testing.assert_close(module.running_var, running_var)
 
     @unittest.skip(reason="LoMa uses scaled dot-product attention without exposing attention weights")
     def test_attention_outputs(self):
@@ -544,7 +619,8 @@ class LoMaModelIntegrationTest(unittest.TestCase):
             ],
             device=torch_device,
         )
-        torch.testing.assert_close(scores, expected_scores, rtol=1e-3, atol=1e-4)
+        # The pinned reference scores are rounded; keep tolerance below 1e-5 absolute error.
+        torch.testing.assert_close(scores, expected_scores, rtol=1e-4, atol=1e-5)
 
         # Mutual matching on this score matrix yields [-1, -1, 0, 3] for image 0
         maximum_scores_0, maximum_scores_1 = scores.max(dim=2), scores.max(dim=1)
