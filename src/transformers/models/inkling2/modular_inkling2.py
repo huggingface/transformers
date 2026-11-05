@@ -40,7 +40,7 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_interpolation_indices_and_weights, get_vision_position_ids
 from ..clip.modeling_clip import CLIPMLP
-from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4TopKRouter
+from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4TopKRouter, DeepseekV4UnweightedRMSNorm
 from ..inkling.configuration_inkling import InklingConfig, InklingTextConfig
 from ..inkling.modeling_inkling import (
     InklingAttention,
@@ -674,6 +674,10 @@ class Inkling2SparseMoeBlock(Qwen3MoeSparseMoeBlock):
     pass
 
 
+class Inkling2UnweightedRMSNorm(DeepseekV4UnweightedRMSNorm):
+    pass
+
+
 class Inkling2BlockAttentionResidual(nn.Module):
     """
     Block attention residual: attention over depth that mixes the completed blocks and the current partial block into
@@ -686,6 +690,7 @@ class Inkling2BlockAttentionResidual(nn.Module):
         self.query = nn.Parameter(
             torch.zeros(config.hidden_size) if num_queries == 1 else torch.zeros(num_queries, config.hidden_size)
         )
+        self.norm = Inkling2UnweightedRMSNorm()
 
     def forward(
         self, block_states: list[torch.Tensor], partial_block_states: torch.Tensor
@@ -695,16 +700,12 @@ class Inkling2BlockAttentionResidual(nn.Module):
         and the partial block) weighted by that query's attention. Full-attention layers use three queries for separate
         query, key and value inputs, all other sublayers use one.
         """
-        # with a device map, earlier blocks live on the devices of the layers that produced them
-        device = partial_block_states.device
-        stacked_states = torch.stack(
-            [*(state.to(device) for state in block_states), partial_block_states], dim=-2
-        ).float()
-        stacked_states = stacked_states * torch.rsqrt(stacked_states.square().mean(dim=-1, keepdim=True) + 1e-6)
+        stacked_states = torch.stack([*block_states, partial_block_states], dim=-2).float()
+        stacked_states = self.norm(stacked_states)
 
         hidden_size = stacked_states.shape[-1]
         # (batch, seq_len, num_queries, hidden_size), the same queries at every position
-        query_states = self.query.to(device).float().view(-1, hidden_size).expand(*stacked_states.shape[:-2], -1, -1)
+        query_states = self.query.float().view(-1, hidden_size).expand(*stacked_states.shape[:-2], -1, -1)
         attn_output = F.scaled_dot_product_attention(
             query_states, stacked_states, stacked_states, scale=hidden_size**-0.5
         )
