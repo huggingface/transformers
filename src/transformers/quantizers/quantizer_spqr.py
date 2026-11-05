@@ -20,7 +20,6 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
     from ..utils.quantization_config import SpQRConfig
 
-from ..integrations import replace_with_spqr_linear
 from ..utils import is_accelerate_available, is_spqr_available, is_torch_available, logging
 
 
@@ -39,6 +38,8 @@ class SpQRHfQuantizer(HfQuantizer):
     quantization_config: "SpQRConfig"
 
     def validate_environment(self, *args, **kwargs):
+        if self.dequantizing:
+            return  # dequantizing is pure torch
         if not torch.cuda.is_available():
             raise RuntimeError("GPU is required to run SpQR quantized model.")
 
@@ -49,7 +50,7 @@ class SpQRHfQuantizer(HfQuantizer):
             raise ImportError("Using `spqr` quantization requires SpQR: `pip install spqr_quant[gpu]`")
 
     def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        if dtype != torch.float16:
+        if dtype != torch.float16 and not (self.dequantizing):
             raise ValueError(
                 "You cannot use any type other than torch.float16 for SpQR. Please set it totorch.float16 explicitly."
             )
@@ -60,9 +61,14 @@ class SpQRHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         **kwargs,
     ):
+        if self.dequantizing:
+            # The model stays unquantized: the `dequantize` load operation runs on every checkpoint weight
+            return
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
+        from ..integrations import replace_with_spqr_linear
+
         replace_with_spqr_linear(
             model,
             quantization_config=self.quantization_config,
@@ -75,3 +81,10 @@ class SpQRHfQuantizer(HfQuantizer):
 
     def is_serializable(self):
         return True
+
+    serialized_names = {"weight": ["dense_weights", "row_offsets", "col_vals", "in_perm"]}
+
+    def get_load_operations(self):
+        from ..integrations.spqr import SpQRDequantize
+
+        return {"dequantize": SpQRDequantize}

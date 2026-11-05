@@ -14,8 +14,7 @@
 
 from typing import TYPE_CHECKING
 
-from ..integrations import prepare_for_hqq_linear
-from ..utils import is_hqq_available, is_torch_available, logging
+from ..utils import is_hqq_available, logging
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
 
@@ -25,10 +24,30 @@ if TYPE_CHECKING:
     from ..utils.quantization_config import HqqConfig
 
 
-if is_torch_available():
-    import torch
-
 logger = logging.get_logger(__name__)
+
+
+HQQ_SERIALIZED_NAMES = [
+    "W_q",
+    "nbits",
+    "group_size",
+    "shape",
+    "scale",
+    "zero",
+    "axis",
+    "packing",
+    "unpack_view_dtype",
+    "view_as_float",
+    "quant_scale",
+    "quant_zero",
+    "compute_dtype",
+    "offload_meta",
+    "encoded_state_dict",
+    "stores_quant_config",
+    "channel_wise",
+    "optimize",
+    "round_zero",
+]
 
 
 class HqqHfQuantizer(HfQuantizer):
@@ -57,18 +76,24 @@ class HqqHfQuantizer(HfQuantizer):
                 )
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
-        module, _ = get_module_from_name(model, param_name)
-        # Since we do not prepare the modules in advance, we need every param of the Linear layer to go through
-        # `create_quantized_param`, even when `self.is_quantized == True`
-        return isinstance(module, torch.nn.Linear)
+        from ..integrations.hqq import HqqLinear
+
+        module, tensor_name = get_module_from_name(model, param_name)
+        # `prepare_for_hqq_linear` swaps the linears to quantize for empty `HqqLinear`s
+        return isinstance(module, HqqLinear) and tensor_name == "weight"
 
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
         **kwargs,
     ):
-        # Add the corresponding quant_config to each valid module. This allows us to do the actual nn.Linear -> HQQLinear conversion in create_quantized_param().
+        if self.dequantizing:
+            # The model stays unquantized: the `dequantize` load operation runs on every checkpoint weight
+            return
+        # Add the corresponding quant_config to each valid module. The `quantize` load operation then swaps each one for an `HQQLinear`.
         # prepare_for_hqq_linear() also sets the right quantization config inside the model (model.config.quantization_config) and the layers (hqq_layer.quant_config)
+        from ..integrations import prepare_for_hqq_linear
+
         model = prepare_for_hqq_linear(model, quantization_config=self.quantization_config)
 
     def is_serializable(self):
@@ -77,3 +102,10 @@ class HqqHfQuantizer(HfQuantizer):
     @property
     def is_trainable(self) -> bool:
         return True
+
+    serialized_names = {"weight": HQQ_SERIALIZED_NAMES}
+
+    def get_load_operations(self):
+        from ..integrations.hqq import HqqDequantize, HqqDeserialize, HqqQuantize
+
+        return {"deserialize": HqqDeserialize, "dequantize": HqqDequantize, "quantize": HqqQuantize}

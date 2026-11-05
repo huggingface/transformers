@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from transformers.utils import is_torch_available, logging
@@ -63,21 +64,69 @@ class SinqQuantize(ConversionOps):
         return {}
 
 
+# The tensors of a `SINQLinear` `meta` (`scale` / `zero` are dicts `x`, `s`, `m` with the "quantAux" methods), saved
+# as `<module>.meta.<path>`; the other entries of `meta` (shape, nbits, packing...) go in the checkpoint metadata.
+
+
+def _set_nested(meta: dict, path: str, value):
+    *parents, name = path.split(".")
+    for parent in parents:
+        meta = meta.setdefault(parent, {})
+    meta[name] = value
+
+
+def _sinq_meta(hf_quantizer, input_dict, prefix, module_name, index=0):
+    """
+    The `meta` dict of a `SINQLinear`: its non-tensor entries from the checkpoint metadata (`{path: value}` per module,
+    dtypes as `"torch.bfloat16"`), its tensors from `input_dict`, under `{prefix}meta.<path>`.
+    """
+    meta = {}
+    for path, value in hf_quantizer.metadata.get(module_name, {}).items():
+        if isinstance(value, str) and isinstance(getattr(torch, value.removeprefix("torch."), None), torch.dtype):
+            value = getattr(torch, value.removeprefix("torch."))
+        _set_nested(meta, path, value)
+    for key, value in input_dict.items():
+        if key.startswith(f"{prefix}meta."):
+            _set_nested(meta, key.removeprefix(f"{prefix}meta."), value[index] if isinstance(value, list) else value)
+    return meta
+
+
+class SinqSerialize(ConversionOps):
+    """
+    Saves a `SINQLinear` as `W_q`, `bias` and the tensors of its `meta` (`meta.<path>`); the rest of `meta` goes in
+    `metadata` (JSON per module), which `SinqDeserialize` / `SinqDequantize` read back.
+    """
+
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+        self.metadata = {}
+
+    def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, torch.Tensor]:
+        module = model.get_submodule(full_layer_name)
+        if not getattr(module, "ready", False) or getattr(module, "W_q", None) is None:
+            return input_dict  # not a quantized `SINQLinear`
+        state = module.state_dict()  # `meta` tensors on cpu, quantAux tuples as dicts
+        output = {f"{full_layer_name}.{name}": state[name] for name in ("W_q", "bias") if name in state}
+        others = {}
+
+        def flatten(path, value):
+            if isinstance(value, dict):
+                for name, item in value.items():
+                    flatten(f"{path}.{name}" if path else name, item)
+            elif isinstance(value, torch.Tensor):
+                output[f"{full_layer_name}.meta.{path}"] = value.contiguous()
+            else:
+                others[path] = str(value) if isinstance(value, torch.dtype) else value
+
+        flatten("", state["meta"])
+        self.metadata[f"{full_layer_name}.meta"] = json.dumps(others, default=list)
+        return output
+
+
 class SinqDeserialize(ConversionOps):
     """
-    ConversionOp for loading *pre-quantized* SINQ checkpoints.
-
-    Checkpoint layout (what `SINQLinear.state_dict` produces) is, per module:
-        <prefix>.W_q
-        <prefix>.bias
-        <prefix>.meta
-
-    WeightConverter in the quantizer is configured so that:
-      - we group ".W_q", ".meta", ".bias" as input_dict
-      - conceptually treat them as belonging to "<prefix>.weight"
-      - and call this SinqDeserialize.convert to load the state into the existing SINQLinear.
-
-    The returned dict is {} because we load directly into the module.
+    Loads a pre-quantized `SINQLinear`: `W_q`, `bias` and its `meta`, rebuilt from the `meta.<path>` tensors and the
+    checkpoint metadata (see `SinqSerialize`). The module is loaded directly, so nothing is returned.
     """
 
     def __init__(self, hf_quantizer):
@@ -88,34 +137,53 @@ class SinqDeserialize(ConversionOps):
         input_dict: dict[str, Any],
         model: torch.nn.Module | None = None,
         full_layer_name: str | None = None,
+        missing_keys=None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        for k, v in list(input_dict.items()):
-            if isinstance(v, list):
-                input_dict[k] = v[0]
+        input_dict = {key: value[0] if isinstance(value, list) else value for key, value in input_dict.items()}
+        module_name = full_layer_name.removesuffix(".weight")
+        if ".W_q" not in input_dict:
+            # e.g. the `.bias` of a module that is not quantized
+            return {f"{module_name}{key}": value for key, value in input_dict.items()}
 
-        W_q = input_dict.get(".W_q")
-        meta = input_dict.get(".meta")
-        bias = input_dict.get(".bias")
-
-        # Fallback path: if W_q or meta is missing, this is not a valid SINQ checkpoint.
-        # Return the tensor as-is so standard HF weight loading can handle it.
-        if W_q is None or meta is None:
-            v = next(iter(input_dict.values()))
-            if isinstance(v, list):
-                v = v[0]
-            return {full_layer_name: v}
-
-        module, _ = get_module_from_name(model, full_layer_name)
-
-        state = {
-            "W_q": W_q,
-            "meta": meta,
-        }
-        if bias is not None:
-            state["bias"] = bias
-
+        module = model.get_submodule(module_name)
+        state = {"W_q": input_dict[".W_q"], "meta": _sinq_meta(self.hf_quantizer, input_dict, ".", module_name)}
+        if ".bias" in input_dict:
+            state["bias"] = input_dict[".bias"]
         module.load_state_dict(state)
+        # the placeholder `weight` is not needed anymore, as after `SINQLinear.quantize`
+        module._parameters.pop("weight", None)
+        module.weight = None
         module._is_hf_initialized = True
-
+        if missing_keys is not None:
+            missing_keys.discard(full_layer_name)
         return {}
+
+
+class SinqDequantize(ConversionOps):
+    """
+    Dequantized weights from the `SINQLinear` state: `W_q`, its `meta` dict (scales, zeros, shape, packing...) and `bias`,
+    dequantized by sinq itself as the format has many variants (NF codebooks, tiling, dual scales).
+    """
+
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, list[torch.Tensor]]:
+        from sinq.quantizer import Quantizer
+
+        module_name = full_layer_name.removesuffix(".weight")
+        output = {}
+        for key, weights in input_dict.items():
+            if not key.endswith("W_q"):
+                continue  # `meta.*` and `bias`
+            prefix = key.removesuffix("W_q")  # `.W_q` -> `.weight`, `experts.*.W_q` -> `experts.*.weight`
+            weights = weights if isinstance(weights, list) else [weights]
+            output[f"{prefix}weight"] = [
+                Quantizer.dequantize(weight, _sinq_meta(self.hf_quantizer, input_dict, prefix, module_name, i))
+                for i, weight in enumerate(weights)
+            ]
+            bias = input_dict.get(f"{prefix}bias")
+            if bias is not None:
+                output[f"{prefix}bias"] = bias if isinstance(bias, list) else [bias]
+        return output

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import re
 import types
 
@@ -28,6 +29,7 @@ from ..quantizers.quantizers_utils import get_module_from_name
 
 if is_torchao_available():
     from torchao.prototype.safetensors.safetensors_support import (
+        flatten_tensor_state_dict,
         unflatten_tensor_state_dict,
     )
     from torchao.prototype.safetensors.safetensors_utils import is_metadata_torchao
@@ -191,11 +193,23 @@ class TorchAoDeserialize(ConversionOps):
             and return it as a dictionary with the full_layer_name as the key and the recovered
             Float8Tensor instance as the value.
         """
-        is_unsafe_serialization = list(input_dict.keys())[0] not in source_patterns
         module, _ = get_module_from_name(model, full_layer_name)
         # TP must use local tensors because this quantization path does not support DTensor inputs or weights.
         module._hf_quantized_needs_local_tp = True
+        new_param = self.unflatten(input_dict, source_patterns, full_layer_name)
 
+        # Add repr to the module
+        if isinstance(module, torch.nn.Linear):
+            module.extra_repr = types.MethodType(_linear_extra_repr, module)
+        module._is_hf_initialized = True
+        for param in module.parameters(recurse=False):
+            param._is_hf_initialized = True
+
+        return {full_layer_name: new_param}
+
+    def unflatten(self, input_dict, source_patterns, full_layer_name):
+        "The tensor subclass rebuilt from its flattened components"
+        is_unsafe_serialization = list(input_dict.keys())[0] not in source_patterns
         param_data = {}
         layer_name = ".".join(full_layer_name.split(".")[:-1])
         if is_unsafe_serialization:
@@ -213,7 +227,7 @@ class TorchAoDeserialize(ConversionOps):
 
         # If it's unsafe-serialized (i.e. not safetensors), no need for anything
         if is_unsafe_serialization:
-            return {full_layer_name: weight}
+            return weight
         elif not is_metadata_torchao(self.hf_quantizer.metadata):
             raise ValueError("Invalid torchao safetensors metadata")
 
@@ -221,13 +235,26 @@ class TorchAoDeserialize(ConversionOps):
             param_data, self.hf_quantizer.metadata
         )
         assert not leftover_state_dict  # there should be no unprocessed tensors
-        new_param = unflattened_state_dict[full_layer_name]
+        return unflattened_state_dict[full_layer_name]
 
-        # Add repr to the module
-        if isinstance(module, torch.nn.Linear):
-            module.extra_repr = types.MethodType(_linear_extra_repr, module)
-        module._is_hf_initialized = True
-        for param in module.parameters(recurse=False):
-            param._is_hf_initialized = True
 
-        return {full_layer_name: new_param}
+class TorchAoDequantize(TorchAoDeserialize):
+    """Dequantized weights: the tensor subclass rebuilt as in `TorchAoDeserialize`, then its own `dequantize()`."""
+
+    def convert(self, input_dict, source_patterns=None, model=None, full_layer_name=None, **kwargs):
+        return {full_layer_name: self.unflatten(input_dict, source_patterns, full_layer_name).dequantize()}
+
+
+class TorchAoSerialize(ConversionOps):
+    """Flattens the tensor subclasses into plain tensors for safetensors; their layout goes in `metadata`."""
+
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+        self.metadata = {}
+
+    def convert(self, input_dict, **kwargs) -> dict[str, torch.Tensor]:
+        state_dict, metadata = flatten_tensor_state_dict(input_dict)
+        # `tensor_names` lists the tensors of the whole file
+        names = json.loads(self.metadata.get("tensor_names", "[]")) + json.loads(metadata.pop("tensor_names", "[]"))
+        self.metadata.update(metadata, tensor_names=json.dumps(names))
+        return state_dict

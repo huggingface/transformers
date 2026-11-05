@@ -13,8 +13,10 @@
 # limitations under the License.
 "HIGGS through FLUTE (Flexible Lookup Table Engine for LUT-quantized LLMs) integration file"
 
+import functools
 from math import sqrt
 
+from ..core_model_loading import ConversionOps
 from ..utils import is_flute_available, is_hadamard_available, is_torch_available, logging
 
 
@@ -546,43 +548,83 @@ class HiggsLinear(torch.nn.Module):
         )
 
 
-def dequantize_higgs(model, current_key_name=None):
+class HiggsDeserialize(ConversionOps):
     """
-    Dequantizes the HiggsLinear layers in the given model by replacing them with standard torch.nn.Linear layers.
-    Args:
-        model (torch.nn.Module): The model containing HiggsLinear layers to be dequantized.
-        current_key_name (list, optional): A list to keep track of the current module names during recursion. Defaults to None.
-    Returns:
-        torch.nn.Module: The model with HiggsLinear layers replaced by torch.nn.Linear layers.
+    FLUTE packs the `weight` of a `HiggsLinear` for the number of SMs (GPU streaming multiprocessors) of the device it
+    was saved on: it is repacked for the device it is loaded on, and the module gets its `tune_metadata` and a
+    `workspace` (a buffer for the unpacking, shared by all the modules of a device).
     """
 
-    with torch.no_grad():
-        for name, module in model.named_children():
-            if current_key_name is None:
-                current_key_name = []
-            current_key_name.append(name)
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
 
-            if isinstance(module, HiggsLinear):
-                in_features = module.in_features
-                out_features = module.out_features
+    @staticmethod
+    @functools.cache
+    def workspace(device):
+        "One FLUTE workspace per device, shared by all the layers"
+        from flute.utils import make_workspace_streamk
 
-                model._modules[name] = torch.nn.Linear(
-                    in_features,
-                    out_features,
-                    bias=module.bias is not None,
-                    device=module.scales.device,
-                    dtype=module.scales.dtype,
-                )
+        return make_workspace_streamk(device=device)
 
-                model._modules[name].weight.data = module(
-                    torch.eye(in_features, device=module.scales.device, dtype=module.scales.dtype)
-                ).T.contiguous()
+    def repack(self, weight, scales, module_name):
+        from flute.tune import TuneMetaData, maybe_tune_and_repack
 
-            if len(list(module.children())) > 0:
-                _ = dequantize_higgs(
-                    module,
-                    current_key_name=current_key_name,
-                )
-            # Remove the last key for recursion
-            current_key_name.pop(-1)
-        return model
+        tune_metadata = self.hf_quantizer.quantization_config.tune_metadata
+        weight, metadata = maybe_tune_and_repack(
+            weight=weight, scales=scales, metadata=TuneMetaData.from_dict(tune_metadata[module_name])
+        )
+        tune_metadata[module_name] = metadata.to_dict()
+        return weight, metadata
+
+    def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, torch.Tensor]:
+        output = {key: value[0] if isinstance(value, list) else value for key, value in input_dict.items()}
+        if "scales" not in output:
+            return output  # the weight of a module that is not quantized
+        module_name = full_layer_name.rpartition(".")[0]
+        module = model.get_submodule(module_name)
+        output["weight"], module.tune_metadata = self.repack(output["weight"], output["scales"], module_name)
+        module.workspace = self.workspace(output["weight"].device)
+        return output
+
+
+class HiggsDequantize(HiggsDeserialize):
+    """
+    Dequantized weights from the FLUTE-packed `weight`, its `scales` and lookup `tables` / `tables2`. The packing is specific
+    to the FLUTE kernels (tiles, number of SMs), so the weights are repacked as when deserializing, then the HIGGS
+    matmul runs on the identity, as in `HiggsLinear.forward`, which also undoes the Hadamard rotation.
+    """
+
+    def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, list[torch.Tensor]]:
+        output = {}
+        for key, weights in input_dict.items():
+            if not key.endswith("weight"):
+                continue  # `scales`, `tables` and `tables2`
+            prefix = key.removesuffix("weight")
+            weights = weights if isinstance(weights, list) else [weights]
+            if f"{prefix}scales" in input_dict:
+                tensors = [
+                    value if isinstance(value, list) else [value]
+                    for value in (input_dict[f"{prefix}{name}"] for name in ("scales", "tables", "tables2"))
+                ]
+                module_name = full_layer_name.removesuffix(f".{key}")
+                weights = [
+                    self.dequantize(weight, *companions, module_name) for weight, *companions in zip(weights, *tensors)
+                ]
+            output[key] = weights
+        return output
+
+    def dequantize(self, weight, scales, tables, tables2, module_name):
+        config = self.hf_quantizer.quantization_config
+        weight, tune_metadata = self.repack(weight, scales, module_name)
+        identity = torch.eye(scales.shape[1] * config.group_size, dtype=scales.dtype, device=scales.device)
+        dequantized = qgemm_v2(
+            pad_to_block(identity, [-1], config.hadamard_size),
+            weight,
+            scales,
+            tables,
+            tables2.view(dtype=torch.float32),
+            self.workspace(weight.device),
+            tune_metadata,
+            hadamard_size=config.hadamard_size,
+        )
+        return dequantized.T.contiguous()

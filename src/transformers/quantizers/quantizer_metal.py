@@ -94,7 +94,7 @@ class MetalHfQuantizer(HfQuantizer):
     def quantized_module(self, name, module):
         from ..integrations.metal_quantization import MetalLinear
 
-        if self.quantization_config.dequantize or not isinstance(module, torch.nn.Linear):
+        if not isinstance(module, torch.nn.Linear):
             return None
         return MetalLinear(
             in_features=module.in_features,
@@ -112,14 +112,9 @@ class MetalHfQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return False
 
-    def get_quantize_ops(self):
-        from ..integrations.metal_quantization import MetalQuantize
-
-        return MetalQuantize(self)
-
     serialized_names = {"weight": ["weight", "scales", "qbiases"]}
 
     def get_load_operations(self):
-        from ..integrations.metal_quantization import MetalDequantize
+        from ..integrations.metal_quantization import MetalDequantize, MetalQuantize
 
-        return {"dequantize": MetalDequantize}
+        return {"dequantize": MetalDequantize, "quantize": MetalQuantize}
