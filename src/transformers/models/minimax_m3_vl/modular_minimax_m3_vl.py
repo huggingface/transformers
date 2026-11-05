@@ -15,7 +15,6 @@
 
 from collections.abc import Callable
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -36,7 +35,7 @@ from ...utils.generic import can_return_tuple, is_flash_attention_requested, mer
 from ...utils.import_utils import is_torchdynamo_compiling
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
-from ..clip.modeling_clip import CLIPMLP, CLIPAttention, CLIPEncoderLayer
+from ..clip.modeling_clip import CLIPMLP, CLIPEncoderLayer
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts
 from ..gemma3.modeling_gemma3 import Gemma3RMSNorm
 from ..laguna.modeling_laguna import LagunaSparseMoeBlock
@@ -61,6 +60,7 @@ from ..mixtral.modeling_mixtral import MixtralDecoderLayer, load_balancing_loss_
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VisionPatchEmbed, Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor, Qwen2VLProcessorKwargs
+from ..radio.modeling_radio import RadioAttention
 
 
 logger = logging.get_logger(__name__)
@@ -799,16 +799,25 @@ def apply_rotary_pos_emb_vision(
     return torch.cat([q_rot, q_pass], dim=-1), torch.cat([k_rot, k_pass], dim=-1)
 
 
-class MiniMaxM3VLVisionAttention(CLIPAttention):
-    """CLIP-style vision attention; the only difference from [`CLIPAttention`] is
-    that queries and keys are rotated by the tower's 3D RoPE before the
-    (interface-dispatched) scaled dot-product attention."""
-
+class MiniMaxM3VLVisionAttention(RadioAttention):
     def __init__(self, config: MiniMaxM3VLVisionConfig):
-        super().__init__(config)
-        # The vision tower has no grouped-query attention; the shared eager kernel
-        # still expects this attribute to drive its (no-op) `repeat_kv`.
+        nn.Module.__init__(self)
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.num_attention_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_attention_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = False
         self.num_key_value_groups = 1
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
+
+    @property
+    def o_proj(self):
+        return self.out_proj
 
     def forward(
         self,
@@ -816,66 +825,19 @@ class MiniMaxM3VLVisionAttention(CLIPAttention):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
         cu_seqlens: torch.Tensor | None = None,
-        max_seqlen: int | None = None,
-        segment_lengths: list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        queries = self.q_proj(hidden_states).view(hidden_shape)
-        keys = self.k_proj(hidden_states).view(hidden_shape)
-        values = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
         cos, sin = position_embeddings
-        queries, keys = apply_rotary_pos_emb_vision(queries, keys, cos, sin)
-        queries, keys = queries.transpose(1, 2), keys.transpose(1, 2)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
+        query_states, key_states = apply_rotary_pos_emb_vision(
+            self.q_proj(hidden_states).view(*hidden_states.shape[:-1], -1, self.head_dim),
+            self.k_proj(hidden_states).view(*hidden_states.shape[:-1], -1, self.head_dim),
+            cos,
+            sin,
         )
-        if cu_seqlens is None or cu_seqlens.numel() == 2 or is_flash_attention_requested(self.config):
-            if cu_seqlens is not None and is_flash_attention_requested(self.config):
-                kwargs.update(
-                    cu_seq_lens_q=cu_seqlens,
-                    cu_seq_lens_k=cu_seqlens,
-                    max_length_q=max_seqlen,
-                    max_length_k=max_seqlen,
-                    is_causal=False,
-                )
-            attn_output, attn_weights = attention_interface(
-                self,
-                queries,
-                keys,
-                values,
-                attention_mask,
-                scaling=self.scale,
-                dropout=0.0 if not self.training else self.dropout,
-                **kwargs,
-            )
-        else:
-            splits = [torch.split(tensor, segment_lengths, dim=2) for tensor in (queries, keys, values)]
-            attn_outputs, attn_weights = [], []
-            start = 0
-            for length, (query, key, value) in zip(segment_lengths, zip(*splits)):
-                output, weights = attention_interface(
-                    self,
-                    query,
-                    key,
-                    value,
-                    attention_mask=None,
-                    scaling=self.scale,
-                    dropout=0.0 if not self.training else self.dropout,
-                    **kwargs,
-                )
-                attn_outputs.append(output)
-                if weights is not None and kwargs.get("output_attentions", self.config.output_attentions):
-                    attn_weights.append(F.pad(weights, (start, input_shape[1] - start - length)))
-                start += length
-            attn_output = torch.cat(attn_outputs, dim=1)
-            attn_weights = torch.cat(attn_weights, dim=2) if attn_weights else None
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        return self.out_proj(attn_output), attn_weights
+        query_states, key_states = query_states.transpose(1, 2), key_states.transpose(1, 2)
+        super().forward(hidden_states, attention_mask, cu_seqlens, **kwargs)
+        del query_states
+        del key_states
 
 
 class MiniMaxM3VLVisionMLP(CLIPMLP):
@@ -1302,21 +1264,8 @@ class MiniMaxM3VLProcessor(Qwen2VLProcessor):
     VISION_START_TOKEN = "]<]start of image[>["
     VISION_END_TOKEN = "]<]end of image[>["
 
-    def __init__(
-        self,
-        image_processor=None,
-        tokenizer=None,
-        video_processor=None,
-        chat_template=None,
-        vision_segment_max_frames=4,
-        **kwargs,
-    ):
-        r"""
-        vision_segment_max_frames (`int`, *optional*, defaults to 4):
-            Maximum temporal patches per vision attention segment. Set to `None` to keep each video as one segment.
-        """
+    def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
-        self.vision_segment_max_frames = vision_segment_max_frames
         self.image_token = self.IMAGE_TOKEN
         self.video_token = self.VIDEO_TOKEN
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.IMAGE_TOKEN) if tokenizer else None
@@ -1324,22 +1273,9 @@ class MiniMaxM3VLProcessor(Qwen2VLProcessor):
         self.vision_start_token_id = tokenizer.convert_tokens_to_ids(self.VISION_START_TOKEN) if tokenizer else None
         self.vision_end_token_id = tokenizer.convert_tokens_to_ids(self.VISION_END_TOKEN) if tokenizer else None
 
-    def _process_videos(self, videos, **kwargs):
-        video_inputs, video_replacements = super()._process_videos(videos, **kwargs)
-        if self.vision_segment_max_frames is not None:
-            grid_thw = video_inputs["video_grid_thw"]
-            max_frames = self.vision_segment_max_frames
-            segments = [
-                [min(max_frames, t - start), h, w]
-                for t, h, w in grid_thw.tolist()
-                for start in range(0, t, max_frames)
-            ]
-            video_inputs["video_grid_thw"] = (
-                np.asarray(segments, dtype=grid_thw.dtype)
-                if isinstance(grid_thw, np.ndarray)
-                else grid_thw.new_tensor(segments)
-            )
-        return video_inputs, video_replacements
+    @property
+    def unused_input_names(self):
+        return ["num_chunks_per_video"]
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         merge_length = self.image_processor.merge_size**2
@@ -1348,9 +1284,11 @@ class MiniMaxM3VLProcessor(Qwen2VLProcessor):
 
     def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         merge_length = self.video_processor.merge_size**2
-        grid_thw = video_inputs["video_grid_thw"][video_idx]
-        grid_t = int(grid_thw[0])
-        frame_seqlen = int(grid_thw[1:].prod() // merge_length)
+        num_chunks = video_inputs["num_chunks_per_video"]
+        start = sum(num_chunks[:video_idx])
+        grid_thw = video_inputs["video_grid_thw"][start : start + num_chunks[video_idx]]
+        grid_t = int(grid_thw[:, 0].sum())
+        frame_seqlen = int(grid_thw[0, 1:].prod() // merge_length)
         metadata = video_inputs.get("video_metadata", [None] * (video_idx + 1))[video_idx]
         temporal_patch_size = self.video_processor.temporal_patch_size
         chunk = ""

@@ -17,9 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-import numpy as np
-
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
 
@@ -47,25 +44,12 @@ class MiniMaxM3VLProcessor(ProcessorMixin):
     VISION_START_TOKEN = "]<]start of image[>["
     VISION_END_TOKEN = "]<]end of image[>["
 
-    def __init__(
-        self,
-        image_processor=None,
-        tokenizer=None,
-        video_processor=None,
-        chat_template=None,
-        vision_segment_max_frames=4,
-        **kwargs,
-    ):
-        r"""
-        vision_segment_max_frames (`int`, *optional*, defaults to 4):
-            Maximum temporal patches per vision attention segment. Set to `None` to keep each video as one segment.
-        """
+    def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = self.IMAGE_TOKEN
         self.video_token = self.VIDEO_TOKEN
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.IMAGE_TOKEN) if tokenizer else None
         self.video_token_id = tokenizer.convert_tokens_to_ids(self.VIDEO_TOKEN) if tokenizer else None
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
-        self.vision_segment_max_frames = vision_segment_max_frames
         self.vision_start_token_id = tokenizer.convert_tokens_to_ids(self.VISION_START_TOKEN) if tokenizer else None
         self.vision_end_token_id = tokenizer.convert_tokens_to_ids(self.VISION_END_TOKEN) if tokenizer else None
 
@@ -76,9 +60,11 @@ class MiniMaxM3VLProcessor(ProcessorMixin):
 
     def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         merge_length = self.video_processor.merge_size**2
-        grid_thw = video_inputs["video_grid_thw"][video_idx]
-        grid_t = int(grid_thw[0])
-        frame_seqlen = int(grid_thw[1:].prod() // merge_length)
+        num_chunks = video_inputs["num_chunks_per_video"]
+        start = sum(num_chunks[:video_idx])
+        grid_thw = video_inputs["video_grid_thw"][start : start + num_chunks[video_idx]]
+        grid_t = int(grid_thw[:, 0].sum())
+        frame_seqlen = int(grid_thw[0, 1:].prod() // merge_length)
         metadata = video_inputs.get("video_metadata", [None] * (video_idx + 1))[video_idx]
         temporal_patch_size = self.video_processor.temporal_patch_size
         chunk = ""
@@ -165,22 +151,9 @@ class MiniMaxM3VLProcessor(ProcessorMixin):
     def model_input_names(self):
         return super().model_input_names + ["mm_token_type_ids"]
 
-    def _process_videos(self, videos, **kwargs):
-        video_inputs, video_replacements = super()._process_videos(videos, **kwargs)
-        if self.vision_segment_max_frames is not None:
-            grid_thw = video_inputs["video_grid_thw"]
-            max_frames = self.vision_segment_max_frames
-            segments = [
-                [min(max_frames, t - start), h, w]
-                for t, h, w in grid_thw.tolist()
-                for start in range(0, t, max_frames)
-            ]
-            video_inputs["video_grid_thw"] = (
-                np.asarray(segments, dtype=grid_thw.dtype)
-                if isinstance(grid_thw, np.ndarray)
-                else grid_thw.new_tensor(segments)
-            )
-        return video_inputs, video_replacements
+    @property
+    def unused_input_names(self):
+        return ["num_chunks_per_video"]
 
 
 __all__ = ["MiniMaxM3VLProcessor"]
