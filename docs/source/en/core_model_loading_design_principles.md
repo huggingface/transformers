@@ -14,119 +14,175 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Core model loading: design principles
+# Core model loading: a walkthrough
 
-[`~PreTrainedModel.from_pretrained`] turns checkpoint tensors into model params through one generic pipeline
-(`core_model_loading.py`). Quantization and tensor parallelism plug into it at fixed points; they never fork it. This
-page walks one key of the hardest case through every step. See [Dynamic weight loading](./weightconverter) for the
-`WeightRenaming` / `WeightConverter` API itself.
+This page follows one checkpoint through [`~PreTrainedModel.from_pretrained`], step by step: what happens, and why.
+See [Dynamic weight loading](./weightconverter) for the `WeightRenaming` / `WeightConverter` API itself.
 
-## Principles
+The checkpoint is ModelOpt's `nvidia/Qwen3.6-35B-A3B-NVFP4`, the hardest common case:
 
-1. **Renamings first, in order.** All `WeightRenaming`s (the model's, then the quantizers') run on every checkpoint key,
-   one after another.
-2. **Then at most one converter.** A `WeightConverter` matches a key on a glob pattern (`*` = the expert index) and
-   gives its target param. Converters are general: having more of them than a checkpoint needs is free.
-3. **One instance per target param.** The first key of a param deep-copies its converter; every other key of that param
-   is collected into the same instance.
-4. **Ops are per param.** Once the instance exists, its full name is known: the quantizer of that layer adds its ops
-   (deserialize, dequantize, quantize).
-5. **Shard on read.** With tensor parallelism, a key is sliced to this rank's piece when it is read, before any op.
-6. **Nothing after loading.** No quantizer post-processes the loaded model: everything happens on the tensors, while
-   loading.
+- the experts are saved one by one (`experts.3.gate_proj.weight`), the model has them fused (`experts.gate_up_proj`);
+- the checkpoint says `model.language_model.layers…`, the model says `model.layers…`;
+- the layers are quantized differently: NVFP4 experts, FP8 attention.
 
-## Before any key is read
+## 1. The config becomes a plan
 
 ```text
-from_pretrained
- ├─ config, hf_quantizer = get_hf_quantizer(config)        a plan: {pattern: config} → one quantizer per distinct config
- ├─ model = cls(config)                                    on meta
- ├─ hf_quantizer.preprocess_model(model)
- │    ├─ match_modules     every module → its quantizer, matched once against the plan's patterns
- │    │                    (a checkpoint's own layer names, e.g. ModelOpt's, are first renamed to the model's)
- │    ├─ replace_modules   nn.Linear → FP8Linear, experts → NVFP4Experts, … (quantized_module)
- │    └─ update_parallel_plan   the quantized params (scales, …) follow their weight's TP/EP style
- ├─ maybe_distribute_model(model)                          PP → TP → EP → FSDP: params become DTensors (still meta)
- └─ conversions = model's conversion mapping, updated by the quantizer:
-      renamings  : model's + each quantizer's `renamed_names`, scoped to its layers
-      converters : per quantizer, every model converter + one copy per serialized name, + its general converters
+config.json  quantization_config = {
+               "quant_algo": "MIXED_PRECISION",
+               "quantized_layers": {
+                 "model.language_model.layers.0.mlp.experts.3.gate_proj": {"quant_algo": "NVFP4"},
+                 "model.language_model.layers.0.self_attn.q_proj":        {"quant_algo": "FP8"},
+                 …
+               }}
+                 │ modelopt_plan (PLAN_CONVERTERS)
+                 ▼
+plan         {"model.language_model.layers.0.mlp.experts.3.gate_proj": NVFP4Config(), …: FP8Config(), …}
+                 │ one quantizer per distinct config
+                 ▼
+             QuantizationPlanHfQuantizer   →  NVFP4HfQuantizer, FineGrainedFP8HfQuantizer
 ```
 
-## One key, end to end
+Why: a per-layer format is just a plan, `{pattern: config}`, like the dtype plan. Each format is its own quantizer, so
+a new format is a new entry in `PLAN_CONVERTERS`, not new loading code. Equal configs share one quantizer, so 40 layers
+of NVFP4 are one quantizer, not 40.
 
-ModelOpt's `nvidia/Qwen3.6-35B-A3B-NVFP4`: experts saved as a per-expert list, merged and concatenated into the
-model's fused `gate_up_proj`; NVFP4 experts and FP8 attention in one checkpoint.
+## 2. The plan is renamed to the model's names, once
 
 ```text
-checkpoint key   model.language_model.layers.0.mlp.experts.3.gate_proj.weight_scale
-  │
-  │ 1. RENAMINGS (all, in order)
-  │      model's      model.language_model.X → model.X
-  │      quantizers'  FP8: weight_scale → weight_scale_inv … only on FP8's layers: not this one (NVFP4)
-  ▼
-                 model.layers.0.mlp.experts.3.gate_proj.weight_scale
-  │
-  │ 2. CONVERTERS of this layer       hf_quantizer.get_weight_converters(key) → NVFP4's list
-  │      model converter    experts.*.gate_proj.weight + experts.*.up_proj.weight → experts.gate_up_proj
-  │      its copy per serialized name (same ops, the name swapped):
-  │                         experts.*.gate_proj.weight_scale + …up_proj.weight_scale → experts.gate_up_proj_scale
-  │                         (dequantized layer: same target as the weight, gate_up_proj, to dequantize them together)
-  ▼
-  target param   model.layers.0.mlp.experts.gate_up_proj_scale
-  │
-  │ 3. INSTANCE      the first key of this param: deepcopy(converter); all its keys (every expert × gate, up) collect here
-  │ 4. OPS           hf_quantizer.update_weight_transform(instance, "…gate_up_proj_scale")   ← full name → NVFP4
-  │                    [MergeModulelist, Concatenate] + [NVFP4Deserialize]      deserialize: after the model's ops
-  │                    dequantize=True: [NVFP4Dequantize] + [MergeModulelist, Concatenate], on the weight + its scales
-  │                    full precision checkpoint: quantization_operation = quantize op
-  │ 5. READ          each key: get_slice → (TP) this rank's piece → dtype → device       (threaded)
-  │ 6. CONVERT       ops on the collected tensors:  stack experts → cat gate|up → swizzle the block scales
-  ▼
-  set_param      NVFP4Experts.gate_up_proj_scale (+ gate_up_proj_sf, from the deserialize)
+model.language_model.layers.0.mlp.experts.3.gate_proj   (+ ".weight", through the model's conversions)
+   → model.layers.0.mlp.experts.gate_up_proj.weight
+   → model.layers.0.mlp.experts                          ← the plan's pattern now
 ```
 
-What each component knows:
+Why: the plan was written against checkpoint names, the model only knows its own. Sending `{pattern}.weight` through
+the same conversions the keys will go through renames the pattern exactly as its keys will be renamed: no guessing. The
+64 per-expert patterns collapse onto the one fused module.
+
+## 3. Every module gets its quantizer, once
+
+```text
+match_modules(model)       exact names first, then globs, then "*"
+  model.layers.0.mlp.experts        → NVFP4
+  model.layers.0.self_attn.q_proj   → FP8
+  model.layers.0.mlp.gate           → None (unquantized)
+```
+
+Why: this is the only place a name is matched against the plan. Everything later (which module class, which
+renamings, which converters, which ops) looks the answer up in `module_quantizers` instead of matching again.
+
+## 4. The model is built on meta and its modules swapped
+
+```text
+model = cls(config)                        on meta, no memory
+preprocess_model
+  replace_modules     experts → NVFP4Experts (buffers gate_up_proj, gate_up_proj_scale, _scale_2, _input_scale, _sf)
+                      q_proj  → FP8Linear    (weight, weight_scale_inv, activation_scale)
+  update_parallel_plan  the new params follow their weight's TP/EP style
+maybe_distribute_model    with TP: params become DTensors (still meta)
+```
+
+Why: the quantized params must exist before loading so each checkpoint tensor has a destination. Swapping is one pass
+over the model for all quantizers.
+
+## 5. The conversions are built: renamings, then converters
+
+```text
+renamings    the model's     model.language_model.X     → model.X
+             FP8's, scoped   ^(…self_attn.q_proj|…)\.weight_scale$ → \1.weight_scale_inv
+                             ^(…self_attn.q_proj|…)\.input_scale$  → \1.activation_scale
+converters   the model's     experts.*.gate_proj.weight + experts.*.up_proj.weight      → experts.gate_up_proj
+             NVFP4's copies  experts.*.gate_proj.weight_scale   + …up_proj.weight_scale   → experts.gate_up_proj_scale
+                             experts.*.gate_proj.weight_scale_2 + …                       → experts.gate_up_proj_scale_2
+                             experts.*.gate_proj.input_scale    + …                       → experts.gate_up_proj_input_scale
+             general         weight + weight_scale_inv + activation_scale                 → weight   (FP8)
+                             weight + weight_scale + weight_scale_2 + input_scale         → weight   (NVFP4)
+```
+
+Why:
+
+- **Renamings are scoped to the quantizer's layers.** ModelOpt calls FP8's scale `weight_scale`, but NVFP4's block
+  scale is also `weight_scale`. Renaming it everywhere would break the experts. Each quantizer only renames on its
+  layers (from step 3).
+- **A scale goes through the same ops as its weight.** The model's converter stacks 64 experts and concatenates gate
+  and up; the scales need exactly that. So each quantizer copies the model's converters that load into its layers, one
+  copy per serialized name, with the same ops. The model's conversion mapping never knows about quantization.
+- **Converters only describe shapes.** No quantization op is in them yet: which op runs depends on the layer, known
+  only once a key is matched (step 7). Having more converters than a checkpoint needs costs nothing.
+
+## 6. One key: renamed, then matched
+
+```text
+model.language_model.layers.0.mlp.experts.3.gate_proj.weight_scale
+  │ renamings (all, in order)    model's: drop "language_model"     FP8's: not an FP8 layer, untouched
+  ▼
+model.layers.0.mlp.experts.3.gate_proj.weight_scale
+  │ converters (the first that matches)    NVFP4's copy: experts.*.gate_proj.weight_scale
+  ▼
+model.layers.0.mlp.experts.gate_up_proj_scale             ← the target param
+```
+
+The FP8 attention key next to it:
+
+```text
+model.language_model.layers.0.self_attn.q_proj.weight_scale
+  │ renamings    model's: drop "language_model"     FP8's: q_proj is an FP8 layer → weight_scale_inv
+  │ converters   general (FP8): weight_scale_inv → weight
+  ▼
+model.layers.0.self_attn.q_proj.weight_scale_inv
+```
+
+Why renamings first: a converter matches leaf patterns, so it needs the final names. Running every renaming before
+any converter means a converter never sees a checkpoint's spelling.
+
+## 7. One instance per param, and its ops
+
+```text
+first key of model.layers.0.mlp.experts.gate_up_proj_scale
+  instance = deepcopy(converter)                       the next 127 keys (64 experts × gate, up) collect into it
+  hf_quantizer.update_weight_transform(instance, "model.layers.0.mlp.experts.gate_up_proj_scale")
+     get_quantizer(name) → NVFP4 (module_quantizers, step 3)
+     ops = [MergeModulelist, Concatenate] + [NVFP4Deserialize]
+```
+
+| Load | Ops | Why |
+|---|---|---|
+| pre-quantized | model's ops, then `deserialize` | stack the experts first, then put the result in the kernel's layout (swizzled `*_sf`) |
+| `dequantize=True` | `dequantize`, then model's ops | dequantizing needs each expert's weight with its own scales, before they are stacked; the instance collects the weight and all its scales together |
+| full precision | model's ops, then `quantize` | quantize the fused param, as the module expects it |
+
+Why per instance: here the full param name is known for the first time, so the layer's quantizer is a lookup, and the
+op is added only where it applies. The converter in the list stays generic.
+
+## 8. Read, shard, convert, set
+
+```text
+each key   get_slice → with TP: only this rank's rows/columns (DtensorShardOperation) → dtype → device   (threaded)
+           with EP: experts this rank doesn't own are skipped (tensor_idx)
+instance   [MergeModulelist, Concatenate, NVFP4Deserialize] on the collected tensors
+set_param  gate_up_proj_scale, gate_up_proj_sf (from the deserialize)   with TP: wrapped back into the DTensor
+```
+
+Why shard on read: no rank ever holds a full tensor. Every op therefore works on a shard: merges and concatenations
+act along dims the placement keeps whole, and a quantizer's op only reshapes what it receives.
+
+Why nothing after loading: everything above happened on tensors while loading. No quantizer walks the model afterwards.
+
+## 9. Saving
+
+```text
+the same conversions, reversed: converters (Concatenate → split, MergeModulelist → unstack), then renamings
+dequantize reverses to identity: a dequantized model saves as an unquantized one
+```
+
+Why: the conversions used to load are the ones that save, so a model saves in its checkpoint's format.
+
+## Who knows what
 
 | Component | Knows | Doesn't know |
 |---|---|---|
 | `WeightRenaming` | a key's name | layers, quantization |
-| `WeightConverter` | how per-expert / split keys map to one param (merge, concat, chunk, …) | quantization: a scale goes through the same ops as its weight |
+| `WeightConverter` | how per-expert / split keys map to one param | quantization |
 | the quantizer | its serialized names, its ops, its layers | the model's conversions |
-| core loading | the order: rename → converters of the layer → instance → ops → read → convert | which format, which quantizer |
-
-## Quantization plans: two name maps
-
-A checkpoint and a model name the same layers differently (`model.language_model.layers.0.mlp.experts.3.gate_proj` vs
-`model.layers.0.mlp.experts`). The model's conversion mapping goes from one to the other; the plan goes through it
-once:
-
-```text
-plan (checkpoint names, e.g. ModelOpt's quantized_layers)
-   │ rename_patterns: each pattern renamed like a key of it (`{pattern}.weight` through the model's conversions)
-   ▼
-plan (model names) ── match_modules ──► module_quantizers {module name → quantizer}      ← the only matcher
-   used by:  replace_modules (which class) · get_weight_converters (which converters) ·
-             update_weight_transform (which ops) · renamings (which layers)
-```
-
-A pattern matches like the dtype plan's globs; exact names win over globs, `"*"` takes the rest. Patterns with equal
-configs share one quantizer.
-
-## Tensor parallelism
-
-```text
-before loading   apply_tensor_parallelism(model, tp_mesh, tp_plan)        params → DTensors with placements, on meta
-                   q_proj.weight          Shard(0)            rows split across ranks
-                   o_proj.weight          Shard(1)            columns split
-                   experts.gate_up_proj   _StridedShard(d, 2) gate | up split each, so a rank keeps both halves
-                   quantized params       the style of their weight (`update_parallel_plan`); per-tensor scales Replicate
-while loading    per key: DtensorShardOperation(empty param).shard_tensor(slice)
-                   reads only this rank's rows/columns from disk (safetensors get_slice), before any op
-                   per-expert keys (tensor_idx): experts this rank doesn't own are skipped
-                 the ops then run on local shards: Merge / Concat / deserialize / dequantize see this rank's piece
-                 set_param wraps the local result back into the DTensor
-saving           the conversions run in reverse (converters, then renamings); dequantize reverses to identity
-```
-
-Because sharding happens on read, every op must work on a shard: merges and concatenations act along dims the placement
-keeps whole, and a quantizer's op (e.g. NVFP4's swizzle, per expert) only reshapes what it receives.
+| the plan | which layer goes to which quantizer | how any format loads |
+| core loading | the order: rename → convert → instance → ops → read → set | which format |
