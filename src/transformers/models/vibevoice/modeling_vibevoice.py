@@ -287,11 +287,9 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
 
         # adjust padding mask according to tokenizer compression
         num_audio_tokens = torch.ceil(padding_mask.sum(dim=-1) / self.config.audio_config.hop_length).to(torch.int64)
-        padding_mask = (
-            torch.arange(acoustic_features.shape[1], device=num_audio_tokens.device) < num_audio_tokens[:, None]
-        )
+        positions = torch.arange(acoustic_features.shape[1], device=num_audio_tokens.device)
         # Keeps a mask already on the CPU from syncing with the accelerator
-        padding_mask = padding_mask.cpu()
+        padding_mask = (positions < num_audio_tokens[:, None]).cpu()
 
         pooler_output = self.multi_modal_projector(acoustic_features)
         return BaseModelOutputWithPooling(
