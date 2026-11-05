@@ -1332,8 +1332,8 @@ class Inkling2Processor(ProcessorMixin):
         image_token (`str`, *optional*, defaults to `"<|unused_200054|>"`):
             Placeholder token for each image soft-token slot, replaced by image features.
         """
-        self.image_token = image_token
-        self.image_token_id = tokenizer.convert_tokens_to_ids(image_token)
+        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
