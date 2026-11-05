@@ -59,7 +59,7 @@ if is_torch_available():
     import torch
     from torch.export import ExportedProgram
 
-    from ..cache_utils import Cache
+    from ..cache_utils import Cache, DynamicLayer
     from ..modeling_utils import PreTrainedModel
 
 
@@ -212,6 +212,26 @@ def patch_forward_signature(model: PreTrainedModel, inputs: dict[str, Any]):
 # Multiple paths share the same factory when the same method shape needs to be
 # swapped across several classes (e.g. `_reshaped_vision_attention_forward`
 # applied to every chunked-vision attention class — see the long list below).
+
+
+@register_patch(
+    "dynamo",
+    "transformers.cache_utils.DynamicSlidingWindowLayer.update",
+    "transformers.cache_utils.DynamicSlidingWindowLayer.get_mask_sizes",
+    "transformers.cache_utils.DynamicSlidingWindowLayer.get_seq_length",
+)
+def _patch_sliding_window_layer(original):
+    """Give sliding-window cache layers the full cache of a `DynamicLayer`; the sliding mask still applies the window.
+
+    A `DynamicSlidingWindowLayer` sizes its mask from a Python token counter and slices its cache to the window, so a
+    trace fixes both at the sample's length: the exported decode fails once generation goes past the window. With the
+    full cache, the mask sizes come from the cache's shape, and the sliding mask keeps attention within the window. It
+    also keeps the KV-cache concat feeding the state directly, which OpenVINO needs to fuse the cache into its
+    attention. The cache of sliding layers then grows with the sequence instead of stopping at the window.
+
+    Temporary: it goes once huggingface/transformers#49542 keeps sliding-window decode on one graph.
+    """
+    return getattr(DynamicLayer, original.__name__)
 
 
 @register_patch("dynamo", "transformers.models.nllb_moe.modeling_nllb_moe.NllbMoeTop2Router._cast_classifier")
