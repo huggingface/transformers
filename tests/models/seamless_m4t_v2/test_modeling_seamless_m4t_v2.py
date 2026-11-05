@@ -401,7 +401,7 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
         # `SeamlessM4Tv2Model` defaults to text and switches its `main_input_name` to `input_features` only at
         # generation. Pin it to speech so the generic helper feeds the speech encoder for every model class here.
         with patch.object(SeamlessM4Tv2Model, "main_input_name", "input_features"):
-            super().test_eager_matches_sdpa_inference(
+            self._test_eager_matches_sdpa_inference(
                 name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
             )
 
@@ -502,7 +502,7 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
             )
             out_len = len(outputs)
 
-            if self.is_encoder_decoder:
+            if config.is_encoder_decoder:
                 correct_outlen = 5
 
                 # loss is at first position
@@ -550,7 +550,7 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
 
             if hasattr(self.model_tester, "num_hidden_states_types"):
                 added_hidden_states = self.model_tester.num_hidden_states_types
-            elif self.is_encoder_decoder:
+            elif config.is_encoder_decoder:
                 added_hidden_states = 2
             else:
                 added_hidden_states = 1

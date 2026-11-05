@@ -1298,7 +1298,7 @@ class Deimv2DINOv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             ("cuda", True, torch.bfloat16): 3e-2,
             ("cuda", True, torch.float16): 5e-3,
         }
-        super().test_eager_matches_sdpa_inference(
+        self._test_eager_matches_sdpa_inference(
             name,
             torch_dtype,
             padding_side,

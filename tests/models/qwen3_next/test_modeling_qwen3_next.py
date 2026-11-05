@@ -239,7 +239,7 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
         """
         if dtype == "fp16":
             self.skipTest("Not robust in fp16")
-        super().test_eager_matches_sdpa_inference(
+        self._test_eager_matches_sdpa_inference(
             name,
             dtype,
             padding_side,

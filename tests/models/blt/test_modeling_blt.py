@@ -276,7 +276,7 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
             ("cuda", True, torch.bfloat16): 1e-2,
             ("cuda", True, torch.float16): 5e-3,
         }
-        super().test_eager_matches_sdpa_inference(
+        self._test_eager_matches_sdpa_inference(
             name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, atols=atols
         )
 

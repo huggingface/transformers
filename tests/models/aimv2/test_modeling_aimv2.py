@@ -458,7 +458,7 @@ class Aimv2ModelTest(Aimv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             ("cuda", True, torch.bfloat16): 3e-2,  # this was relaxed
             ("cuda", True, torch.float16): 5e-3,
         }
-        super().test_eager_matches_sdpa_inference(
+        self._test_eager_matches_sdpa_inference(
             name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, atols=atols
         )
 

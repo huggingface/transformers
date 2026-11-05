@@ -402,7 +402,7 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
             ("cuda", True, torch.float16): 5e-3,
         }
 
-        super().test_eager_matches_sdpa_inference(
+        self._test_eager_matches_sdpa_inference(
             name,
             dtype,
             padding_side,
@@ -845,7 +845,7 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
             ("cuda", True, torch.float16): 5e-3,
         }
 
-        super().test_eager_matches_sdpa_inference(
+        self._test_eager_matches_sdpa_inference(
             self,
             name,
             dtype,

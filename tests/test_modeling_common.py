@@ -2271,6 +2271,21 @@ class ModelTesterMixin(
         This test is written as a regular function to be able to overload it easily with different tolerances.
         Otherwise, `parameterize.expand` prevents it as it removes the original function from the namespace.
         """
+        self._test_eager_matches_sdpa_inference(
+            name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, rtols=rtols, atols=atols
+        )
+
+    def _test_eager_matches_sdpa_inference(
+        self,
+        name,
+        dtype,
+        padding_side,
+        use_attention_mask,
+        output_attentions,
+        enable_kernels,
+        rtols=None,
+        atols=None,
+    ):
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 

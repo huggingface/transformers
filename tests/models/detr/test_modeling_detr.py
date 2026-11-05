@@ -516,7 +516,7 @@ class DetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.skipTest(
                 "This test uses attention masks which are not compatible with DETR. Skipping when use_attention_mask is True."
             )
-        super().test_eager_matches_sdpa_inference(name, dtype, padding_side, False, output_attentions, enable_kernels)
+        self._test_eager_matches_sdpa_inference(name, dtype, padding_side, False, output_attentions, enable_kernels)
 
 
 TOLERANCE = 1e-4
