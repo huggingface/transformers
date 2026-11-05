@@ -117,7 +117,6 @@ class NVFP4HfQuantizer(HfQuantizer):
 
         return {"deserialize": NVFP4Deserialize, "dequantize": NVFP4Dequantize}
 
-    @property
     def is_serializable(self) -> bool:
         return False
 

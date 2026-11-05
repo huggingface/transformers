@@ -46,7 +46,7 @@ from ..utils.quantization_config import (
     TorchAoConfig,
     VptqConfig,
 )
-from .base import HfQuantizer
+from .base import HfQuantizer, _assign_is_quantized
 from .quantizer_aqlm import AqlmHfQuantizer
 from .quantizer_auto_round import AutoRoundQuantizer
 from .quantizer_awq import AwqQuantizer
@@ -429,6 +429,31 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         for quantizer in self.quantizers.values():
             quantizer.update_parallel_plan(model, model.tp_plan)
             quantizer.update_parallel_plan(model, model.ep_plan)
+
+    def postprocess_model(self, model, **kwargs):
+        """
+        Runs the after-load hook of every quantizer. The patterns loaded with `dequantize=True` leave the plan: with
+        none left, the model is plain unquantized.
+        """
+        for quantizer in self.quantizers.values():
+            quantizer._process_model_after_weight_loading(model, **kwargs)
+        self.quantizers = {
+            pattern: quantizer
+            for pattern, quantizer in self.quantizers.items()
+            if not (quantizer.pre_quantized and getattr(quantizer.quantization_config, "dequantize", False))
+        }
+        if not self.quantizers:
+            self.remove_quantization_config(model)
+            return model
+        from ..core_model_loading import build_glob_alternation
+
+        self.quantization_config = {
+            pattern: quantizer.quantization_config for pattern, quantizer in self.quantizers.items()
+        }
+        self.alternation, self.group_to_pattern, _ = build_glob_alternation(list(self.quantizers))
+        model.config.quantization_config = self.quantization_config
+        _assign_is_quantized(model)
+        return model
 
     def is_serializable(self):
         return all(quantizer.is_serializable() for quantizer in self.quantizers.values())

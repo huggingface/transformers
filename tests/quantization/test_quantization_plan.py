@@ -11,11 +11,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import tempfile
 import unittest
+from unittest.mock import patch
 
 from huggingface_hub import hf_hub_download
 
-from transformers import AutoConfig, FineGrainedFP8Config, Mistral4ForCausalLM, NVFP4Config
+from transformers import (
+    AutoConfig,
+    FineGrainedFP8Config,
+    LlamaConfig,
+    LlamaForCausalLM,
+    Mistral4ForCausalLM,
+    NVFP4Config,
+)
+from transformers.quantizers.auto import AutoHfQuantizer, QuantizationPlanHfQuantizer
 from transformers.testing_utils import require_kernels, require_torch, require_torch_gpu, slow
 from transformers.utils import is_torch_available
 
@@ -54,6 +64,34 @@ class QuantizationPlanTest(unittest.TestCase):
             loaded = model.state_dict()[name]
             self.assertEqual(loaded.dtype, torch.bfloat16, name)
             self.assertLess(((loaded.float() - weight.float()).norm() / weight.float().norm()).item(), 0.12, name)
+        # Every pattern dequantized: the plan leaves the model, which saves and reloads plain unquantized
+        self.assertFalse(model.is_quantized)
+        self.assertFalse(hasattr(model.config, "quantization_config"))
+        with tempfile.TemporaryDirectory() as tmp:
+            model.save_pretrained(tmp)
+            reloaded = Mistral4ForCausalLM.from_pretrained(tmp, dtype=torch.bfloat16)
+        self.assertFalse(hasattr(reloaded.config, "quantization_config"))
+        for name, weight in model.state_dict().items():
+            torch.testing.assert_close(reloaded.state_dict()[name], weight, msg=name)
+
+    def test_postprocess_drops_dequantized_patterns(self):
+        plan = QuantizationPlanHfQuantizer(
+            {
+                "*.self_attn.*": AutoHfQuantizer.from_config(
+                    FineGrainedFP8Config(dequantize=True), pre_quantized=True
+                ),
+                "*.mlp.*": AutoHfQuantizer.from_config(NVFP4Config(), pre_quantized=True),
+            }
+        )
+        model = LlamaForCausalLM(
+            LlamaConfig(hidden_size=64, intermediate_size=128, num_hidden_layers=1, vocab_size=128)
+        )
+        with patch("transformers.integrations.finegrained_fp8._disable_deepgemm_on_multi_device") as fp8_hook:
+            plan.postprocess_model(model)
+        fp8_hook.assert_called_once_with(model)  # each quantizer's after-load hook runs
+        self.assertEqual(list(model.config.quantization_config), ["*.mlp.*"])
+        self.assertIsNone(plan.quantizer_for("model.layers.0.self_attn.q_proj.weight"))
+        self.assertFalse(plan.is_serializable())  # NVFP4 can't be saved
 
     @slow
     @require_torch_gpu
