@@ -733,6 +733,7 @@ class FP8Experts(nn.Module):
         scale_fmt: str = "float",
         has_bias: bool = False,
         has_gate: bool = True,
+        weight_dtype: torch.dtype = _FP8_DTYPE,
     ):
         super().__init__()
 
@@ -752,7 +753,13 @@ class FP8Experts(nn.Module):
         self.swiglu_limit = getattr(config, "swiglu_limit", None)
         self.act_fn = ACT2FN[_first_attr(config, "hidden_activation", "hidden_act")]
         self.limit = getattr(config, "swiglu_limit", None)
-        alloc_kwargs = self._weight_format(block_size, scale_fmt)
+        alloc_kwargs = {
+            "weight_dtype": weight_dtype,
+            "weight_k_div": 2 if weight_dtype == torch.int8 else 1,  # `int8`: MXFP4, two e2m1 values per byte
+            "sf_dtype": _get_ue8m0_dtype() if scale_fmt == "ue8m0" else torch.float32,
+            "sf_gran_n": block_size[0] if block_size is not None else None,
+            "sf_gran_k": block_size[1] if block_size is not None else None,
+        }
 
         if self.has_gate:
             self.gate_up_proj, self.gate_up_proj_scale_inv = _alloc_expert_proj(
@@ -773,15 +780,6 @@ class FP8Experts(nn.Module):
         if self.activation_scheme == "static":
             self.gate_up_proj_activation_scale = nn.Parameter(torch.ones(self.num_experts, dtype=torch.float32))
             self.down_proj_activation_scale = nn.Parameter(torch.ones(self.num_experts, dtype=torch.float32))
-
-    def _weight_format(self, block_size: tuple[int, int] | None, scale_fmt: str) -> dict:
-        "The `_alloc_expert_proj` kwargs of the expert weights and their scales"
-        return {
-            "weight_dtype": _FP8_DTYPE,
-            "sf_dtype": _get_ue8m0_dtype() if scale_fmt == "ue8m0" else torch.float32,
-            "sf_gran_n": block_size[0] if block_size is not None else None,
-            "sf_gran_k": block_size[1] if block_size is not None else None,
-        }
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)
@@ -1012,23 +1010,6 @@ class Fp8Quantize(ConversionOps):
         return Fp8Dequantize(self.hf_quantizer)
 
 
-def _rename_modelopt_scales(tensors: dict) -> dict:
-    """
-    ModelOpt checkpoints name the scales `weight_scale` (our `weight_scale_inv`, possibly saved as
-    `(out / 128, 1, in / 128, 1)` per block) and `input_scale` (our static `activation_scale`), like FP8 embeddings.
-    Loading quantized, `FineGrainedFP8HfQuantizer.update_weight_conversions` renames them.
-    """
-    renamed = {}
-    for key, value in tensors.items():
-        if key.endswith("weight_scale"):
-            key += "_inv"
-            value = [v.flatten(1) if v.ndim == 4 else v for v in (value if isinstance(value, list) else [value])]
-        elif key.endswith("input_scale"):
-            key = key.removesuffix("input_scale") + "activation_scale"
-        renamed[key] = value
-    return renamed
-
-
 class Fp8Dequantize(ConversionOps):
     """Dequantize FP8 weights using their per-block ``weight_scale_inv``.
 
@@ -1054,6 +1035,10 @@ class Fp8Dequantize(ConversionOps):
         self, quantized: torch.Tensor, scales: torch.Tensor, output_dtype: torch.dtype | None = None
     ) -> torch.Tensor:
         quantized_fp32 = quantized.to(torch.float32)
+        if (
+            scales.ndim == 4
+        ):  # per-block scales saved with singleton dims, e.g. ModelOpt's `(out / 128, 1, in / 128, 1)`
+            scales = scales.flatten(1)
         rows, cols = quantized_fp32.shape[-2:]
         # Derive block size from the scale grid rather than the global config, which a checkpoint's
         # layers do not always follow.
@@ -1103,7 +1088,6 @@ class Fp8Dequantize(ConversionOps):
         **kwargs,
     ) -> dict[str, list[torch.Tensor] | torch.Tensor]:
         output_dtype = self._get_target_dtype(model, full_layer_name)
-        input_dict = _rename_modelopt_scales(input_dict)
         if "weight" in input_dict:
             # The downstream renamer in `core_model_loading._convert_one_module` uses the
             # output dict's *key*, not its content, to derive prefix/suffix; if `full_layer_name`

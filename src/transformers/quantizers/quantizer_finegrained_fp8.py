@@ -179,10 +179,9 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
         return Fp8Quantize(self)
 
-    # `weight` first: its converter takes `*.down_proj.weight` before the experts' own-name `down_proj` does.
-    # ModelOpt checkpoints name the scales `weight_scale` and `input_scale`
+    # `weight` first: its converter takes `*.down_proj.weight` before the experts' own-name `down_proj` does
     serialized_names = {
-        "weight": ["weight", "weight_scale_inv", "activation_scale", "weight_scale", "input_scale"],
+        "weight": ["weight", "weight_scale_inv", "activation_scale"],
         "gate_up_proj": ["gate_up_proj", "gate_up_proj_scale_inv"],
         "down_proj": ["down_proj", "down_proj_scale_inv"],
     }
@@ -204,9 +203,8 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         conversions = scale_renames + super().update_weight_conversions(weight_conversions, model)
         # ModelOpt's names (and FP8 embeddings' `weight_scale`), after the model's renamings. In a plan, only on our
         # params (NVFP4 has its own `weight_scale`)
-        if not self.quantization_config.dequantize:
-            conversions += [
-                WeightRenaming(r"\.weight_scale$", ".weight_scale_inv"),
-                WeightRenaming(r"\.input_scale$", ".activation_scale"),
-            ]
+        conversions += [
+            WeightRenaming(r"\.weight_scale$", ".weight_scale_inv"),
+            WeightRenaming(r"\.input_scale$", ".activation_scale"),
+        ]
         return conversions

@@ -22,7 +22,7 @@ if is_torch_available():
 from ..core_model_loading import ConversionOps, _IdentityOp
 from ..distributed.utils import _is_torch_distributed_initialized
 from ..quantizers.quantizers_utils import get_module_from_name, on_device, should_convert_module
-from .finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS, FP8Experts, _get_ue8m0_dtype
+from .finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS, FP8Experts
 from .hub_kernels import use_kernel_forward_from_hub
 from .moe import use_experts_implementation
 
@@ -490,11 +490,14 @@ class Mxfp4Experts(FP8Experts):
     """
 
     def __init__(self, config, has_bias: bool = False, has_gate: bool = True):
-        super().__init__(config, scale_fmt="ue8m0", has_bias=has_bias, has_gate=has_gate)
-
-    def _weight_format(self, block_size, scale_fmt):
-        sf_dtype = _get_ue8m0_dtype()
-        return {"weight_dtype": torch.int8, "sf_dtype": sf_dtype, "weight_k_div": 2, "sf_gran_n": 1, "sf_gran_k": 32}
+        super().__init__(
+            config,
+            block_size=(1, 32),
+            scale_fmt="ue8m0",
+            has_bias=has_bias,
+            has_gate=has_gate,
+            weight_dtype=torch.int8,
+        )
 
 
 def build_mxfp4_experts(experts, text_config):
