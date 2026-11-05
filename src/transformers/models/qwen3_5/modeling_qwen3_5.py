@@ -244,8 +244,24 @@ def causal_conv1d_update(
 
     hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
     conv_state.copy_(hidden_states_new[:, :, -state_len:])
-    out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
-    out = out[:, :, -seq_len:]
+    kernel_size = weight.shape[-1]
+    if (
+        weight.device.type == "cpu"
+        and not torch.backends.mkldnn.is_available()
+        and not torch.is_autocast_enabled("cpu")
+        and weight.dtype in (torch.float32, torch.float64)
+        and kernel_size <= 4
+    ):
+        # Avoid the grouped conv1d fallback for short CPU filters when oneDNN is unavailable.
+        hidden_states_new = hidden_states_new[:, :, -(seq_len + kernel_size - 1) :]
+        out = hidden_states_new[:, :, :seq_len] * weight[None, :, :1]
+        for index in range(1, kernel_size):
+            out = out + hidden_states_new[:, :, index : index + seq_len] * weight[None, :, index : index + 1]
+        if bias is not None:
+            out = out + bias[None, :, None]
+    else:
+        out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
+        out = out[:, :, -seq_len:]
     if activation is not None:
         out = ACT2FN[activation](out)
     return out.to(hidden_states.dtype)
@@ -262,13 +278,27 @@ def causal_conv1d_fn(
     _, hidden_size, seq_len = hidden_states.shape
     padding = weight.shape[-1] - 1
 
-    out = F.conv1d(
-        hidden_states.to(weight.dtype),
-        weight=weight.unsqueeze(1),
-        bias=bias,
-        padding=padding,
-        groups=hidden_size,
-    )[:, :, :seq_len]
+    if (
+        weight.device.type == "cpu"
+        and not torch.backends.mkldnn.is_available()
+        and not torch.is_autocast_enabled("cpu")
+        and weight.dtype in (torch.float32, torch.float64)
+        and weight.shape[-1] <= 4
+    ):
+        hidden_states_padded = F.pad(hidden_states.to(weight.dtype), (padding, 0))
+        out = hidden_states_padded[:, :, :seq_len] * weight[None, :, :1]
+        for index in range(1, weight.shape[-1]):
+            out = out + hidden_states_padded[:, :, index : index + seq_len] * weight[None, :, index : index + 1]
+        if bias is not None:
+            out = out + bias[None, :, None]
+    else:
+        out = F.conv1d(
+            hidden_states.to(weight.dtype),
+            weight=weight.unsqueeze(1),
+            bias=bias,
+            padding=padding,
+            groups=hidden_size,
+        )[:, :, :seq_len]
     if activation is not None:
         out = ACT2FN[activation](out)
     return out.to(hidden_states.dtype)
