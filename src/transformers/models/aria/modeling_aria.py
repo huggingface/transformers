@@ -1083,6 +1083,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            modality_outputs=outputs.modality_outputs,
             router_logits=outputs.router_logits,
         )
 
