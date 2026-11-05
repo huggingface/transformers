@@ -15,6 +15,24 @@ Usage:
     - Workflow run URL:  https://github.com/huggingface/transformers/actions/runs/31430051419
     - Job URL:          https://github.com/huggingface/transformers/actions/runs/31430051419/job/93590992881
     - Bare run ID:      31430051419
+
+Known gaps (not handled yet — we will monitor the real CI runs and improve if
+any of these show up):
+  - Only "FAILED" entries of the short test summary are parsed; "ERROR" entries
+    (fixture / setup / teardown / collection errors) are not reported.
+  - Only the first "short test summary info" section is parsed, so a job that
+    runs pytest more than once only reports the first run's failures.
+  - FAILED lines without " - <message>", or node ids containing spaces (e.g. a
+    parametrize id with a space), are not matched.
+  - Failure blocks are matched by the bare test name (the "____ name ____"
+    header), so:
+      - two tests with the same name in different files of one job both get
+        the last block;
+      - class-based tests (header "TestFoo.test_bar") are not found; the fuzzy
+        fallback may return the first lines of another parametrization's block.
+  - VLLMPlugin only recognizes "(Worker pid=N)" / "(EngineCore pid=N)" ERROR
+    lines; other tags such as "(EngineCore_DP0 pid=N)" or "(APIServer pid=N)"
+    are not picked up.
 """
 
 import json

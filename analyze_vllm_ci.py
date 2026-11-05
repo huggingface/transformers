@@ -28,6 +28,18 @@ as separate jobs). Each job entry looks like:
       "num_failing": 3,
       "tests": [...]   # test IDs, or {test, short_error, trace} in *_with_trace files
   }
+
+Known gaps (not handled yet — we will monitor the real CI runs and improve if
+any of these show up):
+  - A failed job without any parsed pytest failure is silently left out of the
+    reports: e.g. a failing setup step (pip/uv install), OOM kill (exit 137), job
+    timeout, or the non-pytest example scripts in "Test vLLM integration". The
+    report then shows 0 failures for a red CI run. This already happened on the
+    main run https://github.com/huggingface/transformers/actions/runs/41959891568
+    (2026-11-05): all 13 jobs failed in "Install dependencies" (torch==2.14.0+cpu
+    could not be resolved). Possible fix: list such jobs with their job URL and
+    the last "##[error]" line.
+  - Log-parsing gaps of analyze_gh_wf_runs.py (see its module docstring) apply here.
 """
 
 import argparse
@@ -237,6 +249,15 @@ def collect_run_failures(run_id, repo=REPO, token=None, plugin=None):
 # ---------------------------------------------------------------------------
 # Categorisation of failures by root-cause error
 # ---------------------------------------------------------------------------
+
+# TODO: We could improve this to have a better grouping. The category is the full
+# (lightly normalized) error message, so failures with the same cause but different
+# numbers end up in separate categories, e.g. two CUDA OOMs:
+#   "OutOfMemoryError: CUDA out of memory. Tried to allocate 20.00 MiB. ..."
+#   "OutOfMemoryError: CUDA out of memory. Tried to allocate 64.00 MiB. ..."
+# Possible approach: fixed labels for well-known cases (OOM, gated repo, timeout,
+# network) matched on the root-cause line only, then replace numbers with a
+# placeholder in the remaining messages and keep one original message as an example.
 
 # A top-level exception line, e.g. "ValueError: No common block size for 16."
 # or "vllm.v1.engine.exceptions.EngineDeadError: EngineCore encountered ...".
