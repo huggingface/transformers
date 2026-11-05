@@ -1231,11 +1231,15 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 cache = inputs.get("past_key_values")
                 # Some models may share some layers of the cache, in which case those layers are not initialized, but they still
                 # get a `cumulative_length` tensor initialized on cpu, which is never moved to the correct device as the layer is not used
-                if cache is not None and any(
-                    hasattr(layer, "is_initialized")
-                    and not layer.is_initialized
-                    and hasattr(layer, "cumulative_length")
-                    for layer in cache.layers
+                if (
+                    cache is not None
+                    and hasattr(cache, "layers")
+                    and any(
+                        hasattr(layer, "is_initialized")
+                        and not layer.is_initialized
+                        and hasattr(layer, "cumulative_length")
+                        for layer in cache.layers
+                    )
                 ):
                     check_device = False
                 with self.subTest(f"{model_class.__name__}/{name}"):

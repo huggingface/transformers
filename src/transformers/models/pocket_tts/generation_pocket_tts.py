@@ -45,19 +45,19 @@ class PocketTTSGenerateOutput(GenerateDecoderOnlyOutput):
         sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             The prompt token ids followed by one `audio_latent_token_id` per generated frame. The audio itself is in
             `audio_latents`.
-        scores (`tuple(torch.FloatTensor)` *optional*, returned when `output_scores=True`):
+        scores (`tuple(torch.Tensor)` *optional*, returned when `output_scores=True`):
             The end-of-speech logit of every generated frame, one tensor of shape `(batch_size,)` per frame.
-        logits (`tuple(torch.FloatTensor)` *optional*, returned when `output_logits=True`):
+        logits (`tuple(torch.Tensor)` *optional*, returned when `output_logits=True`):
             Same as `scores`: Pocket TTS has no vocabulary, so there is nothing to process between the two.
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True`):
-            Tuple (one element for each generated frame) of tuples (one element for each layer) of `torch.FloatTensor`
+        attentions (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_attentions=True`):
+            Tuple (one element for each generated frame) of tuples (one element for each layer) of `torch.Tensor`
             of shape `(batch_size, num_heads, generated_length, sequence_length)`.
-        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True`):
-            Tuple (one element for each generated frame) of tuples (one element for each layer) of `torch.FloatTensor`
+        hidden_states (`tuple(tuple(torch.Tensor))`, *optional*, returned when `output_hidden_states=True`):
+            Tuple (one element for each generated frame) of tuples (one element for each layer) of `torch.Tensor`
             of shape `(batch_size, generated_length, hidden_size)`.
         past_key_values (`Cache`, *optional*, returned when `use_cache=True`):
             The key/value cache of the backbone at the end of generation.
-        audio_latents (`torch.FloatTensor` of shape `(batch_size, num_frames, latent_dim)`):
+        audio_latents (`torch.Tensor` of shape `(batch_size, num_frames, latent_dim)`):
             The generated latents, in the audio tokenizer's latent space, right-padded with zeros past each sample's own
             frames. [`PocketTTSProcessor.decode`] turns them into waveforms.
         audio_latents_mask (`torch.LongTensor` of shape `(batch_size, num_frames)`):
@@ -65,7 +65,7 @@ class PocketTTSGenerateOutput(GenerateDecoderOnlyOutput):
             padding (`0`).
     """
 
-    audio_latents: torch.FloatTensor | None = None
+    audio_latents: torch.Tensor | None = None
     audio_latents_mask: torch.LongTensor | None = None
 
 
@@ -96,7 +96,7 @@ class PocketTTSEosThresholdCriteria(StoppingCriteria):
         # Frames left to generate per sample; -1 until end of speech is seen. Allocated on the first call.
         self.remaining = None
 
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.Tensor, **kwargs) -> torch.BoolTensor:
         batch_size = input_ids.shape[0]
         if self.remaining is None:
             self.remaining = torch.full((batch_size,), -1, dtype=torch.long, device=input_ids.device)
@@ -123,7 +123,7 @@ class PocketTTSGenerationMixin(GenerationMixin):
         self,
         inputs: torch.Tensor | None = None,
         **kwargs,
-    ) -> PocketTTSGenerateOutput | list[torch.FloatTensor]:
+    ) -> PocketTTSGenerateOutput | list[torch.Tensor]:
         r"""
         Generates speech. This method overrides [`~generation.utils.GenerationMixin.generate`] to default
         `max_new_tokens` to the original runtime's frame budget, `ceil((num_text_tokens / 3 + 2) * frame_rate)` for the
@@ -289,7 +289,7 @@ class PocketTTSGenerationMixin(GenerationMixin):
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
         **model_kwargs,
-    ) -> GenerateNonBeamOutput | list[torch.FloatTensor]:
+    ) -> GenerateNonBeamOutput | list[torch.Tensor]:
         """
         This method overrides [~generation.utils.GenerationMixin._sample]. To ease maintenance, modifications are
         marked with the comment "PocketTTS specific".
