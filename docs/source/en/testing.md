@@ -36,6 +36,43 @@ RUN_SLOW=1 pytest tests/models/mymodel/ -v
 
 The Hugging Face CI runs model tests without `@slow` on every pull request, and slow tests run on a nightly schedule (see [Pull request checks](./pr_checks) for what the CI validates).
 
+## Run Model Integration Contracts locally
+
+MICs check published model usage paths against reviewed baselines using small fixtures.
+From your Transformers checkout, install the runner in your active Python environment once:
+
+```bash
+python -m pip install "transformers-mic[runtime]" "hf-doc-builder @ git+https://github.com/huggingface/doc-builder.git"
+```
+
+Then run:
+
+```bash
+make run-mic MODEL=bert  # model directory name under src/transformers/models/
+make run-mic             # contracts affected by local changes
+make run-mic ALL=1       # all control-fleet fixtures
+make run-mic BASE=main   # use a different Git comparison base
+```
+
+The command uses this checkout's source and the fleet revision in `tests/contracts.lock`.
+It downloads the pinned contracts, fixtures and baselines as needed, executes them locally,
+and propagates the runner's failure status. It does not create or publish contracts.
+Model-specific runtime dependencies and a reviewed baseline for your platform are required;
+a fixture pass does not validate the full checkpoint.
+
+By default, changed files are the diff between the merge base with `origin/main` and your
+working tree, plus untracked files. This includes branch commits, staged and unstaged
+changes, and both paths of renames. A clean checkout has nothing to run.
+
+MIC derives model dependencies from fixture configs (including nested models), architectures,
+and tokenizer/processor classes. Model directory changes select matching contracts; changes
+to shared Transformers code, Auto classes, dependency declarations, or the fleet pin select
+all contracts. `MODEL=bert` uses the same selector as a change in the BERT directory, so it
+can also select composite models that use BERT. Docs and ordinary test-only changes select
+nothing. The runner prints its selection and reasons; no matching contract means no coverage,
+not a successful model check. Selection is a heuristic, not a complete Python dependency graph;
+use `ALL=1` when unsure whether indirect dependencies are covered.
+
 ## Pick a base test class
 
 Three base classes cover the most common model families. Pick the one that matches your model's modality.
