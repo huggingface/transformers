@@ -724,11 +724,12 @@ def _run_openvino_model(ov_model, inputs) -> dict:
 
     results = request.infer(feed)
     outputs = {}
+    declared = {name for output in ov_model.outputs for name in output.get_names()}
     for port in compiled.outputs:
-        # Compilation may merge a named output tensor with an intermediate that kept its
-        # numeric id — prefer the human-readable alias over ``get_any_name``'s sorted-first.
+        # Compilation may merge an output's tensor names with the ones of the intermediates it fused (a numeric id,
+        # `add_4:0`): take the name the exported model gave it.
         names = sorted(port.get_names())
-        name = next((n for n in names if not n.isdigit()), names[0])
+        name = next((n for n in names if n in declared), names[0])
         outputs[re.sub(r"^output\.", "", name)] = torch.as_tensor(results[port])
 
     # Folded state tensors are outputs too — read them back so the returned dict covers the
