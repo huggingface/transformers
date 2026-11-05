@@ -901,6 +901,7 @@ class AriaModel(AriaPreTrainedModel):
                 pixel_mask=pixel_mask,
                 vision_feature_layer=self.config.vision_feature_layer,
                 return_dict=True,
+                **kwargs,
             )
 
         if mm_encoder_outputs.get("image") is not None:

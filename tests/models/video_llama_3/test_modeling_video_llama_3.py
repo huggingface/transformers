@@ -594,7 +594,7 @@ class VideoLlama3VisionText2TextModelTester:
         self.use_token_compression = use_token_compression
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
-        self.num_image_tokens = 32
+        self.num_image_tokens = 1
         self.seq_length = seq_length + self.num_image_tokens
 
     def get_config(self):
