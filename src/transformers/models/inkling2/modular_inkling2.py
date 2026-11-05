@@ -354,7 +354,7 @@ class Inkling2DynamicShortConvolution(nn.Module):
         self.num_heads = num_heads
         # tap index is the backward distance: `static_weight[0]` weights the current token
         self.static_weight = nn.Parameter(torch.zeros(conv_kernel_size, hidden_size))
-        self.weight_proj = nn.Parameter(torch.empty(num_heads * conv_kernel_size, input_size))
+        self.weight_proj = nn.Linear(input_size, num_heads * conv_kernel_size, bias=False)
 
     def forward(
         self,
@@ -366,7 +366,7 @@ class Inkling2DynamicShortConvolution(nn.Module):
     ):
         input_dtype = hidden_states.dtype
         batch_size, seq_len, hidden_size = hidden_states.shape
-        dynamic_weights = F.linear(dynamic_input, self.weight_proj.to(dynamic_input.dtype)).float()
+        dynamic_weights = self.weight_proj(dynamic_input).float()
         dynamic_weights = dynamic_weights.view(batch_size, seq_len, self.num_heads, 1, self.conv_kernel_size)
         weights = self.static_weight.float().T.view(self.num_heads, -1, self.conv_kernel_size) + dynamic_weights
 
@@ -879,8 +879,8 @@ class Inkling2PreTrainedModel(InklingPreTrainedModel):
         "e_score_correction_bias",
         "post_attention_convolution",
         "post_mlp_convolution",
-        "key_convolution",
-        "value_convolution",
+        "key_convolution.conv1d",
+        "value_convolution.conv1d",
         "attention_input",
         "mlp_input",
         "final_input",
@@ -903,7 +903,6 @@ class Inkling2PreTrainedModel(InklingPreTrainedModel):
             init.ones_(module.scale)
         elif isinstance(module, Inkling2DynamicShortConvolution):
             init.zeros_(module.static_weight)
-            init.normal_(module.weight_proj, mean=0.0, std=std)
         elif isinstance(module, Inkling2BlockAttentionResidual):
             init.zeros_(module.query)
         elif isinstance(module, Inkling2VisionEmbeddings):
