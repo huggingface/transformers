@@ -108,7 +108,6 @@ class Inkling2TextConfig(PreTrainedConfig):
     moe_intermediate_size: int = 2304
     n_routed_experts: int = 384
     num_experts_per_tok: int = 8
-    n_shared_experts: int = 0
     route_scale: float = 8.0
     attention_dropout: float = 0.0
     initializer_range: float = 0.02

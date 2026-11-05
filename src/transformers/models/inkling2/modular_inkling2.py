@@ -137,7 +137,6 @@ class Inkling2TextConfig(InklingTextConfig):
     moe_intermediate_size: int = 2304
     n_routed_experts: int = 384
     num_experts_per_tok: int = 8
-    n_shared_experts: int = 0
     eos_token_id: int | None = 200006
     qk_l2_clip_threshold: float = 22.627416997969522
     rel_l2_clip_threshold: float = 8.0
@@ -149,6 +148,7 @@ class Inkling2TextConfig(InklingTextConfig):
     use_cache: bool = True
 
     intermediate_size = AttributeError()
+    n_shared_experts = AttributeError()
     mlp_layer_types = AttributeError()
     shared_expert_sink = AttributeError()
     logits_mup_width_multiplier = AttributeError()
