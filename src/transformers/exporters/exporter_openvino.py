@@ -127,9 +127,12 @@ class OpenVINOExporter(DynamoExporter):
             raise TypeError(f"Expected config to be an OpenVINOConfig or dict, got {type(config)}")
 
         # From here on the inputs match the graph's dtypes: calibration and the state folding read them too.
-        with _traced_in_float32(model, sample_inputs) as sample_inputs:
-            with patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("openvino"):
-                exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
+        with (
+            apply_patches("openvino"),
+            patch_16bit_model(model, sample_inputs) as sample_inputs,
+            patch_model_outputs(model) as (inputs_names, outputs_names),
+        ):
+            exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
             # Converted before the model gets its dtypes back: the program's constants are its own tensors.
             exported_program, graph_module = _fix_exported_program(exported_program)
             ov_model = _convert_to_openvino(graph_module)
@@ -318,7 +321,7 @@ def _fix_non_tensor_inputs(ov_model: openvino.Model, graph_module) -> None:
 
 
 @contextlib.contextmanager
-def _traced_in_float32(model: PreTrainedModel, sample_inputs: MutableMapping[str, Any]):
+def patch_16bit_model(model: PreTrainedModel, sample_inputs: MutableMapping[str, Any]):
     """Trace a bf16/fp16 model with f32 activations, yielding f32 copies of the inputs.
 
     Each linear, embedding and MoE experts weight moves to a `_16bit_<name>` parameter, and an f32 placeholder that broadcasts a
@@ -366,7 +369,7 @@ def _traced_in_float32(model: PreTrainedModel, sample_inputs: MutableMapping[str
 
 
 def _16bit_weight_names(module: torch.nn.Module) -> tuple[str, ...]:
-    """The weights of `module` that stay 16-bit through [`_traced_in_float32`]: the patched forwards cast them."""
+    """The weights of `module` that stay 16-bit through [`patch_16bit_model`]: the patched forwards cast them."""
     if isinstance(module, (torch.nn.Linear, torch.nn.Embedding)):
         return ("weight", "bias")
     if hasattr(module, "has_gate") and hasattr(module, "is_transposed"):  # `@use_experts_implementation` experts
@@ -375,7 +378,7 @@ def _16bit_weight_names(module: torch.nn.Module) -> tuple[str, ...]:
 
 
 def _16bit_weight(module: torch.nn.Module, name: str) -> torch.Tensor | None:
-    """`module.<name>`, or the 16-bit weight [`_traced_in_float32`] set aside in its place."""
+    """`module.<name>`, or the 16-bit weight [`patch_16bit_model`] set aside in its place."""
     return module._parameters.get(f"_16bit_{name}", getattr(module, name, None))
 
 
@@ -1290,7 +1293,7 @@ def _patch_neg(original):
 
 @register_patch("openvino", "torch.nn.Linear.forward")
 def _patch_linear_forward(original):
-    """Cast the 16-bit weight [`_traced_in_float32`] set aside to the f32 activations, inside the graph."""
+    """Cast the 16-bit weight [`patch_16bit_model`] set aside to the f32 activations, inside the graph."""
 
     def patch(self, input):
         if "_16bit_weight" not in self._parameters:
@@ -1304,7 +1307,7 @@ def _patch_linear_forward(original):
 
 @register_patch("openvino", "torch.nn.Embedding.forward")
 def _patch_embedding_forward(original):
-    """Look up the 16-bit embedding [`_traced_in_float32`] set aside, cast to f32 inside the graph.
+    """Look up the 16-bit embedding [`patch_16bit_model`] set aside, cast to f32 inside the graph.
 
     The cast comes before the lookup, as in the linear patch: a tied `lm_head` then reads the same `Convert`, and
     stays a compressed-weight matmul once NNCF quantizes the shared weight.
