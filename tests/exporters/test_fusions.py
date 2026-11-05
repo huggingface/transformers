@@ -33,6 +33,7 @@ from tests.models.phi3.test_modeling_phi3 import Phi3ModelTester
 from tests.models.qwen2.test_modeling_qwen2 import Qwen2ModelTester
 from tests.models.qwen3.test_modeling_qwen3 import Qwen3ModelTester
 from tests.models.qwen3_moe.test_modeling_qwen3_moe import Qwen3MoeModelTester
+from tests.test_memory_cleanup_mixin import MemoryCleanupMixin
 from transformers import AutoModelForCausalLM, GenerationConfig, set_seed
 from transformers.exporters import OpenVINOConfig, OpenVINOExporter
 from transformers.testing_utils import require_nncf, require_openvino, require_torch, slow
@@ -101,7 +102,7 @@ def _compiled_ops(ov_model):
 @slow
 @require_torch
 @require_openvino
-class OpenVINOFusionTest(unittest.TestCase):
+class OpenVINOFusionTest(MemoryCleanupMixin, unittest.TestCase):
     """The kernels OpenVINO's CPU plugin compiles the decode graph into: the attention fused with its KV cache, RoPE
     and compressed-weight matmuls."""
 
