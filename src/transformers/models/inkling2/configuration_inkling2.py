@@ -136,8 +136,6 @@ class Inkling2TextConfig(PreTrainedConfig):
 @strict
 class Inkling2VisionConfig(PreTrainedConfig):
     r"""
-    mlp_ratio (`float`, *optional*, defaults to 4.0):
-        Ratio of the MLP intermediate size to the hidden size.
     spatial_merge_size (`int`, *optional*, defaults to 2):
         Side, in native patches, of the square of patch features concatenated into one language model token.
     posemb_grid_size (`int`, *optional*, defaults to 32):
@@ -146,34 +144,32 @@ class Inkling2VisionConfig(PreTrainedConfig):
         Hidden size of the MLP projecting merged patch features to the language model.
     projector_bias (`bool`, *optional*, defaults to `False`):
         Whether the projection MLP uses biases.
-    layer_scale_init_value (`float`, *optional*, defaults to 0.1):
-        Initial value of the LayerScale factors.
     text_hidden_size (`int`, *optional*, defaults to 4608):
         Hidden size of the language model the image features are projected to.
     """
 
     model_type = "inkling2_vision"
     base_config_key = "vision_config"
-    default_rope_type = "axial"
-    attribute_map = {"native_patch_size": "patch_size", "adapter_merge_size": "spatial_merge_size"}
 
     hidden_size: int = 1024
     intermediate_size: int | None = None
     num_hidden_layers: int = 23
     num_attention_heads: int = 16
-    mlp_ratio: float = 4.0
+    num_channels: int = 3
+    patch_size: int = 20
     hidden_act: str = "gelu"
     layer_norm_eps: float = 1e-5
     attention_dropout: float | int = 0.0
-    num_channels: int = 3
-    patch_size: int = 20
+    default_rope_type = "axial"
+    mlp_ratio: float = 4.0
+    layer_scale_init_value: float = 0.1
+    rope_parameters: dict | None = None
+    attribute_map = {"native_patch_size": "patch_size", "adapter_merge_size": "spatial_merge_size"}
     spatial_merge_size: int = 2
     posemb_grid_size: int = 32
     projection_hidden_dim: int = 4096
     projector_bias: bool = False
-    layer_scale_init_value: float = 0.1
     text_hidden_size: int = 4608
-    rope_parameters: dict | None = None
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
