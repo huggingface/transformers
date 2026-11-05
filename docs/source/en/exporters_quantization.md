@@ -133,7 +133,9 @@ The three NNCF quantizers in the table above run `nncf.quantize` by default (int
 on `calibration_dataset`, with `model_type=nncf.ModelType.TRANSFORMER` unless you pass another), with the arguments of
 an [`~exporters.quantizers.NNCFQuantizationConfig`]. With an [`~exporters.quantizers.NNCFWeightCompressionConfig`] they
 run `nncf.compress_weights` (weight-only int8 or int4, with AWQ and scale estimation for int4, plus GPTQ and LoRA
-correction on OpenVINO). ExecuTorch lowers only [`~exporters.quantizers.NNCFTorchFXQuantizer`]'s weight-only result.
+correction on OpenVINO). ExecuTorch lowers only [`~exporters.quantizers.NNCFTorchFXQuantizer`]'s weight-only result. On a
+bfloat16 or float16 model, the OpenVINO graph keeps the weights 16-bit, and
+[`~exporters.quantizers.NNCFOpenVINOQuantizer`] compresses those.
 
 ```python
 import nncf

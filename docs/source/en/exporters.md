@@ -107,6 +107,8 @@ For source builds, see the [MLX installation guide](https://docs.pytorch.org/exe
 pip install transformers "torch==2.12.0" "openvino==2026.3.1"
 ```
 
+OpenVINO 2026.5 converts exported programs without decomposing them first, and the exporter does the same with it.
+
 </hfoption>
 </hfoptions>
 
@@ -214,6 +216,11 @@ compiled = ov.Core().compile_model(ov_model, "CPU")
 ov_inputs = {k: v.numpy() for k, v in inputs.items()}
 outputs = compiled(ov_inputs)
 ```
+
+A bfloat16 or float16 model exports as a float32 graph that keeps its linear, embedding and expert weights 16-bit,
+cast as the graph reads them. Feed it float32 inputs; its outputs are float32 too. OpenVINO's CPU plugin picks the
+precision it runs in (bfloat16 on CPUs with AMX or AVX-512 BF16) and reads the 16-bit weights, or the ones NNCF
+compresses, inside its matmuls.
 
 </hfoption>
 </hfoptions>
@@ -840,6 +847,9 @@ if it's using something else.
 - `grouped_mm` traces fine through `DynamoExporter` and is auto-translated for `OnnxExporter`.
 For `ExecutorchExporter` with either XNNPACK or MLX, the exporter swaps MoE experts to
 `batched_mm` before export.
+- Sliding-window layers (Mistral, Gemma 3) export with a full key-value cache: the sliding mask still keeps attention
+within the window, but the cache grows with the sequence instead of stopping at the window. This lasts until
+sliding-window decode exports as one graph.
 
 ## Next steps
 
