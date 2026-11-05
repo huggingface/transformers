@@ -174,7 +174,7 @@ class DequantizeTest(unittest.TestCase):
         self.assertEqual(tokenizer.decode(output_default[0]), tokenizer.decode(output_dequantized[0]))
 
     def test_dequantize_drops_activation_quantization(self):
-        """`dequantize=True` loads an unquantized model: no compressed-tensors scheme is left, so w8a8 also stops
+        """`dequantize=True` loads a plain dense model: no compressed-tensors scheme is left, so w8a8 also stops
         quantizing its activations."""
         model = AutoModelForCausalLM.from_pretrained(
             self.tinyllama_w8a8, quantization_config=CompressedTensorsConfig(dequantize=True)
