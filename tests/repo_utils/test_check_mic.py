@@ -218,6 +218,27 @@ class CheckMicTest(unittest.TestCase):
         self.assertNotIn("C0", stdout.getvalue())
         self.assertRegex(lines[-1], r"^MIC: 11 passed, 1 failed in [0-9.]+s$")
 
+    def test_install_hints_name_what_is_missing(self):
+        import builtins
+
+        real_import = builtins.__import__
+
+        def released_doc_builder(name, *args, **kwargs):
+            # The released hf-doc-builder has no `doc_builder.testing`.
+            if name == "doc_builder.testing":
+                raise ImportError(name)
+            return real_import(name, *args, **kwargs)
+
+        no_mic = patch("importlib.util.find_spec", return_value=None)
+        old_doc_builder = patch("builtins.__import__", side_effect=released_doc_builder)
+        with patch("importlib.util.find_spec", return_value=object()), old_doc_builder:
+            self.assertEqual(check_mic.missing_requirements(), [check_mic.DOC_BUILDER_HINT])
+        with no_mic:
+            hints = check_mic.missing_requirements()
+        self.assertEqual(hints[0], check_mic.MIC_HINT)
+        self.assertIn('pip install -e ".[testing]"', check_mic.MIC_HINT)
+        self.assertIn("git+https://github.com/huggingface/doc-builder.git", check_mic.DOC_BUILDER_HINT)
+
     def test_runner_crash_shows_raw_tail(self):
         script = "import sys\nprint('Traceback: boom')\nsys.exit(2)\n"
         with patch("sys.stdout", new_callable=io.StringIO) as stdout:

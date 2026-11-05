@@ -32,10 +32,12 @@ CHECKER_CONFIG = {
 
 ROOT = Path(__file__).resolve().parents[1]
 FLEETS = ("prototypes", "control")
-INSTALL_HINT = (
-    "Install MIC in your active Python environment:\n"
-    '  python -m pip install "transformers-mic[runtime]" '
-    '"hf-doc-builder @ git+https://github.com/huggingface/doc-builder.git"'
+MIC_HINT = 'MIC is not installed: python -m pip install -e ".[testing]"'
+# Contracts run their docs through `doc_builder.testing.DocIntegrationTest`, not released yet
+# (huggingface/doc-builder#761): until it is, doc-builder comes from main.
+DOC_BUILDER_HINT = (
+    "hf-doc-builder has no doc_builder.testing.DocIntegrationTest (unreleased, huggingface/doc-builder#761); "
+    'install its dev version: python -m pip install "hf-doc-builder @ git+https://github.com/huggingface/doc-builder.git"'
 )
 STATUS = {
     "pass": "✓",
@@ -520,6 +522,18 @@ def run(command, env, fleet_name="prototypes", total=None, jobs=1):
     return 1 if failed else returncode
 
 
+def missing_requirements():
+    """Install hints for what the runner needs and this environment lacks."""
+    hints = []
+    if importlib.util.find_spec("transformers_mic") is None:
+        hints.append(MIC_HINT)
+    try:
+        from doc_builder.testing import DocIntegrationTest  # noqa: F401
+    except ImportError:
+        hints.append(DOC_BUILDER_HINT)
+    return hints
+
+
 def main():
     model = os.environ.get("MODEL", "")
     all_fixtures = os.environ.get("ALL", "")
@@ -549,8 +563,9 @@ def main():
         if not paths:
             print(f"No local changes relative to {base}. Use MODEL=<name> or ALL=1 to run fixtures explicitly.")
             return 0
-    if importlib.util.find_spec("transformers_mic") is None:
-        print(INSTALL_HINT, file=sys.stderr)
+    hints = missing_requirements()
+    if hints:
+        print("\n".join(hints), file=sys.stderr)
         return 2
 
     env = os.environ.copy()

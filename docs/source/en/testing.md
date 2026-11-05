@@ -39,10 +39,12 @@ The Hugging Face CI runs model tests without `@slow` on every pull request, and 
 ## Run Model Integration Contracts locally
 
 MICs check published model usage paths against reviewed baselines using small fixtures.
-From your Transformers checkout, install the runner in your active Python environment once:
+The runner (`transformers-mic`) comes with the `testing` extra. Contracts also need the development version of
+`hf-doc-builder` until its `doc_builder.testing` module is released. From your Transformers checkout:
 
 ```bash
-python -m pip install "transformers-mic[runtime]" "hf-doc-builder @ git+https://github.com/huggingface/doc-builder.git"
+python -m pip install -e ".[testing]"
+python -m pip install "hf-doc-builder @ git+https://github.com/huggingface/doc-builder.git"
 ```
 
 Then run:
