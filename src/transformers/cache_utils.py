@@ -272,8 +272,9 @@ class DynamicSlidingWindowLayer(DynamicLayer):
             kv_offset = max(cumulative_length - self.sliding_window + 1, 0)
             return min(cumulative_length, self.sliding_window - 1) + query_length, kv_offset
         # The cached states are the last `min(seen, sliding_window - 1)` tokens: sizing the mask from their count and
-        # the tensor counter needs no branch on whether the window is full.
-        cached_length = self.keys.shape[-2]
+        # the tensor counter needs no branch on whether the window is full. Before their first update they're the 1-D
+        # empty tensor `lazy_initialization` leaves (a layer that keeps its prefill apart, Unlimited OCR's, decodes so).
+        cached_length = self.keys.shape[-2] if self.keys.dim() == 4 else 0
         return cached_length + query_length, self.cumulative_length - cached_length
 
     def get_seq_length(self) -> int:
