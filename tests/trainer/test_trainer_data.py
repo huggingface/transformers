@@ -18,6 +18,7 @@ batch size finder, pad/concatenate, collators, and eval loop container.
 """
 
 import copy
+import dataclasses
 import tempfile
 import unittest
 import warnings
@@ -1059,6 +1060,72 @@ class TrainerDataUtilsTest(unittest.TestCase):
         self.assertEqual(len(arrays[2]), 2)
         self.assertEqual(arrays[2][0].shape, (8, 2, 3))
         self.assertEqual(arrays[2][1].shape, (8, 2))
+
+    def test_prepare_input_dataclass(self):
+        @dataclasses.dataclass
+        class SimpleData:
+            input_ids: torch.Tensor
+            attention_mask: torch.Tensor
+
+        @dataclasses.dataclass(frozen=True)
+        class FrozenData:
+            input_ids: torch.Tensor
+
+        @dataclasses.dataclass
+        class NestedData:
+            simple: SimpleData
+            tensors: list[torch.Tensor]
+
+        @dataclasses.dataclass
+        class PostInitData:
+            input_ids: torch.Tensor
+            cached: torch.Tensor = dataclasses.field(init=False)
+
+            def __post_init__(self):
+                self.cached = self.input_ids * 2
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(output_dir=tmp_dir, use_cpu=True, report_to=[])
+            trainer = Trainer(model=nn.Linear(1, 1), args=args)
+
+            # 1. Standard mutable dataclass
+            data = SimpleData(input_ids=torch.tensor([1, 2]), attention_mask=torch.tensor([1, 1]))
+            prepared = trainer._prepare_input(data)
+            self.assertIsInstance(prepared, SimpleData)
+            self.assertEqual(prepared.input_ids.device, trainer.args.device)
+            self.assertEqual(prepared.attention_mask.device, trainer.args.device)
+
+            # 2. Frozen dataclass
+            frozen = FrozenData(input_ids=torch.tensor([3, 4]))
+            prep_frozen = trainer._prepare_input(frozen)
+            self.assertIsInstance(prep_frozen, FrozenData)
+            self.assertEqual(prep_frozen.input_ids.device, trainer.args.device)
+
+            # 3. Nested dataclass
+            nested = NestedData(simple=data, tensors=[torch.tensor([5, 6])])
+            prep_nested = trainer._prepare_input(nested)
+            self.assertIsInstance(prep_nested, NestedData)
+            self.assertIsInstance(prep_nested.simple, SimpleData)
+            self.assertEqual(prep_nested.simple.input_ids.device, trainer.args.device)
+            self.assertEqual(prep_nested.tensors[0].device, trainer.args.device)
+
+            # 4. Dataclass with init=False field
+            post_init = PostInitData(input_ids=torch.tensor([7, 8]))
+            prep_post_init = trainer._prepare_input(post_init)
+            self.assertIsInstance(prep_post_init, PostInitData)
+            self.assertEqual(prep_post_init.input_ids.device, trainer.args.device)
+            self.assertEqual(prep_post_init.cached.device, trainer.args.device)
+
+            # 5. Nested inside a batch dictionary
+            batch = {"data": data, "labels": torch.tensor([1])}
+            prep_batch = trainer._prepare_inputs(batch)
+            self.assertIsInstance(prep_batch["data"], SimpleData)
+            self.assertEqual(prep_batch["data"].input_ids.device, trainer.args.device)
+
+            # 6. Top-level dataclass passed to _prepare_inputs
+            prep_top_level = trainer._prepare_inputs(data)
+            self.assertIsInstance(prep_top_level, SimpleData)
+            self.assertEqual(prep_top_level.input_ids.device, trainer.args.device)
 
 
 # ---------------------------------------------------------------------------
