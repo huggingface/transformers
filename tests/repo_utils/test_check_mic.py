@@ -70,7 +70,7 @@ class CheckMicTest(unittest.TestCase):
             )
 
     def test_model_runs_only_its_contracts_and_propagates_failure(self):
-        def execute(command, env, fleet_name, total=None):
+        def execute(command, env, fleet_name, total=None, jobs=1):
             self.assertEqual(env["PYTHONPATH"].split(os.pathsep)[0], str(check_mic.ROOT / "src"))
             self.assertIn("--fixtures-only", command)
             self.assertIn("--fleet", command)
@@ -174,6 +174,50 @@ class CheckMicTest(unittest.TestCase):
         self.assertEqual(lines[1], "[1/2] ✓ BERT  slim  pass")
         self.assertEqual(lines[2], "[1/2] ✓ BERT  other  pass")
 
+    def test_contracts_are_split_over_parallel_runners(self):
+        # A fake runner: announces the fleet, then passes every --contract it was given.
+        script = (
+            "import json, os, sys\n"
+            "names = [sys.argv[i + 1] for i, a in enumerate(sys.argv) if a == '--contract']\n"
+            "print(json.dumps({'fleet_repository': 'f', 'fleet_revision': '0123456789abc'}))\n"
+            "for name in names:\n"
+            "    print(json.dumps({'contract': 'r', 'contract_name': name, 'target': os.environ['OMP_NUM_THREADS'],"
+            " 'status': 'pass', 'failures': []}))\n"
+        )
+        command = [sys.executable, "-c", script] + [a for n in ("A", "B", "C") for a in ("--contract", n)]
+        self.assertEqual(len(check_mic.shard(command, 2)), 2)
+        self.assertEqual(check_mic.shard(command, 1), [command])
+        env = {k: v for k, v in os.environ.items() if k != "OMP_NUM_THREADS"}
+        with patch("sys.stdout", new_callable=io.StringIO) as stdout, patch("os.cpu_count", return_value=8):
+            self.assertEqual(check_mic.run(command, env, total=3, jobs=2), 0)
+        output = stdout.getvalue()
+        self.assertEqual(output.count("Fleet prototypes (f@0123456789)"), 1)
+        self.assertIn("Running 3 contracts in 2 parallel runners", output)
+        # Every contract ran once, each runner with its share of the CPU threads.
+        self.assertEqual(sorted(line.split()[2] for line in output.splitlines() if "✓" in line), ["A", "B", "C"])
+        self.assertEqual({line.split()[3] for line in output.splitlines() if "✓" in line}, {"4"})
+        self.assertRegex(output.splitlines()[-1], r"^MIC: 3 passed in [0-9.]+s$")
+
+    def test_many_contracts_show_a_bar_and_only_the_failures(self):
+        records = [
+            {"contract": "r", "contract_name": f"C{i}", "target": "t", "status": "pass", "failures": []}
+            for i in range(12)
+        ]
+        records[5] = {**records[5], "status": "fail", "failures": ["logits differ"]}
+        script = "".join(f"print({json.dumps(json.dumps(r))})\n" for r in records)
+        with patch("sys.stdout", new_callable=io.StringIO) as stdout:
+            self.assertEqual(check_mic.run([sys.executable, "-c", script], os.environ.copy(), total=12), 1)
+        lines = stdout.getvalue().rstrip("\n").split("\n")  # not splitlines(): it splits on "\r" too
+        # Every line after the first bar redraws it, except the failure (printed in full) and the bar after it.
+        self.assertEqual(lines[0], "███" + "░" * 37 + " 1/12")
+        self.assertEqual(lines[5], "\r✗ C5  t  fail")
+        self.assertEqual(lines[6], "    logits differ")
+        self.assertEqual(lines[7], "████████████████████" + "░" * 20 + " 6/12")
+        self.assertEqual(lines[8], "\r" + "███████████████████████" + "░" * 17 + " 7/12")
+        self.assertEqual(lines[-2], "\r" + "█" * 40 + " 12/12")
+        self.assertNotIn("C0", stdout.getvalue())
+        self.assertRegex(lines[-1], r"^MIC: 11 passed, 1 failed in [0-9.]+s$")
+
     def test_runner_crash_shows_raw_tail(self):
         script = "import sys\nprint('Traceback: boom')\nsys.exit(2)\n"
         with patch("sys.stdout", new_callable=io.StringIO) as stdout:
@@ -264,7 +308,7 @@ sys.exit(1)
     def test_model_directory_change_runs_selected_contracts(self):
         selection = {"DistilBERT": "models/distilbert (src/transformers/models/distilbert/modeling_distilbert.py)"}
 
-        def execute(command, env, fleet_name, total=None):
+        def execute(command, env, fleet_name, total=None, jobs=1):
             self.assertEqual(command[command.index("--contract") + 1], "DistilBERT")
             self.assertNotIn("--changed-files", command)
             return 0

@@ -305,15 +305,24 @@ def elapsed(seconds):
     return f"{minutes}m{seconds:02d}s" if minutes else f"{seconds}s"
 
 
+BAR_ABOVE = 10
+BAR_WIDTH = 40
+
+
 class Progress:
-    """Counts the contracts the runner reported and prints a heartbeat when it goes quiet.
+    """Reports the runner's results, with a heartbeat when it goes quiet.
 
     The runner prints a target's record only once it has run (loading a model can take a while),
-    so without this a long run looks stuck between results.
+    so without this a long run looks stuck between results. Up to BAR_ABOVE contracts, each result
+    gets a `[k/total]` line; above it, passing results only advance a progress bar redrawn in place
+    (a line starting with "\\r" replaces the previous one in the checker window), and anything else
+    is printed in full above it.
     """
 
     def __init__(self, total):
         self.total, self.every = total, HEARTBEAT_SECONDS
+        self.bar = bool(total) and total > BAR_ABOVE
+        self.bar_on_screen = False
         self.done, self.last = set(), None
         self.started = self.quiet_since = time.perf_counter()
         self._stop = threading.Event()
@@ -327,13 +336,24 @@ class Progress:
         self._stop.set()
         self._thread.join()
 
-    def position(self, record):
-        """`[k/total] ` for a record (k counts contracts, not targets), and resets the quiet timer."""
+    def report(self, record, lines, quiet=False):
+        """Count `record`'s contract and show `lines` for it; `quiet` lines only advance the bar."""
         name = record.get("contract_name", record["contract"])
         self.done.add(name)
         self.last = name
         self.touch()
-        return f"[{len(self.done)}/{self.total}] " if self.total else ""
+        if not self.bar:
+            prefix = f"[{len(self.done)}/{self.total}] " if self.total else ""
+            print(prefix + "\n".join(lines), flush=True)
+            return
+        if not quiet:
+            print(("\r" if self.bar_on_screen else "") + "\n".join(lines), flush=True)
+            self.bar_on_screen = False
+        filled = BAR_WIDTH * len(self.done) // self.total
+        bar = "█" * filled + "░" * (BAR_WIDTH - filled)
+        redraw = "\r" if self.bar_on_screen else ""
+        print(f"{redraw}{bar} {len(self.done)}/{self.total}", flush=True)
+        self.bar_on_screen = True
 
     def touch(self):
         self.quiet_since = time.perf_counter()
@@ -341,48 +361,91 @@ class Progress:
     def _beat(self):
         while not self._stop.wait(1):
             now = time.perf_counter()
-            if now - self.quiet_since >= self.every:
+            # With a bar, the checker's spinner already shows the run is alive.
+            if now - self.quiet_since >= self.every and not self.bar_on_screen:
                 done = f"{len(self.done)}/{self.total} contracts done" if self.total else f"{len(self.done)} done"
                 last = f", last: {self.last}" if self.last else ", loading the first contract"
                 print(f"... {elapsed(now - self.started)} in, {done}{last}", flush=True)
                 self.quiet_since = now
 
 
-def stream(command, env, fleet_name, on_record, announce=True, total=None):
-    """Run the MIC runner, print its fleet/selection messages and hand each result record to `on_record`.
+def stream(commands, env, fleet_name, on_record, announce=True, total=None):
+    """Run MIC runner processes concurrently, print their fleet/selection messages once and hand each
+    result record to `on_record(record, progress)`, which shows it with `progress.report`.
 
-    `on_record(record, position)` gets the `[k/total] ` progress prefix along with the record.
-    Returns the runner's exit code and the last non-JSON lines it printed (tracebacks, warnings).
+    Returns the first non-zero exit code (else 0) and the last non-JSON lines the runners printed
+    (tracebacks, warnings), from the failing runner when there is one.
     """
-    tail = []
-    process = subprocess.Popen(
-        command, cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
-    )
-    with Progress(total) as progress:
+    lock = threading.Lock()
+    announced = not announce
+    results = []
+
+    def follow(command):
+        nonlocal announced
+        tail = []
+        process = subprocess.Popen(
+            command, cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
+        )
         for line in process.stdout:
             try:
                 message = json.loads(line)
             except ValueError:
                 message = None
-            if not isinstance(message, dict):
-                if line.strip():
-                    tail = [*tail, line.rstrip()][-TAIL_LINES:]
-            elif "fleet_revision" in message:
-                if announce:
-                    print(
-                        f"Fleet {fleet_name} ({message['fleet_repository']}@{message['fleet_revision'][:10]})",
-                        flush=True,
-                    )
-                    # The runner reports a contract only once it has finished; say so instead of going quiet.
-                    what = f"{total} contract{'s' if total != 1 else ''}" if total else "the selected contracts"
-                    print(f"Running {what}, results print as each one finishes...", flush=True)
-                progress.touch()
-            elif "selection" in message:
-                print("\n".join(format_selection(message["selection"])), flush=True)
-                progress.touch()
-            elif "status" in message and "target" in message:
-                on_record(message, progress.position(message))
-        return process.wait(), tail
+            with lock:
+                if not isinstance(message, dict):
+                    if line.strip():
+                        tail = [*tail, line.rstrip()][-TAIL_LINES:]
+                elif "fleet_revision" in message:
+                    if not announced:
+                        announced = True
+                        repository, revision = message["fleet_repository"], message["fleet_revision"][:10]
+                        print(f"Fleet {fleet_name} ({repository}@{revision})", flush=True)
+                        # The runner reports a contract only once it has finished; say so instead of going quiet.
+                        what = f"{total} contract{'s' if total != 1 else ''}" if total else "the selected contracts"
+                        runners = f" in {len(commands)} parallel runners" if len(commands) > 1 else ""
+                        shown = "failures print" if progress.bar else "results print as each one finishes"
+                        print(f"Running {what}{runners}, {shown}...", flush=True)
+                    progress.touch()
+                elif "selection" in message:
+                    print("\n".join(format_selection(message["selection"])), flush=True)
+                    progress.touch()
+                elif "status" in message and "target" in message:
+                    on_record(message, progress)
+        results.append((process.wait(), tail))
+
+    with Progress(total) as progress:
+        threads = [threading.Thread(target=follow, args=(command,)) for command in commands]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+    failing = [result for result in results if result[0] != 0]
+    return (failing or results or [(0, [])])[0]
+
+
+def shard(command, jobs):
+    """Split `command`'s `--contract` selection round-robin over `jobs` runner commands.
+
+    A command without an explicit contract list (e.g. `--changed-files`) stays one command.
+    """
+    names = [command[i + 1] for i, arg in enumerate(command[:-1]) if arg == "--contract"]
+    if jobs <= 1 or len(names) <= 1:
+        return [command]
+    base = without_selection(command)
+    groups = [names[i::jobs] for i in range(min(jobs, len(names)))]
+    return [base + [arg for name in group for arg in ("--contract", name)] for group in groups]
+
+
+def default_jobs():
+    """Parallel runners by default: fixtures are tiny, so the cost is mostly per-process imports."""
+    return max(1, min(4, (os.cpu_count() or 2) // 2))
+
+
+def runner_env(env, jobs):
+    """Split the CPU threads between parallel runners so they do not oversubscribe the cores."""
+    if jobs > 1 and "OMP_NUM_THREADS" not in env:
+        env = {**env, "OMP_NUM_THREADS": str(max(1, (os.cpu_count() or jobs) // jobs))}
+    return env
 
 
 def without_selection(command):
@@ -398,14 +461,16 @@ def without_selection(command):
     return kept
 
 
-def run(command, env, fleet_name="prototypes", total=None):
+def run(command, env, fleet_name="prototypes", total=None, jobs=1):
     """Run the selected fixtures and print a readable digest. Returns the exit code for the checker.
 
     Fixtures without a reviewed baseline for this platform are run without comparison (in one pass
     with `--allow-missing-baseline` when MIC supports it, else re-run with `--no-baseline`): they
     are reported as "ran without a baseline" (the usage path executes, outputs are not compared)
-    instead of failing the check. Any other failure fails it.
+    instead of failing the check. Any other failure fails it. `jobs` > 1 splits the contracts over
+    that many runner processes.
     """
+    env = runner_env(env, jobs)
     counts = {}
     missing = []
     started = time.perf_counter()
@@ -414,38 +479,36 @@ def run(command, env, fleet_name="prototypes", total=None):
         key = key or record["status"]
         counts[key] = counts.get(key, 0) + 1
 
-    def first_pass(record, position):
+    def first_pass(record, progress):
         if record.get("baseline_missing"):
             # `--allow-missing-baseline`: outputs validated in this run, not compared.
             count(record, "unchecked")
             note = f"no {record.get('platform', 'platform')} baseline"
-            print(position + "\n".join(format_record(record, note)), flush=True)
+            progress.report(record, format_record(record, note), quiet=record["status"] == "pass")
         elif missing_baseline(record):
             # Re-run without comparison after this pass; say so, or a fleet without local baselines looks stuck.
             missing.append(record)
             name = record.get("contract_name", record["contract"])
-            platform = record.get("platform", "platform")
-            print(
-                f"{position}· {name}  {record['target']}  no {platform} baseline, rerun without comparison", flush=True
-            )
+            line = f"· {name}  {record['target']}  no {record.get('platform', 'platform')} baseline, rerun without comparison"
+            progress.report(record, [line], quiet=True)
         else:
             count(record)
-            print(position + "\n".join(format_record(record)), flush=True)
+            progress.report(record, format_record(record), quiet=record["status"] in ("pass", "xfail"))
 
-    returncode, tail = stream(command, env, fleet_name, first_pass, total=total)
+    returncode, tail = stream(shard(command, jobs), env, fleet_name, first_pass, total=total)
     if missing:
         names = sorted({r.get("contract_name", r["contract"]) for r in missing})
         platform = missing[0].get("platform", "this platform")
         print(f"No reviewed {platform} baseline for {', '.join(names)}; running without comparison...", flush=True)
         note = f"no {platform} baseline"
 
-        def second_pass(record, position):
+        def second_pass(record, progress):
             count(record, "unchecked" if record["status"] == "pass" else None)
-            print(position + "\n".join(format_record(record, note)), flush=True)
+            progress.report(record, format_record(record, note), quiet=record["status"] == "pass")
 
         retry = without_selection(command) + [arg for name in names for arg in ("--contract", name)]
         retry_code, retry_tail = stream(
-            [*retry, "--no-baseline"], env, fleet_name, second_pass, announce=False, total=len(names)
+            shard([*retry, "--no-baseline"], jobs), env, fleet_name, second_pass, announce=False, total=len(names)
         )
         # The first run's non-zero code came from the missing baselines, now accounted for.
         returncode, tail = retry_code, retry_tail
@@ -460,6 +523,11 @@ def run(command, env, fleet_name="prototypes", total=None):
 def main():
     model = os.environ.get("MODEL", "")
     all_fixtures = os.environ.get("ALL", "")
+    jobs = os.environ.get("JOBS") or str(default_jobs())
+    if not jobs.isdigit() or int(jobs) < 1:
+        print(f"JOBS must be a positive number of parallel runners, not {jobs!r}.", file=sys.stderr)
+        return 2
+    jobs = int(jobs)
     base = os.environ.get("BASE") or "origin/main"
     fleet_name = os.environ.get("FLEET") or FLEETS[0]
     if fleet_name not in FLEETS:
@@ -519,12 +587,12 @@ def main():
             return 0
         names = sorted(selection)
     download_fixtures(contracts, names)
-    if all_fixtures == "1":
-        command.append("--run-all")
-    else:
-        for name in names:
-            command.extend(["--contract", name])
-    return run(command, env, fleet_name, total=len(names))
+    # Everything the runner reads is now in the Hub cache (fleet lock, contracts, fixtures): run offline.
+    env.setdefault("HF_HUB_OFFLINE", "1")
+    # An explicit list (rather than --run-all) so the contracts can be split over parallel runners.
+    for name in names:
+        command.extend(["--contract", name])
+    return run(command, env, fleet_name, total=len(names), jobs=jobs)
 
 
 if __name__ == "__main__":

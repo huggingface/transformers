@@ -355,7 +355,10 @@ class SlidingWindow:
 
     def add_line(self, line):
         with self._lock:
-            self.lines.append(line.rstrip()[: self.term_width])
+            # A line starting with "\r" redraws the previous one in place (e.g. a progress bar).
+            if line.startswith("\r") and self.lines:
+                self.lines.pop()
+            self.lines.append(line.lstrip("\r").rstrip()[: self.term_width])
             self._redraw()
 
     def finish(self, success, elapsed=None, show_lines=True):
@@ -401,7 +404,10 @@ def _run_cmd(cmd, line_callback=None):
     output_lines = []
     for raw_line in proc.stdout:
         line = raw_line.decode("utf-8", errors="replace")
-        output_lines.append(line)
+        # A line starting with "\r" replaces the previous one (progress bars): keep only the last state.
+        if line.startswith("\r") and output_lines:
+            output_lines.pop()
+        output_lines.append(line.lstrip("\r"))
         line_callback(line)
     proc.wait()
     return proc.returncode, "".join(output_lines)

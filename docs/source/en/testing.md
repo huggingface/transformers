@@ -53,12 +53,15 @@ make run-mic             # contracts affected by local changes
 make run-mic ALL=1       # all fixtures in the fleet
 make run-mic BASE=main   # use a different Git comparison base
 make run-mic FLEET=control  # the control fleet instead of the default prototypes fleet
+make run-mic ALL=1 JOBS=8   # number of runner processes working in parallel (default: up to 4)
 ```
 
 The command uses this checkout's source and the fleet revision in `tests/contracts.lock`.
 It runs the prototypes fleet by default; `FLEET=control` selects the smaller control fleet.
 It downloads the pinned contracts, fixtures and baselines as needed, executes them locally,
 and prints one line per fixture plus a summary; any failing fixture fails the command.
+Contracts are split over parallel runner processes (`JOBS`, default up to 4, `JOBS=1` to run them one by one),
+each using its share of the CPU threads.
 `make run-mic` is a wrapper around the `mic` checker (`python utils/checkers.py mic`), which is opt-in
 and not part of `make check-repo` or CI because it needs network access and model runtimes. It does not create or publish contracts.
 Model-specific runtime dependencies and a reviewed baseline for your platform are required;
