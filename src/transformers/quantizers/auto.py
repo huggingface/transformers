@@ -12,10 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import re
 import warnings
 from collections.abc import Callable
-from itertools import chain
 from typing import TypeGuard
 
 from ..models.auto.configuration_auto import AutoConfig
@@ -447,14 +445,12 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
     def update_weight_conversions(self, weight_conversions, model):
         from ..core_model_loading import WeightConverter
 
-        # Each model converter is updated by the quantizer of its target param only, e.g. the fp8 quantizer must not
-        # add its companions to the merge of NVFP4 experts
-        names = "\n".join(name for name, _ in chain(model.named_parameters(), model.named_buffers()))
-
+        # Each model converter is updated by the quantizer of its target's module only, e.g. the fp8 quantizer must not
+        # add its serialized names to the merge of NVFP4 experts
         def owner(converter):
-            target = converter._original_target_patterns[0].replace("*", ".*")
-            match = re.search(rf"^(.*{target})$", names, re.MULTILINE)
-            return self.get_quantizer(match.group(1)) if match else None
+            module = converter._original_target_patterns[0].replace("\\", "").rpartition(".")[0].lstrip("^.")
+            names = (name for name in self.module_quantizers if name == module or name.endswith(f".{module}"))
+            return self.module_quantizers.get(next(names, None))
 
         owners = {id(c): owner(c) for c in weight_conversions if isinstance(c, WeightConverter)}
         general = {}
@@ -480,8 +476,8 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
             for converter in own:
                 general.setdefault(converter._original_target_patterns[0], []).append(converter)
         # One general converter per param collects the names of every quantizer, before the own-name ones take them
-        # (`down_proj` would take `shared_experts.down_proj.weight_sf_rowmajor`). Its quantizer gives a param its own
-        # ops in `update_weight_transform`; the others pass through the params without companions
+        # (`down_proj` would take `shared_experts.down_proj.weight_scale`). Its quantizer gives a param its own
+        # ops in `update_weight_transform`; the others pass through the params without serialized names
         # `weight` first: it takes `*.down_proj.weight` before the experts' own-name `down_proj` does
         general = dict(sorted(general.items(), key=lambda item: item[0] != "weight"))
         return weight_conversions + [

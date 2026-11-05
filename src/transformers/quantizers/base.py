@@ -424,18 +424,19 @@ class HfQuantizer(ABC):
             serialized = self.serialized_names.get(param)
             if not serialized or not all(source.endswith(f".{param}") for source in sources):
                 continue
-            # `weight_scale_inv` -> `_scale_inv`
-            suffixes = [name.removeprefix(param) for name in serialized if name.startswith(param) and name != param]
+            # The other serialized names, e.g. `weight_scale_inv` -> `_scale_inv`, `input_scale` -> `_input_scale`
+            names = [name for name in serialized if name != param]
+            suffixes = [name.removeprefix(param) if name.startswith(param) else f"_{name}" for name in names]
             if suffixes and re.search(f"{targets[0]}{suffixes[0]}$", param_names, re.MULTILINE):
-                # The module keeps the companions as params: each one gets its own copy of the converter, then the
-                # quantizer's deserialization (a format conversion of the merged companion)
+                # The module keeps them as params: each one gets its own copy of the converter, then the quantizer's
+                # deserialization (a format conversion of the merged tensors)
                 operations = list(converter.operations) + ([deserialize(self)] if deserialize is not None else [])
-                for suffix in suffixes:
-                    suffixed_sources = [source + suffix for source in sources]
-                    suffixed_targets = [target + suffix for target in targets]
-                    updated.append(converter.copy(suffixed_sources, suffixed_targets, operations=list(operations)))
+                for name, suffix in zip(names, suffixes):
+                    named_sources = [source.removesuffix(param) + name for source in sources]
+                    named_targets = [target + suffix for target in targets]
+                    updated.append(converter.copy(named_sources, named_targets, operations=list(operations)))
             elif dequantize is not None:
-                # The module only has `param`: the converter also collects the companions and dequantizes first
+                # The module only has `param`: the converter also collects its serialized names and dequantizes first
                 all_sources = [re.sub(rf"{param}$", name, source) for source in sources for name in serialized]
                 updated[-1] = converter.copy(
                     all_sources, targets, operations=[dequantize(self)] + converter.operations

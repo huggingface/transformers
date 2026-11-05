@@ -85,8 +85,8 @@ def nvfp4_linear(
     input: torch.Tensor,
     weight: torch.Tensor,
     weight_sf: torch.Tensor,
-    weight_sf_rowmajor: torch.Tensor,
-    weight_global_scale: torch.Tensor,
+    weight_scale: torch.Tensor,
+    weight_scale_2: torch.Tensor,
     out_features: int,
     in_features: int,
     input_scale: torch.Tensor | None = None,
@@ -97,13 +97,14 @@ def nvfp4_linear(
     """
 
     kernel = load_nvfp4_kernel()
+    weight_global_scale = 1 / weight_scale_2
     packed_weight = kernel.PackedWeight(
         qweight=weight,
         sf=weight_sf,
         global_scale=weight_global_scale,
         n=out_features,
         k=in_features,
-        sf_rowmajor=weight_sf_rowmajor,
+        sf_rowmajor=weight_scale,
     )
     if input_scale is None or input.numel() <= 2 * in_features:
         return kernel.gemm(packed_weight, input)  # dynamic activation scale, or the W4A16 decode GEMV
@@ -130,9 +131,10 @@ class NVFP4Linear(nn.Module):
         self.weight = nn.Buffer(torch.empty(out_features, in_features, dtype=torch.bfloat16))
         sf_m, sf_n = load_nvfp4_kernel().swizzled_sf_shape(out_features, in_features)
         self.weight_sf = nn.Buffer(torch.empty(sf_m, sf_n, dtype=torch.int32))
-        # The W4A16 decode GEMV consumes row-major scales, while the W4A4 prefill GEMM consumes swizzled scales.
-        self.weight_sf_rowmajor = nn.Buffer(torch.empty(out_features, in_features // SF_VEC_SIZE, dtype=torch.uint8))
-        self.weight_global_scale = nn.Buffer(torch.empty(1, dtype=torch.float32))
+        # As ModelOpt saves them: the FP8 block scales (row-major, for the W4A16 decode GEMV; `weight_sf` is their
+        # swizzled layout for the W4A4 GEMM) and the per-tensor scale, `weight = fp4 * weight_scale * weight_scale_2`
+        self.weight_scale = nn.Buffer(torch.empty(out_features, in_features // SF_VEC_SIZE, dtype=torch.uint8))
+        self.weight_scale_2 = nn.Buffer(torch.empty(1, dtype=torch.float32))
         # A static activation scale (ModelOpt checkpoints), empty for dynamic activation quantization
         self.input_scale = nn.Buffer(torch.empty(0, dtype=torch.float32))
 
@@ -141,8 +143,8 @@ class NVFP4Linear(nn.Module):
             input,
             self.weight,
             self.weight_sf,
-            self.weight_sf_rowmajor,
-            self.weight_global_scale,
+            self.weight_scale,
+            self.weight_scale_2,
             self.out_features,
             self.in_features,
             self.input_scale if self.input_scale.numel() else None,
@@ -161,7 +163,7 @@ class NVFP4Experts(nn.Module):
     """
     Fused experts backed by packed NVFP4 weights, from per-expert ModelOpt checkpoints merged by the model's own
     converters. Per projection (`gate_up_proj` / `up_proj`, `down_proj`) of `(num_experts, out_features, in_features)`:
-    - `{proj}`: e2m1 values, two per byte, and their FP8 block scales `{proj}_sf_rowmajor` and swizzled `{proj}_sf`
+    - `{proj}`: e2m1 values, two per byte, and their FP8 block scales `{proj}_scale` and swizzled `{proj}_sf`
     - `{proj}_scale_2`, `{proj}_input_scale`: ModelOpt's per-tensor weight and static activation scales, one per
       concatenated projection (`(num_experts, 2)` for gate and up), applied to the GEMM output
     """
@@ -178,8 +180,8 @@ class NVFP4Experts(nn.Module):
             sf_shape = load_nvfp4_kernel().swizzled_sf_shape(out_features, in_features)
             self.register_buffer(name, torch.empty(num_experts, out_features, in_features // 2, dtype=torch.uint8))
             self.register_buffer(f"{name}_sf", torch.empty(num_experts, *sf_shape, dtype=torch.int32))
-            sf_rowmajor = torch.empty(num_experts, out_features, in_features // SF_VEC_SIZE, dtype=torch.uint8)
-            self.register_buffer(f"{name}_sf_rowmajor", sf_rowmajor)
+            block_scales = torch.empty(num_experts, out_features, in_features // SF_VEC_SIZE, dtype=torch.uint8)
+            self.register_buffer(f"{name}_scale", block_scales)
             scales_shape = (num_experts, 2) if name == "gate_up_proj" else (num_experts,)
             self.register_buffer(f"{name}_scale_2", torch.empty(scales_shape, dtype=torch.float32))
             self.register_buffer(f"{name}_input_scale", torch.empty(scales_shape, dtype=torch.float32))
@@ -205,7 +207,7 @@ class NVFP4Experts(nn.Module):
             input,
             getattr(self, name)[expert_idx],
             getattr(self, f"{name}_sf")[expert_idx],
-            getattr(self, f"{name}_sf_rowmajor")[expert_idx],
+            getattr(self, f"{name}_scale")[expert_idx],
             torch.ones(1, device=input.device),  # the global scales are applied to the output, per half
             out_features,
             in_features,
@@ -348,8 +350,8 @@ class NVFP4Quantize(ConversionOps):
             base = key.rsplit(".", 1)[0]
             output[key] = packed_weight.qweight
             output[f"{base}.weight_sf"] = packed_weight.sf
-            output[f"{base}.weight_sf_rowmajor"] = packed_weight.sf_rowmajor
-            output[f"{base}.weight_global_scale"] = packed_weight.global_scale
+            output[f"{base}.weight_scale"] = packed_weight.sf_rowmajor
+            output[f"{base}.weight_scale_2"] = 1 / packed_weight.global_scale
             output[f"{base}.input_scale"] = torch.empty(0, device=self.device)
         return output
 
@@ -370,9 +372,8 @@ def swizzle_sf(sf_rowmajor: torch.Tensor) -> torch.Tensor:
 
 class NVFP4Deserialize(ConversionOps):
     """
-    The kernel's layout of NVFP4 tensors: the swizzled `*_sf` from the row-major FP8 block scales `*_sf_rowmajor`
-    (ModelOpt's `weight_scale`, renamed by the quantizer). For an `NVFP4Linear`, also its `weight_global_scale` from
-    ModelOpt's `weight_scale_2` and its `input_scale`. Other tensors, e.g. the merged expert scales, pass through.
+    The kernel's layout of ModelOpt's NVFP4 tensors: the FP8 block scales `*_scale` as bytes, and their swizzled `*_sf`.
+    An `NVFP4Linear` without a static `input_scale` gets an empty one (dynamic activation quantization).
     """
 
     def __init__(self, hf_quantizer):
@@ -382,22 +383,17 @@ class NVFP4Deserialize(ConversionOps):
         output = {}
         for key, value in input_dict.items():
             tensor = value[0] if isinstance(value, list) else value
-            if key.endswith("sf_rowmajor"):
+            if key.endswith("_scale") and not key.endswith("input_scale"):  # the block scales
                 output[key] = tensor = tensor.view(torch.uint8)
                 rows, columns = tensor.shape[-2], tensor.shape[-1] * SF_VEC_SIZE
                 sf_shape = load_nvfp4_kernel().swizzled_sf_shape(rows, columns)
-                output.setdefault(
-                    key.removesuffix("_rowmajor"),
-                    swizzle_sf(tensor).view(torch.int32).view(*tensor.shape[:-2], *sf_shape),
-                )
-            elif key == "weight_scale_2":
-                output["weight_global_scale"] = (1 / tensor.float()).reshape(1)
-            elif key == "weight_input_scale":
-                output["input_scale"] = tensor.float().reshape(-1)
+                swizzled = swizzle_sf(tensor).view(torch.int32).view(*tensor.shape[:-2], *sf_shape)
+                output[key.removesuffix("scale") + "sf"] = swizzled
+            elif key in ("weight_scale_2", "input_scale"):  # an `NVFP4Linear`'s scalars, saved 0-d
+                output[key] = tensor.float().reshape(-1)
             else:
                 output[key] = tensor
-        if "weight" in output and "weight_sf" in output:  # an `NVFP4Linear`, else not quantized
-            # Empty for dynamic activation quantization
+        if "weight_sf" in output:  # an `NVFP4Linear`
             output.setdefault("input_scale", torch.empty(0, device=output["weight"].device))
         return output
 
@@ -406,9 +402,8 @@ class NVFP4Deserialize(ConversionOps):
 
 class NVFP4Dequantize(ConversionOps):
     """
-    Dense weights from the packed `weight` (two e2m1 values per byte, low nibble first), its row-major FP8 block
-    scales `weight_sf_rowmajor` and `weight_global_scale`: `weight = fp4 * block_scale / global_scale`. Or ModelOpt's
-    `weight_scale_2`: `weight = fp4 * block_scale * weight_scale_2`.
+    Dense weights from the packed `weight` (two e2m1 values per byte, low nibble first), its FP8 block scales
+    `weight_scale` and per-tensor `weight_scale_2`: `weight = fp4 * weight_scale * weight_scale_2`.
     """
 
     def __init__(self, hf_quantizer):
@@ -420,27 +415,22 @@ class NVFP4Dequantize(ConversionOps):
             if not key.endswith("weight"):
                 continue  # the scales, read along with their weight
             weights = weights if isinstance(weights, list) else [weights]
-            modelopt = f"{key}_scale_2" in input_dict
-            scales = input_dict.get(f"{key}_sf_rowmajor")
-            global_scales = input_dict.get(f"{key}_scale_2" if modelopt else f"{key}_global_scale")
-            if scales is not None and global_scales is not None:
+            scales, scales_2 = input_dict.get(f"{key}_scale"), input_dict.get(f"{key}_scale_2")
+            if scales is not None and scales_2 is not None:
                 scales = scales if isinstance(scales, list) else [scales]
-                global_scales = global_scales if isinstance(global_scales, list) else [global_scales]
+                scales_2 = scales_2 if isinstance(scales_2, list) else [scales_2]
                 # In the dtype of the dense param it loads into
                 dtype = model.get_parameter_or_buffer(full_layer_name).dtype
-                weights = [
-                    self._dequantize(weight, scale, 1 / global_scale if modelopt else global_scale).to(dtype)
-                    for weight, scale, global_scale in zip(weights, scales, global_scales)
-                ]
+                weights = [self._dequantize(*tensors).to(dtype) for tensors in zip(weights, scales, scales_2)]
             output[key] = weights
         return output
 
-    def _dequantize(self, packed, scales, global_scale):
+    def _dequantize(self, packed, scales, scale_2):
         values = torch.tensor(FP4_VALUES, device=packed.device)
         weight = torch.stack([values[(packed & 0xF).int()], values[(packed >> 4).int()]], dim=-1)
         weight = weight.view(packed.shape[0], -1, SF_VEC_SIZE)
         scales = scales.view(torch.float8_e4m3fn).float().unsqueeze(-1)
-        return (weight * scales / global_scale).flatten(1)
+        return (weight * scales * scale_2).flatten(1)
 
 
 def is_nvfp4_compatible(module: nn.Module) -> bool:

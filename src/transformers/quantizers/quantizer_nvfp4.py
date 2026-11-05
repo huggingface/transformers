@@ -115,34 +115,13 @@ class NVFP4HfQuantizer(HfQuantizer):
 
         return NVFP4Quantize(self.quantization_device)
 
-    # ModelOpt's `weight_scale` and `input_scale` are renamed (see `update_weight_conversions`)
-    serialized_names = {
-        "weight": [
-            "weight",
-            "weight_sf",
-            "weight_sf_rowmajor",
-            "weight_global_scale",
-            "weight_scale_2",
-            "weight_input_scale",
-        ]
-    }
+    # As ModelOpt saves them
+    serialized_names = {"weight": ["weight", "weight_scale", "weight_scale_2", "input_scale"]}
 
     def get_load_operations(self):
         from ..integrations.nvfp4 import NVFP4Dequantize, NVFP4Deserialize
 
         return {"deserialize": NVFP4Deserialize, "dequantize": NVFP4Dequantize}
-
-    def update_weight_conversions(self, weight_conversions, model):
-        from ..core_model_loading import WeightRenaming
-
-        # ModelOpt's block scales are our row-major ones, and every companion starts with `weight`: the model's merge
-        # converters get a copy for each (e.g. `experts.*.w1.weight_scale_2` into `experts.gate_up_proj_scale_2`).
-        # In a plan, only on our params (FP8 has its own `weight_scale`)
-        renames = [
-            WeightRenaming(r"\.weight_scale$", ".weight_sf_rowmajor"),
-            WeightRenaming(r"\.input_scale$", ".weight_input_scale"),
-        ]
-        return super().update_weight_conversions(weight_conversions + renames, model)
 
     def is_serializable(self) -> bool:
         return False

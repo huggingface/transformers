@@ -158,8 +158,8 @@ class NVFP4IntegrationTest(unittest.TestCase):
         self.assertIsInstance(model["biased"], nn.Linear)
         self.assertIsInstance(model["unaligned"], nn.Linear)
         self.assertEqual(model["convert"].weight_sf.dtype, torch.int32)
-        self.assertEqual(model["convert"].weight_sf_rowmajor.dtype, torch.uint8)
-        self.assertEqual(model["convert"].weight_global_scale.dtype, torch.float32)
+        self.assertEqual(model["convert"].weight_scale.dtype, torch.uint8)
+        self.assertEqual(model["convert"].weight_scale_2.dtype, torch.float32)
 
     @patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel)
     def test_linear_forward_uses_normal_function_entry_point(self, _):
@@ -173,7 +173,7 @@ class NVFP4IntegrationTest(unittest.TestCase):
     def test_packed_tensors_are_registered_in_state_dict(self, _):
         layer = NVFP4Linear(64, 32)
 
-        buffer_names = {"weight", "weight_sf", "weight_sf_rowmajor", "weight_global_scale", "input_scale"}
+        buffer_names = {"weight", "weight_sf", "weight_scale", "weight_scale_2", "input_scale"}
         for buffer_name in buffer_names:
             self.assertIsInstance(getattr(layer, buffer_name), nn.Buffer)
         self.assertEqual(set(layer.state_dict()), buffer_names)
@@ -190,8 +190,8 @@ class NVFP4IntegrationTest(unittest.TestCase):
             {
                 "model.proj.weight",
                 "model.proj.weight_sf",
-                "model.proj.weight_sf_rowmajor",
-                "model.proj.weight_global_scale",
+                "model.proj.weight_scale",
+                "model.proj.weight_scale_2",
                 "model.proj.input_scale",
             },
         )
@@ -201,12 +201,12 @@ class NVFP4IntegrationTest(unittest.TestCase):
     def test_modelopt_checkpoint_round_trip(self, _):
         weight = torch.randn(128, 64)
         packed, weight_scale, weight_scale_2 = _modelopt_quantize(weight)
-        # ModelOpt's names, as renamed by the quantizer
+        # As ModelOpt saves them
         checkpoint = {
             "weight": packed,
-            "weight_sf_rowmajor": weight_scale,
+            "weight_scale": weight_scale,
             "weight_scale_2": weight_scale_2,
-            "weight_input_scale": torch.tensor(1 / 448),
+            "input_scale": torch.tensor(1 / 448),
         }
         buffers = NVFP4Deserialize(None).convert(dict(checkpoint))
         layer = NVFP4Linear(64, 128)
