@@ -925,6 +925,7 @@ class MiniMaxM3VLModelOutputWithPast(LlavaModelOutputWithPast):
     router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed):
         Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
     """
+
     router_logits: tuple[torch.Tensor] | None = None
 
     @property
@@ -943,6 +944,7 @@ class MiniMaxM3VLCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
     router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed):
         Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
     """
+
     aux_loss: torch.Tensor | None = None
     router_logits: tuple[torch.Tensor] | None = None
 
