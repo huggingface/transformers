@@ -2314,7 +2314,7 @@ class GenerationMixin(ContinuousMixin):
             model_kwargs[cache_name] = QuantizedCache(backend=backend, **cache_config)
         # i.e. `cache_implementation` in [None, "dynamic", "offloaded"]
         else:
-            model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs)
+            model_kwargs[cache_name] = DynamicCache(**dynamic_cache_kwargs, **(generation_config.cache_config or {}))
 
         if (
             self.config.is_encoder_decoder

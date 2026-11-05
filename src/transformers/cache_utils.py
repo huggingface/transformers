@@ -1432,6 +1432,12 @@ DYNAMIC_LAYER_TYPE_MAPPING = {
     # Dummy layer type for shared KV layers, or layers with legacy name such as "moe" or "mlp" without attention
     "dummy": DummyLayer,
 }
+# The layer type that caches every token of each windowed one (`DynamicCache(full_sliding_layers=True)`)
+_FULL_LAYER_TYPES = {
+    "sliding_attention": "full_attention",
+    "chunked_attention": "full_attention",
+    "hybrid_sliding": "hybrid",
+}
 # Same but for StaticCache
 STATIC_LAYER_TYPE_MAPPING = {
     "full_attention": StaticLayer,
@@ -1982,6 +1988,11 @@ class DynamicCache(Cache):
         offload_only_non_sliding (`bool`, *optional*, defaults to `False`):
             If `offloading` is `True`, this further decides if only the non-sliding layers will be offloaded (because
             usually the sliding layers are small in size, so there is no need to offload them, and skipping it is faster).
+        full_sliding_layers (`bool`, *optional*, defaults to `False`):
+            Whether the sliding-window and chunked attention layers keep every token, like full attention layers,
+            instead of only their window. The attention mask still applies the window, so outputs are the same; the
+            cache grows with the sequence. Some runtimes need it to fuse the cache into their attention (exported
+            OpenVINO models, for example). In `generate`, set it with `GenerationConfig(cache_config={...})`.
 
     Example:
 
@@ -2006,12 +2017,20 @@ class DynamicCache(Cache):
         config: PreTrainedConfig | None = None,
         offloading: bool = False,
         offload_only_non_sliding: bool = False,
+        full_sliding_layers: bool = False,
     ):
         layers = []
         # If a config is passed, use it to infer the layer types and initialize accordingly
         if config is not None:
             decoder_config = config.get_text_config(decoder=True)
             layer_types, per_layer_kwargs = get_layer_types_and_kwargs(decoder_config)
+            if full_sliding_layers:
+                # Their full attention counterparts, whose layers take no window
+                layer_types = [_FULL_LAYER_TYPES.get(layer_type, layer_type) for layer_type in layer_types]
+                per_layer_kwargs = [
+                    {name: value for name, value in kwargs.items() if name != "sliding_window"}
+                    for kwargs in per_layer_kwargs
+                ]
             # Dispatch the layer types
             layers = [
                 DYNAMIC_LAYER_TYPE_MAPPING[layer_type](**layer_kwargs)
