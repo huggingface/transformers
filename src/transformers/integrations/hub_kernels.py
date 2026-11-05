@@ -174,24 +174,24 @@ if is_kernels_available():
             "chunk_gated_delta_rule": {
                 "cuda": {
                     Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
-                        repo_id="kernels-staging/fla",
+                        repo_id="kernels-community/fla",
                         layer_name="chunk_gated_delta_rule",
                         version=2,
                     ),
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                        repo_id="kernels-staging/fla",
+                        repo_id="kernels-community/fla",
                         layer_name="chunk_gated_delta_rule",
                         version=2,
                     ),
                 },
                 "xpu": {
                     Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
-                        repo_id="kernels-staging/fla",
+                        repo_id="kernels-community/fla",
                         layer_name="chunk_gated_delta_rule",
                         version=2,
                     ),
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                        repo_id="kernels-staging/fla",
+                        repo_id="kernels-community/fla",
                         layer_name="chunk_gated_delta_rule",
                         version=2,
                     ),
@@ -202,14 +202,14 @@ if is_kernels_available():
                 # so training stays on the torch path.
                 "cuda": {
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                        repo_id="kernels-staging/fla",
+                        repo_id="kernels-community/fla",
                         layer_name="recurrent_gated_delta_rule",
                         version=2,
                     ),
                 },
                 "xpu": {
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                        repo_id="kernels-staging/fla",
+                        repo_id="kernels-community/fla",
                         layer_name="recurrent_gated_delta_rule",
                         version=2,
                     ),
@@ -218,12 +218,12 @@ if is_kernels_available():
             "chunk_kda": {
                 "cuda": {
                     Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
-                        repo_id="kernels-staging/fla",
+                        repo_id="kernels-community/fla",
                         layer_name="chunk_kimi_delta_attention",
                         version=2,
                     ),
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                        repo_id="kernels-staging/fla",
+                        repo_id="kernels-community/fla",
                         layer_name="chunk_kimi_delta_attention",
                         version=2,
                     ),
@@ -232,7 +232,7 @@ if is_kernels_available():
                     # Inference only: the `chunk_kda` backward kernel uses Intel 2D block-read intrinsics
                     # that the Triton XPU backend fails to build, so training stays on the torch path.
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                        repo_id="kernels-staging/fla",
+                        repo_id="kernels-community/fla",
                         layer_name="chunk_kimi_delta_attention",
                         version=2,
                     ),
@@ -243,14 +243,14 @@ if is_kernels_available():
                 # so training stays on the torch path.
                 "cuda": {
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                        repo_id="kernels-staging/fla",
+                        repo_id="kernels-community/fla",
                         layer_name="recurrent_kimi_delta_attention",
                         version=2,
                     ),
                 },
                 "xpu": {
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                        repo_id="kernels-staging/fla",
+                        repo_id="kernels-community/fla",
                         layer_name="recurrent_kimi_delta_attention",
                         version=2,
                     ),
@@ -259,24 +259,24 @@ if is_kernels_available():
             "RMSNormGated": {
                 "cuda": {
                     Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
-                        repo_id="kernels-staging/fla",
+                        repo_id="kernels-community/fla",
                         layer_name="FusedRMSNormGated",
                         version=2,
                     ),
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                        repo_id="kernels-staging/fla",
+                        repo_id="kernels-community/fla",
                         layer_name="FusedRMSNormGated",
                         version=2,
                     ),
                 },
                 "xpu": {
                     Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
-                        repo_id="kernels-staging/fla",
+                        repo_id="kernels-community/fla",
                         layer_name="FusedRMSNormGated",
                         version=2,
                     ),
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
-                        repo_id="kernels-staging/fla",
+                        repo_id="kernels-community/fla",
                         layer_name="FusedRMSNormGated",
                         version=2,
                     ),
@@ -736,7 +736,7 @@ def load_and_register_attn_kernel(
             attention_wrapper = flash_attention_forward
         kernel_function = attention_wrapper
     elif hasattr(kernel, "sparse_atten_func"):
-        # Block-sparse kernels (e.g. `kernels-staging/msa`) expose `sparse_atten_func` instead of
+        # Block-sparse kernels (e.g. `kernels-community/msa`) expose `sparse_atten_func` instead of
         # `flash_attn_varlen_func`; their call contract differs from the attention interface, so we
         # bind the dedicated transformers-side wrapper that adapts the arguments and hides the
         # prefill-kernel / decode-fallback dispatch.
