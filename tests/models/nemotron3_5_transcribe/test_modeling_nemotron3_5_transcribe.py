@@ -173,6 +173,14 @@ class Nemotron3_5TranscribeForConditionalGenerationModelTest(ALMModelTest, unitt
     def _audio_features_get_expected_num_attentions(self, model_tester=None):
         return self.model_tester.get_audio_config().asr_config.num_hidden_layers
 
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        config = ALMModelTest._prepare_config_headdim(config, requested_dim)
+        diarization_config = config.audio_config.diarization_config
+        # Keep the speaker head input size aligned with the resized audio encoder.
+        diarization_config.head_config.audio_hidden_size = diarization_config.audio_config.hidden_size
+        return config
+
     @unittest.skip(
         reason="The speech recognition encoder is a sub-model that records its own layers and reads `output_attentions` "
         "from its own config, `audio_config.asr_config`, which the test does not reach (it sets the direct sub-configs "
@@ -187,6 +195,18 @@ class Nemotron3_5TranscribeForConditionalGenerationModelTest(ALMModelTest, unitt
         "only). Passing it as argument works."
     )
     def test_get_audio_features_hidden_states(self):
+        pass
+
+    @unittest.skip(
+        reason="The audio tower is kept in float32 (`_keep_in_fp32_modules_strict`), which FlashAttention does not support"
+    )
+    def test_eager_matches_fa2_generate(self):
+        pass
+
+    @unittest.skip(
+        reason="The audio tower is kept in float32 (`_keep_in_fp32_modules_strict`), which the SDPA flash backend does not support"
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
         pass
 
     @unittest.skip(reason="Nemotron-H needs at least 3 layers to test (mamba, moe, attention)")
