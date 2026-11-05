@@ -143,13 +143,9 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     def _process_model_after_weight_loading(self, model, **kwargs):
         # Single-process multi-device is unsafe for DeepGEMM (its kernels are bound to one CUDA
         # context); route those models through Triton/grouped_mm instead.
-        from ..integrations.finegrained_fp8 import FP8Linear, _disable_deepgemm_on_multi_device
+        from ..integrations.finegrained_fp8 import _disable_deepgemm_on_multi_device
 
         _disable_deepgemm_on_multi_device(model)
-        for module in model.modules():
-            # ModelOpt saves the per-block scales `(out / 128, 1, in / 128, 1)`
-            if isinstance(module, FP8Linear) and module.weight_scale_inv.ndim == 4:
-                module.weight_scale_inv.data = module.weight_scale_inv.data.flatten(1)
         return model
 
     def update_parallel_plan(self, model, plan):
@@ -187,9 +183,16 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     }
 
     def get_load_operations(self):
-        from ..integrations.finegrained_fp8 import Fp8Dequantize
+        from ..integrations.finegrained_fp8 import Fp8Dequantize, Fp8Deserialize
 
-        return {"dequantize": Fp8Dequantize}
+        return {"deserialize": Fp8Deserialize, "dequantize": Fp8Dequantize}
+
+    def get_weight_conversions(self):
+        # Deserializing only reshapes linear scales (ModelOpt's 4-D blocks): the experts load through the model's merges
+        conversions = super().get_weight_conversions()
+        if self.quantization_config.dequantize:
+            return conversions
+        return [c for c in conversions if c._original_target_patterns == ["weight"]]
 
     def update_weight_conversions(self, weight_conversions, model):
         from ..core_model_loading import WeightRenaming

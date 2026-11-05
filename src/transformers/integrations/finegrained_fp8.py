@@ -1010,6 +1010,26 @@ class Fp8Quantize(ConversionOps):
         return Fp8Dequantize(self.hf_quantizer)
 
 
+class Fp8Deserialize(ConversionOps):
+    """
+    The tensors of an FP8 linear as its params: per-block scales saved with singleton dims (e.g. ModelOpt's
+    `(out / 128, 1, in / 128, 1)`) flattened, and each tensor in its param's dtype (e.g. ue8m0 scales saved as float32).
+    """
+
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(self, input_dict, model=None, full_layer_name=None, **kwargs) -> dict[str, torch.Tensor]:
+        module = get_module_from_name(model, full_layer_name)[0] if model is not None else None
+        output = {}
+        for key, value in input_dict.items():
+            value = value[0] if isinstance(value, list) else value
+            value = value.flatten(1) if value.ndim == 4 else value
+            param = getattr(module, key, None)
+            output[key] = value.to(param.dtype) if isinstance(param, torch.Tensor) else value
+        return output
+
+
 class Fp8Dequantize(ConversionOps):
     """Dequantize FP8 weights using their per-block ``weight_scale_inv``.
 

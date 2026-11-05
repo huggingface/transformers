@@ -411,23 +411,17 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         return [quantizer for quantizer in dict.fromkeys(self.quantizers.values()) if quantizer is not None]
 
     def set_quantizers(self, quantizers):
-        from ..core_model_loading import build_glob_alternation
-
         self.quantizers = quantizers
         self.quantization_config = {
             pattern: None if quantizer is None else quantizer.quantization_config
             for pattern, quantizer in quantizers.items()
         }
-        # Exact module names first, then globs, `"*"` last: each matches anywhere in the name, the first one wins
-        patterns = sorted(quantizers, key=lambda pattern: (pattern == "*") + ("*" in pattern))
-        globs = [
-            (pattern if pattern.startswith("*") else f"*{pattern}")
-            if "*" in pattern
-            else rf"(?:^|.+\.){re.escape(pattern)}(?:\.|$)"
-            for pattern in patterns
-        ]
-        self.alternation, groups, _ = build_glob_alternation(globs)
-        self.group_to_pattern = dict(zip(groups, patterns))
+        # A pattern (a module name, `*` for anything) matches whole modules of a name, anywhere in it. Exact names
+        # first, `"*"` last: matched from the start of the name, the first branch wins
+        patterns = sorted(quantizers, key=lambda pattern: pattern.count("*") + (pattern == "*"))
+        self.group_to_pattern = {f"g{i}": pattern for i, pattern in enumerate(patterns)}
+        bodies = [re.escape(pattern).replace(r"\*", ".*") for pattern in patterns]
+        self.alternation = re.compile("|".join(rf"(?P<g{i}>(?:.*\.)?{body}(?:\.|$))" for i, body in enumerate(bodies)))
 
     def get_quantizer(self, name):
         match = self.alternation.match(name)
