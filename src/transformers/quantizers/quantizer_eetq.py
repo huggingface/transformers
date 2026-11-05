@@ -42,6 +42,8 @@ class EetqHfQuantizer(HfQuantizer):
     quantization_config: "EetqConfig"
 
     def validate_environment(self, *args, **kwargs):
+        if self.dequantizing:
+            return  # dequantizing falls back to torch without the kernel or a GPU
         if not is_kernels_available():
             raise ImportError("Loading an EETQ quantized model requires kernels (`pip install kernels`)")
 

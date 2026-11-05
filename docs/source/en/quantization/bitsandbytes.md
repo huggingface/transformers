@@ -327,7 +327,7 @@ model_double_quant = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-13
 
 ## Dequantizing bitsandbytes models
 
-Pass `dequantize=True` to load a pre-quantized bitsandbytes checkpoint back in its original precision. This may result in some quality loss, and requires enough memory to fit the dense model.
+Pass `dequantize=True` to load a pre-quantized bitsandbytes checkpoint as unquantized weights in the model's dtype. They hold the quantized values, so nothing is lost beyond the original quantization (and rounding to that dtype), but the model needs the memory of its unquantized size.
 
 ```python
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
