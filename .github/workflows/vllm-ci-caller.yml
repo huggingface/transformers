@@ -604,9 +604,10 @@ jobs:
           if not jobs:
               print("No new failing tests.")
           else:
-              for job_name, tests in jobs.items():
-                  print(f"  [{job_name}]  ({len(tests)} new)")
-                  for t in tests:
+              for job_name, job in jobs.items():
+                  print(f"  [{job_name}]  ({job['num_failing']} new)")
+                  print(f"    {job['job_url']}")
+                  for t in job["tests"]:
                       print(f"    - {t}")
                   print()
           EOF

@@ -21,15 +21,18 @@ Output files written to --output-dir (default: current directory):
   new_failing_tests_with_trace_YYYY_MM_DD.json  only new failures vs prev run, with trace
   failing_tests_categories_YYYY_MM_DD.json    failure counts per error category
 
-Jobs from different shards are merged under a single group name, e.g.:
-  "Test vLLM initialization (small subset, shard 0 / 4)" ->
-  "Test vLLM initialization (small subset)"
+Failures are grouped by job, keyed by the real job name (matrix shards are kept
+as separate jobs). Each job entry looks like:
+  "Test vLLM transformers backend (shard 2 / 4)": {
+      "job_url": "https://github.com/<repo>/actions/runs/<run_id>/job/<job_id>",
+      "num_failing": 3,
+      "tests": [...]   # test IDs, or {test, short_error, trace} in *_with_trace files
+  }
 """
 
 import argparse
 import json
 import os
-import re
 import sys
 import urllib.error
 import urllib.request
@@ -165,29 +168,6 @@ def get_previous_run(current_run_id, repo=REPO, workflow=WORKFLOW_FILE, token=No
 
 
 # ---------------------------------------------------------------------------
-# Job name normalisation — merge shards into a single group
-# ---------------------------------------------------------------------------
-
-def normalize_job_name(name):
-    """
-    Strip shard suffixes so that matrix shards are grouped under one name.
-
-    Examples:
-      "Test vLLM initialization (small subset, shard 0 / 4)"
-        -> "Test vLLM initialization (small subset)"
-      "Test vLLM transformers backend (shard 2 / 4)"
-        -> "Test vLLM transformers backend"
-      "Test vLLM integration"
-        -> "Test vLLM integration"
-    """
-    # Remove ", shard X / N" inside parentheses
-    name = re.sub(r",\s*shard\s+\d+\s*/\s*\d+", "", name, flags=re.IGNORECASE)
-    # Remove empty parentheses left behind by the substitution above
-    name = re.sub(r"\(\s*\)", "", name)
-    return name.strip()
-
-
-# ---------------------------------------------------------------------------
 # Failure collection
 # ---------------------------------------------------------------------------
 
@@ -201,10 +181,9 @@ def collect_run_failures(run_id, repo=REPO, token=None, plugin=None):
     Returns:
         (jobs_meta, grouped_failures)
         - jobs_meta: list of raw job dicts from the API
-        - grouped_failures: dict  normalized_job_name ->
+        - grouped_failures: dict  job_name ->
               list of {"test": str, "short_error": str, "trace": str}
-          Tests are deduplicated globally (a test appearing in multiple shards
-          is only recorded once, under the first shard's group).
+          Tests are deduplicated within each job.
     """
     if plugin is None:
         plugin = TracePlugin()
@@ -213,21 +192,17 @@ def collect_run_failures(run_id, repo=REPO, token=None, plugin=None):
     print(f"  Run {run_id}: {len(jobs)} jobs found", file=sys.stderr)
 
     grouped = defaultdict(list)
-    seen_tests = set()  # global dedup across all shards / jobs
 
     for job in jobs:
         conclusion = job.get("conclusion") or "unknown"
-        # Only fetch logs for jobs that actually ran and failed/were cancelled.
+        # Only fetch logs for jobs that actually ran and failed.
         # Skip success (no failures), skipped (never ran), and unknown (still
         # running — e.g. the report job itself querying its own run).
         if conclusion != "failure":
             continue
 
-        job_group = normalize_job_name(job["name"])
-        print(
-            f"  [{conclusion}] {job['name']} -> group: {job_group!r}",
-            file=sys.stderr,
-        )
+        job_name = job["name"]
+        print(f"  [{conclusion}] {job_name}", file=sys.stderr)
 
         log = fetch_job_log(job["id"], repo=repo, token=token)
         if not log:
@@ -241,6 +216,7 @@ def collect_run_failures(run_id, repo=REPO, token=None, plugin=None):
         trace_map = classify_by_scanning_log(log, test_ids)
         short_error_map = {t: e for t, e in failures}
 
+        seen_tests = set()
         for test_id in test_ids:
             if test_id in seen_tests:
                 continue
@@ -248,7 +224,7 @@ def collect_run_failures(run_id, repo=REPO, token=None, plugin=None):
 
             base_trace = trace_map.get(test_id, "(not found)")
             enhanced_trace = apply_plugin(plugin, log, test_id, base_trace)
-            grouped[job_group].append({
+            grouped[job_name].append({
                 "test": test_id,
                 "short_error": short_error_map.get(test_id, ""),
                 "trace": enhanced_trace,
@@ -338,15 +314,23 @@ def compute_new_failures(current_grouped, previous_grouped):
 # Report writing
 # ---------------------------------------------------------------------------
 
-def _strip_traces(grouped):
-    """Return grouped_failures with only test IDs (no short_error / trace)."""
+def _format_jobs(grouped, job_urls, with_trace):
+    """
+    Convert grouped_failures into the report's "jobs" mapping, sorted by job name:
+      job_name -> {"job_url": str, "num_failing": int, "tests": [...]}
+    With with_trace=False, "tests" holds only test IDs.
+    """
     return {
-        job_name: [item["test"] for item in items]
-        for job_name, items in grouped.items()
+        job_name: {
+            "job_url": job_urls.get(job_name),
+            "num_failing": len(items),
+            "tests": items if with_trace else [item["test"] for item in items],
+        }
+        for job_name, items in sorted(grouped.items())
     }
 
 
-def write_reports(run_id, run_url, current_grouped, previous_run, previous_grouped, output_dir):
+def write_reports(run_id, run_url, current_grouped, job_urls, previous_run, previous_grouped, output_dir):
     """Write the five report files to output_dir."""
     os.makedirs(output_dir, exist_ok=True)
     date_str = datetime.now(timezone.utc).strftime("%Y_%m_%d")
@@ -366,7 +350,7 @@ def write_reports(run_id, run_url, current_grouped, previous_run, previous_group
             "run_url": run_url,
             "date": date_iso,
             "total_failing": total_failing,
-            "jobs": _strip_traces(current_grouped),
+            "jobs": _format_jobs(current_grouped, job_urls, with_trace=False),
         }, f, indent=2, ensure_ascii=False)
     print(f"Wrote {path}", file=sys.stderr)
 
@@ -380,7 +364,7 @@ def write_reports(run_id, run_url, current_grouped, previous_run, previous_group
             "run_url": run_url,
             "date": date_iso,
             "total_failing": total_failing,
-            "jobs": current_grouped,
+            "jobs": _format_jobs(current_grouped, job_urls, with_trace=True),
         }, f, indent=2, ensure_ascii=False)
     print(f"Wrote {path}", file=sys.stderr)
 
@@ -404,7 +388,7 @@ def write_reports(run_id, run_url, current_grouped, previous_run, previous_group
             "date": date_iso,
             "total_new_failing": total_new,
             "note": new_note,
-            "jobs": _strip_traces(new_grouped),
+            "jobs": _format_jobs(new_grouped, job_urls, with_trace=False),
         }, f, indent=2, ensure_ascii=False)
     print(f"Wrote {path}", file=sys.stderr)
 
@@ -418,7 +402,7 @@ def write_reports(run_id, run_url, current_grouped, previous_run, previous_group
             "date": date_iso,
             "total_new_failing": total_new,
             "note": new_note,
-            "jobs": new_grouped,
+            "jobs": _format_jobs(new_grouped, job_urls, with_trace=True),
         }, f, indent=2, ensure_ascii=False)
     print(f"Wrote {path}", file=sys.stderr)
 
@@ -484,9 +468,10 @@ def main():
     # Collect failures for the current run
     # ------------------------------------------------------------------
     print(f"\n=== Current run: {args.run_id} ===", file=sys.stderr)
-    _, current_grouped = collect_run_failures(
+    current_jobs, current_grouped = collect_run_failures(
         args.run_id, repo=args.repo, token=token, plugin=plugin
     )
+    job_urls = {job["name"]: job.get("html_url") for job in current_jobs}
     total = sum(len(v) for v in current_grouped.values())
     print(f"  Total unique failures: {total}", file=sys.stderr)
 
@@ -520,7 +505,7 @@ def main():
     print(f"\n=== Writing reports to: {args.output_dir} ===", file=sys.stderr)
     write_reports(
         args.run_id, run_url,
-        current_grouped, previous_run, previous_grouped,
+        current_grouped, job_urls, previous_run, previous_grouped,
         args.output_dir,
     )
     print("\nDone.", file=sys.stderr)
