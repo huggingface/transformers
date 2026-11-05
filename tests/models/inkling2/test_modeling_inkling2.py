@@ -123,6 +123,6 @@ class Inkling2VisionText2TextModelTest(Inkling2ModelTestMixin, VLMModelTest, uni
     # each image adds a class token and `spatial_merge_size**2` vision tokens per `pixel_values` row
     skip_test_image_features_output_shape = True
 
-    @unittest.skip("Inkling2 attention is eager only: it adds a relative position bias and a sink")
+    @unittest.skip("Inkling2 text attention is eager only: it adds a relative position bias and a sink")
     def test_can_set_attention_dynamically_composite_model(self):
         pass

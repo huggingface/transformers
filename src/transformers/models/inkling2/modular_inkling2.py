@@ -1161,6 +1161,8 @@ class Inkling2VisionModel(Inkling2PreTrainedModel):
     config: Inkling2VisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
+    _supports_flash_attn = True
+    _supports_sdpa = True
     _can_record_outputs = {
         "hidden_states": Inkling2VisionEncoderLayer,
         "attentions": Inkling2VisionAttention,
