@@ -26,6 +26,8 @@ Memory stays small whatever the model size:
   generates expert `i`, and dummy models use the per-expert ("eager") MoE path.
 """
 
+import contextlib
+
 import torch
 from torch.utils._pytree import tree_map
 
@@ -74,13 +76,21 @@ class ProceduralTensor(torch.Tensor):
         """Rows r0:r1 of the (untransposed) 2-D tensor, generated from the seed blocks they touch only."""
         cols = self.base_shape[1]
         if self.kind != "randn":
-            return (torch.ones if self.kind == "ones" else torch.zeros)(r1 - r0, cols, dtype=self.dtype, device=self.device)
+            return (torch.ones if self.kind == "ones" else torch.zeros)(
+                r1 - r0, cols, dtype=self.dtype, device=self.device
+            )
         b0, b1 = r0 // SEED_ROWS, (r1 + SEED_ROWS - 1) // SEED_ROWS
         out = torch.empty((b1 - b0) * SEED_ROWS, cols, dtype=torch.float32, device=self.device)
         g = torch.Generator(device=self.device)
         for b in range(b0, b1):
             g.manual_seed(_mix(self.seed, b))
-            torch.randn(SEED_ROWS, cols, generator=g, device=self.device, out=out[(b - b0) * SEED_ROWS : (b - b0 + 1) * SEED_ROWS])
+            torch.randn(
+                SEED_ROWS,
+                cols,
+                generator=g,
+                device=self.device,
+                out=out[(b - b0) * SEED_ROWS : (b - b0 + 1) * SEED_ROWS],
+            )
         start = r0 - b0 * SEED_ROWS
         return out[start : start + r1 - r0].mul_(self.std).to(self.dtype)
 
@@ -97,7 +107,9 @@ class ProceduralTensor(torch.Tensor):
             if self.kind == "randn":  # 1-D randn
                 g = torch.Generator(device=self.device).manual_seed(self.seed)
                 return torch.randn(self.base_shape, generator=g, device=self.device).mul_(self.std).to(self.dtype)
-            values = (torch.ones if self.kind == "ones" else torch.zeros)(self.base_shape, dtype=self.dtype, device=self.device)
+            values = (torch.ones if self.kind == "ones" else torch.zeros)(
+                self.base_shape, dtype=self.dtype, device=self.device
+            )
         elif len(self.base_shape) >= 3:
             values = torch.stack([self._slice(i).materialize() for i in range(self.base_shape[0])])
         else:
@@ -120,7 +132,11 @@ class ProceduralTensor(torch.Tensor):
         # `.to(device / dtype)` keeps the recipe: the values are then generated there
         if func is aten._to_copy.default and isinstance(a0, cls):
             return a0._like(dtype=kwargs.get("dtype"), device=kwargs.get("device"))
-        if func in (aten.t.default, aten.transpose.int, aten.permute.default) and isinstance(a0, cls) and a0.dim() == 2:
+        if (
+            func in (aten.t.default, aten.transpose.int, aten.permute.default)
+            and isinstance(a0, cls)
+            and a0.dim() == 2
+        ):
             dims = args[1:] if func is not aten.permute.default else tuple(args[1])
             if func is aten.t.default or sorted(d % 2 for d in dims) == [0, 1] and dims != (0, 1):
                 return a0._like(transposed=not a0.transposed)
@@ -141,7 +157,7 @@ class ProceduralTensor(torch.Tensor):
                 values = a0.rows(start, max(start, end))
                 values = values.t() if a0.transposed else values
                 if dim % 2 == row_dim:
-                    return values[:: step] if not a0.transposed else values[:, :: step]
+                    return values[::step] if not a0.transposed else values[:, ::step]
                 return func(values, *args[1:], **kwargs)
             if func is aten.select.int and args[1] % 2 == row_dim:
                 i = args[2] % a0.base_shape[0]
@@ -192,7 +208,5 @@ def make_procedural(model: torch.nn.Module, seed: int = 0, device_map: dict | No
                 module._parameters[leaf] = new[id(param)]
     # Per-expert MoE path: only the experts that tokens are routed to get generated
     if hasattr(model, "set_experts_implementation"):
-        try:
+        with contextlib.suppress(Exception):  # models without experts
             model.set_experts_implementation("eager")
-        except Exception:  # models without experts
-            pass

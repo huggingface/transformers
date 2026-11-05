@@ -3376,7 +3376,9 @@ class PreTrainedModel(
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         if getattr(self, "_is_dummy", False):
-            raise ValueError("This is a dummy model (`from_pretrained(..., dummy=True)`): its weights are generated on the fly and can't be saved.")
+            raise ValueError(
+                "This is a dummy model (`from_pretrained(..., dummy=True)`): its weights are generated on the fly and can't be saved."
+            )
         if token is not None:
             kwargs["token"] = token
 
