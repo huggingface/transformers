@@ -86,8 +86,9 @@ class HfQuantizer(ABC):
     """
 
     requires_calibration = False
-    # In a quantization plan, the modules of the other quantizers (set by the plan, for quantizers swapping their own)
+    # Set by a quantization plan: the modules of the other quantizers (skipped), the ones it names (never skipped)
     modules_not_owned: list[str] = []
+    modules_named: list[str] = []
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         self.quantization_config = quantization_config
@@ -158,6 +159,11 @@ class HfQuantizer(ABC):
         """
         return False
 
+    @property
+    def all_quantizers(self) -> list["HfQuantizer"]:
+        "The quantizers loading the model: this one, or the ones of a quantization plan"
+        return [self]
+
     def get_quantizer(self, name: str) -> "HfQuantizer | None":
         "The quantizer of the module or param `name`: this one, or in a quantization plan the one of its pattern"
         return self
@@ -223,7 +229,7 @@ class HfQuantizer(ABC):
             model.set_submodule(name, new_module)
             replaced.add(quantizer)
             swapped += (f"{name}.",)
-        for quantizer in getattr(self, "all_quantizers", [self]):
+        for quantizer in self.all_quantizers:
             if quantizer.replaces_modules and quantizer not in replaced:
                 logger.warning(
                     f"No module was quantized with {quantizer.quantization_config.quant_method}: please double check "
@@ -242,14 +248,16 @@ class HfQuantizer(ABC):
             kwargs (`dict`, *optional*):
                 The keyword arguments that are passed along `_process_model_before_weight_loading`.
         """
-        setattr(model, "is_quantized", True)
-        setattr(model, "quantization_method", self.quantization_config.quant_method)
-        if self.pre_quantized:
-            self._convert_model_for_quantization(model)
-        self._process_model_before_weight_loading(model, **kwargs)
+        for quantizer in self.all_quantizers:
+            setattr(model, "is_quantized", True)
+            setattr(model, "quantization_method", quantizer.quantization_config.quant_method)
+            if quantizer.pre_quantized:
+                quantizer._convert_model_for_quantization(model)
+            quantizer._process_model_before_weight_loading(model, **kwargs)
         self.replace_modules(model)
-        self.update_parallel_plan(model, model.tp_plan)
-        self.update_parallel_plan(model, model.ep_plan)
+        for quantizer in self.all_quantizers:
+            quantizer.update_parallel_plan(model, model.tp_plan)
+            quantizer.update_parallel_plan(model, model.ep_plan)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         return model
@@ -323,10 +331,8 @@ class HfQuantizer(ABC):
         if keep_in_fp32_modules is not None:
             modules_to_not_convert.extend(keep_in_fp32_modules)
 
-        modules_to_not_convert = list(set(modules_to_not_convert))
-        # In a quantization plan, the modules of the other quantizers (`replace_modules` already skips them)
-        modules_to_not_convert += [rf"{re.escape(name)}$" for name in self.modules_not_owned]
-        return modules_to_not_convert
+        modules_to_not_convert = [name for name in set(modules_to_not_convert) if name not in self.modules_named]
+        return modules_to_not_convert + [rf"{re.escape(name)}$" for name in self.modules_not_owned]
 
     @property
     def is_qat_trainable(self) -> bool:
@@ -396,25 +402,29 @@ class HfQuantizer(ABC):
     # Names a checkpoint stores, renamed to ours after the model's renamings, e.g. ModelOpt's `weight_scale`
     renamed_names: dict[str, str] = {}
 
-    def update_weight_conversions(self, weight_conversions, model):
-        "The model's conversions loading this quantizer's tensors: its converters updated, its renamings, its own"
+    def update_weight_conversions(self, weight_conversions, model, layers: list[str] | None = None):
+        """
+        The model's conversions with this quantizer's: its renamings, a copy of the model's converters per serialized
+        name, its general converters. In a quantization plan, only for its `layers`.
+        """
         from ..core_model_loading import WeightConverter
 
         # Buffers too: some quantized modules (e.g. NVFP4) keep their serialized tensors as buffers
         param_names = "\n".join(name for name, _ in chain(model.named_parameters(), model.named_buffers()))
-        updated = []
+        modules = None if layers is None else {layer.rpartition(".")[2] for layer in layers}
+        copies = []
         for converter in weight_conversions:
-            is_converter = isinstance(converter, WeightConverter)
-            updated += self.update_weight_converter(converter, param_names) if is_converter else [converter]
-        return updated + self.get_weight_renamings(model) + self.get_weight_conversions()
+            if not isinstance(converter, WeightConverter):
+                continue
+            # The module the converter loads into, e.g. `experts` for `mlp.experts.gate_up_proj`
+            module = converter._original_target_patterns[0].replace("\\", "").rpartition(".")[0].rpartition(".")[2]
+            if modules is None or module in modules:
+                copies += self.copy_weight_converter(converter, param_names)
+        return [*weight_conversions, *self.get_weight_renamings(model, layers), *copies, *self.get_weight_conversions()]
 
-    def get_weight_converters(self, name: str, converters: list) -> list:
-        "The converters loading the key `name` (renamed): in a quantization plan, those of its layer's quantizer"
-        return converters
-
-    def update_weight_converter(self, converter, param_names: str) -> list:
+    def copy_weight_converter(self, converter, param_names: str) -> list:
         """
-        A model converter (from the conversion mapping) and one copy of it per serialized name, so that e.g. the
+        One copy of a model converter (from the conversion mapping) per serialized name, so that e.g. the
         `experts.*.gate_proj.weight_scale_inv` load like the `experts.*.gate_proj.weight`: into their own param if the
         module has it (`experts.gate_up_proj_scale_inv`), else along with the weight (e.g. to dequantize it). The ops
         are set per param, by `update_weight_transform`.
@@ -423,7 +433,7 @@ class HfQuantizer(ABC):
         param = sources[0].rpartition(".")[2]
         serialized = self.serialized_names.get(param)
         if not serialized or not all(source.endswith(f".{param}") for source in sources):
-            return [converter]
+            return []
         copies = []
         for name in serialized:
             if name == param:
@@ -434,7 +444,7 @@ class HfQuantizer(ABC):
             named_targets = [target + suffix for target in targets] if own else targets
             named_sources = [source.removesuffix(param) + name for source in sources]
             copies.append(converter.copy(named_sources, named_targets, operations=list(converter.operations)))
-        return [converter, *copies]
+        return copies
 
     def get_weight_renamings(self, model, modules: list[str] | None = None) -> list:
         """
@@ -469,8 +479,9 @@ class HfQuantizer(ABC):
                 transform.quantization_operation = self.get_quantize_ops()
             return transform
         operation = self._load_operation()
-        names = [self._serialized(source) for source in getattr(transform, "_original_source_patterns", [])]
-        if operation is None or not isinstance(transform, WeightConverter) or None in names:
+        sources = getattr(transform, "_original_source_patterns", [])
+        names = [names for source in sources if (names := self._serialized(source)) is not None]
+        if operation is None or not isinstance(transform, WeightConverter) or not names:
             return transform  # not a serialized tensor of this quantizer
         if not getattr(self.quantization_config, "dequantize", False):
             transform.operations = [*transform.operations, operation(self)]

@@ -108,6 +108,10 @@ class _IdentityOp(ConversionOps):
     def convert(self, input_dict: dict[str, Any], **kwargs) -> dict[str, Any]:
         return input_dict
 
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return _IdentityOp()
+
 
 class Chunk(ConversionOps):
     """Split a tensor along `dim` into equally sized chunks. Additionally, `num_shards_attribute` is a config field to read
@@ -1699,18 +1703,12 @@ def convert_and_load_state_dict_in_model(
         dtype_policy_alt, dtype_policy_by_group_name, _ = build_glob_alternation(list(dtype_plan.keys()))
 
     pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
-    converter_patterns = {id(converters): pattern_to_converter}  # one per list of converters a key may use
 
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
-        # 1. Rename the key according to all renaming patterns, then the converters of its layer (e.g. a quantizer's)
-        renamed_key = apply_renamings(original_key, renamings)
-        key_converters = hf_quantizer.get_weight_converters(renamed_key, converters) if hf_quantizer else converters
-        if id(key_converters) not in converter_patterns:
-            converter_patterns[id(key_converters)] = {k: c for c in key_converters for k in c.source_patterns}
-        key_pattern_to_converter = converter_patterns[id(key_converters)]
+        # 1. Rename the key according to all renaming and weight conversion patterns.
         renamed_key, source_pattern = rename_source_key(
-            renamed_key, [], key_converters, base_model_prefix, meta_model_state_dict
+            original_key, renamings, converters, base_model_prefix, meta_model_state_dict
         )
         if renamed_key not in meta_model_state_dict and original_key in meta_model_state_dict:
             # Key should probably not have been renamed but we might need the `prefix` to be added.
@@ -1725,7 +1723,7 @@ def convert_and_load_state_dict_in_model(
                 # If we enter here, we have a WeightConverter operation to perform: each target key gets its own
                 # converter instance. Otherwise, only potential renaming
                 mapping = (
-                    deepcopy(key_pattern_to_converter[source_pattern])
+                    deepcopy(pattern_to_converter[source_pattern])
                     if source_pattern is not None
                     else WeightRenaming(original_key, renamed_key)
                 )
@@ -1779,7 +1777,7 @@ def convert_and_load_state_dict_in_model(
 
             mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
         elif source_pattern is not None:  # add all target keys as unexpected
-            mapping = key_pattern_to_converter[source_pattern]
+            mapping = pattern_to_converter[source_pattern]
             for k in mapping.target_patterns:
                 _add_unmatched_checkpoint_key(
                     renamed_key.replace(mapping.target_patterns[0], k),

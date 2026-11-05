@@ -402,7 +402,6 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         self.module_quantizers, self.prefix = {}, ""
         self.set_quantizers(quantizers)
         self.pre_quantized = all(quantizer.pre_quantized for quantizer in self.all_quantizers)
-        self.converters = {}
 
     @property
     def all_quantizers(self):
@@ -449,32 +448,20 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         return None
 
     def update_weight_conversions(self, weight_conversions, model):
-        """
-        The model's renamings, then each quantizer's on its own layers. The converters stay the model's: a key uses its
-        layer's quantizer's (`get_weight_converters`), each model converter updated by it, then its own
-        """
-        from ..core_model_loading import WeightConverter
-
-        param_names = "\n".join(name for name, _ in chain(model.named_parameters(), model.named_buffers()))
-        model_converters = [c for c in weight_conversions if isinstance(c, WeightConverter)]
-        self.converters = {
-            quantizer: [
-                *(variant for c in model_converters for variant in quantizer.update_weight_converter(c, param_names)),
-                *quantizer.get_weight_conversions(),
-            ]
-            for quantizer in self.all_quantizers
-        }
-        renamings = [
-            renaming
-            for quantizer in self.all_quantizers
-            for renaming in quantizer.get_weight_renamings(
-                model, [name for name, q in self.module_quantizers.items() if q is quantizer]
-            )
-        ]
-        return weight_conversions + renamings
-
-    def get_weight_converters(self, name, converters):
-        return self.converters.get(self.get_quantizer(name), converters)
+        "Each quantizer's conversions on its layers, the same ones once"
+        conversions = {}
+        for quantizer in self.all_quantizers:
+            layers = [name for name, q in self.module_quantizers.items() if q is quantizer]
+            for conversion in quantizer.update_weight_conversions(weight_conversions, model, layers):
+                kept = conversions.setdefault(tuple(conversion._original_source_patterns), conversion)
+                if kept._original_target_patterns != conversion._original_target_patterns:
+                    raise ValueError(
+                        f"{kept._original_source_patterns} load into both {kept._original_target_patterns} and "
+                        f"{conversion._original_target_patterns}: a format can't be both quantized and dequantized"
+                    )
+        # The general converters of a fused param (e.g. MXFP4's `down_proj`) last: a `*.down_proj.weight` is a `weight`
+        fused = {param for quantizer in self.all_quantizers for param in quantizer.serialized_names if param != "weight"}
+        return sorted(conversions.values(), key=lambda conversion: conversion._original_target_patterns[0] in fused)
 
     def update_weight_transform(self, transform, model, name):
         quantizer = self.get_quantizer(name)
@@ -522,23 +509,11 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
 
     def preprocess_model(self, model, **kwargs):
         self.match_modules(model)
-        named = {pattern for pattern in self.quantizers if "*" not in pattern}  # quantized even if skipped by default
         for quantizer in self.all_quantizers:
+            quantizer.modules_named = [pattern for pattern in self.quantizers if "*" not in pattern]
             if not quantizer.replaces_modules:  # it swaps its modules itself: the others' are not its own
-                quantizer.modules_not_owned = [
-                    name for name, q in self.module_quantizers.items() if q is not quantizer
-                ]
-            setattr(model, "is_quantized", True)
-            setattr(model, "quantization_method", quantizer.quantization_config.quant_method)
-            if quantizer.pre_quantized:
-                quantizer._convert_model_for_quantization(model)
-            quantizer._process_model_before_weight_loading(model, **kwargs)
-            skipped = getattr(quantizer, "modules_to_not_convert", None) or []
-            quantizer.modules_to_not_convert = [module for module in skipped if module not in named]
-        self.replace_modules(model)
-        for quantizer in self.all_quantizers:
-            quantizer.update_parallel_plan(model, model.tp_plan)
-            quantizer.update_parallel_plan(model, model.ep_plan)
+                quantizer.modules_not_owned = [n for n, q in self.module_quantizers.items() if q is not quantizer]
+        super().preprocess_model(model, **kwargs)
 
     def postprocess_model(self, model, **kwargs):
         """
