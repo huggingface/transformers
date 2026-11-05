@@ -226,7 +226,7 @@ class Step3p7VisionAttention(nn.Module):
         )
         attention_kwargs = {"dropout": 0.0 if not self.training else self.attention_dropout, "scaling": self.scaling}
 
-        if cu_seqlens is None or (cu_seqlens.numel() == 2 and not is_flash_attention_requested(self.config)):
+        if cu_seqlens is None:
             attn_output, attn_weights = attention_interface(
                 self, query_states, key_states, value_states, attention_mask, **attention_kwargs, **kwargs
             )
