@@ -270,6 +270,7 @@ if TYPE_CHECKING:
     from .lightglue import *
     from .lighton_ocr import *
     from .lilt import *
+    from .liquid_codec import *
     from .llama import *
     from .llama4 import *
     from .llava import *

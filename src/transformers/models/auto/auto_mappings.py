@@ -375,6 +375,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("lightglue", "LightGlueConfig"),
         ("lighton_ocr", "LightOnOcrConfig"),
         ("lilt", "LiltConfig"),
+        ("liquid_codec", "LiquidCodecConfig"),
         ("llama", "LlamaConfig"),
         ("llama4", "Llama4Config"),
         ("llama4_text", "Llama4TextConfig"),
