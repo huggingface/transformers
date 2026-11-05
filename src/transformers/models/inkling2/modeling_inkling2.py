@@ -127,21 +127,30 @@ class Inkling2RMSNorm(nn.Module):
 class Inkling2L2Clip(nn.Module):
     """Scales each head vector down to `threshold` when its L2 norm is larger; shorter vectors are unchanged."""
 
-    def __init__(self, num_heads: int, head_dim: int, threshold: float, learnable_scale: bool):
+    def __init__(self, threshold: float):
         super().__init__()
         self.threshold = threshold
-        self.scale = nn.Parameter(torch.ones(num_heads, head_dim)) if learnable_scale else None
 
-    def forward(self, hidden_states: torch.Tensor, tau: torch.Tensor | None = None) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.float()
-        if self.scale is not None:
-            hidden_states = hidden_states * self.scale.float()
         norm = torch.linalg.vector_norm(hidden_states, dim=-1, keepdim=True)
-        hidden_states = (hidden_states * (self.threshold / (norm + 1e-6)).clamp(max=1.0)).to(input_dtype)
-        if tau is not None:
-            hidden_states = (hidden_states.float() * tau).to(input_dtype)
-        return hidden_states
+        return (hidden_states * (self.threshold / (norm + 1e-6)).clamp(max=1.0)).to(input_dtype)
+
+
+class Inkling2ScaledL2Clip(nn.Module):
+    """`Inkling2L2Clip` applied after a learned scale."""
+
+    def __init__(self, num_heads: int, head_dim: int, threshold: float):
+        super().__init__()
+        self.threshold = threshold
+        self.scale = nn.Parameter(torch.ones(num_heads, head_dim))
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.float() * self.scale.float()
+        norm = torch.linalg.vector_norm(hidden_states, dim=-1, keepdim=True)
+        return (hidden_states * (self.threshold / (norm + 1e-6)).clamp(max=1.0)).to(input_dtype)
 
 
 class Inkling2RelativeLogits(nn.Module):
@@ -427,9 +436,9 @@ class Inkling2Attention(nn.Module):
                 layer_idx,
                 conv_idx=1,
             )
-        self.q_l2_clip = Inkling2L2Clip(self.num_heads, self.head_dim, config.qk_l2_clip_threshold, True)
-        self.k_l2_clip = Inkling2L2Clip(self.num_key_value_heads, self.head_dim, config.qk_l2_clip_threshold, False)
-        self.relative_l2_clip = Inkling2L2Clip(self.num_heads, config.d_rel, config.rel_l2_clip_threshold, True)
+        self.q_l2_clip = Inkling2ScaledL2Clip(self.num_heads, self.head_dim, config.qk_l2_clip_threshold)
+        self.k_l2_clip = Inkling2L2Clip(config.qk_l2_clip_threshold)
+        self.relative_l2_clip = Inkling2ScaledL2Clip(self.num_heads, config.d_rel, config.rel_l2_clip_threshold)
         self.relative_logits_proj = Inkling2RelativeLogits(config.d_rel, self.relative_extent)
 
     def forward(
@@ -488,11 +497,15 @@ class Inkling2Attention(nn.Module):
             )
             tau = tau[..., None, None]
 
-        query_states = self.q_l2_clip(query_states.view(hidden_shape), tau).transpose(1, 2)
+        query_states = self.q_l2_clip(query_states.view(hidden_shape))
         key_states = self.k_l2_clip(key_states.view(hidden_shape)).transpose(1, 2)
         value_states = F.rms_norm(value_states.view(hidden_shape), (self.head_dim,), eps=self.config.rms_norm_eps)
         value_states = value_states.transpose(1, 2)
-        relative_states = self.relative_l2_clip(relative_states.view(*input_shape, self.num_heads, -1), tau)
+        relative_states = self.relative_l2_clip(relative_states.view(*input_shape, self.num_heads, -1))
+        if tau is not None:
+            query_states = (query_states.float() * tau).to(query_states.dtype)
+            relative_states = (relative_states.float() * tau).to(relative_states.dtype)
+        query_states = query_states.transpose(1, 2)
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
@@ -1059,7 +1072,7 @@ class Inkling2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, Inkling2TopkRouter):
             init.normal_(module.weight, mean=0.0, std=std)
             init.zeros_(module.e_score_correction_bias)
-        elif isinstance(module, Inkling2L2Clip) and module.scale is not None:
+        elif isinstance(module, Inkling2ScaledL2Clip):
             init.ones_(module.scale)
         elif isinstance(module, Inkling2DynamicShortConvolution):
             init.zeros_(module.static_weight)
