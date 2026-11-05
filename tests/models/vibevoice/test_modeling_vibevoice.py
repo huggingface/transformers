@@ -15,6 +15,7 @@
 import copy
 import json
 import random
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -22,9 +23,11 @@ from unittest.mock import patch
 import pytest
 
 from transformers import (
+    AutoModel,
     AutoProcessor,
     VibeVoiceConfig,
     VibeVoiceForConditionalGeneration,
+    VibeVoiceModel,
     is_torch_available,
 )
 from transformers.testing_utils import cleanup, is_diffusers_available, require_diffusers, slow, torch_device
@@ -221,7 +224,7 @@ class VibeVoiceModelTester:
 
 
 class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (VibeVoiceForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (VibeVoiceModel, VibeVoiceForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "text-to-audio": VibeVoiceForConditionalGeneration,
@@ -231,6 +234,42 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
     )
     _is_composite = True
     test_resize_embeddings = False
+
+    # Text-only common inputs do not exercise the audio tokenizers, projectors, or diffusion head.
+    test_all_params_have_gradient = False
+
+    def test_auto_model_from_config(self):
+        config = self.model_tester.get_config()
+        model = AutoModel.from_config(config)
+        self.assertIs(type(model), VibeVoiceModel)
+        self.assertIsNone(model.get_output_embeddings())
+
+    def test_auto_model_from_pretrained(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = VibeVoiceForConditionalGeneration(config).to(torch_device).eval()
+
+        with torch.no_grad():
+            expected = model.model(**inputs).last_hidden_state
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            loaded, loading_info = AutoModel.from_pretrained(tmp_dir, output_loading_info=True)
+            loaded = loaded.to(torch_device).eval()
+
+        self.assertIs(type(loaded), VibeVoiceModel)
+        self.assertIsNone(loaded.get_output_embeddings())
+        self.assertFalse(loading_info["missing_keys"])
+        self.assertFalse(loading_info["mismatched_keys"])
+
+        original_state = model.model.state_dict()
+        loaded_state = loaded.state_dict()
+        self.assertEqual(original_state.keys(), loaded_state.keys())
+        for key in original_state:
+            torch.testing.assert_close(loaded_state[key], original_state[key], rtol=0, atol=0)
+
+        with torch.no_grad():
+            actual = loaded(**inputs).last_hidden_state
+        torch.testing.assert_close(actual, expected)
 
     def setUp(self):
         self.model_tester = VibeVoiceModelTester(self)
@@ -278,6 +317,46 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    # Audio features contain valid frames flattened across the batch.
+    # Their shapes are checked explicitly in test_audio_features_flattened_shapes.
+    skip_test_audio_features_output_shape = True
+
+    def _audio_features_prepare_config_and_inputs(self):
+        config = self.model_tester.get_config()
+        num_samples = 4 * config.audio_config.hop_length
+        input_values = floats_tensor([2, 1, num_samples])
+        padding_mask = torch.ones([2, num_samples], dtype=torch.bool, device=torch_device)
+        padding_mask[1, num_samples // 2 :] = False
+        return config, {
+            "input_values": input_values,
+            "padding_mask": padding_mask,
+            "sample": False,
+        }
+
+    def test_audio_features_flattened_shapes(self):
+        config, inputs = self._audio_features_prepare_config_and_inputs()
+        model = VibeVoiceModel(config).to(torch_device).eval()
+        with torch.no_grad():
+            outputs = model.get_audio_features(**inputs)
+
+        num_frames = (
+            ((inputs["padding_mask"].sum(-1) + config.audio_config.hop_length - 1) // config.audio_config.hop_length)
+            .sum()
+            .item()
+        )
+        self.assertEqual(outputs.last_hidden_state.shape, (num_frames, config.audio_config.hidden_size))
+        self.assertEqual(outputs.pooler_output.shape, (num_frames, config.text_config.hidden_size))
+        self.assertTrue(torch.isfinite(outputs.last_hidden_state).all())
+        self.assertTrue(torch.isfinite(outputs.pooler_output).all())
+
+    @unittest.skip("VibeVoice get_audio_features does not expose intermediate encoder hidden states.")
+    def test_get_audio_features_hidden_states(self):
+        pass
+
+    @unittest.skip("VibeVoice acoustic tokenizer is convolutional and does not return attentions.")
+    def test_get_audio_features_attentions(self):
+        pass
 
     def test_get_audio_features_sample(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()

@@ -13,12 +13,14 @@
 # limitations under the License.
 """Testing suite for the PyTorch ConversationalSpeechModel model."""
 
+import tempfile
 import unittest
 
 import pytest
 from parameterized import parameterized
 
 from transformers import (
+    AutoModel,
     AutoProcessor,
     HiggsAudioV2Config,
     HiggsAudioV2ForConditionalGeneration,
@@ -187,8 +189,48 @@ class HiggsAudioV2ModelTester:
 
 @require_torch
 class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (HiggsAudioV2ForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (HiggsAudioV2Model, HiggsAudioV2ForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = {"text-to-speech": HiggsAudioV2ForConditionalGeneration} if is_torch_available() else {}
+
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        if return_labels and model_class is HiggsAudioV2ForConditionalGeneration:
+            inputs.pop("labels", None)
+            inputs["audio_labels"] = inputs["audio_input_ids"].clone()
+        return inputs
+
+    def test_auto_model_from_config(self):
+        config = self.model_tester.get_config()
+        model = AutoModel.from_config(config)
+        self.assertIs(type(model), HiggsAudioV2Model)
+        self.assertIsNone(model.get_output_embeddings())
+
+    def test_auto_model_from_pretrained(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = HiggsAudioV2ForConditionalGeneration(config).to(torch_device).eval()
+
+        with torch.no_grad():
+            expected = model.model(**inputs).last_hidden_state
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            loaded, loading_info = AutoModel.from_pretrained(tmp_dir, output_loading_info=True)
+            loaded = loaded.to(torch_device).eval()
+
+        self.assertIs(type(loaded), HiggsAudioV2Model)
+        self.assertIsNone(loaded.get_output_embeddings())
+        self.assertFalse(loading_info["missing_keys"])
+        self.assertFalse(loading_info["mismatched_keys"])
+
+        original_state = model.model.state_dict()
+        loaded_state = loaded.state_dict()
+        self.assertEqual(original_state.keys(), loaded_state.keys())
+        for key in original_state:
+            torch.testing.assert_close(loaded_state[key], original_state[key], rtol=0, atol=0)
+
+        with torch.no_grad():
+            actual = loaded(**inputs).last_hidden_state
+        torch.testing.assert_close(actual, expected)
 
     def setUp(self):
         self.model_tester = HiggsAudioV2ModelTester(self)
