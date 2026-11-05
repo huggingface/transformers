@@ -19,7 +19,6 @@ import contextlib
 from typing import TYPE_CHECKING, NamedTuple
 
 from ..utils import logging
-from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
 from .parallel_utils import ALL_PARALLEL_STYLES, _same_ranks, _use_local_dtensor_params
 
@@ -279,12 +278,12 @@ class AllToAllEP(EPImplementation):
     """
 
     def __call__(self, hidden_states, top_k_index, top_k_weights):
-        tokens, expert_ids, weights, state = self._send(hidden_states, top_k_index, top_k_weights)
-        return self._receive(self.run_experts(tokens, expert_ids, weights), state)
+        tokens, expert_ids, weights, state = self._dispatch_tokens(hidden_states, top_k_index, top_k_weights)
+        return self._combine_tokens(self.run_experts(tokens, expert_ids, weights), state)
 
-    def _send(self, hidden_states, top_k_index, top_k_weights):
+    def _dispatch_tokens(self, hidden_states, top_k_index, top_k_weights):
         """Each (token, expert) pair to the expert's rank: the rows this rank's experts run on, their local expert ids
-        and weights, and what `_receive` needs to bring the results back."""
+        and weights, and what `_combine_tokens` needs to bring the results back."""
         num_tokens = hidden_states.size(0)
         if self.tp_mesh is not None and self.tp_mesh.size() > 1:
             # Replicate -> Shard(0) is a local chunk (no communication); its backward all-gathers the row gradients.
@@ -316,12 +315,12 @@ class AllToAllEP(EPImplementation):
         recv_expert_ids = torch.arange(self.num_local_experts, device=hidden_states.device).repeat(ep_size)
         recv_expert_ids = recv_expert_ids.repeat_interleave(recv_counts.reshape(-1), output_size=sum(recv_sizes))
         recv_expert_ids = recv_expert_ids.unsqueeze(-1)
-        # Experts run top-1 with unit weights; the routing weights are applied in `_receive`, on the sender.
+        # Experts run top-1 with unit weights; the routing weights are applied in `_combine_tokens`, on the sender.
         recv_weights = torch.ones_like(recv_expert_ids, dtype=recv_tokens.dtype)
         state = _AllToAllState(top_k_weights, order, send_sizes, recv_sizes, num_tokens)
         return recv_tokens, recv_expert_ids, recv_weights, state
 
-    def _receive(self, expert_output, state):
+    def _combine_tokens(self, expert_output, state):
         """The expert outputs back to the ranks that sent the tokens, weighted and summed per token."""
         hidden_dim = expert_output.size(-1)
         recv_out = all_to_all_single_autograd(
@@ -400,32 +399,24 @@ class AutoEP(EPImplementation):
         return self.all_to_all(hidden_states, top_k_index, top_k_weights)
 
 
-class EPImplementationInterface(GeneralInterface):
-    """The `EPImplementation` classes `DistributedConfig.ep_implementation` can name. Register one under a new name to add one."""
-
-    _global_mapping = {
-        "auto": AutoEP,
-        "all_to_all": AllToAllEP,
-        "all_reduce": AllReduceEP,
-    }
-
-
-ALL_EP_IMPLEMENTATIONS: EPImplementationInterface = EPImplementationInterface()
-
-
 class EpDispatchExpertsParallel(ExpertParallelLayer):
-    """Whole experts per rank (`Shard(0)` on the EP mesh), reached through an `EPImplementation` from
-    `ALL_EP_IMPLEMENTATIONS`, picked by `DistributedConfig.ep_implementation`."""
+    """Whole experts per rank (`Shard(0)` on the EP mesh), reached through the `EPImplementation` that
+    `DistributedConfig.ep_implementation` names in `ep_implementations`. Add an entry there to register one."""
+
+    ep_implementations = {"auto": AutoEP, "all_to_all": AllToAllEP, "all_reduce": AllReduceEP}
+
+    def should_use_local_tensors(self, module):
+        return True
 
     def install_forward(self, module, ep_mesh, *, tp_mesh=None, ep_implementation="auto"):
         """`tp_mesh` is the group of ranks holding the same batch."""
-        if ep_implementation not in ALL_EP_IMPLEMENTATIONS:
+        if ep_implementation not in self.ep_implementations:
             raise ValueError(
                 f"`ep_implementation={ep_implementation!r}` names no registered implementation: use one of "
-                f"{', '.join(repr(name) for name in ALL_EP_IMPLEMENTATIONS)}, or register an `EPImplementation` in "
-                "`ALL_EP_IMPLEMENTATIONS`."
+                f"{', '.join(repr(name) for name in self.ep_implementations)}, or add an `EPImplementation` to "
+                "`EpDispatchExpertsParallel.ep_implementations`."
             )
-        implementation = ALL_EP_IMPLEMENTATIONS[ep_implementation](module, ep_mesh, tp_mesh)
+        implementation = self.ep_implementations[ep_implementation](module, ep_mesh, tp_mesh)
 
         def ep_forward(hidden_states, top_k_index, top_k_weights):
             if isinstance(hidden_states, DTensor):
@@ -471,7 +462,7 @@ def apply_expert_parallelism(
 ):
     """
     Shard experts on EP; `ep_dispatch_experts` modules reach them through the `ep_implementation` registered in
-    `ALL_EP_IMPLEMENTATIONS`.
+    `EpDispatchExpertsParallel.ep_implementations`.
     """
     modules = dict(model.named_modules())
     parameters = dict(model.named_parameters())

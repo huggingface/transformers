@@ -52,7 +52,7 @@ The expert forward rule in `ep_plan` selects how tokens reach the experts:
 
 ### Choosing an implementation
 
-`"ep_dispatch_experts"` shards the experts once and picks how tokens reach them from `ALL_EP_IMPLEMENTATIONS`, a registry selected with `ep_implementation` in [`DistributedConfig`]:
+`"ep_dispatch_experts"` shards the experts once and picks how tokens reach them from `EpDispatchExpertsParallel.ep_implementations`, selected with `ep_implementation` in [`DistributedConfig`]:
 
 | `ep_implementation` | advantages | disadvantages |
 | :--- | :--- | :--- |
@@ -67,7 +67,7 @@ The expert forward rule in `ep_plan` selects how tokens reach the experts:
 An implementation subclasses `EPImplementation` and registers under the name `ep_implementation` selects. It is built once per experts module, so it can keep state such as communication buffers. Calling it with the batch this rank holds, with global expert ids, returns the weighted expert output for each of its tokens. It runs this rank's experts with `run_experts`, on the rows, local expert ids and weights it brought them.
 
 ```py
-from transformers.distributed.expert_parallel import ALL_EP_IMPLEMENTATIONS, EPImplementation
+from transformers.distributed.expert_parallel import EpDispatchExpertsParallel, EPImplementation
 
 class MyEP(EPImplementation):
     def __call__(self, hidden_states, top_k_index, top_k_weights):
@@ -75,7 +75,7 @@ class MyEP(EPImplementation):
         expert_output = self.run_experts(tokens, expert_ids, weights)
         return ...  # the weighted expert output for each token of the batch this rank holds
 
-ALL_EP_IMPLEMENTATIONS.register("my_ep", MyEP)
+EpDispatchExpertsParallel.ep_implementations["my_ep"] = MyEP
 distributed_config = DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8, ep_implementation="my_ep")
 ```
 
