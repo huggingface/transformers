@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, NamedTuple
 
 from ..utils import logging
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
-from .parallel_utils import ALL_PARALLEL_STYLES, _same_ranks, _use_local_dtensor_params
+from .parallel_utils import ALL_PARALLEL_STYLES, _use_local_dtensor_params
 
 
 if TYPE_CHECKING:
@@ -34,7 +34,7 @@ if is_torch_available():
     import torch
 
 if is_torch_distributed_available():
-    from torch.distributed import all_to_all_single
+    from torch.distributed import all_to_all_single, get_process_group_ranks
     from torch.distributed._functional_collectives import all_to_all_single_autograd
     from torch.distributed.tensor import DTensor, Replicate, Shard, distribute_tensor
 
@@ -220,7 +220,11 @@ class EPImplementation:
         self.num_local_experts = experts.num_experts
         self.ep_mesh = ep_mesh
         self.tp_mesh = tp_mesh
-        self.shares_batch = tp_mesh is not None and _same_ranks(tp_mesh, ep_mesh)
+        # Every rank of the EP group holds the same batch when the EP group is the TP group.
+        self.shares_batch = False
+        if tp_mesh is not None:
+            tp_ranks, ep_ranks = (get_process_group_ranks(mesh.get_group()) for mesh in (tp_mesh, ep_mesh))
+            self.shares_batch = tp_ranks == ep_ranks
         if self.needs_shared_batch and not self.shares_batch:
             raise ValueError(
                 f"{type(self).__name__} needs every rank of the expert group to hold the same batch (`ep_size == tp_size`)."
