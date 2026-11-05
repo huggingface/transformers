@@ -42,7 +42,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check, torch_int
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_position_ids
 from .configuration_step3p7 import Step3p7Config, Step3p7TextConfig, Step3p7VisionConfig
@@ -209,7 +209,8 @@ class Step3p7VisionAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
-        segment_lengths: list[int] | None = None,
+        cu_seqlens: torch.Tensor | None = None,
+        max_seqlen: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
@@ -227,29 +228,52 @@ class Step3p7VisionAttention(nn.Module):
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-        segment_lengths = segment_lengths if segment_lengths is not None else [input_shape[1]]
-        splits = [torch.split(tensor, segment_lengths, dim=2) for tensor in (queries, keys, values)]
-        attn_outputs, attn_weights = [], []
-        start = 0
-        for length, (query, key, value) in zip(segment_lengths, zip(*splits)):
-            end = start + length
-            segment_mask = attention_mask[..., start:end, start:end] if attention_mask is not None else None
-            output, weights = attention_interface(
+        if cu_seqlens is None or cu_seqlens.numel() == 2 or is_flash_attention_requested(self.config):
+            if cu_seqlens is not None and is_flash_attention_requested(self.config):
+                max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
+                kwargs.update(
+                    cu_seq_lens_q=cu_seqlens,
+                    cu_seq_lens_k=cu_seqlens,
+                    max_length_q=max_seqlen,
+                    max_length_k=max_seqlen,
+                    is_causal=False,
+                )
+            attn_output, attn_weights = attention_interface(
                 self,
-                query,
-                key,
-                value,
-                segment_mask,
+                queries,
+                keys,
+                values,
+                attention_mask,
                 scaling=self.scale,
                 dropout=0.0 if not self.training else self.dropout,
                 **kwargs,
             )
-            attn_outputs.append(output)
-            if weights is not None and kwargs.get("output_attentions", self.config.output_attentions):
-                attn_weights.append(F.pad(weights, (start, input_shape[1] - end)))
-            start = end
-        attn_output = torch.cat(attn_outputs, dim=1)
-        attn_weights = torch.cat(attn_weights, dim=2) if attn_weights else None
+        else:
+            segment_lengths = kwargs.pop("segment_lengths", None)
+            if segment_lengths is None:
+                segment_lengths = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
+            splits = [torch.split(tensor, segment_lengths, dim=2) for tensor in (queries, keys, values)]
+            attn_outputs, attn_weights = [], []
+            start = 0
+            for length, (query, key, value) in zip(segment_lengths, zip(*splits)):
+                end = start + length
+                segment_mask = attention_mask[..., start:end, start:end] if attention_mask is not None else None
+                output, weights = attention_interface(
+                    self,
+                    query,
+                    key,
+                    value,
+                    segment_mask,
+                    scaling=self.scale,
+                    dropout=0.0 if not self.training else self.dropout,
+                    **kwargs,
+                )
+                attn_outputs.append(output)
+                if weights is not None and kwargs.get("output_attentions", self.config.output_attentions):
+                    attn_weights.append(F.pad(weights, (start, input_shape[1] - end)))
+                start = end
+            attn_output = torch.cat(attn_outputs, dim=1)
+            attn_weights = torch.cat(attn_weights, dim=2) if attn_weights else None
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         return self.out_proj(attn_output), attn_weights
 

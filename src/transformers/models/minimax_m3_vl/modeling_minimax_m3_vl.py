@@ -42,10 +42,10 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check
-from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.generic import can_return_tuple, get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.import_utils import is_torchdynamo_compiling
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ...vision_utils import get_vision_position_ids
+from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from .configuration_minimax_m3_vl import MiniMaxM3VLConfig, MiniMaxM3VLTextConfig, MiniMaxM3VLVisionConfig
 
 
@@ -1072,7 +1072,8 @@ class MiniMaxM3VLVisionAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
-        segment_lengths: list[int] | None = None,
+        cu_seqlens: torch.Tensor | None = None,
+        max_seqlen: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
@@ -1090,29 +1091,52 @@ class MiniMaxM3VLVisionAttention(nn.Module):
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-        segment_lengths = segment_lengths if segment_lengths is not None else [input_shape[1]]
-        splits = [torch.split(tensor, segment_lengths, dim=2) for tensor in (queries, keys, values)]
-        attn_outputs, attn_weights = [], []
-        start = 0
-        for length, (query, key, value) in zip(segment_lengths, zip(*splits)):
-            end = start + length
-            segment_mask = attention_mask[..., start:end, start:end] if attention_mask is not None else None
-            output, weights = attention_interface(
+        if cu_seqlens is None or cu_seqlens.numel() == 2 or is_flash_attention_requested(self.config):
+            if cu_seqlens is not None and is_flash_attention_requested(self.config):
+                max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
+                kwargs.update(
+                    cu_seq_lens_q=cu_seqlens,
+                    cu_seq_lens_k=cu_seqlens,
+                    max_length_q=max_seqlen,
+                    max_length_k=max_seqlen,
+                    is_causal=False,
+                )
+            attn_output, attn_weights = attention_interface(
                 self,
-                query,
-                key,
-                value,
-                segment_mask,
+                queries,
+                keys,
+                values,
+                attention_mask,
                 scaling=self.scale,
                 dropout=0.0 if not self.training else self.dropout,
                 **kwargs,
             )
-            attn_outputs.append(output)
-            if weights is not None and kwargs.get("output_attentions", self.config.output_attentions):
-                attn_weights.append(F.pad(weights, (start, input_shape[1] - end)))
-            start = end
-        attn_output = torch.cat(attn_outputs, dim=1)
-        attn_weights = torch.cat(attn_weights, dim=2) if attn_weights else None
+        else:
+            segment_lengths = kwargs.pop("segment_lengths", None)
+            if segment_lengths is None:
+                segment_lengths = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
+            splits = [torch.split(tensor, segment_lengths, dim=2) for tensor in (queries, keys, values)]
+            attn_outputs, attn_weights = [], []
+            start = 0
+            for length, (query, key, value) in zip(segment_lengths, zip(*splits)):
+                end = start + length
+                segment_mask = attention_mask[..., start:end, start:end] if attention_mask is not None else None
+                output, weights = attention_interface(
+                    self,
+                    query,
+                    key,
+                    value,
+                    segment_mask,
+                    scaling=self.scale,
+                    dropout=0.0 if not self.training else self.dropout,
+                    **kwargs,
+                )
+                attn_outputs.append(output)
+                if weights is not None and kwargs.get("output_attentions", self.config.output_attentions):
+                    attn_weights.append(F.pad(weights, (start, input_shape[1] - end)))
+                start = end
+            attn_output = torch.cat(attn_outputs, dim=1)
+            attn_weights = torch.cat(attn_weights, dim=2) if attn_weights else None
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         return self.out_proj(attn_output), attn_weights
 
@@ -1171,6 +1195,8 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
 
     config: MiniMaxM3VLVisionConfig
     main_input_name = "pixel_values"
+    _supports_flash_attn = True
+    _compatible_flash_implementations = None
     _can_record_outputs = {
         "hidden_states": MiniMaxM3VLVisionEncoderLayer,
         "attentions": MiniMaxM3VLVisionAttention,
@@ -1195,18 +1221,9 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
             The temporal, height and width of feature shape of each image.
         """
         embeds = self.embeddings(pixel_values).to(self.pre_layrnorm.weight.dtype)
-        segment_lengths = kwargs.pop("segment_lengths", None)
-        max_frames = getattr(self.config, "vision_segment_max_frames", None)
-        if max_frames is not None and (segment_lengths is None or kwargs.get("position_ids") is None):
-            grid_thw = grid_thw.new_tensor(
-                [
-                    [min(max_frames, t - start), h, w]
-                    for t, h, w in grid_thw.tolist()
-                    for start in range(0, t, max_frames)
-                ]
-            )
-        if segment_lengths is None:
-            segment_lengths = grid_thw.prod(dim=-1).tolist()
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(
+            grid_thw, self.config, merge_temporal=True, kwargs=kwargs
+        )
         position_ids = get_vision_position_ids(
             grid_thw, self.config.spatial_merge_size, include_temporal=True, kwargs=kwargs
         )
@@ -1217,7 +1234,8 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
                 hidden_states,
                 attention_mask=None,
                 position_embeddings=position_embeddings,
-                segment_lengths=segment_lengths,
+                cu_seqlens=cu_seqlens,
+                max_seqlen=max_seqlen,
                 **kwargs,
             )
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=hidden_states[:, 0])

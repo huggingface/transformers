@@ -15,6 +15,7 @@
 
 from collections.abc import Callable
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -31,10 +32,10 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
-from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.generic import can_return_tuple, get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.import_utils import is_torchdynamo_compiling
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_position_ids
+from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from ..clip.modeling_clip import CLIPMLP, CLIPAttention, CLIPEncoderLayer
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts
 from ..gemma3.modeling_gemma3 import Gemma3RMSNorm
@@ -814,7 +815,8 @@ class MiniMaxM3VLVisionAttention(CLIPAttention):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
-        segment_lengths: list[int] | None = None,
+        cu_seqlens: torch.Tensor | None = None,
+        max_seqlen: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -831,29 +833,52 @@ class MiniMaxM3VLVisionAttention(CLIPAttention):
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-        segment_lengths = segment_lengths if segment_lengths is not None else [input_shape[1]]
-        splits = [torch.split(tensor, segment_lengths, dim=2) for tensor in (queries, keys, values)]
-        attn_outputs, attn_weights = [], []
-        start = 0
-        for length, (query, key, value) in zip(segment_lengths, zip(*splits)):
-            end = start + length
-            segment_mask = attention_mask[..., start:end, start:end] if attention_mask is not None else None
-            output, weights = attention_interface(
+        if cu_seqlens is None or cu_seqlens.numel() == 2 or is_flash_attention_requested(self.config):
+            if cu_seqlens is not None and is_flash_attention_requested(self.config):
+                max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
+                kwargs.update(
+                    cu_seq_lens_q=cu_seqlens,
+                    cu_seq_lens_k=cu_seqlens,
+                    max_length_q=max_seqlen,
+                    max_length_k=max_seqlen,
+                    is_causal=False,
+                )
+            attn_output, attn_weights = attention_interface(
                 self,
-                query,
-                key,
-                value,
-                segment_mask,
+                queries,
+                keys,
+                values,
+                attention_mask,
                 scaling=self.scale,
                 dropout=0.0 if not self.training else self.dropout,
                 **kwargs,
             )
-            attn_outputs.append(output)
-            if weights is not None and kwargs.get("output_attentions", self.config.output_attentions):
-                attn_weights.append(F.pad(weights, (start, input_shape[1] - end)))
-            start = end
-        attn_output = torch.cat(attn_outputs, dim=1)
-        attn_weights = torch.cat(attn_weights, dim=2) if attn_weights else None
+        else:
+            segment_lengths = kwargs.pop("segment_lengths", None)
+            if segment_lengths is None:
+                segment_lengths = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
+            splits = [torch.split(tensor, segment_lengths, dim=2) for tensor in (queries, keys, values)]
+            attn_outputs, attn_weights = [], []
+            start = 0
+            for length, (query, key, value) in zip(segment_lengths, zip(*splits)):
+                end = start + length
+                segment_mask = attention_mask[..., start:end, start:end] if attention_mask is not None else None
+                output, weights = attention_interface(
+                    self,
+                    query,
+                    key,
+                    value,
+                    segment_mask,
+                    scaling=self.scale,
+                    dropout=0.0 if not self.training else self.dropout,
+                    **kwargs,
+                )
+                attn_outputs.append(output)
+                if weights is not None and kwargs.get("output_attentions", self.config.output_attentions):
+                    attn_weights.append(F.pad(weights, (start, input_shape[1] - end)))
+                start = end
+            attn_output = torch.cat(attn_outputs, dim=1)
+            attn_weights = torch.cat(attn_weights, dim=2) if attn_weights else None
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         return self.out_proj(attn_output), attn_weights
 
@@ -876,6 +901,8 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
 
     config: MiniMaxM3VLVisionConfig
     main_input_name = "pixel_values"
+    _supports_flash_attn = True
+    _compatible_flash_implementations = None
     _can_record_outputs = {
         "hidden_states": MiniMaxM3VLVisionEncoderLayer,
         "attentions": MiniMaxM3VLVisionAttention,
@@ -900,18 +927,9 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
             The temporal, height and width of feature shape of each image.
         """
         embeds = self.embeddings(pixel_values).to(self.pre_layrnorm.weight.dtype)
-        segment_lengths = kwargs.pop("segment_lengths", None)
-        max_frames = getattr(self.config, "vision_segment_max_frames", None)
-        if max_frames is not None and (segment_lengths is None or kwargs.get("position_ids") is None):
-            grid_thw = grid_thw.new_tensor(
-                [
-                    [min(max_frames, t - start), h, w]
-                    for t, h, w in grid_thw.tolist()
-                    for start in range(0, t, max_frames)
-                ]
-            )
-        if segment_lengths is None:
-            segment_lengths = grid_thw.prod(dim=-1).tolist()
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(
+            grid_thw, self.config, merge_temporal=True, kwargs=kwargs
+        )
         position_ids = get_vision_position_ids(
             grid_thw, self.config.spatial_merge_size, include_temporal=True, kwargs=kwargs
         )
@@ -922,7 +940,8 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
                 hidden_states,
                 attention_mask=None,
                 position_embeddings=position_embeddings,
-                segment_lengths=segment_lengths,
+                cu_seqlens=cu_seqlens,
+                max_seqlen=max_seqlen,
                 **kwargs,
             )
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=hidden_states[:, 0])
@@ -1284,14 +1303,44 @@ class MiniMaxM3VLProcessor(Qwen2VLProcessor):
     VISION_START_TOKEN = "]<]start of image[>["
     VISION_END_TOKEN = "]<]end of image[>["
 
-    def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        video_processor=None,
+        chat_template=None,
+        vision_segment_max_frames=4,
+        **kwargs,
+    ):
+        r"""
+        vision_segment_max_frames (`int`, *optional*, defaults to 4):
+            Maximum temporal patches per vision attention segment. Set to `None` to keep each video as one segment.
+        """
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
+        self.vision_segment_max_frames = vision_segment_max_frames
         self.image_token = self.IMAGE_TOKEN
         self.video_token = self.VIDEO_TOKEN
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.IMAGE_TOKEN) if tokenizer else None
         self.video_token_id = tokenizer.convert_tokens_to_ids(self.VIDEO_TOKEN) if tokenizer else None
         self.vision_start_token_id = tokenizer.convert_tokens_to_ids(self.VISION_START_TOKEN) if tokenizer else None
         self.vision_end_token_id = tokenizer.convert_tokens_to_ids(self.VISION_END_TOKEN) if tokenizer else None
+
+    def _process_videos(self, videos, **kwargs):
+        video_inputs, video_replacements = super()._process_videos(videos, **kwargs)
+        if self.vision_segment_max_frames is not None:
+            grid_thw = video_inputs["video_grid_thw"]
+            max_frames = self.vision_segment_max_frames
+            segments = [
+                [min(max_frames, t - start), h, w]
+                for t, h, w in grid_thw.tolist()
+                for start in range(0, t, max_frames)
+            ]
+            video_inputs["video_grid_thw"] = (
+                grid_thw.new_tensor(segments)
+                if isinstance(grid_thw, torch.Tensor)
+                else np.asarray(segments, dtype=grid_thw.dtype)
+            )
+        return video_inputs, video_replacements
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         merge_length = self.image_processor.merge_size**2
