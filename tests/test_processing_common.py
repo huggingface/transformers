@@ -210,7 +210,7 @@ class ProcessorTesterMixin:
 
     @classmethod
     def _setup_test_attributes(cls, processor):
-        # can be overriden in the child class to define more class attributes
+        # can be overridden in the child class to define more class attributes
         for token_attr in ("image_token", "video_token", "audio_token"):
             token = getattr(processor, token_attr, None)
             if token is not None:
@@ -876,7 +876,7 @@ class ProcessorTesterMixin:
     # they need to be applied only if an image_processor exists.
 
     def maybe_skip_typed_test_for_modality(self, modality: str, attributes: list):
-        # we have only a few processors that are old and dont follow TypedDict format
+        # we have only a few processors that are old and don't follow TypedDict format
         if any(
             name in self.processor_class.__name__.lower()
             for name in ["instructblipvideo", "mgpstr", "sam3", "layoutlmv", "layoutxlm"]
@@ -901,12 +901,12 @@ class ProcessorTesterMixin:
         return component_key
 
     def _prepare_modality_input(self, modality: str, batch_size: int | None = None):
-        # to be overriden by special models if needed
+        # to be overridden by special models if needed
         prepare_fn = getattr(self, f"prepare_{modality}_inputs")
         return prepare_fn(batch_size=batch_size) if batch_size is not None else prepare_fn()
 
     def _check_modality_outputs(self, inputs: dict, modality: str):
-        # to be overriden by special models if needed
+        # to be overridden by special models if needed
         input_key = getattr(self, f"{modality}_input_name")
         # FIXME eric, eustache - audio has no single kwarg that works same way in all models
         if modality in ["images", "videos"]:

@@ -2025,7 +2025,7 @@ class ProcessorMixin(PushToHubMixin):
                         if load_audio_from_video:
                             batch_audios.extend(load_audio(fname, **audio_loading_params) for fname in video_fnames)
                             # One audio entry per video, right after it, so the template emits the `audio` token in the same spot.
-                            # Deprecated since we dont want to dummy-insert, let users choose where to put audio!
+                            # Deprecated since we don't want to dummy-insert, let users choose where to put audio!
                             if next_block != {"type": "audio"}:
                                 new_content.append({"type": "audio"})
                                 logger.warning_once(

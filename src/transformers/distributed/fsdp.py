@@ -215,7 +215,7 @@ def apply_fully_sharded_data_parallelism(
         logger.debug(f"Applied fully_shard to {name} (reshard=True)")
 
     # Optimization: when the keep buffer is exactly the (final_norm, lm_head/embed)
-    # tail pair, bundle them into one fully_shard so that we dont need to do all-gather during backward pass.
+    # tail pair, bundle them into one fully_shard so that we don't need to do all-gather during backward pass.
     if is_norm_and_head_pair(no_reshard_targets, model):
         names, modules = zip(*no_reshard_targets)
         fully_shard(list(modules), mesh=fsdp_mesh, reshard_after_forward=False, **fsdp_policy_kwargs)

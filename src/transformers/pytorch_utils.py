@@ -231,7 +231,7 @@ def id_tensor_storage(tensor: torch.Tensor) -> tuple[torch.device, int, int]:
         return tensor.device, local_tensor.storage().data_ptr(), tensor.nbytes
 
     if tensor.device.type == "xla" and is_torch_xla_available():
-        # NOTE: xla tensors dont have storage
+        # NOTE: xla tensors don't have storage
         # use some other unique id to distinguish.
         # this is a XLA tensor, it must be created using torch_xla's
         # device. So the following import is safe:
