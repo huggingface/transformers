@@ -58,6 +58,8 @@ class Inkling2TextConfig(PreTrainedConfig):
         Softcap applied to the experts' up projection.
     final_logit_softcapping (`float`, *optional*, defaults to 30.0):
         Softcap applied to the output logits.
+    scoring_func (`str`, *optional*, defaults to `"sigmoid"`):
+        Activation turning the router logits into expert scores.
     """
 
     model_type = "inkling2_text"
@@ -79,6 +81,7 @@ class Inkling2TextConfig(PreTrainedConfig):
         "sconv_kernel_size": "conv_kernel_size",
         "model_max_length": "max_position_embeddings",
         "intermediate_size": "moe_intermediate_size",
+        "routed_scaling_factor": "route_scale",
     }
 
     vocab_size: int = 201024
@@ -118,6 +121,7 @@ class Inkling2TextConfig(PreTrainedConfig):
     mlp_gate_softcap: float = 4.0
     mlp_up_softcap: float = 25.0
     final_logit_softcapping: float = 30.0
+    scoring_func: str = "sigmoid"
     use_cache: bool = True
     number_of_conv_states = 4
 

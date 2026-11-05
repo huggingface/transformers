@@ -592,42 +592,41 @@ class Inkling2Experts(nn.Module):
         return self.act_fn(gate, up)
 
 
-class Inkling2TopkRouter(nn.Module):
-    def __init__(self, config):
+class Inkling2TopKRouter(nn.Module):
+    def __init__(self, config: Inkling2Config):
         super().__init__()
-        self.num_experts = config.n_routed_experts
-        self.n_shared_experts = config.n_shared_experts
-        self.n_total_experts = self.num_experts + self.n_shared_experts
-        self.hidden_dim = config.hidden_size
-        self.route_scale = config.route_scale
         self.top_k = config.num_experts_per_tok
-
-        self.weight = nn.Parameter(torch.empty(self.n_total_experts, config.hidden_size))
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        self.score_fn = ACT2FN[config.scoring_func]
+        self.routed_scaling_factor = config.routed_scaling_factor
         self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
 
-    def forward(self, hidden_states) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        router_logits = F.linear(hidden_states.reshape(-1, self.hidden_dim).float(), self.weight.float())
-        scores = router_logits.sigmoid()
-        topk_indices = torch.topk(scores + self.e_score_correction_bias, self.top_k, dim=-1, sorted=False)[1]
-        topk_weights = scores.gather(-1, topk_indices)
-        topk_weights = topk_weights / topk_weights.sum(dim=-1, keepdim=True) * self.route_scale
-        return router_logits, topk_weights, topk_indices
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        # routing runs in fp32, as in the original
+        hidden_states = hidden_states.float()
+        flat = hidden_states.reshape(-1, self.hidden_dim)
+        logits = F.linear(flat, self.weight)
+        scores = self.score_fn(logits)
+        indices = torch.topk(scores + self.e_score_correction_bias, self.top_k, dim=-1, sorted=False).indices
+        weights = scores.gather(1, indices)
+        weights = weights / (weights.sum(dim=-1, keepdim=True) + 1e-20)
+        return logits, weights * self.routed_scaling_factor, indices
 
 
-class Inkling2MoE(nn.Module):
-    """Gate -> routed experts (+ shared experts), TML flavour."""
-
-    def __init__(self, config):
+class Inkling2SparseMoeBlock(nn.Module):
+    def __init__(self, config: Inkling2Config):
         super().__init__()
-        self.config = config
-        self.gate = Inkling2TopkRouter(config)
         self.experts = Inkling2Experts(config)
+        self.gate = Inkling2TopKRouter(config)
 
-    def forward(self, hidden_states) -> torch.Tensor:
-        input_shape = hidden_states.shape
-        _, topk_weights, topk_indices = self.gate(hidden_states)
-        hidden_states = self.experts(hidden_states.view(-1, input_shape[-1]), topk_indices, topk_weights)
-        return hidden_states.view(*input_shape)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
+        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped)
+        final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
+        return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
 
 class Inkling2BlockAttentionResidual(nn.Module):
@@ -678,7 +677,7 @@ class Inkling2DecoderLayer(GradientCheckpointingLayer):
         )
         self.mlp_input = Inkling2BlockAttentionResidual(config)
         self.self_attn = Inkling2Attention(config, layer_idx)
-        self.mlp = Inkling2MoE(config)
+        self.mlp = Inkling2SparseMoeBlock(config)
         if self.is_sliding:
             self.input_layernorm = Inkling2RMSNorm(config.hidden_size, config.rms_norm_eps)
         else:
@@ -1047,6 +1046,7 @@ class Inkling2PreTrainedModel(PreTrainedModel):
     _supports_attention_backend = False
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
+        "mlp.gate.weight",
         "post_attention_convolution",
         "post_mlp_convolution",
         "key_convolution.conv1d",
@@ -1058,7 +1058,7 @@ class Inkling2PreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": Inkling2DecoderLayer,
         "attentions": Inkling2Attention,
-        "router_logits": OutputRecorder(Inkling2TopkRouter, index=0),
+        "router_logits": OutputRecorder(Inkling2TopKRouter, index=0),
     }
 
     @torch.no_grad()
@@ -1070,7 +1070,7 @@ class Inkling2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, Inkling2Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)
-        elif isinstance(module, Inkling2TopkRouter):
+        elif isinstance(module, Inkling2TopKRouter):
             init.normal_(module.weight, mean=0.0, std=std)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, Inkling2ScaledL2Clip):

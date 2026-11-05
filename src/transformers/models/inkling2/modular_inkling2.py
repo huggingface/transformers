@@ -37,9 +37,10 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_interpolation_indices_and_weights, get_vision_position_ids
 from ..clip.modeling_clip import CLIPMLP
+from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4TopKRouter
 from ..inkling.configuration_inkling import InklingConfig, InklingTextConfig
 from ..inkling.modeling_inkling import (
     InklingAttention,
@@ -49,16 +50,15 @@ from ..inkling.modeling_inkling import (
     InklingForConditionalGeneration,
     InklingModel,
     InklingModelOutputWithPast,
-    InklingMoE,
     InklingPreTrainedModel,
     InklingRelativeLogits,
     InklingRMSNorm,
     InklingShortConvolution,
     InklingTextModel,
-    InklingTopkRouter,
 )
 from ..llama.modeling_llama import repeat_kv
 from ..llava.modeling_llava import LlavaMultiModalProjector
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
 from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states, causal_conv1d_fn, causal_conv1d_update
 from ..sam3.modeling_sam3 import Sam3ViTRotaryEmbedding
 from ..step3p7.modeling_step3p7 import Step3p7VisionEncoderLayer
@@ -99,6 +99,8 @@ class Inkling2TextConfig(InklingTextConfig):
         Softcap applied to the experts' up projection.
     final_logit_softcapping (`float`, *optional*, defaults to 30.0):
         Softcap applied to the output logits.
+    scoring_func (`str`, *optional*, defaults to `"sigmoid"`):
+        Activation turning the router logits into expert scores.
     """
 
     model_type = "inkling2_text"
@@ -120,6 +122,7 @@ class Inkling2TextConfig(InklingTextConfig):
         "sconv_kernel_size": "conv_kernel_size",
         "model_max_length": "max_position_embeddings",
         "intermediate_size": "moe_intermediate_size",
+        "routed_scaling_factor": "route_scale",
     }
 
     unpadded_vocab_size: int = 200058
@@ -142,6 +145,7 @@ class Inkling2TextConfig(InklingTextConfig):
     mlp_gate_softcap: float = 4.0
     mlp_up_softcap: float = 25.0
     final_logit_softcapping: float = 30.0
+    scoring_func: str = "sigmoid"
     use_cache: bool = True
 
     intermediate_size = AttributeError()
@@ -615,30 +619,15 @@ class Inkling2Experts(InklingExperts):
         return final_hidden_states.to(hidden_states.dtype)
 
 
-class Inkling2TopkRouter(InklingTopkRouter):
-    def __init__(self, config):
-        super().__init__(config)
-        del self.global_scale
-
-    def forward(self, hidden_states) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        router_logits = F.linear(hidden_states.reshape(-1, self.hidden_dim).float(), self.weight.float())
-        scores = router_logits.sigmoid()
-        topk_indices = torch.topk(scores + self.e_score_correction_bias, self.top_k, dim=-1, sorted=False)[1]
-        topk_weights = scores.gather(-1, topk_indices)
-        topk_weights = topk_weights / topk_weights.sum(dim=-1, keepdim=True) * self.route_scale
-        return router_logits, topk_weights, topk_indices
+class Inkling2TopKRouter(DeepseekV4TopKRouter):
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        # routing runs in fp32, as in the original
+        hidden_states = hidden_states.float()
+        return super().forward(hidden_states)
 
 
-class Inkling2MoE(InklingMoE):
-    def __init__(self, config):
-        super().__init__(config)
-        del self.shared_experts
-
-    def forward(self, hidden_states) -> torch.Tensor:
-        input_shape = hidden_states.shape
-        _, topk_weights, topk_indices = self.gate(hidden_states)
-        hidden_states = self.experts(hidden_states.view(-1, input_shape[-1]), topk_indices, topk_weights)
-        return hidden_states.view(*input_shape)
+class Inkling2SparseMoeBlock(Qwen3MoeSparseMoeBlock):
+    pass
 
 
 class Inkling2BlockAttentionResidual(nn.Module):
@@ -689,7 +678,7 @@ class Inkling2DecoderLayer(GradientCheckpointingLayer):
         )
         self.mlp_input = Inkling2BlockAttentionResidual(config)
         self.self_attn = Inkling2Attention(config, layer_idx)
-        self.mlp = Inkling2MoE(config)
+        self.mlp = Inkling2SparseMoeBlock(config)
         if self.is_sliding:
             self.input_layernorm = Inkling2RMSNorm(config.hidden_size, config.rms_norm_eps)
         else:
@@ -876,8 +865,14 @@ class Inkling2PreTrainedModel(InklingPreTrainedModel):
     _no_split_modules = ["Inkling2DecoderLayer", "Inkling2VisionEncoderLayer"]
     _supports_sdpa = False
     _supports_flex_attn = False
+    _can_record_outputs = {
+        "hidden_states": Inkling2DecoderLayer,
+        "attentions": Inkling2Attention,
+        "router_logits": OutputRecorder(Inkling2TopKRouter, index=0),
+    }
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
+        "mlp.gate.weight",
         "post_attention_convolution",
         "post_mlp_convolution",
         "key_convolution.conv1d",
@@ -897,7 +892,7 @@ class Inkling2PreTrainedModel(InklingPreTrainedModel):
         elif isinstance(module, Inkling2Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)
-        elif isinstance(module, Inkling2TopkRouter):
+        elif isinstance(module, Inkling2TopKRouter):
             init.normal_(module.weight, mean=0.0, std=std)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, Inkling2ScaledL2Clip):
