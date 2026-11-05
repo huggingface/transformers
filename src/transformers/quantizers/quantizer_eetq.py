@@ -42,6 +42,11 @@ class EetqHfQuantizer(HfQuantizer):
     quantization_config: "EetqConfig"
 
     def validate_environment(self, *args, **kwargs):
+        if self.dequantizing and not (is_kernels_available() and torch.cuda.is_available()):
+            raise ImportError(
+                "Dequantizing an EETQ checkpoint requires kernels (`pip install kernels`) and a GPU: its int8 weights are "
+                "stored in the GPU-specific layout of EETQ's CUTLASS gemm, which only that kernel reads."
+            )
         if not is_kernels_available():
             raise ImportError("Loading an EETQ quantized model requires kernels (`pip install kernels`)")
 
