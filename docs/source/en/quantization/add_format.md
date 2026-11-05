@@ -124,10 +124,8 @@ class NVFP4HfQuantizer(HfQuantizer):
     serialized_names = {"weight": ["weight", "weight_scale", "weight_scale_2", "input_scale"]}
 
     def get_load_operations(self):
-        return {"deserialize": NVFP4Deserialize, "dequantize": NVFP4Dequantize}
-
-    def get_quantize_ops(self):  # quantize a full-precision checkpoint on load (optional)
-        return NVFP4Quantize(self)
+        # `quantize`: a full-precision checkpoint quantized on load (optional)
+        return {"deserialize": NVFP4Deserialize, "dequantize": NVFP4Dequantize, "quantize": NVFP4Quantize}
 ```
 
 Why ops and not a post-processing pass: the plan gives each param its ops while loading, so every format runs the same
