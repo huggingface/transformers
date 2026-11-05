@@ -228,6 +228,8 @@ def _patch_sliding_window_layer(original):
     full cache, the mask sizes come from the cache's shape, and the sliding mask keeps attention within the window. It
     also keeps the KV-cache concat feeding the state directly, which OpenVINO needs to fuse the cache into its
     attention. The cache of sliding layers then grows with the sequence instead of stopping at the window.
+
+    Temporary: it goes once huggingface/transformers#49542 keeps sliding-window decode on one graph.
     """
     return getattr(DynamicLayer, original.__name__)
 
