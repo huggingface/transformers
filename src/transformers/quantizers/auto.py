@@ -635,7 +635,8 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
                 shared[key] = AutoHfQuantizer.from_config(pattern_config, pre_quantized=plan_from_config)
             quantizers[pattern] = shared[key]
         hf_quantizer = QuantizationPlanHfQuantizer(quantizers, checkpoint_names)
-        config.quantization_config = hf_quantizer.quantization_config
+        if not checkpoint_names:  # else `rename_patterns` sets it, in the model's names
+            config.quantization_config = hf_quantizer.quantization_config
     elif pre_quantized or quantization_config is not None:
         if pre_quantized:
             config.quantization_config = AutoHfQuantizer.merge_quantization_configs(

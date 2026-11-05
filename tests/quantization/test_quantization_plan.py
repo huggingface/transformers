@@ -153,9 +153,9 @@ class QuantizationPlanTest(unittest.TestCase):
             self.assertEqual(len(hf_quantizer.all_quantizers), 2)
             self.assertTrue(hf_quantizer.pre_quantized)
             for pattern, expected in plan.items():
-                self.assertEqual(repr(config.quantization_config[pattern]), repr(expected), pattern)
+                self.assertEqual(repr(hf_quantizer.quantization_config[pattern]), repr(expected), pattern)
         # DeepSeek's base fp8 quantizes everything ModelOpt left out, its `ignore` included
-        fallback = self.plan_from_config(DEEPSEEK)[1].quantization_config
+        fallback = self.plan_from_config(DEEPSEEK)[0].quantization_config
         self.assertEqual(list(fallback)[-1], "*")
         self.assertEqual((fallback["*"].quant_method, fallback["*"].scale_fmt), ("fp8", "ue8m0"))
         self.assertNotIn("head", fallback)
@@ -165,6 +165,11 @@ class QuantizationPlanTest(unittest.TestCase):
         with torch.device("meta"):
             model = DeepseekV4ForCausalLM(config)
         hf_quantizer.match_modules(model)
+        # Reusing the config (now in the model's names) gives the same plan
+        with patch.object(QuantizationPlanHfQuantizer, "validate_environment"):
+            reloaded = get_hf_quantizer(config, None, None, True, {})[0]
+        reloaded.match_modules(model)
+        self.assertIn("layers.0.mlp.experts", reloaded.quantizers)
         # The checkpoint's `layers.0.ffn.experts` is the model's `layers.0.mlp.experts`; exact names beat the `"*"`
         nvfp4, fp8 = hf_quantizer.quantizers["layers.0.mlp.experts"], hf_quantizer.quantizers["*"]
         self.assertEqual(
@@ -191,7 +196,8 @@ class QuantizationPlanTest(unittest.TestCase):
             hf_quantizer, config = self.plan_from_config(saved, **kwargs)
             plan = {"*.mlp.experts": Mxfp4Config(), "*": FineGrainedFP8Config(**DEEPSEEK_V4)}
             self.assertEqual(
-                {k: repr(v) for k, v in config.quantization_config.items()}, {k: repr(v) for k, v in plan.items()}
+                {k: repr(v) for k, v in hf_quantizer.quantization_config.items()},
+                {k: repr(v) for k, v in plan.items()},
             )
             with torch.device("meta"):
                 model = DeepseekV4ForCausalLM(config)
