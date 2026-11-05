@@ -553,7 +553,7 @@ class Inkling2SoftcappedSwiGLU(nn.Module):
         return (gate_linear * torch.sigmoid(gate) * up).to(input_dtype)
 
 
-@use_experts_implementation
+@use_experts_implementation(is_concatenated=False)
 class Inkling2Experts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
@@ -569,6 +569,7 @@ class Inkling2Experts(nn.Module):
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
+        # accumulate the top-k expert outputs in fp32, as in the original
         final_hidden_states = torch.zeros_like(hidden_states, dtype=torch.float32)
         with torch.no_grad():
             expert_mask = F.one_hot(top_k_index, num_classes=self.num_experts + 1).permute(2, 1, 0)

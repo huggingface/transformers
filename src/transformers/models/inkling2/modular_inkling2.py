@@ -28,7 +28,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ChannelDimension, ImageInput, ImageType, SizeDict, get_image_type
-from ...integrations import use_kernelized_func
+from ...integrations import use_experts_implementation, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -588,6 +588,7 @@ class Inkling2SoftcappedSwiGLU(nn.Module):
         return (gate_linear * torch.sigmoid(gate) * up).to(input_dtype)
 
 
+@use_experts_implementation(is_concatenated=False)
 class Inkling2Experts(InklingExperts):
     def __init__(self, config: Inkling2TextConfig):
         super().__init__(config)
@@ -600,6 +601,7 @@ class Inkling2Experts(InklingExperts):
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
+        # accumulate the top-k expert outputs in fp32, as in the original
         final_hidden_states = torch.zeros_like(hidden_states, dtype=torch.float32)
         with torch.no_grad():
             expert_mask = F.one_hot(top_k_index, num_classes=self.num_experts + 1).permute(2, 1, 0)
