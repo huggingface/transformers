@@ -116,16 +116,15 @@ class NVFP4HfQuantizer(HfQuantizer):
 
         return NVFP4Quantize(self.quantization_device)
 
-    # ModelOpt checkpoints: `weight_scale` (block scales), `weight_scale_2` (`1 / weight_global_scale`), `input_scale`
+    # ModelOpt's `weight_scale` and `input_scale` are renamed (see `update_weight_conversions`)
     serialized_names = {
         "weight": [
             "weight",
             "weight_sf",
             "weight_sf_rowmajor",
             "weight_global_scale",
-            "weight_scale",
             "weight_scale_2",
-            "input_scale",
+            "weight_input_scale",
         ]
     }
 
@@ -135,28 +134,24 @@ class NVFP4HfQuantizer(HfQuantizer):
         return {"deserialize": NVFP4Deserialize, "dequantize": NVFP4Dequantize}
 
     def update_weight_conversions(self, weight_conversions, model):
-        from ..core_model_loading import WeightConverter
-        from ..integrations.nvfp4 import NVFP4Experts, NVFP4ExpertsDeserialize
+        from ..core_model_loading import WeightRenaming
 
-        # A converter merging per-expert weights into `NVFP4Experts` also collects their ModelOpt scales
-        experts = "\n".join(
-            f"{name}.{projection}"
+        # ModelOpt's block scales are our row-major ones, and every companion starts with `weight`: the model's merge
+        # converters get a copy for each (e.g. `experts.*.w1.weight_scale_2` into `experts.gate_up_proj_scale_2`).
+        # Only those of our modules, after the model's renamings: in a plan, FP8 has its own `weight_scale`
+        owner = self.plan.get_quantizer if self.plan is not None else self.get_quantizer
+        prefix = f"{model.base_model_prefix}."
+        modules = "|".join(
+            re.escape(name.removeprefix(prefix))
             for name, module in model.named_modules()
-            if isinstance(module, NVFP4Experts)
-            for projection in module.projections
+            if owner(name) is self and (module._parameters or module._buffers)
         )
-        companions = ["weight", "weight_scale", "weight_scale_2", "input_scale"]
-
-        def to_nvfp4(converter):
-            sources, targets = converter._original_source_patterns, converter._original_target_patterns
-            if not isinstance(converter, WeightConverter) or not all(source.endswith("weight") for source in sources):
-                return converter
-            if not re.search(f"{targets[0]}$", experts, re.MULTILINE):
-                return converter
-            sources = [source.removesuffix("weight") + name for source in sources for name in companions]
-            return converter.copy(sources, targets, operations=[NVFP4ExpertsDeserialize(self)])
-
-        return super().update_weight_conversions([to_nvfp4(converter) for converter in weight_conversions], model)
+        renames = [
+            WeightRenaming(rf"((?:^|\.)(?:{modules})(?:\.\d+\.[^.]+)?)\.{name}$", rf"\1.{ours}")
+            for name, ours in (("weight_scale", "weight_sf_rowmajor"), ("input_scale", "weight_input_scale"))
+            if modules
+        ]
+        return super().update_weight_conversions(weight_conversions + renames, model)
 
     def is_serializable(self) -> bool:
         return False

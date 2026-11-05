@@ -409,7 +409,8 @@ class HfQuantizer(ABC):
 
         # Buffers too: some quantized modules (e.g. NVFP4) keep their serialized tensors as buffers
         param_names = "\n".join(name for name, _ in chain(model.named_parameters(), model.named_buffers()))
-        dequantize = self.get_load_operations().get("dequantize") if self.pre_quantized else None
+        load_operations = self.get_load_operations() if self.pre_quantized else {}
+        dequantize, deserialize = load_operations.get("dequantize"), load_operations.get("deserialize")
         updated = []
         for converter in weight_conversions:
             updated.append(converter)
@@ -423,13 +424,13 @@ class HfQuantizer(ABC):
             # `weight_scale_inv` -> `_scale_inv`
             suffixes = [name.removeprefix(param) for name in serialized if name.startswith(param) and name != param]
             if suffixes and re.search(f"{targets[0]}{suffixes[0]}$", param_names, re.MULTILINE):
-                # The module keeps the companions as params: each one gets its own copy of the converter
+                # The module keeps the companions as params: each one gets its own copy of the converter, then the
+                # quantizer's deserialization (a format conversion of the merged companion)
+                operations = list(converter.operations) + ([deserialize(self)] if deserialize is not None else [])
                 for suffix in suffixes:
                     suffixed_sources = [source + suffix for source in sources]
                     suffixed_targets = [target + suffix for target in targets]
-                    updated.append(
-                        converter.copy(suffixed_sources, suffixed_targets, operations=list(converter.operations))
-                    )
+                    updated.append(converter.copy(suffixed_sources, suffixed_targets, operations=list(operations)))
             elif dequantize is not None:
                 # The module only has `param`: the converter also collects the companions and dequantizes first
                 all_sources = [re.sub(rf"{param}$", name, source) for source in sources for name in serialized]
