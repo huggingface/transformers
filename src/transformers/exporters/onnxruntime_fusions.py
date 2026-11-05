@@ -1290,11 +1290,11 @@ _STEPS = (
 )
 
 
-def fuse_for_onnxruntime(model: ir.Model, provider: str = "cpu", steps: int | None = None) -> dict[str, int]:
-    """Fuse `model` in place into ONNX Runtime's own ops, for its `"cpu"` or `"cuda"` provider (with the ops only
-    the latter has, `MoE`). Returns how many times each step applied. `steps` runs only the first ones (to measure
-    each step's share)."""
-    if provider == "cuda":
+def fuse_for_onnxruntime(model: ir.Model, ort_fusions: str = "cpu", steps: int | None = None) -> dict[str, int]:
+    """Fuse `model` in place into ONNX Runtime's own ops, for the device it runs on, `ort_fusions` (`"cpu"` or
+    `"cuda"`, which has more ops, `MoE`). Returns how many times each step applied. `steps` runs only the first ones
+    (to measure each step's share)."""
+    if ort_fusions == "cuda":
         installed, installed_version = _is_package_available("onnxruntime", return_version=True)
         if installed and version.parse(installed_version) < version.parse("1.28.0"):
             logger.warning(
@@ -1302,7 +1302,7 @@ def fuse_for_onnxruntime(model: ir.Model, provider: str = "cpu", steps: int | No
                 f"{installed_version}): before it, `GroupQueryAttention` has no query and key norms and float16 skip "
                 "norms overflow on large activations."
             )
-    counts = {name: step(model) if provider in providers else 0 for name, step, providers in _STEPS[:steps]}
+    counts = {name: step(model) if ort_fusions in providers else 0 for name, step, providers in _STEPS[:steps]}
     # 7. What every layer computes alike (its mask's unattended rows), computed once.
     _merge_equal_computations(model)
     return counts
