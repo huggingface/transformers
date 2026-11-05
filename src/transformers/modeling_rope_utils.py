@@ -767,7 +767,7 @@ class RotaryEmbeddingConfigMixin:
         Return the keys `rope_parameters` is nested under, or an empty list if it is a flat dict. Only the layer
         types the config declares count, so a config that declares none is never treated as nested.
         """
-        # Deepseekv4 has `layer_types` which are different from `_rope_type_labels`
+        # `_rope_type_labels` names the RoPE entries when they differ from `layer_types` (e.g. DeepSeek-V4, LFM3)
         labels = getattr(self, "_rope_type_labels", None) or getattr(self, "layer_types", None) or ()
         return [key for key in rope_parameters if key in labels]
 
