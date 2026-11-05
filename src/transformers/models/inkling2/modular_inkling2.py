@@ -1313,7 +1313,8 @@ class Inkling2ImageProcessor(TorchvisionBackend):
             channels, height, width = image.shape
             rows, columns = math.ceil(height / size.height), math.ceil(width / size.width)
             # pad to the grid with -1 on the 0-255 scale, then cut it into one patch per image token
-            image = F.pad(image.float(), (0, columns * size.width - width, 0, rows * size.height - height), value=-1.0)
+            pad_size = SizeDict(height=rows * size.height, width=columns * size.width)
+            image = self.pad([image.float()], pad_size=pad_size, fill_value=-1.0)[0]
             image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
             image = image.reshape(channels, rows, size.height, columns, size.width).permute(1, 3, 2, 4, 0)
             patches.append(image.flatten(0, 1))
