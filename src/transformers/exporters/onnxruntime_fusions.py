@@ -1301,13 +1301,14 @@ _STEPS = (
     # Narrowed, the norms whose skip fusion was undone take their residual's dtype: fused again.
     ("narrowed_skip_norms", fuse_skip_rms_normalization, _ANY),
     # CUDA's `GroupQueryAttention`, decode only: with a bias, it runs an unfused kernel, slower for a prefill than
-    # `MultiHeadAttention`'s.
+    # `MultiHeadAttention`'s (microsoft/onnxruntime#33869).
     ("group_query_attention", _fuse_group_query_attention, _CPU),
     ("group_query_attention_decode", partial(_fuse_group_query_attention, prefill=False, head_norms=True), _CUDA),
     # WebGPU's rotates at the positions after the past, ignoring `position_ids`: rotary stays its own op.
     ("group_query_attention_unrotated", partial(_fuse_group_query_attention, rotary=False), _WEBGPU),
     ("mixture_of_experts", _fuse_mixture_of_experts, _CUDA),
-    # ONNX Runtime's CPU `MultiHeadAttention` runs slower than the ops it fused: the ones left, unfused.
+    # ONNX Runtime's CPU `MultiHeadAttention` runs slower than the ops it fused (microsoft/onnxruntime#33873): the ones
+    # left, unfused.
     ("unfused_attentions", _unfuse_attentions, _CPU),
     ("head_transposes", _sink_head_transposes, _ANY),
     ("packed_matmuls", _pack_sibling_matmuls, _ANY),
