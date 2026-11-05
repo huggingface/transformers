@@ -2319,6 +2319,8 @@ def get_model_conversion_mapping(
     key_mapping: dict[str, str] | None = None,
     hf_quantizer: HfQuantizer | None = None,
     add_legacy: bool = True,
+    *,
+    checkpoint_keys: set[str] | None = None,
 ) -> list[WeightTransform]:
     """
     Collect the ordered list of weight transforms for `model` (used during
@@ -2330,6 +2332,12 @@ def get_model_conversion_mapping(
     sub-module is processed, both its class name and `model_type` are marked
     seen to prevent `XForY` / `XModel` pairs from applying the same mapping
     twice via different lookup paths.
+
+    `checkpoint_keys` optionally holds the tensor names of the checkpoint being loaded. It is only used by
+    `hf_quantizer.update_weight_conversions`, which skips rewriting the converters whose serialized companions
+    (e.g. `weight_scale`) the checkpoint does not store — those target modules the checkpoint left unquantized.
+    It is keyword-only and optional so that existing callers (e.g. PEFT) keep working unchanged, and the
+    quantizers fall back to their previous behavior when it is not provided.
     """
     from .modeling_utils import PreTrainedModel
 
@@ -2411,6 +2419,6 @@ def get_model_conversion_mapping(
         weight_conversions.extend(get_checkpoint_conversion_mapping("legacy"))
 
     if hf_quantizer is not None:
-        weight_conversions = hf_quantizer.update_weight_conversions(weight_conversions, model)
+        weight_conversions = hf_quantizer.update_weight_conversions(weight_conversions, model, checkpoint_keys)
 
     return weight_conversions

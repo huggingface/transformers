@@ -807,6 +807,26 @@ def _get_resolved_checkpoint_files(
     return checkpoint_files, sharded_metadata
 
 
+def _get_checkpoint_tensor_names(checkpoint_files: list[str] | None, sharded_metadata: dict | None) -> set[str] | None:
+    """Tensor names of the checkpoint being loaded, without materializing any tensor.
+
+    They are read from the sharded checkpoint index, or from the headers of the safetensors files. `None` is
+    returned when they cannot be resolved (e.g. a `state_dict` was passed directly, or a GGUF/PyTorch checkpoint):
+    callers then fall back to the behavior of checkpoints that cannot be inspected.
+    """
+    if sharded_metadata is not None:
+        # Populated by `get_checkpoint_shard_files` from the checkpoint index
+        if sharded_metadata.get("all_checkpoint_keys"):
+            return set(sharded_metadata["all_checkpoint_keys"])
+    if checkpoint_files is None or not all(file.endswith(".safetensors") for file in checkpoint_files):
+        return None
+    keys = set()
+    for file in checkpoint_files:
+        with safe_open(file, framework="pt") as f:
+            keys.update(f.keys())
+    return keys or None
+
+
 def _get_dtype(
     dtype: str | torch.dtype | dict | None,
     checkpoint_files: list[str] | None,
@@ -4317,7 +4337,14 @@ class PreTrainedModel(
         dtype_plan = model._get_dtype_plan(dtype)
 
         # Obtain the weight conversion mapping for this model if any are registered and apply to all submodels recursively
-        weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
+        # The checkpoint keys let the quantizer leave the converters of modules the checkpoint does not quantize
+        # untouched (None when they cannot be resolved, e.g. a `state_dict` was passed directly)
+        checkpoint_keys = (
+            None if state_dict is not None else _get_checkpoint_tensor_names(checkpoint_files, sharded_metadata)
+        )
+        weight_conversions = get_model_conversion_mapping(
+            model, key_mapping, hf_quantizer, checkpoint_keys=checkpoint_keys
+        )
 
         if distributed_config is not None:
             model = cls.maybe_distribute_model(model, distributed_config, mesh_manager)

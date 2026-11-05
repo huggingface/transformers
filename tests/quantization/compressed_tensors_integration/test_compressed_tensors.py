@@ -270,3 +270,254 @@ class CompressedTensorsTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(int8_model, device_map="auto")
         fp8_count = sum(1 for m in model.modules() if isinstance(m, CompressedTensorsFP8Linear))
         self.assertEqual(fp8_count, 0, "INT8 model should NOT use CompressedTensorsFP8Linear")
+
+
+@require_compressed_tensors
+@require_torch
+class CompressedTensorsUpdateWeightConversionsTest(unittest.TestCase):
+    """The rewrite of the model's conversion mapping by the quantizer, exercised without loading any checkpoint.
+
+    Mixed-precision checkpoints (e.g. RedHatAI/GLM-5.3-Flash-NVFP4, whose experts are NVFP4-packed while its
+    causal convs stay dense) only serialize the companion tensors (e.g. `weight_scale`) of the modules they
+    quantize: `update_weight_conversions` must leave the converters of the other modules as registered, so that
+    they keep consuming the plain checkpoint keys instead of silently dropping them.
+    """
+
+    # experts-only NVFP4 scheme, like RedHatAI/GLM-5.3-Flash-NVFP4
+    nvfp4_experts_config = {
+        "config_groups": {
+            "group_0": {
+                "format": "nvfp4-pack-quantized",
+                "input_activations": None,
+                "targets": ["re:.*\\.mlp\\.experts\\..*(gate|up|down)_proj$"],
+                "weights": {
+                    "dynamic": False,
+                    "group_size": 16,
+                    "num_bits": 4,
+                    "strategy": "tensor_group",
+                    "symmetric": True,
+                    "type": "float",
+                },
+            }
+        },
+        "format": "mixed-precision",
+        "quantization_status": "compressed",
+        "ignore": ["lm_head"],
+    }
+    # experts-only FP8 scheme: the serialized names then include the plain `weight`
+    fp8_experts_config = {
+        "config_groups": {
+            "group_0": {
+                "format": "float-quantized",
+                "input_activations": None,
+                "targets": ["re:.*\\.mlp\\.experts\\..*(gate|up|down)_proj$"],
+                "weights": {
+                    "dynamic": False,
+                    "num_bits": 8,
+                    "strategy": "tensor",
+                    "symmetric": True,
+                    "type": "float",
+                },
+            }
+        },
+        "format": "mixed-precision",
+        "quantization_status": "compressed",
+        "ignore": ["lm_head"],
+    }
+
+    # Keys of a checkpoint which quantizes its experts to NVFP4 but keeps the (fused) causal conv modules
+    # dense, like RedHatAI/GLM-5.3-Flash-NVFP4
+    checkpoint_keys = {
+        "model.layers.0.self_attn.q_conv1d.weight",
+        "model.layers.0.self_attn.k_conv1d.weight",
+        "model.layers.0.self_attn.v_conv1d.weight",
+        "model.layers.1.self_attn.q_conv1d.weight",
+        "model.layers.1.self_attn.k_conv1d.weight",
+        "model.layers.1.self_attn.v_conv1d.weight",
+        "model.layers.1.mlp.experts.0.gate_proj.weight_packed",
+        "model.layers.1.mlp.experts.0.gate_proj.weight_scale",
+        "model.layers.1.mlp.experts.0.gate_proj.weight_shape",
+        "model.layers.1.mlp.experts.0.up_proj.weight_packed",
+        "model.layers.1.mlp.experts.0.up_proj.weight_scale",
+        "model.layers.1.mlp.experts.0.up_proj.weight_shape",
+        "model.layers.1.mlp.experts.0.down_proj.weight_packed",
+        "model.layers.1.mlp.experts.0.down_proj.weight_scale",
+        "model.layers.1.mlp.experts.0.down_proj.weight_shape",
+    }
+    packed_names = ("weight_packed", "weight_scale", "weight_shape")
+    conv1d_sources = ["self_attn.q_conv1d.weight", "self_attn.k_conv1d.weight", "self_attn.v_conv1d.weight"]
+
+    def _quantizer(self, config):
+        from transformers.quantizers.quantizer_compressed_tensors import CompressedTensorsHfQuantizer
+
+        quantizer = CompressedTensorsHfQuantizer(CompressedTensorsConfig(**config), pre_quantized=True)
+        quantizer.use_fp8_kernel = False  # normally set by validate_environment()
+        return quantizer
+
+    @staticmethod
+    def _glm5_next_like_model():
+        """Parameter layout of glm5_next layers: a fused causal conv in attention (dense) and a fused MoE block."""
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.model = torch.nn.Module()
+                self.model.layers = torch.nn.ModuleList()
+                for _ in range(2):
+                    layer = torch.nn.Module()
+                    layer.self_attn = torch.nn.Module()
+                    layer.self_attn.conv1d = torch.nn.Conv1d(8, 8, 4)
+                    layer.mlp = torch.nn.Module()
+                    layer.mlp.experts = torch.nn.Module()
+                    layer.mlp.experts.gate_up_proj = torch.nn.Linear(8, 16)
+                    layer.mlp.experts.down_proj = torch.nn.Linear(8, 16)
+                    self.model.layers.append(layer)
+
+        return Model()
+
+    @staticmethod
+    def _conv1d_converter():
+        # the glm5_next q/k/v conv1d fusion registered by transformers
+        from transformers.core_model_loading import Concatenate, WeightConverter
+
+        return WeightConverter(
+            source_patterns=[
+                "self_attn.q_conv1d.weight",
+                "self_attn.k_conv1d.weight",
+                "self_attn.v_conv1d.weight",
+            ],
+            target_patterns="self_attn.conv1d.weight",
+            operations=[Concatenate(dim=0)],
+        )
+
+    @staticmethod
+    def _experts_converter():
+        # the glm5_next expert fusion registered by transformers
+        from transformers.core_model_loading import Concatenate, MergeModulelist, WeightConverter
+
+        return WeightConverter(
+            source_patterns=[
+                "mlp.experts.*.gate_proj.weight",
+                "mlp.experts.*.up_proj.weight",
+            ],
+            target_patterns="mlp.experts.gate_up_proj",
+            operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+        )
+
+    def test_dense_module_converter_left_as_registered(self):
+        """A converter whose modules the checkpoint does not quantize keeps consuming the plain keys."""
+        quantizer = self._quantizer(self.nvfp4_experts_config)
+
+        updated = quantizer.update_weight_conversions(
+            [self._conv1d_converter()], self._glm5_next_like_model(), checkpoint_keys=self.checkpoint_keys
+        )
+
+        self.assertEqual(updated[0].source_patterns, self.conv1d_sources)
+
+    def test_dense_module_converter_left_as_registered_fp8(self):
+        """Same with FP8 serialized names: the plain `weight` is part of them, but the `weight_scale`
+        companions the rewrite would collect are missing for unquantized modules."""
+        quantizer = self._quantizer(self.fp8_experts_config)
+        self.assertEqual(quantizer.serialized_names, {"weight": ["weight", "weight_scale"]})
+        plain_keys = {key for key in self.checkpoint_keys if not key.endswith(self.packed_names)}
+
+        updated = quantizer.update_weight_conversions(
+            [self._conv1d_converter()], self._glm5_next_like_model(), checkpoint_keys=plain_keys
+        )
+
+        self.assertEqual(updated[0].source_patterns, self.conv1d_sources)
+
+    def test_quantized_module_converter_still_rewritten(self):
+        """A converter whose sources have serialized companions in the checkpoint still collects them and
+        dequantizes first."""
+        from transformers.integrations.compressed_tensors import CompressedTensorsDequantize
+
+        quantizer = self._quantizer(self.nvfp4_experts_config)
+
+        updated = quantizer.update_weight_conversions(
+            [self._experts_converter()], self._glm5_next_like_model(), checkpoint_keys=self.checkpoint_keys
+        )
+
+        self.assertTrue(all(source.endswith(self.packed_names) for source in updated[0].source_patterns))
+        self.assertIsInstance(updated[0].operations[0], CompressedTensorsDequantize)
+
+    def test_fp8_converter_with_companions_still_rewritten(self):
+        """FP8 sources that do ship `weight_scale` companions are still rewritten to collect them."""
+        quantizer = self._quantizer(self.fp8_experts_config)
+        fp8_keys = {
+            "model.layers.0.self_attn.q_conv1d.weight",
+            "model.layers.0.self_attn.q_conv1d.weight_scale",
+            "model.layers.0.self_attn.k_conv1d.weight",
+            "model.layers.0.self_attn.k_conv1d.weight_scale",
+            "model.layers.0.self_attn.v_conv1d.weight",
+            "model.layers.0.self_attn.v_conv1d.weight_scale",
+        }
+
+        updated = quantizer.update_weight_conversions(
+            [self._conv1d_converter()], self._glm5_next_like_model(), checkpoint_keys=fp8_keys
+        )
+
+        self.assertEqual(
+            sorted(updated[0].source_patterns),
+            sorted(source + suffix for source in self.conv1d_sources for suffix in ("", "_scale")),
+        )
+
+    def test_fallback_when_checkpoint_keys_are_unavailable(self):
+        """Checkpoints that cannot be inspected (e.g. a `state_dict` was passed directly) keep the previous
+        behavior: the converter is rewritten unconditionally."""
+        quantizer = self._quantizer(self.nvfp4_experts_config)
+
+        updated = quantizer.update_weight_conversions(
+            [self._conv1d_converter()], self._glm5_next_like_model(), checkpoint_keys=None
+        )
+
+        self.assertTrue(all(source.endswith(self.packed_names) for source in updated[0].source_patterns))
+
+    def test_plain_checkpoint_keys_still_collected(self):
+        """Simulate the renaming performed while loading: under the guard, the plain q/k/v conv1d checkpoint
+        keys are collected by the untouched fusion converter instead of being reported as UNEXPECTED."""
+        from transformers.core_model_loading import WeightConverter, rename_source_key
+
+        quantizer = self._quantizer(self.nvfp4_experts_config)
+        model = self._glm5_next_like_model()
+        updated = quantizer.update_weight_conversions(
+            [self._conv1d_converter()], model, checkpoint_keys=self.checkpoint_keys
+        )
+        converters = [entry for entry in updated if isinstance(entry, WeightConverter)]
+        state_dict = model.state_dict()
+
+        for proj in ("q", "k", "v"):
+            key = f"model.layers.0.self_attn.{proj}_conv1d.weight"
+            renamed, source_pattern = rename_source_key(key, [], converters, meta_state_dict=state_dict)
+            self.assertEqual(renamed, "model.layers.0.self_attn.conv1d.weight")
+            self.assertIn(renamed, state_dict)
+            self.assertIsNotNone(source_pattern)
+
+    def test_get_model_conversion_mapping_threads_checkpoint_keys(self):
+        """`get_model_conversion_mapping` forwards the checkpoint keys to the quantizer."""
+        from transformers import PreTrainedConfig, PreTrainedModel
+        from transformers.conversion_mapping import (
+            get_model_conversion_mapping,
+            register_checkpoint_conversion_mapping,
+        )
+
+        model_type = "_ct_update_weight_conversions"
+        register_checkpoint_conversion_mapping(model_type, [self._conv1d_converter()], overwrite=True)
+
+        class _Model(PreTrainedModel):
+            def __init__(self, config, torch_model):
+                super().__init__(config)
+                self.model = torch_model.model
+                self.post_init()
+
+        model = _Model(PreTrainedConfig(model_type=model_type), self._glm5_next_like_model())
+        quantizer = self._quantizer(self.nvfp4_experts_config)
+
+        transforms = get_model_conversion_mapping(
+            model, hf_quantizer=quantizer, add_legacy=False, checkpoint_keys=self.checkpoint_keys
+        )
+        self.assertEqual(transforms[0].source_patterns, self.conv1d_sources)
+
+        # Without the checkpoint keys, the converter falls back to being rewritten
+        transforms = get_model_conversion_mapping(model, hf_quantizer=quantizer, add_legacy=False)
+        self.assertTrue(all(source.endswith(self.packed_names) for source in transforms[0].source_patterns))

@@ -175,10 +175,11 @@ class GgufHfQuantizer(HfQuantizer):
         model._weight_conversions = None
         return model
 
-    def update_weight_conversions(self, weight_conversions, model):
+    def update_weight_conversions(self, weight_conversions, model, checkpoint_keys=None):
         """Swap in this file's conversions, dropping the model's own.
 
-        The model's describe a safetensors checkpoint, and match nothing in a GGUF.
+        The model's describe a safetensors checkpoint, and match nothing in a GGUF. `checkpoint_keys` is
+        ignored: the tensor names come from the GGUF header instead.
         """
         if not self.supported:
             return weight_conversions

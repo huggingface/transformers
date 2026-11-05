@@ -455,6 +455,8 @@ Quantization hooks into the loading pipeline in two ways, depending on whether t
 
 The quantizer can also rewrite the entire conversion list at the end of [`get_model_conversion_mapping`] via `update_weight_conversions(...)` — for example, the FP8 dequantizer prepends a `Fp8Dequantize` op to every existing converter so per-block scales are applied *before* any expert-merge / concat ops flatten the per-expert structure.
 
+That rewrite only targets converters whose serialized companions (e.g. `weight_scale`) the checkpoint actually stores: [`~PreTrainedModel.from_pretrained`] resolves the checkpoint's tensor names and passes them down, so the converters of modules a mixed-precision checkpoint left unquantized keep consuming the plain checkpoint keys instead of ending up detached from them. When the tensor names cannot be resolved (a `state_dict` was passed directly, GGUF, ...), the rewrite is applied unconditionally as before.
+
 ## Fast and efficient model loading
 
 Loading a model is faster and uses less memory because the loader knows which tensors are required for operations and schedules their materialization lazily.

@@ -71,6 +71,34 @@ def _assign_is_quantized(model):
             module.config._is_quantized = True
 
 
+def _companions_in_checkpoint(
+    sources: list[str], param: str, serialized: list[str], checkpoint_keys: set[str] | None
+) -> bool:
+    """
+    Whether `checkpoint_keys` stores the serialized companion tensors (e.g. `weight_scale`) of any of the
+    converter's `sources`, i.e. whether the modules backing those sources are quantized.
+
+    The companion patterns are built exactly as `HfQuantizer.update_weight_conversions` builds them for its
+    dequantize rewrite, so that this presence check agrees with the patterns the rewrite would produce. When the
+    checkpoint cannot be inspected (`checkpoint_keys` is `None`) or `serialized` holds nothing beyond the plain
+    parameter name, the companions are assumed to be present to preserve the behavior of the rewrite.
+    """
+    companions = [name for name in serialized if name != param]
+    if checkpoint_keys is None or not companions:
+        return True
+    patterns = set()
+    for source in sources:
+        for companion in companions:
+            # Mirror the wildcard expansion and the name-boundary anchoring done when compiling the sources of
+            # the rewritten converter (see `WeightTransform.__init__`)
+            pattern = re.sub(rf"{param}$", companion, source).replace("*.", r".*\.")
+            if re.search(r"[a-zA-Z0-9]$", pattern):
+                pattern += r"(?!\w)"
+            patterns.add(pattern)
+    regex = re.compile("|".join(patterns))
+    return any(regex.search(key) for key in checkpoint_keys)
+
+
 class HfQuantizer(ABC):
     """
     Abstract class of the HuggingFace quantizer. Supports for now quantizing HF transformers models for inference and/or quantization.
@@ -338,12 +366,18 @@ class HfQuantizer(ABC):
             return []
         return [WeightConverter(names, param, [operation(self)]) for param, names in self.serialized_names.items()]
 
-    def update_weight_conversions(self, weight_conversions, model):
+    def update_weight_conversions(self, weight_conversions, model, checkpoint_keys=None):
         """
         Makes the model's converters (from the conversion mapping) load the serialized names. The model's params
         decide, e.g. for a merge of `experts.*.gate_proj.weight` into `experts.gate_up_proj`:
         - `experts.gate_up_proj_scale_inv` is a param: a copy merges `experts.*.gate_proj.weight_scale_inv` into it
         - otherwise the converter also collects `experts.*.gate_proj.weight_scale_inv`, the dequantize op runs first
+
+        The last rewrite requires the checkpoint to serialize the companions of the converter's sources, i.e. the
+        modules backing them to be quantized. Mixed-precision checkpoints may leave those modules dense, so when
+        `checkpoint_keys` (the tensor names of the checkpoint being loaded) is provided, the rewrite is skipped for
+        converters whose companions the checkpoint does not store: those are left as registered, so that they can
+        consume the plain checkpoint keys instead of silently dropping them.
         """
         from ..core_model_loading import WeightConverter
 
@@ -369,8 +403,9 @@ class HfQuantizer(ABC):
                     updated.append(
                         converter.copy(suffixed_sources, suffixed_targets, operations=list(converter.operations))
                     )
-            elif dequantize is not None:
-                # The module only has `param`: the converter also collects the companions and dequantizes first
+            elif dequantize is not None and _companions_in_checkpoint(sources, param, serialized, checkpoint_keys):
+                # The module only has `param` and the checkpoint serializes the companions: the converter also
+                # collects the companions and dequantizes first
                 all_sources = [re.sub(rf"{param}$", name, source) for source in sources for name in serialized]
                 updated[-1] = converter.copy(
                     all_sources, targets, operations=[dequantize(self)] + converter.operations
