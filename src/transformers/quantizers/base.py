@@ -13,7 +13,6 @@
 # limitations under the License.
 import re
 from abc import ABC, abstractmethod
-from itertools import chain
 from typing import TYPE_CHECKING, Any
 
 from ..utils import is_torch_available, logging
@@ -386,118 +385,19 @@ class HfQuantizer(ABC):
         return {}
 
     def get_weight_conversions(self):
-        "Return the loading to perform on any parameter that is not matched by the model's converters"
+        "General converters: a param's serialized names load together. Their ops are set per param, by the plan"
         from ..core_model_loading import WeightConverter, _IdentityOp
 
-        if self._load_operation() is None:
+        if not self.pre_quantized or not self.get_load_operations():
             return []
-        # Its op is set per param, by `update_weight_transform`
         return [WeightConverter(names, param, [_IdentityOp()]) for param, names in self.serialized_names.items()]
-
-    def _load_operation(self):
-        "The op loading the serialized tensors: `dequantize` if asked, else `deserialize` (`None` if not pre-quantized)"
-        mode = "dequantize" if getattr(self.quantization_config, "dequantize", False) else "deserialize"
-        return self.get_load_operations().get(mode) if self.pre_quantized else None
 
     # Names a checkpoint stores, renamed to ours after the model's renamings, e.g. ModelOpt's `weight_scale`
     renamed_names: dict[str, str] = {}
 
-    def update_weight_conversions(self, weight_conversions, model, layers: list[str] | None = None):
-        """
-        The model's conversions with this quantizer's: its renamings, a copy of the model's converters per serialized
-        name, its general converters. In a quantization plan, only for its `layers`.
-        """
-        from ..core_model_loading import WeightConverter
-
-        # Buffers too: some quantized modules (e.g. NVFP4) keep their serialized tensors as buffers
-        param_names = "\n".join(name for name, _ in chain(model.named_parameters(), model.named_buffers()))
-        modules = None if layers is None else {layer.rpartition(".")[2] for layer in layers}
-        copies = []
-        for converter in weight_conversions:
-            if not isinstance(converter, WeightConverter):
-                continue
-            # The module the converter loads into, e.g. `experts` for `mlp.experts.gate_up_proj`
-            module = converter._original_target_patterns[0].replace("\\", "").rpartition(".")[0].rpartition(".")[2]
-            if modules is None or module in modules:
-                copies += self.copy_weight_converter(converter, param_names)
-        return [*weight_conversions, *self.get_weight_renamings(model, layers), *copies, *self.get_weight_conversions()]
-
-    def copy_weight_converter(self, converter, param_names: str) -> list:
-        """
-        One copy of a model converter (from the conversion mapping) per serialized name, so that e.g. the
-        `experts.*.gate_proj.weight_scale_inv` load like the `experts.*.gate_proj.weight`: into their own param if the
-        module has it (`experts.gate_up_proj_scale_inv`), else along with the weight (e.g. to dequantize it). The ops
-        are set per param, by `update_weight_transform`.
-        """
-        sources, targets = converter._original_source_patterns, converter._original_target_patterns
-        param = sources[0].rpartition(".")[2]
-        serialized = self.serialized_names.get(param)
-        if not serialized or not all(source.endswith(f".{param}") for source in sources):
-            return []
-        copies = []
-        for name in serialized:
-            if name == param:
-                continue
-            # e.g. `weight_scale_inv` -> `_scale_inv`, `input_scale` -> `_input_scale`
-            suffix = name.removeprefix(param) if name.startswith(param) else f"_{name}"
-            own = re.search(f"{targets[0]}{suffix}$", param_names, re.MULTILINE)
-            named_targets = [target + suffix for target in targets] if own else targets
-            named_sources = [source.removesuffix(param) + name for source in sources]
-            copies.append(converter.copy(named_sources, named_targets, operations=list(converter.operations)))
-        return copies
-
-    def get_weight_renamings(self, model, modules: list[str] | None = None) -> list:
-        """
-        `renamed_names` as renamings, run after the model's: only on `modules` if given (in a quantization plan, the
-        layers of this quantizer), never on a param the model already has under that name (e.g. an `attn_hc.scale`)
-        """
-        from ..core_model_loading import WeightRenaming
-
-        prefix = rf"(?:{re.escape(model.base_model_prefix)}\.)?"
-        params = [name.removeprefix(f"{model.base_model_prefix}.") for name, _ in model.named_parameters()]
-        names = [name.removeprefix(f"{model.base_model_prefix}.") for name in modules or []]
-        layers = ".+" if modules is None else "|".join(re.escape(name) for name in names)
-        renamings = []
-        for stored, ours in self.renamed_names.items():
-            kept = "|".join(re.escape(name) for name in params if name.endswith(f".{stored}"))
-            exclude = rf"(?!{prefix}(?:{kept})$)" if kept else ""
-            # A layer's own tensors or those of its submodules (e.g. the per-expert ones of fused experts)
-            source = rf"^{exclude}({prefix}(?:{layers})(?:\..+)?)\.{stored}$"
-            renamings.append(WeightRenaming(source, rf"\1.{ours}"))
-        return renamings
-
-    def update_weight_transform(self, transform, model, name):
-        """
-        The ops loading the param `name`, once its first checkpoint key matched a converter: the quantizer's
-        deserialization (after the converter's ops) or dequantization (before them, on the weight and its serialized
-        names, collected together), or a quantization of a full precision checkpoint.
-        """
-        from ..core_model_loading import WeightConverter
-
-        if not self.pre_quantized:
-            if self.param_needs_quantization(model, name):
-                transform.quantization_operation = self.get_quantize_ops()
-            return transform
-        operation = self._load_operation()
-        sources = getattr(transform, "_original_source_patterns", [])
-        names = [names for source in sources if (names := self._serialized(source)) is not None]
-        if operation is None or not isinstance(transform, WeightConverter) or not names:
-            return transform  # not a serialized tensor of this quantizer
-        if not getattr(self.quantization_config, "dequantize", False):
-            transform.operations = [*transform.operations, operation(self)]
-            return transform
-        # The weight and all its serialized names, whichever matched first (nothing is collected yet)
-        sources = dict.fromkeys(base + serialized for base, names_of_param in names for serialized in names_of_param)
-        operations = [operation(self), *transform.operations]
-        return transform.copy(list(sources), transform._original_target_patterns, operations=operations)
-
-    def _serialized(self, source: str):
-        "The prefix of `source` and the serialized names of its param, if it ends with one of them"
-        for names in self.serialized_names.values():
-            for name in sorted(names, key=len, reverse=True):
-                if source == name or source.endswith(f".{name}"):
-                    return source.removesuffix(name), names
-        return None
+    def update_weight_conversions(self, weight_conversions, model):
+        "A format may rewrite the model's conversions, e.g. GGUF replaces them with its own"
+        return weight_conversions
 
 
 class SequentialLlama4TextExperts(ModuleList):

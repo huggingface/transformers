@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import re
 import warnings
 from collections.abc import Callable
 from itertools import chain
@@ -394,7 +395,9 @@ PLAN_CONVERTERS: dict[str, Callable[[dict], dict | None]] = {
 class QuantizationPlanHfQuantizer(HfQuantizer):
     """
     The quantizers of a plan: like the dtype plan's, the glob pattern a module or param matches picks its quantizer,
-    the others stay unquantized. While loading, a param goes through the converters and ops of its quantizer.
+    the others stay unquantized. Every quantized model loads through one: a single quantizer is the plan `{"*": q}`.
+    It knows every module's quantizer, so it builds the conversions and gives each param its ops; a quantizer only
+    describes its format (`serialized_names`, `renamed_names`, `get_load_operations`, `quantized_module`).
     """
 
     def __init__(self, quantizers: dict[str, HfQuantizer | None], checkpoint_names: bool = False):
@@ -414,6 +417,19 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
             pattern: None if quantizer is None else quantizer.quantization_config
             for pattern, quantizer in quantizers.items()
         }
+        if list(self.quantization_config) == ["*"]:  # a single quantizer keeps its config as is
+            self.quantization_config = self.quantization_config["*"]
+
+    @property
+    def quantizer(self):
+        "The quantizer of the whole model, if a single one"
+        return self.quantizers["*"] if list(self.quantizers) == ["*"] else None
+
+    def __getattr__(self, name):
+        # A single quantizer's own attributes, e.g. GGUF's `metadata` or compressed-tensors' `compressor`
+        if name.startswith("__") or "quantizers" not in self.__dict__ or self.quantizer is None:
+            raise AttributeError(name)
+        return getattr(self.quantizer, name)
 
     def match_modules(self, model):
         """
@@ -457,19 +473,91 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         return None
 
     def update_weight_conversions(self, weight_conversions, model):
-        "Each quantizer adds its conversions for its layers"
+        """
+        The model's conversions, for the quantizers' formats, once before reading. Per quantizer: its renamings on its
+        layers, a copy of the model's converters per serialized name loading into its layers (a scale goes through the
+        merges of its weight), its general converters. No ops: they depend on the layer, see `update_weight_transform`.
+        """
+        from ..core_model_loading import WeightConverter, WeightRenaming
+
+        prefix = rf"(?:{re.escape(model.base_model_prefix)}\.)?"
+        params = [name.removeprefix(self.prefix) for name, _ in model.named_parameters()]
+        renamings, copies, general = [], [], []
         for quantizer in self.all_quantizers:
-            layers = [name for name, q in self.module_quantizers.items() if q is quantizer]
-            weight_conversions = quantizer.update_weight_conversions(weight_conversions, model, layers)
+            weight_conversions = quantizer.update_weight_conversions(weight_conversions, model)
+            layers = [name.removeprefix(self.prefix) for name, q in self.module_quantizers.items() if q is quantizer]
+            # A layer's own tensors or those of its submodules (e.g. the per-expert ones of fused experts), never a
+            # param the model already has under that name (e.g. an `attn_hc.scale`)
+            layer_names = "|".join(re.escape(name) for name in layers)
+            for stored, ours in quantizer.renamed_names.items():
+                kept = "|".join(re.escape(name) for name in params if name.endswith(f".{stored}"))
+                exclude = rf"(?!{prefix}(?:{kept})$)" if kept else ""
+                renamings.append(
+                    WeightRenaming(rf"^{exclude}({prefix}(?:{layer_names})(?:\..+)?)\.{stored}$", rf"\1.{ours}")
+                )
+            modules = {layer.rpartition(".")[2] for layer in layers}
+            dequantize = getattr(quantizer.quantization_config, "dequantize", False)
+            for converter in weight_conversions:
+                if not isinstance(converter, WeightConverter):
+                    continue
+                sources, targets = converter._original_source_patterns, converter._original_target_patterns
+                module = (
+                    targets[0].replace("\\", "").rpartition(".")[0].rpartition(".")[2]
+                )  # `experts` of `mlp.experts.gate_up_proj`
+                param = sources[0].rpartition(".")[2]
+                if module not in modules or not all(source.endswith(f".{param}") for source in sources):
+                    continue
+                for name in quantizer.serialized_names.get(param, []):
+                    # e.g. `weight_scale_inv` -> `gate_up_proj_scale_inv`, `input_scale` -> `gate_up_proj_input_scale`.
+                    # Dequantized, it loads with its weight
+                    suffix = name.removeprefix(param) if name.startswith(param) else f"_{name}"
+                    named_sources = [source.removesuffix(param) + name for source in sources]
+                    named_targets = targets if dequantize else [target + suffix for target in targets]
+                    if name != param:
+                        copies.append(
+                            converter.copy(named_sources, named_targets, operations=list(converter.operations))
+                        )
+            general += quantizer.get_weight_conversions()
         # The general converters of a fused param (e.g. MXFP4's `down_proj`) last: a `*.down_proj.weight` is a `weight`
         fused = {
             param for quantizer in self.all_quantizers for param in quantizer.serialized_names if param != "weight"
         }
-        return sorted(weight_conversions, key=lambda conversion: conversion._original_target_patterns[0] in fused)
+        general.sort(key=lambda converter: converter._original_target_patterns[0] in fused)
+        return [*weight_conversions, *renamings, *copies, *general]
 
     def update_weight_transform(self, transform, model, name):
+        """
+        The ops of the param `name`, once its first key matched a converter, from its layer's quantizer: a
+        deserialization (after the converter's ops), a dequantization (before them, on the weight and its serialized
+        names collected together), or a quantization of a full precision checkpoint.
+        """
+        from ..core_model_loading import WeightConverter
+
         quantizer = self.get_quantizer(name)
-        return transform if quantizer is None else quantizer.update_weight_transform(transform, model, name)
+        if quantizer is None:
+            return transform
+        if not quantizer.pre_quantized:
+            if quantizer.param_needs_quantization(model, name):
+                transform.quantization_operation = quantizer.get_quantize_ops()
+            return transform
+        dequantize = getattr(quantizer.quantization_config, "dequantize", False)
+        operation = quantizer.get_load_operations().get("dequantize" if dequantize else "deserialize")
+        # The serialized names of the params it loads, by prefix: `experts.*.gate_proj.` -> [weight, weight_scale, ...]
+        serialized = {
+            source.removesuffix(stored): names
+            for source in getattr(transform, "_original_source_patterns", [])
+            for names in quantizer.serialized_names.values()
+            for stored in names
+            if source == stored or source.endswith(f".{stored}")
+        }
+        if operation is None or not isinstance(transform, WeightConverter) or not serialized:
+            return transform
+        if not dequantize:
+            transform.operations = [*transform.operations, operation(quantizer)]
+            return transform
+        sources = [prefix + name for prefix, names in serialized.items() for name in names]
+        operations = [operation(quantizer), *transform.operations]
+        return transform.copy(sources, transform._original_target_patterns, operations=operations)
 
     def param_element_size(self, model, param_name, param):
         if not self.module_quantizers:
@@ -480,6 +568,28 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
     def validate_environment(self, *args, **kwargs):
         for quantizer in self.all_quantizers:
             quantizer.validate_environment(*args, **kwargs)
+
+    def update_attn_implementation(self, config):
+        for quantizer in self.all_quantizers:
+            config = quantizer.update_attn_implementation(config)
+        return config
+
+    def get_new_dtype(self, converter, param, dtype):
+        return (self.quantizer or super()).get_new_dtype(converter, param, dtype)
+
+    def dequantize(self, model, dtype=None):
+        return (self.quantizer or super()).dequantize(model, dtype)
+
+    def get_state_dict_and_metadata(self, model):
+        return (self.quantizer or super()).get_state_dict_and_metadata(model)
+
+    @property
+    def is_compileable(self):
+        return all(quantizer.is_compileable for quantizer in self.all_quantizers)
+
+    @property
+    def is_qat_trainable(self):
+        return all(quantizer.is_qat_trainable for quantizer in self.all_quantizers)
 
     def update_dtype(self, dtype):
         for quantizer in self.all_quantizers:
@@ -509,6 +619,8 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         The patterns loaded with `dequantize=True` become unquantized (`None`, so a broader pattern like `"*"` can't
         claim their modules): with none quantized left, the model is plain unquantized.
         """
+        for quantizer in self.all_quantizers:
+            quantizer._process_model_after_weight_loading(model, **kwargs)
         dequantized = {
             quantizer
             for quantizer in self.all_quantizers
@@ -598,10 +710,8 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
         else:
             config.quantization_config = quantization_config
 
-        hf_quantizer = AutoHfQuantizer.from_config(
-            config.quantization_config,
-            pre_quantized=pre_quantized,
-        )
+        quantizer = AutoHfQuantizer.from_config(config.quantization_config, pre_quantized=pre_quantized)
+        hf_quantizer = QuantizationPlanHfQuantizer({"*": quantizer})
     else:
         hf_quantizer = None
 
