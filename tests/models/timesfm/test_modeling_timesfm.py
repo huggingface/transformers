@@ -125,7 +125,7 @@ class TimesFmModelTest(ModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = ()
 
     test_resize_embeddings = False
-    is_encoder_decoder = False
+
     test_inputs_embeds = False
 
     def setUp(self):

@@ -238,26 +238,6 @@ class Gemma4UnifiedAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, 
         self.config_tester = ConfigTester(self, config_class=Gemma4UnifiedConfig, hidden_size=37)
         self.skip_mm_output_format()
 
-    def skip_mm_output_format(self):
-        # This test doesn't have any images/videos in input
-        skippable_tests = [
-            "test_get_image_features_hidden_states",
-            "test_get_image_features_attentions",
-            "test_get_image_features_output",
-            "test_get_image_features_pooler_output",
-            "test_get_video_features_hidden_states",
-            "test_get_video_features_attentions",
-            "test_get_video_features_output",
-            "test_get_audio_features_hidden_states",
-            "test_get_audio_features_attentions",
-            # no last-hidden-states returned, only pooler output
-            "test_get_audio_features_output",
-        ]
-
-        for test in skippable_tests:
-            if self._testMethodName.startswith(test):
-                self.skipTest(reason="Gemma4 unified does not collect any hidden states or attentions (no mm tower)")
-
     @unittest.skip("The tester has no image in input dict and mm-encoder-output don't yet support audio")
     def test_generate_from_multimodal_encoder_outputs_and_raw_data(self):
         pass

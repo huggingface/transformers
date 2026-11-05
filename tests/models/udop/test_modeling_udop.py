@@ -275,7 +275,7 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     )
 
     test_resize_embeddings = True
-    is_encoder_decoder = True
+
     test_cpu_offload = False
     # The small UDOP model needs higher percentages for CPU/MP tests
     model_split_percents = [0.8, 0.9]

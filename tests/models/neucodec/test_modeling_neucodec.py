@@ -145,7 +145,7 @@ class NeuCodecModelTester:
 @require_torch
 class NeuCodecModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (NeuCodecModel,) if is_torch_available() else ()
-    is_encoder_decoder = True
+
     test_resize_embeddings = False
     test_torch_exportable = False
     pipeline_model_mapping = {"feature-extraction": NeuCodecModel} if is_torch_available() else {}

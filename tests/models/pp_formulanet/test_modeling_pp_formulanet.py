@@ -129,7 +129,6 @@ class PPFormulaNetModelTest(VLMModelTest, unittest.TestCase):
     )
 
     test_resize_embeddings = False
-    is_encoder_decoder = True
 
     def _check_encoder_attention_for_generate(self, attentions, batch_size, config, prompt_length):
         # Ignoring batch size for now as it is dynamically changed during window partitioning

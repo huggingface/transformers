@@ -28,11 +28,11 @@ from transformers.testing_utils import (
     slow,
 )
 
+from .generation.test_utils import GenerationTesterMixin
 from .test_configuration_common import ConfigTester
 from .test_expert_parallel_mixin import ExpertParallelTesterMixin
 from .test_fsdp_mixin import FSDPTesterMixin
 from .test_modeling_common import (
-    GenerationTesterMixin,
     ModelTesterMixin,
     ids_tensor,
     is_torch_available,

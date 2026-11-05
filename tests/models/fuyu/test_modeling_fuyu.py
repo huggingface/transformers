@@ -273,14 +273,6 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         inputs_dict = {"pixel_values": inputs_dict["image_patches"]}
         return config, inputs_dict
 
-    @unittest.skip("Skip get_image_features tests as Fuyu's image features originate from a simple Linear")
-    def test_get_image_features_hidden_states(self):
-        pass
-
-    @unittest.skip("Skip get_image_features tests as Fuyu's image features originate from a simple Linear")
-    def test_get_image_features_attentions(self):
-        pass
-
 
 @slow
 @require_torch_accelerator

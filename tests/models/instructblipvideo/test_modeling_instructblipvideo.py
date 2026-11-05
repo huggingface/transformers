@@ -357,7 +357,6 @@ class InstructBlipVideoTextModelDecoderOnlyTester:
         self.num_labels = num_labels
         self.type_sequence_label_size = type_sequence_label_size
         self.word_embed_proj_dim = word_embed_proj_dim
-        self.is_encoder_decoder = False
 
     def prepare_config_and_inputs(self):
         config = self.get_config()

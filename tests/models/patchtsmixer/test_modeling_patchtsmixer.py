@@ -218,13 +218,11 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         else ()
     )
     pipeline_model_mapping = {"feature-extraction": PatchTSMixerModel} if is_torch_available() else {}
-    is_encoder_decoder = False
 
     test_missing_keys = False
     test_inputs_embeds = False
 
     test_resize_embeddings = True
-    test_resize_position_embeddings = False
     test_mismatched_shapes = True
     has_attentions = False
 

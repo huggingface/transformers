@@ -221,7 +221,6 @@ class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available()
         else {}
     )
-    is_encoder_decoder = True
 
     test_missing_keys = False
 
@@ -261,7 +260,7 @@ class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
 
-            if not self.is_encoder_decoder:
+            if not config.is_encoder_decoder:
                 input_ids = inputs["input_ids"]
                 del inputs["input_ids"]
             else:
@@ -271,7 +270,7 @@ class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                 inputs.pop("decoder_input_ids", None)
 
             wte = model.get_input_embeddings()
-            if not self.is_encoder_decoder:
+            if not config.is_encoder_decoder:
                 inputs["inputs_embeds"] = wte(input_ids)
             else:
                 inputs["inputs_embeds"] = wte(encoder_input_ids)
@@ -510,8 +509,11 @@ class PLBartStandaloneDecoderModelTester:
         lm_labels = None
         if self.use_labels:
             lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
+        config = self.get_config()
+        return (config, input_ids, attention_mask, lm_labels)
 
-        config = PLBartConfig(
+    def get_config(self):
+        return PLBartConfig(
             vocab_size=self.vocab_size,
             d_model=self.d_model,
             decoder_layers=self.decoder_layers,
@@ -527,8 +529,6 @@ class PLBartStandaloneDecoderModelTester:
             max_position_embeddings=self.max_position_embeddings,
             is_encoder_decoder=self.is_encoder_decoder,
         )
-
-        return (config, input_ids, attention_mask, lm_labels)
 
     def create_and_check_decoder_model_past(
         self,
@@ -623,8 +623,6 @@ class PLBartStandaloneDecoderModelTester:
 @require_torch
 class PLBartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (PLBartDecoder, PLBartForCausalLM) if is_torch_available() else ()
-
-    is_encoder_decoder = False
 
     def setUp(self):
         self.model_tester = PLBartStandaloneDecoderModelTester(self, is_training=False)

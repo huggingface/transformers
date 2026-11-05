@@ -249,7 +249,6 @@ class MMGroundingDinoModelTester:
 # Copied from tests.models.grounding_dino.test_modeling_grounding_dino.GroundingDinoModelTest with Grounding->MMGrounding
 class MMGroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MMGroundingDinoModel, MMGroundingDinoForObjectDetection) if is_torch_available() else ()
-    is_encoder_decoder = True
 
     test_missing_keys = False
     pipeline_model_mapping = (

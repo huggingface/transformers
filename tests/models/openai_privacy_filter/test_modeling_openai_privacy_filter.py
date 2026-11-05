@@ -31,7 +31,6 @@ from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
-    _test_eager_matches_batched_and_grouped_inference,
     ids_tensor,
     random_attention_mask,
 )
@@ -209,7 +208,7 @@ class OpenAIPrivacyFilterModelTest(
     def test_eager_matches_batched_and_grouped_inference(self, name, dtype):
         if dtype == "bf16":
             self.skipTest("Bf16 may cause biggers fluctuations when used in combination with float casting")
-        _test_eager_matches_batched_and_grouped_inference(self, name, dtype)
+        super().test_eager_matches_batched_and_grouped_inference(name, dtype)
 
 
 @slow

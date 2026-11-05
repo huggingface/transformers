@@ -313,14 +313,6 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
     def test_batching_equivalence(self):
         pass
 
-    @unittest.skip(reason="Vision backbone is packed Qwen-style and return no attentions yet")
-    def test_get_image_features_attentions(self):
-        pass
-
-    @unittest.skip(reason="Vision backbone is packed Qwen-style and return no attentions yet")
-    def test_get_video_features_attentions(self):
-        pass
-
     @unittest.skip(reason="FA works on generate test, inference needs override to pass target sizes")
     def test_flash_attn_2_inference_equivalence(self):
         pass

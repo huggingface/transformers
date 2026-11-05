@@ -107,7 +107,7 @@ class VideomtForUniversalSegmentationTester:
 class VideomtForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (VideomtForUniversalSegmentation,) if is_torch_available() else ()
     pipeline_model_mapping = {}
-    is_encoder_decoder = False
+
     test_missing_keys = False
 
     def setUp(self):

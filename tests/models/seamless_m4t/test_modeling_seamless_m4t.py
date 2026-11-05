@@ -30,7 +30,6 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
-    _test_eager_matches_sdpa_inference,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -342,7 +341,6 @@ class SeamlessM4TModelTester:
 
 @require_torch
 class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
-    is_encoder_decoder = True
     test_missing_keys = False
 
     test_resize_embeddings = False
@@ -372,13 +370,28 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     def test_eager_matches_sdpa_inference(
-        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+        self,
+        name,
+        dtype,
+        padding_side,
+        use_attention_mask,
+        output_attentions,
+        enable_kernels,
+        rtols=None,
+        atols=None,
     ):
         # `SeamlessM4TModel` defaults to text and switches its `main_input_name` to `input_features` only at
         # generation. Pin it to speech so the generic helper feeds the speech encoder for every model class here.
         with patch.object(SeamlessM4TModel, "main_input_name", "input_features"):
-            _test_eager_matches_sdpa_inference(
-                self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+            self._test_eager_matches_sdpa_inference(
+                name,
+                dtype,
+                padding_side,
+                use_attention_mask,
+                output_attentions,
+                enable_kernels,
+                rtols=rtols,
+                atols=atols,
             )
 
     def test_flex_attention_with_grads(self):
@@ -478,7 +491,7 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
             )
             out_len = len(outputs)
 
-            if self.is_encoder_decoder:
+            if config.is_encoder_decoder:
                 correct_outlen = 5
 
                 # loss is at first position
@@ -526,7 +539,7 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
 
             if hasattr(self.model_tester, "num_hidden_states_types"):
                 added_hidden_states = self.model_tester.num_hidden_states_types
-            elif self.is_encoder_decoder:
+            elif config.is_encoder_decoder:
                 added_hidden_states = 2
             else:
                 added_hidden_states = 1
@@ -551,7 +564,6 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    is_encoder_decoder = True
     test_missing_keys = False
 
     test_resize_embeddings = True

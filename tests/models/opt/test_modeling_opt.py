@@ -111,7 +111,6 @@ class OPTModelTester:
         self.num_labels = num_labels
         self.type_sequence_label_size = type_sequence_label_size
         self.word_embed_proj_dim = word_embed_proj_dim
-        self.is_encoder_decoder = False
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
@@ -246,7 +245,6 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         if is_torch_available()
         else {}
     )
-    is_encoder_decoder = False
 
     test_missing_keys = False
 
@@ -314,7 +312,7 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
 
-            if not self.is_encoder_decoder:
+            if not config.is_encoder_decoder:
                 input_ids = inputs["input_ids"]
                 del inputs["input_ids"]
             else:
@@ -324,7 +322,7 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 inputs.pop("decoder_input_ids", None)
 
             wte = model.get_input_embeddings()
-            if not self.is_encoder_decoder:
+            if not config.is_encoder_decoder:
                 inputs["inputs_embeds"] = wte(input_ids)
             else:
                 inputs["inputs_embeds"] = wte(encoder_input_ids)

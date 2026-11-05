@@ -458,7 +458,7 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     )
 
     test_resize_embeddings = True
-    is_encoder_decoder = True
+
     # The small MT5 model needs higher percentages for CPU/MP tests
     model_split_percents = [0.5, 0.8, 0.9]
 
@@ -554,7 +554,7 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
 
-            if not self.is_encoder_decoder:
+            if not config.is_encoder_decoder:
                 input_ids = inputs["input_ids"]
                 del inputs["input_ids"]
             else:
@@ -564,7 +564,7 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 inputs.pop("decoder_input_ids", None)
 
             wte = model.get_input_embeddings()
-            if not self.is_encoder_decoder:
+            if not config.is_encoder_decoder:
                 inputs["inputs_embeds"] = wte(input_ids)
             else:
                 inputs["inputs_embeds"] = wte(encoder_input_ids)
@@ -697,7 +697,11 @@ class MT5EncoderOnlyModelTester:
         if self.use_attention_mask:
             attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
 
-        config = MT5Config(
+        config = self.get_config()
+        return config, input_ids, attention_mask
+
+    def get_config(self):
+        return MT5Config(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
             d_ff=self.d_ff,
@@ -711,12 +715,6 @@ class MT5EncoderOnlyModelTester:
             bos_token_id=self.pad_token_id,
             pad_token_id=self.pad_token_id,
             is_encoder_decoder=self.is_encoder_decoder,
-        )
-
-        return (
-            config,
-            input_ids,
-            attention_mask,
         )
 
     def create_and_check_model(

@@ -238,7 +238,6 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         if is_torch_available()
         else {}
     )
-    is_encoder_decoder = True
 
     test_missing_keys = True
 
@@ -292,7 +291,7 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
 
-            if not self.is_encoder_decoder:
+            if not config.is_encoder_decoder:
                 input_ids = inputs["input_ids"]
                 del inputs["input_ids"]
             else:
@@ -302,7 +301,7 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 inputs.pop("decoder_input_ids", None)
 
             wte = model.get_input_embeddings()
-            if not self.is_encoder_decoder:
+            if not config.is_encoder_decoder:
                 inputs["inputs_embeds"] = wte(input_ids)
             else:
                 inputs["inputs_embeds"] = wte(encoder_input_ids)

@@ -99,7 +99,18 @@ class OpenAIGPTModelTester:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-        config = OpenAIGPTConfig(
+        config = self.get_config()
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
+
+    def get_config(self):
+        return OpenAIGPTConfig(
             vocab_size=self.vocab_size,
             n_embd=self.hidden_size,
             n_layer=self.num_hidden_layers,
@@ -112,15 +123,6 @@ class OpenAIGPTModelTester:
             # type_vocab_size=self.type_vocab_size,
             # initializer_range=self.initializer_range
             pad_token_id=self.pad_token_id,
-        )
-
-        return (
-            config,
-            input_ids,
-            token_type_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
         )
 
     def create_and_check_openai_gpt_model(self, config, input_ids, token_type_ids, *args):

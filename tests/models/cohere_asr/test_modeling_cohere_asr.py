@@ -20,9 +20,9 @@ from transformers import AutoProcessor, CohereAsrConfig, CohereAsrForConditional
 from transformers.audio_utils import load_audio
 from transformers.testing_utils import Expectations, cleanup, require_torch, slow, torch_device
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
-    GenerationTesterMixin,
     ModelTesterMixin,
     floats_tensor,
     random_attention_mask,
@@ -164,7 +164,6 @@ class CohereAsrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         if is_torch_available()
         else {}
     )
-    is_encoder_decoder = True
 
     # CohereAsr's pos_emb layer is large relative to total model size
     model_split_percents = [0.5, 0.9, 0.95]

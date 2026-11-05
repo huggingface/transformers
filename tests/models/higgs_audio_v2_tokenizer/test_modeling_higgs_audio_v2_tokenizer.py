@@ -107,7 +107,7 @@ class HiggsAudioV2TokenizerModelTester:
 @require_torch
 class HiggsAudioV2TokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (HiggsAudioV2TokenizerModel,) if is_torch_available() else ()
-    is_encoder_decoder = True
+
     test_resize_embeddings = False
     test_can_init_all_missing_weights = False
     # The quantizer module takes ~78% of model size, so default split percents (0.5, 0.7, 0.9)

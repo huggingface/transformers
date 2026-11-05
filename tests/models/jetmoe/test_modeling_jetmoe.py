@@ -100,7 +100,7 @@ class JetMoeModelTester(CausalLMModelTester):
 
 @require_torch
 class JetMoeModelTest(CausalLMModelTest, unittest.TestCase):
-    test_mismatched_shapes = False
+    test_mismatched_shapes = True
     test_cpu_offload = False
     test_disk_offload_bin = False
     test_disk_offload_safetensors = False

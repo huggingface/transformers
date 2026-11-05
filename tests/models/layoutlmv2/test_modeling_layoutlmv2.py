@@ -149,7 +149,11 @@ class LayoutLMv2ModelTester:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
 
-        config = LayoutLMv2Config(
+        config = self.get_config()
+        return config, input_ids, bbox, image, token_type_ids, input_mask, sequence_labels, token_labels
+
+    def get_config(self):
+        return LayoutLMv2Config(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -167,8 +171,6 @@ class LayoutLMv2ModelTester:
             shape_size=self.shape_size,
             detectron2_config_args=self.detectron2_config,
         )
-
-        return config, input_ids, bbox, image, token_type_ids, input_mask, sequence_labels, token_labels
 
     def create_and_check_model(
         self, config, input_ids, bbox, image, token_type_ids, input_mask, sequence_labels, token_labels
@@ -264,7 +266,7 @@ class LayoutLMv2ModelTester:
 @require_torch
 @require_detectron2
 class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    test_mismatched_shapes = False
+    test_mismatched_shapes = True
 
     all_model_classes = (
         (

@@ -203,8 +203,6 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         else {}
     )
 
-    is_encoder_decoder = False
-
     test_missing_keys = False
     zero_init_hidden_state = True
 

@@ -427,7 +427,6 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     )
 
     test_resize_embeddings = True
-    is_encoder_decoder = True
 
     def setUp(self):
         self.model_tester = LongT5ModelTester(self)
@@ -606,7 +605,7 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                 )
                 out_len = len(outputs)
 
-                if self.is_encoder_decoder:
+                if config.is_encoder_decoder:
                     correct_outlen = 5
 
                     # loss is at first position
@@ -653,7 +652,7 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
                 if hasattr(self.model_tester, "num_hidden_states_types"):
                     added_hidden_states = self.model_tester.num_hidden_states_types
-                elif self.is_encoder_decoder:
+                elif config.is_encoder_decoder:
                     added_hidden_states = 2
                 else:
                     added_hidden_states = 1
@@ -745,7 +744,7 @@ class LongT5TGlobalModelTest(LongT5ModelTest):
                 )
                 out_len = len(outputs)
 
-                if self.is_encoder_decoder:
+                if config.is_encoder_decoder:
                     correct_outlen = 5
 
                     # loss is at first position
@@ -792,7 +791,7 @@ class LongT5TGlobalModelTest(LongT5ModelTest):
 
                 if hasattr(self.model_tester, "num_hidden_states_types"):
                     added_hidden_states = self.model_tester.num_hidden_states_types
-                elif self.is_encoder_decoder:
+                elif config.is_encoder_decoder:
                     added_hidden_states = 2
                 else:
                     added_hidden_states = 1
@@ -886,7 +885,11 @@ class LongT5EncoderOnlyModelTester:
         if self.use_attention_mask:
             attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
 
-        config = LongT5Config(
+        config = self.get_config()
+        return config, input_ids, attention_mask
+
+    def get_config(self):
+        return LongT5Config(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
             d_ff=self.d_ff,
@@ -903,12 +906,6 @@ class LongT5EncoderOnlyModelTester:
             local_radius=self.local_radius,
             encoder_attention_type=self.encoder_attention_type,
             global_block_size=self.global_block_size,
-        )
-
-        return (
-            config,
-            input_ids,
-            attention_mask,
         )
 
     def create_and_check_model(
@@ -1010,7 +1007,7 @@ class LongT5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
 
                 if hasattr(self.model_tester, "num_hidden_states_types"):
                     added_hidden_states = self.model_tester.num_hidden_states_types
-                elif self.is_encoder_decoder:
+                elif config.is_encoder_decoder:
                     added_hidden_states = 2
                 else:
                     added_hidden_states = 1
@@ -1091,7 +1088,7 @@ class LongT5EncoderOnlyTGlobalModelTest(LongT5EncoderOnlyModelTest):
 
                 if hasattr(self.model_tester, "num_hidden_states_types"):
                     added_hidden_states = self.model_tester.num_hidden_states_types
-                elif self.is_encoder_decoder:
+                elif config.is_encoder_decoder:
                     added_hidden_states = 2
                 else:
                     added_hidden_states = 1

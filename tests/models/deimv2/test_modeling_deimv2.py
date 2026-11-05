@@ -47,7 +47,6 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
-    _test_eager_matches_sdpa_inference,
     floats_tensor,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -291,7 +290,7 @@ class Deimv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    is_encoder_decoder = True
+
     test_resize_embeddings = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -868,7 +867,7 @@ class Deimv2LiteEncoderModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
         if is_torch_available()
         else {}
     )
-    is_encoder_decoder = True
+
     test_resize_embeddings = False
     has_attentions = False
 
@@ -1206,7 +1205,7 @@ class Deimv2DINOv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         if is_torch_available()
         else {}
     )
-    is_encoder_decoder = True
+
     test_resize_embeddings = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -1299,8 +1298,7 @@ class Deimv2DINOv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             ("cuda", True, torch.bfloat16): 3e-2,
             ("cuda", True, torch.float16): 5e-3,
         }
-        _test_eager_matches_sdpa_inference(
-            self,
+        self._test_eager_matches_sdpa_inference(
             name,
             torch_dtype,
             padding_side,

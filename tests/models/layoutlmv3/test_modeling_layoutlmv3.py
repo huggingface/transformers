@@ -145,7 +145,11 @@ class LayoutLMv3ModelTester:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
             token_labels = ids_tensor([self.batch_size, self.text_seq_length], self.num_labels)
 
-        config = LayoutLMv3Config(
+        config = self.get_config()
+        return config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels, token_labels
+
+    def get_config(self):
+        return LayoutLMv3Config(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -162,8 +166,6 @@ class LayoutLMv3ModelTester:
             input_size=self.image_size,
             patch_size=self.patch_size,
         )
-
-        return config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels, token_labels
 
     def create_and_check_model(
         self, config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels, token_labels
@@ -270,7 +272,7 @@ class LayoutLMv3ModelTester:
 
 @require_torch
 class LayoutLMv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    test_mismatched_shapes = False
+    test_mismatched_shapes = True
 
     all_model_classes = (
         (

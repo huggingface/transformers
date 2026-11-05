@@ -167,7 +167,6 @@ class MimiModelTester:
 @require_torch
 class MimiModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (MimiModel,) if is_torch_available() else ()
-    is_encoder_decoder = True
 
     test_resize_embeddings = False
     test_torch_exportable = False  # data-dependent guard in conv padding (`u0 + u1 + 2 < 7`)

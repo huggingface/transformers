@@ -40,7 +40,6 @@ from transformers.testing_utils import (
 from ...test_image_processing_common import load_coco_image, load_test_image
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION,
-    _test_eager_matches_batched_and_grouped_inference,
     floats_tensor,
     ids_tensor,
 )
@@ -213,7 +212,7 @@ class MiniMaxM3VLModelTest(VLMModelTest, unittest.TestCase):
         # tolerance. This is precision noise, not a logic mismatch (fp32 matches exactly).
         if dtype in ("fp16", "bf16"):
             self.skipTest("Low-precision float casting fluctuations across expert kernels exceed the 1e-4 tolerance")
-        _test_eager_matches_batched_and_grouped_inference(self, name, dtype)
+        super().test_eager_matches_batched_and_grouped_inference(name, dtype)
 
     @unittest.skip(
         reason=(

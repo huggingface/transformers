@@ -28,7 +28,6 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
-    _test_eager_matches_sdpa_inference,
     floats_tensor,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -194,7 +193,6 @@ class DetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    is_encoder_decoder = True
 
     test_missing_keys = False
     zero_init_hidden_state = True
@@ -305,7 +303,7 @@ class DetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             )
             out_len = len(outputs)
 
-            if self.is_encoder_decoder:
+            if config.is_encoder_decoder:
                 correct_outlen = 5
 
                 # loss is at first position
@@ -355,7 +353,7 @@ class DetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             if hasattr(self.model_tester, "num_hidden_states_types"):
                 added_hidden_states = self.model_tester.num_hidden_states_types
-            elif self.is_encoder_decoder:
+            elif config.is_encoder_decoder:
                 added_hidden_states = 2
             else:
                 added_hidden_states = 1
@@ -518,7 +516,7 @@ class DetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.skipTest(
                 "This test uses attention masks which are not compatible with DETR. Skipping when use_attention_mask is True."
             )
-        _test_eager_matches_sdpa_inference(self, name, dtype, padding_side, False, output_attentions, enable_kernels)
+        self._test_eager_matches_sdpa_inference(name, dtype, padding_side, False, output_attentions, enable_kernels)
 
 
 TOLERANCE = 1e-4

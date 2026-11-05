@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import tempfile
 import unittest
 
@@ -221,7 +222,6 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         else {}
     )
     test_resize_embeddings = True
-    test_resize_position_embeddings = True
 
     def setUp(self):
         self.model_tester = DistilBertModelTester(self)
@@ -268,6 +268,58 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         model_name = "distilbert-base-uncased"
         model = DistilBertModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
+    def test_resize_position_vector_embeddings(self):
+        (
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            config = copy.deepcopy(original_config)
+            model = model_class(config)
+            model.to(torch_device)
+
+            if self.model_tester.is_training is False:
+                model.eval()
+
+            max_position_embeddings = config.max_position_embeddings
+
+            # Retrieve the embeddings and clone theme
+            model_embed = model.get_position_embeddings()
+            cloned_embeddings = model_embed.weight.clone()
+
+            # Check that resizing the position embeddings with a larger max_position_embeddings increases
+            # the model's position embeddings size
+            model.resize_position_embeddings(max_position_embeddings + 10)
+            self.assertEqual(model.config.max_position_embeddings, max_position_embeddings + 10)
+
+            # Check that it actually resizes the embeddings matrix
+            model_embed = model.get_position_embeddings()
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that resizing the position embeddings with a smaller max_position_embeddings decreases
+            # the model's max_position_embeddings
+            model.resize_position_embeddings(max_position_embeddings - 5)
+            self.assertEqual(model.config.max_position_embeddings, max_position_embeddings - 5)
+
+            # Check that it actually resizes the embeddings matrix
+            model_embed = model.get_position_embeddings()
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 5)
+
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that adding and removing tokens has not modified the first part of the embedding matrix.
+            models_equal = True
+            for p1, p2 in zip(cloned_embeddings, model_embed.weight):
+                if p1.data.ne(p2.data).sum() > 0:
+                    models_equal = False
+
+            self.assertTrue(models_equal)
 
     # Because DistilBertForMultipleChoice requires inputs with different shapes we need to override this test.
     @require_flash_attn

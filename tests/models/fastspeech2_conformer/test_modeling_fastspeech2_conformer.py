@@ -128,7 +128,6 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = False
     test_torch_exportable = False  # data-dependent control flow in length regulator (`duration_labels.sum() == 0`)
-    is_encoder_decoder = True
 
     def setUp(self):
         self.model_tester = FastSpeech2ConformerModelTester(self)
@@ -548,7 +547,7 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (FastSpeech2ConformerWithHifiGan,) if is_torch_available() else ()
 
     test_resize_embeddings = False
-    is_encoder_decoder = True
+
     test_torch_exportable = False  # data-dependent control flow in length regulator (`duration_labels.sum() == 0`)
 
     def setUp(self):

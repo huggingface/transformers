@@ -103,7 +103,11 @@ class SplinterModelTester:
             end_positions = ids_tensor([self.batch_size, self.num_questions], self.type_sequence_label_size)
             question_positions = ids_tensor([self.batch_size, self.num_questions], self.num_labels)
 
-        config = SplinterConfig(
+        config = self.get_config()
+        return (config, input_ids, token_type_ids, input_mask, start_positions, end_positions, question_positions)
+
+    def get_config(self):
+        return SplinterConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -118,8 +122,6 @@ class SplinterModelTester:
             initializer_range=self.initializer_range,
             question_token_id=self.question_token_id,
         )
-
-        return (config, input_ids, token_type_ids, input_mask, start_positions, end_positions, question_positions)
 
     def create_and_check_model(
         self,
@@ -297,7 +299,7 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
 
-            if not self.is_encoder_decoder:
+            if not config.is_encoder_decoder:
                 input_ids = inputs["input_ids"]
                 del inputs["input_ids"]
             else:
@@ -307,7 +309,7 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 inputs.pop("decoder_input_ids", None)
 
             wte = model.get_input_embeddings()
-            if not self.is_encoder_decoder:
+            if not config.is_encoder_decoder:
                 inputs["inputs_embeds"] = wte(input_ids)
             else:
                 inputs["inputs_embeds"] = wte(encoder_input_ids)

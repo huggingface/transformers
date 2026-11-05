@@ -179,14 +179,6 @@ class MiniCPMOcrModelTest(VLMModelTest, unittest.TestCase):
     def test_batching_equivalence(self):
         pass
 
-    @unittest.skip(reason="Packed attention doesn't return attn weights yet")
-    def test_get_image_features_attentions(self):
-        pass
-
-    @unittest.skip(reason="Packed attention doesn't return attn weights yet")
-    def test_get_video_features_attentions(self):
-        pass
-
     @unittest.skip(reason="FA works on generate test, inference needs override to pass target sizes")
     def test_flash_attn_2_inference_equivalence(self):
         pass

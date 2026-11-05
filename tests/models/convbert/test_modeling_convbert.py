@@ -354,7 +354,7 @@ class ConvBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 )
             out_len = len(outputs)
 
-            if self.is_encoder_decoder:
+            if config.is_encoder_decoder:
                 correct_outlen = 5
 
                 # loss is at first position
@@ -401,7 +401,7 @@ class ConvBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
             if hasattr(self.model_tester, "num_hidden_states_types"):
                 added_hidden_states = self.model_tester.num_hidden_states_types
-            elif self.is_encoder_decoder:
+            elif config.is_encoder_decoder:
                 added_hidden_states = 2
             else:
                 added_hidden_states = 1

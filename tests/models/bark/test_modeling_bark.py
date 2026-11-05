@@ -103,8 +103,6 @@ class BarkSemanticModelTester:
         self.n_codes_total = n_codes_total
         self.n_codes_given = n_codes_given
 
-        self.is_encoder_decoder = False
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -236,8 +234,6 @@ class BarkCoarseModelTester:
         self.n_codes_total = n_codes_total
         self.n_codes_given = n_codes_given
 
-        self.is_encoder_decoder = False
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -368,8 +364,6 @@ class BarkFineModelTester:
 
         self.n_codes_total = n_codes_total
         self.n_codes_given = n_codes_given
-
-        self.is_encoder_decoder = False
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length, self.n_codes_total], self.vocab_size)
@@ -520,7 +514,6 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
     # `BarkCausalModel` does not, so we run generation tests there.
     all_generative_model_classes = (BarkCausalModel,) if is_torch_available() else ()
 
-    is_encoder_decoder = False
     test_missing_keys = False
 
     test_resize_embeddings = True
@@ -568,7 +561,6 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     # `BarkCausalModel` does not, so we run generation tests there.
     all_generative_model_classes = (BarkCausalModel,) if is_torch_available() else ()
 
-    is_encoder_decoder = False
     test_missing_keys = False
 
     test_resize_embeddings = True
@@ -613,7 +605,6 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
 class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (BarkFineModel,) if is_torch_available() else ()
 
-    is_encoder_decoder = False
     test_missing_keys = False
 
     test_resize_embeddings = True

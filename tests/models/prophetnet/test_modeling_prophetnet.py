@@ -534,7 +534,11 @@ class ProphetNetStandaloneDecoderModelTester:
         if self.use_labels:
             lm_labels = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
 
-        config = ProphetNetConfig(
+        config = self.get_config()
+        return config, input_ids, attention_mask, lm_labels
+
+    def get_config(self) -> object:
+        return ProphetNetConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_encoder_layers=self.num_encoder_layers,
@@ -555,13 +559,6 @@ class ProphetNetStandaloneDecoderModelTester:
             max_position_embeddings=self.max_position_embeddings,
             add_cross_attention=self.add_cross_attention,
             is_encoder_decoder=self.is_encoder_decoder,
-        )
-
-        return (
-            config,
-            input_ids,
-            attention_mask,
-            lm_labels,
         )
 
     def prepare_config_and_inputs_for_decoder(self):
@@ -759,7 +756,11 @@ class ProphetNetStandaloneEncoderModelTester:
         if self.use_attention_mask:
             attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
 
-        config = ProphetNetConfig(
+        config = self.get_config()
+        return config, input_ids, attention_mask
+
+    def get_config(self):
+        return ProphetNetConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_encoder_layers=self.num_encoder_layers,
@@ -779,12 +780,6 @@ class ProphetNetStandaloneEncoderModelTester:
             max_position_embeddings=self.max_position_embeddings,
             add_cross_attention=self.add_cross_attention,
             is_encoder_decoder=self.is_encoder_decoder,
-        )
-
-        return (
-            config,
-            input_ids,
-            attention_mask,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -815,7 +810,6 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     )
 
     test_resize_embeddings = False
-    is_encoder_decoder = True
 
     @unittest.skip(reason="ProphetNet's loss is NLL over n-gram streams, not one cross-entropy over the logits")
     def test_encoder_decoder_loss_no_double_shift(self):
@@ -987,7 +981,7 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
             if hasattr(self.model_tester, "num_hidden_states_types"):
                 added_hidden_states = self.model_tester.num_hidden_states_types
-            elif self.is_encoder_decoder:
+            elif config.is_encoder_decoder:
                 added_hidden_states = 2
             else:
                 added_hidden_states = 1
@@ -1039,7 +1033,6 @@ class ProphetNetStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMix
     all_model_classes = (ProphetNetDecoder, ProphetNetForCausalLM) if is_torch_available() else ()
 
     test_resize_embeddings = False
-    is_encoder_decoder = False
 
     def setUp(self):
         self.model_tester = ProphetNetStandaloneDecoderModelTester(self, is_training=False)
@@ -1077,7 +1070,6 @@ class ProphetNetStandaloneEncoderModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ProphetNetEncoder,) if is_torch_available() else ()
 
     test_resize_embeddings = False
-    is_encoder_decoder = False
 
     def setUp(self):
         self.model_tester = ProphetNetStandaloneEncoderModelTester(self, is_training=False)

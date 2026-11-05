@@ -105,7 +105,7 @@ class TimesFm2_5ModelTester:
 class TimesFm2_5ModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (TimesFm2_5ModelForPrediction,) if is_torch_available() else ()
     test_resize_embeddings = False
-    is_encoder_decoder = False
+
     test_inputs_embeds = False
 
     def setUp(self):

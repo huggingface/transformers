@@ -105,12 +105,11 @@ class UnivNetModelTest(ModelTesterMixin, unittest.TestCase):
     # related tests.
 
     test_resize_embeddings = False
-    test_resize_position_embeddings = False
     # UnivNetModel is not a sequence classification model.
-    test_mismatched_shapes = False
+    test_mismatched_shapes = True
     # UnivNetModel does not have a base_model_prefix attribute.
     test_missing_keys = False
-    is_encoder_decoder = False
+
     has_attentions = False
 
     def setUp(self):

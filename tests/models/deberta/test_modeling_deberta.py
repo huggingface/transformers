@@ -236,8 +236,6 @@ class DebertaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         else {}
     )
 
-    is_encoder_decoder = False
-
     def setUp(self):
         self.model_tester = DebertaModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DebertaConfig, hidden_size=32)

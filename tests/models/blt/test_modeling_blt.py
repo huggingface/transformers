@@ -31,11 +31,7 @@ from transformers.testing_utils import (
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
-from ...test_modeling_common import (
-    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
-    _test_eager_matches_sdpa_inference,
-    ids_tensor,
-)
+from ...test_modeling_common import TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION, ids_tensor
 
 
 if is_torch_available():
@@ -280,8 +276,8 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
             ("cuda", True, torch.bfloat16): 1e-2,
             ("cuda", True, torch.float16): 5e-3,
         }
-        _test_eager_matches_sdpa_inference(
-            self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, atols=atols
+        self._test_eager_matches_sdpa_inference(
+            name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, atols=atols
         )
 
     def test_sliding_window_config_defaults_and_roundtrip(self):

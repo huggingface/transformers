@@ -184,7 +184,6 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         if is_torch_available()
         else {}
     )
-    is_encoder_decoder = True
 
     test_missing_keys = False
     zero_init_hidden_state = True
@@ -533,7 +532,7 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
             out_len = len(outputs)
-            if self.is_encoder_decoder:
+            if config.is_encoder_decoder:
                 correct_outlen = 6
 
                 # loss is at first position
@@ -577,7 +576,7 @@ class DabDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
             if hasattr(self.model_tester, "num_hidden_states_types"):
                 added_hidden_states = self.model_tester.num_hidden_states_types
-            elif self.is_encoder_decoder:
+            elif config.is_encoder_decoder:
                 # decoder_hidden_states, encoder_last_hidden_state, encoder_hidden_states
                 added_hidden_states = 3
             else:

@@ -426,10 +426,6 @@ class EdgeTamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(model, tuple_inputs, dict_inputs)
 
-    @unittest.skip("Cannot set `output_attentions` for timm models.")
-    def test_get_image_features_attentions(self):
-        pass
-
     @unittest.skip("Cannot set `output_hidden_states` for this timm model.")
     def test_get_image_features_hidden_states(self):
         pass

@@ -143,7 +143,7 @@ class UltraVBertModelTest(VLMModelTest, unittest.TestCase):
         else {}
     )
 
-    test_mismatched_shapes = False
+    test_mismatched_shapes = True
     skip_test_image_features_output_shape = True  # UltraVBert merges batch_size with num_images in index 0
     model_split_percents = [0.5, 0.8, 0.9]
 
