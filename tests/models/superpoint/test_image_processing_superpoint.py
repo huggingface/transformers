@@ -1,0 +1,119 @@
+# Copyright 2024 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+import unittest
+
+import numpy as np
+
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torch_available
+
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
+
+
+if is_torch_available():
+    import torch
+
+    from transformers.models.superpoint.modeling_superpoint import SuperPointKeypointDescriptionOutput
+
+
+class SuperPointImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 480, "width": 640})
+        kwargs.setdefault("do_grayscale", True)
+
+        super().__init__(**kwargs)
+
+    def prepare_keypoint_detection_output(self, pixel_values):
+        max_number_keypoints = 50
+        batch_size = len(pixel_values)
+        mask = torch.zeros((batch_size, max_number_keypoints))
+        keypoints = torch.zeros((batch_size, max_number_keypoints, 2))
+        scores = torch.zeros((batch_size, max_number_keypoints))
+        descriptors = torch.zeros((batch_size, max_number_keypoints, 16))
+        for i in range(batch_size):
+            random_number_keypoints = np.random.randint(0, max_number_keypoints)
+            mask[i, :random_number_keypoints] = 1
+            keypoints[i, :random_number_keypoints] = torch.rand((random_number_keypoints, 2))
+            scores[i, :random_number_keypoints] = torch.rand((random_number_keypoints,))
+            descriptors[i, :random_number_keypoints] = torch.rand((random_number_keypoints, 16))
+        return SuperPointKeypointDescriptionOutput(
+            loss=None, keypoints=keypoints, scores=scores, descriptors=descriptors, mask=mask, hidden_states=None
+        )
+
+
+@require_torch
+@require_vision
+class SuperPointImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processor_tester_class = SuperPointImageProcessingTester
+
+    def test_image_processing(self):
+        for image_processing_class in self.image_processing_classes.values():
+            image_processing = image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processing, "do_resize"))
+            self.assertTrue(hasattr(image_processing, "size"))
+            self.assertTrue(hasattr(image_processing, "do_rescale"))
+            self.assertTrue(hasattr(image_processing, "rescale_factor"))
+            self.assertTrue(hasattr(image_processing, "do_grayscale"))
+
+    @unittest.skip(reason="SuperPointImageProcessor is always supposed to return a grayscaled image")
+    def test_call_numpy_4_channels(self):
+        pass
+
+    def test_input_image_properly_converted_to_grayscale(self):
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+            image_inputs = self.image_processor_tester.prepare_image_inputs()
+            pre_processed_images = image_processor.preprocess(image_inputs)
+            for image in pre_processed_images["pixel_values"]:
+                if isinstance(image, torch.Tensor):
+                    self.assertTrue(
+                        torch.all(image[0, ...] == image[1, ...]).item()
+                        and torch.all(image[1, ...] == image[2, ...]).item()
+                    )
+                else:
+                    self.assertTrue(np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...]))
+
+    @require_torch
+    def test_post_processing_keypoint_detection(self):
+        def check_post_processed_output(post_processed_output, image_size):
+            for post_processed_output, image_size in zip(post_processed_output, image_size):
+                self.assertTrue("keypoints" in post_processed_output)
+                self.assertTrue("descriptors" in post_processed_output)
+                self.assertTrue("scores" in post_processed_output)
+                keypoints = post_processed_output["keypoints"]
+                all_below_image_size = torch.all(keypoints[:, 0] <= image_size[1]) and torch.all(
+                    keypoints[:, 1] <= image_size[0]
+                )
+                all_above_zero = torch.all(keypoints[:, 0] >= 0) and torch.all(keypoints[:, 1] >= 0)
+                self.assertTrue(all_below_image_size)
+                self.assertTrue(all_above_zero)
+
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+            image_inputs = self.image_processor_tester.prepare_image_inputs()
+            pre_processed_images = image_processor.preprocess(image_inputs, return_tensors="pt")
+            outputs = self.image_processor_tester.prepare_keypoint_detection_output(**pre_processed_images)
+
+            tuple_image_sizes = [(image.size[0], image.size[1]) for image in image_inputs]
+            tuple_post_processed_outputs = image_processor.post_process_keypoint_detection(outputs, tuple_image_sizes)
+
+            check_post_processed_output(tuple_post_processed_outputs, tuple_image_sizes)
+
+            tensor_image_sizes = torch.tensor([image.size for image in image_inputs]).flip(1)
+            tensor_post_processed_outputs = image_processor.post_process_keypoint_detection(
+                outputs, tensor_image_sizes
+            )
+
+            check_post_processed_output(tensor_post_processed_outputs, tensor_image_sizes)

@@ -1,0 +1,107 @@
+# Copyright 2023 HuggingFace Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+import unittest
+
+import numpy as np
+
+from transformers.image_utils import PILImageResampling
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torch_available
+
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
+
+
+if is_torch_available():
+    import torch
+
+
+class EfficientNetImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("batch_size", 13)
+
+        # Image processor init kwargs
+        kwargs.setdefault("rescale_offset", True)
+        kwargs.setdefault("rescale_factor", 1 / 127.5)
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+        kwargs.setdefault("resample", PILImageResampling.BILINEAR)
+
+        super().__init__(**kwargs)
+
+
+@require_torch
+@require_vision
+class EfficientNetImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processor_tester_class = EfficientNetImageProcessingTester
+
+    def test_rescale(self):
+        # EfficientNet optionally rescales between -1 and 1 instead of the usual 0 and 1
+        image_np = np.arange(0, 256, 1, dtype=np.uint8).reshape(1, 8, 32)
+
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            if backend_name == "torchvision":
+                image = torch.from_numpy(image_np)
+                # Scale between [-1, 1] with rescale_factor 1/127.5 and rescale_offset=True
+                rescaled_image = image_processor.rescale(image, scale=1 / 127.5, offset=True)
+                expected_image = (image * (1 / 127.5)) - 1
+                self.assertTrue(torch.allclose(rescaled_image, expected_image))
+                # Scale between [0, 1] with rescale_factor 1/255 and rescale_offset=False
+                rescaled_image = image_processor.rescale(image, scale=1 / 255, offset=False)
+                expected_image = image / 255.0
+                self.assertTrue(torch.allclose(rescaled_image, expected_image))
+            else:
+                image = image_np
+                rescaled_image = image_processor.rescale(image, scale=1 / 127.5, offset=True)
+                expected_image = (image.astype(np.float64) * (1 / 127.5)) - 1
+                self.assertTrue(np.allclose(rescaled_image, expected_image, rtol=1e-5, atol=1e-5))
+                rescaled_image = image_processor.rescale(image, scale=1 / 255, offset=False)
+                expected_image = image.astype(np.float64) / 255.0
+                self.assertTrue(np.allclose(rescaled_image, expected_image, rtol=1e-5, atol=1e-5))
+
+    @require_vision
+    @require_torch
+    def test_rescale_normalize(self):
+        if "torchvision" not in self.image_processing_classes:
+            self.skipTest(reason="Skipping rescale_normalize test as torchvision backend is not available")
+
+        image = torch.arange(0, 256, 1, dtype=torch.uint8).reshape(1, 8, 32).repeat(3, 1, 1)
+        image_mean_0 = (0.0, 0.0, 0.0)
+        image_std_0 = (1.0, 1.0, 1.0)
+        image_mean_1 = (0.5, 0.5, 0.5)
+        image_std_1 = (0.5, 0.5, 0.5)
+
+        image_processor = self.image_processing_classes["torchvision"](**self.image_processor_dict)
+
+        # Rescale between [-1, 1] with rescale_factor=1/127.5 and rescale_offset=True. Then normalize
+        rescaled_normalized = image_processor.rescale_and_normalize_efficientnet(
+            image, True, 1 / 127.5, True, image_mean_0, image_std_0, True
+        )
+        expected_image = (image * (1 / 127.5)) - 1
+        expected_image = (expected_image - torch.tensor(image_mean_0).view(3, 1, 1)) / torch.tensor(image_std_0).view(
+            3, 1, 1
+        )
+        self.assertTrue(torch.allclose(rescaled_normalized, expected_image, rtol=1e-3))
+
+        # Rescale between [0, 1] with rescale_factor=1/255 and rescale_offset=False. Then normalize
+        rescaled_normalized = image_processor.rescale_and_normalize_efficientnet(
+            image, True, 1 / 255, True, image_mean_1, image_std_1, False
+        )
+        expected_image = image * (1 / 255.0)
+        expected_image = (expected_image - torch.tensor(image_mean_1).view(3, 1, 1)) / torch.tensor(image_std_1).view(
+            3, 1, 1
+        )
+        self.assertTrue(torch.allclose(rescaled_normalized, expected_image, rtol=1e-3))

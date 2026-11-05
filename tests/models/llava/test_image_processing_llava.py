@@ -1,0 +1,149 @@
+# Copyright 2024 HuggingFace Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+import unittest
+
+import numpy as np
+
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torchvision_available, is_vision_available
+
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
+
+
+if is_vision_available():
+    from PIL import Image
+
+    if is_torchvision_available():
+        from torchvision.transforms import functional as F
+
+
+class LlavaImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("do_pad", True)
+        kwargs.setdefault("size", {"shortest_edge": 20})
+        kwargs.setdefault("crop_size", {"height": 18, "width": 18})
+
+        super().__init__(**kwargs)
+
+
+@require_torch
+@require_vision
+class LlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processor_tester_class = LlavaImageProcessingTester
+
+    def test_padding(self):
+        """
+        LLaVA needs to pad images to square size before processing as per orig implementation.
+        Checks that image processor pads images correctly given different background colors.
+        """
+
+        # taken from original implementation: https://github.com/haotian-liu/LLaVA/blob/c121f0432da27facab705978f83c4ada465e46fd/llava/mm_utils.py#L152
+        def pad_to_square_original(
+            image: Image.Image, background_color: int | tuple[int, int, int] = 0
+        ) -> Image.Image:
+            width, height = image.size
+            if width == height:
+                return image
+            elif width > height:
+                result = Image.new(image.mode, (width, width), background_color)
+                result.paste(image, (0, (width - height) // 2))
+                return result
+            else:
+                result = Image.new(image.mode, (height, height), background_color)
+                result.paste(image, ((height - width) // 2, 0))
+                return result
+
+        for i, (backend_name, image_processing_class) in enumerate(self.image_processing_classes.items()):
+            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+            numpify = backend_name == "pil"
+            torchify = backend_name == "torchvision"
+            image_inputs = self.image_processor_tester.prepare_image_inputs(
+                equal_resolution=False, numpify=numpify, torchify=torchify
+            )
+
+            # test with images in channel-last and channel-first format (only channel-first for torch)
+            for image in image_inputs:
+                padded_image = image_processor.pad_to_square(
+                    image.transpose(2, 0, 1) if backend_name == "pil" else image
+                )
+                if backend_name == "pil":
+                    padded_image_original = pad_to_square_original(Image.fromarray(image))
+                    padded_image_original = np.array(padded_image_original)
+                    padded_image = padded_image.transpose(1, 2, 0)
+
+                    np.testing.assert_allclose(padded_image, padded_image_original)
+                else:
+                    padded_image_original = pad_to_square_original(F.to_pil_image(image))
+                    padded_image = padded_image.permute(1, 2, 0)
+                    np.testing.assert_allclose(padded_image, padded_image_original)
+
+            # test background color
+            background_color = (122, 116, 104)
+            for image in image_inputs:
+                padded_image = image_processor.pad_to_square(
+                    image.transpose(2, 0, 1) if backend_name == "pil" else image,
+                    background_color=background_color,
+                )
+                if backend_name == "pil":
+                    padded_image_original = pad_to_square_original(
+                        Image.fromarray(image), background_color=background_color
+                    )
+                    padded_image = padded_image.transpose(1, 2, 0)
+                else:
+                    padded_image_original = pad_to_square_original(
+                        F.to_pil_image(image), background_color=background_color
+                    )
+                    padded_image = padded_image.permute(1, 2, 0)
+                padded_image_original = np.array(padded_image_original)
+
+                np.testing.assert_allclose(padded_image, padded_image_original)
+
+            background_color = 122
+            for image in image_inputs:
+                padded_image = image_processor.pad_to_square(
+                    image.transpose(2, 0, 1) if backend_name == "pil" else image, background_color=background_color
+                )
+                if backend_name == "pil":
+                    padded_image_original = pad_to_square_original(
+                        Image.fromarray(image), background_color=background_color
+                    )
+                    padded_image = padded_image.transpose(1, 2, 0)
+                else:
+                    padded_image_original = pad_to_square_original(
+                        F.to_pil_image(image), background_color=background_color
+                    )
+                    padded_image = padded_image.permute(1, 2, 0)
+                padded_image_original = np.array(padded_image_original)
+                np.testing.assert_allclose(padded_image, padded_image_original)
+
+            # background color length should match channel length
+            # torch shape is (C, H, W), numpy shape is (H, W, C)
+            h_idx, w_idx = (1, 2) if torchify else (0, 1)
+            if image_inputs[0].shape[h_idx] == image_inputs[0].shape[w_idx]:
+                # This avoids a source of test flakiness - if the image is already square
+                # no padding is done and background colour is not checked.
+                continue
+
+            with self.assertRaises(ValueError):
+                padded_image = image_processor.pad_to_square(image_inputs[0], background_color=(122, 104))
+
+            with self.assertRaises(ValueError):
+                padded_image = image_processor.pad_to_square(image_inputs[0], background_color=(122, 104, 0, 0))
+
+    @unittest.skip(reason="LLaVa does not support 4 channel images yet")
+    def test_call_numpy_4_channels(self):
+        pass

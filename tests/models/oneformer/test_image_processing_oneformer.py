@@ -1,0 +1,313 @@
+# Copyright 2022 HuggingFace Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+import json
+import os
+import tempfile
+import unittest
+
+import numpy as np
+
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torch_available, is_vision_available
+
+from ...test_image_processing_common import (
+    ImageProcessingTester,
+    ImageProcessingTestMixin,
+    PostProcessSemanticSegmentationTestMixin,
+)
+
+
+if is_torch_available():
+    import torch
+
+    from transformers.models.oneformer.image_processing_oneformer import binary_mask_to_rle, prepare_metadata
+    from transformers.models.oneformer.modeling_oneformer import OneFormerForUniversalSegmentationOutput
+
+if is_vision_available():
+    from PIL import Image
+
+
+class OneFormerImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("batch_size", 2)
+        kwargs.setdefault("num_queries", 10)
+        kwargs.setdefault("num_classes", 10)
+        kwargs.setdefault("height", 3)
+        kwargs.setdefault("width", 4)
+
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"shortest_edge": 32, "longest_edge": 1333})
+        kwargs.setdefault("num_labels", 10)
+        kwargs.setdefault("ignore_index", 255)
+        kwargs.setdefault("class_info_file", "ade20k_panoptic.json")
+        kwargs.setdefault("num_text", 10)
+
+        super().__init__(**kwargs)
+
+    def get_fake_oneformer_outputs(self):
+        return OneFormerForUniversalSegmentationOutput(
+            # +1 for null class
+            class_queries_logits=torch.randn((self.batch_size, self.num_queries, self.num_classes + 1)),
+            masks_queries_logits=torch.randn((self.batch_size, self.num_queries, self.height, self.width)),
+        )
+
+    def prepare_post_process_semantic_segmentation_inputs(self):
+        inputs = {"outputs": self.get_fake_oneformer_outputs()}
+        expected_shape = {
+            "num_labels": self.num_classes,
+            "height": self.height,
+            "width": self.width,
+        }
+        return inputs, expected_shape
+
+
+@require_torch
+@require_vision
+class OneFormerImageProcessingTest(
+    ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase
+):
+    image_processor_tester_class = OneFormerImageProcessingTester
+
+    def test_image_proc_properties(self):
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processor, "image_mean"))
+            self.assertTrue(hasattr(image_processor, "image_std"))
+            self.assertTrue(hasattr(image_processor, "do_normalize"))
+            self.assertTrue(hasattr(image_processor, "do_resize"))
+            self.assertTrue(hasattr(image_processor, "size"))
+            self.assertTrue(hasattr(image_processor, "ignore_index"))
+            self.assertTrue(hasattr(image_processor, "class_info_file"))
+            self.assertTrue(hasattr(image_processor, "num_text"))
+            self.assertTrue(hasattr(image_processor, "repo_path"))
+            self.assertTrue(hasattr(image_processor, "metadata"))
+            self.assertTrue(hasattr(image_processor, "do_reduce_labels"))
+
+    def comm_get_image_processor_inputs(
+        self, with_segmentation_maps=False, is_instance_map=False, segmentation_type="np", image_processing_class=None
+    ):
+        image_processor = image_processing_class(**self.image_processor_dict)
+        # prepare image and target
+        num_labels = self.image_processor_tester.num_labels
+        annotations = None
+        instance_id_to_semantic_id = None
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+        if with_segmentation_maps:
+            high = num_labels
+            if is_instance_map:
+                labels_expanded = list(range(num_labels)) * 2
+                instance_id_to_semantic_id = dict(enumerate(labels_expanded))
+            annotations = [
+                np.random.randint(0, high * 2, (img.size[1], img.size[0])).astype(np.uint8) for img in image_inputs
+            ]
+            if segmentation_type == "pil":
+                annotations = [Image.fromarray(annotation) for annotation in annotations]
+
+        inputs = image_processor(
+            image_inputs,
+            ["semantic"] * len(image_inputs),
+            annotations,
+            return_tensors="pt",
+            instance_id_to_semantic_id=instance_id_to_semantic_id,
+        )
+
+        return inputs
+
+    @unittest.skip
+    def test_init_without_params(self):
+        pass
+
+    def test_call_with_segmentation_maps(self):
+        def common(is_instance_map=False, segmentation_type=None):
+            for image_processing_class in self.image_processing_classes.values():
+                inputs = self.comm_get_image_processor_inputs(
+                    with_segmentation_maps=True,
+                    is_instance_map=is_instance_map,
+                    segmentation_type=segmentation_type,
+                    image_processing_class=image_processing_class,
+                )
+
+                mask_labels = inputs["mask_labels"]
+                class_labels = inputs["class_labels"]
+                pixel_values = inputs["pixel_values"]
+                text_inputs = inputs["text_inputs"]
+
+                # check the batch_size
+                for mask_label, class_label, text_input in zip(mask_labels, class_labels, text_inputs):
+                    self.assertEqual(mask_label.shape[0], class_label.shape[0])
+                    # this ensure padding has happened
+                    self.assertEqual(mask_label.shape[1:], pixel_values.shape[2:])
+                    self.assertEqual(len(text_input), self.image_processor_tester.num_text)
+
+        common()
+        common(is_instance_map=True)
+        common(is_instance_map=False, segmentation_type="pil")
+        common(is_instance_map=True, segmentation_type="pil")
+
+    def test_binary_mask_to_rle(self):
+        fake_binary_mask = np.zeros((20, 50))
+        fake_binary_mask[0, 20:] = 1
+        fake_binary_mask[1, :15] = 1
+        fake_binary_mask[5, :10] = 1
+
+        rle = binary_mask_to_rle(fake_binary_mask)
+        self.assertEqual(len(rle), 4)
+        self.assertEqual(rle[0], 21)
+        self.assertEqual(rle[1], 45)
+
+    def test_post_process_instance_segmentation(self):
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(
+                num_labels=self.image_processor_tester.num_classes,
+                max_seq_length=77,
+                task_seq_length=77,
+                class_info_file="ade20k_panoptic.json",
+                num_text=self.image_processor_tester.num_text,
+                repo_path="shi-labs/oneformer_demo",
+            )
+            outputs = self.image_processor_tester.get_fake_oneformer_outputs()
+            segmentation = image_processor.post_process_instance_segmentation(outputs, threshold=0)
+
+            self.assertTrue(len(segmentation) == self.image_processor_tester.batch_size)
+            for el in segmentation:
+                self.assertTrue("segmentation" in el)
+                self.assertTrue("segments_info" in el)
+                self.assertEqual(type(el["segments_info"]), list)
+                self.assertEqual(
+                    el["segmentation"].shape, (self.image_processor_tester.height, self.image_processor_tester.width)
+                )
+
+            segmentation_with_opts = image_processor.post_process_instance_segmentation(
+                outputs,
+                threshold=0,
+                target_sizes=[(1, 4) for _ in range(self.image_processor_tester.batch_size)],
+                task_type="panoptic",
+            )
+            self.assertTrue(len(segmentation_with_opts) == self.image_processor_tester.batch_size)
+            for el in segmentation_with_opts:
+                self.assertTrue("segmentation" in el)
+                self.assertTrue("segments_info" in el)
+                self.assertEqual(type(el["segments_info"]), list)
+                self.assertEqual(el["segmentation"].shape, (1, 4))
+
+    def test_post_process_panoptic_segmentation(self):
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(
+                num_labels=self.image_processor_tester.num_classes,
+                max_seq_length=77,
+                task_seq_length=77,
+                class_info_file="ade20k_panoptic.json",
+                num_text=self.image_processor_tester.num_text,
+                repo_path="shi-labs/oneformer_demo",
+            )
+            outputs = self.image_processor_tester.get_fake_oneformer_outputs()
+            segmentation = image_processor.post_process_panoptic_segmentation(outputs, threshold=0)
+
+            self.assertTrue(len(segmentation) == self.image_processor_tester.batch_size)
+            for el in segmentation:
+                self.assertTrue("segmentation" in el)
+                self.assertTrue("segments_info" in el)
+                self.assertEqual(type(el["segments_info"]), list)
+                self.assertEqual(
+                    el["segmentation"].shape, (self.image_processor_tester.height, self.image_processor_tester.width)
+                )
+
+    def test_can_load_with_local_metadata(self):
+        # Create a temporary json file
+        class_info = {
+            "0": {"isthing": 0, "name": "foo"},
+            "1": {"isthing": 0, "name": "bar"},
+            "2": {"isthing": 1, "name": "baz"},
+        }
+        metadata = prepare_metadata(class_info)
+        for image_processing_class in self.image_processing_classes.values():
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                metadata_path = os.path.join(tmpdirname, "metadata.json")
+                with open(metadata_path, "w", encoding="utf-8") as f:
+                    json.dump(class_info, f)
+
+                config_dict = self.image_processor_dict
+                config_dict["class_info_file"] = metadata_path
+                config_dict["repo_path"] = tmpdirname
+                image_processor = image_processing_class(**config_dict)
+
+            self.assertEqual(image_processor.metadata, metadata)
+
+    def test_backends_equivalence(self):
+        """Override base class test to also compare segmentation labels."""
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
+
+        dummy_image, dummy_map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
+
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            encodings[backend_name] = image_processor(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
+
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(
+                encodings[reference_backend].pixel_values, encodings[backend_name].pixel_values
+            )
+            for mask_label_ref, mask_label_other in zip(
+                encodings[reference_backend].mask_labels, encodings[backend_name].mask_labels
+            ):
+                self._assert_tensors_equivalence(mask_label_ref, mask_label_other)
+            for class_label_ref, class_label_other in zip(
+                encodings[reference_backend].class_labels, encodings[backend_name].class_labels
+            ):
+                self._assert_tensors_equivalence(class_label_ref.float(), class_label_other.float())
+            self.assertEqual(encodings[reference_backend].text_inputs, encodings[backend_name].text_inputs)
+            self.assertEqual(encodings[reference_backend].task_inputs, encodings[backend_name].task_inputs)
+
+    def test_backends_equivalence_batched(self):
+        """Override base class test to also compare segmentation labels."""
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
+
+        dummy_images, dummy_maps = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(
+            batched=True
+        )
+
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            encodings[backend_name] = image_processor(
+                dummy_images,
+                segmentation_maps=dummy_maps,
+                task_inputs=["instance"] + ["semantic"] * (len(dummy_images) - 1),
+                return_tensors="pt",
+            )
+
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(
+                encodings[reference_backend].pixel_values, encodings[backend_name].pixel_values
+            )
+            for mask_label_ref, mask_label_other in zip(
+                encodings[reference_backend].mask_labels, encodings[backend_name].mask_labels
+            ):
+                self._assert_tensors_equivalence(mask_label_ref, mask_label_other)
+            for class_label_ref, class_label_other in zip(
+                encodings[reference_backend].class_labels, encodings[backend_name].class_labels
+            ):
+                self._assert_tensors_equivalence(class_label_ref.float(), class_label_other.float())
+            self.assertEqual(encodings[reference_backend].text_inputs, encodings[backend_name].text_inputs)
+            self.assertEqual(encodings[reference_backend].task_inputs, encodings[backend_name].task_inputs)

@@ -1,0 +1,444 @@
+# Copyright 2024 the HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""PyTorch PaliGemmamodel."""
+
+from dataclasses import dataclass
+from typing import Any
+
+import torch
+from torch import nn
+
+from ...cache_utils import Cache
+from ...configuration_utils import PreTrainedConfig
+from ...generation import GenerationMixin
+from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
+from ...processing_utils import Unpack
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    logging,
+    torch_compilable_check,
+)
+from ..auto import AutoModel
+from .configuration_paligemma import PaliGemmaConfig
+
+
+logger = logging.get_logger(__name__)
+
+
+@auto_docstring(
+    custom_intro="""
+    Base class for Paligemma outputs, with hidden states and attentions.
+    """
+)
+@dataclass
+class PaligemmaModelOutputWithPast(BaseModelOutputWithPast):
+    r"""
+    image_hidden_states (`torch.Tensor`, *optional*):
+        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    """
+
+    image_hidden_states: torch.Tensor | None = None
+
+
+@auto_docstring(
+    custom_intro="""
+    Base class for PaliGemma causal language model (or autoregressive) outputs.
+    """
+)
+@dataclass
+class PaliGemmaCausalLMOutputWithPast(ModelOutput):
+    r"""
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.text_config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    image_hidden_states (`torch.Tensor`, *optional*):
+        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
+    """
+
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    image_hidden_states: torch.Tensor | None = None
+
+
+class PaliGemmaMultiModalProjector(nn.Module):
+    def __init__(self, config: PaliGemmaConfig):
+        super().__init__()
+        self.linear = nn.Linear(config.vision_config.hidden_size, config.vision_config.projection_dim, bias=True)
+
+    def forward(self, image_features):
+        hidden_states = self.linear(image_features)
+
+        return hidden_states
+
+
+@auto_docstring
+class PaliGemmaPreTrainedModel(PreTrainedModel):
+    config: PaliGemmaConfig
+    base_model_prefix = "model"
+    input_modalities = ("image", "text")
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["PaliGemmaMultiModalProjector"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _can_compile_fullgraph = False
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+
+
+@auto_docstring(
+    custom_intro="""
+    The Base Paligemma model which consists of a vision backbone and a language model without language modeling head.,
+    """
+)
+class PaliGemmaModel(PaliGemmaPreTrainedModel):
+    # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
+    accepts_loss_kwargs = False
+
+    def __init__(self, config: PaliGemmaConfig):
+        super().__init__(config)
+        self.vision_tower = AutoModel.from_config(config.vision_config)
+        self.multi_modal_projector = PaliGemmaMultiModalProjector(config)
+        self.vocab_size = config.text_config.vocab_size
+        self.language_model = AutoModel.from_config(config.text_config)
+        self.text_config_dtype = self.config.text_config.dtype or self.dtype
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
+    def get_image_features(
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        image_outputs = self.vision_tower(pixel_values, **kwargs)
+        selected_image_feature = image_outputs.last_hidden_state
+        image_features = self.multi_modal_projector(selected_image_feature)
+        image_outputs.pooler_output = image_features
+
+        return image_outputs
+
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        n_image_features = image_features.shape[0] * image_features.shape[1]
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
+        torch_compilable_check(
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
+        )
+        return special_image_mask
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple | PaligemmaModelOutputWithPast:
+        r"""
+        Example:
+
+        ```python
+        >>> from PIL import Image
+        >>> from huggingface_hub.utils import httpx
+        >>> from io import BytesIO
+        >>> from transformers import AutoProcessor, PaliGemmaForConditionalGeneration
+
+        >>> model = PaliGemmaForConditionalGeneration.from_pretrained("google/paligemma2-3b-mix-224")
+        >>> processor = AutoProcessor.from_pretrained("google/paligemma2-3b-mix-224")
+
+        >>> prompt = "Where is the cat standing?"
+        >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
+
+        >>> inputs = processor(images=image, text=prompt,  return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(**inputs,)
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "Where is the cat standing?\nsnow"
+        ```"""
+
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
+        # Replace image id with PAD if the image token if OOV, to avoid index-errors
+        if input_ids is not None and self.config.image_token_id >= self.vocab_size:
+            special_image_mask = input_ids == self.config.image_token_id
+            llm_input_ids = input_ids.clone()
+            llm_input_ids[special_image_mask] = 0
+        else:
+            llm_input_ids = input_ids
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(llm_input_ids)
+
+        if position_ids is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0) + 1  # Paligemma positions are 1-indexed
+
+        # Merge text and images
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values)
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
+        # Create the mask
+        mask_kwargs = {
+            "config": self.config.get_text_config(),
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+        is_first_iteration = past_key_values is None or not past_key_values.is_initialized or pixel_values is not None
+        if token_type_ids is not None and is_first_iteration:
+            # Can attend bidirectionally in prefix and only causally in suffix
+            mask_kwargs["block_sequence_ids"] = torch.where(token_type_ids == 0, 0, -1)
+
+        # PG has no sliding window, only full attn. But PG2 needs sliding mask and full mask
+        causal_mask = create_causal_mask(**mask_kwargs)
+        if getattr(self.config.text_config, "sliding_window", None) is not None:
+            sliding_mask_kwargs = mask_kwargs.copy()
+            causal_mask = {
+                "full_attention": causal_mask,
+                "sliding_attention": create_sliding_window_causal_mask(**sliding_mask_kwargs),
+            }
+
+        outputs = self.language_model(
+            attention_mask=causal_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        return PaligemmaModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
+        )
+
+
+@auto_docstring(
+    custom_intro="""
+    The Base Paligemma model which consists of a vision backbone and a language model without language modeling head.,
+    """
+)
+class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+
+    def __init__(self, config: PaliGemmaConfig):
+        super().__init__(config)
+        self.model = PaliGemmaModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.post_init()
+
+    @auto_docstring
+    def get_image_features(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
+        return self.model.get_image_features(pixel_values, **kwargs)
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | PaliGemmaCausalLMOutputWithPast:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.text_config.vocab_size]`.
+
+        Example:
+
+        ```python
+        >>> from PIL import Image
+        >>> from huggingface_hub.utils import httpx
+        >>> from io import BytesIO
+        >>> from transformers import AutoProcessor, PaliGemmaForConditionalGeneration
+
+        >>> model = PaliGemmaForConditionalGeneration.from_pretrained("google/paligemma2-3b-mix-224")
+        >>> processor = AutoProcessor.from_pretrained("google/paligemma2-3b-mix-224")
+
+        >>> prompt = "Where is the cat standing?"
+        >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
+
+        >>> inputs = processor(images=image, text=prompt,  return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(**inputs,)
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "Where is the cat standing?\nsnow"
+        ```"""
+        outputs = self.model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            token_type_ids=token_type_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
+            **kwargs,
+        )
+
+        hidden_states = outputs[0]
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
+        final_logit_softcapping = getattr(self.config.get_text_config(), "final_logit_softcapping", None)
+        if final_logit_softcapping is not None:
+            logits = logits / final_logit_softcapping
+            logits = torch.tanh(logits)
+            logits = logits * final_logit_softcapping
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
+
+        return PaliGemmaCausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            image_hidden_states=outputs.image_hidden_states,
+        )
+
+    def _update_model_kwargs_for_generation(
+        self,
+        outputs: ModelOutput,
+        model_kwargs: dict[str, Any],
+        is_encoder_decoder: bool = False,
+        num_new_tokens: int = 1,
+    ) -> dict[str, Any]:
+        token_type_ids = model_kwargs.get("token_type_ids")
+        model_kwargs = super()._update_model_kwargs_for_generation(
+            outputs, model_kwargs, is_encoder_decoder, num_new_tokens
+        )
+        if token_type_ids is not None:
+            # A generated token belongs to the causal suffix, so it is 1. The generic update repeats the
+            # last prompt value (0 before any suffix), which would put it in the bidirectional prefix.
+            model_kwargs["token_type_ids"] = torch.cat(
+                [token_type_ids, token_type_ids.new_ones((token_type_ids.shape[0], num_new_tokens))], dim=-1
+            )
+        return model_kwargs
+
+    def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
+        # position_ids in Paligemma are 1-indexed
+        if model_inputs.get("position_ids") is not None:
+            # NOTE: we need this op out-of-place, otherwise it modifies the `model_kwargs` dict used in `generate` in-place!
+            model_inputs["position_ids"] = model_inputs["position_ids"] + 1
+
+        return model_inputs
+
+    @staticmethod
+    def create_masks_for_generate(
+        config: PreTrainedConfig,
+        inputs_embeds: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None,
+        position_ids: torch.Tensor | None,
+        token_type_ids: torch.Tensor | None = None,
+        is_first_iteration: bool | None = False,
+        **kwargs,
+    ) -> dict:
+        group_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
+        if token_type_ids is not None:
+            # First find where a new image block starts: 1 if image and previous not image
+            # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
+            group_ids = torch.where(token_type_ids == 0, 0, -1)
+
+        return create_masks_for_generate(
+            config=config.get_text_config(),
+            inputs_embeds=inputs_embeds,
+            block_sequence_ids=group_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+        )
+
+
+__all__ = ["PaliGemmaForConditionalGeneration", "PaliGemmaPreTrainedModel", "PaliGemmaModel"]

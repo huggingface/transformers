@@ -1,0 +1,119 @@
+# Copyright 2024 HuggingFace Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+import unittest
+
+import numpy as np
+
+from transformers.testing_utils import require_torch, require_vision
+
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
+
+
+class PromptDepthAnythingImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+
+        super().__init__(**kwargs)
+
+
+@require_torch
+@require_vision
+class PromptDepthAnythingImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processor_tester_class = PromptDepthAnythingImageProcessingTester
+
+    def test_keep_aspect_ratio(self):
+        size = {"height": 512, "width": 512}
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(size=size, keep_aspect_ratio=True, ensure_multiple_of=32)
+
+            image = np.zeros((489, 640, 3))
+
+            pixel_values = image_processor(image, return_tensors="pt").pixel_values
+
+            self.assertEqual(list(pixel_values.shape), [1, 3, 512, 672])
+
+    def test_prompt_depth_processing(self):
+        size = {"height": 756, "width": 756}
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(size=size, keep_aspect_ratio=True, ensure_multiple_of=32)
+
+            image = np.zeros((756, 1008, 3))
+            prompt_depth = np.random.random((192, 256))
+
+            outputs = image_processor(image, prompt_depth=prompt_depth, return_tensors="pt")
+            pixel_values = outputs.pixel_values
+            prompt_depth_values = outputs.prompt_depth
+
+            self.assertEqual(list(pixel_values.shape), [1, 3, 768, 1024])
+            self.assertEqual(list(prompt_depth_values.shape), [1, 1, 192, 256])
+
+    def test_backends_equivalence(self):
+        """Override base class test to also compare prompt_depth."""
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
+
+        image = np.zeros((756, 1008, 3))
+        prompt_depth = np.random.random((192, 256))
+
+        size = {"height": 756, "width": 756}
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(
+                size=size, keep_aspect_ratio=True, ensure_multiple_of=32, do_pad=True, size_divisor=51
+            )
+            encodings[backend_name] = image_processor(image, prompt_depth=prompt_depth, return_tensors="pt")
+
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(
+                encodings[reference_backend].pixel_values, encodings[backend_name].pixel_values
+            )
+            self.assertEqual(
+                encodings[reference_backend].prompt_depth.dtype, encodings[backend_name].prompt_depth.dtype
+            )
+            self._assert_tensors_equivalence(
+                encodings[reference_backend].prompt_depth, encodings[backend_name].prompt_depth
+            )
+
+    def test_slow_fast_equivalence_batched(self):
+        """Override base class test to also compare prompt_depth."""
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
+
+        batch_size = self.image_processor_tester.batch_size
+        images = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+        prompt_depths = [np.random.random((192, 256)) for _ in range(batch_size)]
+
+        size = {"height": 756, "width": 756}
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(size=size, keep_aspect_ratio=False, ensure_multiple_of=32)
+            encodings[backend_name] = image_processor(images, prompt_depth=prompt_depths, return_tensors="pt")
+
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(
+                encodings[reference_backend].pixel_values, encodings[backend_name].pixel_values
+            )
+            self.assertEqual(
+                encodings[reference_backend].prompt_depth.dtype, encodings[backend_name].prompt_depth.dtype
+            )
+            self._assert_tensors_equivalence(
+                encodings[reference_backend].prompt_depth, encodings[backend_name].prompt_depth
+            )

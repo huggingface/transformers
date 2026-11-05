@@ -1,0 +1,72 @@
+import torch
+from torch import nn
+
+from ..generation.continuous_batching.cache import PagedAttentionCache
+
+
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+# Compile is disabled because the cache update mutates in place aliased views of the cache tensor, which compile's
+# functionalization handles by making a copy of the full cache for every layer.
+@torch.compiler.disable
+def eager_paged_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,  # shape [seqlen_q, seqlen_k]
+    scaling: float,
+    **kwargs,
+):
+    # Add KV cache to the key and value tensors
+    cache: PagedAttentionCache | None = kwargs.pop("cache", None)
+    if cache is None:
+        raise ValueError(
+            "`paged|eager` was called without a paged attention cache. This implementation expects the packed "
+            "inputs and the 4D mask that continuous batching prepares; on a standard forward it would attend "
+            "bidirectionally. Use `eager` for a standard forward."
+        )
+    # Paged cache update uses the same format as the regular Cache update so that one day they can be unified.
+    key, value = cache.update(
+        key_states=key,
+        value_states=value,
+        layer_idx=module.layer_idx,
+        kwargs=kwargs,
+    )
+
+    # Repeat the key and value tensors for each group of key-value heads
+    if hasattr(module, "num_key_value_groups"):
+        key = repeat_kv(key, module.num_key_value_groups)
+        value = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    # Handle attention sinks if the model has them
+    if hasattr(module, "sinks"):
+        # Retrieve the sink and add it to the attention weights
+        sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
+        attn_weights = torch.cat([attn_weights, sinks], dim=-1)
+        # Normalize the attention weights for better numerical stability
+        attn_weights = attn_weights - attn_weights.max(dim=-1, keepdim=True).values
+        # Apply softmax and drop the sink. Not exactly the same code as eager w/ sink, but the same code does not produce the same results.
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+        attn_weights = attn_weights[..., :-1]
+    else:
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights

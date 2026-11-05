@@ -1,0 +1,32 @@
+- sections:
+  - local: index
+    title: 🤗 Transformers
+  - local: quicktour
+    title: Visite rapide
+  - local: installation
+    title: Installation
+  title: Démarrer
+- sections:
+  - local: tutoriel_pipeline
+    title: Pipelines pour l'inférence
+  - local: autoclass_tutorial
+    title: Chargement d'instances pré-entraînées avec une AutoClass
+  - local: in_translation
+    title: Préparation des données
+  - local: in_translation
+    title: Fine-tune un modèle pré-entraîné
+  - local: in_translation
+    title: Entraînement distribué avec 🤗 Accelerate
+  - local: in_translation
+    title: Chargement et entraînement des adaptateurs avec 🤗 PEFT
+  - local: in_translation
+    title: Partager un modèle
+  - local: in_translation
+    title: Génération avec LLMs
+  title: Tutoriels
+- sections:
+  - local: task_summary
+    title: Ce que 🤗 Transformers peut faire
+  - local: tasks_explained
+    title: Comment 🤗 Transformers résout ces tâches
+  title: Guides conceptuels

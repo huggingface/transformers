@@ -1,0 +1,41 @@
+name: Update Transformers metadata
+
+on:
+  push:
+    branches:
+      - main
+      - update_transformers_metadata*
+
+
+permissions: {}
+
+jobs:
+  build_and_package:
+    permissions:
+      contents: read
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version-file: .python-version
+
+      - name: Setup environment
+        run: |
+          pip install --upgrade pip
+          pip install datasets pandas
+          pip install .[torch]
+
+      - name: Update metadata
+        env:
+          HF_TOKEN: ${{ secrets.LYSANDRE_HF_TOKEN }}
+        run: |
+          python utils/update_metadata.py --token "$HF_TOKEN" --commit_sha ${{ github.sha }}

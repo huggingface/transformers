@@ -1,0 +1,200 @@
+# Copyright 2024 HuggingFace Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import unittest
+
+import numpy as np
+import pytest
+
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_accelerator,
+    require_vision,
+    slow,
+    torch_device,
+)
+from transformers.utils import is_torch_available, is_vision_available
+
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
+
+
+if is_torch_available():
+    import torch
+
+if is_vision_available():
+    from PIL import Image
+
+
+class PixtralImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("max_num_images_per_sample", 3)
+
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"longest_edge": 24})
+        kwargs.setdefault("patch_size", {"height": 8, "width": 8})
+
+        super().__init__(**kwargs)
+
+    def expected_output_image_shape(self, images):
+        if not isinstance(images, (list, tuple)):
+            images = [images]
+
+        batch_size = len(images)
+        return_height, return_width = 0, 0
+        for image in images:
+            if isinstance(image, Image.Image):
+                width, height = image.size
+            elif isinstance(image, np.ndarray):
+                height, width = image.shape[:2]
+            elif isinstance(image, torch.Tensor):
+                height, width = image.shape[-2:]
+
+            max_height = max_width = self.size.get("longest_edge")
+
+            ratio = max(height / max_height, width / max_width)
+            if ratio > 1:
+                height = int(np.floor(height / ratio))
+                width = int(np.floor(width / ratio))
+
+            patch_height, patch_width = self.patch_size["height"], self.patch_size["width"]
+            num_height_tokens = (height - 1) // patch_height + 1
+            num_width_tokens = (width - 1) // patch_width + 1
+
+            return_height = max(num_height_tokens * patch_height, return_height)
+            return_width = max(num_width_tokens * patch_width, return_width)
+
+        return batch_size, self.num_channels, return_height, return_width
+
+
+@require_torch
+@require_vision
+class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processor_tester_class = PixtralImageProcessingTester
+
+    def test_call_without_padding(self):
+        for image_processing_class in self.image_processing_classes.values():
+            image_processing = image_processing_class(**self.image_processor_dict)
+            image_inputs = [
+                np.zeros((30, 60, 3), dtype=np.uint8),
+                np.zeros((60, 30, 3), dtype=np.uint8),
+            ]
+
+            encoded_images = image_processing(image_inputs, do_pad=False).pixel_values
+
+            self.assertIsInstance(encoded_images, list)
+            self.assertEqual([image.shape[-2:] for image in encoded_images], [(16, 24), (24, 16)])
+
+            padded_images = image_processing(image_inputs, do_pad=True).pixel_values
+            self.assertEqual(padded_images.shape[-2:], (24, 24))
+
+    def test_rescale_and_normalize_does_not_modify_input(self):
+        image_processor = self.image_processing_classes["torchvision"](**self.image_processor_dict)
+        image = torch.rand(3, 8, 8)
+        original_image = image.clone()
+
+        image_processor.rescale_and_normalize(
+            image,
+            do_rescale=True,
+            rescale_factor=image_processor.rescale_factor,
+            do_normalize=True,
+            image_mean=image_processor.image_mean,
+            image_std=image_processor.image_std,
+        )
+
+        torch.testing.assert_close(image, original_image)
+
+    # The following tests are overridden as PixtralImageProcessor can return images of different sizes
+    # and thus doesn't support returning batched tensors
+
+    def test_call_pil(self):
+        for image_processing_class in self.image_processing_classes.values():
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # create random PIL images
+            image_inputs_list = self.image_processor_tester.prepare_image_inputs()
+            for image in image_inputs_list:
+                self.assertIsInstance(image, Image.Image)
+
+            # Test not batched input
+            encoded_images = image_processing(image_inputs_list[0], return_tensors="pt").pixel_values
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs_list[0])
+            self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
+
+            # Test batched
+            encoded_images = image_processing(image_inputs_list, return_tensors="pt").pixel_values
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs_list)
+            self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
+
+    def test_call_numpy(self):
+        for image_processing_class in self.image_processing_classes.values():
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # create random numpy tensors
+            image_inputs_list = self.image_processor_tester.prepare_image_inputs(numpify=True)
+            for image in image_inputs_list:
+                self.assertIsInstance(image, np.ndarray)
+
+            # Test not batched input
+            encoded_images = image_processing(image_inputs_list[0], return_tensors="pt").pixel_values
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs_list[0])
+            self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
+
+            # Test batched
+            batch_encoded_images = image_processing(image_inputs_list, return_tensors="pt").pixel_values
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs_list)
+            self.assertEqual(tuple(batch_encoded_images.shape), expected_output_image_shape)
+
+    def test_call_pytorch(self):
+        for image_processing_class in self.image_processing_classes.values():
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # create random PyTorch tensors
+            image_inputs_list = self.image_processor_tester.prepare_image_inputs(torchify=True)
+            for image in image_inputs_list:
+                self.assertIsInstance(image, torch.Tensor)
+
+            # Test not batched input
+            encoded_images = image_processing(image_inputs_list[0], return_tensors="pt").pixel_values
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs_list[0])
+            self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
+
+            # Test batched
+            batch_encoded_images = image_processing(image_inputs_list, return_tensors="pt").pixel_values
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs_list)
+            self.assertEqual(tuple(batch_encoded_images.shape), expected_output_image_shape)
+
+    @slow
+    @require_torch_accelerator
+    @require_vision
+    @pytest.mark.torch_compile_test
+    def test_can_compile_torchvision_backend(self):
+        if "torchvision" not in self.image_processing_classes:
+            self.skipTest("Skipping compilation test as torchvision backend is not defined")
+
+        torch.compiler.reset()
+        input_image = torch.randint(0, 255, (3, 224, 224), dtype=torch.uint8)
+        image_processor = self.image_processing_classes["torchvision"](**self.image_processor_dict)
+        output_eager = image_processor(input_image, device=torch_device, return_tensors="pt")
+
+        image_processor = torch.compile(image_processor, mode="reduce-overhead")
+        output_compiled = image_processor(input_image, device=torch_device, return_tensors="pt")
+
+        self._assert_tensors_equivalence(
+            output_eager.pixel_values, output_compiled.pixel_values, atol=1e-4, rtol=1e-4, mean_atol=1e-5
+        )
+
+    @unittest.skip(reason="PixtralImageProcessor doesn't treat 4 channel PIL and numpy consistently yet")  # FIXME Amy
+    def test_call_numpy_4_channels(self):
+        pass

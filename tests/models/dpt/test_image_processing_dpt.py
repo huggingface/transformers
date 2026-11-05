@@ -1,0 +1,270 @@
+# Copyright 2022 HuggingFace Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+import unittest
+
+import numpy as np
+
+from transformers.file_utils import is_torch_available
+from transformers.testing_utils import require_torch, require_vision
+
+from ...test_image_processing_common import (
+    ImageProcessingTester,
+    ImageProcessingTestMixin,
+    PostProcessSemanticSegmentationTestMixin,
+)
+
+
+if is_torch_available():
+    import torch
+
+
+class DPTImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_labels", 5)
+
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 18, "width": 18})
+        kwargs.setdefault("do_reduce_labels", False)
+
+        super().__init__(**kwargs)
+
+
+@require_torch
+@require_vision
+class DPTImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegmentationTestMixin, unittest.TestCase):
+    image_processor_tester_class = DPTImageProcessingTester
+
+    def test_padding(self):
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            if backend_name == "torchvision":
+                image = torch.arange(0, 366777, 1, dtype=torch.uint8).reshape(3, 249, 491)
+                padded_image = image_processor.pad_image(image, size_divisor=4)
+                self.assertTrue(padded_image.shape[1] % 4 == 0)
+                self.assertTrue(padded_image.shape[2] % 4 == 0)
+                pixel_values = image_processor.preprocess(
+                    image, do_rescale=False, do_resize=False, do_pad=True, size_divisor=4, return_tensors="pt"
+                ).pixel_values
+                self.assertTrue(pixel_values.shape[2] % 4 == 0)
+                self.assertTrue(pixel_values.shape[3] % 4 == 0)
+            else:
+                image_processor = image_processing_class(**self.image_processor_dict)
+                image = np.random.randn(3, 249, 491)
+                image = image_processor.pad_image(image, size_divisor=4)
+                self.assertTrue(image.shape[1] % 4 == 0)
+                self.assertTrue(image.shape[2] % 4 == 0)
+                pixel_values = image_processor.preprocess(
+                    image, do_rescale=False, do_resize=False, do_pad=True, size_divisor=4, return_tensors="pt"
+                ).pixel_values
+                self.assertTrue(pixel_values.shape[2] % 4 == 0)
+                self.assertTrue(pixel_values.shape[3] % 4 == 0)
+
+    def test_keep_aspect_ratio(self):
+        size = {"height": 512, "width": 512}
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(size=size, keep_aspect_ratio=True, ensure_multiple_of=32)
+
+            image = np.zeros((489, 640, 3))
+
+            pixel_values = image_processor(image, return_tensors="pt").pixel_values
+
+            self.assertEqual(list(pixel_values.shape), [1, 3, 512, 672])
+
+    # Copied from transformers.tests.models.beit.test_image_processing_beit.BeitImageProcessingTest.test_call_segmentation_maps
+    def test_call_segmentation_maps(self):
+        for image_processing_class in self.image_processing_classes.values():
+            # Initialize image_processor
+            image_processor = image_processing_class(**self.image_processor_dict)
+            # create random PyTorch tensors
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+            maps = []
+            for image in image_inputs:
+                self.assertIsInstance(image, torch.Tensor)
+                maps.append(torch.zeros(image.shape[-2:]).long())
+
+            # Test not batched input
+            encoding = image_processor(image_inputs[0], maps[0], return_tensors="pt")
+            self.assertEqual(
+                encoding["pixel_values"].shape,
+                (
+                    1,
+                    self.image_processor_tester.num_channels,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
+                ),
+            )
+            self.assertEqual(
+                encoding["labels"].shape,
+                (
+                    1,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
+                ),
+            )
+            self.assertEqual(encoding["labels"].dtype, torch.long)
+            self.assertTrue(encoding["labels"].min().item() >= 0)
+            self.assertTrue(encoding["labels"].max().item() <= 255)
+
+            # Test batched
+            encoding = image_processor(image_inputs, maps, return_tensors="pt")
+            self.assertEqual(
+                encoding["pixel_values"].shape,
+                (
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.num_channels,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
+                ),
+            )
+            self.assertEqual(
+                encoding["labels"].shape,
+                (
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
+                ),
+            )
+            self.assertEqual(encoding["labels"].dtype, torch.long)
+            self.assertTrue(encoding["labels"].min().item() >= 0)
+            self.assertTrue(encoding["labels"].max().item() <= 255)
+
+            # Test not batched input (PIL images)
+            image, segmentation_map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
+
+            encoding = image_processor(image, segmentation_map, return_tensors="pt")
+            self.assertEqual(
+                encoding["pixel_values"].shape,
+                (
+                    1,
+                    self.image_processor_tester.num_channels,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
+                ),
+            )
+            self.assertEqual(
+                encoding["labels"].shape,
+                (
+                    1,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
+                ),
+            )
+            self.assertEqual(encoding["labels"].dtype, torch.long)
+            self.assertTrue(encoding["labels"].min().item() >= 0)
+            self.assertTrue(encoding["labels"].max().item() <= 255)
+
+            # Test batched input (PIL images)
+            images, segmentation_maps = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(
+                batched=True
+            )
+
+            encoding = image_processor(images, segmentation_maps, return_tensors="pt")
+            self.assertEqual(
+                encoding["pixel_values"].shape,
+                (
+                    2,
+                    self.image_processor_tester.num_channels,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
+                ),
+            )
+            self.assertEqual(
+                encoding["labels"].shape,
+                (
+                    2,
+                    self.image_processor_tester.size["height"],
+                    self.image_processor_tester.size["width"],
+                ),
+            )
+            self.assertEqual(encoding["labels"].dtype, torch.long)
+            self.assertTrue(encoding["labels"].min().item() >= 0)
+            self.assertTrue(encoding["labels"].max().item() <= 255)
+
+    def test_reduce_labels(self):
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(**self.image_processor_dict)
+
+            # ADE20k has 150 classes, and the background is included, so labels should be between 0 and 150
+            image, map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
+            encoding = image_processor(image, map, return_tensors="pt")
+            labels_no_reduce = encoding["labels"].clone()
+            self.assertTrue(labels_no_reduce.min().item() >= 0)
+            self.assertTrue(labels_no_reduce.max().item() <= 150)
+            # Get the first non-zero label coords and value, for comparison when do_reduce_labels is True
+            non_zero_positions = (labels_no_reduce > 0).nonzero()
+            first_non_zero_coords = tuple(non_zero_positions[0].tolist())
+            first_non_zero_value = labels_no_reduce[first_non_zero_coords].item()
+
+            image_processor.do_reduce_labels = True
+            encoding = image_processor(image, map, return_tensors="pt")
+            self.assertTrue(encoding["labels"].min().item() >= 0)
+            self.assertTrue(encoding["labels"].max().item() <= 255)
+            # Compare with non-reduced label to see if it's reduced by 1
+            self.assertEqual(encoding["labels"][first_non_zero_coords].item(), first_non_zero_value - 1)
+
+            # Ensure reduce label returns the same number of masks
+            image, map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(batched=True)
+            encoding = image_processor(image, map, return_tensors="pt")
+            self.assertTrue(len(encoding["labels"]) == len(map))
+
+    @require_vision
+    @require_torch
+    def test_backends_equivalence(self):
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
+
+        dummy_image, dummy_map = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k()
+
+        # Create processors for each backend
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            encodings[backend_name] = image_processor(dummy_image, segmentation_maps=dummy_map, return_tensors="pt")
+
+        # Compare all backends to the first one (reference backend)
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        reference_encoding = encodings[reference_backend]
+
+        for backend_name in backend_names[1:]:
+            # Check pixel_values
+            self._assert_tensors_equivalence(reference_encoding.pixel_values, encodings[backend_name].pixel_values)
+            self._assert_tensors_equivalence(reference_encoding.labels.float(), encodings[backend_name].labels.float())
+
+    @require_vision
+    @require_torch
+    def test_backends_equivalence_batched(self):
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
+
+        dummy_images, dummy_maps = self.image_processor_tester.prepare_semantic_segmentation_inputs_ade20k(
+            batched=True
+        )
+
+        # Create processors for each backend
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            encodings[backend_name] = image_processor(dummy_images, segmentation_maps=dummy_maps, return_tensors="pt")
+
+        # Compare all backends to the first one (reference backend)
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        reference_encoding = encodings[reference_backend]
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(reference_encoding.pixel_values, encodings[backend_name].pixel_values)
+            self._assert_tensors_equivalence(reference_encoding.labels.float(), encodings[backend_name].labels.float())

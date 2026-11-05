@@ -1,0 +1,223 @@
+# Copyright 2023 HuggingFace Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+import unittest
+
+import numpy as np
+from huggingface_hub import hf_hub_download
+
+from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, SizeDict, load_image
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torch_available, is_vision_available
+
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
+from ...test_processing_common import url_to_local_path
+
+
+if is_torch_available():
+    import torch
+
+if is_vision_available():
+    from PIL import Image
+
+
+class NougatImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 20, "width": 20})
+        # test_expected_output pins the pixel mean with this normalization.
+        kwargs.setdefault("image_mean", IMAGENET_STANDARD_MEAN.copy())
+        kwargs.setdefault("image_std", IMAGENET_STANDARD_STD.copy())
+        kwargs.setdefault("data_format", "channels_first")
+
+        super().__init__(**kwargs)
+
+    def prepare_dummy_image(self):
+        revision = "ec57bf8c8b1653a209c13f6e9ee66b12df0fc2db"
+        filepath = hf_hub_download(
+            repo_id="hf-internal-testing/fixtures_docvqa",
+            filename="nougat_pdf.png",
+            repo_type="dataset",
+            revision=revision,
+        )
+        image = Image.open(filepath).convert("RGB")
+        return image
+
+
+@require_torch
+@require_vision
+class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processor_tester_class = NougatImageProcessingTester
+
+    def test_expected_output(self):
+        dummy_image = self.image_processor_tester.prepare_dummy_image()
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            inputs = image_processor(dummy_image, return_tensors="pt")
+            torch.testing.assert_close(inputs["pixel_values"].mean(), torch.tensor(0.4906), rtol=1e-3, atol=1e-3)
+
+    def test_crop_margin_all_white(self):
+        image = np.uint8(np.ones((3, 100, 100)) * 255)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            if backend_name == "torchvision":
+                image = torch.from_numpy(image)
+                image_processor = image_processing_class(**self.image_processor_dict)
+                cropped_image = image_processor.crop_margin(image)
+                self.assertTrue(torch.equal(image, cropped_image))
+            else:
+                image_processor = image_processing_class(**self.image_processor_dict)
+                cropped_image = image_processor.crop_margin(image)
+                self.assertTrue(np.array_equal(image, cropped_image))
+
+    def test_crop_margin_centered_black_square(self):
+        image = np.ones((3, 100, 100), dtype=np.uint8) * 255
+        image[:, 45:55, 45:55] = 0
+        expected_cropped = image[:, 45:55, 45:55]
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            if backend_name == "torchvision":
+                image = torch.from_numpy(image)
+                expected_cropped = torch.from_numpy(expected_cropped)
+                image_processor = image_processing_class(**self.image_processor_dict)
+                cropped_image = image_processor.crop_margin(image)
+                self.assertTrue(torch.equal(expected_cropped, cropped_image))
+            else:
+                image_processor = image_processing_class(**self.image_processor_dict)
+                cropped_image = image_processor.crop_margin(image)
+                self.assertTrue(np.array_equal(expected_cropped, cropped_image))
+
+    def test_align_long_axis_no_rotation(self):
+        image = np.uint8(np.ones((3, 100, 200)) * 255)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            size = SizeDict(height=200, width=300)
+            image_processor = image_processing_class(**self.image_processor_dict)
+            if backend_name == "torchvision":
+                image = torch.from_numpy(image)
+                aligned_image = image_processor.align_long_axis(image, size)
+                self.assertEqual(image.shape, aligned_image.shape)
+            else:
+                aligned_image = image_processor.align_long_axis(image, size)
+                self.assertEqual(image.shape, aligned_image.shape)
+
+    def test_align_long_axis_with_rotation(self):
+        image = np.uint8(np.ones((3, 200, 100)) * 255)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            size = SizeDict(height=300, width=200)
+            if backend_name == "torchvision":
+                image = torch.from_numpy(image)
+                aligned_image = image_processor.align_long_axis(image, size)
+                self.assertEqual(torch.Size([3, 200, 100]), aligned_image.shape)
+            else:
+                aligned_image = image_processor.align_long_axis(image, size)
+                self.assertEqual((3, 200, 100), aligned_image.shape)
+
+    def test_align_long_axis_data_format(self):
+        image = np.uint8(np.ones((3, 100, 200)) * 255)
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            size = SizeDict(height=200, width=300)
+            image_processor = image_processing_class(**self.image_processor_dict)
+            if backend_name == "torchvision":
+                image = torch.from_numpy(image)
+                aligned_image = image_processor.align_long_axis(image, size)
+                self.assertEqual(torch.Size([3, 100, 200]), aligned_image.shape)
+            else:
+                aligned_image = image_processor.align_long_axis(image, size)
+                self.assertEqual((3, 100, 200), aligned_image.shape)
+
+    def prepare_dummy_np_image(self):
+        revision = "ec57bf8c8b1653a209c13f6e9ee66b12df0fc2db"
+        filepath = hf_hub_download(
+            repo_id="hf-internal-testing/fixtures_docvqa",
+            filename="nougat_pdf.png",
+            repo_type="dataset",
+            revision=revision,
+        )
+        image = Image.open(filepath).convert("RGB")
+        return np.array(image).transpose(2, 0, 1)
+
+    def test_crop_margin_equality_cv2_python(self):
+        image = self.prepare_dummy_np_image()
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            if backend_name == "torchvision":
+                image = torch.from_numpy(image)
+                image_cropped_python = image_processor.crop_margin(image)
+                self.assertEqual(image_cropped_python.shape, torch.Size([3, 850, 685]))
+                self.assertAlmostEqual(image_cropped_python.float().mean().item(), 237.43881150708458, delta=0.001)
+            else:
+                image_cropped_python = image_processor.crop_margin(image)
+                self.assertEqual(image_cropped_python.shape, (3, 850, 685))
+                self.assertAlmostEqual(image_cropped_python.mean(), 237.43881150708458, delta=0.001)
+
+    def test_call_numpy_4_channels(self):
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            if backend_name == "pil":
+                # Test that can process images which have an arbitrary number of channels
+                # Initialize image_processing
+                image_processor = image_processing_class(**self.image_processor_dict)
+
+                # create random numpy tensors
+                self.image_processor_tester.num_channels = 4
+                image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+
+                # Test not batched input
+                encoded_images = image_processor(
+                    image_inputs[0],
+                    return_tensors="pt",
+                    input_data_format="channels_last",
+                    image_mean=(0.0, 0.0, 0.0, 0.0),
+                    image_std=(1.0, 1.0, 1.0, 1.0),
+                ).pixel_values
+                expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(
+                    [image_inputs[0]]
+                )
+                self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+
+                # Test batched
+                encoded_images = image_processor(
+                    image_inputs,
+                    return_tensors="pt",
+                    input_data_format="channels_last",
+                    image_mean=(0.0, 0.0, 0.0, 0.0),
+                    image_std=(1.0, 1.0, 1.0, 1.0),
+                ).pixel_values
+                expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+                self.assertEqual(
+                    tuple(encoded_images.shape),
+                    (self.image_processor_tester.batch_size, *expected_output_image_shape),
+                )
+
+    def test_backends_equivalence(self):
+        """Test equivalence across backends. PIL backend delegates to Torchvision for pixel-perfect match."""
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
+
+        dummy_image = load_image(
+            url_to_local_path(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+            )
+        )
+
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            encodings[backend_name] = image_processor(dummy_image, return_tensors="pt")
+
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        reference_pixel_values = encodings[reference_backend].pixel_values
+
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(reference_pixel_values, encodings[backend_name].pixel_values)

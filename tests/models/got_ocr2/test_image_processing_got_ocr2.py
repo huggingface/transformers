@@ -1,0 +1,143 @@
+# Copyright 2022 HuggingFace Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+import unittest
+
+from transformers.image_utils import SizeDict
+from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torch_available
+
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
+
+
+if is_torch_available():
+    import torch
+
+
+class GotOcr2ImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 20, "width": 20})
+
+        super().__init__(**kwargs)
+
+
+@require_torch
+@require_vision
+class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processor_tester_class = GotOcr2ImageProcessingTester
+
+    def test_backends_equivalence_crop_to_patches(self):
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
+
+        dummy_image = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)[0]
+
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict, crop_to_patches=True)
+            encodings[backend_name] = image_processor(dummy_image, return_tensors="pt")
+
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        reference_num_patches = encodings[reference_backend].num_patches
+        reference_pixel_values = encodings[reference_backend].pixel_values
+
+        for backend_name in backend_names[1:]:
+            torch.testing.assert_close(reference_num_patches, encodings[backend_name].num_patches)
+            self._assert_tensors_equivalence(reference_pixel_values, encodings[backend_name].pixel_values)
+
+    def test_backends_equivalence_batched_crop_to_patches(self):
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
+
+        # Prepare image inputs so that we have two groups of images with equal resolution with a group of images with
+        # different resolutions in between
+        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+        dummy_images += self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        dummy_images += self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict, crop_to_patches=True)
+            encodings[backend_name] = image_processor(dummy_images, return_tensors="pt")
+
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        reference_num_patches = encodings[reference_backend].num_patches
+        reference_pixel_values = encodings[reference_backend].pixel_values
+
+        for backend_name in backend_names[1:]:
+            torch.testing.assert_close(reference_num_patches, encodings[backend_name].num_patches)
+            self._assert_tensors_equivalence(reference_pixel_values, encodings[backend_name].pixel_values)
+
+    def test_crop_to_patches(self):
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            if backend_name == "pil":
+                # PIL backend processes single images
+                image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)[0]
+                processed_images = image_processor.crop_image_to_patches(
+                    image,
+                    min_patches=1,
+                    max_patches=6,
+                    use_thumbnail=True,
+                    patch_size=SizeDict(height=20, width=20),
+                )
+                self.assertEqual(len(processed_images), 5)
+                self.assertEqual(processed_images[0].shape[:2], (20, 20))
+            else:
+                # Torchvision backend processes batches
+                image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)[0]
+                processed_images = image_processor.crop_image_to_patches(
+                    image.unsqueeze(0),
+                    min_patches=1,
+                    max_patches=6,
+                    use_thumbnail=True,
+                    patch_size=SizeDict(height=20, width=20),
+                )
+                self.assertEqual(len(processed_images[0]), 5)
+                self.assertEqual(processed_images.shape[-2:], (20, 20))
+
+    def test_get_num_patches_without_images(self):
+        for image_processing_class in self.image_processing_classes.values():
+            image_processing = image_processing_class(**self.image_processor_dict)
+            num_patches = image_processing.get_number_of_image_patches(height=100, width=100, images_kwargs={})
+            self.assertEqual(num_patches, 1)
+
+            num_patches = image_processing.get_number_of_image_patches(
+                height=300, width=500, images_kwargs={"crop_to_patches": False}
+            )
+            self.assertEqual(num_patches, 1)
+
+            num_patches = image_processing.get_number_of_image_patches(
+                height=20, width=20, images_kwargs={"crop_to_patches": True}
+            )
+            self.assertEqual(num_patches, 1)
+
+            num_patches = image_processing.get_number_of_image_patches(
+                height=60, width=60, images_kwargs={"crop_to_patches": True}
+            )
+            self.assertEqual(num_patches, 10)
+
+            num_patches = image_processing.get_number_of_image_patches(
+                height=100, width=100, images_kwargs={"crop_to_patches": True}
+            )
+            self.assertEqual(num_patches, 10)
+
+            num_patches = image_processing.get_number_of_image_patches(
+                height=100, width=100, images_kwargs={"crop_to_patches": True, "max_patches": 200}
+            )
+            self.assertEqual(num_patches, 50)

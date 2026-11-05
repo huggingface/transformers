@@ -1,0 +1,150 @@
+# Copyright 2024 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+Processor class for Pixtral.
+"""
+
+import numpy as np
+
+from ...processing_utils import (
+    MultiModalData,
+    ProcessingKwargs,
+    ProcessorMixin,
+)
+from ...utils import auto_docstring, is_vision_available, logging
+from ...utils.import_utils import requires
+
+
+if is_vision_available():
+    from .image_processing_pixtral import get_resize_output_image_size
+
+
+logger = logging.get_logger(__name__)
+
+
+class PixtralProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+            "return_mm_token_type_ids": False,
+        },
+        "common_kwargs": {
+            "return_tensors": "pt",
+        },
+    }
+
+
+@auto_docstring
+@requires(backends=("torchvision", "torch"))
+class PixtralProcessor(ProcessorMixin):
+    valid_processor_kwargs = PixtralProcessorKwargs
+
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        patch_size: int = 16,
+        spatial_merge_size: int = 1,
+        chat_template=None,
+        image_token="[IMG]",  # set the default and let users change if they have peculiar special tokens in rare cases
+        image_break_token="[IMG_BREAK]",
+        image_end_token="[IMG_END]",
+        **kwargs,
+    ):
+        r"""
+        patch_size (`int`, *optional*, defaults to 16):
+            Patch size from the vision tower.
+        spatial_merge_size (`int`, *optional*, defaults to 1):
+            The downsampling factor for the spatial merge operation.
+        image_token (`str`, *optional*, defaults to `"[IMG]"`):
+            Special token used to denote image location.
+        image_break_token (`str`, *optional*, defaults to `"[IMG_BREAK]"`):
+            Special token used to denote the end of a line of pixels in an image.
+        image_end_token (`str`, *optional*, defaults to `"[IMG_END]"`):
+            Special token used to denote the end of an image input.
+        """
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+
+        self.patch_size = patch_size
+        self.spatial_merge_size = spatial_merge_size
+        self.image_token = image_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.image_break_token = image_break_token
+        self.image_end_token = image_end_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.image_break_token_id = tokenizer.convert_tokens_to_ids(self.image_break_token)
+        self.image_end_token_id = tokenizer.convert_tokens_to_ids(self.image_end_token)
+
+    @property
+    def image_token_ids(self) -> list[int]:
+        return [self.image_token_id, self.image_break_token_id, self.image_end_token_id]
+
+    def _process_images(self, images, **images_kwargs):
+        images_kwargs["patch_size"] = self.patch_size * self.spatial_merge_size
+        return super()._process_images(images, **images_kwargs)
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        patch_size = self.patch_size * self.spatial_merge_size
+        height, width = image_inputs["image_sizes"][image_idx]
+        num_height_tokens = height // patch_size
+        num_width_tokens = width // patch_size
+        replace_tokens = [[self.image_token] * num_width_tokens + [self.image_break_token]] * num_height_tokens
+        replace_tokens = [item for sublist in replace_tokens for item in sublist]
+        replace_tokens[-1] = self.image_end_token
+        return "".join(replace_tokens)
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = PixtralProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
+
+            size = images_kwargs.get("size", None) or self.image_processor.size
+            patch_size = self.patch_size * self.spatial_merge_size
+
+            num_image_tokens = []
+            for height, width in image_sizes:
+                resized_height, resized_width = get_resize_output_image_size(
+                    np.zeros((height, width, 3)),
+                    size=(size["longest_edge"], size["longest_edge"]),
+                    patch_size=(patch_size, patch_size),
+                )
+                num_height_tokens = resized_height // patch_size
+                num_width_tokens = resized_width // patch_size
+                num_image_tokens.append((num_width_tokens + 1) * num_height_tokens)
+
+            num_image_patches = [1] * len(image_sizes)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
+
+    @property
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names
+        image_processor_input_names = self.image_processor.model_input_names
+        return tokenizer_input_names + image_processor_input_names + ["image_sizes"]
+
+
+__all__ = ["PixtralProcessor"]

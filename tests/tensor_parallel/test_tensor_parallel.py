@@ -1,0 +1,344 @@
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+from unittest.mock import patch
+
+import torch
+
+from transformers import AutoModelForCausalLM
+from transformers.distributed import tensor_parallel
+from transformers.distributed.sharding_utils import DtensorShardOperation
+from transformers.distributed.tensor_parallel import (
+    ALL_PARALLEL_STYLES,
+    ColwiseParallel,
+    PackedColwiseParallel,
+    PackedRowwiseParallel,
+    RowwiseParallel,
+    get_kv_heads_per_rank,
+)
+from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
+
+
+@is_tensor_parallel_test
+class TestTensorParallelProperties(TestCasePlus):
+    def test_tp_plan_property_setter_getter(self):
+        """Test that tp_plan property can be set and retrieved correctly."""
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
+
+        # Test setting empty plan
+        model.tp_plan = {}
+        self.assertEqual(model.tp_plan, {})
+
+        # Test setting a valid plan
+        valid_plan = {"model.layers.*.self_attn.q_proj": "colwise"}
+        model.tp_plan = valid_plan
+        self.assertEqual(model.tp_plan, valid_plan)
+
+        # Test updating the plan
+        model.tp_plan.update({"model.layers.*.self_attn.k_proj": "colwise"})
+        expected_plan = {"model.layers.*.self_attn.q_proj": "colwise", "model.layers.*.self_attn.k_proj": "colwise"}
+        self.assertEqual(model.tp_plan, expected_plan)
+
+        # Test overriding existing entry
+        model.tp_plan.update({"model.layers.*.self_attn.q_proj": "rowwise"})
+        expected_plan = {
+            "model.layers.*.self_attn.q_proj": "rowwise",
+            "model.layers.*.self_attn.k_proj": "colwise",
+        }
+        self.assertEqual(model.tp_plan, expected_plan)
+
+    def test_tp_plan_validation_invalid_style(self):
+        """Test that invalid parallel styles are rejected."""
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
+
+        invalid_plan = {
+            "layers.*.self_attn.q_proj": "invalid_style",
+            "layers.*.self_attn.k_proj": "another_invalid_style",
+        }
+        with self.assertRaises(ValueError) as context:
+            model.tp_plan = invalid_plan
+
+        error_message = str(context.exception)
+        for style in invalid_plan.values():
+            self.assertIn(repr(style), error_message)
+        self.assertIn("Supported styles are", error_message)
+
+    def test_apply_tensor_parallelism_reports_all_invalid_styles(self):
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
+        tp_plan = {
+            "first_layer": "invalid_style",
+            "second_layer": "another_invalid_style",
+        }
+
+        with self.assertRaises(ValueError) as context:
+            model._validate_parallel_plan(tp_plan, ALL_PARALLEL_STYLES, "tp_plan")
+
+        error_message = str(context.exception)
+        self.assertIn("'invalid_style'", error_message)
+        self.assertIn("'another_invalid_style'", error_message)
+
+    def test_tp_plan_validation_nonexistent_layer_warning(self):
+        """Test that warnings are issued for non-existent layer patterns."""
+
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
+
+        with self.assertLogs("transformers.distributed.mixin", level="WARNING") as logs:
+            model.tp_plan = {"nonexistent.*.layer": "colwise"}
+        self.assertIn("`tp_plan` rules ['nonexistent.*.layer'] match nothing in LlamaForCausalLM", logs.output[0])
+
+    def test_tp_plan_valid_layer_patterns(self):
+        """Test that valid layer patterns are accepted without warnings."""
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
+
+        # Test valid layer patterns that should match the model structure
+        valid_plans = [
+            {"model.layers.*.self_attn.q_proj": "colwise"},
+            {"model.layers.*.self_attn.k_proj": "rowwise"},
+            {"model.layers.*.mlp.gate_proj": "colwise"},
+        ]
+
+        for plan in valid_plans:
+            with self.assertNoLogs("transformers.distributed.mixin", level="WARNING"):
+                model.tp_plan = plan
+
+        # Verify the final plan was set correctly
+        self.assertEqual(model.tp_plan, valid_plans[-1])
+
+    def test_tp_plan_none_handling(self):
+        """Test that None values are handled correctly."""
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
+
+        # Test setting None
+        model.tp_plan = None
+        self.assertEqual(model.tp_plan, {})
+
+        # Test setting a plan after None
+        model.tp_plan = {"model.layers.*.self_attn.q_proj": "colwise"}
+        self.assertEqual(model.tp_plan, {"model.layers.*.self_attn.q_proj": "colwise"})
+
+    def test_post_init_keeps_class_level_plans(self):
+        """Class-level plans (e.g. `lm_head` on ForCausalLM classes) must survive post_init alongside the base model plan."""
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
+
+        self.assertIn("lm_head", model._tp_plan)
+        self.assertIn("model.layers.*.self_attn.q_proj", model._tp_plan)
+        self.assertIn("lm_head", model._pp_plan)
+        # The merge must not have mutated the class attribute shared by all instances
+        self.assertEqual(set(type(model)._tp_plan), {"lm_head"})
+
+    def test_get_kv_heads_per_rank(self):
+        """The KV heads are sharded only when the plan splits the (possibly fused) key projection by column."""
+        experts = {"layers.*.mlp.experts.gate_up_proj": "packed_colwise"}
+        for plan, expected in (
+            ({}, 4),
+            (experts, 4),
+            ({"layers.*.self_attn.k_proj": "colwise_gather_output"}, 4),
+            ({"layers.*.self_attn.qkv_proj": "colwise_gather_output"}, 4),
+            ({"layers.*.self_attn.k_proj": "colwise", **experts}, 2),
+            ({"layers.*.attention.query_key_value": "colwise"}, 2),
+        ):
+            self.assertEqual(get_kv_heads_per_rank(plan, 4, tp_size=2), expected, plan)
+
+        sharded = {"layers.*.self_attn.k_proj": "colwise"}
+        self.assertEqual(get_kv_heads_per_rank(sharded, [4, 8], tp_size=2), [2, 4])
+        self.assertIsNone(get_kv_heads_per_rank(sharded, 3, tp_size=2))
+
+
+@is_tensor_parallel_test
+class TestTensorParallelLayer(TestCasePlus):
+    class MockDeviceMesh:
+        def __init__(self, world_size, rank):
+            self.world_size = world_size
+            self.rank = rank
+            self.shape = (world_size,)
+            self.ndim = 1
+
+        def size(self):
+            return self.world_size
+
+        def get_local_rank(self):
+            return self.rank
+
+    def _get_parameter_placements(self, module, style, mesh=None):
+        placements = {}
+        mesh = object() if mesh is None else mesh
+        with patch.object(
+            tensor_parallel, "distribute_tensor", side_effect=lambda tensor, *args, **kwargs: tensor
+        ) as distribute:
+            for parameter_name in list(module._parameters):
+                style.shard_param(module, parameter_name, mesh)
+                placements[parameter_name] = distribute.call_args.args[2][0]
+
+        return placements
+
+    def _get_local_shape(self, global_shape, placement, world_size, rank):
+        if placement.is_replicate():
+            return tuple(global_shape)
+
+        shard_dim = placement.dim
+        local_size, _ = placement._local_shard_size_and_offset(global_shape[shard_dim], world_size, rank)
+        local_shape = list(global_shape)
+        local_shape[shard_dim] = local_size
+        return tuple(local_shape)
+
+    def _make_dtensor_shard_op(self, mesh, placement, param_shape, local_shape):
+        op = object.__new__(DtensorShardOperation)
+        op.device_mesh = mesh
+        op.placements = (placement,)
+        op.param_ndim = len(param_shape)
+        op._axis0_offset = 0
+        op._axis0_local_size = local_shape[0]
+        op._axis0_size = param_shape[0]
+        return op
+
+    def test_colwise_uneven_local_shapes(self):
+        module = torch.nn.Module()
+        module.register_parameter("weight", torch.nn.Parameter(torch.empty(10, 32)))
+        module.register_parameter("bias", torch.nn.Parameter(torch.empty(10)))
+        placements = self._get_parameter_placements(module, ColwiseParallel())
+        expected_local_sizes = (4, 4, 2)
+
+        for rank, expected_size in enumerate(expected_local_sizes):
+            weight_shape = self._get_local_shape((10, 32), placements["weight"], world_size=3, rank=rank)
+            bias_shape = self._get_local_shape((10,), placements["bias"], world_size=3, rank=rank)
+
+            self.assertEqual(weight_shape, (expected_size, 32))
+            self.assertEqual(bias_shape, (expected_size,))
+
+    def test_rowwise_uneven_local_shapes(self):
+        module = torch.nn.Module()
+        module.register_parameter("weight", torch.nn.Parameter(torch.empty(32, 10)))
+        module.register_parameter("bias", torch.nn.Parameter(torch.empty(10)))
+        placements = self._get_parameter_placements(module, RowwiseParallel())
+        expected_local_sizes = (4, 4, 2)
+
+        for rank, expected_size in enumerate(expected_local_sizes):
+            weight_shape = self._get_local_shape((32, 10), placements["weight"], world_size=3, rank=rank)
+            bias_shape = self._get_local_shape((10,), placements["bias"], world_size=3, rank=rank)
+
+            self.assertEqual(weight_shape, (32, expected_size))
+            self.assertEqual(bias_shape, (10,))
+
+    def test_linear_styles_reject_embedding(self):
+        for style in ("colwise", "rowwise"):
+            with self.subTest(style=style):
+                with self.assertRaises(ValueError) as context:
+                    ALL_PARALLEL_STYLES[style].install_forward(torch.nn.Embedding(8, 16), mesh=None)
+                self.assertIn("linear layers", str(context.exception))
+
+    def test_embedding_uneven_local_shapes(self):
+        rowwise = self._get_parameter_placements(torch.nn.Embedding(10, 10), ALL_PARALLEL_STYLES["embedding_rowwise"])
+        colwise = self._get_parameter_placements(torch.nn.Embedding(10, 10), ALL_PARALLEL_STYLES["embedding_colwise"])
+
+        expected_local_sizes = (4, 4, 2)
+        for rank, expected_size in enumerate(expected_local_sizes):
+            rowwise_shape = self._get_local_shape((10, 10), rowwise["weight"], world_size=3, rank=rank)
+            colwise_shape = self._get_local_shape((10, 10), colwise["weight"], world_size=3, rank=rank)
+            self.assertEqual(rowwise_shape, (expected_size, 10))
+            self.assertEqual(colwise_shape, (10, expected_size))
+
+    def test_shard_tensor_shape_consistency(self):
+        world_size = 4
+        cases = {
+            "colwise": {
+                "module": torch.nn.Linear(32, 16),
+                "style": ColwiseParallel(),
+                "expected_shapes": {"weight": (4, 32), "bias": (4,)},
+            },
+            "colwise_gather_output": {
+                "module": torch.nn.Linear(32, 16),
+                "style": ALL_PARALLEL_STYLES["colwise_gather_output"],
+                "expected_shapes": {"weight": (4, 32), "bias": (4,)},
+            },
+            "rowwise": {
+                "module": torch.nn.Linear(32, 16),
+                "style": RowwiseParallel(),
+                "expected_shapes": {"weight": (16, 8), "bias": (16,)},
+            },
+            "embedding_rowwise": {
+                "module": torch.nn.Embedding(32, 16),
+                "style": ALL_PARALLEL_STYLES["embedding_rowwise"],
+                "expected_shapes": {"weight": (8, 16)},
+            },
+            "embedding_colwise": {
+                "module": torch.nn.Embedding(32, 16),
+                "style": ALL_PARALLEL_STYLES["embedding_colwise"],
+                "expected_shapes": {"weight": (32, 4)},
+            },
+        }
+
+        for case_name, case in cases.items():
+            module = case["module"]
+            placements = self._get_parameter_placements(module, case["style"])
+
+            for parameter_name, expected_shape in case["expected_shapes"].items():
+                global_shape = module._parameters[parameter_name].shape
+                placement = placements[parameter_name]
+
+                for rank in range(world_size):
+                    with self.subTest(case=case_name, parameter=parameter_name, rank=rank):
+                        local_shape = self._get_local_shape(global_shape, placement, world_size, rank)
+                        self.assertEqual(local_shape, expected_shape)
+
+    def test_packed_colwise_packed_and_unpacked_shapes(self):
+        module = torch.nn.Module()
+        module.register_parameter("weight", torch.nn.Parameter(torch.empty(2, 16, 64)))
+        placement = self._get_parameter_placements(module, PackedColwiseParallel())["weight"]
+        packed = torch.randn(2, 16, 64)
+        unpacked_expert = torch.randn(16, 64)
+
+        self.assertEqual(placement.dim, 1)
+        self.assertEqual(placement.split_factor, 2)
+        for rank in range(2):
+            mesh = self.MockDeviceMesh(world_size=2, rank=rank)
+            op = self._make_dtensor_shard_op(mesh, placement, param_shape=(2, 16, 64), local_shape=(2, 8, 64))
+
+            self.assertEqual(op.shard_tensor(packed).shape, (2, 8, 64))
+            self.assertEqual(op.shard_tensor(unpacked_expert, tensor_idx=0).shape, (8, 64))
+
+    def test_packed_rowwise_packed_and_unpacked_shapes(self):
+        module = torch.nn.Module()
+        module.register_parameter("weight", torch.nn.Parameter(torch.empty(16, 64)))
+        placement = self._get_parameter_placements(module, PackedRowwiseParallel())["weight"]
+        packed = torch.randn(16, 64)
+        unpacked = torch.randn(16, 32)
+
+        self.assertEqual(placement.dim, -1)
+        self.assertEqual(placement.split_factor, 2)
+        for rank in range(2):
+            mesh = self.MockDeviceMesh(world_size=2, rank=rank)
+            op = self._make_dtensor_shard_op(mesh, placement, param_shape=(16, 64), local_shape=(16, 32))
+
+            self.assertEqual(op.shard_tensor(packed).shape, (16, 32))
+            self.assertEqual(op.shard_tensor(unpacked).shape, (16, 16))
+
+    def test_sharding_does_not_create_unrelated_module_attributes(self):
+        styles = (ColwiseParallel(), RowwiseParallel())
+
+        for style in styles:
+            with self.subTest(style=type(style).__name__):
+                module = torch.nn.Module()
+                module.random_attr = 123
+                module.register_parameter("weight", torch.nn.Parameter(torch.empty(8, 16, 32)))
+
+                self._get_parameter_placements(module, style, self.MockDeviceMesh(world_size=4, rank=0))
+
+                self.assertEqual(module.random_attr, 123)
+                self.assertFalse(hasattr(module, "num_experts"))
