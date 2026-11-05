@@ -13,6 +13,7 @@
 # limitations under the License.
 import re
 from abc import ABC, abstractmethod
+from itertools import chain
 from typing import TYPE_CHECKING, Any
 
 from ..utils import is_torch_available, logging
@@ -406,7 +407,8 @@ class HfQuantizer(ABC):
         """
         from ..core_model_loading import WeightConverter
 
-        param_names = "\n".join(name for name, _ in model.named_parameters())
+        # Buffers too: some quantized modules (e.g. NVFP4) keep their serialized tensors as buffers
+        param_names = "\n".join(name for name, _ in chain(model.named_parameters(), model.named_buffers()))
         dequantize = self.get_load_operations().get("dequantize") if self.pre_quantized else None
         updated = []
         for converter in weight_conversions:

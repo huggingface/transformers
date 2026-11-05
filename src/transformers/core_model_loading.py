@@ -212,7 +212,9 @@ class Concatenate(ConversionOps):
                 all_tensors.extend(tensors)
             else:
                 all_tensors.append(tensors)
-        return {target_pattern: torch.cat(all_tensors, dim=self.dim)}
+        # Tensors without `dim` (e.g. one scale per expert after a merge) are stacked along it
+        join = torch.stack if all_tensors[0].dim() <= self.dim else torch.cat
+        return {target_pattern: join(all_tensors, dim=self.dim)}
 
     def get_target_pattern(self, target_patterns: list[str]) -> str:
         # Here we always return the target pattern
