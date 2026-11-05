@@ -33,6 +33,7 @@ import transformers.modeling_flash_attention_utils as fa_utils
 from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
+    AutoModelForImageTextToText,
     AutoTokenizer,
     CompileConfig,
     ContinuousBatchingConfig,
@@ -946,6 +947,21 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         reduce_tensor = torch.tensor([7, 3], dtype=torch.int64)
         self.assertIs(helper.tp_all_reduce_min(reduce_tensor), reduce_tensor)
         self.assertTrue(torch.equal(reduce_tensor, torch.tensor([7, 3], dtype=torch.int64)))
+
+    @parameterized.expand(
+        [
+            (AutoModelForCausalLM, "hf-tiny-v2/tiny-random-Qwen3ForCausalLM"),
+            (AutoModelForImageTextToText, "hf-tiny-v2/tiny-random-Gemma3ForConditionalGeneration"),
+        ]
+    )
+    def test_distributed_helper_finds_the_sharded_kv_heads(self, auto_class: type, model_id: str) -> None:
+        """The cache splits the key/value heads across ranks when the model's TP plan shards the key and value
+        projections, whatever the path to the decoder layers: `model.language_model.layers` in a vision-language
+        model."""
+        with torch.device("meta"):
+            model = auto_class.from_config(AutoConfig.from_pretrained(model_id))
+        helper = DistributedHelper(device_mesh=None, cpu_group_timeout=300, tp_plan=model.tp_plan)
+        self.assertTrue(helper.are_kv_heads_tp_ed())
 
     def test_distributed_helper_set_tp_seed_no_dist(self) -> None:
         """Test that set_tp_seed sets a torch seed without distributed initialized, both with and without a user seed."""
