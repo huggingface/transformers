@@ -19,7 +19,7 @@ Output files written to --output-dir (default: current directory):
   failing_tests_with_trace_YYYY_MM_DD.json    all failing tests per job, with trace
   new_failing_tests_YYYY_MM_DD.json           only new failures vs prev run, no trace
   new_failing_tests_with_trace_YYYY_MM_DD.json  only new failures vs prev run, with trace
-  failing_tests_categories_YYYY_MM_DD.json    failure counts per error category
+  failing_tests_categories_YYYY_MM_DD.json    failing tests grouped by root-cause error
 
 Failures are grouped by job, keyed by the real job name (matrix shards are kept
 as separate jobs). Each job entry looks like:
@@ -33,6 +33,7 @@ as separate jobs). Each job entry looks like:
 import argparse
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -234,57 +235,96 @@ def collect_run_failures(run_id, repo=REPO, token=None, plugin=None):
 
 
 # ---------------------------------------------------------------------------
-# Categorisation of failures by error type
+# Categorisation of failures by root-cause error
 # ---------------------------------------------------------------------------
 
-def group_by_category(grouped_failures):
+# A top-level exception line, e.g. "ValueError: No common block size for 16."
+# or "vllm.v1.engine.exceptions.EngineDeadError: EngineCore encountered ...".
+_EXC_LINE_RE = re.compile(r"^((?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*(?:Error|Exception|Exit|Interrupt))(?::\s*(.*))?$")
+# Short error from the pytest summary line: "<exc type>: <message>".
+_SHORT_ERROR_RE = re.compile(r"^((?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*):\s*(.*)$")
+# pydantic's actual message, e.g. "  Value error, Model Runner V2 requires Triton. [type=value_error, ...".
+_PYDANTIC_VALUE_ERROR_RE = re.compile(r"Value error, (.*?)(?: \[type=.*)?$", re.MULTILINE)
+# c10 log prefix: "[rank0]:[F825 10:33:04.650907418 cpu_wna16.cpp:308] " -> "[cpu_wna16.cpp:308] "
+_C10_PREFIX_RE = re.compile(r"(?:\[rank\d+\]:)?\[[IWEF]\d{3,4} [\d:.]+ ([^\]]+)\]")
+
+_MAX_ROOT_CAUSE_LEN = 300
+
+
+def root_cause_error(item):
     """
-    Categorise all failing tests by error type.
+    Return a normalized "<ExcType>: <message>" string describing why a test failed.
+
+    - vLLM engine failures (EngineDeadError, "Engine core initialization failed")
+      only wrap the real error raised in a worker subprocess. When the vLLM plugin
+      prepended the subprocess ERROR lines, use the first exception found there.
+    - Otherwise use the short error from the pytest summary line (first line only).
+    - pydantic ValidationError: use the actual "Value error, ..." message instead
+      of the generic "1 validation error for VllmConfig".
+    - Run-specific noise (memory addresses, c10 log timestamps) is removed so the
+      same failure gets the same category across runs.
+    """
+    trace, short_error = item["trace"], item["short_error"]
+    exc_type, message = None, ""
+
+    if trace.startswith("[vllm plugin]"):
+        subprocess_lines = trace.split("\n--- pytest trace ---\n", 1)[0]
+        for line in subprocess_lines.splitlines():
+            m = _EXC_LINE_RE.match(line.rstrip())
+            if m:
+                exc_type, message = m.group(1), m.group(2) or ""
+                break
+
+    if exc_type is None and short_error:
+        first_line = short_error.splitlines()[0].strip()
+        m = _SHORT_ERROR_RE.match(first_line)
+        if m:
+            exc_type, message = m.group(1), m.group(2)
+        else:
+            exc_type, message = "", first_line
+
+    if exc_type is None:
+        return "Unknown"
+
+    exc_type = exc_type.rsplit(".", 1)[-1]
+    if exc_type == "ValidationError":
+        m = _PYDANTIC_VALUE_ERROR_RE.search(trace)
+        if m:
+            message = m.group(1)
+
+    message = _C10_PREFIX_RE.sub(r"[\1]", message)
+    message = re.sub(r"\[rank\d+\]:", "", message)
+    message = re.sub(r"0x[0-9a-fA-F]+", "0x...", message).strip()
+    if len(message) > _MAX_ROOT_CAUSE_LEN:
+        message = message[:_MAX_ROOT_CAUSE_LEN] + "..."
+
+    if not exc_type:
+        return message or "Unknown"
+    return f"{exc_type}: {message}" if message else exc_type
+
+
+def group_by_category(grouped_failures, job_urls):
+    """
+    Group failing tests by their root-cause error (see root_cause_error).
 
     Input:  grouped_failures  (job_name -> list of {test, short_error, trace})
-    Output: dict  category -> {"count": int, "tests": [test_id, ...]}
+    Output: dict  root_cause -> {"count": int, "jobs": {job_name -> {job_url, num_failing, tests}}}
             sorted by descending count
     """
-    categories = defaultdict(list)
-
-    for items in grouped_failures.values():
+    by_cause = defaultdict(lambda: defaultdict(list))
+    for job_name, items in grouped_failures.items():
         for item in items:
-            text = item["short_error"] + "\n" + item["trace"]
+            by_cause[root_cause_error(item)][job_name].append(item)
 
-            if "AmbiguousGlobalPerLayerAttributeError" in text:
-                cat = "AmbiguousGlobalPerLayerAttributeError"
-            elif "GatedRepoError" in text or "gated repo" in text.lower() or "restricted" in text:
-                cat = "GatedRepoError (403 - no Hub access)"
-            elif "ImportError" in text or "ModuleNotFoundError" in text:
-                cat = "ImportError / missing module"
-            elif "SKIPPED" in text:
-                cat = "Skipped (not a real failure)"
-            elif "Available memory" in text or "memory utilization" in text:
-                cat = "OOM / memory utilization"
-            elif "exit code 137" in text or "Killed" in text:
-                cat = "OOM kill (exit 137)"
-            elif "NotImplementedError" in text:
-                cat = "NotImplementedError"
-            elif "assert" in text.lower() or "AssertionError" in text:
-                cat = "AssertionError"
-            elif "timeout" in text.lower() or "Timeout" in text:
-                cat = "Timeout"
-            elif "ConnectionError" in text or "HTTPError" in text:
-                cat = "Network / HTTP error"
-            elif "FileNotFoundError" in text or "No such file" in text:
-                cat = "FileNotFoundError"
-            elif "RuntimeError" in text:
-                cat = "RuntimeError"
-            elif "ValueError" in text:
-                cat = "ValueError"
-            else:
-                cat = "Other / unknown"
-
-            categories[cat].append(item["test"])
+    def count(cause_jobs):
+        return sum(len(items) for items in cause_jobs.values())
 
     return {
-        cat: {"count": len(tests), "tests": tests}
-        for cat, tests in sorted(categories.items(), key=lambda x: -len(x[1]))
+        cause: {
+            "count": count(cause_jobs),
+            "jobs": _format_jobs(cause_jobs, job_urls, with_trace=False),
+        }
+        for cause, cause_jobs in sorted(by_cause.items(), key=lambda x: (-count(x[1]), x[0]))
     }
 
 
@@ -409,7 +449,7 @@ def write_reports(run_id, run_url, current_grouped, job_urls, previous_run, prev
     # ------------------------------------------------------------------
     # 5. failing_tests_categories_YYYY_MM_DD.json — error category breakdown
     # ------------------------------------------------------------------
-    categories = group_by_category(current_grouped)
+    categories = group_by_category(current_grouped, job_urls)
     path = os.path.join(output_dir, f"failing_tests_categories_{date_str}.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump({
