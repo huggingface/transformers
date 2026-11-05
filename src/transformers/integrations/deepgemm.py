@@ -692,15 +692,27 @@ def deepgemm_bf16_experts_forward(
     )
 
 
+_DEEPGEMM_DEVICE = None
+
+
+def deepgemm_allowed(device: torch.device) -> bool:
+    """
+    DeepGEMM binds its cached kernels to the CUDA context of the device they first run on, so in one process only that
+    device runs them; the others take the Triton path. TP/EP run one device per process.
+    """
+    global _DEEPGEMM_DEVICE
+    if _DEEPGEMM_DEVICE is None:
+        _DEEPGEMM_DEVICE = device
+    return device == _DEEPGEMM_DEVICE
+
+
 def deepgemm_fp8_fp4_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
-    if self._deepgemm_disabled:
-        # Set at load when the model spans >1 CUDA device in this process, where DeepGEMM's
-        # context-bound kernels corrupt across devices (see `quantizer_finegrained_fp8.py`).
+    if not deepgemm_allowed(hidden_states.device):
         raise RuntimeError(
             "DeepGEMM experts selected on a model spanning multiple CUDA devices in one process; "
             "its kernels are bound to a single CUDA context and corrupt across devices. Use "

@@ -399,7 +399,8 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
     """
 
     def __init__(self, quantizers: dict[str, HfQuantizer | None], checkpoint_names: bool = False):
-        self.checkpoint_names = checkpoint_names  # patterns are checkpoint module names, renamed in `preprocess_model`
+        self.checkpoint_names = checkpoint_names  # patterns are checkpoint module names, renamed in `match_modules`
+        self.module_quantizers, self.prefix = {}, ""
         self.set_quantizers(quantizers)
         self.pre_quantized = all(quantizer.pre_quantized for quantizer in self.all_quantizers)
         for quantizer in self.all_quantizers:
@@ -416,16 +417,32 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
             pattern: None if quantizer is None else quantizer.quantization_config
             for pattern, quantizer in quantizers.items()
         }
-        # A pattern (a module name, `*` for anything) matches whole modules of a name, anywhere in it. Exact names
-        # first, `"*"` last: matched from the start of the name, the first branch wins
-        patterns = sorted(quantizers, key=lambda pattern: pattern.count("*") + (pattern == "*"))
-        self.group_to_pattern = {f"g{i}": pattern for i, pattern in enumerate(patterns)}
-        bodies = [re.escape(pattern).replace(r"\*", ".*") for pattern in patterns]
-        self.alternation = re.compile("|".join(rf"(?P<g{i}>(?:.*\.)?{body}(?:\.|$))" for i, body in enumerate(bodies)))
+
+    def match_modules(self, model):
+        """
+        The quantizer of every module, matched once against the plan with the dtype plan's globs: exact names first,
+        then globs, then `"*"` for the modules no other pattern matches.
+        """
+        from ..core_model_loading import build_glob_alternation
+
+        if self.checkpoint_names:
+            self.rename_patterns(model)
+        tiers = [[p for p in self.quantizers if "*" not in p], [p for p in self.quantizers if "*" in p and p != "*"]]
+        tiers = [build_glob_alternation(tier)[:2] for tier in tiers if tier]
+        self.prefix = f"{model.base_model_prefix}."
+        self.module_quantizers = {}
+        for name, _ in model.named_modules():
+            matches = ((alternation.search(name), group_to_pattern) for alternation, group_to_pattern in tiers)
+            pattern = next((patterns[match.lastgroup] for match, patterns in matches if match), "*")
+            self.module_quantizers[name] = self.quantizers.get(pattern)
 
     def get_quantizer(self, name):
-        match = self.alternation.match(name)
-        return self.quantizers[self.group_to_pattern[match.lastgroup]] if match else None
+        "The quantizer of the module owning `name` (a param, or a module), as matched by `match_modules`"
+        if not name.startswith(self.prefix) and f"{self.prefix}{name}" in self.module_quantizers:
+            name = f"{self.prefix}{name}"  # e.g. a checkpoint saved from the base model
+        while name not in self.module_quantizers and "." in name:
+            name = name.rpartition(".")[0]
+        return self.module_quantizers.get(name)
 
     def update_weight_conversions(self, weight_conversions, model):
         from ..core_model_loading import WeightConverter
@@ -486,6 +503,8 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         return quantizer.update_weight_transform(own or transform, model, name)
 
     def param_element_size(self, model, param_name, param):
+        if not self.module_quantizers:
+            self.match_modules(model)
         quantizer = self.get_quantizer(param_name)
         return param.element_size() if quantizer is None else quantizer.param_element_size(model, param_name, param)
 
@@ -520,11 +539,11 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
                 name, _ = transform.rename_source_key(name)
             quantizers.setdefault(name.removesuffix(".weight"), quantizer)
         self.set_quantizers(quantizers)
+        self.checkpoint_names = False
         model.config.quantization_config = self.quantization_config
 
     def preprocess_model(self, model, **kwargs):
-        if self.checkpoint_names:
-            self.rename_patterns(model)
+        self.match_modules(model)
         for quantizer in self.all_quantizers:
             quantizer.preprocess_model(model, **kwargs)
         self.replace_modules(model)
@@ -534,21 +553,16 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
 
     def postprocess_model(self, model, **kwargs):
         """
-        Runs the after-load hook of every quantizer. The patterns loaded with `dequantize=True` become unquantized
-        (`None`): with none quantized left, the model is plain unquantized.
+        The patterns loaded with `dequantize=True` become unquantized (`None`, so a broader pattern like `"*"` can't
+        claim their modules): with none quantized left, the model is plain unquantized.
         """
-        for quantizer in self.all_quantizers:
-            quantizer._process_model_after_weight_loading(model, **kwargs)
-        # Dequantized patterns stay in the plan as `None`, so a broader pattern (e.g. `"*"`) can't claim their modules
-        self.set_quantizers(
-            {
-                pattern: None
-                if quantizer is None
-                or (quantizer.pre_quantized and getattr(quantizer.quantization_config, "dequantize", False))
-                else quantizer
-                for pattern, quantizer in self.quantizers.items()
-            }
-        )
+        dequantized = {
+            quantizer
+            for quantizer in self.all_quantizers
+            if quantizer.pre_quantized and getattr(quantizer.quantization_config, "dequantize", False)
+        }
+        self.set_quantizers({p: None if q in dequantized else q for p, q in self.quantizers.items()})
+        self.module_quantizers = {n: None if q in dequantized else q for n, q in self.module_quantizers.items()}
         if not self.all_quantizers:
             self.remove_quantization_config(model)
             return model

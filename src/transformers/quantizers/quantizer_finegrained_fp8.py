@@ -140,14 +140,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             new_module._hf_quantized_needs_local_tp = True
         return new_module
 
-    def _process_model_after_weight_loading(self, model, **kwargs):
-        # Single-process multi-device is unsafe for DeepGEMM (its kernels are bound to one CUDA
-        # context); route those models through Triton/grouped_mm instead.
-        from ..integrations.finegrained_fp8 import _disable_deepgemm_on_multi_device
-
-        _disable_deepgemm_on_multi_device(model)
-        return model
-
     def update_parallel_plan(self, model, plan):
         from ..distributed.parallel_utils import _get_parameter_plan, replace_layer_number_by_wildcard
         from ..integrations.finegrained_fp8 import FP8Experts

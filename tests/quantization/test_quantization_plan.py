@@ -145,9 +145,8 @@ class QuantizationPlanTest(unittest.TestCase):
         model = LlamaForCausalLM(
             LlamaConfig(hidden_size=64, intermediate_size=128, num_hidden_layers=1, vocab_size=128)
         )
-        with patch("transformers.integrations.finegrained_fp8._disable_deepgemm_on_multi_device") as fp8_hook:
-            plan.postprocess_model(model)
-        fp8_hook.assert_called_once_with(model)  # each quantizer's after-load hook runs
+        plan.match_modules(model)
+        plan.postprocess_model(model)
         self.assertIsNone(model.config.quantization_config["*.self_attn.*"])  # stays, so no broader pattern claims it
         self.assertIsNotNone(model.config.quantization_config["*.mlp.*"])
         self.assertIsNone(plan.get_quantizer("model.layers.0.self_attn.q_proj.weight"))
@@ -190,7 +189,7 @@ class QuantizationPlanTest(unittest.TestCase):
         hf_quantizer, config = self.plan_from_config(DEEPSEEK)
         with torch.device("meta"):
             model = DeepseekV4ForCausalLM(config)
-        hf_quantizer.rename_patterns(model)
+        hf_quantizer.match_modules(model)
         # The checkpoint's `layers.0.ffn.experts` is the model's `layers.0.mlp.experts`, its fused experts
         nvfp4, fp8 = hf_quantizer.quantizers["layers.0.mlp.experts"], hf_quantizer.quantizers["*"]
         self.assertEqual(
@@ -205,6 +204,7 @@ class QuantizationPlanTest(unittest.TestCase):
         self.assertIs(hf_quantizer.get_quantizer("lm_head.weight"), fp8)
         # `None` leaves the modules unquantized, an exact name doesn't match a longer one
         plan = QuantizationPlanHfQuantizer({"layers.1.mlp": nvfp4, "*.mlp.*": None})
+        plan.match_modules(model)
         self.assertIs(plan.get_quantizer("model.layers.1.mlp.experts.down_proj"), nvfp4)
         self.assertIsNone(plan.get_quantizer("model.layers.11.mlp.experts.down_proj"))
 

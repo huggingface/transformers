@@ -33,9 +33,7 @@ from transformers.testing_utils import (
     get_device_properties,
     require_accelerate,
     require_torch_accelerator,
-    require_torch_gpu,
     require_torch_multi_accelerator,
-    require_torch_multi_gpu,
     slow,
     torch_device,
 )
@@ -568,39 +566,15 @@ class FP8EmbeddingTest(unittest.TestCase):
         self.assertIs(type(model.other), torch.nn.Embedding)  # no pattern match
 
 
-class FP8DeepGEMMMultiDeviceTest(unittest.TestCase):
-    """`_disable_deepgemm_on_multi_device` must flag FP8 modules based on the devices they actually
-    occupy — DeepGEMM's kernels are bound to a single CUDA context and corrupt across devices, but a
-    model that fits on one device must keep DeepGEMM even when other GPUs are visible (no overshoot).
-    """
+class FP8DeepGEMMDeviceTest(unittest.TestCase):
+    def test_only_the_first_device_runs_deepgemm(self):
+        # DeepGEMM's kernels are bound to the CUDA context they first ran in: other devices take the Triton path
+        from transformers.integrations import deepgemm
 
-    @staticmethod
-    def _fp8_module(device):
-        from transformers.integrations import FP8Linear
-
-        return FP8Linear(256, 256, block_size=(128, 128)).to(device)
-
-    @require_torch_multi_gpu
-    def test_multi_device_disables_deepgemm(self):
-        from transformers.integrations.finegrained_fp8 import _disable_deepgemm_on_multi_device
-
-        model = torch.nn.Module()
-        model.a = self._fp8_module("cuda:0")
-        model.b = self._fp8_module("cuda:1")
-        _disable_deepgemm_on_multi_device(model)
-        self.assertTrue(model.a._deepgemm_disabled)
-        self.assertTrue(model.b._deepgemm_disabled)
-
-    @require_torch_gpu
-    def test_single_device_keeps_deepgemm(self):
-        from transformers.integrations.finegrained_fp8 import _disable_deepgemm_on_multi_device
-
-        model = torch.nn.Module()
-        model.a = self._fp8_module("cuda:0")
-        model.b = self._fp8_module("cuda:0")
-        _disable_deepgemm_on_multi_device(model)
-        self.assertFalse(model.a._deepgemm_disabled)
-        self.assertFalse(model.b._deepgemm_disabled)
+        with patch.object(deepgemm, "_DEEPGEMM_DEVICE", None):
+            self.assertTrue(deepgemm.deepgemm_allowed(torch.device("cuda:0")))
+            self.assertTrue(deepgemm.deepgemm_allowed(torch.device("cuda:0")))
+            self.assertFalse(deepgemm.deepgemm_allowed(torch.device("cuda:1")))
 
 
 class FP8Ue8m0LoadingTest(unittest.TestCase):

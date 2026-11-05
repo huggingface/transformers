@@ -151,13 +151,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
             return True
         return False
 
-    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        # clean cache due to triton ops
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        elif torch.xpu.is_available():
-            torch.xpu.empty_cache()
-
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
