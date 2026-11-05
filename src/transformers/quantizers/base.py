@@ -388,7 +388,8 @@ class HfQuantizer(ABC):
         "General converters: a param's serialized names load together. Their ops are set per param, by the plan"
         from ..core_model_loading import WeightConverter, _IdentityOp
 
-        if not self.pre_quantized or not self.get_load_operations():
+        mode = "dequantize" if getattr(self.quantization_config, "dequantize", False) else "deserialize"
+        if not self.pre_quantized or mode not in self.get_load_operations():
             return []
         return [WeightConverter(names, param, [_IdentityOp()]) for param, names in self.serialized_names.items()]
 

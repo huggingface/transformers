@@ -425,6 +425,14 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         "The quantizer of the whole model, if a single one"
         return self.quantizers["*"] if list(self.quantizers) == ["*"] else None
 
+    @property
+    def __class__(self):
+        # `isinstance(hf_quantizer, Bnb4BitHfQuantizer)` keeps working for a single quantizer
+        return QuantizationPlanHfQuantizer if self.quantizer is None else type(self.quantizer)
+
+    def __reduce__(self):  # copied and pickled as the plan, not as `__class__`
+        return QuantizationPlanHfQuantizer, (self.quantizers,), self.__dict__
+
     def __getattr__(self, name):
         # A single quantizer's own attributes, e.g. GGUF's `metadata` or compressed-tensors' `compressor`
         if name.startswith("__") or "quantizers" not in self.__dict__ or self.quantizer is None:
