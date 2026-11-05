@@ -597,9 +597,8 @@ def _test_fsdp2_expert_parallel_2d_vs_ddp_impl(rank, config_class, config_dict, 
 
 def _test_fsdp2_expert_parallel_bf16_grads_impl(rank, config_class, config_dict):
     """
-    Token dispatch with `ep_size < fsdp_size` in bfloat16: each expert is FSDP-sharded over `fsdp_size / ep_size` ranks
-    and its gradient divided by `fsdp_size`. The loss and every gradient after one backward match the whole batch on
-    one device.
+    Token dispatch in bfloat16 with `fsdp_size=world_size, ep_size=2`: after one backward, the loss and every gradient
+    match the whole batch on one device.
     """
     init_test_logger()
 
@@ -656,7 +655,7 @@ def _test_fsdp2_expert_parallel_bf16_grads_impl(rank, config_class, config_dict)
         )
 
     if rank == 0:
-        logger.debug("FSDP2+EP (bf16, ep_size < fsdp_size) gradient checks passed.")
+        logger.debug("FSDP2+EP (bf16) gradient checks passed.")
 
 
 # =============================================================================
@@ -834,15 +833,16 @@ class FSDPTesterMixin(ABC):
             "fsdp2_expert_parallel_2d_vs_ddp", _test_fsdp2_expert_parallel_2d_vs_ddp_impl, world_size=4
         )
 
+    @parameterized.expand([("experts_sharded", 4), ("experts_not_sharded", 2)])
     @is_fsdp_test
-    def test_fsdp2_expert_parallel_bf16_grads(self):
+    def test_fsdp2_expert_parallel_bf16_grads(self, _, world_size):
         """
-        In bfloat16, with token dispatch and `ep_size < fsdp_size` so that the experts are FSDP-sharded over a subgroup,
-        the loss and the gradients match the whole batch on one device.
+        The loss and the gradients match one device, with experts sharded (4 ranks)
+        or not sharded (2 ranks, `efsdp_size == 1`).
         """
         config = self.model_tester.get_config()
         if "ep_dispatch_experts" not in (getattr(config, "base_model_ep_plan", None) or {}).values():
             self.skipTest("Model does not have a token-dispatch expert parallel plan")
         self._run_fsdp2_distributed_test(
-            "fsdp2_expert_parallel_bf16_grads", _test_fsdp2_expert_parallel_bf16_grads_impl, world_size=4
+            "fsdp2_expert_parallel_bf16_grads", _test_fsdp2_expert_parallel_bf16_grads_impl, world_size=world_size
         )

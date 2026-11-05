@@ -1173,14 +1173,6 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         self.quant_method = QuantizationMethod.COMPRESSED_TENSORS
 
     def post_init(self):
-        if not self.dequantize and not self.is_quantization_compressed:
-            # Nothing is stored compressed, so there is neither anything to execute compressed nor
-            # anything to accelerate: the weights are already dense.
-            logger.warning(
-                "Compressed execution is only supported for compressed checkpoints. Setting `dequantize=True`."
-            )
-            self.dequantize = True
-
         if self.use_optimized_inference:
             # Whether the optimized path is reachable at all is decided here; whether the hardware
             # can run its kernels is left to `HfQuantizer.validate_environment`.
