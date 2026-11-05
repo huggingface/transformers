@@ -220,10 +220,6 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
     def test_can_be_initialized_on_meta(self):
         pass
 
-    @unittest.skip("Cannot set output_attentions on timm models.")
-    def test_get_image_features_attentions(self):
-        pass
-
     @unittest.skip(reason="The model has TimmWrapper backbone but doesn't apply any conversion")
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass

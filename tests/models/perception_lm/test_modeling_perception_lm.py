@@ -312,9 +312,6 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
     def test_generate_compilation_all_outputs(self):
         pass
 
-    @unittest.skip("Cannot set output_attentions on timm models.")
-    def test_get_image_features_attentions(self):
-        pass
 
     def _image_features_get_expected_num_hidden_states(self, model_tester=None):
         # For models that rely on timm for their vision backend, it's hard to infer how many layers the model has

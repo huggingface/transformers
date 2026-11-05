@@ -155,44 +155,6 @@ class InklingAudio2TextModelTest(ALMModelTest, unittest.TestCase):
     def test_reverse_loading_mapping(self):
         pass
 
-    @unittest.skip("Inkling's audio tower is an embedding+norm module with no attention or hidden-state layers")
-    def test_get_audio_features_hidden_states(self):
-        pass
-
-    @unittest.skip("Inkling's audio tower is an embedding+norm module with no attention or hidden-state layers")
-    def test_get_audio_features_attentions(self):
-        pass
-
-    @unittest.skip("The tester has no image in input dict")
-    def test_get_image_features_hidden_states(self):
-        pass
-
-    @unittest.skip("The tester has no image in input dict")
-    def test_get_image_features_attentions(self):
-        pass
-
-    @parameterized.expand([True, False, None])
-    @unittest.skip("The tester has no image in input dict")
-    def test_get_image_features_output(self, return_dict: bool | None):
-        pass
-
-    @unittest.skip("The tester has no image in input dict")
-    def test_get_image_features_pooler_output(self):
-        pass
-
-    @unittest.skip("The tester has no videos in input dict")
-    def test_get_video_features_hidden_states(self):
-        pass
-
-    @unittest.skip("The tester has no videos in input dict")
-    def test_get_video_features_attentions(self):
-        pass
-
-    @parameterized.expand([True, False, None])
-    @unittest.skip("The tester has no videos in input dict")
-    def test_get_video_features_output(self, return_dict: bool | None):
-        pass
-
     @unittest.skip("The tester has no image in input dict")
     def test_generate_from_multimodal_encoder_outputs_and_raw_data(self):
         pass
@@ -315,40 +277,6 @@ class InklingVision2TextModelTest(VLMModelTest, unittest.TestCase):
         inputs.pop("pixel_values", None)
         loss = model(**inputs).loss
         loss.backward()
-
-    @unittest.skip("The tester has no audios in input dict")
-    def test_get_audio_features_hidden_states(self):
-        pass
-
-    @unittest.skip("The tester has no audios in input dict")
-    def test_get_audio_features_attentions(self):
-        pass
-
-    @parameterized.expand([True, False, None])
-    @unittest.skip("The tester has no audios in input dict")
-    def test_get_audio_features_output(self, return_dict: bool | None):
-        pass
-
-    @unittest.skip("Inkling's HMLP vision tower has no attention or hidden-state outputs")
-    def test_get_image_features_hidden_states(self):
-        pass
-
-    @unittest.skip("Inkling's HMLP vision tower has no attention or hidden-state outputs")
-    def test_get_image_features_attentions(self):
-        pass
-
-    @unittest.skip("The tester has no videos in input dict")
-    def test_get_video_features_hidden_states(self):
-        pass
-
-    @unittest.skip("The tester has no videos in input dict")
-    def test_get_video_features_attentions(self):
-        pass
-
-    @parameterized.expand([True, False, None])
-    @unittest.skip("The tester has no videos in input dict")
-    def test_get_video_features_output(self, return_dict: bool | None):
-        pass
 
     @unittest.skip("We need 4 layers to correctly test cache sharing.")
     def test_num_layers_is_small(self):

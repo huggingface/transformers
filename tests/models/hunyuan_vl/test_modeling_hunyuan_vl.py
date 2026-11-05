@@ -279,10 +279,6 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @unittest.skip("Model doesn't return attentions for vision tower")
-    def test_get_image_features_attentions(self):
-        pass
-
     def test_reverse_loading_mapping(self, check_keys_were_modified=True, skip_base_model=True):
         self.skipTest("HunYuanVL keeps multiple legacy vision-tower source prefixes for checkpoint compatibility.")
 

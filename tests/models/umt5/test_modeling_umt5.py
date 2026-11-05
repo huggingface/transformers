@@ -280,7 +280,7 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
 
-            if not self.is_encoder_decoder:
+            if not config.is_encoder_decoder:
                 input_ids = inputs["input_ids"]
                 del inputs["input_ids"]
             else:
@@ -290,7 +290,7 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                 inputs.pop("decoder_input_ids", None)
 
             wte = model.get_input_embeddings()
-            if not self.is_encoder_decoder:
+            if not config.is_encoder_decoder:
                 inputs["inputs_embeds"] = wte(input_ids)
             else:
                 inputs["inputs_embeds"] = wte(encoder_input_ids)

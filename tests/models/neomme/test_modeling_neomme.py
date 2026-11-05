@@ -274,14 +274,6 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
     def test_sliding_window_mask(self):
         pass
 
-    @unittest.skip(reason="NeoMME's image feature extractor is a single patch MLP without intermediate states")
-    def test_get_image_features_hidden_states(self):
-        pass
-
-    @unittest.skip(reason="NeoMME's image feature extractor is a patch MLP without attention layers")
-    def test_get_image_features_attentions(self):
-        pass
-
     def test_grouped_query_heads_validated(self):
         with self.assertRaises(StrictDataclassFieldValidationError):
             NeoMMEConfig(num_attention_heads=4, num_key_value_heads=0)

@@ -240,24 +240,6 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_batching_equivalence(self):
         pass
 
-    @parameterized.expand([True, False, None])
-    @unittest.skip("Skip get_image_features tests as those are tested via ChameleonVision2SeqModelTest instead")
-    def test_get_image_features_output(self, return_dict: bool | None):
-        pass
-
-    @unittest.skip("Skip get_image_features tests as those are tested via ChameleonVision2SeqModelTest instead")
-    def test_get_image_features_pooler_output(self):
-        pass
-
-    @unittest.skip("Skip get_image_features tests as those are tested via ChameleonVision2SeqModelTest instead")
-    def test_get_image_features_hidden_states(self):
-        pass
-
-    @unittest.skip("Skip get_image_features tests as those are tested via ChameleonVision2SeqModelTest instead")
-    def test_get_image_features_attentions(self):
-        pass
-
-
 class ChameleonVision2SeqModelTester(ChameleonModelTester):
     def __init__(self, parent, image_size=10, **kwargs):
         super().__init__(parent, **kwargs)

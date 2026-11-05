@@ -2722,17 +2722,17 @@ class ModelTesterMixin(
                     self.assertEqual(model.config._experts_implementation, impl)
 
                     with torch.no_grad():
-                        outputs = model(**prepared_inputs)
+                        impl_outputs = model(**prepared_inputs)
 
                         output_tensors = []
-                        if hasattr(outputs, "logits"):
-                            output_tensors.append(outputs.logits)
-                        if hasattr(outputs, "last_hidden_state"):
-                            output_tensors.append(outputs.last_hidden_state)
-                        if hasattr(outputs, "start_logits"):
-                            output_tensors.append(outputs.start_logits)
-                        if hasattr(outputs, "end_logits"):
-                            output_tensors.append(outputs.end_logits)
+                        if hasattr(impl_outputs, "logits"):
+                            output_tensors.append(impl_outputs.logits)
+                        if hasattr(impl_outputs, "last_hidden_state"):
+                            output_tensors.append(impl_outputs.last_hidden_state)
+                        if hasattr(impl_outputs, "start_logits"):
+                            output_tensors.append(impl_outputs.start_logits)
+                        if hasattr(impl_outputs, "end_logits"):
+                            output_tensors.append(impl_outputs.end_logits)
                         outputs[impl] = output_tensors
 
                     self.assertTrue(outputs[impl], f"No outputs from {impl} implementation")
@@ -3440,10 +3440,21 @@ class ModelTesterMixin(
                 "Number of attention layers mismatch",
             )
 
+        def has_timm_config(config):
+            for key in config.sub_configs_defaults:
+                sub_config = getattr(config, key)
+                if "Timm" in sub_config.__class__.__name__:
+                    return True
+                return has_timm_config(sub_config)
+            return False
+
         for model_class in self.all_model_classes:
             if not hasattr(model_class, f"get_{modality}_features"):
                 continue
             config, inputs_dict = self._features_prepare_config_and_inputs(modality)
+            if has_timm_config(config):
+                self.skipTest("Cannot set `output_attentions` for timm models.")
+
             inputs_dict["output_hidden_states"] = False
             inputs_dict["output_attentions"] = True
             check(inputs_dict, config, model_class)
