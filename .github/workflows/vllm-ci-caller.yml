@@ -75,7 +75,18 @@ jobs:
         # TODO: Better to build a dedicated Docker image for vLLM CI.
         # But the workflow only runs once a day, so installing at runtime is fine for now.
         run: |
-          uv pip install 'torch<=2.13.0' torchaudio torchvision 'torchcodec<=0.15.0' --index-url https://download.pytorch.org/whl/cpu
+          # vLLM pins torch exactly (its compiled kernels are built against that version), so install
+          # the torch version required by the vLLM commit under test instead of hard-coding it.
+          # torchvision / torchaudio pin torch exactly, so uv picks the matching versions.
+          # torchcodec does not pin torch, but torchcodec >= 0.12 supports torch >= 2.11 (see the
+          # compatibility table in the torchcodec README), so the latest torchcodec is fine.
+          TORCH_VERSION=$(sed -nE 's/^torch==([0-9.]+)\+cpu.*/\1/p' vllm/requirements/cpu.txt | head -n 1)
+          if [ -z "$TORCH_VERSION" ]; then
+            echo "ERROR: could not find the torch==<version>+cpu pin in vllm/requirements/cpu.txt" >&2
+            exit 1
+          fi
+          echo "torch version required by vLLM: $TORCH_VERSION"
+          uv pip install "torch==${TORCH_VERSION}" torchaudio torchvision torchcodec --index-url https://download.pytorch.org/whl/cpu
           uv pip install --no-deps timm accelerate
           uv pip install librosa
           uv pip install -e 'transformers/[sklearn,sentencepiece,vision,testing,tiktoken,num2words,video]'
@@ -211,7 +222,18 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv pip install 'torch<=2.13.0' torchaudio torchvision 'torchcodec<=0.15.0' --index-url https://download.pytorch.org/whl/cpu
+          # vLLM pins torch exactly (its compiled kernels are built against that version), so install
+          # the torch version required by the vLLM commit under test instead of hard-coding it.
+          # torchvision / torchaudio pin torch exactly, so uv picks the matching versions.
+          # torchcodec does not pin torch, but torchcodec >= 0.12 supports torch >= 2.11 (see the
+          # compatibility table in the torchcodec README), so the latest torchcodec is fine.
+          TORCH_VERSION=$(sed -nE 's/^torch==([0-9.]+)\+cpu.*/\1/p' vllm/requirements/cpu.txt | head -n 1)
+          if [ -z "$TORCH_VERSION" ]; then
+            echo "ERROR: could not find the torch==<version>+cpu pin in vllm/requirements/cpu.txt" >&2
+            exit 1
+          fi
+          echo "torch version required by vLLM: $TORCH_VERSION"
+          uv pip install "torch==${TORCH_VERSION}" torchaudio torchvision torchcodec --index-url https://download.pytorch.org/whl/cpu
           uv pip install --no-deps timm accelerate
           uv pip install librosa
           uv pip install -e 'transformers/[sklearn,sentencepiece,vision,testing,tiktoken,num2words,video]'
@@ -334,7 +356,18 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv pip install 'torch<=2.13.0' torchaudio torchvision 'torchcodec<=0.15.0' --index-url https://download.pytorch.org/whl/cpu
+          # vLLM pins torch exactly (its compiled kernels are built against that version), so install
+          # the torch version required by the vLLM commit under test instead of hard-coding it.
+          # torchvision / torchaudio pin torch exactly, so uv picks the matching versions.
+          # torchcodec does not pin torch, but torchcodec >= 0.12 supports torch >= 2.11 (see the
+          # compatibility table in the torchcodec README), so the latest torchcodec is fine.
+          TORCH_VERSION=$(sed -nE 's/^torch==([0-9.]+)\+cpu.*/\1/p' vllm/requirements/cpu.txt | head -n 1)
+          if [ -z "$TORCH_VERSION" ]; then
+            echo "ERROR: could not find the torch==<version>+cpu pin in vllm/requirements/cpu.txt" >&2
+            exit 1
+          fi
+          echo "torch version required by vLLM: $TORCH_VERSION"
+          uv pip install "torch==${TORCH_VERSION}" torchaudio torchvision torchcodec --index-url https://download.pytorch.org/whl/cpu
           uv pip install --no-deps timm accelerate
           uv pip install librosa
           uv pip install -e 'transformers/[sklearn,sentencepiece,vision,testing,tiktoken,num2words,video]'
@@ -523,7 +556,18 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv pip install 'torch<=2.13.0' torchaudio torchvision 'torchcodec<=0.15.0' --index-url https://download.pytorch.org/whl/cpu
+          # vLLM pins torch exactly (its compiled kernels are built against that version), so install
+          # the torch version required by the vLLM commit under test instead of hard-coding it.
+          # torchvision / torchaudio pin torch exactly, so uv picks the matching versions.
+          # torchcodec does not pin torch, but torchcodec >= 0.12 supports torch >= 2.11 (see the
+          # compatibility table in the torchcodec README), so the latest torchcodec is fine.
+          TORCH_VERSION=$(sed -nE 's/^torch==([0-9.]+)\+cpu.*/\1/p' vllm/requirements/cpu.txt | head -n 1)
+          if [ -z "$TORCH_VERSION" ]; then
+            echo "ERROR: could not find the torch==<version>+cpu pin in vllm/requirements/cpu.txt" >&2
+            exit 1
+          fi
+          echo "torch version required by vLLM: $TORCH_VERSION"
+          uv pip install "torch==${TORCH_VERSION}" torchaudio torchvision torchcodec --index-url https://download.pytorch.org/whl/cpu
           uv pip install --no-deps timm accelerate
           uv pip install librosa
           uv pip install -e 'transformers/[sklearn,sentencepiece,vision,testing,tiktoken,num2words,video]'
