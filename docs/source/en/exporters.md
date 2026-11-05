@@ -828,8 +828,9 @@ runs the fused graph much faster than the plain one. The fusions cover RMS and l
 (`MultiHeadAttention`, or `GroupQueryAttention` when there's a key-value cache), rotary embeddings, GELU, and
 projections that share an input. Each fusion gives the same result as the ops it replaces.
 
-Set `ort_fusions` to the execution provider the graph will run on. The fusions differ by provider, each keeping what
-its kernels run fastest.
+Set `ort_fusions` to the execution provider the graph will run on. Each provider gets the fused ops it supports. Two
+fusions are skipped for now because ONNX Runtime's kernel runs slower than the plain ops, and come back once that's
+fixed.
 
 ```python
 config = OnnxConfig(ort_fusions="cpu")
@@ -839,8 +840,8 @@ config = OnnxConfig(ort_fusions="webgpu")
 
 | | `"cpu"` | `"cuda"` | `"webgpu"` |
 |---|---|---|---|
-| Attention with a key-value cache | `GroupQueryAttention`, rotary included | `GroupQueryAttention` with its query and key norms, decode only (the prefill keeps `MultiHeadAttention`) | `GroupQueryAttention`, rotary as its own `RotaryEmbedding` |
-| Other attention | plain ops (the CPU `MultiHeadAttention` is slower) | `MultiHeadAttention` | `MultiHeadAttention` |
+| Attention with a key-value cache | `GroupQueryAttention`, rotary included | `GroupQueryAttention` with its query and key norms; the prefill keeps `MultiHeadAttention` for now ([slower](https://github.com/microsoft/onnxruntime/issues/33869)) | `GroupQueryAttention`, rotary as its own `RotaryEmbedding` |
+| Other attention | plain ops for now ([slower](https://github.com/microsoft/onnxruntime/issues/33873)) | `MultiHeadAttention` | `MultiHeadAttention` |
 | Mixture of experts | unfused | `MoE` | unfused |
 | CUDA graphs | — | static exports can replay | — |
 | onnxruntime | any | 1.28 or later | any |
