@@ -48,6 +48,7 @@ class PI0ProcessorKwargs(ProcessingKwargs, total=False):
 @requires(backends=("vision", "torch"))
 class PI0Processor(ProcessorMixin):
     valid_processor_kwargs = PI0ProcessorKwargs
+    state_in_prompt = False
 
     def __init__(
         self,
@@ -154,14 +155,9 @@ class PI0Processor(ProcessorMixin):
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         output_kwargs["images_kwargs"].pop("return_tensors", None)
 
-        prompt_strings = []
-        for sample, image_list in zip(text, batched_images):
-            sample = (
-                f"{self.image_token * self.image_seq_length * len(image_list)}{self.tokenizer.bos_token}{sample}\n"
-            )
-            prompt_strings.append(sample)
-
-        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+        if state is not None:
+            state = self.normalize(torch.as_tensor(state, dtype=torch.float32), "state")
+        text_inputs = self.tokenizer(self.build_prompts(text, batched_images, state), **output_kwargs["text_kwargs"])
 
         # Here is the diff from PaliGemma. Ideally we'd create a new ImageProcessor if it were a VLM
         num_cameras = torch.tensor([len(sample_images) for sample_images in batched_images])
@@ -186,13 +182,21 @@ class PI0Processor(ProcessorMixin):
                 actions = F.pad(actions, (0, self.max_state_dim - actions.shape[-1]))
             model_inputs["actions"] = actions.view(-1, self.chunk_size, self.max_state_dim)
 
-        if state is not None:
-            state = self.normalize(torch.as_tensor(state, dtype=torch.float32), "state")
+        if state is not None and not self.state_in_prompt:
             if state.shape[-1] < self.max_state_dim:
                 state = F.pad(state, (0, self.max_state_dim - state.shape[-1]))
             model_inputs["state"] = state.view(-1, self.max_state_dim)
 
         return BatchFeature(data=model_inputs, tensor_type=return_tensors)
+
+    def build_prompts(
+        self, text: list[str], batched_images: list[list[ImageInput]], state: torch.Tensor | None
+    ) -> list[str]:
+        """Builds one prompt per sample: image tokens for each camera, then the task text."""
+        return [
+            f"{self.image_token * self.image_seq_length * len(image_list)}{self.tokenizer.bos_token}{sample}\n"
+            for sample, image_list in zip(text, batched_images)
+        ]
 
     def normalize(self, values: torch.Tensor, feature: str) -> torch.Tensor:
         """Normalizes `state` or `actions` with the dataset mean and standard deviation."""

@@ -109,6 +109,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "qwen3_5_moe_text": "qwen3_5_text",
     "llava_next_video": "llava_next",
     "llava_onevision": "llava_next",
+    "pi05": "pi0",
     # class-based mappings
     "AriaModel": "LlavaModel",
     "PaliGemmaModel": "LlavaModel",
@@ -1114,6 +1115,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(
                 source_patterns=r"action_time_mlp_out", target_patterns="embed_action_time.action_time_mlp_out"
             ),
+            WeightRenaming(source_patterns=r"^time_mlp_(in|out)", target_patterns=r"embed_action_time.time_mlp_\1"),
             WeightRenaming(source_patterns=r"^paligemma_with_expert.paligemma.model", target_patterns="model.vlm"),
             WeightRenaming(source_patterns=r"^paligemma_with_expert.gemma_expert.model", target_patterns="model.dit"),
             # Weight on the hub have only `lm_head` saved, but PI0 doesn't create any lm-head initialized!

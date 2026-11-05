@@ -131,6 +131,7 @@ else:
             ("muse_spark", {"torchvision": "MuseGlimmerImageProcessor"}),
             ("omdet-turbo", {"torchvision": "DetrImageProcessor", "pil": "DetrImageProcessorPil"}),
             ("paligemma", {"torchvision": "SiglipImageProcessor", "pil": "SiglipImageProcessorPil"}),
+            ("pi05", {"torchvision": "PI0ImageProcessor"}),
             ("pixio", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
             ("pp_ocrv5_mobile_det", {"torchvision": "PPOCRV5ServerDetImageProcessor"}),
             ("pp_ocrv5_mobile_rec", {"torchvision": "PPOCRV5ServerRecImageProcessor"}),
