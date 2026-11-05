@@ -1375,7 +1375,16 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
         "hidden_states": Glm5NextTextDecoderLayer,
         "router_logits": OutputRecorder(Glm5NextTextTopkRouter, index=0),
     }
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "conv1d", "dt_bias", "A_log"]
+    _keep_in_fp32_modules_strict = [
+        "e_score_correction_bias",
+        "conv1d",
+        "dt_bias",
+        "A_log",
+        "attn_hc.base",
+        "attn_hc.scale",
+        "ffn_hc.base",
+        "ffn_hc.scale",
+    ]
     _keys_to_ignore_on_load_unexpected = [r"layers\.45\.", r"layers\.\d+\.shared_head\."]
 
     @torch.no_grad()
