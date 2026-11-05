@@ -15,6 +15,8 @@
 
 import unittest
 
+from huggingface_hub.errors import StrictDataclassClassValidationError
+
 from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
@@ -31,6 +33,7 @@ if is_torch_available():
 
     from transformers import (
         AutoTokenizer,
+        MellumConfig,
         MellumForCausalLM,
         MellumModel,
     )
@@ -46,6 +49,8 @@ class MellumModelTester(CausalLMModelTester):
         # Override for the TP plan tests.
         self.layer_types = ["full_attention", "sliding_attention"]
         self.mlp_layer_types = ["dense", "sparse"]
+        # The shared MTP test sets `num_mtp_layers` after `__post_init__` has derived `mtp_layer_types`
+        self.num_mtp_layers = 1
 
 
 @require_torch
@@ -84,6 +89,10 @@ class MellumModelTest(CausalLMModelTest, unittest.TestCase):
 
         include_padding_result = model(padded_input_ids, attention_mask=None)
         self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
+
+    def test_config_rejects_multiple_mtp_layers(self):
+        with self.assertRaisesRegex(StrictDataclassClassValidationError, "single MTP layer"):
+            MellumConfig(num_nextn_predict_layers=2)
 
 
 # TODO(vasqu) fixup integration tests

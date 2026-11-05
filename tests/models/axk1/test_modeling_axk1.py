@@ -34,6 +34,7 @@ if is_torch_available():
     torch.set_float32_matmul_precision("highest")
 
     from transformers import (
+        AXK1Config,
         AXK1Model,
     )
 
@@ -51,7 +52,6 @@ class AXK1ModelTester(CausalLMModelTester):
         n_group=2,
         topk_group=1,
         num_experts_per_tok=2,
-        first_k_dense_replace=1,
         moe_intermediate_size=16,
         kv_lora_rank=16,
         q_lora_rank=32,
@@ -66,7 +66,7 @@ class AXK1ModelTester(CausalLMModelTester):
         self.n_group = n_group
         self.topk_group = topk_group
         self.num_experts_per_tok = num_experts_per_tok
-        self.first_k_dense_replace = first_k_dense_replace
+        self.mlp_layer_types = ["dense", "sparse"]
         self.moe_intermediate_size = moe_intermediate_size
         self.kv_lora_rank = kv_lora_rank
         self.q_lora_rank = q_lora_rank
@@ -84,6 +84,12 @@ class AXK1ModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip(reason="SDPA can't dispatch on flash due to unsupported head dims (MLA qk/v dims differ)")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
+
+    def test_legacy_mlp_layer_types(self):
+        # Checkpoints describe the MLP layout with `first_k_dense_replace` / `moe_layer_freq`
+        # See https://github.com/huggingface/transformers/pull/49518
+        config = AXK1Config(num_hidden_layers=5, first_k_dense_replace=1, moe_layer_freq=2)
+        self.assertEqual(config.mlp_layer_types, ["dense", "dense", "sparse", "dense", "sparse"])
 
 
 @slow

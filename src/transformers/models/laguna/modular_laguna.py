@@ -362,7 +362,7 @@ class LagunaPreTrainedModel(Qwen2MoePreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, LagunaTopKRouter):
-            torch.nn.init.zeros_(module.e_score_correction_bias)
+            init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, LagunaRotaryEmbedding):
             for layer_type in module.layer_types:
                 rope_init_fn = module.compute_default_rope_parameters
@@ -380,7 +380,7 @@ class LagunaModel(LlamaModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:

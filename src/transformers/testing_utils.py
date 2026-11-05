@@ -123,6 +123,7 @@ from .utils import (
     is_multipart_available,
     is_natten_available,
     is_nltk_available,
+    is_nncf_available,
     is_numba_available,
     is_onnx_available,
     is_onnxruntime_available,
@@ -178,6 +179,7 @@ from .utils import (
     is_torchao_available,
     is_torchaudio_available,
     is_torchcodec_available,
+    is_torchcodec_greater_or_equal,
     is_torchvision_available,
     is_triton_available,
     is_vision_available,
@@ -324,6 +326,7 @@ _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
 _run_agent_tests = parse_flag_from_env("RUN_AGENT_TESTS", default=False)
 _run_training_tests = parse_flag_from_env("RUN_TRAINING_TESTS", default=True)
 _run_tensor_parallel_tests = parse_flag_from_env("RUN_TENSOR_PARALLEL_TESTS", default=True)
+_run_expert_parallel_tests = parse_flag_from_env("RUN_EXPERT_PARALLEL_TESTS", default=True)
 _run_fsdp_tests = parse_flag_from_env("RUN_FSDP_TESTS", default=True)
 
 
@@ -405,6 +408,22 @@ def is_tensor_parallel_test(test_case):
             return test_case
         else:
             return pytest.mark.is_tensor_parallel_test()(test_case)
+
+
+def is_expert_parallel_test(test_case):
+    """
+    Decorator marking a test as an expert parallel test. If RUN_EXPERT_PARALLEL_TESTS is set to a falsy value, those
+    tests will be skipped.
+    """
+    if not _run_expert_parallel_tests:
+        return unittest.skip(reason="test is expert parallel test")(test_case)
+    else:
+        try:
+            import pytest  # We don't need a hard dependency on pytest in the main library
+        except ImportError:
+            return test_case
+        else:
+            return pytest.mark.is_expert_parallel_test()(test_case)
 
 
 def is_fsdp_test(test_case):
@@ -648,6 +667,10 @@ def require_openvino(test_case):
     return unittest.skipUnless(is_openvino_available(), "test requires OpenVINO")(test_case)
 
 
+def require_nncf(test_case):
+    return unittest.skipUnless(is_nncf_available(), "test requires NNCF")(test_case)
+
+
 def require_timm(test_case):
     """
     Decorator marking a test that requires Timm.
@@ -689,6 +712,21 @@ def require_torch_greater_or_equal(version: str):
         return unittest.skipUnless(is_torch_greater_or_equal(version), f"test requires PyTorch version >= {version}")(
             test_case
         )
+
+    return decorator
+
+
+def require_torchcodec_greater_or_equal(version: str):
+    """
+    Decorator marking a test that requires torchcodec version >= `version`.
+
+    These tests are skipped when PyTorch version is less than `version`.
+    """
+
+    def decorator(test_case):
+        return unittest.skipUnless(
+            is_torchcodec_greater_or_equal(version), f"test requires PyTorch version >= {version}"
+        )(test_case)
 
     return decorator
 
@@ -1981,6 +2019,7 @@ def assert_screenout(out, what):
 def set_config_for_less_flaky_test(config):
     target_attrs = [
         "rms_norm_eps",
+        "post_norm_eps",
         "layer_norm_eps",
         "norm_eps",
         "norm_epsilon",
@@ -2588,7 +2627,7 @@ def mockenv_context(*remove, **update):
 
 # --- pytest conf functions --- #
 
-# to avoid multiple invocation from tests/conftest.py and examples/conftest.py - make sure it's called only once
+# to avoid multiple invocation if several conftest.py files call it - make sure it's called only once
 pytest_opt_registered = {}
 
 
@@ -4947,3 +4986,531 @@ def preserve_module_forwards(model: "PreTrainedModel"):
                 module.__dict__.pop("forward", None)
             else:
                 module.__dict__["forward"] = original_forward
+
+
+# ---------------------------------------------------------------------------
+# Import chain tracker — records the full call chain for every transformers.*
+# import statement (cached or not) by overriding sys.modules with a dict
+# subclass whose .get() is called by importlib._bootstrap for every import.
+# ---------------------------------------------------------------------------
+
+_ci_deps_chains: list[dict[str, object]] = []
+_ci_deps_by_file: dict[tuple[str, str], set[str]] = {}  # (test_file, phase) -> set of src_files
+_ci_deps_tracker_reentrant = threading.local()
+# Set to True via CI_RECORD_DEPS_INCLUDE_COLLECTION=1 to also record collection-phase imports
+# in deps_chain.json. Default False: collection imports are noise (not attributed to any test).
+_ci_record_collection_phase: bool = False
+# Set to True via CI_RECORD_DEPS_INCLUDE_CHAIN=1 to record call stack in each chain entry.
+_ci_record_chain: bool = False
+# Tracks which test file is currently being collected (set by pytest_collectstart hook).
+_ci_currently_collecting_file: str | None = None
+_ci_source_deps_repo_root: Path | None = None
+_ci_source_deps_src_root: Path | None = None
+_ci_current_phase: str = "startup"
+_ci_current_test_id: str | None = None
+# Module dependency graph: parent_module_name → set of directly-imported child module names.
+# Built as module bodies execute (one entry per unique (parent, child) pair).
+# Used at session end to compute the full transitive dep set for each test file — including
+# modules whose bodies didn't re-execute for later test files (sys.modules caching).
+_ci_module_graph: dict[str, set[str]] = {}
+# Stack of module names whose bodies are currently executing.
+# Pushed before _original_import when the module is new; popped after it returns.
+_ci_module_loading_stack: list[str] = []
+
+
+def set_ci_collecting_file(path: str | None) -> None:
+    global _ci_currently_collecting_file
+    _ci_currently_collecting_file = path
+
+
+def scan_preloaded_test_module_deps(nodeid: str) -> None:
+    """Record deps for a test module that was pre-loaded before its pytest_collectstart.
+
+    When a test file is imported as a side-effect of another test file's module-level
+    import (e.g. ``test_modeling_auto`` does ``from ..bert.test_modeling_bert import
+    BertModelTester`` at the top level), the importing module's body runs while
+    ``_ci_currently_collecting_file`` points to the *other* test file.  By the time
+    pytest fires ``pytest_collectstart`` for the pre-loaded file, the module is already
+    in ``sys.modules`` and its body does not re-execute, so our ``builtins.__import__``
+    hook never fires for its imports under the correct collecting-file context.
+
+    This function is called from ``pytest_collectstart`` in ``conftest.py``, *after*
+    ``set_ci_collecting_file`` has already set the correct context.  It checks whether
+    the module is pre-loaded and, if so, walks its ``__dict__`` to find every
+    transformers object and records its defining module via ``__module__``.
+
+    No-op if ``CI_RECORD_DEPS_OUTPUT`` is not set or the module is not yet in
+    ``sys.modules`` (normal path — the import hook handles fresh loads).
+    """
+    if not os.environ.get("CI_RECORD_DEPS_OUTPUT"):
+        return
+    if _ci_currently_collecting_file is None:
+        return
+
+    # Convert nodeid path to Python module name.
+    # nodeid looks like "tests/models/bert/test_modeling_bert.py"
+    module_name = nodeid.replace("\\", "/").removesuffix(".py").replace("/", ".")
+    module = sys.modules.get(module_name)
+    if module is None:
+        return  # Not pre-loaded; the normal import hook will handle it.
+
+    # Module is already in sys.modules — its body already ran under a different context.
+    # Scan its __dict__ for every object whose __module__ points into transformers/ or tests/.
+    for obj in module.__dict__.values():
+        mod_name = getattr(obj, "__module__", None)
+        if isinstance(mod_name, str) and mod_name.split(".")[0] in ("transformers", "tests"):
+            _record_import_chain(mod_name)
+
+
+def set_ci_deps_phase(phase: str, test_id: str | None = None) -> None:
+    global _ci_current_phase, _ci_current_test_id
+    _ci_current_phase = phase
+    _ci_current_test_id = test_id
+
+
+def _record_import_chain(module_name: str) -> None:
+    _ci_deps_tracker_reentrant.active = True
+    try:
+        module_obj = sys.modules.get(module_name)
+        if module_obj is None:
+            return
+
+        src_file = getattr(module_obj, "__file__", None)
+        if not src_file:
+            return
+
+        src_root = _ci_source_deps_src_root
+        repo_root = _ci_source_deps_repo_root
+        if src_root is None or repo_root is None:
+            return
+
+        resolved = Path(src_file).resolve()
+        try:
+            rel = resolved.relative_to(src_root)
+            src_file_rel = f"src/transformers/{rel.as_posix()}"
+        except ValueError:
+            # Not under src/transformers/ — check if it's under tests/
+            try:
+                rel = resolved.relative_to(repo_root)
+                rel_str = rel.as_posix()
+                if not rel_str.startswith("tests/"):
+                    return
+                src_file_rel = rel_str
+            except ValueError:
+                return
+
+        # Determine the dedup key: (test_file, phase_bucket) to allow same src_file
+        # to appear once per phase (collection + execution) per test file.
+        if _ci_current_test_id is not None:
+            dedup_key = (_ci_current_test_id.split("::")[0], "execution")
+        elif _ci_currently_collecting_file is not None:
+            dedup_key = (_ci_currently_collecting_file, "collection")
+        elif _ci_record_collection_phase:
+            dedup_key = ("__collection__", "collection")
+        else:
+            # No active context — import is "lost" (fired before collecting_file was set, e.g. xdist)
+            return
+
+        # Fast path: skip frame walk entirely for already-seen files (the common case
+        # after the first few imports).  Correctness is preserved: a false-positive first
+        # call is still caught by the frame walk below (file not yet in set); a legitimate
+        # first call adds the file; subsequent calls (legitimate or false-positive) are
+        # harmlessly skipped here.
+        if src_file_rel in _ci_deps_by_file.get(dedup_key, ()):
+            return
+
+        # Discard imports triggered by _LazyAutoMapping bulk iteration (values/items/keys).
+        # These are registry side-effects, not real test deps — applies to both collection
+        # and execution phases (e.g. get_values(MODEL_FOR_PRETRAINING_MAPPING) at class
+        # definition time during collection pulls in all 98 registered models).
+        # Use sys._getframe() — much cheaper than inspect.stack() (no source line reads).
+        frame = sys._getframe(2)  # skip _record_import_chain + _tracking_import
+        load_attr_filtered = False
+        while frame is not None:
+            if frame.f_code.co_name == "_load_attr_from_module":
+                load_attr_filtered = True
+                break
+            frame = frame.f_back
+
+        if load_attr_filtered:
+            return
+
+        _ci_deps_by_file.setdefault(dedup_key, set()).add(src_file_rel)
+
+        if _ci_record_chain:
+            chain: list = []
+            repo_str = repo_root.as_posix() + "/"
+            for fi in inspect.stack(context=0)[2:]:
+                fn = fi.filename.replace("\\", "/") if fi.filename else ""
+                fn = fn.removeprefix(repo_str)
+                if "tests/" in fn or "src/transformers/" in fn:
+                    chain.append({"file": fn, "line": fi.lineno, "func": fi.function})
+            entry: dict = {"src_file": src_file_rel, "phase": _ci_current_phase, "chain": chain}
+            if _ci_current_test_id is not None:
+                entry["test_id"] = _ci_current_test_id
+            elif _ci_currently_collecting_file is not None:
+                entry["test_file"] = _ci_currently_collecting_file
+            _ci_deps_chains.append(entry)
+    except Exception:  # noqa: S110
+        pass
+    finally:
+        _ci_deps_tracker_reentrant.active = False
+
+
+def _record_module_graph_edge(module_name: str) -> None:
+    """Record a direct dep edge in the module graph: loading_stack[-1] → module_name.
+
+    Called from the import hook for every transformers/tests import.  When the loading
+    stack is non-empty, the top entry is the module whose body is currently executing —
+    we record that it directly imports ``module_name``.  When the stack is empty the
+    import is a seed (from test file code) and no graph edge is needed (the seed is
+    already captured by ``_record_import_chain``).
+
+    Edges triggered by ``_LazyAutoMapping`` bulk iteration (``_load_attr_from_module``)
+    are filtered out — same rule as in ``_record_import_chain``.
+    """
+    if not _ci_module_loading_stack:
+        return
+    parent = _ci_module_loading_stack[-1]
+    if parent == module_name:
+        return  # self-loop
+    # Fast path: already recorded this edge — skip the frame walk.
+    parent_set = _ci_module_graph.get(parent)
+    if parent_set is not None and module_name in parent_set:
+        return
+    # Discard imports triggered by _LazyAutoMapping bulk iteration (values/items/keys).
+    frame = sys._getframe(0)
+    while frame is not None:
+        if frame.f_code.co_name == "_load_attr_from_module":
+            return
+        frame = frame.f_back
+    _ci_module_graph.setdefault(parent, set()).add(module_name)
+
+
+def install_ci_source_deps_tracker() -> None:
+    """Override builtins.__import__ to record import call chains for CI dep analysis.
+
+    ``builtins.__import__`` is called by the IMPORT_NAME bytecode for every ``import``
+    statement — cached or not — so we intercept all transformers.* imports with no
+    re-import cost.  No-op if ``CI_RECORD_DEPS_OUTPUT`` is not set.
+    Called from ``pytest_sessionstart`` in conftest.py.
+    """
+    if not os.environ.get("CI_RECORD_DEPS_OUTPUT"):
+        return
+    global _ci_source_deps_repo_root, _ci_source_deps_src_root, _ci_record_collection_phase, _ci_record_chain
+
+    _ci_record_collection_phase = os.environ.get("CI_RECORD_DEPS_INCLUDE_COLLECTION", "") == "1"
+    _ci_record_chain = os.environ.get("CI_RECORD_DEPS_INCLUDE_CHAIN", "") == "1"
+    _ci_source_deps_repo_root = Path(__file__).parent.parent.parent.resolve()
+    _ci_source_deps_src_root = _ci_source_deps_repo_root / "src" / "transformers"
+
+    import builtins
+    import importlib as _importlib
+    import importlib.util as _importlib_util
+
+    _original_import = builtins.__import__
+    _original_import_module = _importlib.import_module
+
+    def _tracking_import(name, globals=None, locals=None, fromlist=(), level=0):
+        # ── 1. Resolve the module name BEFORE calling the real import ──────────
+        # We need the resolved name early to check sys.modules and manage the
+        # loading stack (which module body is currently executing).
+        resolved_name = name
+        if isinstance(name, str) and level > 0 and globals is not None:
+            pkg = globals.get("__package__") or ""
+            parts = pkg.split(".")
+            if level <= len(parts):
+                # Trim off `level - 1` components (level=1 → same pkg, level=2 → parent, …)
+                base = ".".join(parts[: max(0, len(parts) - (level - 1))])
+                resolved_name = f"{base}.{name}" if name else base
+            # else: keep resolved_name = name (edge case, shouldn't happen in valid Python)
+
+        top = resolved_name.split(".")[0] if isinstance(resolved_name, str) else ""
+        is_relevant = top in ("transformers", "tests")
+        reentrant = getattr(_ci_deps_tracker_reentrant, "active", False)
+
+        # ── 2. Push to loading stack if this module is being loaded fresh ──────
+        # The stack lets _record_module_graph_edge know which parent module body
+        # is executing when a child import fires.
+        is_new = is_relevant and not reentrant and resolved_name not in sys.modules
+        if is_new:
+            _ci_module_loading_stack.append(resolved_name)
+
+        # ── 3. Run the real import (may execute module body recursively) ───────
+        try:
+            result = _original_import(name, globals, locals, fromlist, level)
+        finally:
+            # ── 4. Pop loading stack (always, even on exception) ───────────────
+            if is_new:
+                _ci_module_loading_stack.pop()
+
+        # ── 5. Record graph edge + test-file seed ─────────────────────────────
+        if is_relevant and not reentrant:
+            # Graph edge: whoever is loading right now → resolved_name.
+            # If stack is empty this is a top-level seed (recorded via _record_import_chain).
+            _record_module_graph_edge(resolved_name)
+            # Existing per-test-file attribution (unchanged behaviour).
+            _record_import_chain(resolved_name)
+
+            # Also record submodules loaded as fromlist side-effects.
+            if fromlist:
+                for item in fromlist:
+                    if item == "*":
+                        continue
+                    submodule = f"{resolved_name}.{item}"
+                    if submodule in sys.modules:
+                        _record_module_graph_edge(submodule)
+                        _record_import_chain(submodule)
+                    else:
+                        # attr.__module__ gives the real defining module when the attr is
+                        # already cached in transformers.__dict__ (skips __getattr__).  # noqa: NC001
+                        parent_mod = sys.modules.get(resolved_name)
+                        if parent_mod is not None:
+                            attr = parent_mod.__dict__.get(item)
+                            if attr is not None:
+                                mod_name = getattr(attr, "__module__", None)
+                                if isinstance(mod_name, str) and mod_name.split(".")[0] in ("transformers", "tests"):
+                                    _record_module_graph_edge(mod_name)
+                                    _record_import_chain(mod_name)
+        return result
+
+    def _tracking_import_module(name, package=None):
+        # Resolve name before the call so we can manage the loading stack.
+        resolved = _importlib_util.resolve_name(name, package) if (package and name.startswith(".")) else name
+        is_relevant = isinstance(resolved, str) and resolved.split(".")[0] in ("transformers", "tests")
+        reentrant = getattr(_ci_deps_tracker_reentrant, "active", False)
+
+        is_new = is_relevant and not reentrant and resolved not in sys.modules
+        if is_new:
+            _ci_module_loading_stack.append(resolved)
+        try:
+            result = _original_import_module(name, package)
+        finally:
+            if is_new:
+                _ci_module_loading_stack.pop()
+
+        if is_relevant and not reentrant:
+            _record_module_graph_edge(resolved)
+            _record_import_chain(resolved)
+        return result
+
+    builtins.__import__ = _tracking_import
+    _importlib.import_module = _tracking_import_module
+
+
+def _ci_record_target(out_dir: Path, base_name: str) -> tuple[Path, bool]:
+    """Return (target_path, is_controller) for xdist-aware writing.
+
+    xdist worker  → writes to ``<base_name>_<worker_id>.json`` (unique, no races).
+    xdist controller → is_controller=True; caller must merge worker files then write ``base_name``.
+    non-xdist     → writes directly to ``base_name``.
+    """
+    worker_id = os.environ.get("PYTEST_XDIST_WORKER")
+    if worker_id:
+        stem, ext = base_name.rsplit(".", 1) if "." in base_name else (base_name, "json")
+        return out_dir / f"{stem}_{worker_id}.{ext}", False
+    # Detect xdist controller by checking whether worker output files already exist on disk.
+    # Workers always run pytest_sessionfinish before the controller, so their gw*.json files
+    # are present by the time this code runs on the controller process.
+    # (PYTEST_XDIST_TESTRUNUID is only set in workers, not the controller, so cannot be used.)
+    stem = base_name.rsplit(".", 1)[0] if "." in base_name else base_name
+    is_controller = bool(list(out_dir.glob(f"{stem}_gw*.json")))
+    return out_dir / base_name, is_controller
+
+
+def record_ci_source_deps_chains() -> None:
+    """Write recorded import chains to ``deps_chain.json`` next to ``CI_RECORD_DEPS_OUTPUT``.
+
+    No-op if ``CI_RECORD_DEPS_OUTPUT`` is not set.  Call from ``pytest_sessionfinish``.
+    xdist-aware: workers write per-worker files; controller merges them.
+    """
+    if not _ci_record_chain:
+        return
+    output_path = os.environ.get("CI_RECORD_DEPS_OUTPUT")
+    if not output_path:
+        return
+    out_dir = Path(output_path).parent
+    target, is_controller = _ci_record_target(out_dir, "deps_chain.json")
+    if is_controller:
+        merged: list = []
+        for f in sorted(out_dir.glob("deps_chain_gw*.json")):
+            try:
+                merged.extend(json.loads(f.read_text(encoding="utf-8")))
+            except (OSError, json.JSONDecodeError):
+                pass
+        data = merged
+    else:
+        data = _ci_deps_chains
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        with open(target, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except OSError:
+        pass
+
+
+def write_ci_module_graph() -> None:
+    """Write the module dependency graph to ``module_graph.json`` next to ``CI_RECORD_DEPS_OUTPUT``.
+
+    Output format::
+
+        {
+            "transformers.models.bert.modeling_bert": [
+                "transformers.models.bert.configuration_bert",
+                "transformers.activations",
+                ...
+            ],
+            ...
+        }
+
+    Each key is a Python module name whose body was observed executing during this session.
+    Values are the module names that were *directly* imported from that body — one hop only.
+    The full transitive closure is computed from this graph in ``record_ci_source_deps_by_file``.
+
+    No-op if ``CI_RECORD_DEPS_OUTPUT`` is not set.  Call from ``pytest_sessionfinish``.
+    xdist-aware: workers write per-worker files; controller merges with set union.
+    """
+    output_path = os.environ.get("CI_RECORD_DEPS_OUTPUT")
+    if not output_path:
+        return
+    out_dir = Path(output_path).parent
+    target, is_controller = _ci_record_target(out_dir, "module_graph.json")
+    if is_controller:
+        merged: dict[str, set] = {}
+        for f in sorted(out_dir.glob("module_graph_gw*.json")):
+            try:
+                fragment = json.loads(f.read_text(encoding="utf-8"))
+                for k, v in fragment.items():
+                    merged.setdefault(k, set()).update(v)
+            except (OSError, json.JSONDecodeError):
+                pass
+        data = {k: sorted(v) for k, v in sorted(merged.items())}
+    else:
+        data = {k: sorted(v) for k, v in sorted(_ci_module_graph.items())}
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        with open(target, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except OSError:
+        pass
+
+
+def record_ci_source_deps_by_file() -> None:
+    """Write a per-test-file import dict to ``deps_by_file.json`` next to ``CI_RECORD_DEPS_OUTPUT``.
+
+    Output format::
+
+        {
+            "tests/models/clip/test_processing_clip.py": {
+                "collection": ["src/transformers/models/clip/processing_clip.py", ...],
+                "execution":  ["src/transformers/models/clip/image_processing_clip.py", ...]
+            },
+            ...
+        }
+
+    Both phases are kept separate so consumers can union them for a complete picture or
+    inspect each independently.  ``collate_ci_source_deps.py`` unions them when building
+    the fetcher map.
+
+    No-op if ``CI_RECORD_DEPS_OUTPUT`` is not set.  Call from ``pytest_sessionfinish``.
+    xdist-aware: workers write per-worker files; controller merges them.
+    """
+    output_path = os.environ.get("CI_RECORD_DEPS_OUTPUT")
+    if not output_path:
+        return
+
+    out_dir = Path(output_path).parent
+    target, is_controller = _ci_record_target(out_dir, "deps_by_file.json")
+    if is_controller:
+        merged_by_file: dict[str, dict[str, set]] = {}
+        for wf in sorted(out_dir.glob("deps_by_file_gw*.json")):
+            try:
+                worker_data = json.loads(wf.read_text(encoding="utf-8"))
+                for test_file, phases in worker_data.items():
+                    entry = merged_by_file.setdefault(test_file, {"collection": set(), "execution": set()})
+                    for phase, srcs in phases.items():
+                        entry.setdefault(phase, set()).update(srcs)
+            except (OSError, json.JSONDecodeError):
+                pass
+        out = {
+            tf: {phase: sorted(srcs) for phase, srcs in sorted(phases.items())}
+            for tf, phases in sorted(merged_by_file.items())
+        }
+    else:
+        # Accumulate per-file, per-phase sets; always emit both keys for a consistent schema.
+        by_file: dict[str, dict[str, set[str]]] = {}
+        for (test_file, phase), src_files in _ci_deps_by_file.items():
+            if test_file.startswith("__"):
+                continue  # skip global __collection__ pool
+            entry = by_file.setdefault(test_file, {"collection": set(), "execution": set()})
+            entry.setdefault(phase, set()).update(src_files)
+        out = {
+            test_file: {phase: sorted(srcs) for phase, srcs in sorted(phases.items())}
+            for test_file, phases in sorted(by_file.items())
+        }
+
+    # BFS from each test file's seeds through the module graph to recover transitive deps
+    # missed because sys.modules caching prevented module bodies from re-executing on
+    # 2nd+ encounters.  Results stored under "graph_transitive" key.  # noqa: NC001, NC002
+
+    src_root = _ci_source_deps_src_root
+    repo_root = _ci_source_deps_repo_root
+
+    def _mod_to_path(mod_name: str) -> str | None:
+        mod = sys.modules.get(mod_name)
+        if mod is None:
+            return None
+        f = getattr(mod, "__file__", None)
+        if not f:
+            return None
+        resolved = Path(f).resolve()
+        try:
+            return f"src/transformers/{resolved.relative_to(src_root).as_posix()}"
+        except (ValueError, TypeError):
+            pass
+        try:
+            rel = resolved.relative_to(repo_root).as_posix()
+            if rel.startswith("tests/"):
+                return rel
+        except (ValueError, TypeError):
+            pass
+        return None
+
+    if src_root is not None and repo_root is not None and _ci_module_graph:
+        # Convert module-name graph → file-path graph (built once per session).
+        file_graph: dict[str, set[str]] = {}
+        for parent_mod, child_mods in _ci_module_graph.items():
+            p_path = _mod_to_path(parent_mod)
+            if p_path is None:
+                continue
+            for child_mod in child_mods:
+                c_path = _mod_to_path(child_mod)
+                if c_path is None or c_path == p_path:
+                    continue
+                file_graph.setdefault(p_path, set()).add(c_path)
+
+        # BFS per test file.
+        for test_file, phases in out.items():
+            seeds: set[str] = set()
+            for files in phases.values():
+                seeds.update(files)
+            if not seeds:
+                continue
+            frontier = list(seeds)
+            visited = set(seeds)
+            while frontier:
+                cur = frontier.pop()
+                for dep in file_graph.get(cur, ()):
+                    if dep not in visited:
+                        visited.add(dep)
+                        frontier.append(dep)
+            new_via_graph = sorted(visited - seeds)
+            if new_via_graph:
+                out[test_file]["graph_transitive"] = new_via_graph
+
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        with open(target, "w", encoding="utf-8") as f:
+            json.dump(out, f, indent=2)
+    except OSError:
+        pass

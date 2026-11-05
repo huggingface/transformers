@@ -349,7 +349,7 @@ class RTDetrResNetPreTrainedModel(PreTrainedModel):
 class RTDetrResNetBackbone(BackboneMixin, RTDetrResNetPreTrainedModel):
     has_attentions = False
 
-    def __init__(self, config):
+    def __init__(self, config: RTDetrResNetConfig):
         super().__init__(config)
 
         self.num_features = [config.embedding_size] + config.hidden_sizes

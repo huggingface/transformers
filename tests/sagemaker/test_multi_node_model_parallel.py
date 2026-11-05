@@ -1,6 +1,5 @@
 import json
 import os
-import subprocess
 import unittest
 from ast import literal_eval
 
@@ -28,21 +27,10 @@ if is_sagemaker_available():
             "instance_type": "ml.p3dn.24xlarge",
             "results": {"train_runtime": 1600, "eval_accuracy": 0.3, "eval_loss": 1.2},
         },
-        {
-            "script": "run_glue.py",
-            "model_name_or_path": "FacebookAI/roberta-large",
-            "instance_type": "ml.p3dn.24xlarge",
-            "results": {"train_runtime": 1600, "eval_accuracy": 0.3, "eval_loss": 1.2},
-        },
     ]
 )
 class MultiNodeTest(unittest.TestCase):
     def setUp(self):
-        subprocess.run(
-            f"cp ./examples/pytorch/text-classification/run_glue.py {self.env.test_path}/run_glue.py".split(),
-            encoding="utf-8",
-            check=True,
-        )
         assert hasattr(self, "env")
 
     def create_estimator(self, instance_count):
@@ -65,14 +53,13 @@ class MultiNodeTest(unittest.TestCase):
 
         distribution = {"smdistributed": {"modelparallel": smp_options}, "mpi": mpi_options}
 
-        name_extension = "trainer" if self.script == "run_glue.py" else "smtrainer"
         # creates estimator
         return HuggingFace(
             entry_point=self.script,
             source_dir=self.env.test_path,
             role=self.env.role,
             image_uri=self.env.image_uri,
-            base_job_name=f"{self.env.base_job_name}-{instance_count}-smp-{name_extension}",
+            base_job_name=f"{self.env.base_job_name}-{instance_count}-smp-smtrainer",
             instance_count=instance_count,
             instance_type=self.instance_type,
             debugger_hook_config=False,

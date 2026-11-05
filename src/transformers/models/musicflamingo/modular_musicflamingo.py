@@ -180,7 +180,8 @@ def rotate_half(x):
 
 def apply_rotary_time_emb(hidden_states, cos, sin):
     original_dtype = hidden_states.dtype
-    hidden_states = hidden_states.to(torch.float64)
+    dtype = torch.float32 if hidden_states.device.type == "mps" else torch.float64
+    hidden_states = hidden_states.to(dtype)
     cos = cos.to(hidden_states)
     sin = sin.to(hidden_states)
     rot_dim = cos.shape[-1]
@@ -259,7 +260,7 @@ class MusicFlamingoModel(AudioFlamingo3Model):
         input_ids: torch.LongTensor,
         post_lengths: torch.LongTensor,
         max_post_length: int,
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         audio_token_mask = input_ids == self.config.audio_token_id
         diff = torch.diff(torch.nn.functional.pad(audio_token_mask.int(), (1, 1), value=0), dim=1)
         _, starts = torch.where(diff == 1)
@@ -301,7 +302,7 @@ class MusicFlamingoModel(AudioFlamingo3Model):
     )
     def get_audio_features(
         self,
-        input_features: torch.FloatTensor,
+        input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
         input_ids: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
@@ -336,12 +337,12 @@ class MusicFlamingoModel(AudioFlamingo3Model):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
+        input_features: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):

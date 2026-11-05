@@ -1,3 +1,5 @@
+import os
+
 import torch
 
 from ..generation.continuous_batching.cache import PagedAttentionCache
@@ -27,7 +29,20 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
+def pack_gqa(hidden_states: torch.Tensor | None, n_rep: int) -> torch.Tensor | None:
+    """
+    For a single query token: (batch, num_attention_heads, 1, dim) -> (batch, num_key_value_heads, n_rep, dim), so
+    that attention runs on the key/value heads without `repeat_kv`. Masks shared by all heads are returned as is.
+    """
+    if hidden_states is None or hidden_states.shape[1] == 1:
+        return hidden_states
+    batch, num_attention_heads, _, dim = hidden_states.shape
+    return hidden_states.reshape(batch, num_attention_heads // n_rep, n_rep, dim)
+
+
 def use_gqa_in_sdpa(attention_mask: torch.Tensor | None, key: torch.Tensor, value: torch.Tensor) -> bool:
+    if os.environ.get("TRANSFORMERS_SDPA_FORCE_GQA", "0") == "1":
+        return True
     # XPU and MPS support masked GQA under more recent torch versions
     if _is_torch_xpu_available:
         return _is_torch_greater_or_equal_than_2_8
@@ -74,7 +89,7 @@ def create_position_bias_mask(
         # A custom float mask is already additive, so we can simply add it to the position_bias
         position_bias_mask = position_bias + attention_mask
 
-    return position_bias_mask
+    return position_bias_mask.contiguous()
 
 
 def sdpa_attention_forward(
@@ -90,6 +105,10 @@ def sdpa_attention_forward(
     cache: PagedAttentionCache | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
+    if kwargs.get("softcap") is not None:
+        raise ValueError(
+            "`sdpa` attention does not support `softcap`. Try using `eager`, `flex_attention`, or the few FA kernels supporting it"
+        )
     if kwargs.get("output_attentions", False):
         logger.warning_once(
             "`sdpa` attention does not support `output_attentions=True`."
@@ -106,14 +125,18 @@ def sdpa_attention_forward(
         )
 
     sdpa_kwargs = {}
+    q_length = query.shape[2]
     if hasattr(module, "num_key_value_groups") and module.num_key_value_groups > 1:
-        if not use_gqa_in_sdpa(attention_mask, key, value):
+        if use_gqa_in_sdpa(attention_mask, key, value):
+            sdpa_kwargs["enable_gqa"] = True
+        elif q_length == 1:
+            query = pack_gqa(query, module.num_key_value_groups)
+            attention_mask = pack_gqa(attention_mask, module.num_key_value_groups)
+            position_bias = pack_gqa(position_bias, module.num_key_value_groups)
+        else:
             key = repeat_kv(key, module.num_key_value_groups)
             value = repeat_kv(value, module.num_key_value_groups)
-        else:
-            sdpa_kwargs["enable_gqa"] = True
 
-    q_length = query.shape[2]
     kv_length = key.shape[2]
 
     # Instead of relying on the value set in the module directly, we use the is_causal passed in kwargs if it is presented
@@ -177,6 +200,9 @@ def sdpa_attention_forward(
         is_causal=is_causal,
         **sdpa_kwargs,
     )
+    # Undoes `pack_gqa`, a no-op otherwise. The batch comes from the output, as SDPA broadcasts it (e.g. learned
+    # queries with batch 1)
+    attn_output = attn_output.reshape(attn_output.shape[0], -1, q_length, value.shape[-1])
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, None

@@ -374,24 +374,24 @@ class PPDocLayoutV4HybridEncoder(RTDetrHybridEncoder):
 @dataclass
 class PPDocLayoutV4DecoderOutput(PPDocLayoutV3DecoderOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the decoder.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+    intermediate_hidden_states (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
         Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, config.num_coords)`):
+    intermediate_reference_points (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, config.num_coords)`):
         Stacked intermediate reference points (refined quads of each layer of the decoder).
-    logits (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_labels)`):
+    logits (`torch.Tensor` of shape `(batch_size, num_queries, config.num_labels)`):
         Classification logits of the last decoder layer. Unlike RT-DETR, PP-DocLayoutV4 only evaluates its
         classification and reading order heads on the last layer.
-    relative_order_logits (`torch.FloatTensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
+    relative_order_logits (`torch.Tensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
         Pairwise relative reading order logits of the last decoder layer, after the optional S2R fusion.
-    successor_order_logits (`torch.FloatTensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
+    successor_order_logits (`torch.Tensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
         Pairwise direct successor (ROOR) logits of the last decoder layer.
     """
 
-    logits: torch.FloatTensor | None = None
-    relative_order_logits: torch.FloatTensor | None = None
-    successor_order_logits: torch.FloatTensor | None = None
+    logits: torch.Tensor | None = None
+    relative_order_logits: torch.Tensor | None = None
+    successor_order_logits: torch.Tensor | None = None
 
     # PP-DocLayoutV4 does not produce these RT-DETR / PP-DocLayoutV3 decoder outputs: only the last layer is scored
     # (no intermediate logits), there is no corner prediction, and there is no mask branch.
@@ -445,9 +445,9 @@ class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`):
             The query embeddings that are passed into the decoder.
-        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        encoder_hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
             of the decoder.
         encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -455,9 +455,9 @@ class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
             in `[0, 1]`:
             - 1 for pixels that are real (i.e. **not masked**),
             - 0 for pixels that are padding (i.e. **masked**).
-        reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_coords)`):
+        reference_points (`torch.Tensor` of shape `(batch_size, num_queries, config.num_coords)`):
             Quad reference points in inverse sigmoid space.
-        spatial_shapes (`torch.FloatTensor` of shape `(num_feature_levels, 2)`):
+        spatial_shapes (`torch.Tensor` of shape `(num_feature_levels, 2)`):
             Spatial shapes of the feature maps.
         spatial_shapes_list (`list[tuple[int, int]]`, *optional*):
             Spatial shapes of the feature maps as a list, kept alongside `spatial_shapes` so that the deformable
@@ -524,35 +524,35 @@ class PPDocLayoutV4Decoder(PPDocLayoutV3Decoder):
 @dataclass
 class PPDocLayoutV4ModelOutput(PPDocLayoutV3ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+    intermediate_hidden_states (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
         Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, config.num_coords)`):
+    intermediate_reference_points (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, config.num_coords)`):
         Stacked intermediate reference points (refined quads of each layer of the decoder).
-    init_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_coords)`):
+    init_reference_points (`torch.Tensor` of shape `(batch_size, num_queries, config.num_coords)`):
         Initial quad reference points sent through the Transformer decoder.
-    enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_labels)`):
+    enc_topk_logits (`torch.Tensor` of shape `(batch_size, num_queries, config.num_labels)`):
         Class logits of the encoder proposals that were selected as decoder queries.
-    enc_topk_bboxes (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_coords)`):
+    enc_topk_bboxes (`torch.Tensor` of shape `(batch_size, num_queries, config.num_coords)`):
         Quads of the encoder proposals that were selected as decoder queries.
-    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
+    enc_outputs_class (`torch.Tensor` of shape `(batch_size, sequence_length, config.num_labels)`):
         Class logits of every encoder proposal.
-    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_coords)`):
+    enc_outputs_coord_logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.num_coords)`):
         Quad logits of every encoder proposal.
     denoising_meta_values (`dict`):
         Extra dictionary for the denoising related values.
-    logits (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_labels)`):
+    logits (`torch.Tensor` of shape `(batch_size, num_queries, config.num_labels)`):
         Classification logits of the last decoder layer.
-    relative_order_logits (`torch.FloatTensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
+    relative_order_logits (`torch.Tensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
         Pairwise relative reading order logits, after the optional S2R fusion.
-    successor_order_logits (`torch.FloatTensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
+    successor_order_logits (`torch.Tensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
         Pairwise direct successor (ROOR) logits.
     """
 
-    logits: torch.FloatTensor | None = None
-    relative_order_logits: torch.FloatTensor | None = None
-    successor_order_logits: torch.FloatTensor | None = None
+    logits: torch.Tensor | None = None
+    relative_order_logits: torch.Tensor | None = None
+    successor_order_logits: torch.Tensor | None = None
 
     # PP-DocLayoutV4 does not produce these RT-DETR / PP-DocLayoutV3 outputs: only the last layer is scored (no
     # intermediate logits), there is no corner prediction, and there is no mask branch.
@@ -690,12 +690,12 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
 
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         pixel_mask: torch.LongTensor | None = None,
-        encoder_outputs: torch.FloatTensor | None = None,
+        encoder_outputs: torch.Tensor | None = None,
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | PPDocLayoutV4ModelOutput:
+    ) -> tuple[torch.Tensor] | PPDocLayoutV4ModelOutput:
         r"""
         labels (`list[Dict]` of len `(batch_size,)`, *optional*):
             Not supported: PP-DocLayoutV4 is inference only in Transformers.
@@ -808,43 +808,43 @@ class PPDocLayoutV4Model(PPDocLayoutV3Model):
 @dataclass
 class PPDocLayoutV4ForObjectDetectionOutput(PPDocLayoutV3ForObjectDetectionOutput):
     r"""
-    logits (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_labels)`):
+    logits (`torch.Tensor` of shape `(batch_size, num_queries, config.num_labels)`):
         Classification logits (without no-object) for all queries.
-    pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_coords)`):
+    pred_boxes (`torch.Tensor` of shape `(batch_size, num_queries, config.num_coords)`):
         Normalized quads for all queries, encoded as `[center_x, center_y, dx1, dy1, ..., dx4, dy4]` where the corner
         offsets are shifted by `+0.5`. Use
         [`~PPDocLayoutV4ImageProcessor.post_process_object_detection`] to retrieve the unnormalized corners and their
         enclosing boxes.
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+    intermediate_hidden_states (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
         Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, config.num_coords)`):
+    intermediate_reference_points (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, config.num_coords)`):
         Stacked intermediate reference points (refined quads of each layer of the decoder).
-    init_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_coords)`):
+    init_reference_points (`torch.Tensor` of shape `(batch_size, num_queries, config.num_coords)`):
         Initial quad reference points sent through the Transformer decoder.
-    enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_labels)`):
+    enc_topk_logits (`torch.Tensor` of shape `(batch_size, num_queries, config.num_labels)`):
         Class logits of the encoder proposals that were selected as decoder queries.
-    enc_topk_bboxes (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_coords)`):
+    enc_topk_bboxes (`torch.Tensor` of shape `(batch_size, num_queries, config.num_coords)`):
         Quads of the encoder proposals that were selected as decoder queries.
-    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
+    enc_outputs_class (`torch.Tensor` of shape `(batch_size, sequence_length, config.num_labels)`):
         Class logits of every encoder proposal.
-    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_coords)`):
+    enc_outputs_coord_logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.num_coords)`):
         Quad logits of every encoder proposal.
     denoising_meta_values (`dict`):
         Extra dictionary for the denoising related values.
-    relative_order_logits (`torch.FloatTensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
+    relative_order_logits (`torch.Tensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
         Pairwise relative reading order logits, after the optional S2R fusion. A positive `relative_order_logits[i, j]`
         means query `i` is read before query `j`.
-    successor_order_logits (`torch.FloatTensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
+    successor_order_logits (`torch.Tensor` of shape `(batch_size, config.num_queries, config.num_queries)`):
         Pairwise direct successor (ROOR) logits. A positive `successor_order_logits[i, j]` means query `j` directly
         follows query `i`.
     """
 
-    relative_order_logits: torch.FloatTensor | None = None
-    successor_order_logits: torch.FloatTensor | None = None
+    relative_order_logits: torch.Tensor | None = None
+    successor_order_logits: torch.Tensor | None = None
     # PP-DocLayoutV3 annotates this as a tuple, but PP-DocLayoutV4 emits a single tensor.
-    init_reference_points: torch.FloatTensor | None = None
+    init_reference_points: torch.Tensor | None = None
 
     # PP-DocLayoutV4 does not produce these RT-DETR / PP-DocLayoutV3 outputs: only the last layer is scored (no
     # intermediate logits), there is no corner prediction, and there is no mask branch.
@@ -874,12 +874,12 @@ class PPDocLayoutV4ForObjectDetection(PPDocLayoutV3ForObjectDetection, PPDocLayo
 
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         pixel_mask: torch.LongTensor | None = None,
-        encoder_outputs: torch.FloatTensor | None = None,
+        encoder_outputs: torch.Tensor | None = None,
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | PPDocLayoutV4ForObjectDetectionOutput:
+    ) -> tuple[torch.Tensor] | PPDocLayoutV4ForObjectDetectionOutput:
         r"""
         labels (`list[Dict]` of len `(batch_size,)`, *optional*):
             Not supported: PP-DocLayoutV4 is inference only in Transformers.
