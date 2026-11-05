@@ -401,8 +401,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         self.module_quantizers, self.prefix = {}, ""
         self.set_quantizers(quantizers)
         self.pre_quantized = all(quantizer.pre_quantized for quantizer in self.all_quantizers)
-        for quantizer in self.all_quantizers:
-            quantizer.plan = self
+        self.conversions = {}
 
     @property
     def all_quantizers(self):
@@ -443,60 +442,18 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         return self.module_quantizers.get(name)
 
     def update_weight_conversions(self, weight_conversions, model):
-        from ..core_model_loading import WeightConverter
-
-        # Each model converter is updated by the quantizer of its target's module only, e.g. the fp8 quantizer must not
-        # add its serialized names to the merge of NVFP4 experts
-        def owner(converter):
-            module = converter._original_target_patterns[0].replace("\\", "").rpartition(".")[0].lstrip("^.")
-            names = (name for name in self.module_quantizers if name == module or name.endswith(f".{module}"))
-            return self.module_quantizers.get(next(names, None))
-
-        owners = {id(c): owner(c) for c in weight_conversions if isinstance(c, WeightConverter)}
-        general = {}
-        for quantizer in self.all_quantizers:
-            # Chained like a single quantizer (renamings keep their order), but blind to the converters of others
-            hidden = [c for c in weight_conversions if owners.get(id(c), quantizer) is not quantizer]
-            visible = [c for c in weight_conversions if owners.get(id(c), quantizer) is quantizer]
-            own = quantizer.get_weight_conversions()
-            # Taken out of `update_weight_conversions` by patterns, not position: renamings may come after them
-            general_patterns = [(c._original_source_patterns, c._original_target_patterns) for c in own]
-            updated = [
-                c
-                for c in quantizer.update_weight_conversions(visible, model)
-                if (getattr(c, "_original_source_patterns", None), getattr(c, "_original_target_patterns", None))
-                not in general_patterns
-            ]
-            for converter in updated:
-                if isinstance(converter, WeightConverter):
-                    owners.setdefault(id(converter), quantizer)
-                elif not any(converter is c for c in visible):  # its own renamings: only on its own params
-                    converter.applies_to = lambda key, quantizer=quantizer: self.get_quantizer(key) is quantizer
-            weight_conversions = updated + hidden
-            for converter in own:
-                general.setdefault(converter._original_target_patterns[0], []).append(converter)
-        # One general converter per param collects the names of every quantizer, before the own-name ones take them
-        # (`down_proj` would take `shared_experts.down_proj.weight_scale`). Its quantizer gives a param its own
-        # ops in `update_weight_transform`; the others pass through the params without serialized names
-        # `weight` first: it takes `*.down_proj.weight` before the experts' own-name `down_proj` does
-        general = dict(sorted(general.items(), key=lambda item: item[0] != "weight"))
-        return weight_conversions + [
-            WeightConverter(
-                list(dict.fromkeys(name for c in converters for name in c._original_source_patterns)),
-                target,
-                converters[0].operations,
-            )
-            for target, converters in general.items()
-        ]
+        """
+        The model's conversions: each quantizer updates its own copy of them (`conversions`), which core loading uses
+        for the keys of the layers it quantizes
+        """
+        self.conversions = {
+            q: q.update_weight_conversions(list(weight_conversions), model) for q in self.all_quantizers
+        }
+        return weight_conversions
 
     def update_weight_transform(self, transform, model, name):
         quantizer = self.get_quantizer(name)
-        if quantizer is None:
-            return transform
-        # A general converter of another quantizer may have matched the first key of `name`: swap in its quantizer's
-        targets = getattr(transform, "_original_target_patterns", None)
-        own = next((c for c in quantizer.get_weight_conversions() if c._original_target_patterns == targets), None)
-        return quantizer.update_weight_transform(own or transform, model, name)
+        return transform if quantizer is None else quantizer.update_weight_transform(transform, model, name)
 
     def param_element_size(self, model, param_name, param):
         if not self.module_quantizers:
@@ -540,8 +497,19 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
 
     def preprocess_model(self, model, **kwargs):
         self.match_modules(model)
+        named = {pattern for pattern in self.quantizers if "*" not in pattern}  # quantized even if skipped by default
         for quantizer in self.all_quantizers:
-            quantizer.preprocess_model(model, **kwargs)
+            if not quantizer.replaces_modules:  # it swaps its modules itself: the others' are not its own
+                quantizer.modules_not_owned = [
+                    name for name, q in self.module_quantizers.items() if q is not quantizer
+                ]
+            setattr(model, "is_quantized", True)
+            setattr(model, "quantization_method", quantizer.quantization_config.quant_method)
+            if quantizer.pre_quantized:
+                quantizer._convert_model_for_quantization(model)
+            quantizer._process_model_before_weight_loading(model, **kwargs)
+            skipped = getattr(quantizer, "modules_to_not_convert", None) or []
+            quantizer.modules_to_not_convert = [module for module in skipped if module not in named]
         self.replace_modules(model)
         for quantizer in self.all_quantizers:
             quantizer.update_parallel_plan(model, model.tp_plan)

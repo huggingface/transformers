@@ -86,8 +86,8 @@ class HfQuantizer(ABC):
     """
 
     requires_calibration = False
-    # In a quantization plan, the plan: it gives each param its quantizer
-    plan: "HfQuantizer | None" = None
+    # In a quantization plan, the modules of the other quantizers (set by the plan, for quantizers swapping their own)
+    modules_not_owned: list[str] = []
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         self.quantization_config = quantization_config
@@ -247,10 +247,9 @@ class HfQuantizer(ABC):
         if self.pre_quantized:
             self._convert_model_for_quantization(model)
         self._process_model_before_weight_loading(model, **kwargs)
-        if self.plan is None:  # a quantization plan swaps the modules of all its quantizers at once, then does this
-            self.replace_modules(model)
-            self.update_parallel_plan(model, model.tp_plan)
-            self.update_parallel_plan(model, model.ep_plan)
+        self.replace_modules(model)
+        self.update_parallel_plan(model, model.tp_plan)
+        self.update_parallel_plan(model, model.ep_plan)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         return model
@@ -315,9 +314,6 @@ class HfQuantizer(ABC):
     ):
         if skip_modules is None or add_default_skips:
             modules_to_not_convert = get_keys_to_not_convert(model)
-            if self.plan is not None:  # a module a plan names is quantized (e.g. ModelOpt's `lm_head`), not `"*"`
-                named = {pattern for pattern in self.plan.quantizers if "*" not in pattern}
-                modules_to_not_convert = [module for module in modules_to_not_convert if module not in named]
         else:
             modules_to_not_convert = []
 
@@ -328,16 +324,8 @@ class HfQuantizer(ABC):
             modules_to_not_convert.extend(keep_in_fp32_modules)
 
         modules_to_not_convert = list(set(modules_to_not_convert))
-        # In a quantization plan, the modules whose params belong to another quantizer, or to none (`replace_modules`
-        # already gives each module its quantizer)
-        if self.plan is not None and not self.replaces_modules:
-            modules_to_not_convert += [
-                rf"{re.escape(name)}$"
-                for name, module in model.named_modules()
-                if module._parameters
-                and not any(self.plan.get_quantizer(f"{name}.{param}") is self for param in module._parameters)
-            ]
-
+        # In a quantization plan, the modules of the other quantizers (`replace_modules` already skips them)
+        modules_to_not_convert += [rf"{re.escape(name)}$" for name in self.modules_not_owned]
         return modules_to_not_convert
 
     @property
