@@ -981,7 +981,7 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
             if hasattr(self.model_tester, "num_hidden_states_types"):
                 added_hidden_states = self.model_tester.num_hidden_states_types
-            elif self.is_encoder_decoder:
+            elif config.is_encoder_decoder:
                 added_hidden_states = 2
             else:
                 added_hidden_states = 1
