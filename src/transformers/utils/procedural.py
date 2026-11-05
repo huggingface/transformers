@@ -19,8 +19,9 @@ and dtypes and a working forward pass without storing any weights. Each paramete
 the parameter's position, so a given (repo, seed) always gives the same model.
 
 Memory stays small whatever the model size:
-- matrices are generated in row chunks of about `CHUNK_BYTES`, each with its own seed, and matmuls (`x @ W.T`) and
-  embedding lookups go chunk by chunk, so a full matrix is never in memory at once;
+- each block of `SEED_ROWS` rows of a matrix has its own seed, so `w[i]` or `w[a:b]` only generates the blocks it
+  touches; matmuls (`x @ W.T`) and embedding lookups go in chunks of about `CHUNK_BYTES`, so a full matrix is never
+  in memory at once;
 - tensors with 3 or more dims (fused MoE experts) are generated per slice of the first dim, so `experts[i]` only
   generates expert `i`, and dummy models use the per-expert ("eager") MoE path.
 """
@@ -30,6 +31,7 @@ from torch.utils._pytree import tree_map
 
 
 CHUNK_BYTES = 64 << 20
+SEED_ROWS = 16  # each block of 16 rows of a matrix has its own seed, so row slices only generate their blocks
 _MASK = (1 << 64) - 1
 aten = torch.ops.aten
 
@@ -68,22 +70,26 @@ class ProceduralTensor(torch.Tensor):
         )
 
     # -- generation --------------------------------------------------------------------------------------------
-    def _rows_per_chunk(self) -> int:
-        row_bytes = max(1, self.base_shape[1] * 4)  # generated in fp32
-        return max(1, CHUNK_BYTES // row_bytes)
+    def rows(self, r0: int, r1: int) -> torch.Tensor:
+        """Rows r0:r1 of the (untransposed) 2-D tensor, generated from the seed blocks they touch only."""
+        cols = self.base_shape[1]
+        if self.kind != "randn":
+            return (torch.ones if self.kind == "ones" else torch.zeros)(r1 - r0, cols, dtype=self.dtype, device=self.device)
+        b0, b1 = r0 // SEED_ROWS, (r1 + SEED_ROWS - 1) // SEED_ROWS
+        out = torch.empty((b1 - b0) * SEED_ROWS, cols, dtype=torch.float32, device=self.device)
+        g = torch.Generator(device=self.device)
+        for b in range(b0, b1):
+            g.manual_seed(_mix(self.seed, b))
+            torch.randn(SEED_ROWS, cols, generator=g, device=self.device, out=out[(b - b0) * SEED_ROWS : (b - b0 + 1) * SEED_ROWS])
+        start = r0 - b0 * SEED_ROWS
+        return out[start : start + r1 - r0].mul_(self.std).to(self.dtype)
 
     def chunks(self):
-        """(first row, values) for each row chunk of the (untransposed) 2-D tensor."""
+        """(first row, values) for chunks of about CHUNK_BYTES of rows of the (untransposed) 2-D tensor."""
         rows, cols = self.base_shape
-        step = self._rows_per_chunk()
-        for c, r0 in enumerate(range(0, rows, step)):
-            n = min(step, rows - r0)
-            if self.kind == "randn":
-                g = torch.Generator(device=self.device).manual_seed(_mix(self.seed, c))
-                values = torch.randn(n, cols, generator=g, device=self.device).mul_(self.std).to(self.dtype)
-            else:
-                values = (torch.ones if self.kind == "ones" else torch.zeros)(n, cols, dtype=self.dtype, device=self.device)
-            yield r0, values
+        step = max(SEED_ROWS, CHUNK_BYTES // max(1, cols * 4) // SEED_ROWS * SEED_ROWS)
+        for r0 in range(0, rows, step):
+            yield r0, self.rows(r0, min(rows, r0 + step))
 
     def materialize(self) -> torch.Tensor:
         """The full values of this tensor, generated now and not kept (avoided by matmuls and embeddings)."""
@@ -95,7 +101,7 @@ class ProceduralTensor(torch.Tensor):
         elif len(self.base_shape) >= 3:
             values = torch.stack([self._slice(i).materialize() for i in range(self.base_shape[0])])
         else:
-            values = torch.cat([v for _, v in self.chunks()])
+            values = self.rows(0, self.base_shape[0])
         return values.t() if self.transposed else values
 
     def _slice(self, i: int) -> "ProceduralTensor":
@@ -124,6 +130,22 @@ class ProceduralTensor(torch.Tensor):
                 return a0._slice(args[2])
             if func is aten.index.Tensor and len(args[1]) == 1 and args[1][0] is not None and args[1][0].dim() == 0:
                 return a0._slice(int(args[1][0]))
+        # w[a:b], w[i] (and their transposed forms): only the rows needed are generated
+        if isinstance(a0, cls) and len(a0.base_shape) == 2 and a0.kind == "randn":
+            row_dim = 1 if a0.transposed else 0
+            if func is aten.slice.Tensor:
+                dim = args[1] if len(args) > 1 else 0
+                start, end, step = (list(args[2:]) + [None, None, 1])[:3]
+                n = a0.base_shape[0]
+                start, end, _ = slice(start, end, step).indices(n) if dim % 2 == row_dim else (0, n, 1)
+                values = a0.rows(start, max(start, end))
+                values = values.t() if a0.transposed else values
+                if dim % 2 == row_dim:
+                    return values[:: step] if not a0.transposed else values[:, :: step]
+                return func(values, *args[1:], **kwargs)
+            if func is aten.select.int and args[1] % 2 == row_dim:
+                i = args[2] % a0.base_shape[0]
+                return a0.rows(i, i + 1)[0]
         # x @ W.T, chunk by chunk over the rows of W (the output columns)
         if func in (aten.mm.default, aten.addmm.default):
             x, w = (args[1], args[2]) if func is aten.addmm.default else (args[0], args[1])
