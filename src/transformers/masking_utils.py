@@ -834,10 +834,23 @@ def _preprocess_mask_arguments(
         else:
             kv_length, kv_offset = attention_mask.shape[-1], 0
 
-    # We check the position_ids for potential packed sequence format (only if the 2D attention mask is explicitly None,
-    # and we don't have past_key_values, i.e. generally a training setup)
+    # Detect packing on prefill, even when an empty cache has already been allocated.
+    # Avoid tensor-valued cache offsets in data-dependent branches under compilation.
     packed_sequence_mask = None
-    if position_ids is not None and attention_mask is None and past_key_values is None:
+    if (
+        position_ids is not None
+        and attention_mask is None
+        and (
+            past_key_values is None
+            or (
+                isinstance(q_offset, int)
+                and isinstance(kv_offset, int)
+                and isinstance(kv_length, int)
+                and q_offset == kv_offset == 0
+                and kv_length == q_length
+            )
+        )
+    ):
         batch_size = inputs_embeds.shape[0]
         # The position ids are sometimes just unsqueezed, without being expanded
         if batch_size != position_ids.shape[0]:

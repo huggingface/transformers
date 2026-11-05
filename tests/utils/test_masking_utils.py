@@ -21,14 +21,14 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ..test_memory_cleanup_mixin import MemoryCleanupMixin
+from ..test_memory_cleanup_mixin import MemoryCleanupMixin, with_grad
 
 
 if is_torch_available():
     import torch
     from torch.nn.attention.flex_attention import create_block_mask
 
-    from transformers import DynamicCache, LlamaConfig, Qwen3NextConfig, StaticCache
+    from transformers import DynamicCache, LlamaConfig, LlamaForCausalLM, Qwen3NextConfig, StaticCache
     from transformers.cache_utils import DynamicSlidingWindowLayer
     from transformers.masking_utils import (
         create_bidirectional_mask,
@@ -112,6 +112,61 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
 
         min_dtype = torch.finfo(torch.float16).min
         self.assertTrue((causal_mask == torch.where(EXPECTED_PACKED_MASK, 0.0, min_dtype)).all())
+
+    def test_packed_sequence_mask_with_empty_cache(self):
+        config = LlamaConfig(num_hidden_layers=1, num_attention_heads=2, num_key_value_heads=2, head_dim=8)
+        positions = torch.tensor([[0, 1, 2, 0, 1]])
+        embeddings = torch.empty(1, 5, 16)
+        for backend in ("sdpa", "eager"):
+            with self.subTest(backend=backend):
+                config._attn_implementation = backend
+                kwargs = {
+                    "config": config,
+                    "inputs_embeds": embeddings,
+                    "attention_mask": None,
+                    "position_ids": positions,
+                    "allow_is_causal_skip": False,
+                }
+                uncached = create_causal_mask(**kwargs, past_key_values=None)
+                cached = create_causal_mask(**kwargs, past_key_values=DynamicCache(config=config))
+                self.assertTrue(torch.equal(cached, uncached))
+
+                # A populated cache must not infer new document boundaries from query-only positions.
+                cache = DynamicCache(config=config)
+                kv = torch.zeros(1, 2, 3, 8)
+                cache.update(kv, kv, 0)
+                kwargs["inputs_embeds"] = embeddings[:, :2]
+                kwargs["position_ids"] = torch.tensor([[3, 0]])
+                continued = create_causal_mask(**kwargs, past_key_values=cache)
+                kwargs["position_ids"] = None
+                reference = create_causal_mask(**kwargs, past_key_values=cache)
+                self.assertTrue(torch.equal(continued, reference))
+
+    @with_grad
+    def test_packed_sequence_model_isolation_with_cache(self):
+        config = LlamaConfig(
+            vocab_size=64,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+        )
+        config._attn_implementation = "sdpa"
+        model = LlamaForCausalLM(config).eval()
+        ids = torch.tensor([[3, 11, 17, 7, 13, 19]])
+        changed = torch.tensor([[23, 29, 31, 7, 13, 19]])
+        positions = torch.tensor([[0, 1, 2, 0, 1, 2]])
+        for use_cache in (False, True):
+            with torch.no_grad():
+                original = model(ids, position_ids=positions, use_cache=use_cache).logits[:, 3:]
+                altered = model(changed, position_ids=positions, use_cache=use_cache).logits[:, 3:]
+            self.assertTrue(torch.allclose(original, altered, atol=1e-6, rtol=1e-6))
+
+        embeddings = model.get_input_embeddings()(ids).detach().requires_grad_(True)
+        loss = model(inputs_embeds=embeddings, position_ids=positions, use_cache=True).logits[:, 3:, 5].sum()
+        grad = torch.autograd.grad(loss, embeddings)[0]
+        self.assertEqual(grad[:, :3].abs().max().item(), 0.0)
 
     def test_packed_sequence_mask_flex_attention(self):
         config = LlamaConfig()
