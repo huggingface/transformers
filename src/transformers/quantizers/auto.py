@@ -448,20 +448,13 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         return None
 
     def update_weight_conversions(self, weight_conversions, model):
-        "Each quantizer's conversions on its layers, the same ones once"
-        conversions = {}
+        "Each quantizer adds its conversions for its layers"
         for quantizer in self.all_quantizers:
             layers = [name for name, q in self.module_quantizers.items() if q is quantizer]
-            for conversion in quantizer.update_weight_conversions(weight_conversions, model, layers):
-                kept = conversions.setdefault(tuple(conversion._original_source_patterns), conversion)
-                if kept._original_target_patterns != conversion._original_target_patterns:
-                    raise ValueError(
-                        f"{kept._original_source_patterns} load into both {kept._original_target_patterns} and "
-                        f"{conversion._original_target_patterns}: a format can't be both quantized and dequantized"
-                    )
+            weight_conversions = quantizer.update_weight_conversions(weight_conversions, model, layers)
         # The general converters of a fused param (e.g. MXFP4's `down_proj`) last: a `*.down_proj.weight` is a `weight`
         fused = {param for quantizer in self.all_quantizers for param in quantizer.serialized_names if param != "weight"}
-        return sorted(conversions.values(), key=lambda conversion: conversion._original_target_patterns[0] in fused)
+        return sorted(weight_conversions, key=lambda conversion: conversion._original_target_patterns[0] in fused)
 
     def update_weight_transform(self, transform, model, name):
         quantizer = self.get_quantizer(name)
