@@ -179,7 +179,7 @@ class OnnxExporter(DynamoExporter):
         fusions = config.ort_fusions and config.optimize and (quantizer is None or not quantizer.quantizes_fx_graph)
 
         if fusions:
-            counts = fuse_for_onnxruntime(onnx_program.model, device=config.ort_fusions)
+            counts = fuse_for_onnxruntime(onnx_program.model, provider=config.ort_fusions)
             blocks = sum(
                 hasattr(module, "has_gate") and hasattr(module, "is_concatenated") for module in model.modules()
             )
