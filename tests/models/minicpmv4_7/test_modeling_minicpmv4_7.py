@@ -131,6 +131,8 @@ class MiniCPMV4_7VisionText2TextModelTester(VLMModelTester):
         # patch_size=8, image_size=32 → 4×4 grid → vit_merger [2×2] → merger [1×1] = 1 token
         kwargs.setdefault("image_size", 32)
         kwargs.setdefault("patch_size", 8)
+        # The tower's position grid is larger than an image, as the checkpoint's (980 against 448): a 8×8 grid.
+        kwargs.setdefault("vision_image_size", 64)
         kwargs.setdefault("num_image_tokens", 1)
         kwargs.setdefault("vocab_size", 256)
         kwargs.setdefault("hidden_size", 64)
@@ -269,7 +271,7 @@ class MiniCPMV4_7VisionText2TextModelTester(VLMModelTester):
             "num_hidden_layers": self.num_hidden_layers,
             "num_attention_heads": self.num_attention_heads,
             "intermediate_size": self.vision_intermediate_size,
-            "image_size": self.image_size,
+            "image_size": self.vision_image_size,
             "patch_size": self.patch_size,
             "num_channels": self.num_channels,
             "hidden_act": self.vision_hidden_act,

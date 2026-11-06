@@ -760,14 +760,6 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel):
         deepstack_visual_embeds: list[torch.Tensor] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | BaseModelOutputWithPast:
-        r"""
-        visual_pos_masks (`torch.Tensor` of shape `(batch_size, seqlen)`, *optional*):
-            The mask of the visual positions.
-        deepstack_visual_embeds (`list[torch.Tensor]`, *optional*):
-            The deepstack visual embeddings. The shape is (num_layers, visual_seqlen, embed_dim).
-            The feature is extracted from the different visual encoder layers, and fed to the decoder
-            hidden states. It's from the paper DeepStack(https://arxiv.org/abs/2406.04334).
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1141,6 +1133,8 @@ class Qwen3VLModel(Qwen3VLPreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        visual_pos_masks: torch.Tensor | None = None,
+        deepstack_visual_embeds: list[torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -1186,8 +1180,6 @@ class Qwen3VLModel(Qwen3VLPreTrainedModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
-        visual_pos_masks = None
-        deepstack_visual_embeds = None
         if image_mask is not None and video_mask is not None:
             # aggregate visual_pos_masks and deepstack_visual_embeds
             image_mask = image_mask[..., 0]

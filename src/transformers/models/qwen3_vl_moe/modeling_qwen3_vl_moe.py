@@ -1238,6 +1238,8 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        visual_pos_masks: torch.Tensor | None = None,
+        deepstack_visual_embeds: list[torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -1283,8 +1285,6 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
-        visual_pos_masks = None
-        deepstack_visual_embeds = None
         if image_mask is not None and video_mask is not None:
             # aggregate visual_pos_masks and deepstack_visual_embeds
             image_mask = image_mask[..., 0]

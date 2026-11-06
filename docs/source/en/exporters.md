@@ -388,23 +388,49 @@ exported = exporter.export(model, inputs, config=config)
 </hfoption>
 </hfoptions>
 
+## Multi-modal models
+
+A multi-modal model runs a vision or audio tower on each modality, scatters the features into the text embeddings at
+their placeholder tokens, then runs its main stack. [`~HfExporter.export_multimodal`] takes the same forward inputs as
+[`~HfExporter.export`] and exports one graph per part, named as [Optimum Intel](https://huggingface.co/docs/optimum/intel/index)
+names them:
+
+- `"text_embeddings_model"`: `input_ids` to embeddings;
+- one `"<modality>_embeddings_model"` per modality present (`"vision_embeddings_model"`, `"audio_embeddings_model"`,
+  ...);
+- `"language_model"`: the model itself on `inputs_embeds`, so its head (a classification head, for example) stays in
+  the graph.
+
+Scattering the features into the embeddings stays outside the graphs, and so do the tensors a vision tower would
+compute from the image grid with data-dependent ops (position ids, window indices, ...): they're computed from the
+config ([`~exporters.precompute.precompute_export_inputs`]) and fed to the graph.
+
+```python
+from transformers import AutoModelForImageTextToText, AutoProcessor
+from transformers.exporters import DynamoConfig, DynamoExporter
+
+model = AutoModelForImageTextToText.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
+processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
+messages = [{"role": "user", "content": [{"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"}, {"type": "text", "text": "Describe this image."}]}]
+inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt")
+
+components = DynamoExporter().export_multimodal(model, inputs, config=DynamoConfig(dynamic=True))
+# components: ExportArtifacts with "text_embeddings_model", "vision_embeddings_model" and "language_model"
+components.save_pretrained("qwen2-vl-dynamo")
+```
+
+Pass a `{component: config}` dict to configure each component on its own terms.
+
 ## Generative models
 
 For autoregressive generation, the model's `forward` has different shapes at the prefill step
 (full prompt, no KV cache) versus the decode step (single token, populated KV cache). Exporters
 expose [`~HfExporter.export_for_generation`], which splits both stages and exports each.
 
-For multi-modal generative models, the prefill additionally splits into an image or audio
-encoder, the language model, and `lm_head`. Encoder and language-model discovery uses
-[`~PreTrainedModel.get_encoder`] (`modality="image"` or `"audio"`) and
-[`~PreTrainedModel.get_decoder`] accessors, so any new architecture using these
-work out of the box.
-
-A projector component appears only when the model exposes one
-under an attribute name (`multi_modal_projector`, `connector`, `embed_vision`,
-`embed_audio`). Qwen2-VL below folds its projector into the vision tower, so its component dict
-has no separate `multi_modal_projector` key. New architectures must align their projector
-attribute to one of these names instead of growing the list.
+For multi-modal generative models, the prefill additionally splits as [`~HfExporter.export_multimodal`] splits a
+forward (see [Multi-modal models](#multi-modal-models)): `"text_embeddings_model"`, one
+`"<modality>_embeddings_model"` per modality, and `"language_model"`. Each modality graph runs the model's own
+`get_<modality>_features`, projector included, so any architecture exposing those works out of the box.
 
 <hfoptions id="generate">
 <hfoption id="Dynamo">
@@ -422,7 +448,7 @@ inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_te
 exporter = DynamoExporter()
 config = DynamoConfig(dynamic=True)
 components = exporter.export_for_generation(model, inputs, config=config)
-# components: ExportArtifacts with "image_encoder", "language_model", "lm_head" and "decode",
+# components: ExportArtifacts with "text_embeddings_model", "vision_embeddings_model", "language_model" and "decode",
 # each an ExportedComponent whose `.program` is an ExportedProgram
 ```
 
@@ -442,7 +468,7 @@ inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_te
 exporter = OnnxExporter()
 config = OnnxConfig(dynamic=True)
 components = exporter.export_for_generation(model, inputs, config=config)
-# components: ExportArtifacts with "image_encoder", "language_model", "lm_head" and "decode",
+# components: ExportArtifacts with "text_embeddings_model", "vision_embeddings_model", "language_model" and "decode",
 # each an ExportedComponent whose `.program` is an ONNXProgram
 ```
 
@@ -462,7 +488,7 @@ inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_te
 exporter = ExecutorchExporter()
 config = ExecutorchConfig(backend="xnnpack", dynamic=True)  # Use "mlx" on Apple Silicon.
 components = exporter.export_for_generation(model, inputs, config=config)
-# components: ExportArtifacts with "image_encoder", "language_model", "lm_head" and "decode",
+# components: ExportArtifacts with "text_embeddings_model", "vision_embeddings_model", "language_model" and "decode",
 # each an ExportedComponent whose `.program` is an ExecutorchProgramManager
 ```
 
@@ -482,11 +508,11 @@ inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_te
 exporter = OpenVINOExporter()
 config = OpenVINOConfig(dynamic=True)
 components = exporter.export_for_generation(model, inputs, config=config)
-# components: ExportArtifacts with "image_encoder", "language_model", "lm_head" and "decode",
+# components: ExportArtifacts with "text_embeddings_model", "vision_embeddings_model", "language_model" and "decode",
 # each an ExportedComponent whose `.program` is an openvino.Model
 ```
 
-`components.save_pretrained(directory)` writes one file per component (`decode.onnx`, `lm_head.onnx`, ...),
+`components.save_pretrained(directory)` writes one file per component (`decode.onnx`, `language_model.onnx`, ...),
 the manifest, the model config, and the generation config passed to `export_for_generation`.
 
 </hfoption>
@@ -518,7 +544,7 @@ running an eager forward for verification, swapping a submodule's inputs, or ski
 from transformers.exporters.utils import decompose_for_generation
 
 components = decompose_for_generation(model, inputs)
-# {"image_encoder": (submodel, fwd_kwargs), "language_model": (...), ..., "decode": (...)}
+# {"vision_embeddings_model": (submodel, fwd_kwargs), "language_model": (...), ..., "decode": (...)}
 
 exported = {}
 for name, (submodel, subinputs) in components.items():

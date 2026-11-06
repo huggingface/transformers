@@ -388,13 +388,6 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
         deepstack_features: dict[int, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        r"""
-        vision_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Boolean mask marking image token positions. Required when `deepstack_features` is provided.
-        deepstack_features (`dict[int, torch.Tensor]`, *optional*):
-            Mapping from LLM layer index to projected vision features of shape `(num_image_tokens, hidden_size)`.
-            Features are added into image-token positions of hidden states before the corresponding decoder layer.
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -631,6 +624,8 @@ class Granite4VisionModel(LlavaNextModel):
         vision_feature_select_strategy: str | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        vision_mask: torch.BoolTensor | None = None,
+        deepstack_features: dict[int, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Granite4VisionModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -653,8 +648,6 @@ class Granite4VisionModel(LlavaNextModel):
             )
 
         # Build deepstack injection map and scatter initial image embeddings
-        deepstack_features = None
-        vision_mask = None
         if mm_encoder_outputs.get("image") is not None:
             deepstack_features = {}
             for idx, (llm_layer_idx, packed_features) in enumerate(mm_encoder_outputs["image"].deepstack_features):
