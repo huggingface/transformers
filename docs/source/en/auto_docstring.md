@@ -164,10 +164,19 @@ from ...processing_utils import ProcessorMixin, ProcessingKwargs, Unpack
 from ...utils import auto_docstring
 
 class MyModelProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+    """
+    custom_call_kwarg (`bool`, *optional*, defaults to `False`):
+        A parameter with a default that can passed to __call__ which is not
+        covered by the standard ProcessorArgs, ImageProcessorArgs, and
+        VideoProcessorArgs.
+    """
+    custom_call_kwarg: bool
 
 @auto_docstring
 class MyModelProcessor(ProcessorMixin):
+    valid_processor_kwargs = MyModelProcessorKwargs
+    custom_call_kwarg = False
+
     def __init__(self, image_processor=None, tokenizer=None, custom_param: int = 4, **kwargs):
         r"""
         custom_param (`int`, *optional*, defaults to 4):

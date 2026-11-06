@@ -80,15 +80,11 @@ def validate_inputs(self, images=None, text=None, videos=None, audio=None, **kwa
 
 There are three ways to add custom arguments to a processor:
 
-| Where to add | Use for | Example |
-|---|---|---|
-| `__init__` | Settings saved in the config (model properties) | `image_seq_length` in [`Gemma3Processor`] |
-| `__call__` | Inputs only known at runtime | `images`, `labels`, `suffix`, etc. |
-| Custom `MyModelProcessingKwargs` class | Settings that can be configured at runtime | `use_image_id` in [`MiniCPMV4_7Processor`] |
-
-Arguments passed to `__init__` are saved in the config, have typically a default, and are not configurable at runtime.
-
-Arguments passed to `__call__` are inputs only known at runtime. They must either have no default value or `None`.
+| Where to add | Use for | Default value | Configurable at runtime | Example |
+|---|---|---|---|---|
+| `__init__` | Settings saved in the config (model properties) | Typically has a default | No | `image_seq_length` in [`Gemma3Processor`] |
+| `__call__` | Inputs only known at runtime | No default or `None` | Yes | `images`, `labels`, `suffix`, etc. |
+| Custom `MyModelProcessingKwargs` class | Settings that can be configured at runtime | Set as processor class attribute | Yes | `use_image_id` in [`MiniCPMV4_7Processor`] |
 
 Runtime arguments which can have a default must be added to a custom `MyModelProcessingKwargs` and will be passed as part of `**kwargs` to `__call__`. Defaults for these values can be set as processor class attributes. Defaults for modality-specific processors, for example the tokenizer or image processor, can be defined in the same way. This is usually not needed as modality-specific processors already have defaults defined in their respective classes. Only use this option if the processor must override a modality-specific processor setting. Of course, arguments passed at runtime to `__call__` have always higher priority than any defaults.
 
