@@ -244,7 +244,9 @@ RUN python3 -m pip install --no-cache-dir --no-deps "pytest-rerunfailures==16.7"
 # that imports it, so without it that slow test fails with an ImportError naming
 # matplotlib, on every GPU.
 #
-# kernels, pinned to transformers' range (setup.py: kernels>=0.17.0,<0.18).
+# kernels, pinned to transformers' range (setup.py: kernels>=0.18.0,<0.19 since
+# transformers#50307). Outside it, is_kernels_available() is False and
+# hub_kernels defines no mapping at all, which the gdn step below trips on.
 # It used to be uninstalled: adding it took gpt_oss from 5 failures to 25, all
 # resolving the CUDA-only kernels-community/vllm-flash-attn3. Retested on ROCm
 # 10.1 with kernels 0.17.2: the kernel tests in ministral3, granite_swa and
@@ -253,12 +255,12 @@ RUN python3 -m pip install --no-cache-dir --no-deps "pytest-rerunfailures==16.7"
 # load on ROCm 10.1; see "Hub kernels" at the end of this file.
 # urllib3 is pinned here, not globally, because two requirements conflict:
 # transformers[testing] (its "quality" deps) wants urllib3<2.0.0, while kernels
-# 0.17.2 -> sigstore -> tuf wants urllib3~=2.0. Unpinned, the transformers
+# -> sigstore -> tuf wants urllib3~=2.0. Unpinned, the transformers
 # install takes 1.26.x and this step upgrades it. A global constraint would
 # apply to the transformers step too and make it unresolvable.
 RUN python3 -m pip install --no-cache-dir einops blobfile num2words timm \
       scipy librosa soundfile pycocotools peft bitsandbytes matplotlib \
-      "kernels==0.17.2" "urllib3==2.8.0"
+      "kernels==0.18.1" "urllib3==2.8.0"
 
 # Media decoders needed by audio/video model tests:
 #  - PyAV (`av`): torchvision video ops
