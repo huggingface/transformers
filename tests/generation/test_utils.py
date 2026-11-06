@@ -46,6 +46,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_flash_attn_3,
     require_flash_attn_4,
+    require_kernels,
     require_optimum_quanto,
     require_torch,
     require_torch_accelerator,
@@ -335,6 +336,23 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         )
 
         return output_generate
+
+    @pytest.mark.generate
+    @require_torch_accelerator
+    @require_kernels
+    def test_kernels_greedy_generate(self):
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+
+            model = model_class(config).to(torch_device).eval()
+            model.use_kernels = True  # Enable kernels
+
+            output_generate = self._greedy_generate(model=model, inputs_dict=inputs_dict)
+
+            if model.config.is_encoder_decoder:
+                self.assertTrue(output_generate.shape[1] == self.max_new_tokens + 1)
+            else:
+                self.assertTrue(output_generate.shape[1] == self.max_new_tokens + inputs_dict["input_ids"].shape[1])
 
     @pytest.mark.generate
     def test_greedy_generate(self):
