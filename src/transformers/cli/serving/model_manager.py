@@ -295,7 +295,7 @@ class ModelManager:
         # A decision model, or a checkpoint shipping a decision head next to its weights: loaded like the pipeline does
         config = decision_checkpoint_config(model_id, config, revision=revision)
         if type(config) in MODEL_FOR_DECISION_MAPPING:
-            return MODEL_FOR_DECISION_MAPPING[type(config)].from_pretrained(model_id, **model_kwargs)
+            return MODEL_FOR_DECISION_MAPPING[type(config)].from_pretrained(model_id, **model_kwargs)  # type: ignore[union-attr]
 
         if config.model_type in MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES:
             from transformers import AutoModelForMultimodalLM

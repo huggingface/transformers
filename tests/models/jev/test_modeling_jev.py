@@ -101,19 +101,19 @@ class JevForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
 # Code readouts of a Qwen3.5 checkpoint, read with the files of its repo, and the answers each gives to the request of its
 # `decision_test.json`. One per prompt and attention mode: the other fine-tunes (d3-*, Darwin-*, PhysicalEye) share them
 DECIDERS = {
-    "ArthurZ/pplx-decider-v1.1-27b": {
+    "hf-internal-testing/pplx-decider-v1.1-27b": {
         "refund": 0.9993,
         "spam": 0.0003,
         "tone": {"calm": 0.1327, "angry": 0.8002, "sad": 0.0671},
         "urgency": {"0": 0.0008, "1": 0.0058, "2": 0.7808, "3": 0.2126},
     },
-    "ArthurZ/pplx-decider-v1-27b": {
+    "hf-internal-testing/pplx-decider-v1-27b": {
         "refund": 0.9946,
         "spam": 0.0208,
         "tone": {"calm": 0.1099, "angry": 0.7974, "sad": 0.0927},
         "urgency": {"0": 0.0034, "1": 0.0051, "2": 0.9301, "3": 0.0614},
     },
-    "ArthurZ/d3": {
+    "hf-internal-testing/d3": {
         "refund": 0.9908,
         "spam": 0.0006,
         "tone": {"calm": 0.1407, "angry": 0.8094, "sad": 0.05},
@@ -131,7 +131,9 @@ class JevIntegrationTest(unittest.TestCase):
             "urgent": 0.5419,
             "anger": {"0": 0.0165, "1": 0.1113, "2": 0.5163, "3": 0.3126, "4": 0.0419, "5": 0.0013},
         }
-        check_decision(self, "ArthurZ/JEV-9B", "ArthurZ/JEV-9B", expected, atol=1e-2, dtype="bfloat16")
+        check_decision(
+            self, "hf-internal-testing/JEV-9B", "hf-internal-testing/JEV-9B", expected, atol=1e-2, dtype="bfloat16"
+        )
 
     def test_jev_35b(self):
         # System 1 merged into the weights: its head is rows of the `lm_head`
@@ -140,7 +142,7 @@ class JevIntegrationTest(unittest.TestCase):
             "urgent": 0.7539,
             "anger": {"0": 0.0155, "1": 0.0859, "2": 0.4147, "3": 0.3896, "4": 0.0872, "5": 0.007},
         }
-        check_decision(self, "ArthurZ/JEV-35B", "ArthurZ/JEV-35B", expected, atol=1e-2)
+        check_decision(self, "hf-internal-testing/JEV-35B", "hf-internal-testing/JEV-35B", expected, atol=1e-2)
 
     def test_deciders(self):
         for repo, expected in DECIDERS.items():
