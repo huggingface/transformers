@@ -1541,6 +1541,7 @@ class Gemma4TextModel(Gemma3TextModel):
             shared_kv_states=shared_kv_states if kwargs.get("return_shared_kv_states", False) else None,
         )
 
+    # trf-ignore: TRF051
     def _maybe_slice_kv_shared_inputs(
         self,
         hidden_states,
@@ -1571,7 +1572,11 @@ class Gemma4TextModel(Gemma3TextModel):
         elif self.config._attn_implementation == "flex_attention":
             can_optimize = False
         # In this case, we cannot rely on the `is_causal` attribute, as dropping some tokens will make us loose causality
-        elif logits_to_keep > 1 and any(mask is None for mask in causal_mask_mapping.values()):
+        elif (
+            self.config._attn_implementation == "sdpa"
+            and logits_to_keep > 1
+            and any(mask is None for mask in causal_mask_mapping.values())
+        ):
             can_optimize = False
 
         # If we cannot optimize, return untouched inputs will the full seq_len
