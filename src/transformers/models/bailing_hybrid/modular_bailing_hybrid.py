@@ -25,12 +25,12 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations.accelerate import force_accelerate_hooks
+from ...integrations.moe import use_experts_implementation
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ...models.deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
-    DeepseekV3Experts,
     DeepseekV3ForCausalLM,
     DeepseekV3MLP,
     DeepseekV3MoE,
@@ -53,6 +53,7 @@ from ...models.qwen3_next.modeling_qwen3_next import (
     Qwen3NextPreTrainedModel,
     apply_mask_to_padding_states,
 )
+from ...models.step3p7.modeling_step3p7 import Step3p7Experts
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.output_capturing import OutputRecorder
@@ -67,11 +68,12 @@ class BailingHybridConfig(DeepseekV3Config):
     first_k_dense_replace (`int`, *optional*, defaults to 2):
         Number of initial decoder layers that use a dense MLP instead of routed experts.
     num_mtp_layers (`int`, *optional*, defaults to 1):
-        Number of Multi-Token Prediction (MTP) modules available to append after the base transformer model. When `0`,
-        the model behaves as a standard decoder. When `>0`, each extra module can predict one additional future token at inference
-        time (speculative decoding via `generate(..., use_mtp=True)`).
+        Number of Multi-Token Prediction (MTP) layers stored after the main decoder in the checkpoint. Standard causal
+        inference uses only `num_hidden_layers` decoder layers.
     rope_theta (`float`, *optional*, defaults to 6000000.0):
         Base period of the rotary position embeddings used by MLA layers.
+    q_lora_rank (`int`, *optional*, defaults to `None`):
+        Low-rank dimension of the query projection in MLA layers. When unset, queries use a single projection.
     short_conv_kernel_size (`int`, *optional*, defaults to 4):
         Kernel size of the short depthwise convolutions in KDA layers.
     layer_group_size (`int`, *optional*, defaults to 6):
@@ -83,6 +85,10 @@ class BailingHybridConfig(DeepseekV3Config):
         Lower bound of the KDA forget gate in log space.
     mlp_layer_types (`list[str]`, *optional*):
         Per-layer MLP types. Derived from `first_k_dense_replace` when omitted.
+    expert_swiglu_limit_list (`list[float]`, *optional*):
+        Per-layer SwiGLU clipping limits for routed experts. Zero disables clipping.
+    share_expert_swiglu_limit_list (`list[float]`, *optional*):
+        Per-layer SwiGLU clipping limits for shared experts. Zero disables clipping.
     mtp_loss_scaling_factor (`float`, *optional*, defaults to 0.0):
         Scaling factor used for the auxiliary multi-token-prediction loss during pretraining.
     """
@@ -149,6 +155,7 @@ class BailingHybridConfig(DeepseekV3Config):
     output_router_logits: bool = False
 
     kv_lora_rank: int = 512
+    q_lora_rank: int | None = None
     qk_nope_head_dim: int = 128
     qk_rope_head_dim: int = 64
     v_head_dim: int = 128
@@ -161,15 +168,20 @@ class BailingHybridConfig(DeepseekV3Config):
     kda_lower_bound: float = -5.0
     layer_types: list[str] | None = None
     mlp_layer_types: list[str] | None = None
+    expert_swiglu_limit_list: list[float | int] | None = None
+    share_expert_swiglu_limit_list: list[float | int] | None = None
 
     mtp_loss_scaling_factor: float | int = 0.0
 
     # Ling checkpoints use `num_experts`; the DeepSeek compatibility name is not part of this architecture.
     n_routed_experts = AttributeError()
     rope_interleave = AttributeError()
-    q_lora_rank = AttributeError()
 
     def __post_init__(self, **kwargs):
+        for name in ("expert_swiglu_limit_list", "share_expert_swiglu_limit_list"):
+            limits = getattr(self, name)
+            if limits is not None and len(limits) != self.num_hidden_layers:
+                raise ValueError(f"`{name}` must contain one limit per decoder layer.")
         self.linear_head_dim = self.head_dim
         self.linear_num_heads = self.num_attention_heads
         self.linear_conv_kernel_dim = self.short_conv_kernel_size
@@ -202,25 +214,28 @@ class BailingHybridRotaryEmbedding(DeepseekV3RotaryEmbedding):
     pass
 
 
-class BailingHybridExperts(DeepseekV3Experts):
+@use_experts_implementation
+class BailingHybridExperts(Step3p7Experts):
     pass
 
 
 class BailingHybridMLP(DeepseekV3MLP):
-    pass
+    def __init__(self, config, intermediate_size=None):
+        super().__init__(config, intermediate_size)
+        self.limit = float("inf")
+
+    def forward(self, x):
+        gate = self.act_fn(self.gate_proj(x)).clamp(max=self.limit)
+        up = self.up_proj(x).clamp(min=-self.limit, max=self.limit)
+        return self.down_proj(gate * up)
 
 
 class BailingHybridAttention(DeepseekV3Attention):
-    """Multi-head latent attention with the head-wise output gate used by Ling 3.0."""
+    """Multi-head latent attention with the head-wise output gate used by Ling 3 models."""
 
     def __init__(self, config: BailingHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.g_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-        del self.q_a_proj
-        del self.q_a_layernorm
-        del self.q_b_proj
-        del self.q_lora_rank
 
     def forward(
         self,
@@ -233,7 +248,10 @@ class BailingHybridAttention(DeepseekV3Attention):
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
 
-        q_states = self.q_proj(hidden_states)
+        if self.q_lora_rank is None:
+            q_states = self.q_proj(hidden_states)
+        else:
+            q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
         q_states = q_states.view(query_shape).transpose(1, 2)
         q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
@@ -398,17 +416,28 @@ class BailingHybridTopkRouter(DeepseekV3TopkRouter):
 
 
 class BailingHybridMoE(DeepseekV3MoE):
-    pass
+    def __init__(self, config: BailingHybridConfig, layer_idx: int):
+        super().__init__(config)
+        if config.expert_swiglu_limit_list is not None:
+            self.experts.limit = config.expert_swiglu_limit_list[layer_idx] or float("inf")
+        if config.share_expert_swiglu_limit_list is not None:
+            self.shared_experts.limit = config.share_expert_swiglu_limit_list[layer_idx] or float("inf")
 
 
 class BailingHybridDecoderLayer(KimiLinearDecoderLayer):
-    pass
+    def __init__(self, config: BailingHybridConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.mlp = (
+            BailingHybridMoE(config, layer_idx)
+            if config.mlp_layer_types[layer_idx] == "sparse"
+            else BailingHybridMLP(config)
+        )
 
 
 @auto_docstring
 class BailingHybridPreTrainedModel(Qwen3NextPreTrainedModel):
     _no_split_modules = ["BailingHybridDecoderLayer"]
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.42\..*"]
+    _keys_to_ignore_on_load_unexpected = None
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
         "conv1d",
@@ -420,6 +449,11 @@ class BailingHybridPreTrainedModel(Qwen3NextPreTrainedModel):
         "hidden_states": BailingHybridDecoderLayer,
         "attentions": BailingHybridAttention,
     }
+
+    def get_correct_experts_implementation(self, requested_experts: str | None) -> str:
+        if requested_experts == "sonicmoe" and any(self.config.expert_swiglu_limit_list or []):
+            raise ValueError("SonicMoE does not support Ling's post-activation SwiGLU clipping.")
+        return PreTrainedModel.get_correct_experts_implementation(self, requested_experts)
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -441,7 +475,12 @@ class BailingHybridPreTrainedModel(Qwen3NextPreTrainedModel):
 
 @auto_docstring
 class BailingHybridModel(Qwen3NextModel):
-    pass
+    def __init__(self, config: BailingHybridConfig):
+        super().__init__(config)
+        self._keys_to_ignore_on_load_unexpected = [
+            rf"(^|\.)layers\.{layer_idx}\."
+            for layer_idx in range(config.num_hidden_layers, config.num_hidden_layers + config.num_mtp_layers)
+        ]
 
 
 class BailingHybridForCausalLM(DeepseekV3ForCausalLM, GenerationMixin):

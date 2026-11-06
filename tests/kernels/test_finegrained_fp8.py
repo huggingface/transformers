@@ -29,6 +29,7 @@ Two layers, both mocking only what needs the `kernels-community/finegrained-fp8`
 
 import contextlib
 import unittest
+from types import SimpleNamespace
 from unittest import mock
 
 import torch
@@ -46,6 +47,40 @@ from transformers.testing_utils import require_torch, torch_device
 
 def _add_one(x, *args, **kwargs):
     return x + 1
+
+
+@require_torch
+class FinegrainedFp8GatingTest(unittest.TestCase):
+    def test_clipping_order_and_existing_gates(self):
+        gate_up = torch.tensor([[2.0, -2.0, 3.0, -3.0]], device=torch_device)
+        gate, up = gate_up.chunk(2, dim=-1)
+        for limit, after_activation, alpha in (
+            (None, False, None),
+            (1.5, False, None),
+            (1.5, True, None),
+            (1.5, False, 1.7),
+        ):
+            with self.subTest(limit=limit, after_activation=after_activation, alpha=alpha):
+                config = SimpleNamespace(
+                    hidden_size=4,
+                    num_local_experts=2,
+                    moe_intermediate_size=2,
+                    hidden_act="silu",
+                    swiglu_limit=limit,
+                    swiglu_alpha=alpha,
+                )
+                experts = fg.FP8Experts(config)
+                experts._fp8_experts_clamp_after_activation = after_activation
+                if alpha is not None:
+                    clipped_gate = gate.clamp(max=limit)
+                    expected = clipped_gate * torch.sigmoid(alpha * clipped_gate) * (up.clamp(-limit, limit) + 1)
+                elif after_activation:
+                    expected = torch.nn.functional.silu(gate).clamp(max=limit) * up.clamp(-limit, limit)
+                elif limit is not None:
+                    expected = torch.nn.functional.silu(gate.clamp(max=limit)) * up.clamp(-limit, limit)
+                else:
+                    expected = torch.nn.functional.silu(gate) * up
+                torch.testing.assert_close(experts._apply_gate(gate_up), expected, rtol=0, atol=0)
 
 
 # ── Fake kernels (a "good" one exposing every symbol the loader resolves, plus a variant missing one) ──
