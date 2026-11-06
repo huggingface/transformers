@@ -38,8 +38,9 @@ any of these show up):
     report then shows 0 failures for a red CI run. This already happened on the
     main run https://github.com/huggingface/transformers/actions/runs/41959891568
     (2026-11-05): all 13 jobs failed in "Install dependencies" (torch==2.14.0+cpu
-    could not be resolved). Possible fix: list such jobs with their job URL and
-    the last "##[error]" line.
+    could not be resolved). It also hits jobs killed before pytest prints its
+    summary (see the first gap of analyze_gh_wf_runs.py). Possible fix: list such
+    jobs with their job URL and the last "##[error]" line.
     The same applies to the *previous* (baseline) run: if its jobs failed this
     way, it has 0 parsed failures and every current failure is reported as new
     (e.g. run 42196234595 vs baseline 42154858517). Possible fix: warn (or skip

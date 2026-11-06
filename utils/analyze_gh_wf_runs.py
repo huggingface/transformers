@@ -18,6 +18,11 @@ Usage:
 
 Known gaps (not handled yet — we will monitor the real CI runs and improve if
 any of these show up):
+  - Logs without a pytest summary (job killed, e.g. exit code 137, or timed out)
+    yield no failures, although the live `-v` lines still show results (e.g.
+    "<nodeid> ERROR [ 50%]") and which test was running when the job died. Possible
+    fix: when there is no summary, collect FAILED / ERROR from the live status lines,
+    and report the last started test with the end reason (killed / exit code / timeout).
   - Only the first "short test summary info" section is parsed, so a job that
     runs pytest more than once only reports the first run's failures.
   - Node ids containing spaces (e.g. a parametrize id with a space) are not matched.
