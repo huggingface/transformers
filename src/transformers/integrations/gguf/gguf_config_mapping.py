@@ -117,10 +117,61 @@ def _lfm2_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
     }
 
 
+def _gemma3_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
+    """Gemma 3: sliding-window attention, with full attention on every sixth layer."""
+    key = lambda name: metadata[f"gemma3.{name}"]  # noqa: E731
+    num_layers = key("block_count")
+    # llama.cpp scales the full-attention layers only; the sliding ones keep their own base
+    full_attention = {"rope_type": "default", "rope_theta": key("rope.freq_base")}
+    if (rope_type := metadata.get("gemma3.rope.scaling.type", "none")) != "none":
+        full_attention |= {"rope_type": rope_type, "factor": key("rope.scaling.factor")}
+    # without a window llama.cpp runs every layer as full attention, otherwise one in six
+    window = metadata.get("gemma3.attention.sliding_window")
+
+    return {
+        "model_type": "gemma3_text",
+        "architectures": ["Gemma3ForCausalLM"],
+        "max_position_embeddings": key("context_length"),
+        "hidden_size": key("embedding_length"),
+        "intermediate_size": key("feed_forward_length"),
+        "num_hidden_layers": num_layers,
+        "num_attention_heads": key("attention.head_count"),
+        "num_key_value_heads": key("attention.head_count_kv"),
+        "head_dim": key("attention.key_length"),
+        # not in the file: llama.cpp scales queries by `key_length`, except on the 27B (62 layers)
+        "query_pre_attn_scalar": (
+            key("embedding_length") // key("attention.head_count") if num_layers == 62 else key("attention.key_length")
+        ),
+        "rms_norm_eps": key("attention.layer_norm_rms_epsilon"),
+        "sliding_window": window,
+        "layer_types": [
+            "sliding_attention" if window and (i + 1) % 6 else "full_attention" for i in range(num_layers)
+        ],
+        "final_logit_softcapping": metadata.get("gemma3.final_logit_softcapping"),
+        "rope_parameters": {
+            "full_attention": full_attention,
+            # llama.cpp's default when the file leaves it out
+            "sliding_attention": {
+                "rope_type": "default",
+                "rope_theta": metadata.get("gemma3.rope.freq_base_swa", 10_000.0),
+            },
+        },
+        # `read_gguf_metadata` leaves the vocabulary as its length
+        "vocab_size": metadata["tokenizer.ggml.tokens"],
+        # llama.cpp writes the output projection only when it is not the embedding matrix
+        "tie_word_embeddings": "output.weight" not in tensor_names,
+        # absent ids stay `None`, as they are on a config by default
+        "eos_token_id": metadata.get("tokenizer.ggml.eos_token_id"),
+        "bos_token_id": metadata.get("tokenizer.ggml.bos_token_id"),
+        "pad_token_id": metadata.get("tokenizer.ggml.padding_token_id"),
+    }
+
+
 GGUF_CONFIG_ARCHS = {
     "qwen35": _qwen35_config,
     "qwen35moe": _qwen35moe_config,
     "lfm2": _lfm2_config,
+    "gemma3": _gemma3_config,
 }
 
 

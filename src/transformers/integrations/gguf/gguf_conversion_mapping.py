@@ -233,11 +233,29 @@ def _lfm2(config) -> list[WeightTransform]:
     return renamings + [conv_kernel]
 
 
+def _gemma3(config) -> list[WeightTransform]:
+    """Gemma 3: llama.cpp stores every norm as `w + 1` (`SubtractOne`) and otherwise only renames."""
+    offset_norms = {
+        r"^output_norm\.weight": "model.norm.weight",
+        r"\.attn_norm\.weight": ".input_layernorm.weight",
+        r"\.post_attention_norm\.weight": ".post_attention_layernorm.weight",
+        r"\.ffn_norm\.weight": ".pre_feedforward_layernorm.weight",
+        r"\.post_ffw_norm\.weight": ".post_feedforward_layernorm.weight",
+        r"\.attn_q_norm\.weight": ".self_attn.q_norm.weight",
+        r"\.attn_k_norm\.weight": ".self_attn.k_norm.weight",
+    }
+    return DENSE_DECODER_RENAMINGS + [
+        WeightConverter(source_patterns=source, target_patterns=target, operations=[SubtractOne()])
+        for source, target in offset_norms.items()
+    ]
+
+
 # gguf `general.architecture` -> builder taking the model config
 GGUF_ARCHS = {
     "qwen35": _qwen35,
     "qwen35moe": _qwen35moe,
     "lfm2": _lfm2,
+    "gemma3": _gemma3,
 }
 
 
