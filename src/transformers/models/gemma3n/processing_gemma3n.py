@@ -98,7 +98,7 @@ class Gemma3nProcessor(ProcessorMixin):
                 text = [" ".join([self.image_token] * len(image_list)) for image_list in images]
 
         if audio is not None and not text:
-            text = " ".join([self.audio_token] * len(audio))
+            text = [self.audio_token] * len(audio)
         return images, text, None, audio
 
     def _get_num_multimodal_tokens(self, image_sizes=None, audio_lengths=None, **kwargs):
