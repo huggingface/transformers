@@ -34,6 +34,17 @@ decide(
 )
 ```
 
+## Training
+
+Pass `labels` to [`KevForDecision`] to return a loss alongside the option logits. Integer labels select an option
+for each question; floating-point labels give target distributions concatenated in question order. The loss is
+cross-entropy over each question's options, averaged over the questions in the prompt. Integer labels of `-100`
+ignore a question.
+
+This matches the default objective in the [official Kev trainer](https://github.com/jaredpalmer/kev/blob/2074cc44256200bb37540103fa4572901faa10f3/kev/train.py#L41).
+Its optional ordinal, focal, anchoring, and permutation-consistency objectives are not enabled. Training uses raw
+logits; the decision configuration's fitted temperature is applied by `decide` for inference.
+
 ## KevConfig
 
 [[autodoc]] KevConfig

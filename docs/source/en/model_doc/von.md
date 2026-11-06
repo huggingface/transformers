@@ -34,6 +34,17 @@ decide(
 )
 ```
 
+## Training
+
+Pass `labels` to [`VonForDecision`] to return a loss alongside the option logits. Labels are either an integer option
+index or a target distribution over the options of the question. The loss is cross-entropy plus the Brier score,
+weighted by `config.brier_weight` (default `0.5`). The Brier score sums squared probability errors over options.
+An integer label of `-100` ignores the question.
+
+This follows the [official marker trainer](https://github.com/wfzyx/von/blob/fd577a87eea6f0a002d256c5c181135d353a3fd0/training/train_option_marker.py#L275),
+including its `log(probability + 1e-8)` calculation. When labels are supplied, logits and loss are computed before
+null-state debiasing. Probability calibration remains an inference step in `decide`.
+
 ## VonConfig
 
 [[autodoc]] VonConfig

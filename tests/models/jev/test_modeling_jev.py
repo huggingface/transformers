@@ -21,7 +21,7 @@ from huggingface_hub import hf_hub_download
 from safetensors.torch import save_file
 
 from transformers import AutoProcessor, is_torch_available, pipeline
-from transformers.decision import DecisionConfig
+from transformers.decision import DecisionConfig, Question
 from transformers.testing_utils import require_torch, require_torch_accelerator, require_vision, slow
 
 from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision, render
@@ -30,7 +30,186 @@ from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision
 if is_torch_available():
     import torch
 
-    from transformers import JevForDecision
+    from transformers import AutoModelForDecision, JevConfig, JevForDecision, Qwen2Config, Trainer, TrainingArguments
+    from transformers.loss.loss_jev import JevForDecisionLoss
+
+
+@require_torch
+class JevLossTest(unittest.TestCase):
+    def setUp(self):
+        self.config = JevConfig(
+            hidden_size=16,
+            num_verbalizers=16,
+            offsets={"noul": 8, "score": 0, "choice": 10},
+            softcap=2.0,
+            text_config=Qwen2Config(
+                vocab_size=32,
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=1,
+                num_attention_heads=2,
+                num_key_value_heads=1,
+            ),
+        )
+        self.inputs = {
+            "input_ids": torch.arange(12)[None],
+            "marks": torch.tensor([[4, 8, 12]]),
+            "num_options": torch.tensor([[2, 6, 4]]),
+            "question_type_ids": torch.tensor(
+                [[Question.questions_types.index(k) for k in ("noul", "score", "choice")]]
+            ),
+            "labels": torch.tensor([[1, 3, 2]]),
+            "loss_weights": torch.tensor([[0.25, 2.0, 0.5]]),
+        }
+
+    def test_reference_loss_and_gradients(self):
+        # Golden values from trainjev.losses.kl_rps at shibing624/train-jev@88bcc9d.
+        soft_labels = torch.tensor([[0.2, 0.8, 0.05, 0.1, 0.2, 0.3, 0.25, 0.1, 0.0, 0.2, 0.0, 0.8]])
+        cases = (
+            (
+                torch.tensor([[1, 3, 2]]),
+                0.0,
+                None,
+                1.6074589490890503,
+                [
+                    0.1914808452,
+                    -0.1914808452,
+                    0.0134539399,
+                    0.0598560162,
+                    0.1156741679,
+                    -0.3125763834,
+                    0.0453034379,
+                    0.0782888085,
+                    0.0779418349,
+                    0.0316887870,
+                    -0.2381349802,
+                    0.1285043508,
+                ],
+            ),
+            (
+                soft_labels,
+                0.0,
+                None,
+                0.4593898057937622,
+                [
+                    0.1248141751,
+                    -0.1248141825,
+                    -0.0036421223,
+                    0.0251717903,
+                    0.0497519299,
+                    -0.0774605125,
+                    -0.0377272293,
+                    0.0439061336,
+                    0.0779418349,
+                    -0.0349778831,
+                    0.0951983631,
+                    -0.1381623298,
+                ],
+            ),
+            (
+                soft_labels,
+                0.2,
+                self.inputs["loss_weights"],
+                0.4107740819454193,
+                [
+                    0.0373059139,
+                    -0.0373059213,
+                    -0.0080373567,
+                    0.0508070849,
+                    0.1073135063,
+                    -0.1603680551,
+                    -0.0818812922,
+                    0.0921660811,
+                    0.0431385003,
+                    -0.0179415010,
+                    0.0536751598,
+                    -0.0788721740,
+                ],
+            ),
+        )
+        for labels, brier_weight, weights, expected_loss, expected_grad in cases:
+            with self.subTest(soft_labels=labels.is_floating_point(), brier_weight=brier_weight):
+                logits = torch.tensor(
+                    [0.1, -0.2, -1.0, 0.5, 1.2, -0.4, 0.3, 0.8, 0.4, -0.5, 0.6, 0.9], requires_grad=True
+                )
+                loss = JevForDecisionLoss(
+                    logits,
+                    labels,
+                    self.inputs["num_options"],
+                    torch.tensor([False, True, False]),
+                    brier_weight=brier_weight,
+                    loss_weights=weights,
+                )
+                torch.testing.assert_close(loss, torch.tensor(expected_loss))
+                loss.backward()
+                torch.testing.assert_close(logits.grad, torch.tensor(expected_grad))
+
+    def test_loss_and_save_load(self):
+        model = JevForDecision(self.config).eval()
+        self.assertIs(model.loss_function, JevForDecisionLoss)
+        output = model(**self.inputs)
+        torch.testing.assert_close(model(**self.inputs, return_dict=False)[0], output.loss)
+        output.loss.backward()
+        self.assertTrue(all(p.grad is None or torch.isfinite(p.grad).all() for p in model.parameters()))
+        self.assertGreater(model.proj.weight.grad.abs().sum().item(), 0)
+        self.assertGreater(model.model.get_input_embeddings().weight.grad.abs().sum().item(), 0)
+        # Custom offsets: these head rows are not options of any question and must receive no supervised gradient.
+        torch.testing.assert_close(model.proj.weight.grad[[6, 7, 14, 15]], torch.zeros(4, 16))
+        with tempfile.TemporaryDirectory() as directory:
+            model.save_pretrained(directory)
+            loaded = AutoModelForDecision.from_pretrained(directory).eval()
+        result = loaded(**self.inputs)
+        torch.testing.assert_close(result.loss, output.loss)
+        torch.testing.assert_close(result.logits, output.logits)
+        self.assertIsNone(model(**{k: v for k, v in self.inputs.items() if k != "labels"}).loss)
+
+    def test_accumulated_loss(self):
+        model = JevForDecision(self.config).eval()
+        model(**self.inputs).loss.backward()
+        reference = {name: p.grad.clone() for name, p in model.named_parameters()}
+        model.zero_grad()
+        for index in range(3):
+            sample = {k: v if k == "input_ids" else v[:, index : index + 1] for k, v in self.inputs.items()}
+            model(**sample, num_items_in_batch=3).loss.backward()
+        for name, p in model.named_parameters():
+            torch.testing.assert_close(p.grad, reference[name], rtol=1e-4, atol=1e-6)
+
+    def test_bfloat16_loss(self):
+        model = JevForDecision(self.config).to(torch.bfloat16)
+        output = model(**self.inputs)
+        self.assertEqual(output.loss.dtype, torch.float32)
+        self.assertTrue(torch.isfinite(output.loss))
+        output.loss.backward()
+        self.assertTrue(all(p.grad is None or torch.isfinite(p.grad).all() for p in model.parameters()))
+
+    def test_ignored_and_singleton_questions(self):
+        logits = torch.tensor([1.0, -0.5, 0.5], requires_grad=True)
+        loss = JevForDecisionLoss(logits, torch.tensor([[0, -100]]), torch.tensor([1, 2]), torch.tensor([True, False]))
+        self.assertEqual(loss.item(), 0.0)
+        loss.backward()
+        torch.testing.assert_close(logits.grad, torch.zeros(3))
+
+    def test_trainer(self):
+        model = JevForDecision(self.config)
+        before = model.proj.weight.detach().clone()
+        with tempfile.TemporaryDirectory() as directory:
+            trainer = Trainer(
+                model=model,
+                args=TrainingArguments(
+                    output_dir=directory,
+                    use_cpu=True,
+                    max_steps=1,
+                    per_device_train_batch_size=1,
+                    report_to="none",
+                    remove_unused_columns=False,
+                    save_strategy="no",
+                ),
+                train_dataset=[0],
+                data_collator=lambda features: self.inputs,
+            )
+            result = trainer.train()
+        self.assertTrue(torch.isfinite(torch.tensor(result.training_loss)))
+        self.assertFalse(torch.equal(before, model.proj.weight))
 
 
 @require_torch

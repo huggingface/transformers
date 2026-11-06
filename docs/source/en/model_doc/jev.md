@@ -75,6 +75,20 @@ and [d3](https://huggingface.co/vllm-sr/d3), whose Qwen3.5 backbone attends to t
 pipeline("decision", model="vllm-sr/d3")(request)  # or perplexity-ai/pplx-decider-v1.1-27b
 ```
 
+## Training
+
+[`JevForDecision`] accepts integer option indices or target distributions in `labels` and returns a typed output with
+`loss` and `logits`. Its native loss is registered in `LOSS_MAPPING`. It follows the community
+[`train-jev` objective](https://github.com/shibing624/train-jev/blob/88bcc9d21eb4f3ec07da8183bb3f5898abe36bc5/trainjev/losses.py):
+KL divergence from the target to the predicted distribution over active options, plus an ordinal ranked probability
+score for `score` questions. `config.rps_weight` defaults to `0.5`; optional `config.brier_weight` defaults to `0.0`.
+This is a fine-tuning recipe from `train-jev`, not a claim about the original JEV checkpoint's training objective.
+
+Loss uses the head's scores after its optional soft cap and before inference calibration. `loss_weights` weights each
+question; the weighted sum is divided by the number of valid questions, not the sum of weights. Use
+`num_items_in_batch` to normalize accumulated micro-batches by their total number of questions. Option indices and
+target distributions follow the rendered option order; integer labels of `-100` ignore a question.
+
 ## JevConfig
 
 [[autodoc]] JevConfig
