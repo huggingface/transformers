@@ -16,6 +16,7 @@ The Trainer class, to easily train a 🤗 Transformers from scratch or finetune 
 """
 
 import contextlib
+import copy
 import dataclasses
 import functools
 import glob
@@ -2348,19 +2349,11 @@ class Trainer:
         elif isinstance(data, (tuple, list)):
             return type(data)(self._prepare_input(v) for v in data)
         elif dataclasses.is_dataclass(data) and not isinstance(data, type):
-            init_fields = {
-                f.name: self._prepare_input(getattr(data, f.name))
-                for f in dataclasses.fields(data)
-                if f.init and hasattr(data, f.name)
-            }
-            replaced = dataclasses.replace(data, **init_fields)
+            copied = copy.copy(data)
             for f in dataclasses.fields(data):
-                if not f.init and hasattr(data, f.name):
-                    try:
-                        setattr(replaced, f.name, self._prepare_input(getattr(data, f.name)))
-                    except (dataclasses.FrozenInstanceError, AttributeError):
-                        pass
-            return replaced
+                if hasattr(data, f.name):
+                    object.__setattr__(copied, f.name, self._prepare_input(getattr(data, f.name)))
+            return copied
         elif isinstance(data, torch.Tensor):
             kwargs = {"device": self.args.device}
             if self.is_deepspeed_enabled and (torch.is_floating_point(data) or torch.is_complex(data)):

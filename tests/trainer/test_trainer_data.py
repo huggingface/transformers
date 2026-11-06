@@ -1084,6 +1084,15 @@ class TrainerDataUtilsTest(unittest.TestCase):
             def __post_init__(self):
                 self.cached = self.input_ids * 2
 
+        @dataclasses.dataclass(frozen=True)
+        class FrozenInitVarData:
+            input_ids: torch.Tensor
+            pad_val: dataclasses.InitVar[int]
+            cached: torch.Tensor = dataclasses.field(init=False)
+
+            def __post_init__(self, pad_val: int):
+                object.__setattr__(self, "cached", self.input_ids + pad_val)
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = TrainingArguments(output_dir=tmp_dir, use_cpu=True, report_to=[])
             trainer = Trainer(model=nn.Linear(1, 1), args=args)
@@ -1126,6 +1135,14 @@ class TrainerDataUtilsTest(unittest.TestCase):
             prep_top_level = trainer._prepare_inputs(data)
             self.assertIsInstance(prep_top_level, SimpleData)
             self.assertEqual(prep_top_level.input_ids.device, trainer.args.device)
+
+            # 7. Frozen dataclass with required InitVar and init=False field
+            frozen_init_var = FrozenInitVarData(input_ids=torch.tensor([9, 10]), pad_val=3)
+            prep_frozen_init_var = trainer._prepare_input(frozen_init_var)
+            self.assertIsInstance(prep_frozen_init_var, FrozenInitVarData)
+            self.assertEqual(prep_frozen_init_var.input_ids.device, trainer.args.device)
+            self.assertEqual(prep_frozen_init_var.cached.device, trainer.args.device)
+            self.assertTrue(torch.equal(prep_frozen_init_var.cached, torch.tensor([12, 13])))
 
 
 # ---------------------------------------------------------------------------
