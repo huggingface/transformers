@@ -16,9 +16,8 @@ import inspect
 import json
 import re
 import types
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import contextmanager
-from copy import deepcopy
 from datetime import datetime
 from functools import lru_cache, partial
 from inspect import isfunction
@@ -653,6 +652,33 @@ def _alias_reasoning_fields(chat: ChatType) -> ChatType:
     return aliased_chat
 
 
+def _plain_template_data(value: Any) -> Any:
+    # Chat templates come from the Hub, but callers often put rich objects in their inputs, like the decoded images,
+    # arrays and tensors in multimodal content blocks. Those objects have methods that the sandbox doesn't know are
+    # dangerous (some of them write files!), so we rebuild everything the template sees out of plain JSON types,
+    # and replace anything else with an inert placeholder. Templates only check whether media keys are present,
+    # and never read their values, so this doesn't change what they render.
+    if value is None or type(value) in (str, int, float, bool):
+        # Exact JSON scalars are safe as-is
+        return value
+    elif isinstance(value, str):
+        # Subclasses (enums, numpy scalars, ...) can carry extra methods, so we strip them back to the base type
+        return str.__str__(value)
+    elif isinstance(value, int):
+        return int.__int__(value)
+    elif isinstance(value, float):
+        return float.__float__(value)
+    elif isinstance(value, Mapping):
+        return {_plain_template_data(key): _plain_template_data(item) for key, item in value.items()}
+    elif isinstance(value, list):
+        return [_plain_template_data(item) for item in value]
+    elif isinstance(value, tuple):
+        return tuple(_plain_template_data(item) for item in value)
+    else:
+        # Anything else becomes a placeholder naming its type, e.g. "<ndarray>"
+        return f"<{type(value).__name__}>"
+
+
 def render_jinja_template(
     conversations: list[ChatType],
     tools: list[dict | Callable] | None = None,
@@ -692,6 +718,11 @@ def render_jinja_template(
             if not isinstance(document, dict):
                 raise TypeError("Documents should be a list of dicts with 'title' and 'text' keys!")
 
+    # Everything the template can see goes through `_plain_template_data`. The conversations are converted below.
+    tool_schemas = _plain_template_data(tool_schemas)
+    documents = _plain_template_data(documents)
+    kwargs = _plain_template_data(kwargs)
+
     rendered = []
     all_generation_indices = []
     continue_final_message_tag = "CONTINUE_FINAL_MESSAGE_TAG "
@@ -699,9 +730,16 @@ def render_jinja_template(
         if hasattr(chat, "messages"):
             # Indicates it's a Conversation object
             chat = chat.messages
-        chat = _alias_reasoning_fields(chat)
+        for message in chat:
+            # Message objects (e.g. from pydantic) would become placeholders, so we reject them explicitly
+            if not isinstance(message, Mapping):
+                raise TypeError(
+                    f"Chat messages should be dicts, but got a message of type {type(message).__name__}. If you're "
+                    "using message objects, please convert them to dicts first, e.g. with `.model_dump()` for pydantic."
+                )
+        # The converted chat is a fresh copy, so the edits below never touch the caller's messages
+        chat = _alias_reasoning_fields(_plain_template_data(chat))
         if continue_final_message:
-            chat = deepcopy(chat)
             continue_final_message = continue_final_message if isinstance(continue_final_message, str) else "content"
 
             if (final_message := chat[-1].get(continue_final_message)) is None:
