@@ -1663,8 +1663,8 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     @require_flash_linear_attention
     @slow
     def test_continuous_batching_hybrid_logprobs_match_a_full_forward(self, model_id: str) -> None:
-        """The logprobs the engine samples with match those of a plain forward over each whole sequence. Greedy tokens
-        alone tell little on a tiny random model: a missing mask or a lost state can leave the argmax unchanged."""
+        """Linear attention keeps states per request and indexed attention caches its indexer's keys: the logprobs
+        match those of a plain forward."""
         tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device, torch.float32)
         # Qwen4-Exp's checkpoint has zero weights in the convolutions of its per-layer embeddings, which would hide
         # their state
@@ -1673,6 +1673,29 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             for name, parameter in model.named_parameters():
                 if "ple.conv1d" in name:
                     parameter.normal_(mean=0.0, std=0.5)
+        self._assert_logprobs_match_a_full_forward(tokenizer, model)
+
+    @parameterized.expand(
+        [
+            ("hf-tiny-v2/tiny-random-DeepseekV3ForCausalLM", {}),
+            # The indexers keep fewer keys than the sequences hold
+            ("hf-tiny-v2/tiny-random-DeepseekV32ForCausalLM", {"index_topk": 8}),
+            ("hf-tiny-v2/tiny-random-GlmMoeDsaForCausalLM", {"index_topk": 8}),
+        ]
+    )
+    @slow
+    def test_continuous_batching_latent_attention_logprobs_match_a_full_forward(
+        self, model_id: str, config_kwargs: dict
+    ) -> None:
+        """Multi-head latent attention caches its compressed latents and rebuilds its keys and values from them, and
+        sparse attention caches its indexer's keys: the logprobs match those of a plain forward."""
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32, **config_kwargs)
+        self._assert_logprobs_match_a_full_forward(tokenizer, model.to(torch_device).eval())
+
+    def _assert_logprobs_match_a_full_forward(self, tokenizer: AutoTokenizer, model: GenerationMixin) -> None:
+        """Checks the logprobs the engine samples with match those of a plain forward over each whole sequence. Greedy
+        tokens alone tell little on a tiny random model: a missing mask or a lost state can leave the argmax unchanged."""
         model.generation_config.max_new_tokens = 20
         model.generation_config.do_sample = False
         input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES, tokenizer, for_continuous_batching=True)
