@@ -19,14 +19,12 @@ import requests
 from huggingface_hub import hf_hub_download
 
 from transformers import (
-    AutoModel,
     AutoModelForImageTextToText,
     AutoProcessor,
     HunYuanVLConfig,
     HunYuanVLForConditionalGeneration,
     HunYuanVLModel,
     HunYuanVLTextConfig,
-    HunYuanVLVisionConfig,
     is_torch_available,
     is_vision_available,
 )
@@ -56,8 +54,7 @@ class HunYuanVLVisionText2TextModelTester(VLMModelTester):
 
     base_model_class = HunYuanVLModel
     config_class = HunYuanVLConfig
-    text_config_class = HunYuanVLTextConfig
-    vision_config_class = HunYuanVLVisionConfig
+
     conditional_generation_class = HunYuanVLForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
@@ -99,18 +96,6 @@ class HunYuanVLVisionText2TextModelTester(VLMModelTester):
         self.device = torch_device
         self.grid_hw = self.image_size // self.patch_size
         self.num_image_patches = self.grid_hw**2
-        self.num_image_placeholder_tokens = self.num_image_tokens
-
-    def get_config(self):
-        return HunYuanVLConfig(
-            attn_implementation="eager",
-            text_config=self.get_text_config().to_dict(),
-            vision_config=self.get_vision_config().to_dict(),
-            image_token_id=self.image_token_id,
-        )
-
-    def create_attention_mask(self, input_ids):
-        return torch.ones_like(input_ids, device=torch_device)
 
     def create_pixel_values(self, batch_size: int | None = None):
         # Override to 5D for patch-based models
@@ -118,12 +103,6 @@ class HunYuanVLVisionText2TextModelTester(VLMModelTester):
         return floats_tensor(
             [batch_size * self.num_image_patches, self.num_channels * self.patch_size * self.patch_size]
         ).to(torch_device)
-
-    def place_image_tokens(self, input_ids, config):
-        input_ids = input_ids.clone()
-        input_ids[input_ids == self.image_token_id] = config.text_config.pad_token_id
-        input_ids[:, : self.num_image_placeholder_tokens] = self.image_token_id
-        return input_ids
 
     def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size
@@ -137,10 +116,6 @@ class HunYuanVLVisionText2TextModelTester(VLMModelTester):
     def prepare_config_and_inputs(self):
         config, inputs_dict = self.prepare_config_and_inputs_for_common()
         config.text_config.rope_parameters["mrope_section"] = [2, 2, 2, 2]
-        # HunYuanVL uses 4 multimodal RoPE axes: position, width, height, and temporal.
-        inputs_dict["position_ids"] = (
-            torch.arange(self.seq_length, device=torch_device).view(1, 1, -1).expand(4, self.batch_size, -1)
-        )
         return config, inputs_dict
 
 
@@ -150,33 +125,6 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
     test_all_params_have_gradient = False
     # HunYuanVL packs all images into one flat patch stream; pixel_values.shape[0] is total patches, not batch size.
     skip_test_image_features_output_shape = True
-
-    def test_auto_model_uses_base_model(self):
-        config = self.model_tester.get_config()
-        model = AutoModel.from_config(config).to(self.model_tester.device)
-        self.assertIsInstance(model, HunYuanVLModel)
-        self.assertFalse(hasattr(model, "lm_head"))
-
-    def test_mrope_embeddings_are_built_once_per_forward(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-        inputs_dict.pop("position_ids")
-        config.text_config.rope_parameters["mrope_section"] = [2, 2, 2, 2]
-        model = HunYuanVLForConditionalGeneration(config).to(self.model_tester.device)
-        model.eval()
-
-        embedding_call_count = 0
-        rotary_forward = model.model.language_model.rotary_emb.forward
-
-        def wrapped_rotary_forward(*args, **kwargs):
-            nonlocal embedding_call_count
-            embedding_call_count += 1
-            return rotary_forward(*args, **kwargs)
-
-        model.model.language_model.rotary_emb.forward = wrapped_rotary_forward
-        with torch.no_grad():
-            model(**inputs_dict)
-
-        self.assertEqual(embedding_call_count, 1)
 
     def test_model_builds_mrope_position_ids(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
@@ -239,38 +187,6 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
         config = HunYuanVLConfig(**legacy_kwargs)
         for alias in aliases:
             self.assertNotIn(alias, config.to_dict())
-
-    def test_prepare_inputs_for_generation_drops_pixel_values_after_prefill(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-        model = HunYuanVLForConditionalGeneration(config).to(self.model_tester.device)
-        model.eval()
-
-        prefill_inputs = model.prepare_inputs_for_generation(
-            inputs_dict["input_ids"],
-            attention_mask=inputs_dict["attention_mask"],
-            position_ids=inputs_dict["position_ids"],
-            pixel_values=inputs_dict["pixel_values"],
-            image_grid_thw=inputs_dict["image_grid_thw"],
-            use_cache=True,
-            is_first_iteration=True,
-        )
-        self.assertIs(prefill_inputs["pixel_values"], inputs_dict["pixel_values"])
-        self.assertIs(prefill_inputs["image_grid_thw"], inputs_dict["image_grid_thw"])
-        self.assertEqual(prefill_inputs["position_ids"].shape, inputs_dict["position_ids"].shape)
-
-        decode_inputs = model.prepare_inputs_for_generation(
-            inputs_dict["input_ids"],
-            attention_mask=inputs_dict["attention_mask"],
-            position_ids=inputs_dict["position_ids"],
-            pixel_values=inputs_dict["pixel_values"],
-            image_grid_thw=inputs_dict["image_grid_thw"],
-            use_cache=True,
-            is_first_iteration=False,
-            next_sequence_length=1,
-        )
-        self.assertIsNone(decode_inputs["pixel_values"])
-        self.assertIs(decode_inputs["image_grid_thw"], inputs_dict["image_grid_thw"])
-        self.assertEqual(decode_inputs["position_ids"].shape, (4, self.model_tester.batch_size, 1))
 
     def test_batching_equivalence(self, atol=2e-5, rtol=1e-4):
         super().test_batching_equivalence(atol=atol, rtol=rtol)

@@ -469,7 +469,7 @@ class Lfm2MoeShortConv(nn.Module):
 class Lfm2MoeDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Lfm2MoeConfig, layer_idx: int):
         super().__init__()
-        self.is_attention_layer = config.layer_types[layer_idx] == "full_attention"
+        self.is_attention_layer = config.layer_types[layer_idx] != "conv"
 
         if self.is_attention_layer:
             self.self_attn = Lfm2MoeAttention(config, layer_idx)

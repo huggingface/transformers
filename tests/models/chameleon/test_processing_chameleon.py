@@ -28,10 +28,6 @@ class ChameleonProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ChameleonProcessor
 
     @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-
-    @classmethod
     def _setup_tokenizer(cls):
         tokenizer_class = cls._get_component_class_from_processor("tokenizer")
         print("SAMPLE_VOCAB", SAMPLE_VOCAB)

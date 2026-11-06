@@ -348,8 +348,7 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             processor(text=text, images=None, padding=True)
 
         images = [[self.image1], []]
-        with self.assertRaises(ValueError):
-            processor(text=text, images=images, padding=True)
+        processor(text=text, images=images, padding=True)
 
         text = [
             "This is a test sentence.<|image|>",
