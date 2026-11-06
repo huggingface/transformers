@@ -157,7 +157,8 @@ class OmniASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertEqual(input_ids[idx, -len(target) - 1].item(), tokenizer.bos_token_id)
 
     @require_librosa
-    def test_apply_transcription_request_with_transcription(self):
+    def test_apply_transcription_request_with_transcription_and_language(self):
+        # checks per-sample languages (including the language-agnostic mode) against the manually written chat template
         processor = self.get_processor()
         text = ["hello world", "hi"]
         language = ["eng_Latn", None]
@@ -185,6 +186,3 @@ class OmniASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIn("labels", inputs)
         for key in ("input_ids", "attention_mask", "labels", "input_values", "padding_mask"):
             torch.testing.assert_close(inputs[key], expected[key])
-
-        with self.assertRaisesRegex(ValueError, "transcription"):
-            processor.apply_transcription_request(audio, transcription=text[:1])

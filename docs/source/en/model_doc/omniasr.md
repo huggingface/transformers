@@ -170,10 +170,7 @@ for i, text in enumerate(processor.decode(generated_ids, skip_special_tokens=Tru
 
 ### Training
 
-The model can be trained with the loss it outputs. Pass the target transcripts to `apply_transcription_request` with
-`transcription`, which writes them as the assistant turn and returns `labels`. Everything but the transcript and its EOS is masked automatically (namely the audio placeholders, the language prompt and the padding). With
-[`apply_chat_template`](#chat-template), the same is done by putting the transcript in an assistant turn and passing
-`processor_kwargs={"output_labels": True}`.
+Pass the target transcripts to `apply_transcription_request` with `transcription` to get the `labels` used to compute the loss.
 
 Note that OmniASR transcribes in lowercase, so the (uppercase) LibriSpeech transcripts are lowercased below.
 
@@ -197,9 +194,9 @@ text_samples = [text.lower() for text in ds["text"][:NUM_SAMPLES]]
 inputs = processor.apply_transcription_request(speech_samples, language="en", transcription=text_samples)
 inputs.to(model.device, dtype=model.dtype)
 
-outputs = model(**inputs)
-print("Loss:", outputs.loss.item())
-outputs.loss.backward()
+loss = model(**inputs).loss
+print("Loss:", loss.item())
+loss.backward()
 ```
 
 ### Torch compile

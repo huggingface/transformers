@@ -14,7 +14,7 @@
 
 from ...audio_utils import AudioInput, make_audio_chat_template_content, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available, logging
 
@@ -161,8 +161,9 @@ class OmniASRProcessor(ProcessorMixin):
         audio: str | list[str] | AudioInput,
         language: str | list[str] | None = None,
         transcription: str | list[str] | None = None,
+        tokenize: bool = True,
         **kwargs: Unpack[OmniASRProcessorKwargs],
-    ) -> BatchFeature:
+    ) -> BatchFeature | list[str]:
         """
         Prepare inputs for speech recognition without manually writing the chat template, either for inference or,
         when `transcription` is given, for training.
@@ -179,13 +180,19 @@ class OmniASRProcessor(ProcessorMixin):
             transcription (`str` or `list[str]`, *optional*):
                 Target transcript(s) for training, one per audio. When given, each transcript is written as the
                 assistant turn and `labels` are returned (see `output_labels` in [`~OmniASRProcessor.__call__`]).
+            tokenize (`bool`, *optional*, defaults to `True`):
+                Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
+                the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
+                audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
+                `tokenize=True`.
             **kwargs:
-                Additional keyword arguments forwarded to [`~OmniASRProcessor.apply_chat_template`] (for example
-                `text_kwargs`, `audio_kwargs`, ...).
+                Additional keyword arguments forwarded to [`~OmniASRProcessor.apply_chat_template`].
+                Processor kwargs (for example `text_kwargs`, `audio_kwargs`, ...) should be passed as
+                `processor_kwargs={...}`.
 
         Returns:
-            [`BatchFeature`]: Processor outputs ready to be passed to
-            [`OmniASRForConditionalGeneration.generate`], or to [`OmniASRForConditionalGeneration.forward`] to compute
+            [`BatchFeature`] or `list[str]`: One prompt per audio when `tokenize=False`, otherwise processor
+            outputs ready to be passed to [`OmniASRForConditionalGeneration.generate`], or to [`OmniASRForConditionalGeneration.forward`] to compute
             the loss when `transcription` is given.
         """
         audio_items = list(make_list_of_audio_chat_template(audio))
@@ -193,25 +200,15 @@ class OmniASRProcessor(ProcessorMixin):
         if batch_size == 0:
             raise ValueError("`audio` must contain at least one sample.")
 
-        if language is None or isinstance(language, str):
-            language = [language] * batch_size
-        if len(language) != batch_size:
-            raise ValueError(f"Got {len(language)} language(s) for {batch_size} sample(s); counts must match.")
+        languages = prepare_prompt_input(language, batch_size, input_name="language")
 
         is_training = transcription is not None
+        transcriptions = prepare_prompt_input(transcription, batch_size, input_name="transcription", broadcast=False)
         if is_training:
-            if isinstance(transcription, str):
-                transcription = [transcription]
-            if len(transcription) != batch_size:
-                raise ValueError(
-                    f"Got {len(transcription)} transcription(s) for {batch_size} sample(s); counts must match."
-                )
             kwargs["processor_kwargs"] = {"output_labels": True, **kwargs.get("processor_kwargs", {})}
-        else:
-            transcription = [None] * batch_size
 
         conversations = []
-        for audio_item, lang, transcript in zip(audio_items, language, transcription):
+        for audio_item, lang, transcript in zip(audio_items, languages, transcriptions):
             content = [make_audio_chat_template_content(audio_item)]
             if lang is not None:
                 content.append({"type": "language", "language": lang})
@@ -222,7 +219,7 @@ class OmniASRProcessor(ProcessorMixin):
 
         return self.apply_chat_template(
             conversations,
-            tokenize=True,
+            tokenize=tokenize,
             add_generation_prompt=not is_training,
             return_dict=True,
             **kwargs,
