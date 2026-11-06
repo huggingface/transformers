@@ -699,7 +699,7 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel):
         Note: to simplify, we only allow this optimization for integer `logits_to_keep`, i.e. what `generate` uses. This avoids a lot
         of edge cases regarding masks, and it keeps this method simple.
         """
-        batch_size, seq_len = hidden_states.shape[:1]
+        batch_size, seq_len = hidden_states.shape[:2]
         record_keys = ("output_hidden_states", "output_attentions", "output_router_logits")
         can_optimize = True
         # If the seq_len is already 1 (i.e. decoding), or we request any additional output, exit early
