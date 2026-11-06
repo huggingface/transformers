@@ -771,10 +771,6 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
 
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
-
         aux_loss = None
         if output_router_logits:
             aux_loss = load_balancing_loss_func(
@@ -784,8 +780,12 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
                 self.num_experts_per_tok,
                 attention_mask,
             )
-            if labels is not None:
-                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits, labels, self.vocab_size, aux_loss=aux_loss, aux_loss_coef=self.router_aux_loss_coef, **kwargs
+            )
 
         return MoeCausalLMOutputWithPast(
             loss=loss,

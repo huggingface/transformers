@@ -1550,8 +1550,6 @@ class MuseSparkModel(MuseSparkPreTrainedModel):
 
 @auto_docstring
 class MuseSparkForConditionalGeneration(MuseSparkPreTrainedModel, GenerationMixin):
-    # Reference: fix gemma3 grad acc #37208
-    accepts_loss_kwargs = False
     input_modalities = ("image", "video", "text")
 
     def __init__(self, config: MuseSparkConfig):

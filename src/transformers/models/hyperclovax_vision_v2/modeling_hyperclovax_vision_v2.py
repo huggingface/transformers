@@ -50,8 +50,6 @@ class HyperCLOVAXVisionV2PreTrainedModel(PreTrainedModel):
 @auto_docstring
 class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel):
     base_model_prefix = "model"
-    # Reference: fix gemma3 grad acc #37208
-    accepts_loss_kwargs = False
     _can_compile_fullgraph = False
 
     def __init__(self, config: HyperCLOVAXVisionV2Config):
@@ -237,8 +235,6 @@ class HyperCLOVAXVisionV2ForConditionalGeneration(HyperCLOVAXVisionV2PreTrainedM
 
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
-    # Reference: fix gemma3 grad acc #37208
-    accepts_loss_kwargs = False
 
     input_modalities = ("image", "video", "text")
 
