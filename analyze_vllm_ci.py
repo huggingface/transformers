@@ -39,6 +39,10 @@ any of these show up):
     (2026-11-05): all 13 jobs failed in "Install dependencies" (torch==2.14.0+cpu
     could not be resolved). Possible fix: list such jobs with their job URL and
     the last "##[error]" line.
+    The same applies to the *previous* (baseline) run: if its jobs failed this
+    way, it has 0 parsed failures and every current failure is reported as new
+    (e.g. run 42196234595 vs baseline 42154858517). Possible fix: warn (or skip
+    the comparison) when the baseline has failed jobs but no parsed failures.
   - Log-parsing gaps of analyze_gh_wf_runs.py (see its module docstring) apply here.
 """
 
@@ -255,6 +259,9 @@ def collect_run_failures(run_id, repo=REPO, token=None, plugin=None):
 # numbers end up in separate categories, e.g. two CUDA OOMs:
 #   "OutOfMemoryError: CUDA out of memory. Tried to allocate 20.00 MiB. ..."
 #   "OutOfMemoryError: CUDA out of memory. Tried to allocate 64.00 MiB. ..."
+# Seen on run 42196234595: 10 identical vLLM KV-cache errors ("Available memory on
+# node 0 (X/111.33 GiB) ... less than requested memory for kv (Y/102.42 GiB)") ended
+# up in 10 categories.
 # Possible approach: fixed labels for well-known cases (OOM, gated repo, timeout,
 # network) matched on the root-cause line only, then replace numbers with a
 # placeholder in the remaining messages and keep one original message as an example.
