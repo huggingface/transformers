@@ -823,11 +823,11 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
         # To keep it simple, as it's the usual case
         elif not isinstance(logits_to_keep, int):
             can_optimize = False
+        # Flex cannot slice mask
+        elif self.config._attn_implementation == "flex_attention":
+            can_optimize = False
         # In this case, we cannot rely on the `is_causal` attribute, as dropping some tokens will make us loose causality
-        elif logits_to_keep > 1 and any(
-            mask is None or mask.dim() == 2 or not isinstance(mask, torch.Tensor)
-            for mask in causal_mask_mapping.values()
-        ):
+        elif logits_to_keep > 1 and any(mask is None for mask in causal_mask_mapping.values()):
             can_optimize = False
 
         # If we cannot optimize, return untouched inputs will the full seq_len
