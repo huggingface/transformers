@@ -5638,25 +5638,27 @@ class ModelTesterMixin(ExportTesterMixin):
 
         torch.testing.assert_close(features(outputs), features(outputs_all))
 
+        # Most models only capture hidden states when requested, so there is nothing to compare
         hidden_states = outputs.hidden_states
-        hidden_states_all = outputs_all.hidden_states
-        if hidden_states is None or hidden_states_all is None:
+        if hidden_states is None:
             return
 
+        hidden_states_all = outputs_all.hidden_states
+        self.assertIsNotNone(hidden_states_all, "`output_hidden_states=True` should capture all hidden states")
         self.assertEqual(len(hidden_states), len(hidden_states_all))
         for h, h_all in zip(hidden_states, hidden_states_all):
             self.assertIsNotNone(h_all, "`output_hidden_states=True` should capture all hidden states")
             if h is not None:
                 torch.testing.assert_close(h, h_all)
 
-        uses_vision_feature_layers = False
+        uses_vision_feature_layer = False
         for sub_config in [config, *(getattr(config, key, None) for key in config.sub_configs)]:
-            uses_vision_feature_layers |= getattr(sub_config, "vision_feature_layer", None) is not None
+            uses_vision_feature_layer |= getattr(sub_config, "vision_feature_layer", None) is not None
 
-        if uses_vision_feature_layers:
+        if uses_vision_feature_layer:
             self.assertTrue(
                 any(h is None for h in hidden_states),
-                "Features built from `vision_feature_layer(s)` should only capture the hidden states they use",
+                "Features built from `vision_feature_layer` should only capture the hidden states they use",
             )
 
     def test_get_image_features_attentions(self):
