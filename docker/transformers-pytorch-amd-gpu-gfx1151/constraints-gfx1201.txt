@@ -121,7 +121,6 @@ pytest-asyncio==1.4.1
 pytest-env==1.2.0
 pytest-order==1.5.0
 pytest-random-order==1.2.0
-pytest-rerunfailures==15.1
 pytest-rich==0.3.0
 pytest-timeout==2.4.0
 pytest-xdist==3.8.0
