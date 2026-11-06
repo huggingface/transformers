@@ -1013,10 +1013,11 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
         hidden_states = transformer_outputs[0]
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
 
-        outputs = self.pred_layer(
-            hidden_states,
-            labels,
-        )  # (loss, logits) or (logits,) depending on if labels are provided.
+        # The adaptive softmax computes its own loss from the labels
+        outputs = self.pred_layer(hidden_states, labels if self.config.asm else None)
+        if labels is not None and not self.config.asm:
+            loss = self.loss_function(outputs[0], labels, vocab_size=self.config.n_words, **kwargs)
+            outputs = (loss,) + outputs
 
         if not return_dict:
             return outputs + transformer_outputs[1:]
