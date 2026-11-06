@@ -32,7 +32,9 @@ any of these show up):
         fallback may return the first lines of another parametrization's block.
   - VLLMPlugin only recognizes "(Worker pid=N)" / "(EngineCore pid=N)" ERROR
     lines; other tags such as "(EngineCore_DP0 pid=N)" or "(APIServer pid=N)"
-    are not picked up.
+    are not picked up. Possible fix: accept any process name in the
+    "(<name> pid=N) ERROR" prefix instead of listing the names (in both the
+    match and the prefix-strip regexes).
 """
 
 import json
