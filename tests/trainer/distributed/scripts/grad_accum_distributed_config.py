@@ -68,7 +68,6 @@ def main():
             per_device_train_batch_size=1,
             gradient_accumulation_steps=4,
             save_strategy="no",
-            report_to="none",
         )
         callback = GradientReductionCallback()
         dataset = Dataset.from_dict({"input_ids": input_ids, "labels": input_ids})
