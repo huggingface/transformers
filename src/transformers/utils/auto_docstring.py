@@ -83,6 +83,7 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "privacy-filter": "OpenAIPrivacyFilterConfig",
     "lasr": "LasrCTCConfig",
     "granite-speech5": "GraniteSpeech5CTCConfig",
+    "nemotron3-5-transcribe": "Nemotron3_5TranscribeConfig",
     "wav2vec2-with-lm": "Wav2Vec2Config",
     "radio": "RADIOConfig",
     "cosmos3-edge": "Cosmos3EdgeConfig",
@@ -274,6 +275,15 @@ class ImageProcessorArgs:
     Added for backward compatibility but this should be set as a processor attribute in future models.
     """,
         "shape": None,
+    }
+
+    image_like_kwargs = {
+        "description": """
+    Developer flag for additional image like inputs that will also be preprocessed. Only use this if
+    passing the inputs as kwarg doesn't work. For example, `preprocess(images, masks=masks)` is the
+    preferred option but results in argument priority issues for some models. In those cases
+    `preprocess(images, image_like_inputs={"masks": masks})` can be used instead.
+    """
     }
 
     # Used for the **kwargs summary line when unrolling typed kwargs (key: "__kwargs__")
@@ -1859,6 +1869,8 @@ class ConfigArgs:
     decoder_attention_dropout = attention_dropout
     decoder_dropout = dropout
     encoder_dropout = dropout
+    encoder = encoder_config
+    decoder = decoder_config
 
     route_scale = routed_scaling_factor
     activation_function = hidden_act
@@ -1990,7 +2002,7 @@ class ModelArgs:
     into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library
     (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
     To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and conversion
-    into a tensor of type `torch.FloatTensor`. See [`{processor_class}.__call__`] for details.
+    into a tensor of type `torch.Tensor`. See [`{processor_class}.__call__`] for details.
     """,
         "shape": "of shape `(batch_size, sequence_length)`",
     }
@@ -2053,6 +2065,46 @@ class ModelArgs:
 
     """,
         "shape": "of shape `(batch_size, sequence_length)`",
+    }
+
+    image_token_pooling = {
+        "description": """
+    Indices into the flattened image patch sequence gathered by each pooled image token, with `-1` marking padding
+    slots. Can be obtained using [`AutoProcessor`]. See [`ProcessorMixin.__call__`] for details.
+    """,
+        "shape": "of shape `(num_image_tokens, pool_h * pool_w)`",
+    }
+
+    image_grids = {
+        "description": """
+    Per-image `[low_res_h, low_res_w, high_res_h, high_res_w]` pooled token grid. Can be obtained using
+    [`AutoProcessor`]. See [`ProcessorMixin.__call__`] for details.
+    """,
+        "shape": "of shape `(num_images, 4)`",
+    }
+
+    image_num_crops = {
+        "description": """
+    Number of crops per image, low-resolution view included. Can be obtained using [`AutoProcessor`]. See
+    [`ProcessorMixin.__call__`] for details.
+    """,
+        "shape": "of shape `(num_images,)`",
+    }
+
+    video_token_pooling = {
+        "description": """
+    Indices into the flattened video frame-patch sequence gathered by each pooled video token, with `-1` marking
+    padding slots. Can be obtained using [`AutoProcessor`]. See [`ProcessorMixin.__call__`] for details.
+    """,
+        "shape": "of shape `(num_video_tokens, pool_h * pool_w)`",
+    }
+
+    video_grids = {
+        "description": """
+    Per-video `[num_frames, pooled_h, pooled_w]` token grid. Can be obtained using [`AutoProcessor`]. See
+    [`ProcessorMixin.__call__`] for details.
+    """,
+        "shape": "of shape `(num_videos, 3)`",
     }
 
     position_ids = {
@@ -2203,6 +2255,16 @@ class ModelArgs:
         "shape": None,
     }
 
+    mm_encoder_outputs = {
+        "description": """
+    Dict where keys are supported modalities and values are encoded outputs for that modality. Each encoded output is a tuple
+    that consists of (`pooler_output`, *optional*: `last_hidden_states`, *optional*: `hidden_states`, *optional*: `attentions`)
+    `pooler_output` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
+    multimmodal features of the encoder merged into text embeddings.
+    """,
+        "shape": None,
+    }
+
     output_router_logits = {
         "description": """
     Whether or not to return the logits of all the routers. They are useful for computing the router loss, and
@@ -2286,6 +2348,115 @@ class ModelArgs:
     }
 
 
+class ModelForArgs:
+    """Task-specific overrides for `ModelArgs`."""
+
+    class ForSequenceClassification:
+        labels = {
+            "description": """
+    Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+    config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+    `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+    """,
+            "shape": "of shape `(batch_size,)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForTokenClassification:
+        labels = {
+            "description": """
+    Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
+    """,
+            "shape": "of shape `(batch_size, sequence_length)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForMultipleChoice:
+        labels = {
+            "description": """
+    Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
+    num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
+    `input_ids` above)
+    """,
+            "shape": "of shape `(batch_size,)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForMaskedLM:
+        labels = {
+            "description": """
+    Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+    config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+    loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+    """,
+            "shape": "of shape `(batch_size, sequence_length)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForImageClassification:
+        labels = {
+            "description": """
+    Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+    config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+    `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+    """,
+            "shape": "of shape `(batch_size,)`",
+            "type": "torch.LongTensor",
+        }
+
+    ForVideoClassification = ForImageClassification
+
+    class ForSemanticSegmentation:
+        labels = {
+            "description": """
+    Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
+    config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
+    """,
+            "shape": "of shape `(batch_size, height, width)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForDepthEstimation:
+        labels = {
+            "description": """
+    Ground truth depth estimation maps for computing the loss.
+    """,
+            "shape": "of shape `(batch_size, height, width)`",
+            "type": "torch.LongTensor",
+        }
+
+    class ForObjectDetection:
+        labels = {
+            "description": """
+    Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
+    following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
+    respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
+    in the image,)` and the boxes a `torch.Tensor` of shape `(number of bounding boxes in the image, 4)`.
+    """,
+            "shape": "of len `(batch_size,)`",
+            "type": "list[Dict]",
+        }
+
+    ForInstanceSegmentation = ForObjectDetection
+
+
+# Longest first, so that short suffixes don't mask longer ones.
+MODEL_FOR_ARGS_SUFFIXES = sorted(
+    (name for name in vars(ModelForArgs) if name.startswith("For")), key=len, reverse=True
+)
+
+
+class _EmptyArgs:
+    pass
+
+
+def get_model_for_args(class_name: str) -> type:
+    for suffix in MODEL_FOR_ARGS_SUFFIXES:
+        if class_name.endswith(suffix):
+            return getattr(ModelForArgs, suffix)
+    return _EmptyArgs
+
+
 class ModelOutputArgs:
     last_hidden_state = {
         "description": """
@@ -2308,7 +2479,7 @@ class ModelOutputArgs:
 
     hidden_states = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+    Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
     one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
     Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
@@ -2319,7 +2490,7 @@ class ModelOutputArgs:
 
     attentions = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
     sequence_length)`.
 
     Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
@@ -2338,7 +2509,7 @@ class ModelOutputArgs:
 
     cross_attentions = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
     sequence_length)`.
 
     Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
@@ -2350,7 +2521,7 @@ class ModelOutputArgs:
 
     decoder_hidden_states = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+    Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
     one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
     Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
@@ -2361,7 +2532,7 @@ class ModelOutputArgs:
 
     decoder_attentions = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
     sequence_length)`.
 
     Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
@@ -2380,7 +2551,7 @@ class ModelOutputArgs:
 
     encoder_hidden_states = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+    Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
     one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
     Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
@@ -2391,7 +2562,7 @@ class ModelOutputArgs:
 
     encoder_attentions = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+    Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
     sequence_length)`.
 
     Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
@@ -2403,7 +2574,7 @@ class ModelOutputArgs:
 
     router_logits = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
+    Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
 
     Router logits of the model, useful to compute the auxiliary loss for Mixture of Experts models.
     """,
@@ -2413,7 +2584,7 @@ class ModelOutputArgs:
 
     router_probs = {
         "description": """
-    Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
+    Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
 
     Raw router probabilities that are computed by MoE routers, these terms are used to compute the auxiliary
     loss and the z_loss for Mixture of Experts models.
@@ -2974,8 +3145,9 @@ def format_args_docstring(docstring: str, model_name: str) -> str:
     placeholders_dict = get_placeholders_dict(placeholders, model_name)
     # replace the placeholders in the docstring with the values from the placeholders_dict
     for placeholder, value in placeholders_dict.items():
-        if isinstance(value, dict) and placeholder == "image_processor_class":
+        if isinstance(value, dict) and placeholder in ["image_processor_class", "video_processor_class"]:
             value = value.get("torchvision", value.get("pil", None))
+            value = value or placeholder
         if placeholder is not None:
             docstring = docstring.replace(f"{{{placeholder}}}", value)
     return docstring
@@ -3407,7 +3579,10 @@ def _process_regular_parameters(
                 [ModelArgs, ImageProcessorArgs, VideoProcessorArgs, ProcessorArgs]
             )
         else:
-            source_args_dict = get_args_doc_from_source([ModelArgs, ImageProcessorArgs, VideoProcessorArgs])
+            model_for_args = get_model_for_args(class_name)
+            source_args_dict = get_args_doc_from_source(
+                [ModelArgs, model_for_args, ImageProcessorArgs, VideoProcessorArgs]
+            )
 
     missing_args = {}
 
@@ -4045,7 +4220,7 @@ def _prepare_return_docstring(output_type, config_class, add_intro=True):
             additional_info = param_info.get("additional_info", "")
 
             # Handle types with unbalanced backticks due to nested parentheses
-            # The parse_docstring function splits types like `tuple(torch.FloatTensor)` incorrectly
+            # The parse_docstring function splits types like `tuple(torch.Tensor)` incorrectly
             # so we need to reconstruct the complete type by grabbing the closing part from additional_info
             if param_type.startswith("`") and not param_type.endswith("`"):
                 # Find the closing backtick in additional_info
@@ -4593,9 +4768,9 @@ def auto_docstring(obj=None, *, custom_intro=None, custom_args=None, checkpoint=
         Using `custom_args` to define reusable arguments:
         ```python
         VISION_ARGS = r'''
-        pixel_values (`torch.FloatTensor`, *optional*):
+        pixel_values (`torch.Tensor`, *optional*):
             Pixel values of the input images.
-        image_features (`torch.FloatTensor`, *optional*):
+        image_features (`torch.Tensor`, *optional*):
             Pre-computed image features for efficient processing.
         '''
 
@@ -4607,7 +4782,7 @@ def auto_docstring(obj=None, *, custom_intro=None, custom_args=None, checkpoint=
         Combining `custom_intro` and `custom_args`:
         ```python
         MULTIMODAL_ARGS = r'''
-        vision_features (`torch.FloatTensor`, *optional*):
+        vision_features (`torch.Tensor`, *optional*):
             Pre-extracted vision features from the vision encoder.
         fusion_strategy (`str`, *optional*, defaults to "concat"):
             Strategy for fusing text and vision modalities.
@@ -4635,19 +4810,19 @@ def auto_docstring(obj=None, *, custom_intro=None, custom_args=None, checkpoint=
         @dataclass
         class MyModelOutput(ImageClassifierOutput):
             r'''
-            loss (`torch.FloatTensor`, *optional*):
+            loss (`torch.Tensor`, *optional*):
                 The loss of the model.
-            custom_field (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*):
+            custom_field (`torch.Tensor` of shape `(batch_size, hidden_size)`, *optional*):
                 A custom output field specific to this model.
             '''
 
             # Standard fields like hidden_states, logits, attentions etc. can be automatically documented
             # However, given that the loss docstring is often different per model, you should document it above
-            loss: Optional[torch.FloatTensor] = None
-            logits: Optional[torch.FloatTensor] = None
-            hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-            attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-            custom_field: Optional[torch.FloatTensor] = None
+            loss: Optional[torch.Tensor] = None
+            logits: Optional[torch.Tensor] = None
+            hidden_states: Optional[tuple[torch.Tensor, ...]] = None
+            attentions: Optional[tuple[torch.Tensor, ...]] = None
+            custom_field: Optional[torch.Tensor] = None
         ```
 
     Args:

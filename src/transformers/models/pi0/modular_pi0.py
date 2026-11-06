@@ -24,7 +24,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...masking_utils import create_causal_mask
@@ -35,7 +35,7 @@ from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.generic import maybe_autocast
 from ...utils.import_utils import requires
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..auto import AutoConfig, AutoModel
 from ..siglip.image_processing_siglip import SiglipImageProcessor
 
 
@@ -44,6 +44,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 class PI0ImageProcessor(SiglipImageProcessor):
+    image_seq_length = 256
     size = {"max_height": 224, "max_width": 224}
     pad_size = {"height": 224, "width": 224}
     do_pad = True
@@ -63,19 +64,41 @@ class PI0ProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 @requires(backends=("vision", "torch"))
 class PI0Processor(ProcessorMixin):
-    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
-        self.height, self.width = image_processor.size["height"], image_processor.size["width"]
-        state_mean = kwargs.get("state_mean", [-0.0419, 0.0354, 0.8257, 2.9083, -0.5562, -0.1665, 0.0283, -0.0286])
-        state_std = kwargs.get("state_std", [0.1074, 0.1442, 0.2572, 0.3441, 1.2344, 0.3580, 0.0133, 0.0132])
-        actions_mean = kwargs.get("actions_mean", [0.0182, 0.0586, -0.0559, 0.0046, 0.0029, -0.0077, -0.0916])
-        actions_std = kwargs.get("actions_std", [0.2825, 0.3590, 0.3674, 0.0377, 0.0543, 0.0872, 0.9958])
+    valid_processor_kwargs = PI0ProcessorKwargs
 
-        self.state_mean = torch.tensor(state_mean)
-        self.state_std = torch.tensor(state_std)
-        self.actions_mean = torch.tensor(actions_mean)
-        self.actions_std = torch.tensor(actions_std)
-        self.max_state_dim = kwargs.get("max_state_dim", 32)
-        self.chunk_size = kwargs.get("chunk_size", 50)
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        chat_template=None,
+        state_mean: list[float] | None = None,
+        state_std: list[float] | None = None,
+        actions_mean: list[float] | None = None,
+        actions_std: list[float] | None = None,
+        max_state_dim: int = 32,
+        chunk_size: int = 50,
+        **kwargs,
+    ):
+        r"""
+        state_mean (`list[float]`, *optional*):
+            Dataset mean of the robot state. Required to process `state`.
+        state_std (`list[float]`, *optional*):
+            Dataset standard deviation of the robot state. Required to process `state`.
+        actions_mean (`list[float]`, *optional*):
+            Dataset mean of the actions. Required to process `actions`.
+        actions_std (`list[float]`, *optional*):
+            Dataset standard deviation of the actions. Required to process `actions`.
+        max_state_dim (`int`, *optional*, defaults to 32):
+            Size the state and actions are zero-padded to.
+        chunk_size (`int`, *optional*, defaults to 50):
+            Number of actions per chunk.
+        """
+        self.state_mean = state_mean
+        self.state_std = state_std
+        self.actions_mean = actions_mean
+        self.actions_std = actions_std
+        self.max_state_dim = max_state_dim
+        self.chunk_size = chunk_size
         if not hasattr(image_processor, "image_seq_length"):
             raise ValueError("Image processor is missing an `image_seq_length` attribute.")
 
@@ -110,9 +133,9 @@ class PI0Processor(ProcessorMixin):
     ) -> BatchFeature:
         r"""
         actions (`list | np.ndarray | torch.Tensor`, *optional*):
-            Actions to be predicted by the model. If provided, padding, mean and std normalization will be applied.
+            Actions to be predicted by the model. Normalized with the processor's dataset statistics, then padded.
         state (`list | np.ndarray | torch.Tensor`, *optional*):
-            Robotic states to be predicted by the model. If provided, padding, mean and std normalization will be applied.
+            Robot state. Normalized with the processor's dataset statistics, then padded.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -128,7 +151,7 @@ class PI0Processor(ProcessorMixin):
             - **actions** -- Label-actions compatible with training if `actions` is not None
         """
         output_kwargs = self._merge_kwargs(
-            PI0ProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
+            self.valid_processor_kwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
         )
 
         if text is None:
@@ -158,16 +181,15 @@ class PI0Processor(ProcessorMixin):
         text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
 
         # Here is the diff from PaliGemma. Ideally we'd create a new ImageProcessor if it were a VLM
-        max_num_cameras = max(len(sample_images) for sample_images in batched_images)
-        pixel_attention_mask = torch.zeros((len(batched_images), max_num_cameras), dtype=torch.bool)
-        padded_pixel_values = torch.zeros(len(batched_images), max_num_cameras, 3, self.height, self.width)
-
-        for batch, sample_images in enumerate(batched_images):
-            processed = self.image_processor(sample_images, return_tensors="pt", **output_kwargs["images_kwargs"])
-
-            num_cameras = len(sample_images)
-            pixel_attention_mask[batch, :num_cameras] = True
-            padded_pixel_values[batch, :num_cameras] = processed["pixel_values"]
+        num_cameras = torch.tensor([len(sample_images) for sample_images in batched_images])
+        pixel_attention_mask = torch.arange(num_cameras.max())[None, :] < num_cameras[:, None]
+        pixel_values = self.image_processor(
+            [image for sample_images in batched_images for image in sample_images],
+            return_tensors="pt",
+            **output_kwargs["images_kwargs"],
+        )["pixel_values"]
+        padded_pixel_values = pixel_values.new_zeros(*pixel_attention_mask.shape, *pixel_values.shape[1:])
+        padded_pixel_values[pixel_attention_mask] = pixel_values
 
         model_inputs = {
             **text_inputs,
@@ -176,18 +198,28 @@ class PI0Processor(ProcessorMixin):
         }
 
         if actions is not None:
-            actions = (torch.tensor(actions) - self.actions_mean) / (self.actions_std + 1e-08)
+            actions = self.normalize(torch.as_tensor(actions, dtype=torch.float32), "actions")
             if actions.shape[-1] < self.max_state_dim:
                 actions = F.pad(actions, (0, self.max_state_dim - actions.shape[-1]))
             model_inputs["actions"] = actions.view(-1, self.chunk_size, self.max_state_dim)
 
         if state is not None:
-            state = (torch.tensor(state) - self.state_mean) / (self.state_std + 1e-08)
+            state = self.normalize(torch.as_tensor(state, dtype=torch.float32), "state")
             if state.shape[-1] < self.max_state_dim:
                 state = F.pad(state, (0, self.max_state_dim - state.shape[-1]))
             model_inputs["state"] = state.view(-1, self.max_state_dim)
 
         return BatchFeature(data=model_inputs, tensor_type=return_tensors)
+
+    def normalize(self, values: torch.Tensor, feature: str) -> torch.Tensor:
+        """Normalizes `state` or `actions` with the dataset mean and standard deviation."""
+        mean, std = getattr(self, f"{feature}_mean"), getattr(self, f"{feature}_std")
+        if mean is None or std is None:
+            raise ValueError(
+                f"Processing `{feature}` needs `{feature}_mean` and `{feature}_std`. Pass the statistics of the "
+                "dataset the checkpoint was trained on when creating the processor."
+            )
+        return (values - torch.tensor(mean)) / (torch.tensor(std) + 1e-08)
 
     @property
     def model_input_names(self):
@@ -235,7 +267,48 @@ class PI0Config(PreTrainedConfig):
     """
 
     model_type = "pi0"
-    sub_configs = {"vlm_config": AutoConfig, "dit_config": AutoConfig}
+    sub_configs_defaults = {
+        "vlm_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="paligemma",
+            init_kwargs={
+                "text_config": {
+                    "model_type": "gemma",
+                    "hidden_size": 2048,
+                    "num_hidden_layers": 18,
+                    "intermediate_size": 16384,
+                    "num_attention_heads": 8,
+                    "num_key_value_heads": 1,
+                    "vocab_size": 257152,
+                },
+                "vision_config": {
+                    "model_type": "siglip_vision_model",
+                    "intermediate_size": 4304,
+                    "hidden_size": 1152,
+                    "patch_size": 14,
+                    "image_size": 224,
+                    "num_hidden_layers": 27,
+                    "num_attention_heads": 16,
+                    "vocab_size": 257152,
+                    "vision_use_head": False,
+                },
+                "projection_dim": 2048,
+                "image_token_id": 257152,
+            },
+        ),
+        "dit_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="gemma",
+            init_kwargs={
+                "hidden_size": 1024,
+                "num_hidden_layers": 18,
+                "intermediate_size": 4096,
+                "num_attention_heads": 8,
+                "num_key_value_heads": 1,
+                "head_dim": 256,
+            },
+        ),
+    }
 
     vlm_config: dict | PreTrainedConfig | None = None
     dit_config: dict | PreTrainedConfig | None = None
@@ -252,59 +325,17 @@ class PI0Config(PreTrainedConfig):
     loss_reduction: str = "mean"
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vlm_config, dict):
-            vlm_model_type = self.vlm_config.get("model_type", "paligemma")
-            self.vlm_config = CONFIG_MAPPING[vlm_model_type](**self.vlm_config)
-        elif self.vlm_config is None:
-            self.vlm_config = CONFIG_MAPPING["paligemma"](
-                text_config={
-                    "model_type": "gemma",
-                    "hidden_size": 2048,
-                    "num_hidden_layers": 18,
-                    "intermediate_size": 16384,
-                    "num_attention_heads": 8,
-                    "num_key_value_heads": 1,
-                    "vocab_size": 257152,
-                },
-                vision_config={
-                    "model_type": "siglip_vision_model",
-                    "intermediate_size": 4304,
-                    "hidden_size": 1152,
-                    "patch_size": 14,
-                    "image_size": 224,
-                    "num_hidden_layers": 27,
-                    "num_attention_heads": 16,
-                    "vocab_size": 257152,
-                    "vision_use_head": False,
-                },
-                projection_dim=2048,
-                image_token_id=257152,
-            )
-
-        if isinstance(self.dit_config, dict):
-            dit_model_type = self.dit_config.get("model_type", "gemma")
-            self.dit_config = CONFIG_MAPPING[dit_model_type](**self.dit_config)
-        elif self.dit_config is None:
-            self.dit_config = CONFIG_MAPPING["gemma"](
-                hidden_size=1024,
-                num_hidden_layers=18,
-                intermediate_size=4096,
-                num_attention_heads=8,
-                num_key_value_heads=1,
-                head_dim=256,
-                vocab_size=self.vlm_config.text_config.vocab_size,
-            )
-
+        super().__post_init__(**kwargs)
+        self.dit_config.vocab_size = self.vlm_config.text_config.vocab_size
         # Force bidirectional attention for images in Paligemma
         self.dit_config.is_causal = True
         self.dit_config.use_bidirectional_attention = True
         self.vlm_config.text_config.use_bidirectional_attention = True
-        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if self.dit_config.hidden_size % 2 != 0:
-            raise ValueError(f"DiT hidden dim=({self.config.dit_config.hidden_size}) must be divisible by 2")
+            raise ValueError(f"DiT hidden dim=({self.dit_config.hidden_size}) must be divisible by 2")
 
 
 def blockwise_bidirectional_mask(block_boundaries: torch.Tensor) -> Callable:
@@ -331,7 +362,7 @@ class PI0TimestepEmbeddings(nn.Module):
         return sinusoid_freq
 
     def forward(self, time):
-        device_type = time.device.type if isinstance(time.device.type, str) and time.device.type != "mps" else "cpu"
+        device_type = time.device.type if isinstance(time.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             sinusoid_freq = self.sinusoid_freq[None, :]
             emb = sinusoid_freq * time[:, None]
@@ -396,28 +427,24 @@ class PI0Model(PI0PreTrainedModel):
         self.vlm.set_input_embeddings(value)
 
     def embed_prefix(self, input_ids, pixel_values, pixel_attention_mask, attention_mask=None):
-        max_num_cameras = pixel_attention_mask.shape[1]
+        batch_size, max_num_cameras = pixel_attention_mask.shape
         pixel_values = pixel_values.flatten(0, 1)
         image_features = self.vlm.get_image_features(pixel_values).pooler_output
-        image_features = image_features.reshape(-1, max_num_cameras, image_features.shape[1], image_features.shape[2])
+        tokens_per_image, hidden_size = image_features.shape[1], image_features.shape[2]
+        image_features = image_features.reshape(batch_size, max_num_cameras * tokens_per_image, hidden_size)
 
-        total_image_features = []
-        for batch_idx, mask in enumerate(pixel_attention_mask):
-            unpadded_image_features = image_features[batch_idx][mask]
-            total_image_features.append(unpadded_image_features)
-        total_image_features = torch.cat(total_image_features, dim=0)
+        special_image_mask = input_ids == self.config.vlm_config.image_token_id
+        image_token_rank = special_image_mask.cumsum(-1) - 1
+        camera_rank = image_token_rank // tokens_per_image
+        token_offset = image_token_rank - camera_rank * tokens_per_image
+        camera_slot = pixel_attention_mask.cumsum(-1) - 1
+        camera_match = (camera_slot[:, None, :] == camera_rank[..., None]) & pixel_attention_mask[:, None, :]
+        feature_index = (camera_match.int().argmax(-1) * tokens_per_image + token_offset).to(image_features.device)
+        image_embeds = image_features.gather(1, feature_index[..., None].expand(-1, -1, hidden_size))
 
-        llm_input_ids = input_ids.clone()
-        llm_input_ids[input_ids == self.config.vlm_config.image_token_id] = 0
-        inputs_embeds = self.vlm.get_input_embeddings()(llm_input_ids)
-        special_image_mask = (
-            (input_ids == self.config.vlm_config.image_token_id).unsqueeze(-1).to(inputs_embeds.device)
-        )
-        inputs_embeds = inputs_embeds.masked_scatter(
-            special_image_mask, total_image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-        )
-
-        return inputs_embeds
+        inputs_embeds = self.vlm.get_input_embeddings()(input_ids.masked_fill(special_image_mask, 0))
+        image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+        return torch.where(special_image_mask[..., None], image_embeds, inputs_embeds)
 
     @can_return_tuple
     @auto_docstring
@@ -516,9 +543,9 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        state: torch.FloatTensor,
-        noise: torch.FloatTensor | None = None,
-        timestep: torch.FloatTensor | None = None,
+        state: torch.Tensor,
+        noise: torch.Tensor | None = None,
+        timestep: torch.Tensor | None = None,
         input_ids: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
         pixel_attention_mask: torch.BoolTensor | None = None,
@@ -526,7 +553,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        actions: torch.FloatTensor = None,  # aka labels
+        actions: torch.Tensor = None,  # aka labels
         **kwargs,
     ) -> CausalLMOutputWithPast:
         r"""
@@ -603,15 +630,15 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
     @torch.no_grad()
     def sample_actions(
         self,
-        state: torch.FloatTensor,
+        state: torch.Tensor,
         input_ids: torch.LongTensor,
-        pixel_values: torch.FloatTensor,
-        noise: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor,
+        noise: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         pixel_attention_mask: torch.BoolTensor | None = None,
         num_steps: int | None = None,
         **kwargs,
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         """Run flow matching inference to generate actions."""
 
         num_steps = num_steps or self.config.num_inference_steps
@@ -644,7 +671,6 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             use_cache=True,
-            return_dict=True,
         ).past_key_values
         prefix_length = past_key_values.get_seq_length()
 
@@ -652,7 +678,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
         dt = -1.0 / num_steps
         for step in range(num_steps):
             time = 1.0 + step * dt
-            time_tensor = torch.tensor(time, dtype=torch.float32, device=device).expand(batch_size)
+            time_tensor = torch.full((batch_size,), time, dtype=torch.float32, device=device)
             output = self(
                 state=state,
                 noise=noise,
@@ -664,7 +690,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             )
 
             # We need to keep only the "vlm-prefix", no attention to past denoising steps!
-            past_key_values.crop(prefix_length)
+            past_key_values.crop(prefix_length - past_key_values.get_seq_length())
             noise = noise + dt * output.logits
         return noise
 

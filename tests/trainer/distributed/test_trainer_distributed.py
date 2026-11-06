@@ -174,7 +174,7 @@ class TrainerDistributedCommon(ABC):
             env=self.get_env(),
         )
 
-        with open(eval_output) as f:
+        with open(eval_output, encoding="utf-8") as f:
             eval_metrics = json.load(f)
         self.assertIn("eval_loss", eval_metrics)
         self.assertTrue(torch.isfinite(torch.tensor(eval_metrics["eval_loss"])))

@@ -33,7 +33,7 @@ from transformers.models.perception_lm.configuration_perception_lm import (
     PerceptionLMConfig,
 )
 from transformers.models.perception_lm.image_processing_perception_lm_fast import (
-    PerceptionLMImageProcessorFast,
+    PerceptionLMImageProcessor,
 )
 from transformers.models.perception_lm.modeling_perception_lm import (
     PerceptionLMForConditionalGeneration,
@@ -173,12 +173,12 @@ def compute_intermediate_size(n, ffn_dim_multiplier=1, multiple_of=256):
 
 
 def read_json(path):
-    with open(path, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def write_json(text, path):
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(text, f)
 
 
@@ -509,7 +509,7 @@ def write_tokenizer(
     tile_size = params["model"]["vision_model"]["image_size"]
 
     image_preprocessor_config = {
-        "image_processor_type": "PerceptionLMImageProcessorFast",
+        "image_processor_type": "PerceptionLMImageProcessor",
         "vision_input_type": params["data"]["vision_input_type"],
         "tile_size": tile_size,
         "max_num_tiles": params["data"]["max_num_tiles"],
@@ -521,7 +521,7 @@ def write_tokenizer(
         "image_mean": [0.5, 0.5, 0.5],
         "image_std": [0.5, 0.5, 0.5],
     }
-    image_preprocessor = PerceptionLMImageProcessorFast(**image_preprocessor_config)
+    image_preprocessor = PerceptionLMImageProcessor(**image_preprocessor_config)
     video_preprocessor_config = {
         "video_processor_type": "PerceptionLMVideoProcessor",
         "size": {"height": tile_size, "width": tile_size},

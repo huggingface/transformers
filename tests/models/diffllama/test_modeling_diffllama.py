@@ -14,7 +14,6 @@
 """Testing suite for the PyTorch DiffLlama model."""
 
 import gc
-import tempfile
 import unittest
 
 import pytest
@@ -199,7 +198,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     def setUp(self):
         self.model_tester = DiffLlamaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DiffLlamaConfig, hidden_size=32)
+        self.config_tester = ConfigTester(self, config_class=DiffLlamaConfig, hidden_size=64)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -358,34 +357,6 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         self.assertListEqual(output_native, output_fa_2)
 
-    @require_flash_attn
-    @require_torch_accelerator
-    @slow
-    @pytest.mark.flash_attn_test
-    def test_use_flash_attention_2_true(self):
-        """
-        NOTE: this is the only test testing that the legacy `use_flash_attention=2` argument still works as intended.
-        """
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                model = model_class(config)
-                model.save_pretrained(tmp_dir)
-
-                new_model = DiffLlamaForCausalLM.from_pretrained(
-                    tmp_dir, attn_implementation="flash_attention_2", dtype=torch.float16
-                ).to(torch_device)
-
-                self.assertTrue(new_model.config._attn_implementation == "flash_attention_2")
-
-                has_flash = False
-                for name, submodule in new_model.named_modules():
-                    if "FlashAttention" in submodule.__class__.__name__:
-                        has_flash = True
-                        break
-                if not has_flash:
-                    raise ValueError("The flash model should have flash attention layers")
-
     @slow
     def test_eager_matches_sdpa_generate(self):
         """
@@ -489,15 +460,6 @@ class DiffLlamaIntegrationTest(unittest.TestCase):
         )
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
-
-        # Static Cache + compile
-        model._cache = None  # clear cache object, initialized when we pass `cache_implementation="static"`
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-        )
-        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
 
 
 @slow

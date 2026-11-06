@@ -16,11 +16,10 @@ import tempfile
 import unittest
 
 import datasets
-import httpx
 import numpy as np
 from datasets import load_dataset
 from huggingface_hub import ImageSegmentationOutputElement
-from huggingface_hub.utils import insecure_hashlib
+from huggingface_hub.utils import httpx, insecure_hashlib
 
 from transformers import (
     MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,

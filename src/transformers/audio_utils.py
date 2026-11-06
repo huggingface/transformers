@@ -17,7 +17,6 @@ and remove unnecessary dependencies.
 """
 
 import base64
-import importlib
 import io
 import os
 import warnings
@@ -26,9 +25,8 @@ from io import BytesIO
 from typing import TYPE_CHECKING, Any, Union
 from urllib.parse import urlparse
 
-import httpx
 import numpy as np
-from packaging import version
+from huggingface_hub.utils import httpx
 
 from .utils import (
     is_librosa_available,
@@ -36,7 +34,8 @@ from .utils import (
     is_soundfile_available,
     is_torch_tensor,
     is_torchaudio_available,
-    is_torchcodec_available,
+    is_torchcodec_greater_or_equal,
+    is_torchcodec_usable,
     requires_backends,
 )
 from .utils.generic import retry
@@ -57,8 +56,6 @@ if is_librosa_available():
 if is_torchaudio_available():
     import torchaudio
 
-if is_torchcodec_available():
-    TORCHCODEC_VERSION = version.parse(importlib.metadata.version("torchcodec"))
 
 AudioInput = Union[np.ndarray, "torch.Tensor", Sequence[np.ndarray], Sequence["torch.Tensor"]]
 
@@ -71,7 +68,10 @@ def _fetch_audio_bytes(url: str, timeout: float | None = 10.0) -> bytes:
     return response.content
 
 
-_NEEDS_TORCHCODEC = "Install torchcodec>=0.3.0 (`pip install torchcodec`) to load audio from this source."
+_NEEDS_TORCHCODEC = (
+    "Loading audio from this source needs torchcodec>=0.3.0 with FFmpeg, which is not installed or can't be loaded. "
+    "See https://github.com/meta-pytorch/torchcodec#installing-torchcodec."
+)
 
 
 TORCHCODEC_ONLY_FILETYPES = frozenset(
@@ -223,13 +223,15 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None, backe
     if not isinstance(audio, str):
         raise TypeError(
             "Incorrect format used for `audio`. Should be a numpy array or a `str`: an `http(s)://` URL, "
-            "a local file path, or a base64-encoded string (optionally wrapped as a `data:...` URI)."
+            f"a local file path, or a base64-encoded string (optionally wrapped as a `data:...` URI) but got {type(audio)}."
         )
 
     # torchcodec handles audio/video; librosa only plain audio. `backend` lets callers pin one.
     if backend == "auto":
         resolved_backend = (
-            "torchcodec" if is_torchcodec_available() and version.parse("0.3.0") <= TORCHCODEC_VERSION else "librosa"
+            "torchcodec"
+            if is_torchcodec_greater_or_equal("0.3.0") and is_torchcodec_usable(decode="audio")
+            else "librosa"
         )
     elif backend in ("torchcodec", "librosa", "torchaudio"):
         resolved_backend = backend
@@ -403,13 +405,21 @@ def make_list_of_audio(
     audio: list[AudioInput] | AudioInput,
 ) -> AudioInput:
     """
-    Ensure that the output is a list of audio.
+    Ensure that the output is a flat list of audio.
     Args:
         audio (`Union[list[AudioInput], AudioInput]`):
             The input audio.
     Returns:
         list: A list of audio.
     """
+    # If the input is a nested list of audios, we flatten it
+    if (
+        isinstance(audio, (list, tuple))
+        and all(isinstance(audio_i, (list, tuple)) for audio_i in audio)
+        and all(is_valid_list_of_audio(audio_i) or not audio_i for audio_i in audio)
+    ):
+        return [aud for audio_list in audio for aud in audio_list]
+
     # If it's a list of audios, it's already in the right format
     if isinstance(audio, (list, tuple)) and is_valid_list_of_audio(audio):
         return audio
@@ -418,7 +428,7 @@ def make_list_of_audio(
     if is_valid_audio(audio):
         return [audio]
 
-    raise ValueError("Invalid input type. Must be a single audio or a list of audio")
+    raise ValueError("Invalid input type. Must be a single audio, a list of audio, or a nested list of audio")
 
 
 def make_list_of_audio_chat_template(

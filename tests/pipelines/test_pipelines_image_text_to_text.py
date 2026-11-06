@@ -47,6 +47,21 @@ else:
 class ImageTextToTextPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING
 
+    @require_torch
+    def test_multiple_candidates_tiny_model(self):
+        pipe = pipeline(
+            "image-text-to-text",
+            model="trl-internal-testing/tiny-LlavaForConditionalGeneration",
+            max_new_tokens=2,
+        )
+        kwargs = {"num_beams": 2, "num_return_sequences": 2, "do_sample": False}
+
+        single = pipe(text="Hello", generate_kwargs=kwargs)
+        batched = pipe(text=["Hello", "World"], batch_size=2, generate_kwargs=kwargs)
+
+        self.assertEqual(len(single), 2)
+        self.assertEqual([len(group) for group in batched], [2, 2])
+
     def get_test_pipeline(self, model, tokenizer, processor, image_processor, dtype="float32"):
         pipe = ImageTextToTextPipeline(model=model, processor=processor, dtype=dtype, max_new_tokens=10)
         image_token = getattr(processor.tokenizer, "image_token", "")
@@ -292,7 +307,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
             "defaults": {"role": "assistant"},
             "start_anchor": "<|im_start|>assistant\n",
             "fields": {
-                "thinking": {"open": "<think>", "close": "</think>", "content": "text"},
+                "reasoning_content": {"open": "<think>", "close": "</think>", "content": "text"},
                 "content": {"close": "<|im_end|>", "content": "text"},
             },
         }
@@ -303,7 +318,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                     {"type": "text", "text": "What's in this image?"},
                     {
                         "type": "image",
-                        "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg",
                     },
                 ],
             }
@@ -311,21 +326,21 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         outputs = pipe(text=messages, do_sample=False, max_new_tokens=10)
         parsed_message = outputs[0]["generated_text"][-1]
         # The model never emits </think> here, so everything it generates stays inside the
-        # `thinking` region opened by the chat template in the prompt. Without `prefix=`,
+        # `reasoning_content` region opened by the chat template in the prompt. Without `prefix=`,
         # the parser would never see the opening <think> and would mis-route the generated
         # text into `content` instead.
         self.assertEqual(parsed_message["role"], "assistant")
-        self.assertIn("thinking", parsed_message)
+        self.assertIn("reasoning_content", parsed_message)
         self.assertNotIn("content", parsed_message)
-        self.assertIsInstance(parsed_message["thinking"], str)
-        self.assertGreater(len(parsed_message["thinking"]), 0)
+        self.assertIsInstance(parsed_message["reasoning_content"], str)
+        self.assertGreater(len(parsed_message["reasoning_content"]), 0)
 
     @slow
     @require_torch
     def test_model_pt_chat_template(self):
         pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
-        image_ny = "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
-        image_chicago = "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg"
+        image_ny = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
+        image_chicago = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/skyline_chicago.jpg"
         messages = [
             {
                 "role": "user",
@@ -353,9 +368,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         outputs = pipe(text=messages, return_full_text=True, max_new_tokens=10)
         EXPECTED_CONTENT = Expectations(
             {
-                ("rocm", (9, 4)): "The first image shows a statue of the Statue of",
-                ("cuda", 8): "The first image shows a statue of Liberty in the",
-                ("xpu", 3): "The first image shows a statue of Liberty in the",
+                (None, None): "The first image shows a statue of the Statue of",
             }
         ).get_expectation()
 
@@ -370,11 +383,11 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                                 {"type": "text", "text": "What’s the difference between these two images?"},
                                 {
                                     "type": "image",
-                                    "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                                    "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg",
                                 },
                                 {
                                     "type": "image",
-                                    "url": "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
+                                    "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/skyline_chicago.jpg",
                                 },
                             ],
                         }
@@ -386,11 +399,11 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                                 {"type": "text", "text": "What’s the difference between these two images?"},
                                 {
                                     "type": "image",
-                                    "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                                    "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg",
                                 },
                                 {
                                     "type": "image",
-                                    "url": "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
+                                    "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/skyline_chicago.jpg",
                                 },
                             ],
                         },
@@ -413,7 +426,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "image": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg",
+                        "image": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen_vl_demo.jpeg",
                     },
                     {"type": "text", "text": "Describe this image."},
                 ],
@@ -436,7 +449,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                             "content": [
                                 {
                                     "type": "image",
-                                    "image": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg",
+                                    "image": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen_vl_demo.jpeg",
                                 },
                                 {"type": "text", "text": "Describe this image."},
                             ],
@@ -449,7 +462,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                             "content": [
                                 {
                                     "type": "image",
-                                    "image": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg",
+                                    "image": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen_vl_demo.jpeg",
                                 },
                                 {"type": "text", "text": "Describe this image."},
                             ],
@@ -457,14 +470,11 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                         {
                             "role": "assistant",
                             "content": [
-                                {
-                                    "type": "text",
-                                    "text": "There is a dog and a person in the image. The dog is sitting",
-                                }
+                                {"type": "text", "text": "There is a dog and a cat in the image. The dog is located"}
                             ],
                         },
                     ],
-                }
+                },
             ],
         )
 
@@ -478,7 +488,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "image": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg",
+                        "image": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen_vl_demo.jpeg",
                     },
                     {"type": "text", "text": "Describe this image."},
                 ],
@@ -495,14 +505,14 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                             "content": [
                                 {
                                     "type": "image",
-                                    "image": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg",
+                                    "image": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen_vl_demo.jpeg",
                                 },
                                 {"type": "text", "text": "Describe this image."},
                             ],
                         }
                     ],
-                    "generated_text": "In the image, a woman is sitting on the",
-                }
+                    "generated_text": "The image presents a vibrant and dynamic scene. Domin",
+                },
             ],
         )
 
@@ -517,7 +527,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                     {
                         "type": "image_url",
                         "image_url": {
-                            "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+                            "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
                         },
                     },
                     {"type": "text", "text": "Describe this image in one sentence."},
@@ -525,7 +535,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
             }
         ]
         outputs = pipe(text=messages, return_full_text=False, max_new_tokens=10)[0]["generated_text"]
-        self.assertEqual(outputs, "A statue of liberty in the foreground of a city")
+        self.assertEqual(outputs, "A statue of liberty in the foreground next to a")
 
     @slow
     @require_torch

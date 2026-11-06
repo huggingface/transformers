@@ -34,8 +34,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import maybe_autocast
 from .configuration_muse_glimmer_assistant import MuseGlimmerAssistantConfig
 
 
@@ -162,7 +160,7 @@ class MuseGlimmerAssistantAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        context_hidden_states: torch.FloatTensor,
+        context_hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
         past_key_values: DFlashCache | None = None,
@@ -246,7 +244,7 @@ class MuseGlimmerAssistantDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        context_hidden_states: torch.FloatTensor,
+        context_hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
         past_key_values: DFlashCache | None = None,
@@ -288,7 +286,6 @@ class MuseGlimmerAssistantPreTrainedModel(PreTrainedModel):
         "hidden_states": MuseGlimmerAssistantDecoderLayer,
         "attentions": MuseGlimmerAssistantAttention,
     }
-    config_class = MuseGlimmerAssistantConfig
     main_input_name = "noise_embeds"
 
 
@@ -303,7 +300,7 @@ class MuseGlimmerAssistantContextProjection(nn.Module):
 
     def forward(self, context_hidden_states: torch.Tensor) -> torch.Tensor:
         """
-        context_hidden_states (`torch.FloatTensor` of shape `[batch_size, seq_length, dim * len(config.target_layer_ids)]`):
+        context_hidden_states (`torch.Tensor` of shape `[batch_size, seq_length, dim * len(config.target_layer_ids)]`):
             Context hidden states from target model's selected layer ids concatenated in the last dim.
         """
         context_hidden_states = self.fc(context_hidden_states)
@@ -312,8 +309,7 @@ class MuseGlimmerAssistantContextProjection(nn.Module):
 
 
 class MuseGlimmerAssistantRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: MuseGlimmerAssistantConfig, device=None):
+    def __init__(self, config: MuseGlimmerAssistantConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -324,16 +320,13 @@ class MuseGlimmerAssistantRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(
-        config: MuseGlimmerAssistantConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: MuseGlimmerAssistantConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -349,20 +342,15 @@ class MuseGlimmerAssistantRotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -385,8 +373,8 @@ class MuseGlimmerAssistantModel(MuseGlimmerAssistantPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        noise_embeds: torch.FloatTensor,
-        context_hidden_states: torch.FloatTensor,
+        noise_embeds: torch.Tensor,
+        context_hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: DFlashCache | None = None,
@@ -394,9 +382,9 @@ class MuseGlimmerAssistantModel(MuseGlimmerAssistantPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
-        noise_embeds (`torch.FloatTensor` of shape `[batch_size, config.block_size, dim]`):
+        noise_embeds (`torch.Tensor` of shape `[batch_size, config.block_size, dim]`):
             Input embedding for the last generated anchor token and mask tokens to be denoised.
-        context_hidden_states (`torch.FloatTensor` of shape `[batch_size, number_of_previous_accepted_tokens, dim * len(config.target_layer_ids)]`):
+        context_hidden_states (`torch.Tensor` of shape `[batch_size, number_of_previous_accepted_tokens, dim * len(config.target_layer_ids)]`):
             Context hidden states from target model's selected layer ids concatenated in the last dim.
         attention_mask (`torch.Tensor` of shape `[batch_size, number_of_previous_accepted_tokens + config.block_size]`):
             Similar to the usual attention_mask, but note that it has length `number_of_previous_accepted_tokens + config.block_size`,

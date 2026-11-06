@@ -236,7 +236,7 @@ class PPOCRV6SmallDetModelIntegrationTest(unittest.TestCase):
             PPOCRV5ServerDetImageProcessor.from_pretrained(model_path) if is_vision_available() else None
         )
         img_url = url_to_local_path(
-            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png"
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_001.png"
         )
         self.image = load_image(img_url)
 
@@ -273,10 +273,10 @@ class PPOCRV6SmallDetModelIntegrationTest(unittest.TestCase):
         expected_shape_boxes = torch.Size((4, 4, 2))
         expected_boxes = torch.tensor(
             [
-                [[77, 551], [400, 541], [401, 576], [78, 586]],
-                [[21, 504], [517, 485], [519, 534], [23, 553]],
-                [[192, 453], [400, 445], [402, 483], [194, 491]],
-                [[35, 408], [487, 387], [489, 434], [37, 455]],
+                [[87, 358], [305, 358], [305, 412], [87, 412]],
+                [[87, 257], [260, 259], [260, 320], [86, 319]],
+                [[84, 164], [273, 168], [272, 231], [83, 228]],
+                [[85, 77], [576, 77], [576, 149], [85, 149]],
             ],
             dtype=torch.short,
             device=torch_device,

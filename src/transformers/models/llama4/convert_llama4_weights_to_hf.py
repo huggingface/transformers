@@ -13,7 +13,7 @@ from transformers import (
     GenerationConfig,
     Llama4Config,
     Llama4ForConditionalGeneration,
-    Llama4ImageProcessorFast,
+    Llama4ImageProcessor,
     Llama4Processor,
     Llama4TextConfig,
     Llama4VisionConfig,
@@ -200,7 +200,7 @@ def max_context_length(model_path, instruct=False):
     if not instruct:
         return 256 * 1024
 
-    with open(os.path.join(model_path, "params.json"), "r") as f:
+    with open(os.path.join(model_path, "params.json"), "r", encoding="utf-8") as f:
         params = json.load(f)
     params = params.get("model", params)
     if params.get("moe_args") is None:
@@ -218,7 +218,7 @@ def write_model(
 ):
     os.makedirs(model_path, exist_ok=True)
 
-    with open(os.path.join(input_base_path, "params.json"), "r") as f:
+    with open(os.path.join(input_base_path, "params.json"), "r", encoding="utf-8") as f:
         params = json.load(f)
 
     params = params.get("model", params)
@@ -680,7 +680,7 @@ def write_tokenizer(args):
     )
     tokenizer = converter.converted_tokenizer
 
-    image_processor = Llama4ImageProcessorFast()
+    image_processor = Llama4ImageProcessor()
     processor = Llama4Processor(
         image_processor=image_processor,
         tokenizer=tokenizer,

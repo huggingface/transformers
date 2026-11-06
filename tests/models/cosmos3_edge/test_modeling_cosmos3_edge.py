@@ -13,7 +13,6 @@
 # limitations under the License.
 """Focused tests for the native Cosmos3 Edge reasoner implementation."""
 
-import copy
 import unittest
 
 from transformers import (
@@ -22,7 +21,6 @@ from transformers import (
     Cosmos3EdgeForConditionalGeneration,
     Cosmos3EdgeModel,
     Cosmos3EdgeTextConfig,
-    Cosmos3EdgeVisionConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -111,8 +109,7 @@ class Cosmos3EdgeVisionText2TextModelTester(VLMModelTester):
 
     base_model_class = Cosmos3EdgeModel
     config_class = Cosmos3EdgeConfig
-    text_config_class = Cosmos3EdgeTextConfig
-    vision_config_class = Cosmos3EdgeVisionConfig
+
     conditional_generation_class = Cosmos3EdgeForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
@@ -130,9 +127,9 @@ class Cosmos3EdgeVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("video_token_id", 4)
         kwargs.setdefault("vision_start_token_id", 5)
         kwargs.setdefault("vision_end_token_id", 6)
-        kwargs.setdefault("image_size", 4)
+        kwargs.setdefault("image_size", 8)
         kwargs.setdefault("patch_size", 2)
-        kwargs.setdefault("num_image_tokens", 1)
+        kwargs.setdefault("num_image_tokens", 4)
         kwargs.setdefault("num_channels", 3)
         kwargs.setdefault("spatial_merge_size", 2)
         kwargs.setdefault(
@@ -140,6 +137,8 @@ class Cosmos3EdgeVisionText2TextModelTester(VLMModelTester):
             {"rope_type": "default", "rope_theta": 100_000_000, "mrope_section": [2, 1, 1]},
         )
         super().__init__(parent, **kwargs)
+        self.num_patches = (self.image_size // self.patch_size) ** 2
+        self.projector_hidden_size = self.intermediate_size
 
     @property
     def _special_token_ids(self):
@@ -149,36 +148,13 @@ class Cosmos3EdgeVisionText2TextModelTester(VLMModelTester):
             self.vision_end_token_id,
         }
 
-    def get_vision_config(self):
-        return self.vision_config_class(
-            hidden_size=self.hidden_size,
-            intermediate_size=self.intermediate_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            num_channels=self.num_channels,
-            patch_size=self.patch_size,
-            num_patches=(self.image_size // self.patch_size) ** 2,
-            spatial_merge_size=self.spatial_merge_size,
-        )
-
-    def get_config(self):
-        return self.config_class(
-            text_config=self.get_text_config(),
-            vision_config=self.get_vision_config(),
-            projector_hidden_size=self.intermediate_size,
-            image_token_id=self.image_token_id,
-            video_token_id=self.video_token_id,
-            vision_start_token_id=self.vision_start_token_id,
-            vision_end_token_id=self.vision_end_token_id,
-            tie_word_embeddings=self.tie_word_embeddings,
-            pad_token_id=self.pad_token_id,
-        )
-
-    def create_pixel_values(self):
+    def create_pixel_values(self, batch_size: int | None = None):
+        # Override to 5D for patch-based models
+        batch_size = batch_size if batch_size is not None else self.batch_size
         # Edge consumes flattened spatial patches. A 2 x 2 patch grid is merged into one language token.
         return floats_tensor(
             [
-                self.batch_size * (self.image_size // self.patch_size) ** 2,
+                batch_size * (self.image_size // self.patch_size) ** 2,
                 self.num_channels * self.patch_size**2,
             ]
         )
@@ -186,15 +162,16 @@ class Cosmos3EdgeVisionText2TextModelTester(VLMModelTester):
     def place_image_tokens(self, input_ids, config):
         input_ids = input_ids.clone()
         input_ids[:, 0] = self.vision_start_token_id
-        input_ids[:, 1] = self.image_token_id
-        input_ids[:, 2] = self.vision_end_token_id
+        input_ids[:, 1 : self.num_image_tokens + 1] = self.image_token_id
+        input_ids[:, self.num_image_tokens + 2] = self.vision_end_token_id
         return input_ids
 
-    def get_additional_inputs(self, config, input_ids, modality_inputs):
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         patch_grid_size = self.image_size // self.patch_size
         return {
             "image_grid_thw": torch.tensor(
-                [[1, patch_grid_size, patch_grid_size]] * self.batch_size,
+                [[1, patch_grid_size, patch_grid_size]] * batch_size,
                 device=input_ids.device,
             ),
             "mm_token_type_ids": (input_ids == self.image_token_id).long(),
@@ -217,73 +194,6 @@ class Cosmos3EdgeModelTest(VLMModelTest, unittest.TestCase):
     def test_reverse_loading_mapping(self):
         # Native conversion mappings target the conditional model's `language_model` subtree, not the bare model.
         super().test_reverse_loading_mapping(skip_base_model=True)
-
-    def prepare_config_and_inputs_for_generate(self, batch_size=2):
-        """Keep packed visual patches aligned with the corresponding text batch during generation tests."""
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        patches_per_image = (self.model_tester.image_size // config.vision_config.patch_size) ** 2
-        filtered_inputs_dict = {}
-
-        for key, value in inputs_dict.items():
-            if key == "pixel_values":
-                filtered_inputs_dict[key] = value[: batch_size * patches_per_image]
-            elif key == "image_grid_thw":
-                filtered_inputs_dict[key] = value[:batch_size]
-            elif isinstance(value, torch.Tensor):
-                filtered_inputs_dict[key] = value[:batch_size, ...]
-            else:
-                filtered_inputs_dict[key] = value
-
-        text_gen_config = config.get_text_config(decoder=True)
-        if text_gen_config.eos_token_id is not None and text_gen_config.pad_token_id is None:
-            text_gen_config.pad_token_id = (
-                text_gen_config.eos_token_id
-                if isinstance(text_gen_config.eos_token_id, int)
-                else text_gen_config.eos_token_id[0]
-            )
-        text_gen_config.eos_token_id = None
-        text_gen_config.forced_eos_token_id = None
-
-        return config, filtered_inputs_dict
-
-    def test_mismatching_num_image_tokens(self):
-        # The shared VLM test slices one image tensor at a time. Edge stores images as a packed sequence of patches,
-        # so an image must be sliced as its full `grid_thw.prod()` span instead.
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        patches_per_image = (self.model_tester.image_size // config.vision_config.patch_size) ** 2
-
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device).eval()
-            _ = model(**input_dict)
-            curr_input_dict = copy.deepcopy(input_dict)
-
-            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-patches_per_image:]
-            curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][-1:]
-            with self.assertRaises(ValueError):
-                _ = model(**curr_input_dict)
-
-            model.base_model.rope_deltas = None
-            input_ids = curr_input_dict["input_ids"][:1]
-            pixel_values = curr_input_dict["pixel_values"][:patches_per_image]
-            image_grid_thw = curr_input_dict["image_grid_thw"][:1]
-            mm_token_type_ids = curr_input_dict["mm_token_type_ids"][:1]
-            input_ids = torch.cat([input_ids, input_ids], dim=0)
-
-            with self.assertRaises(ValueError):
-                _ = model(
-                    input_ids=input_ids,
-                    pixel_values=pixel_values,
-                    image_grid_thw=image_grid_thw,
-                    mm_token_type_ids=torch.cat([mm_token_type_ids, mm_token_type_ids], dim=0),
-                )
-
-            model.base_model.rope_deltas = None
-            _ = model(
-                input_ids=input_ids,
-                pixel_values=torch.cat([pixel_values, pixel_values], dim=0),
-                image_grid_thw=torch.cat([image_grid_thw, image_grid_thw], dim=0),
-                mm_token_type_ids=torch.cat([mm_token_type_ids, mm_token_type_ids], dim=0),
-            )
 
 
 @slow

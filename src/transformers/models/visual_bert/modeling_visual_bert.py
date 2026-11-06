@@ -465,21 +465,21 @@ class VisualBertPreTrainedModel(PreTrainedModel):
 @dataclass
 class VisualBertForPreTrainingOutput(ModelOutput):
     r"""
-    loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+    loss (*optional*, returned when `labels` is provided, `torch.Tensor` of shape `(1,)`):
         Total loss as the sum of the masked language modeling loss and the sentence-image prediction
         (classification) loss.
-    prediction_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    prediction_logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    seq_relationship_logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
+    seq_relationship_logits (`torch.Tensor` of shape `(batch_size, 2)`):
         Prediction scores of the sentence-image prediction (classification) head (scores of True/False continuation
         before SoftMax).
     """
 
-    loss: torch.FloatTensor | None = None
-    prediction_logits: torch.FloatTensor | None = None
-    seq_relationship_logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    prediction_logits: torch.Tensor | None = None
+    seq_relationship_logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(
@@ -490,7 +490,7 @@ class VisualBertForPreTrainingOutput(ModelOutput):
     """
 )
 class VisualBertModel(VisualBertPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: VisualBertConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -524,8 +524,8 @@ class VisualBertModel(VisualBertPreTrainedModel):
         attention_mask: torch.LongTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        visual_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        visual_embeds: torch.Tensor | None = None,
         visual_attention_mask: torch.LongTensor | None = None,
         visual_token_type_ids: torch.LongTensor | None = None,
         image_text_alignment: torch.LongTensor | None = None,
@@ -535,9 +535,9 @@ class VisualBertModel(VisualBertPreTrainedModel):
         **kwargs,
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPooling:
         r"""
-        visual_embeds (`torch.FloatTensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
+        visual_embeds (`torch.Tensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
             The embedded representation of the visual inputs, generally derived using using an object detector.
-        visual_attention_mask (`torch.FloatTensor` of shape `(batch_size, visual_seq_length)`, *optional*):
+        visual_attention_mask (`torch.Tensor` of shape `(batch_size, visual_seq_length)`, *optional*):
             Mask to avoid performing attention on visual embeddings. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
@@ -684,7 +684,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         "cls.predictions.decoder.weight": "visual_bert.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: VisualBertConfig):
         super().__init__(config)
 
         self.visual_bert = VisualBertModel(config)
@@ -707,8 +707,8 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         attention_mask: torch.LongTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        visual_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        visual_embeds: torch.Tensor | None = None,
         visual_attention_mask: torch.LongTensor | None = None,
         visual_token_type_ids: torch.LongTensor | None = None,
         image_text_alignment: torch.LongTensor | None = None,
@@ -720,9 +720,9 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         **kwargs,
     ) -> tuple[torch.Tensor] | VisualBertForPreTrainingOutput:
         r"""
-        visual_embeds (`torch.FloatTensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
+        visual_embeds (`torch.Tensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
             The embedded representation of the visual inputs, generally derived using using an object detector.
-        visual_attention_mask (`torch.FloatTensor` of shape `(batch_size, visual_seq_length)`, *optional*):
+        visual_attention_mask (`torch.Tensor` of shape `(batch_size, visual_seq_length)`, *optional*):
             Mask to avoid performing attention on visual embeddings. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
@@ -834,7 +834,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
 
 @auto_docstring
 class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: VisualBertConfig):
         super().__init__(config)
 
         self.visual_bert = VisualBertModel(config)
@@ -851,8 +851,8 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
         attention_mask: torch.LongTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        visual_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        visual_embeds: torch.Tensor | None = None,
         visual_attention_mask: torch.LongTensor | None = None,
         visual_token_type_ids: torch.LongTensor | None = None,
         image_text_alignment: torch.LongTensor | None = None,
@@ -883,13 +883,13 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        visual_embeds (`torch.FloatTensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
+        visual_embeds (`torch.Tensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
             The embedded representation of the visual inputs, generally derived using using an object detector.
-        visual_attention_mask (`torch.FloatTensor` of shape `(batch_size, visual_seq_length)`, *optional*):
+        visual_attention_mask (`torch.Tensor` of shape `(batch_size, visual_seq_length)`, *optional*):
             Mask to avoid performing attention on visual embeddings. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
@@ -903,10 +903,6 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
             *visual_token_type_ids* to *1* for all tokens.
         image_text_alignment (`torch.LongTensor` of shape `(batch_size, visual_seq_length, alignment_number)`, *optional*):
             Image-Text alignment uses to decide the position IDs of the visual embeddings.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
 
         Example:
 
@@ -1020,7 +1016,7 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
     """
 )
 class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: VisualBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1038,8 +1034,8 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
         attention_mask: torch.LongTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        visual_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        visual_embeds: torch.Tensor | None = None,
         visual_attention_mask: torch.LongTensor | None = None,
         visual_token_type_ids: torch.LongTensor | None = None,
         image_text_alignment: torch.LongTensor | None = None,
@@ -1050,9 +1046,9 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
         **kwargs,
     ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
         r"""
-        visual_embeds (`torch.FloatTensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
+        visual_embeds (`torch.Tensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
             The embedded representation of the visual inputs, generally derived using using an object detector.
-        visual_attention_mask (`torch.FloatTensor` of shape `(batch_size, visual_seq_length)`, *optional*):
+        visual_attention_mask (`torch.Tensor` of shape `(batch_size, visual_seq_length)`, *optional*):
             Mask to avoid performing attention on visual embeddings. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
@@ -1157,7 +1153,7 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
     """
 )
 class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: VisualBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1175,8 +1171,8 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
         attention_mask: torch.LongTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        visual_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        visual_embeds: torch.Tensor | None = None,
         visual_attention_mask: torch.LongTensor | None = None,
         visual_token_type_ids: torch.LongTensor | None = None,
         image_text_alignment: torch.LongTensor | None = None,
@@ -1187,9 +1183,9 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
         **kwargs,
     ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
         r"""
-        visual_embeds (`torch.FloatTensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
+        visual_embeds (`torch.Tensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
             The embedded representation of the visual inputs, generally derived using using an object detector.
-        visual_attention_mask (`torch.FloatTensor` of shape `(batch_size, visual_seq_length)`, *optional*):
+        visual_attention_mask (`torch.Tensor` of shape `(batch_size, visual_seq_length)`, *optional*):
             Mask to avoid performing attention on visual embeddings. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
@@ -1330,7 +1326,7 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
         "cls.predictions.decoder.weight": "visual_bert.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: VisualBertConfig):
         super().__init__(config)
 
         self.visual_bert = VisualBertModel(config)
@@ -1348,8 +1344,8 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
         attention_mask: torch.LongTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        visual_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        visual_embeds: torch.Tensor | None = None,
         visual_attention_mask: torch.LongTensor | None = None,
         visual_token_type_ids: torch.LongTensor | None = None,
         image_text_alignment: torch.LongTensor | None = None,
@@ -1361,9 +1357,9 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
         **kwargs,
     ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
         r"""
-        visual_embeds (`torch.FloatTensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
+        visual_embeds (`torch.Tensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
             The embedded representation of the visual inputs, generally derived using using an object detector.
-        visual_attention_mask (`torch.FloatTensor` of shape `(batch_size, visual_seq_length)`, *optional*):
+        visual_attention_mask (`torch.Tensor` of shape `(batch_size, visual_seq_length)`, *optional*):
             Mask to avoid performing attention on visual embeddings. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,

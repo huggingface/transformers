@@ -21,7 +21,7 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -193,7 +193,7 @@ class HiggsAudioV2Model(LlamaModel):
         self.embed_audio_tokens = HiggsAudioV2Embeddings(config)
 
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, audio_input_ids_mask: torch.LongTensor
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, audio_input_ids_mask: torch.LongTensor
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -228,7 +228,7 @@ class HiggsAudioV2Model(LlamaModel):
         audio_input_ids_mask: torch.BoolTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -432,7 +432,7 @@ class HiggsAudioV2ForConditionalGeneration(HiggsAudioV2PreTrainedModel, HiggsAud
         audio_input_ids_mask: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         audio_labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -528,14 +528,13 @@ class HiggsAudioV2ForConditionalGeneration(HiggsAudioV2PreTrainedModel, HiggsAud
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.audio_lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.audio_lm_head(hidden_states)
 
         loss = None
         if audio_labels is not None:
             audio_logits = logits.reshape(*logits.shape[:2], self.config.num_codebooks, self.config.codebook_size)
-            audio_labels_expanded = input_ids.new_ones((*input_ids.shape[:2], 8)) * -100
+            audio_labels_expanded = input_ids.new_ones((*input_ids.shape[:2], self.config.num_codebooks)) * -100
             audio_token_mask = self.model.get_placeholder_mask(input_ids, inputs_embeds, audio_input_ids_mask)
             audio_labels_expanded[audio_token_mask] = audio_labels[audio_input_ids_mask]
 
@@ -551,7 +550,7 @@ class HiggsAudioV2ForConditionalGeneration(HiggsAudioV2PreTrainedModel, HiggsAud
 
         if labels is not None:
             if self.text_lm_head is not None:
-                text_logits = self.text_lm_head(hidden_states[:, slice_indices, :])
+                text_logits = self.text_lm_head(hidden_states)
                 text_loss = self.loss_function(text_logits, labels, self.config.vocab_size, **kwargs)
                 loss = text_loss if loss is None else loss + text_loss
             else:

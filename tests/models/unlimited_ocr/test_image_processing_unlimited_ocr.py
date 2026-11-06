@@ -1,0 +1,80 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import unittest
+
+from transformers.testing_utils import require_torch, require_vision
+
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
+
+
+class UnlimitedOcrImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("min_resolution", 500)
+        kwargs.setdefault("max_resolution", 800)
+
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 512, "width": 512})
+        kwargs.setdefault("tile_size", 384)
+        kwargs.setdefault("image_mean", [0.5, 0.5, 0.5])
+        kwargs.setdefault("image_std", [0.5, 0.5, 0.5])
+
+        super().__init__(**kwargs)
+
+
+@require_torch
+@require_vision
+class UnlimitedOcrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processor_tester_class = UnlimitedOcrImageProcessingTester
+
+    @unittest.skip(reason="Not supported")
+    def test_call_numpy_4_channels(self):
+        pass
+
+    def test_preprocess_crop_to_patches(self):
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            num_channels = self.image_processor_tester.num_channels
+            size = self.image_processor_tester.size
+            tile_size = self.image_processor_tester.tile_size
+
+            image = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)[0]
+            processed_image = image_processor.preprocess(images=image, crop_to_patches=True)
+
+            num_local_patches = processed_image["num_local_patches"][0]
+            num_columns, num_rows = processed_image["patches_grid"][0]
+            self.assertEqual(num_local_patches, num_columns * num_rows)
+
+            self.assertEqual(len(processed_image["pixel_values"]), 1)
+            self.assertEqual(processed_image["pixel_values"][0].shape, (num_channels, size["height"], size["width"]))
+
+            self.assertEqual(len(processed_image["pixel_values_local"]), num_local_patches)
+            for local_patch in processed_image["pixel_values_local"]:
+                self.assertEqual(local_patch.shape, (num_channels, tile_size, tile_size))
+
+    def test_preprocess_no_crop_to_patches(self):
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            num_channels = self.image_processor_tester.num_channels
+            size = self.image_processor_tester.size
+
+            image = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)[0]
+            processed_image = image_processor.preprocess(images=image, crop_to_patches=False)
+
+            self.assertEqual(processed_image["num_local_patches"][0], 0)
+            self.assertNotIn("pixel_values_local", processed_image)
+
+            self.assertEqual(len(processed_image["pixel_values"]), 1)
+            self.assertEqual(processed_image["pixel_values"][0].shape, (num_channels, size["height"], size["width"]))

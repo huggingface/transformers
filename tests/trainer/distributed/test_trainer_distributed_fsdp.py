@@ -120,8 +120,8 @@ if is_torch_available():
 
 @require_torch
 class InitializeMissingKeysTest(unittest.TestCase):
-    """Tests for FSDP non-rank-0 weight initialization: params should be moved from meta to CPU
-    and marked as initialized without being re-initialized."""
+    """Tests for FSDP non-rank-0 weight initialization: params stay on meta (rank 0 broadcasts them)
+    and are marked as initialized without being re-initialized."""
 
     def _clear_init_flags(self, model):
         for module in model.modules():
@@ -134,24 +134,29 @@ class InitializeMissingKeysTest(unittest.TestCase):
             if hasattr(buffer, "_is_hf_initialized"):
                 delattr(buffer, "_is_hf_initialized")
 
-    def test_move_missing_keys_fsdp_non_rank0_moves_meta_to_cpu(self):
-        """FSDP non-rank-0 path should move all params from meta to CPU."""
+    def test_move_missing_keys_fsdp_non_rank0_only_moves_non_persistent_buffers(self):
+        """FSDP non-rank-0 path should leave params and persistent buffers on meta, since rank 0 broadcasts them,
+        and only move non-persistent buffers to CPU."""
         with torch.device("meta"):
             model = _BaseModel(PreTrainedConfig())
+            model.linear.register_buffer("persistent_buffer", torch.ones(5))
+            model.linear.register_buffer("non_persistent_buffer", torch.ones(5), persistent=False)
 
         for param in model.parameters():
             self.assertEqual(param.device, torch.device("meta"))
 
         with (
             patch("transformers.modeling_utils.is_fsdp_enabled", return_value=True),
-            patch("transformers.distributed.utils.is_local_dist_rank_0", return_value=False),
+            patch("transformers.modeling_utils.is_local_dist_rank_0", return_value=False),
         ):
             model._move_missing_keys_from_meta_to_device(
                 missing_keys=set(), device_map=None, device_mesh=None, hf_quantizer=None
             )
 
         for name, param in model.named_parameters():
-            self.assertEqual(param.device, torch.device("cpu"), f"param {name} should be on CPU after FSDP move")
+            self.assertEqual(param.device, torch.device("meta"), f"param {name} should stay on meta")
+        self.assertEqual(model.linear.persistent_buffer.device, torch.device("meta"))
+        self.assertEqual(model.linear.non_persistent_buffer.device, torch.device("cpu"))
 
     def test_fsdp_non_rank0_end_to_end_no_reinit(self):
         """End-to-end: move from meta + _initialize_missing_keys should mark all params initialized
@@ -161,7 +166,7 @@ class InitializeMissingKeysTest(unittest.TestCase):
 
         with (
             patch("transformers.modeling_utils.is_fsdp_enabled", return_value=True),
-            patch("transformers.distributed.utils.is_local_dist_rank_0", return_value=False),
+            patch("transformers.modeling_utils.is_local_dist_rank_0", return_value=False),
         ):
             model._move_missing_keys_from_meta_to_device(
                 missing_keys=set(), device_map=None, device_mesh=None, hf_quantizer=None
@@ -372,7 +377,7 @@ class TestTrainerDistributedFSDP(FSDPCommandsMixin, TestCasePlus):
         output_dir = cmd[cmd.index("--output_dir") + 1]
         results = []
         for rank in range(num_processes):
-            with open(os.path.join(output_dir, f"env_rank{rank}.json")) as f:
+            with open(os.path.join(output_dir, f"env_rank{rank}.json"), encoding="utf-8") as f:
                 results.append(json.load(f))
         return results
 
@@ -622,9 +627,9 @@ class TestTrainerDistributedFSDPCommon(
         execute_subprocess_async(cmd, env=self.get_env())
 
         # Compare losses
-        with open(cp_yes_losses_path) as f:
+        with open(cp_yes_losses_path, encoding="utf-8") as f:
             cp_yes_losses = json.load(f)
-        with open(cp_no_losses_path) as f:
+        with open(cp_no_losses_path, encoding="utf-8") as f:
             cp_no_losses = json.load(f)
 
         assert len(cp_yes_losses) == len(cp_no_losses), (

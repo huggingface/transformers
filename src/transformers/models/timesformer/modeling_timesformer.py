@@ -461,7 +461,7 @@ class TimesformerPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class TimesformerModel(TimesformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: TimesformerConfig):
         super().__init__(config)
         self.config = config
 
@@ -479,12 +479,12 @@ class TimesformerModel(TimesformerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor] | BaseModelOutput:
+    ) -> tuple[torch.Tensor] | BaseModelOutput:
         r"""
         Examples:
 
@@ -594,7 +594,7 @@ class TimesformerModel(TimesformerPreTrainedModel):
     """
 )
 class TimesformerForVideoClassification(TimesformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: TimesformerConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -617,11 +617,6 @@ class TimesformerForVideoClassification(TimesformerPreTrainedModel):
         **kwargs,
     ) -> tuple | ImageClassifierOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
         Examples:
 
         ```python

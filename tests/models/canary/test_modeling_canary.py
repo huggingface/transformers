@@ -92,6 +92,7 @@ class CanaryModelTester:
             subsampling_factor=self.subsampling_factor,
             subsampling_conv_channels=self.subsampling_conv_channels,
             scale_input=False,
+            layerdrop=0.0,  # unlike ParakeetEncoderModelTester, set directly here; move to __init__ if more dropout attrs need zeroing
         )
         decoder_config = CanaryDecoderConfig(
             vocab_size=self.vocab_size,
@@ -522,7 +523,7 @@ class CanaryIntegrationTest(unittest.TestCase):
         """
         reproducer: https://gist.github.com/harshaljanjani/ff11260652a115da61037ecfc288c74f#file-reproducer_transcription-py
         """
-        with open(self.fixtures_path / "expected_results_transcription.json") as f:
+        with open(self.fixtures_path / "expected_results_transcription.json", encoding="utf-8") as f:
             expected_transcriptions = json.load(f)["transcriptions"]
 
         inputs = self._load_datasamples(self.processor, 1)
@@ -535,7 +536,7 @@ class CanaryIntegrationTest(unittest.TestCase):
         """
         reproducer: https://gist.github.com/harshaljanjani/d93abd784d09a7f25291080ebcdf805d#file-reproducer_batch-py
         """
-        with open(self.fixtures_path / "expected_results_batch.json") as f:
+        with open(self.fixtures_path / "expected_results_batch.json", encoding="utf-8") as f:
             expected_transcriptions = json.load(f)["transcriptions"]
 
         inputs = self._load_datasamples(self.processor, 2)
@@ -550,7 +551,7 @@ class CanaryIntegrationTest(unittest.TestCase):
         """
         reproducer: https://gist.github.com/harshaljanjani/5b093d7fc25507694b7b6ada08fa7988#file-reproducer_translation-py
         """
-        with open(self.fixtures_path / "expected_results_translation.json") as f:
+        with open(self.fixtures_path / "expected_results_translation.json", encoding="utf-8") as f:
             expected_transcriptions = json.load(f)["transcriptions"]
 
         inputs = self._load_datasamples(self.processor, 1)

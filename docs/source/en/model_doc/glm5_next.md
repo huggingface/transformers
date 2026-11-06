@@ -35,6 +35,10 @@ GLM-5.3-Flash starts from a newly trained base model, with its architecture and 
 
 ![bench_53](https://raw.githubusercontent.com/zai-org/GLM-5/refs/heads/main/resources/bench_53.png)
 
+## Notes
+
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
+
 ## Glm5NextConfig
 
 [[autodoc]] Glm5NextConfig

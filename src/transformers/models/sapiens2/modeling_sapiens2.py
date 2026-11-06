@@ -41,7 +41,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_sapiens2 import Sapiens2Config
 
@@ -55,12 +55,12 @@ from .configuration_sapiens2 import Sapiens2Config
 @dataclass
 class Sapiens2BackboneOutput(BackboneOutput):
     r"""
-    cls_tokens (`tuple(torch.FloatTensor)`, *optional*):
+    cls_tokens (`tuple(torch.Tensor)`, *optional*):
         CLS token from each selected feature stage, each of shape `(batch_size, hidden_size)`.
         Only present when `config.return_class_token=True`.
     """
 
-    cls_tokens: tuple[torch.FloatTensor] | None = None
+    cls_tokens: tuple[torch.Tensor] | None = None
 
 
 # General docstring
@@ -74,20 +74,20 @@ class Sapiens2BackboneOutput(BackboneOutput):
 @dataclass
 class Sapiens2PoseEstimatorOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Pose estimation loss.
-    heatmaps (`torch.FloatTensor` of shape `(batch_size, num_keypoints, height, width)`):
+    heatmaps (`torch.Tensor` of shape `(batch_size, num_keypoints, height, width)`):
         Heatmaps as predicted by the model.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+    hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
         one for the output of each stage) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states
         (also called feature maps) of the model at the output of each stage.
     """
 
-    loss: torch.FloatTensor | None = None
-    heatmaps: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    loss: torch.Tensor | None = None
+    heatmaps: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring(
@@ -98,23 +98,23 @@ class Sapiens2PoseEstimatorOutput(ModelOutput):
 @dataclass
 class Sapiens2NormalEstimatorOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Normal estimation loss.
-    normals (`torch.FloatTensor` of shape `(batch_size, num_labels, height, width)`):
+    normals (`torch.Tensor` of shape `(batch_size, num_labels, height, width)`):
         Raw normal map predictions as output by the model (unnormalized).
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage)
+    hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each stage)
         of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
         each layer plus the initial embedding outputs.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one per layer) of shape `(batch_size, num_heads, sequence_length,
+    attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.Tensor` (one per layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`. Attentions weights after the attention softmax.
     """
 
-    loss: torch.FloatTensor | None = None
-    normals: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    loss: torch.Tensor | None = None
+    normals: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring(
@@ -125,26 +125,26 @@ class Sapiens2NormalEstimatorOutput(ModelOutput):
 @dataclass
 class Sapiens2PointmapEstimatorOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Pointmap estimation loss.
-    pointmaps (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
+    pointmaps (`torch.Tensor` of shape `(batch_size, 3, height, width)`):
         Per-pixel 3D XYZ coordinate predictions in canonical camera space.
-    scales (`torch.FloatTensor` of shape `(batch_size, 1)`, *optional*):
+    scales (`torch.Tensor` of shape `(batch_size, 1)`, *optional*):
         Canonical focal length / actual focal length ratio. `None` when no scale branch is configured.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage)
+    hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each stage)
         of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
         each layer plus the initial embedding outputs.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one per layer) of shape `(batch_size, num_heads, sequence_length,
+    attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.Tensor` (one per layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`. Attentions weights after the attention softmax.
     """
 
-    loss: torch.FloatTensor | None = None
-    pointmaps: torch.FloatTensor | None = None
-    scales: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    loss: torch.Tensor | None = None
+    pointmaps: torch.Tensor | None = None
+    scales: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring(
@@ -155,24 +155,24 @@ class Sapiens2PointmapEstimatorOutput(ModelOutput):
 @dataclass
 class Sapiens2ImageMattingOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Loss.
-    alphas (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`):
+    alphas (`torch.Tensor` of shape `(batch_size, 1, height, width)`):
         Estimated alpha values.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+    hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
         one for the output of each stage) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states
         (also called feature maps) of the model at the output of each stage.
-    foregrounds (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
+    foregrounds (`torch.Tensor` of shape `(batch_size, 3, height, width)`):
         Pre-multiplied RGB foreground predictions in `[0, 1]` (sigmoid-activated).
     """
 
-    loss: torch.FloatTensor | None = None
-    alphas: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    alphas: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
-    foregrounds: torch.FloatTensor | None = None
+    foregrounds: torch.Tensor | None = None
 
 
 class Sapiens2Embeddings(nn.Module):
@@ -279,47 +279,49 @@ class Sapiens2RopePositionEmbedding(nn.Module):
         self.config = config
         self.base = config.rope_theta
         self.head_dim = config.hidden_size // config.num_attention_heads
+        image_height, image_width = (
+            config.image_size if isinstance(config.image_size, Iterable) else (config.image_size, config.image_size)
+        )
+        patch_height, patch_width = (
+            config.patch_size if isinstance(config.patch_size, Iterable) else (config.patch_size, config.patch_size)
+        )
+        self.num_patches_h = image_height // patch_height
+        self.num_patches_w = image_width // patch_width
 
         inv_freq = 1 / self.base ** torch.arange(0, 1, 4 / self.head_dim, dtype=torch.float32)  # (head_dim / 4,)
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
-        image_size = config.image_size
-        image_h, image_w = image_size if isinstance(image_size, Iterable) else (image_size, image_size)
-        patch_size = config.patch_size
-        patch_size_h = patch_size if isinstance(patch_size, int) else patch_size[0]
-        patch_size_w = patch_size if isinstance(patch_size, int) else patch_size[1]
-        self.num_patches_h = image_h // patch_size_h
-        self.num_patches_w = image_w // patch_size_w
 
     def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         _, _, height, width = pixel_values.shape
-        num_patches_h = height // self.config.patch_size
-        num_patches_w = width // self.config.patch_size
+        patch_height, patch_width = (
+            self.config.patch_size
+            if isinstance(self.config.patch_size, Iterable)
+            else (self.config.patch_size, self.config.patch_size)
+        )
+        num_patches_h = height // patch_height
+        num_patches_w = width // patch_width
 
         device = pixel_values.device
-        device_type = device.type if isinstance(device.type, str) and device.type != "mps" else "cpu"
 
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            # Although we could precompute static patch_coords from image_size and patch_size in the config,
-            # the model was trained with random_scale, so it can process images of varying sizes.
-            # Therefore, it's better to compute patch_coords dynamically (with lru_cache).
-            patch_coords = get_patches_center_coordinates(
-                num_patches_h, num_patches_w, dtype=torch.float32, device=device
+        # Although we could precompute static patch_coords from image_size and patch_size in the config,
+        # the model was trained with random_scale, so it can process images of varying sizes.
+        # Therefore, it's better to compute patch_coords dynamically (with lru_cache).
+        patch_coords = get_patches_center_coordinates(num_patches_h, num_patches_w, dtype=torch.float32, device=device)
+        if self.training:
+            patch_coords = augment_patches_center_coordinates(
+                patch_coords,
+                shift=self.config.pos_embed_shift,
+                jitter=self.config.pos_embed_jitter,
+                rescale=self.config.pos_embed_rescale,
             )
-            if self.training:
-                patch_coords = augment_patches_center_coordinates(
-                    patch_coords,
-                    shift=self.config.pos_embed_shift,
-                    jitter=self.config.pos_embed_jitter,
-                    rescale=self.config.pos_embed_rescale,
-                )
 
-            # (height * width, 2, head_dim / 4) -> (height * width, head_dim / 2) -> (height * width, head_dim)
-            angles = 2 * math.pi * patch_coords[:, :, None] * self.inv_freq[None, None, :]
-            angles = angles.flatten(1, 2)
-            angles = angles.tile(2)
+        # (height * width, 2, head_dim / 4) -> (height * width, head_dim / 2) -> (height * width, head_dim)
+        angles = 2 * math.pi * patch_coords[:, :, None] * self.inv_freq[None, None, :]
+        angles = angles.flatten(1, 2)
+        angles = angles.tile(2)
 
-            cos = torch.cos(angles)
-            sin = torch.sin(angles)
+        cos = torch.cos(angles)
+        sin = torch.sin(angles)
 
         dtype = pixel_values.dtype
         return cos.to(dtype=dtype), sin.to(dtype=dtype)
@@ -795,15 +797,17 @@ class Sapiens2PreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Sapiens2Layer"]
+    _no_split_modules = ["Sapiens2Embeddings", "Sapiens2Layer"]
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
+    _can_compile_fullgraph = True
     _can_record_outputs = {
         "hidden_states": Sapiens2Layer,
         "attentions": Sapiens2Attention,
     }
+    _input_embed_layer = "patch_embeddings"
 
     # Ignore periods as we use inv_freq instead which is automatically calculated from the config.
     _keys_to_ignore_on_load_unexpected = [r"periods"]
@@ -843,7 +847,6 @@ class Sapiens2Encoder(Sapiens2PreTrainedModel):
         self.layer = nn.ModuleList(
             [Sapiens2Layer(config, layer_idx=layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        # Initialize weights and apply final processing
         self.post_init()
 
     @merge_with_config_defaults
@@ -857,7 +860,6 @@ class Sapiens2Encoder(Sapiens2PreTrainedModel):
     ) -> BaseModelOutput:
         for layer_module in self.layer:
             hidden_states = layer_module(hidden_states, position_embeddings=position_embeddings, **kwargs)
-
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
@@ -869,7 +871,6 @@ class Sapiens2Model(Sapiens2PreTrainedModel):
         self.rope_embeddings = Sapiens2RopePositionEmbedding(config)
         self.model = Sapiens2Encoder(config)
         self.norm = Sapiens2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -909,20 +910,18 @@ class Sapiens2Model(Sapiens2PreTrainedModel):
         torch.Size([1, 1024])
         ```
         """
-
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
         hidden_states = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
         position_embeddings = self.rope_embeddings(pixel_values)
 
-        output = self.model(hidden_states, position_embeddings, **kwargs)
-        sequence_output = self.norm(output.last_hidden_state)
+        encoder_outputs: BaseModelOutput = self.model(hidden_states, position_embeddings=position_embeddings, **kwargs)
+        sequence_output = self.norm(encoder_outputs.last_hidden_state)
         pooled_output = sequence_output[:, 0, :]
-
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            hidden_states=output.hidden_states,
-            attentions=output.attentions,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )
 
 
@@ -930,13 +929,10 @@ class Sapiens2Model(Sapiens2PreTrainedModel):
 class Sapiens2Backbone(BackboneMixin, Sapiens2PreTrainedModel):
     def __init__(self, config: Sapiens2Config):
         super().__init__(config)
-
         self.embeddings = Sapiens2Embeddings(config)
         self.rope_embeddings = Sapiens2RopePositionEmbedding(config)
         self.model = Sapiens2Encoder(config)
         self.norm = Sapiens2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.gradient_checkpointing = False
-
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.post_init()
 
@@ -977,8 +973,8 @@ class Sapiens2Backbone(BackboneMixin, Sapiens2PreTrainedModel):
         hidden_states = self.embeddings(pixel_values)
         position_embeddings = self.rope_embeddings(pixel_values)
 
-        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
-        output = self.model(hidden_states, position_embeddings, **kwargs)
+        kwargs["output_hidden_states"] = True  # required to extract per-stage feature maps from hidden_states
+        output: BaseModelOutput = self.model(hidden_states, position_embeddings, **kwargs)
         stage_hidden_states = output.hidden_states
 
         batch_size, _, image_height, image_width = pixel_values.shape
@@ -1032,16 +1028,11 @@ class Sapiens2ForSemanticSegmentation(Sapiens2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> SemanticSegmenterOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth semantic segmentation maps for computing the loss.
-            Indices should be in `[0, ..., config.num_labels - 1]`.
-            If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
-
         Example:
 
         ```python
@@ -1150,10 +1141,10 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         flip_pairs: torch.Tensor | None = None,
-        labels: torch.FloatTensor | None = None,
-        label_weights: torch.FloatTensor | None = None,
+        labels: torch.Tensor | None = None,
+        label_weights: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sapiens2PoseEstimatorOutput:
         r"""
@@ -1162,9 +1153,9 @@ class Sapiens2ForPoseEstimation(Sapiens2PreTrainedModel):
             test-time flip augmentation. When provided, the model assumes `pixel_values` contains
             horizontally-flipped images and calls `flip_back` on the output heatmaps to restore the
             original orientation.
-        labels (`torch.FloatTensor` of shape `(batch_size, num_keypoints, height, width)`, *optional*):
+        labels (`torch.Tensor` of shape `(batch_size, num_keypoints, height, width)`, *optional*):
             Heatmap ground truth for computing the loss.
-        label_weights (`torch.FloatTensor` of shape `(batch_size, num_labels, 1, 1)` or `(batch_size, num_labels, height, width)`, *optional*):
+        label_weights (`torch.Tensor` of shape `(batch_size, num_labels, 1, 1)` or `(batch_size, num_labels, height, width)`, *optional*):
             Visibility weights for each keypoint. Must be broadcastable to the shape of `labels`.
 
         Example:
@@ -1233,12 +1224,12 @@ class Sapiens2ForNormalEstimation(Sapiens2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        labels: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor,
+        labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sapiens2NormalEstimatorOutput:
         r"""
-        labels (`torch.FloatTensor` of shape `(batch_size, num_labels, height, width)`, *optional*):
+        labels (`torch.Tensor` of shape `(batch_size, num_labels, height, width)`, *optional*):
             Ground-truth surface normal maps for computing the loss.
 
         Example:
@@ -1309,12 +1300,12 @@ class Sapiens2ForPointmapEstimation(Sapiens2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        labels: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor,
+        labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sapiens2PointmapEstimatorOutput:
         r"""
-        labels (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`, *optional*):
+        labels (`torch.Tensor` of shape `(batch_size, 3, height, width)`, *optional*):
             Ground-truth pointmap for computing the loss.
 
         Example:
@@ -1382,12 +1373,12 @@ class Sapiens2ForImageMatting(Sapiens2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        labels: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor,
+        labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sapiens2ImageMattingOutput:
         r"""
-        labels (`torch.FloatTensor` of shape `(batch_size, 4, height, width)`, *optional*):
+        labels (`torch.Tensor` of shape `(batch_size, 4, height, width)`, *optional*):
             Ground-truth matting targets for computing the loss.
 
         Example:

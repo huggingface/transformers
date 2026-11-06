@@ -143,9 +143,12 @@ class SwitchTransformersTop1Router(nn.Module):
             hidden_states (`torch.Tensor`):
                 (batch_size, sequence_length, hidden_dim) from which router probabilities are computed.
         Returns:
-            router_probabilities (`torch.Tensor`):
-                Tensor of shape (batch_size, sequence_length, num_experts) corresponding to the probabilities for each
-                token and expert. Used for routing tokens to experts.
+            expert_index (`torch.Tensor`):
+                One-hot dispatch mask of shape (batch_size, sequence_length, num_experts) with tokens routed to an
+                expert beyond its capacity masked out.
+            router_probs (`torch.Tensor`):
+                Tensor of shape (batch_size, sequence_length, 1) with the probability of the selected expert for each
+                token. Used to scale the expert outputs.
             router_logits (`torch.Tensor`):
                 Logits tensor of shape (batch_size, sequence_length, num_experts) corresponding to raw router logits.
                 This is used later for computing router z-loss.
@@ -163,14 +166,14 @@ class SwitchTransformersTop1Router(nn.Module):
 
         # Apply Softmax and cast back to the original `dtype`
         router_probs = nn.functional.softmax(router_logits, dim=-1, dtype=self.dtype).to(self.input_dtype)
-        router_logits, expert_index = torch.max(router_probs, dim=-1, keepdim=True)
+        expert_index = torch.argmax(router_probs, dim=-1)
         expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.num_experts)
         token_priority = torch.cumsum(expert_index, dim=-2)
         # mask if the token routed to the expert will overflow
         expert_capacity_mask = token_priority <= self.expert_capacity
         expert_index = expert_index * expert_capacity_mask
         router_probs = torch.max(router_probs, dim=-1).values.unsqueeze(-1)
-        return router_probs, expert_index, router_logits
+        return expert_index, router_probs, router_logits
 
 
 class SwitchTransformersLayerNorm(T5LayerNorm):
@@ -211,8 +214,11 @@ class SwitchTransformersSparseMLP(nn.Module):  # inherit from mixtral
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
+        # Route on the unflattened hidden states so that expert capacity is accounted per sequence
+        selected_experts, routing_weights, _ = self.router(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_dim)
-        _, selected_experts, routing_weights = self.router(hidden_states)
+        selected_experts = selected_experts.view(-1, 1, self.router.num_experts)
+        routing_weights = routing_weights.view(-1, 1)
         hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return hidden_states
@@ -419,7 +425,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         "router_logits": OutputRecorder(SwitchTransformersTop1Router, index=2),
     }
 
-    def __init__(self, config):
+    def __init__(self, config: SwitchTransformersConfig):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
 
@@ -574,15 +580,15 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.BoolTensor | None = None,
-        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         decoder_inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | Seq2SeqMoEModelOutput:
+    ) -> tuple[torch.Tensor] | Seq2SeqMoEModelOutput:
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, **kwargs
@@ -660,17 +666,17 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.BoolTensor | None = None,
         encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_router_logits: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | Seq2SeqMoEOutput:
+    ) -> tuple[torch.Tensor] | Seq2SeqMoEOutput:
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
@@ -763,14 +769,10 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         )
 
     def _unpack_router_logits(self, router_outputs):
-        total_router_logits = []
-        total_expert_indexes = []
-        for router_output in router_outputs:
-            if len(router_output[0].shape) > 1:
-                router_logits, expert_indexes = router_output
-                total_router_logits.append(router_logits)
-                total_expert_indexes.append(expert_indexes)
-        return torch.cat(total_router_logits, dim=1), torch.cat(total_expert_indexes, dim=1)
+        # `router_outputs` holds the raw router logits recorded for each sparse layer, of shape
+        # (batch_size, sequence_length, num_experts)
+        router_logits = torch.cat(router_outputs, dim=1)
+        return router_logits, router_logits.argmax(dim=-1)
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self._shift_right(labels)
@@ -803,11 +805,11 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | MoEModelOutput:
+    ) -> tuple[torch.Tensor] | MoEModelOutput:
         use_cache = False
         encoder_outputs = self.encoder(
             input_ids=input_ids,

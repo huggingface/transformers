@@ -26,7 +26,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -53,7 +53,6 @@ from ..qwen3_5_moe.modeling_qwen3_5_moe import (
     Qwen3_5MoeForCausalLM,
     Qwen3_5MoeForConditionalGeneration,
     Qwen3_5MoeModel,
-    Qwen3_5MoeModelOutputWithPast,
     Qwen3_5MoePreTrainedModel,
     Qwen3_5MoeTextModel,
     Qwen3_5MoeVisionModel,
@@ -141,7 +140,7 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
         "hyper_connection_mixer.input_mix_weight_down": "rowwise_split_input",
         # It's extremely important to shard this embedding as its size is ~45B == 90 GiB - we shard on dim 1, as the checkpoints
         # for it are sharded on dim0 (this way Concatenate and tp do not work on the same dim and everything is easy)
-        "layers.*.ple.ple_embedding.ngram_embedding": "colwise_gather_output",
+        "layers.*.ple.ple_embedding.ngram_embedding": "embedding_colwise",
     }
     base_model_fsdp_plan = {
         "embed_tokens": "free_full_weight",
@@ -182,20 +181,20 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
         if self.layer_types is None:
             interval_pattern = kwargs.pop("full_attention_interval", 4)
             self.layer_types = [
-                "linear_attention" if (i + 1) % interval_pattern else "qwen_sparse_attention"
+                "linear_attention" if (i + 1) % interval_pattern else "indexed_attention"
                 for i in range(self.num_hidden_layers)
             ]
         # The real checkpoint contains "full_attention" entries for layers that are actually using an indexer
         elif "full_attention" in self.layer_types:
             self.layer_types = [
-                "qwen_sparse_attention" if layer == "full_attention" else layer for layer in self.layer_types
+                "indexed_attention" if layer == "full_attention" else layer for layer in self.layer_types
             ]
 
         PreTrainedConfig.__post_init__(self, **kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates Qwen4-Exp architecture invariants."""
-        unsupported_layer_types = sorted(set(self.layer_types) - {"linear_attention", "qwen_sparse_attention"})
+        unsupported_layer_types = sorted(set(self.layer_types) - {"linear_attention", "indexed_attention"})
         if unsupported_layer_types:
             raise ValueError(f"Unsupported Qwen4-Exp layer types: {unsupported_layer_types}.")
         output_gate_type = self.output_gate_type or self.hidden_act
@@ -458,7 +457,7 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
                 selected_tokens = torch.cat([selected_tokens, tail]).to(torch.int32)
                 selected_token_indices[batch_idx, query_idx, : selected_tokens.numel()] = selected_tokens
 
-        # Create the additive mask to be added to the main causal mask
+        # Create the selection mask to combine with the main causal mask
         kv_length = attention_mask.shape[-1]
         selected_token_mask = torch.zeros(
             (*selected_token_indices.shape[:-1], kv_length + 1), device=attention_mask.device, dtype=torch.bool
@@ -466,10 +465,6 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         # We absorb all the -1 by scaterring them to the last index that we will drop
         scatter_indices = torch.where(selected_token_indices >= 0, selected_token_indices, kv_length)
         selected_token_mask = selected_token_mask.scatter(-1, scatter_indices, True)[..., :kv_length].unsqueeze(1)
-        # if using eager, convert to float mask
-        if attention_mask.is_floating_point():
-            min_dtype = torch.finfo(attention_mask.dtype).min
-            selected_token_mask = torch.where(selected_token_mask, attention_mask.new_zeros(()), min_dtype)
 
         return selected_token_mask
 
@@ -490,11 +485,12 @@ class Qwen4ExpTextAttention(Qwen3_5Attention):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         selected_token_mask = self.indexer(hidden_states, position_embeddings, attention_mask, past_key_values)
-        # Combine both masks (they are never None, and are always 4D with either bool for sdpa, or float for eager)
-        if attention_mask.is_floating_point():
-            attention_mask = attention_mask + selected_token_mask
-        else:
+        # Combine the boolean selection mask with the causal mask (bool for sdpa, float for eager).
+        if attention_mask.dtype == torch.bool:
             attention_mask = attention_mask & selected_token_mask
+        else:
+            # Adding minimum-finite values overflows to -inf and yields NaNs for fully masked queries.
+            attention_mask = attention_mask.masked_fill(~selected_token_mask, torch.finfo(attention_mask.dtype).min)
 
         # The cos/sin are the full positions here due to the indexer, so we need to slice to get current positions
         position_embeddings = (x[:, -hidden_states.shape[1] :, :] for x in position_embeddings)
@@ -660,19 +656,21 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
         input_ids = input_ids.long()
         # This is a trick to store the previous N=self.context_len `input_ids` - indeed the manipulations are identical to storing
         # a past conv_state, so we can use an additional conv_states inside the Cache for it
-        if past_key_values is not None and past_key_values.has_previous_state(self.layer_idx, state_idx=2):
-            previous_context = past_key_values.layers[self.layer_idx].conv_states[2].clone()
+        cached_ctx = (
+            past_key_values.get_conv_state(self.layer_idx, state_idx=2) if past_key_values is not None else None
+        )
+
+        if cached_ctx is not None:
+            previous_context = cached_ctx.clone()
         else:
             previous_context = input_ids.new_full((input_ids.shape[0], self.context_len), self.eos_token_id)
+
         # Store the current input_ids for the next forward
         if past_key_values is not None:
             input_ids_to_cache = input_ids
             # In the case where `input_ids` would be smaller than `self.context_len`, the `update_conv_state` will pad with zeros, whereas
             # here we want to pad with eos, so we do it explicitly
-            if (
-                not past_key_values.has_previous_state(self.layer_idx, state_idx=2)
-                and input_ids.shape[1] < self.context_len
-            ):
+            if cached_ctx is None and input_ids.shape[1] < self.context_len:
                 input_ids_to_cache = torch.nn.functional.pad(
                     input_ids_to_cache, (self.context_len - input_ids.shape[1], 0), value=self.eos_token_id
                 )
@@ -807,7 +805,7 @@ class Qwen4ExpTextDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Cache | None = None,
         ple_input_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         if self.ple is not None:
             hidden_states = hidden_states + self.ple(
                 hidden_states, ple_input_ids, past_key_values, conv_mask=conv_mask
@@ -882,10 +880,6 @@ class Qwen4ExpPreTrainedModel(Qwen3_5MoePreTrainedModel):
             init.zeros_(module.conv1d.weight)
 
 
-class Qwen4ExpModelOutputWithPast(Qwen3_5MoeModelOutputWithPast):
-    pass
-
-
 @auto_docstring
 class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
     config: Qwen4ExpTextConfig
@@ -937,7 +931,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         ple_input_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -978,13 +972,13 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
         else:
             text_position_ids = None
 
-        # We need the full position_ids in the indexer, not just the current ones, so bind them to the cache if any (as they
-        # are 3D, it's otherwise not easy to compute them back from only current positions)
-        if past_key_values is not None:
-            if hasattr(past_key_values, "position_ids"):
-                previous_positions = past_key_values.position_ids
-                position_ids = torch.cat([previous_positions, position_ids], dim=-1)
-            past_key_values.position_ids = position_ids
+        # All indexers share the full 3D positions. Store them on the first indexed layer so cache operations
+        # such as reset, crop and beam reordering also update the position history.
+        if past_key_values is not None and "indexed_attention" in self.config.layer_types:
+            indexer_cache = past_key_values.layers[self.config.layer_types.index("indexed_attention")]
+            if indexer_cache.indexer_position_ids is not None:
+                position_ids = torch.cat([indexer_cache.indexer_position_ids, position_ids], dim=-1)
+            indexer_cache.indexer_position_ids = position_ids
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             mask_kwargs = {
@@ -998,7 +992,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
                 "allow_is_causal_skip": False,
             }
             causal_mask_mapping = {
-                "qwen_sparse_attention": create_causal_mask(**mask_kwargs),
+                "indexed_attention": create_causal_mask(**mask_kwargs),
                 "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
             }
 
@@ -1017,7 +1011,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
             hidden_states = decoder_layer(
                 hidden_states,
                 position_embeddings=position_embeddings,
-                attention_mask=causal_mask_mapping["qwen_sparse_attention"],
+                attention_mask=causal_mask_mapping["indexed_attention"],
                 conv_mask=conv_mask,
                 past_key_values=past_key_values,
                 ple_input_ids=ple_input_ids,
@@ -1026,7 +1020,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
 
         hidden_states = self.hyper_connection_mixer(hidden_states)
 
-        return Qwen4ExpModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
@@ -1043,22 +1037,31 @@ class Qwen4ExpVisionModel(Qwen3_5MoeVisionModel):
 
 
 class Qwen4ExpModel(Qwen3_5MoeModel):
+    # Qwen4ExpDecoderLayer, inherited from Qwen3_5MoeModel and renamed by prefix, does not exist
+    _no_split_modules = ["Qwen4ExpTextDecoderLayer", "Qwen4ExpVisionBlock"]
+
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Qwen4ExpModelOutputWithPast:
+    ) -> tuple | MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -1071,23 +1074,30 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
                 input_ids if input_ids is not None else self.language_model.reverse_embedding(inputs_embeds)
             )
 
-        if pixel_values is not None:
-            image_outputs: BaseModelOutputWithPooling = self.get_image_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
-            image_embeds = image_outputs.pooler_output
-            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"] = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        if pixel_values_videos is not None:
-            video_outputs: BaseModelOutputWithPooling = self.get_video_features(
-                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+        if mm_encoder_outputs.get("video") is not None:
+            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
             )
-            video_embeds = video_outputs.pooler_output
-            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
@@ -1114,10 +1124,7 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
             **kwargs,
         )
 
-        return Qwen4ExpModelOutputWithPast(
-            **outputs,
-            rope_deltas=self.rope_deltas,
-        )
+        return outputs
 
 
 @auto_docstring

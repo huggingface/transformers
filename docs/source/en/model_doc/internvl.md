@@ -157,7 +157,7 @@ messages = [
         {
             "role": "user",
             "content": [
-                {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
+                {"type": "image", "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"},
                 {"type": "text", "text": "Write a haiku for this image"},
             ],
         },
@@ -201,7 +201,7 @@ messages = [
         {
             "role": "user",
             "content": [
-                {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
+                {"type": "image", "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"},
                 {"type": "text", "text": "Write a haiku for this image"},
             ],
         },
@@ -210,8 +210,8 @@ messages = [
         {
             "role": "user",
             "content": [
-                {"type": "image", "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"},
-                {"type": "image", "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"},
+                {"type": "image", "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"},
+                {"type": "image", "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg"},
                 {"type": "text", "text": "These images depict two different landmarks. Can you identify them?"},
             ],
         },
@@ -286,8 +286,8 @@ messages = [
         {
             "role": "user",
             "content": [
-                {"type": "image", "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"},
-                {"type": "image", "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"},
+                {"type": "image", "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"},
+                {"type": "image", "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg"},
                 {"type": "text", "text": "These images depict two different landmarks. Can you identify them?"},
             ],
         },
@@ -305,7 +305,7 @@ messages = [
         {
             "role": "user",
             "content": [
-                {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
+                {"type": "image", "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"},
                 {"type": "text", "text": "Write a haiku for this image"},
             ],
         },

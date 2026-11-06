@@ -41,7 +41,7 @@ The example below demonstrates how to detect text with PP-OCRv6_small_rec using 
 ```python
 from io import BytesIO
 
-import httpx
+from huggingface_hub.utils import httpx
 from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForTextRecognition
 from transformers.image_utils import load_image
@@ -50,7 +50,7 @@ model_path = "PaddlePaddle/PP-OCRv6_small_rec_safetensors"
 model = AutoModelForTextRecognition.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image_url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_rec_001.png"
+image_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_rec_001.png"
 image = load_image(image_url)
 inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
@@ -73,7 +73,7 @@ Here is how you can do it with PP-OCRv6_small_rec using the [`AutoModel`]:
 ```python
 from io import BytesIO
 
-import httpx
+from huggingface_hub.utils import httpx
 from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForTextRecognition
 from transformers.image_utils import load_image
@@ -82,7 +82,7 @@ model_path = "PaddlePaddle/PP-OCRv6_small_rec_safetensors"
 model = AutoModelForTextRecognition.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image_url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_rec_001.png"
+image_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_rec_001.png"
 image = load_image(image_url)
 inputs = image_processor(images=[image, image], return_tensors="pt").to(model.device)
 outputs = model(**inputs)

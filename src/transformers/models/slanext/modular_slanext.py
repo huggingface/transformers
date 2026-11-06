@@ -35,7 +35,6 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.generic import TensorType, merge_with_config_defaults
-from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..got_ocr2.configuration_got_ocr2 import GotOcr2VisionConfig
 from ..got_ocr2.modeling_got_ocr2 import (
@@ -77,7 +76,9 @@ class SLANeXtConfig(PreTrainedConfig):
     """
 
     model_type = "slanext"
-    sub_configs = {"vision_config": SLANeXtVisionConfig}
+    sub_configs_defaults = {
+        "vision_config": SLANeXtVisionConfig,
+    }
 
     vision_config: dict | SLANeXtVisionConfig | None = None
     post_conv_in_channels: int = 256
@@ -85,13 +86,6 @@ class SLANeXtConfig(PreTrainedConfig):
     out_channels: int = 50
     hidden_size: int = 512
     max_text_length: int = 500
-
-    def __post_init__(self, **kwargs):
-        if self.vision_config is None:
-            self.vision_config = SLANeXtVisionConfig()
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = SLANeXtVisionConfig(**self.vision_config)
-        super().__post_init__(**kwargs)
 
 
 class SLANeXtAttentionGRUCell(nn.Module):
@@ -106,9 +100,9 @@ class SLANeXtAttentionGRUCell(nn.Module):
 
     def forward(
         self,
-        prev_hidden: torch.FloatTensor,
-        batch_hidden: torch.FloatTensor,
-        char_onehots: torch.FloatTensor,
+        prev_hidden: torch.Tensor,
+        batch_hidden: torch.Tensor,
+        char_onehots: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ):
         batch_hidden_proj = self.input_to_hidden(batch_hidden)
@@ -239,7 +233,7 @@ class SLANeXtSLAHead(SLANeXtPreTrainedModel):
     @filter_output_hidden_states
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
+        hidden_states: torch.Tensor,
         targets: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
@@ -271,14 +265,14 @@ class SLANeXtSLAHead(SLANeXtPreTrainedModel):
 @dataclass
 class SLANeXtForTableRecognitionOutput(BaseModelOutput):
     r"""
-    head_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+    head_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
         Hidden-states of the SLANeXtSLAHead at each prediction step, varies up to max `self.config.max_text_length` states (depending on early exits).
-    head_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+    head_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
         Attentions of the SLANeXtSLAHead at each prediction step, varies up to max `self.config.max_text_length` attentions (depending on early exits).
     """
 
-    head_hidden_states: torch.FloatTensor | None = None
-    head_attentions: torch.FloatTensor | None = None
+    head_hidden_states: torch.Tensor | None = None
+    head_attentions: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -297,8 +291,8 @@ class SLANeXtForTableRecognition(SLANeXtPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     def forward(
-        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple[torch.FloatTensor] | SLANeXtForTableRecognitionOutput:
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple[torch.Tensor] | SLANeXtForTableRecognitionOutput:
         backbone_outputs = self.backbone(pixel_values, **kwargs)
         head_outputs = self.head(backbone_outputs.last_hidden_state, **kwargs)
         return SLANeXtForTableRecognitionOutput(
@@ -311,7 +305,6 @@ class SLANeXtForTableRecognition(SLANeXtPreTrainedModel):
 
 
 @auto_docstring
-@requires(backends=("torch",))
 class SLANeXtImageProcessor(TorchvisionBackend):
     resample = 2  # PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -532,6 +525,7 @@ class SLANeXtImageProcessor(TorchvisionBackend):
 __all__ = [
     "SLANeXtImageProcessor",
     "SLANeXtConfig",
+    "SLANeXtVisionConfig",
     "SLANeXtSLAHead",
     "SLANeXtBackbone",
     "SLANeXtForTableRecognition",

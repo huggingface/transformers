@@ -205,24 +205,20 @@ def _get_adamw_torch(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
     ctx.optimizer_kwargs.update(ctx.adam_kwargs)
     if ctx.args.optim == OptimizerNames.ADAMW_TORCH_FUSED:
         ctx.optimizer_kwargs.update({"fused": True})
-    # HACK(ep-2d): expert parallelism leaves only the expert weights as DTensor, so the fused and
-    # foreach kernels cannot span the parameter set. Step per parameter instead.
-    if ctx.model is not None and has_mixed_dtensor(p for p in ctx.model.parameters() if p.requires_grad):
-        ctx.optimizer_kwargs.update({"fused": False, "foreach": False})
     return AdamW, ctx.optimizer_kwargs
 
 
 def has_mixed_dtensor(tensors) -> bool:
-    """Whether `tensors` mixes `DTensor` and plain tensors, as expert parallelism leaves a model:
-    experts sharded, everything else replicated."""
+    """
+    Whether `tensors` do not all share one device mesh, so whole-set ops (fused/foreach kernels, `clip_grad_norm_`)
+    cannot span them and the Trainer groups them by mesh. Expert parallelism leaves the experts sharded and everything
+    else as plain tensors; under a 2-D (fsdp, tp) mesh everything is a `DTensor`, but the experts live on the full mesh
+    and the rest on the `fsdp` sub-mesh.
+    """
     from torch.distributed.tensor import DTensor
 
-    tensors = list(tensors)
-    return (
-        bool(tensors)
-        and any(isinstance(t, DTensor) for t in tensors)
-        and not all(isinstance(t, DTensor) for t in tensors)
-    )
+    meshes = {t.device_mesh if isinstance(t, DTensor) else None for t in tensors}
+    return len(meshes) > 1
 
 
 def _get_adamw_torch_xla(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
@@ -458,12 +454,6 @@ def _get_torchao_optimizer(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
             "You need to have `torchao>=0.4.0` in order to use torch 4-bit optimizers. "
             "Install it with `pip install torchao` or follow the instructions here: "
             "https://github.com/pytorch/ao"
-        )
-    if version.parse(importlib.metadata.version("torch")) <= version.parse("2.4"):
-        raise ImportError(
-            "You need to have `torch>2.4` in order to use torch 4-bit optimizers. "
-            "Install it with `pip install --upgrade torch` it is available on pipy. "
-            "Otherwise, you need to install torch nightly."
         )
 
     if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.11.0"):

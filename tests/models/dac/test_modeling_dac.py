@@ -25,9 +25,11 @@ from parameterized import parameterized
 from tests.utils.test_audio_utils import compute_rmse
 from transformers import AutoProcessor, DacConfig, DacModel
 from transformers.testing_utils import (
+    get_json_expectation,
     is_torch_available,
     require_deterministic_for_xpu,
     require_torch,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -304,15 +306,15 @@ https://gist.github.com/ebezzam/bb315efa7a416db6336a6b2a2d424ffa#file-dac_layer_
 
 FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures/dac"
 
-with open(FIXTURES_DIR / "expected_integration.json") as f:
+with open(FIXTURES_DIR / "expected_integration.json", encoding="utf-8") as f:
     EXPECTED_INTEGRATION = json.load(f)
 
-with open(FIXTURES_DIR / "expected_integration_batch.json") as f:
+with open(FIXTURES_DIR / "expected_integration_batch.json", encoding="utf-8") as f:
     EXPECTED_INTEGRATION_BATCH = json.load(f)
 
 
 @slow
-@require_torch
+@require_torch_accelerator
 class DacIntegrationTest(unittest.TestCase):
     @parameterized.expand([(model_name,) for model_name in EXPECTED_INTEGRATION.keys()])
     @require_deterministic_for_xpu
@@ -352,7 +354,10 @@ class DacIntegrationTest(unittest.TestCase):
                 atol=1e-6,
             )
             torch.testing.assert_close(
-                quantizer_outputs[4].squeeze().item(), expected["quant_codebook_loss"], rtol=1e-4, atol=1e-4
+                quantizer_outputs[4].squeeze().item(),
+                get_json_expectation(expected["quant_codebook_loss"]),
+                rtol=1e-4,
+                atol=1e-4,
             )
 
             # compare decoder outputs

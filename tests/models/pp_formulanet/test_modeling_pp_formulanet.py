@@ -25,8 +25,6 @@ from transformers import (
     PPFormulaNetConfig,
     PPFormulaNetForConditionalGeneration,
     PPFormulaNetModel,
-    PPFormulaNetTextConfig,
-    PPFormulaNetVisionConfig,
     is_torch_available,
 )
 from transformers.image_utils import load_image
@@ -50,8 +48,7 @@ if is_torch_available():
 class PPFormulaNetModelTester(VLMModelTester):
     base_model_class = PPFormulaNetModel
     config_class = PPFormulaNetConfig
-    text_config_class = PPFormulaNetTextConfig
-    vision_config_class = PPFormulaNetVisionConfig
+
     conditional_generation_class = PPFormulaNetForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
@@ -301,7 +298,7 @@ class PPFormulaNetModelIntegrationTest(unittest.TestCase):
         self.model = PPFormulaNetForConditionalGeneration.from_pretrained(model_path).to(torch_device)
         self.processor = AutoProcessor.from_pretrained(model_path)
         img_url = url_to_local_path(
-            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_formula_rec_001.png"
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_formula_rec_001.png"
         )
         self.image = load_image(img_url)
 
@@ -313,7 +310,7 @@ class PPFormulaNetModelIntegrationTest(unittest.TestCase):
 
         formula_text = self.processor.post_process(outputs)
         expected_formula_text = [
-            "\\zeta_{0}(\\nu)=-\\frac{\\nu\\varrho^{-2\\nu}}{\\pi}\\int_{\\mu}^{\\infty}d\\omega\\int_{C_{+}}d z\\frac{2z^{2}}{(z^{2}+\\omega^{2})^{\\nu+1}}\\breve{\\Psi}(\\omega;z)e^{i\\epsilon z}\\quad,"
+            "\\mathsf{N e t a\\_0(N u)}=-\\mathsf{M r a c}{\\{\\mathsf{N u}\\backslash\\mathsf{r h o}^{\\wedge}\\{-2\\mathsf{N u}\\}\\}}{\\{\\mathsf{N p i}\\}\\mathsf{N i n t\\_N u}}\\land\\mathsf{N i n f t y}\\mathsf{d}\\mathsf{N o m e g a}\\mathsf{N i n t\\_()}"
         ]
 
         self.assertEqual(formula_text, expected_formula_text)

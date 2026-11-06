@@ -93,6 +93,8 @@ class Siglip2TextConfig(SiglipTextConfig):
 @strict
 class Siglip2VisionConfig(SiglipVisionConfig):
     r"""
+    vision_use_head ('bool', *optional*):
+        Whether to use a vision head module or not.
     num_patches (`int`, *optional*, defaults to 256):
         The number of patches in the image with the size of (`patch_size`, `patch_size`).
         The image is resized to fill maximum of this number of patches, and to preserve
@@ -214,10 +216,10 @@ class Siglip2VisionEmbeddings(nn.Module):
 
         return resulted_positional_embeddings
 
-    def forward(self, pixel_values: torch.FloatTensor, spatial_shapes: torch.LongTensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, spatial_shapes: torch.LongTensor) -> torch.Tensor:
         """
         Args:
-            pixel_values (`torch.FloatTensor`):
+            pixel_values (`torch.Tensor`):
                 Pixel values of shape (batch_size, max_num_patches, num_channels * patch_size * patch_size)
             spatial_shapes (`list[tuple[int, int]]`):
                 Spatial shapes of shape (batch_size, 2) to resize the positional embeddings to
@@ -255,7 +257,7 @@ class Siglip2VisionModel(SiglipVisionModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         pixel_attention_mask: torch.Tensor,
         spatial_shapes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
@@ -269,7 +271,7 @@ class Siglip2VisionModel(SiglipVisionModel):
         Examples:
 
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> from transformers import AutoProcessor, Siglip2VisionModel
@@ -363,7 +365,7 @@ class Siglip2Model(SiglipModel):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         pixel_attention_mask: torch.Tensor | None = None,
         spatial_shapes: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -406,7 +408,7 @@ class Siglip2Model(SiglipModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         pixel_attention_mask: torch.Tensor | None = None,
         spatial_shapes: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
@@ -426,7 +428,7 @@ class Siglip2Model(SiglipModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, AutoModel
         >>> import torch
@@ -517,10 +519,6 @@ class Siglip2ForImageClassification(SiglipForImageClassification):
             Mask to avoid performing attention on padding pixel indices.
         spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
             Tensor containing the spatial dimensions (height, width) of the input images.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Examples:
 
@@ -528,7 +526,7 @@ class Siglip2ForImageClassification(SiglipForImageClassification):
         >>> from transformers import AutoImageProcessor, Siglip2ForImageClassification
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT

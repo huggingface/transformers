@@ -460,7 +460,7 @@ class MetalConversionOpsTest(unittest.TestCase):
 
             dq_result = dq_op.convert(
                 {
-                    "weight$": [q_result["layer.weight"]],
+                    "weight": [q_result["layer.weight"]],
                     "scales": [q_result["layer.scales"]],
                     "qbiases": [q_result["layer.qbiases"]],
                 },
@@ -482,7 +482,7 @@ class MetalConversionOpsTest(unittest.TestCase):
         dq_op = MetalDequantize(dq_quantizer)
         dq_result = dq_op.convert(
             {
-                "weight$": [q_result["layer.weight"]],
+                "weight": [q_result["layer.weight"]],
                 "scales": [q_result["layer.scales"]],
                 "qbiases": [q_result["layer.qbiases"]],
             },

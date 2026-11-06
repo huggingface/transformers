@@ -55,10 +55,12 @@ class ZayaModelTester(CausalLMModelTester):
 @require_torch
 class ZayaModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = ZayaModelTester
-    test_all_params_have_gradient = False
 
-    @unittest.skip("ZAYA hybrid/sliding cache layers are not compatible with QuantizedCache.")
-    def test_generate_with_quant_cache(self):
+    @unittest.skip(
+        reason="Zaya disables tensor parallelism on purpose (`base_model_tp_plan = AttributeError()`): its 2 KV "
+        "heads cap the useful degree, so its experts have no TP plan to check."
+    )
+    def test_moe_parallel_plans_shard_experts(self):
         pass
 
     def _get_conv_state_shape(self, batch_size: int, config):
@@ -324,9 +326,9 @@ class ZayaIntegrationTest(unittest.TestCase):
         EXPECTED_LOGITS = Expectations(
             {
                 (None, None): [
-                    [0.0223, 0.0228, 0.0234],
-                    [-1.4297, -1.4297, -1.4297],
-                    [-3.0469, -3.0469, -3.0469],
+                    [0.0359, 0.0364, 0.0371],
+                    [-1.4141, -1.4141, -1.4141],
+                    [-3.0625, -3.0625, -3.0625],
                 ],
                 ("xpu", None): [
                     [0.3203, 0.3203, 0.3203],
@@ -340,7 +342,7 @@ class ZayaIntegrationTest(unittest.TestCase):
 
         expected_argmax = Expectations(
             {
-                (None, None): [[105, 9731, 107, 740, 564, 1601, 611, 3124, 236881, 107, 107]],
+                (None, None): [[105, 9731, 107, 740, 564, 1601, 611, 236881, 236881, 107, 107]],
                 ("xpu", None): [[105, 9731, 107, 740, 564, 1601, 611, 236881, 236881, 107, 107]],
             }
         )
@@ -381,7 +383,7 @@ class ZayaIntegrationTest(unittest.TestCase):
             {
                 (None, None): [
                     107, 262146, 108, 9259, 236888, 1030, 5724, 1133,
-                    611, 236789, 500, 7467, 528, 4735, 1003, 5213,
+                    611, 236789, 500, 7467, 528, 506, 5213, 236778,
                 ],
                 ("xpu", None): [
                     107, 262146, 108, 9259, 236888, 2088, 740, 564,

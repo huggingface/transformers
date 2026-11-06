@@ -308,6 +308,38 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         self.assertListEqual(list(position_ids.shape), [3, 1, 26])
         self.assertListEqual(position_ids.tolist(), expected_positions.tolist())
 
+    def test_video_position_ids_fractional_seconds(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.vision_config.tokens_per_second = 2
+        model = Qwen2_5_VLModel(config).to(torch_device)
+        input_ids = torch.tensor(
+            [[config.text_config.pad_token_id] + [config.video_token_id] * 4], device=torch_device
+        )
+        mm_token_type_ids = torch.tensor([[0, 2, 2, 2, 2]], device=torch_device)
+        video_grid_thw = torch.tensor([[4, 1, 1]], device=torch_device)
+
+        # Quantize the final positions, not seconds or the scaled temporal step.
+        for seconds, temporal_positions in [
+            (0.25, [1, 1, 2, 2]),
+            (0.5, [1, 2, 3, 4]),
+            (0.75, [1, 2, 4, 5]),
+            (1.0, [1, 3, 5, 7]),
+            (1.5, [1, 4, 7, 10]),
+        ]:
+            for as_tensor in (False, True):
+                with self.subTest(seconds=seconds, as_tensor=as_tensor):
+                    intervals = torch.tensor([seconds], device=torch_device) if as_tensor else [seconds]
+                    positions, deltas = model.get_rope_index(
+                        input_ids,
+                        mm_token_type_ids,
+                        video_grid_thw=video_grid_thw,
+                        second_per_grid_ts=intervals,
+                    )
+                    self.assertEqual(positions.dtype, torch.long)
+                    self.assertListEqual(positions[0, 0].tolist(), [0] + temporal_positions)
+                    self.assertListEqual(positions[1:, 0].tolist(), [[0, 1, 1, 1, 1]] * 2)
+                    self.assertListEqual(deltas.tolist(), [[max(temporal_positions) + 1 - 5]])
+
     def test_video_forward(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -483,7 +515,9 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
                 ],
             }
         ]
-        img_url = url_to_local_path("https://qianwen-res.oss-accelerate-overseas.aliyuncs.com/Qwen2-VL/demo_small.jpg")
+        img_url = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen2_vl_demo_small.jpg"
+        )
         self.image = load_image(img_url).convert("RGB")
 
         cleanup(torch_device, gc_collect=True)
@@ -505,12 +539,12 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
 
         expected_pixel_slice = torch.tensor(
             [
-                [0.8792, 0.8792, 0.9084],
-                [1.1858, 1.1858, 1.2296],
-                [1.2004, 1.2004, 1.2150],
-                [1.4340, 1.4340, 1.4194],
-                [1.3902, 1.4048, 1.4194],
-                [1.5216, 1.5362, 1.5362],
+                [0.7333, 0.7333, 0.7333],
+                [0.7479, 0.7479, 0.7479],
+                [0.7333, 0.7333, 0.7333],
+                [0.7479, 0.7479, 0.7479],
+                [0.7333, 0.7333, 0.7333],
+                [0.7333, 0.7333, 0.7333],
             ],
             dtype=torch.float32,
             device="cpu",
@@ -521,7 +555,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         inputs = inputs.to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-        EXPECTED_DECODED_TEXT = "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in"
+        EXPECTED_DECODED_TEXT = "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and outgoing personalities, as well as their"
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -542,8 +576,8 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
 
         expected_decoded_texts = [
-            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in",
-            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in",
+            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and outgoing personalities, as well as their",
+            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and outgoing personalities, as well as their",
         ]
 
         self.assertEqual(
@@ -561,11 +595,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=30, num_return_sequences=3)
 
-        EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
-        ]  # fmt: skip
+        EXPECTED_DECODED_TEXT = ['system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and outgoing personalities, as well as their', 'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and outgoing personalities, as well as their', 'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and outgoing personalities, as well as their']  # fmt: skip
 
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
@@ -592,18 +622,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
 
         expected_decoded_texts = Expectations(
             {
-                (None, None): [
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
-                    'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am Qwen, a large language model created by Alibaba Cloud. I am designed to assist with a wide range of tasks, from answering questions and'
-                ],
-                ("rocm", (9, 4)): [
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
-                    'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am Qwen, a large language model created by Alibaba Cloud. I am designed to assist with a wide range of tasks, from answering questions and'
-                ],
-                ("xpu", None): [
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
-                    'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am Qwen, a large language model created by Alibaba Cloud. I am designed to assist with a wide range of tasks, from answering questions and'
-                ],
+                (None, None): ['system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and outgoing personalities, as well as their', 'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am Qwen, a large language model created by Alibaba Cloud. I am designed to assist with a wide range of tasks, from answering questions and'],
             }
         ).get_expectation()  # fmt: skip
 
@@ -632,18 +651,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
 
         expected_decoded_texts = Expectations(
             {
-                ("cuda", (8, 6)): [
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is evident in',
-                ],
-                ("rocm", None): [
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is evident in',
-                ],
-                ("xpu", None): [
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is evident in',
-                ],
+                (None, None): ['system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and outgoing personalities, as well as their', 'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, as well as their'],
             }
         ).get_expectation()  # fmt: skip
 
@@ -674,7 +682,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
 
-        expected_decoded_text = "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in"
+        expected_decoded_text = "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and outgoing personalities, as well as their"
 
         # Since the test is to generate twice the same text, we just test twice against the expected decoded text
         decoded_texts = self.processor.batch_decode(output, skip_special_tokens=True)
@@ -709,15 +717,15 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         # on the ROCm expectation that was the correct one. Either model changed or code is buggy.
         EXPECTED_DECODED_TEXT = Expectations({
             ("cuda", None): [
-                'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
+                'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and outgoing personalities, as well as their',
                 "system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\n�\n\n addCriterion\nI'm sorry, but I don't understand your question. Could you please provide more context or clarify what you're asking",
             ],
             ("rocm", (9, 4)): [
-                'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
+                'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and outgoing personalities, as well as their',
                 'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am Qwen, a large language model created by Alibaba Cloud. I am designed to assist with a wide range of tasks, from answering questions and'
             ],
             ("xpu", None): [
-                'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
+                'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and outgoing personalities, as well as their',
                 "system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am Qwen, a large language model created by Alibaba Cloud. I am designed to assist with a wide range of tasks, from answering questions and",
             ],
         }).get_expectation()  # fmt: skip

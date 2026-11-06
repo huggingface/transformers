@@ -1158,37 +1158,37 @@ class EsmFold2MSAPairWeightedAveraging(nn.Module):
 @dataclass
 class EsmFold2Output(ModelOutput):
     r"""
-    distogram_logits (`torch.FloatTensor` of shape `(batch_size, num_tokens, num_tokens, distogram_bins)`):
+    distogram_logits (`torch.Tensor` of shape `(batch_size, num_tokens, num_tokens, distogram_bins)`):
         Predicted distance-distribution logits over residue pairs (RNG-independent; no diffusion sampling).
-    sample_atom_coords (`torch.FloatTensor` of shape `(num_diffusion_samples, num_atoms, 3)`):
+    sample_atom_coords (`torch.Tensor` of shape `(num_diffusion_samples, num_atoms, 3)`):
         Predicted all-atom Cartesian coordinates for each diffusion sample.
-    plddt_logits (`torch.FloatTensor` of shape `(num_diffusion_samples, num_atoms, num_plddt_bins)`):
+    plddt_logits (`torch.Tensor` of shape `(num_diffusion_samples, num_atoms, num_plddt_bins)`):
         Per-atom pLDDT bin logits.
-    plddt (`torch.FloatTensor` of shape `(num_diffusion_samples, num_tokens)`):
+    plddt (`torch.Tensor` of shape `(num_diffusion_samples, num_tokens)`):
         Per-residue predicted lDDT confidence.
-    plddt_per_atom (`torch.FloatTensor` of shape `(num_diffusion_samples, num_atoms)`):
+    plddt_per_atom (`torch.Tensor` of shape `(num_diffusion_samples, num_atoms)`):
         Per-atom predicted lDDT confidence.
-    plddt_ca (`torch.FloatTensor` of shape `(num_diffusion_samples, num_tokens)`):
+    plddt_ca (`torch.Tensor` of shape `(num_diffusion_samples, num_tokens)`):
         Predicted lDDT at the representative (Cα) atom of each token.
-    complex_plddt (`torch.FloatTensor` of shape `(num_diffusion_samples,)`):
+    complex_plddt (`torch.Tensor` of shape `(num_diffusion_samples,)`):
         Mean pLDDT over all atoms of the complex.
-    complex_iplddt (`torch.FloatTensor` of shape `(num_diffusion_samples,)`):
+    complex_iplddt (`torch.Tensor` of shape `(num_diffusion_samples,)`):
         Interface-weighted complex pLDDT.
-    pae_logits (`torch.FloatTensor` of shape `(num_diffusion_samples, num_tokens, num_tokens, num_pae_bins)`):
+    pae_logits (`torch.Tensor` of shape `(num_diffusion_samples, num_tokens, num_tokens, num_pae_bins)`):
         Predicted-aligned-error bin logits.
-    pae (`torch.FloatTensor` of shape `(num_diffusion_samples, num_tokens, num_tokens)`):
+    pae (`torch.Tensor` of shape `(num_diffusion_samples, num_tokens, num_tokens)`):
         Expected predicted aligned error (Å) for each residue pair.
-    pde_logits (`torch.FloatTensor` of shape `(num_diffusion_samples, num_tokens, num_tokens, num_pde_bins)`):
+    pde_logits (`torch.Tensor` of shape `(num_diffusion_samples, num_tokens, num_tokens, num_pde_bins)`):
         Predicted-distance-error bin logits.
-    pde (`torch.FloatTensor` of shape `(num_diffusion_samples, num_tokens, num_tokens)`):
+    pde (`torch.Tensor` of shape `(num_diffusion_samples, num_tokens, num_tokens)`):
         Expected predicted distance error (Å) for each residue pair.
-    resolved_logits (`torch.FloatTensor` of shape `(num_diffusion_samples, num_atoms, 2)`):
+    resolved_logits (`torch.Tensor` of shape `(num_diffusion_samples, num_atoms, 2)`):
         Per-atom resolved/unresolved logits.
-    ptm (`torch.FloatTensor` of shape `(num_diffusion_samples,)`):
+    ptm (`torch.Tensor` of shape `(num_diffusion_samples,)`):
         Predicted TM-score for each sample.
-    iptm (`torch.FloatTensor` of shape `(num_diffusion_samples,)`):
+    iptm (`torch.Tensor` of shape `(num_diffusion_samples,)`):
         Predicted interface TM-score for each sample.
-    pair_chains_iptm (`torch.FloatTensor` of shape `(num_diffusion_samples, num_chains, num_chains)`):
+    pair_chains_iptm (`torch.Tensor` of shape `(num_diffusion_samples, num_chains, num_chains)`):
         Predicted interface TM-score for each ordered chain pair.
     """
 
@@ -1220,15 +1220,15 @@ class EsmFold2Output(ModelOutput):
 @dataclass
 class EsmFold2TrunkOutput(ModelOutput):
     r"""
-    distogram_logits (`torch.FloatTensor` of shape `(batch_size, num_tokens, num_tokens, distogram_bins)`):
+    distogram_logits (`torch.Tensor` of shape `(batch_size, num_tokens, num_tokens, distogram_bins)`):
         Predicted distance-distribution logits over residue pairs.
-    pair_states (`torch.FloatTensor` of shape `(batch_size, num_tokens, num_tokens, pairwise_hidden_size)`):
+    pair_states (`torch.Tensor` of shape `(batch_size, num_tokens, num_tokens, pairwise_hidden_size)`):
         The trunk's final pair representation, in fp32.
-    single_inputs (`torch.FloatTensor` of shape `(batch_size, num_tokens, single_inputs_size)`):
+    single_inputs (`torch.Tensor` of shape `(batch_size, num_tokens, single_inputs_size)`):
         Concatenated single-input features built by the inputs embedder.
-    relative_position_encoding (`torch.FloatTensor` of shape `(batch_size, num_tokens, num_tokens, pairwise_hidden_size)`):
+    relative_position_encoding (`torch.Tensor` of shape `(batch_size, num_tokens, num_tokens, pairwise_hidden_size)`):
         Relative-position pair encoding.
-    token_bonds_encoding (`torch.FloatTensor` of shape `(batch_size, num_tokens, num_tokens, pairwise_hidden_size)`):
+    token_bonds_encoding (`torch.Tensor` of shape `(batch_size, num_tokens, num_tokens, pairwise_hidden_size)`):
         Embedded inter-token covalent-bond feature.
     atom_inputs ([`EsmFold2AtomInputs`]):
         The featurized reference-conformer atom inputs, reused by the diffusion atom stack.
@@ -1434,7 +1434,7 @@ class EsmFold2ConfidenceHead(nn.Module):
 
             complex_plddt = (plddt_per_atom * atom_mask_float).sum(dim=-1) / (atom_mask_float.sum(dim=-1) + self.eps)
 
-            is_ligand = (expanded_type == 4).float()  # 4 = non-polymer (ligand) molecule type
+            is_ligand = (expanded_type == 3).float()  # 3 = non-polymer (ligand) molecule type
             inter_chain = (expanded_asym.unsqueeze(-1) != expanded_asym.unsqueeze(-2)).float()
             near_contact = (rep_distances < 8).float()  # 8 Å: the conventional interface-contact cutoff
             interface_per_token = (near_contact * inter_chain * (1.0 - is_ligand).unsqueeze(-1)).amax(dim=-1)
@@ -1778,7 +1778,7 @@ class EsmFold2InputEmbedder(nn.Module):
 
 @auto_docstring
 class EsmFold2PreTrainedModel(PreTrainedModel):
-    config_class = EsmFold2Config
+    config: EsmFold2Config
     base_model_prefix = "esmfold2"
     main_input_name = "token_index"
     _no_split_modules = [
@@ -1854,7 +1854,8 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
         )
         self.confidence_head = EsmFold2ConfidenceHead(config)
 
-        self.msa_encoder = EsmFold2MSAEncoder(config)
+        # Checkpoints trained without MSA conditioning (e.g. `biohub/ESMFold2-Fast`) ship no MSA-encoder weights.
+        self.msa_encoder = EsmFold2MSAEncoder(config) if config.msa_encoder.enabled else None
 
         self.post_init()
 
@@ -2047,7 +2048,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
         single_inputs: Tensor,
     ) -> dict | None:
         """Assemble the transposed/padded one-hot MSA tensors the MSA encoder consumes."""
-        if msa is None:
+        if msa is None or self.msa_encoder is None:
             return None
         batch_size, msa_depth, num_tokens = msa.shape
         msa_one_hot = F.one_hot(msa.permute(0, 2, 1), num_classes=self.config.num_res_types).float()
@@ -2159,7 +2160,8 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
         entity_id (`torch.Tensor` of shape `(batch_size, num_tokens)`):
             Entity ID grouping tokens that belong to the same molecular entity.
         mol_type (`torch.Tensor` of shape `(batch_size, num_tokens)`):
-            Molecule-type code for each token (``0`` = protein).
+            Molecule-type code for each token: ``0`` = protein, ``1`` = DNA, ``2`` = RNA,
+            ``3`` = non-polymer (ligand).
         res_type (`torch.Tensor` of shape `(batch_size, num_tokens)`):
             Residue-type (amino-acid identity) index for each token.
         token_bonds (`torch.Tensor` of shape `(batch_size, num_tokens, num_tokens, 1)`):

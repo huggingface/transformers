@@ -97,20 +97,20 @@ Also apply `@auto_docstring` to classes that inherit from [`~utils.ModelOutput`]
 @dataclass
 class MyModelOutput(ImageClassifierOutput):
     r"""
-    loss (`torch.FloatTensor`, *optional*):
+    loss (`torch.Tensor`, *optional*):
         The loss of the model.
-    custom_field (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*):
+    custom_field (`torch.Tensor` of shape `(batch_size, hidden_size)`, *optional*):
         A custom output field specific to this model.
     """
 
     # Standard fields (hidden_states, logits, attentions, etc.) are documented automatically when
     # the description matches the standard text. Loss typically varies per model, so document it above.
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: Optional[torch.Tensor] = None
+    logits: Optional[torch.Tensor] = None
+    hidden_states: Optional[tuple[torch.Tensor, ...]] = None
+    attentions: Optional[tuple[torch.Tensor, ...]] = None
     # Custom fields need to be documented in the docstring above
-    custom_field: Optional[torch.FloatTensor] = None
+    custom_field: Optional[torch.Tensor] = None
 ```
 
 ### Config classes
@@ -365,7 +365,7 @@ The `@auto_docstring` decorator generates docstrings through the following steps
 3. Each parameter's description follows this priority chain:
 
     - A manual docstring (`r""" """` block or `custom_args`) takes priority.
-    - The predefined source dict ([`ModelArgs`], [`ConfigArgs`], [`ImageProcessorArgs`], [`ProcessorArgs`], [`ModelOutputArgs`]) is the fallback.
+    - The predefined source dict ([`ModelArgs`], [`ModelForArgs`], [`ConfigArgs`], [`ImageProcessorArgs`], [`ProcessorArgs`], [`ModelOutputArgs`]) is the fallback.
     - If neither source has a description, the parameter is flagged with `[ERROR]` in the build output.
 
 4. For model classes with standard names like `ModelForCausalLM`, or classes that map to a pipeline, `@auto_docstring` generates the intro. For multimodal processors, the intro lists which components (tokenizer, image processor, and so on) the class wraps. See [ClassDocstring](https://github.com/huggingface/transformers/blob/main/src/transformers/utils/auto_docstring.py#L2437) for the full list.

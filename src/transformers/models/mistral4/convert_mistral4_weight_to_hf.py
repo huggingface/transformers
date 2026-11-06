@@ -27,7 +27,7 @@ from transformers import (
     Mistral3Config,
     Mistral3ForConditionalGeneration,
     Mistral4Config,
-    PixtralImageProcessorFast,
+    PixtralImageProcessor,
     PixtralProcessor,
     PixtralVisionConfig,
 )
@@ -360,7 +360,7 @@ def convert_state_dict(
 
 
 def _read_json(path: Path) -> dict:
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -560,7 +560,7 @@ def convert_and_write_processor_and_tokenizer(
 
     processor = PixtralProcessor(
         tokenizer=tokenizer,
-        image_processor=PixtralImageProcessorFast(
+        image_processor=PixtralImageProcessor(
             patch_size=ve["patch_size"], size={"longest_edge": ve["max_image_size"]}
         ),
         image_token="[IMG]",

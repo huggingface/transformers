@@ -32,7 +32,19 @@ from transformers.testing_utils import torch_device
 
 
 def _build_experts(
-    *, num_experts, hidden, inter, has_gate, has_bias, is_transposed, weight_dtype, scale_dtype, hidden_act, **extra
+    *,
+    num_experts,
+    hidden,
+    inter,
+    has_gate,
+    has_bias,
+    is_transposed,
+    weight_dtype,
+    scale_dtype,
+    hidden_act,
+    is_expert_parallel,
+    has_post_expert_norm,
+    **extra,
 ):
     def weight(out_dim, in_dim):
         # Non-transposed weights are (E, out, in); transposed are (E, in, out).
@@ -55,7 +67,9 @@ def _build_experts(
         num_experts=num_experts,
         has_gate=has_gate,
         has_bias=has_bias,
+        has_post_expert_norm=has_post_expert_norm,
         is_transposed=is_transposed,
+        _is_expert_parallel=is_expert_parallel,
         act_fn=act_fn,
         _apply_gate=apply_gate,
         down_proj=weight(hidden, inter),
@@ -81,6 +95,8 @@ def make_experts(
     hidden_act="silu",
     is_concatenated=True,
     weight_dtype=torch.bfloat16,
+    is_expert_parallel=False,
+    has_post_expert_norm=False,
 ):
     """BF16 experts stand-in (no scales) for the sonic-moe and DeepGEMM BF16 forwards. Carries
     `config.hidden_act` / `is_concatenated` (read by sonic-moe)."""
@@ -94,8 +110,10 @@ def make_experts(
         weight_dtype=weight_dtype,
         scale_dtype=None,
         hidden_act=hidden_act,
+        is_expert_parallel=is_expert_parallel,
         config=types.SimpleNamespace(hidden_act=hidden_act),
         is_concatenated=is_concatenated,
+        has_post_expert_norm=has_post_expert_norm,
     )
 
 
@@ -111,6 +129,8 @@ def make_fp8_experts(
     scale_dtype=torch.float32,
     activation_scheme="dynamic",
     block_size=(128, 128),
+    is_expert_parallel=False,
+    has_post_expert_norm=False,
 ):
     """FP8/FP4 experts stand-in (per-projection `_scale_inv`) for the DeepGEMM FP8 and finegrained-fp8
     forwards, plus the `_deepgemm_disabled` multi-device flag."""
@@ -124,7 +144,9 @@ def make_fp8_experts(
         weight_dtype=weight_dtype,
         scale_dtype=scale_dtype,
         hidden_act=hidden_act,
+        is_expert_parallel=is_expert_parallel,
         activation_scheme=activation_scheme,
         block_size=block_size,
         _deepgemm_disabled=False,
+        has_post_expert_norm=has_post_expert_norm,
     )

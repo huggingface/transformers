@@ -1,7 +1,7 @@
 from typing import Optional
 
-import httpx
 from huggingface_hub import Discussion, HfApi, get_repo_discussions
+from huggingface_hub.utils import httpx
 
 from .utils import cached_file, http_user_agent, logging
 
@@ -24,7 +24,7 @@ def spawn_conversion(token: str, private: bool, model_id: str):
     logger.info("Attempting to convert .bin model on the fly to safetensors.")
 
     safetensors_convert_space_url = "https://safetensors-convert.hf.space"
-    sse_url = f"{safetensors_convert_space_url}/call/run"
+    sse_url = f"{safetensors_convert_space_url}/gradio_api/call/run"
 
     def start(_sse_connection):
         for line in _sse_connection.iter_lines():
@@ -98,7 +98,6 @@ def auto_conversion(
         if sha is None:
             return None, None
         cached_file_kwargs["revision"] = sha
-        del cached_file_kwargs["_commit_hash"]
 
         # This is an additional HEAD call that could be removed if we could infer sharded/non-sharded from the PR
         # description.

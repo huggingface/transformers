@@ -330,7 +330,7 @@ def insert_model_in_doc_toc(
             The fully cased name (as in the official paper name) of the new model.
     """
     toc_file = repo_path / "docs" / "source" / "en" / "_toctree.yml"
-    with open(toc_file, "r") as f:
+    with open(toc_file, "r", encoding="utf-8") as f:
         content = f.read()
 
     toc_match = re.search(rf"- local: model_doc/{old_lowercase_name}\n {{8}}title: .*?\n", content)
@@ -514,7 +514,7 @@ def create_test_files(
             # Sometimes, tests may not exist
             if not original_test_path.is_file():
                 continue
-            with open(original_test_path, "r") as f:
+            with open(original_test_path, "r", encoding="utf-8") as f:
                 test_code = f.read()
             # Remove old copyright and add new one
             test_lines = test_code.split("\n")
@@ -564,12 +564,12 @@ def _add_new_model_like_internal(
     modular_file, public_classes = create_modular_file(
         repo_path, old_model_infos, new_lowercase_name, filenames_to_add
     )
-    with open(new_module_folder / f"modular_{new_lowercase_name}.py", "w") as f:
+    with open(new_module_folder / f"modular_{new_lowercase_name}.py", "w", encoding="utf-8") as f:
         f.write(modular_file)
 
     # 3. Create and add the __init__.py
     init_file = create_init_file(old_lowercase_name, new_lowercase_name, filenames_to_add)
-    with open(new_module_folder / "__init__.py", "w") as f:
+    with open(new_module_folder / "__init__.py", "w", encoding="utf-8") as f:
         f.write(init_file)
 
     # 4. Add new model to the models init
@@ -586,16 +586,18 @@ def _add_new_model_like_internal(
     tests_folder = repo_path / "tests" / "models" / new_lowercase_name
     os.makedirs(tests_folder, exist_ok=True)
     # Add empty __init__.py
-    with open(tests_folder / "__init__.py", "w"):
+    with open(tests_folder / "__init__.py", "w", encoding="utf-8"):
         pass
     test_files = create_test_files(repo_path, old_model_infos, new_lowercase_name, filenames_to_add)
     for filename, content in test_files.items():
-        with open(tests_folder / filename, "w") as f:
+        with open(tests_folder / filename, "w", encoding="utf-8") as f:
             f.write(content)
 
     # 7. Add doc file
     doc_file = create_doc_file(new_model_paper_name, public_classes)
-    with open(repo_path / "docs" / "source" / "en" / "model_doc" / f"{new_lowercase_name}.md", "w") as f:
+    with open(
+        repo_path / "docs" / "source" / "en" / "model_doc" / f"{new_lowercase_name}.md", "w", encoding="utf-8"
+    ) as f:
         f.write(doc_file)
     insert_model_in_doc_toc(repo_path, old_lowercase_name, new_lowercase_name, new_model_paper_name)
 

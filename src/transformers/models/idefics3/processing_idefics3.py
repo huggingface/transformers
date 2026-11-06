@@ -15,7 +15,6 @@
 Processor class for Idefics3.
 """
 
-import re
 from itertools import accumulate
 from typing import TYPE_CHECKING, Union
 
@@ -72,10 +71,6 @@ class Idefics3Processor(ProcessorMixin):
         self.row_col_ids = [
             tokenizer.convert_tokens_to_ids(f"<row_{i + 1}_col_{j + 1}>") for i in range(6) for j in range(6)
         ]
-
-        # This regex matches one or more occurrences of <global-img> tags (optionally surrounded by newline characters)
-        # or <row_x_col_y> tags (where x and y are digits, also optionally surrounded by newline characters).
-        self._regex_to_remove_extra_special_tokens = re.compile(r"(\n?<global-img>\n?|<row_\d+_col_\d+>\n?)+")
 
         tokens_to_add = {
             "additional_special_tokens": [
@@ -199,18 +194,13 @@ class Idefics3Processor(ProcessorMixin):
         if text is None and images is None:
             raise ValueError("You must provide either `text` or `images`.")
 
-        if text is not None:
+        if text is not None and images is not None:
             n_images_in_text = [sample.count(self.image_token) for sample in text]
-            if images is not None:
-                n_images_in_images = [len(sublist) for sublist in images]
-                if n_images_in_text != n_images_in_images:
-                    raise ValueError(
-                        f"The total number of {self.image_token} tokens in the prompts should be the same as the number of images passed."
-                        f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
-                    )
-            elif images is None and any(n_images_in_text):
+            n_images_in_images = [len(sublist) for sublist in images]
+            if n_images_in_text != n_images_in_images:
                 raise ValueError(
-                    f"Found {sum(n_images_in_text)} {self.image_token} tokens in the text but no images were passed."
+                    f"The number of {self.image_token} tokens in each prompt should be the same as the number of images passed."
+                    f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
                 )
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:

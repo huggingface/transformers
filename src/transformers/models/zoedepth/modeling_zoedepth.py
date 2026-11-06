@@ -39,17 +39,17 @@ logger = logging.get_logger(__name__)
 @dataclass
 class ZoeDepthDepthEstimatorOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Classification (or regression if config.num_labels==1) loss.
-    domain_logits (`torch.FloatTensor` of shape `(batch_size, num_domains)`):
+    domain_logits (`torch.Tensor` of shape `(batch_size, num_domains)`):
         Logits for each domain (e.g. NYU and KITTI) in case multiple metric heads are used.
     """
 
-    loss: torch.FloatTensor | None = None
-    predicted_depth: torch.FloatTensor | None = None
-    domain_logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    loss: torch.Tensor | None = None
+    predicted_depth: torch.Tensor | None = None
+    domain_logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 class ZoeDepthReassembleStage(nn.Module):
@@ -88,7 +88,7 @@ class ZoeDepthReassembleStage(nn.Module):
     def forward(self, hidden_states: list[torch.Tensor], patch_height, patch_width) -> list[torch.Tensor]:
         """
         Args:
-            hidden_states (`list[torch.FloatTensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
+            hidden_states (`list[torch.Tensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
                 List of hidden states from the backbone.
         """
         batch_size = hidden_states[0].shape[0]
@@ -308,7 +308,7 @@ class ZoeDepthNeck(nn.Module):
     def forward(self, hidden_states: list[torch.Tensor], patch_height, patch_width) -> list[torch.Tensor]:
         """
         Args:
-            hidden_states (`list[torch.FloatTensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
+            hidden_states (`list[torch.Tensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
                 List of hidden states from the backbone.
         """
         if not isinstance(hidden_states, (tuple, list)):
@@ -547,7 +547,6 @@ class ZoeDepthSeedBinRegressor(nn.Module):
             return bin_centers, bin_centers
 
 
-@torch.jit.script
 def inv_attractor(dx, alpha: float = 300, gamma: int = 2):
     """Inverse attractor: dc = dx / (1 + alpha*dx^gamma), where dx = a - c, a = attractor point, c = bin center, dc = shift in bin center
     This is the default one according to the accompanying paper.
@@ -802,7 +801,7 @@ class ZoeDepthMultiheadAttention(nn.Module):
         queries: torch.Tensor,
         keys: torch.Tensor,
         values: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor]:
         batch_size, seq_length, _ = queries.shape
@@ -1223,7 +1222,7 @@ class ZoeDepthPreTrainedModel(PreTrainedModel):
     """
 )
 class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ZoeDepthConfig):
         super().__init__(config)
 
         self.backbone = load_backbone(config)
@@ -1251,7 +1250,7 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         labels: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
@@ -1259,16 +1258,13 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
         **kwargs,
     ) -> tuple[torch.Tensor] | DepthEstimatorOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth depth estimation maps for computing the loss.
-
         Examples:
         ```python
         >>> from transformers import AutoImageProcessor, ZoeDepthForDepthEstimation
         >>> import torch
         >>> import numpy as np
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

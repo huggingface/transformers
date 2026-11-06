@@ -132,12 +132,12 @@ class Qwen2AudioProcessor(ProcessorMixin):
         messages = [
             {'role': 'system', 'content': 'You are a helpful assistant.'},
             {"role": "user", "content": [
-                {"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"},
+                {"type": "audio", "audio_url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3"},
                 {"type": "text", "text": "What's that sound?"},
             ]},
             {"role": "assistant", "content": "It is the sound of glass shattering."},
             {"role": "user", "content": [
-                {"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav"},
+                {"type": "audio", "audio_url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/throat_clearing.wav"},
                 {"type": "text", "text": "How about this one?"},
             ]},
         ]

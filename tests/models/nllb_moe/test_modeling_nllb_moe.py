@@ -369,7 +369,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
 
     @cached_property
     def big_model(self):
-        return NllbMoeForConditionalGeneration.from_pretrained("facebook/nllb-moe-54b")
+        return NllbMoeForConditionalGeneration.from_pretrained("hf-internal-testing/nllb-moe-54b-safetensors")
 
     def inference_no_head(self):
         model = NllbMoeModel.from_pretrained("hf-internal-testing/random-nllb-moe-2-experts").eval()
@@ -419,7 +419,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
     @unittest.skip(reason="This requires 300GB of RAM")
     def test_seq_to_seq_generation(self):
         model = self.big_model
-        tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-moe-54b")
+        tokenizer = NllbTokenizer.from_pretrained("hf-internal-testing/nllb-moe-54b-safetensors")
 
         # first 6 samples of load_dataset("facebook/flores", "eng_Latn-fra_Latn"), devtest. Truth are very similar to the fairseq translation files
         FIRST_6_FLORES_200 = [

@@ -23,42 +23,19 @@ import numpy as np
 
 from ...audio_utils import AudioInput
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     auto_docstring,
-    is_vision_available,
     logging,
 )
-from ...utils.import_utils import requires
 from ...video_utils import VideoInput
-
-
-if is_vision_available():
-    from .image_processing_gemma4_unified import Gemma4UnifiedImageProcessorKwargs, get_aspect_ratio_preserving_size
 
 
 logger = logging.get_logger(__name__)
 
 
-class Gemma4UnifiedVideoProcessorKwargs(VideosKwargs, total=False):
-    """
-    patch_size (`int`, *optional*):
-        Size of each image patch in pixels.
-    max_soft_tokens (`int`, *optional*):
-        Maximum number of soft (vision) tokens per video frame.
-        Must be one of {70, 140, 280, 560, 1120}.
-    pooling_kernel_size (`int`, *optional*):
-        Spatial pooling kernel size applied after patchification.
-    """
-
-    patch_size: int
-    max_soft_tokens: int
-    pooling_kernel_size: int
-
-
 class Gemma4UnifiedProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Gemma4UnifiedImageProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": True,
@@ -72,8 +49,61 @@ class Gemma4UnifiedProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+def get_aspect_ratio_preserving_size(
+    height: int,
+    width: int,
+    patch_size: int,
+    max_patches: int,
+    pooling_kernel_size: int,
+) -> tuple[int, int]:
+    """
+    Image is resized to preserve aspect ratio so it fits within the patch budget.
+    Target dimensions are the largest that:
+    1) Produce at most `max_patches` patches when patchified with `patch_size`
+    2) Have height and width divisible by `pooling_kernel_size * patch_size`
+    """
+    total_px = height * width
+    target_px = max_patches * (patch_size**2)
+    factor = math.sqrt(target_px / total_px)
+    ideal_height = factor * height
+    ideal_width = factor * width
+    side_mult = pooling_kernel_size * patch_size
+
+    # Round down to nearest multiple of side_mult
+    target_height = int(math.floor(ideal_height / side_mult)) * side_mult
+    target_width = int(math.floor(ideal_width / side_mult)) * side_mult
+
+    # Handle edge cases where one or both dimensions round to 0
+    if target_height == 0 and target_width == 0:
+        raise ValueError(
+            "Attempting to resize to a 0 x 0 image. Resized height should be divisible by "
+            f"`pooling_kernel_size * patch_size`={pooling_kernel_size * patch_size}."
+        )
+
+    max_side_length = (max_patches // pooling_kernel_size**2) * side_mult
+    if target_height == 0:
+        target_height = side_mult
+        target_width = min(
+            int(math.floor(width / height)) * side_mult,
+            max_side_length,
+        )
+    elif target_width == 0:
+        target_width = side_mult
+        target_height = min(
+            int(math.floor(height / width)) * side_mult,
+            max_side_length,
+        )
+
+    if target_height * target_width > target_px:
+        raise ValueError(
+            f"Resizing [{height}x{width}] to [{target_height}x{target_width}] "
+            f"but this exceeds {max_patches} patches with patch_size {patch_size}"
+        )
+
+    return target_height, target_width
+
+
 @auto_docstring
-@requires(backends=("vision",))
 class Gemma4UnifiedProcessor(ProcessorMixin):
     valid_processor_kwargs = Gemma4UnifiedProcessorKwargs
 
@@ -165,7 +195,7 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
         audio: AudioInput = None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
-        super().validate_inputs(images=images, text=text, **kwargs)
+        super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
 
         if text is None and images is None:
             raise ValueError("You must provide either `text` or `images`.")
@@ -173,23 +203,13 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
         if audio is not None and self.audio_token is None or self.boa_token is None or self.eoa_token is None:
             raise ValueError("Audio inputs were provided, but the tokenizer does not have an `audio_token` defined.")
 
-        if text is not None:
+        if text is not None and images is not None:
             n_images_in_text = [sample.count(self.image_token) for sample in text]
-            if images is not None:
-                if len(images) != len(text):
-                    raise ValueError(
-                        f"Received inconsistently sized batches of images ({len(images)}) and text ({len(text)})."
-                    )
-
-                n_images_in_images = [len(sublist) for sublist in images]
-                if n_images_in_text != n_images_in_images:
-                    raise ValueError(
-                        f"The total number of {self.image_token} tokens in the prompts should be the same as the number of images passed."
-                        f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
-                    )
-            elif images is None and any(n_images_in_text):
+            n_images_in_images = [len(sublist) for sublist in images]
+            if n_images_in_text != n_images_in_images:
                 raise ValueError(
-                    f"Found {sum(n_images_in_text)} {self.image_token} tokens in the text but no images were passed."
+                    f"The number of {self.image_token} tokens in each prompt should be the same as the number of images passed."
+                    f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
                 )
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
@@ -226,13 +246,15 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
         mask = audio_inputs["input_features_mask"][audio_idx]
         return f"{self.boa_token}{self.audio_token * int(mask.sum())}{self.eoa_token}"
 
-    def _get_num_multimodal_tokens(self, image_sizes=None, audio_lengths=None, **kwargs):
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, audio_lengths=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
             image_sizes (`list[list[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
+            video_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
             audio_lengths (`list[int]`, *optional*):
                 The lengths of audio inputs in number of samples. Used to dynamically
                 compute per-audio token counts.
@@ -242,8 +264,8 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
             input modalities, along with other useful data.
         """
 
-        images_kwargs = Gemma4UnifiedProcessorKwargs._defaults.get("images_kwargs", {})
-        images_kwargs.update(kwargs)
+        merged_kwargs = self._merge_kwargs(self.valid_processor_kwargs, **kwargs)
+        images_kwargs = merged_kwargs["images_kwargs"]
         patch_size = images_kwargs.get("patch_size", None) or self.image_processor.patch_size
         pooling_kernel_size = (
             images_kwargs.get("pooling_kernel_size", None) or self.image_processor.pooling_kernel_size
@@ -269,6 +291,30 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
 
             num_image_patches = [1] * len(image_sizes)
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        if video_sizes is not None:
+            videos_kwargs = merged_kwargs["videos_kwargs"]
+            patch_size = videos_kwargs.get("patch_size", None) or self.video_processor.patch_size
+            pooling_kernel_size = (
+                videos_kwargs.get("pooling_kernel_size", None) or self.video_processor.pooling_kernel_size
+            )
+            max_soft_tokens = videos_kwargs.get("max_soft_tokens", None) or self.video_processor.max_soft_tokens
+
+            max_patches = max_soft_tokens * pooling_kernel_size**2
+
+            num_video_tokens = []
+            for num_frames, height, width in video_sizes:
+                target_h, target_w = get_aspect_ratio_preserving_size(
+                    height=height,
+                    width=width,
+                    patch_size=patch_size,
+                    max_patches=max_patches,
+                    pooling_kernel_size=pooling_kernel_size,
+                )
+                patch_height = target_h // patch_size
+                patch_width = target_w // patch_size
+                num_video_tokens.append(num_frames * (patch_height * patch_width // pooling_kernel_size**2))
+            vision_data.update({"num_video_tokens": num_video_tokens})
 
         if audio_lengths is not None:
             # Dynamically compute per-audio token counts from sample lengths.

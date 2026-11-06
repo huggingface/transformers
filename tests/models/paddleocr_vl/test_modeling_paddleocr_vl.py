@@ -24,6 +24,7 @@ from transformers import (
     AutoProcessor,
     PaddleOCRVLConfig,
     PaddleOCRVLForConditionalGeneration,
+    PaddleOCRVLModel,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -172,7 +173,7 @@ class PaddleOCRVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     Model tester for `PaddleOCRVLForConditionalGeneration`.
     """
 
-    all_model_classes = (PaddleOCRVLForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (PaddleOCRVLForConditionalGeneration, PaddleOCRVLModel) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": PaddleOCRVLForConditionalGeneration}
     _is_composite = True
 
@@ -200,6 +201,9 @@ class PaddleOCRVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     )
     def test_disk_offload_safetensors(self):
         pass
+
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True, skip_base_model=True):
+        super().test_reverse_loading_mapping(check_keys_were_modified, skip_base_model=True)
 
     def test_mismatching_num_image_tokens(self):
         """
@@ -248,47 +252,6 @@ class PaddleOCRVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
                 image_grid_thw=image_grid_thw,
                 mm_token_type_ids=mm_token_type_ids,
             )
-
-    # PaddleOCRVL has pixel_values shaped as (bs*patch_len, image_channels, patch_size, patch_size) so we can't slice to batches in generate
-    def prepare_config_and_inputs_for_generate(self, batch_size=2):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # We don't want a few model inputs in our model input dictionary for generation tests
-        input_keys_to_ignore = [
-            # we don't want encoder-decoder models to start from filled decoder ids
-            "decoder_input_ids",
-            "decoder_attention_mask",
-            # we'll set cache use in each test differently
-            "use_cache",
-            # Ignore labels if it is in the input dict
-            "labels",
-            # model-specific exceptions should overload/overwrite this function
-        ]
-
-        # The diff from the general `prepare_config_and_inputs_for_generate` lies here
-        patch_size = config.vision_config.patch_size
-        filtered_image_length = (
-            batch_size * (self.model_tester.image_height * self.model_tester.image_width) // (patch_size**2)
-        )
-        filtered_inputs_dict = {
-            k: v[:batch_size, ...] if isinstance(v, torch.Tensor) else v
-            for k, v in inputs_dict.items()
-            if k not in input_keys_to_ignore
-        }
-        filtered_inputs_dict["pixel_values"] = inputs_dict["pixel_values"][:filtered_image_length]
-
-        # It is important set `eos_token_id` to `None` to avoid early stopping (would break for length-based checks)
-        text_gen_config = config.get_text_config(decoder=True)
-        if text_gen_config.eos_token_id is not None and text_gen_config.pad_token_id is None:
-            text_gen_config.pad_token_id = (
-                text_gen_config.eos_token_id
-                if isinstance(text_gen_config.eos_token_id, int)
-                else text_gen_config.eos_token_id[0]
-            )
-        text_gen_config.eos_token_id = None
-        text_gen_config.forced_eos_token_id = None
-
-        return config, filtered_inputs_dict
 
     @unittest.skip(reason="PaddleOCRVL does not support.")
     def test_generate_compile_model_forward_fullgraph(self):
@@ -356,7 +319,7 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
                     {
                         "type": "image",
                         "url": url_to_local_path(
-                            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/ocr_demo2.jpg"
+                            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_001.png"
                         ),
                     },
                     {"type": "text", "text": "OCR:"},
@@ -386,32 +349,32 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
             return_tensors="pt",
         )
 
-        expected_input_ids_length = 211
-        assert expected_input_ids_length == len(inputs.input_ids[0])
+        expected_input_ids_length = 1389
+        self.assertEqual(expected_input_ids_length, len(inputs.input_ids[0]))
 
         expected_input_ids = [100273, 2969, 93963, 93919, 101305, 100295, 100295, 100295, 100295, 100295]  # fmt: skip
-        assert expected_input_ids == inputs.input_ids[0].tolist()[:10]
+        self.assertEqual(expected_input_ids, inputs.input_ids[0].tolist()[:10])
 
         expected_pixel_slice = torch.tensor(
             [
-                [1.0000, 1.0000, 1.0000],
-                [1.0000, 1.0000, 1.0000],
-                [0.9922, 0.9922, 0.9922],
-                [1.0000, 1.0000, 1.0000],
-                [1.0000, 1.0000, 1.0000],
+                [0.9373, 0.9373, 0.9137],
+                [0.9373, 0.9373, 0.9137],
+                [0.9373, 0.9373, 0.9137],
+                [0.9373, 0.9373, 0.9137],
+                [0.9373, 0.9373, 0.9137],
             ],
             dtype=torch.float32,
             device="cpu",
         )
 
-        assert torch.allclose(expected_pixel_slice, inputs.pixel_values[:5, :, 0, 0], atol=3e-3)
+        torch.testing.assert_close(inputs.pixel_values[:5, :, 0, 0], expected_pixel_slice, atol=3e-3, rtol=1e-5)
 
         # verify generation
         inputs = inputs.to(torch_device)
         output = model.generate(**inputs, max_new_tokens=30)
         result = self.processor.decode(output[0][inputs["input_ids"].shape[-1] : -1])
 
-        EXPECTED_DECODED_TEXT = "生甘草"
+        EXPECTED_DECODED_TEXT = "绿洲仕格维花园公寓\n楼栋 A 座\n访客登记\n2026-09-07\n"
 
         self.assertEqual(
             result,
@@ -442,7 +405,10 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
             generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
         )
 
-        EXPECTED_DECODED_TEXT = ["生甘草", "生甘草"]
+        EXPECTED_DECODED_TEXT = [
+            "绿洲仕格维花园公寓\n楼栋 A 座\n访客登记\n2026-09-07\n___",
+            "绿洲仕格维花园公寓\n楼栋 A 座\n访客登记\n2026-09-07\n___",
+        ]
 
         self.assertEqual(
             result,
@@ -453,6 +419,11 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_small_model_integration_test_flashatt2(self):
+        # EXPECTED_DECODED_TEXT mirrors test_small_model_integration_test: same model,
+        # image, prompt, generation args and decode path -- only attn_implementation
+        # differs, and the two held identical expectations before the asset swap.
+        # @require_flash_attn keeps this out of run_models_gpu, so no CI round can
+        # measure it; confirm with a local flash-attn run.
         model = (
             PaddleOCRVLForConditionalGeneration.from_pretrained(
                 "PaddlePaddle/PaddleOCR-VL", dtype="bfloat16", attn_implementation="flash_attention_2"
@@ -469,31 +440,31 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
             return_tensors="pt",
         )
 
-        expected_input_ids_length = 211
-        assert expected_input_ids_length == len(inputs.input_ids[0])
+        expected_input_ids_length = 1389
+        self.assertEqual(expected_input_ids_length, len(inputs.input_ids[0]))
 
         expected_input_ids = [100273, 2969, 93963, 93919, 101305, 100295, 100295, 100295, 100295, 100295]  # fmt: skip
-        assert expected_input_ids == inputs.input_ids[0].tolist()[:10]
+        self.assertEqual(expected_input_ids, inputs.input_ids[0].tolist()[:10])
 
         expected_pixel_slice = torch.tensor(
             [
-                [1.0000, 1.0000, 1.0000],
-                [1.0000, 1.0000, 1.0000],
-                [0.9922, 0.9922, 0.9922],
-                [1.0000, 1.0000, 1.0000],
-                [1.0000, 1.0000, 1.0000],
+                [0.9373, 0.9373, 0.9137],
+                [0.9373, 0.9373, 0.9137],
+                [0.9373, 0.9373, 0.9137],
+                [0.9373, 0.9373, 0.9137],
+                [0.9373, 0.9373, 0.9137],
             ],
             dtype=torch.float32,
             device="cpu",
         )
-        assert torch.allclose(expected_pixel_slice, inputs.pixel_values[:5, :, 0, 0], atol=3e-3)
+        torch.testing.assert_close(inputs.pixel_values[:5, :, 0, 0], expected_pixel_slice, atol=3e-3, rtol=1e-5)
 
         # verify generation
         inputs = inputs.to(torch_device)
         output = model.generate(**inputs, max_new_tokens=30)
         result = self.processor.decode(output[0][inputs["input_ids"].shape[-1] : -1])
 
-        EXPECTED_DECODED_TEXT = "生甘草"
+        EXPECTED_DECODED_TEXT = "绿洲仕格维花园公寓\n楼栋 A 座\n访客登记\n2026-09-07\n"
 
         self.assertEqual(
             result,
@@ -529,7 +500,10 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
             generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
         )
 
-        EXPECTED_DECODED_TEXT = ["生甘草", "生甘草"]
+        EXPECTED_DECODED_TEXT = [
+            "绿洲仕格维花园公寓\n楼栋 A 座\n访客登记\n2026-09-07\n___",
+            "绿洲仕格维花园公寓\n楼栋 A 座\n访客登记\n2026-09-07\n___",
+        ]
 
         self.assertEqual(
             result,

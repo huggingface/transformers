@@ -28,7 +28,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from ...utils.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
@@ -46,13 +46,13 @@ logger = logging.get_logger(__name__)
 @dataclass
 class VideoMAEDecoderOutput(ModelOutput):
     r"""
-    logits (`torch.FloatTensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
+    logits (`torch.Tensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
         Pixel reconstruction logits.
     """
 
-    logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(
@@ -63,16 +63,16 @@ class VideoMAEDecoderOutput(ModelOutput):
 @dataclass
 class VideoMAEForPreTrainingOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`):
+    loss (`torch.Tensor` of shape `(1,)`):
         Pixel reconstruction loss.
-    logits (`torch.FloatTensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
+    logits (`torch.Tensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
         Pixel reconstruction logits.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 # sin-cos position encoding
@@ -222,9 +222,9 @@ class VideoMAESelfAttention(nn.Module):
         self.scaling = self.attention_head_size**-0.5
         self.is_causal = False
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qv_bias)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qv_bias)
 
     def forward(
         self, hidden_states: torch.Tensor | None = None
@@ -396,7 +396,7 @@ class VideoMAEPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class VideoMAEModel(VideoMAEPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: VideoMAEConfig):
         super().__init__(config)
         self.config = config
 
@@ -419,7 +419,7 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         bool_masked_pos: torch.BoolTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
@@ -509,7 +509,7 @@ class VideoMAEDecoder(nn.Module):
     """
 )
 class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: VideoMAEConfig):
         super().__init__(config)
         self.config = config
 
@@ -530,7 +530,7 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         bool_masked_pos: torch.BoolTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> VideoMAEForPreTrainingOutput:
@@ -661,6 +661,10 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
             labels = videos_patch[bool_masked_pos].reshape(batch_size, -1, num_channels)
 
         loss_fct = MSELoss()
+        torch_compilable_check(
+            logits.shape[1] == labels.shape[1],
+            "VideoMAE reconstruction logits and labels must cover the same number of masked patches.",
+        )
         loss = loss_fct(logits, labels)
 
         return VideoMAEForPreTrainingOutput(
@@ -678,7 +682,7 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
     """
 )
 class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: VideoMAEConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -700,11 +704,6 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
         Examples:
 
         ```python
