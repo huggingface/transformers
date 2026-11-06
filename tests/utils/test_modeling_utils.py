@@ -2754,6 +2754,7 @@ class ModelUtilsTest(TestCasePlus):
             model.save_pretrained(tmpdirname, state_dict=state_dict)
 
             quant_config = FineGrainedFP8Config(modules_to_not_convert=["self_attn.q_proj"])
+            # Even with a quantizer, since q_proj is not quantized we should raise for the shape mismatch
             with self.assertRaisesRegex(
                 RuntimeError, "You set `ignore_mismatched_sizes` to `False`, thus raising an error."
             ):
