@@ -1083,8 +1083,7 @@ class ProcessorMixin(PushToHubMixin):
         tokenizer_attributes = set()
         for attribute in self.__class__.get_attributes():
             if attribute in self.__dict__:
-                modality = _get_modality_for_attribute(attribute)
-                if modality == "tokenizer":
+                if _get_modality_for_attribute(attribute) == "tokenizer":
                     tokenizer_attributes.add(attribute)
 
         dict_to_copy = {k: v for k, v in self.__dict__.items() if k not in tokenizer_attributes}
@@ -1204,12 +1203,10 @@ class ProcessorMixin(PushToHubMixin):
         for attribute_name in self.get_attributes():
             attribute = getattr(self, attribute_name)
 
-            modality = _get_modality_for_attribute(attribute_name)
-            is_primary = attribute_name == modality
-            if modality == "tokenizer":
+            if (modality := _get_modality_for_attribute(attribute_name)) == "tokenizer":
                 attribute._set_processor_class(self.__class__.__name__)
                 # Save the tokenizer in its own vocab file. The other attributes are saved as part of `processor_config.json`
-                if is_primary:
+                if attribute_name == modality:
                     attribute.save_pretrained(save_directory)
                 else:
                     # if a model has multiple tokenizers, save the additional tokenizers in their own folders.
@@ -1909,6 +1906,7 @@ class ProcessorMixin(PushToHubMixin):
         load_kwargs = load_kwargs if load_kwargs is not None else {}
         # Remove subfolder from kwargs to avoid duplicate keyword arguments
         subfolder = load_kwargs.pop("subfolder", "")
+        keys_to_remove = set()
 
         # get args from processor init signature
         sub_processors = cls.get_attributes()
@@ -1930,6 +1928,9 @@ class ProcessorMixin(PushToHubMixin):
                 # Determine the class to instantiate: image processors have 'image_processor_type', etc.
                 modality = _get_modality_for_attribute(sub_processor_type)
                 type_key = f"{modality}_type"
+                if modality == "audio_processor":
+                    # hardcoded in FeatureExtractionMixin: FIXME @eustlib
+                    type_key = "feature_extractor_type"
                 class_name = sub_processor_config.get(type_key)
                 if class_name is None:
                     raise ValueError(
@@ -1940,8 +1941,10 @@ class ProcessorMixin(PushToHubMixin):
                 valid_subprocessor_kwargs = (
                     cls.valid_kwargs.__annotations__ if hasattr(cls, "valid_kwargs") else sub_processor_config.keys()
                 )
-                sub_processor_config.update({k: kwargs.pop(k) for k in kwargs.keys() & valid_subprocessor_kwargs})
-                sub_processor = processor_class(**sub_processor_config)
+                sub_kwargs = {k: kwargs[k] for k in kwargs.keys() & valid_subprocessor_kwargs}
+                keys_to_remove |= sub_kwargs.keys()
+
+                sub_processor = processor_class(**{**sub_processor_config, **sub_kwargs})
                 processor_dict[sub_processor_type] = sub_processor
             else:
                 # Fallback for non-tokenizer sub-processor: try loading via Auto class
@@ -1959,6 +1962,8 @@ class ProcessorMixin(PushToHubMixin):
                 )
                 processor_dict[sub_processor_type] = sub_processor
 
+        for k in keys_to_remove:
+            kwargs.pop(k)
         return processor_dict, kwargs
 
     @staticmethod
