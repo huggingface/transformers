@@ -11,91 +11,128 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for loading the original `OpenGVLab/InternVL2-*` checkpoints natively."""
+"""Tests for loading the original `OpenGVLab/InternVL2-*` checkpoints."""
 
+import tempfile
 import unittest
 
-from transformers import AutoConfig, AutoTokenizer, InternVL2Config, InternVLForConditionalGeneration
-from transformers.testing_utils import cleanup, require_torch, slow, torch_device
+from huggingface_hub import get_safetensors_metadata
+
+from transformers import (
+    MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING,
+    AutoConfig,
+    AutoTokenizer,
+    InternVL2Config,
+    InternVLForConditionalGeneration,
+    LlamaConfig,
+    Qwen2Config,
+)
+from transformers.testing_utils import require_torch, slow
 from transformers.utils import is_torch_available
 
 
 if is_torch_available():
     import torch
 
+    from transformers.modeling_utils import str_to_torch_dtype
+
+
+def get_original_config_dict(architecture="Qwen2ForCausalLM", model_type="qwen2"):
+    return {
+        "architectures": ["InternVLChatModel"],
+        "model_type": "internvl_chat",
+        "image_token_id": 151648,
+        "select_layer": -1,
+        "template": "Hermes-2",
+        "llm_config": {
+            "architectures": [architecture],
+            "model_type": model_type,
+            "hidden_size": 64,
+            "num_hidden_layers": 2,
+            "tie_word_embeddings": False,
+        },
+        "vision_config": {
+            "architectures": ["InternVisionModel"],
+            "model_type": "intern_vit_6b",
+            "hidden_size": 32,
+            "num_hidden_layers": 2,
+            "qk_normalization": True,
+            "qkv_bias": False,
+            "use_flash_attn": True,
+        },
+    }
+
+
+class InternVL2ConfigTest(unittest.TestCase):
+    def test_original_layout(self):
+        config = InternVL2Config.from_dict(get_original_config_dict())
+
+        self.assertIsInstance(config.text_config, Qwen2Config)
+        self.assertEqual(config.text_config.hidden_size, 64)
+        self.assertEqual(config.vision_config.model_type, "internvl_vision")
+        self.assertEqual(config.vision_config.hidden_size, 32)
+        self.assertTrue(config.vision_config.use_qk_norm)
+        self.assertFalse(config.vision_config.attention_bias)
+        self.assertFalse(config.tie_word_embeddings)
+        self.assertEqual(config.image_token_id, 151648)
+
+    def test_llama_language_model(self):
+        config = InternVL2Config.from_dict(get_original_config_dict("LlamaForCausalLM", "llama"))
+        self.assertIsInstance(config.text_config, LlamaConfig)
+
+    def test_unsupported_language_model(self):
+        with self.assertRaisesRegex(ValueError, "InternLM2ForCausalLM"):
+            InternVL2Config.from_dict(get_original_config_dict("InternLM2ForCausalLM", "internlm2"))
+
+    @require_torch
+    def test_auto_model_mapping(self):
+        self.assertIs(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING[InternVL2Config], InternVLForConditionalGeneration)
+
+    def test_save_and_reload(self):
+        config = InternVL2Config.from_dict(get_original_config_dict())
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            reloaded = InternVL2Config.from_pretrained(tmp_dir)
+
+        self.assertEqual(reloaded.text_config.to_dict(), config.text_config.to_dict())
+        self.assertEqual(reloaded.vision_config.to_dict(), config.vision_config.to_dict())
+        self.assertFalse(reloaded.tie_word_embeddings)
+        self.assertEqual(reloaded.image_token_id, 151648)
+
 
 @slow
 @require_torch
-class InternVL2OriginalCheckpointTest(unittest.TestCase):
-    """The original `OpenGVLab/InternVL2-*` checkpoints use the bespoke `internvl_chat`
-    remote-code layout. They should load into the native implementation without
-    `trust_remote_code`, on CPU, with every weight mapped."""
-
-    checkpoint = "OpenGVLab/InternVL2-1B"
-
-    def setUp(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def test_original_internvl2_checkpoint_loads_natively(self):
-        config = AutoConfig.from_pretrained(self.checkpoint, trust_remote_code=False)
-        self.assertIsInstance(config, InternVL2Config)
-        self.assertEqual(config.text_config.model_type, "qwen2")
-        self.assertGreater(config.text_config.num_attention_heads, 0)
-        self.assertGreater(config.vision_config.num_attention_heads, 0)
-
-        model, loading_info = InternVLForConditionalGeneration.from_pretrained(
-            self.checkpoint,
-            dtype=torch.bfloat16,
-            trust_remote_code=False,
-            output_loading_info=True,
-        )
-        self.assertIsInstance(model, InternVLForConditionalGeneration)
-        self.assertEqual(len(loading_info["missing_keys"]), 0)
-        self.assertEqual(len(loading_info["unexpected_keys"]), 0)
-        self.assertEqual(len(loading_info["mismatched_keys"]), 0)
-
-    # Checkpoints whose tokenizer loads natively, so config and tokenizer can be compared here.
-    # InternVL2-4B is deliberately absent: its Phi3 backbone is not supported (see
-    # `_BACKBONE_TO_TEXT_MODEL_TYPE`), so loading its config raises rather than returning an id.
-    NATIVE_TOKENIZER_CHECKPOINTS = [
-        ("OpenGVLab/InternVL2-1B", "qwen2", 151648),
-        ("OpenGVLab/InternVL2-40B", "llama", 64000),
+class InternVL2IntegrationTest(unittest.TestCase):
+    checkpoints = [
+        "OpenGVLab/InternVL2-1B",
+        "OpenGVLab/InternVL2-40B",
+        "OpenGVLab/InternVL2-Llama3-76B",
     ]
 
-    # The InternLM2-backbone checkpoints declare `InternLM2Tokenizer` through `auto_map`, so
-    # loading their tokenizer executes remote code even though the config now loads natively.
-    # That vendored tokenizer is also tied to an older sentencepiece; on current versions it
-    # fails with `RuntimeError: INTERNAL: piece must not include null character`. Both are
-    # upstream properties of the checkpoints, unrelated to the config normalization tested here.
-    REMOTE_CODE_TOKENIZER_CHECKPOINTS = [
-        "OpenGVLab/InternVL2-2B",
-        "OpenGVLab/InternVL2-8B",
-        "OpenGVLab/InternVL2-26B",
-    ]
+    def test_all_weights_load(self):
+        # Meta tensors shaped from the safetensors headers, so no weights are downloaded
+        for checkpoint in self.checkpoints:
+            with self.subTest(checkpoint=checkpoint):
+                state_dict = {
+                    name: torch.empty(info.shape, dtype=str_to_torch_dtype[info.dtype], device="meta")
+                    for file_metadata in get_safetensors_metadata(checkpoint).files_metadata.values()
+                    for name, info in file_metadata.tensors.items()
+                }
+                _, loading_info = InternVLForConditionalGeneration.from_pretrained(
+                    None,
+                    config=AutoConfig.from_pretrained(checkpoint),
+                    state_dict=state_dict,
+                    device_map="meta",
+                    output_loading_info=True,
+                )
+
+                self.assertEqual(sorted(loading_info["missing_keys"]), [])
+                self.assertEqual(sorted(loading_info["unexpected_keys"]), [])
+                self.assertEqual(sorted(loading_info["mismatched_keys"]), [])
 
     def test_image_token_id_matches_tokenizer(self):
-        """`config.image_token_id` must equal the checkpoint tokenizer's `<IMG_CONTEXT>` id.
-
-        The model masks image positions with `config.image_token_id` while the processor takes
-        the id from the tokenizer. If the two disagree no image features are ever spliced in and
-        the model silently answers as if no image was given, without raising.
-        """
-        for checkpoint, text_model_type, expected_image_token_id in self.NATIVE_TOKENIZER_CHECKPOINTS:
+        for checkpoint in self.checkpoints:
             with self.subTest(checkpoint=checkpoint):
-                config = AutoConfig.from_pretrained(checkpoint, trust_remote_code=False)
-                tokenizer = AutoTokenizer.from_pretrained(checkpoint, trust_remote_code=False)
-                self.assertEqual(config.text_config.model_type, text_model_type)
-                self.assertEqual(config.image_token_id, expected_image_token_id)
+                config = AutoConfig.from_pretrained(checkpoint)
+                tokenizer = AutoTokenizer.from_pretrained(checkpoint)
                 self.assertEqual(config.image_token_id, tokenizer.convert_tokens_to_ids("<IMG_CONTEXT>"))
-
-        for checkpoint in self.REMOTE_CODE_TOKENIZER_CHECKPOINTS:
-            with self.subTest(checkpoint=checkpoint):
-                self.skipTest(
-                    f"{checkpoint} declares InternLM2Tokenizer via `auto_map`, so comparing against "
-                    "the tokenizer needs `trust_remote_code=True`, and that vendored tokenizer does "
-                    "not load on current sentencepiece. The config side is covered by the other "
-                    "checkpoints."
-                )
