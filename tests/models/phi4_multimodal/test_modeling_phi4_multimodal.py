@@ -31,6 +31,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
+from transformers.audio_utils import load_audio
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -58,7 +59,7 @@ if is_vision_available():
 
 
 if is_torchcodec_available():
-    import torchcodec
+    pass
 
 
 class Phi4MultimodalModelTester:
@@ -291,9 +292,8 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         self.assistant_token = "<|assistant|>"
         self.end_token = "<|end|>"
         self.image = Image.open(requests.get(self.image_url, stream=True).raw)
-        audio_bytes = requests.get(self.audio_url, stream=True).raw.data
-        samples = torchcodec.decoders.AudioDecoder(audio_bytes).get_all_samples()
-        self.audio, self.sampling_rate = samples.data, samples.sample_rate
+        self.sampling_rate = 16000
+        self.audio = load_audio(self.audio_url, sampling_rate=self.sampling_rate)
 
         cleanup(torch_device, gc_collect=True)
 
@@ -380,9 +380,9 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         )
 
         prompt = f"{self.user_token}<|audio|>What is happening in this audio?{self.end_token}{self.assistant_token}"
-        inputs = self.processor(text=prompt, audio=self.audio, sampling_rate=self.sampling_rate, return_tensors="pt").to(
-            torch_device
-        )
+        inputs = self.processor(
+            text=prompt, audio=self.audio, sampling_rate=self.sampling_rate, return_tensors="pt"
+        ).to(torch_device)
 
         output = model.generate(
             **inputs,
