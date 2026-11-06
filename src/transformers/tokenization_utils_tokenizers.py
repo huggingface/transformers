@@ -31,7 +31,6 @@ from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.models import BPE, Unigram
-from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
 
 from transformers.utils.hub import cached_file
 
@@ -71,13 +70,6 @@ INIT_TOKENIZER_DOCSTRING += """
             A path to a local JSON file representing a previously serialized [`tokenizers.Tokenizer`] object from 🤗
             tokenizers.
 """
-
-MODEL_TO_TRAINER_MAPPING = {
-    "BPE": BpeTrainer,
-    "Unigram": UnigramTrainer,
-    "WordLevel": WordLevelTrainer,
-    "WordPiece": WordPieceTrainer,
-}
 
 VOCAB_FILES_NAMES = {"tokenizer_file": TOKENIZER_FILE, "vocab_file": TIKTOKEN_VOCAB_FILE}
 
@@ -1300,7 +1292,16 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             ):
                 kwargs["initial_alphabet"] = pre_tokenizers_fast.ByteLevel.alphabet()
 
-        trainer_class = MODEL_TO_TRAINER_MAPPING[tokenizer_json["model"]["type"]]
+        # Imported here: tokenizers>=1 has no `trainers` module, so a module-level import breaks every import of
+        # this file under it.
+        from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
+
+        trainer_class = {
+            "BPE": BpeTrainer,
+            "Unigram": UnigramTrainer,
+            "WordLevel": WordLevelTrainer,
+            "WordPiece": WordPieceTrainer,
+        }[tokenizer_json["model"]["type"]]
         trainer = trainer_class(vocab_size=vocab_size, special_tokens=special_tokens, **kwargs)
         tokenizer.train_from_iterator(text_iterator, length=length, trainer=trainer)
 
