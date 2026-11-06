@@ -130,6 +130,7 @@ if TYPE_CHECKING:
     from .distilbert import *
     from .doge import *
     from .donut import *
+    from .dory import *
     from .dots1 import *
     from .dpr import *
     from .dpt import *
