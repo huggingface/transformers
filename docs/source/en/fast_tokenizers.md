@@ -257,7 +257,7 @@ The affected model types and checkpoints grow as configs are corrected on the Hu
 
 The fallback is automatic and doesn't change how you call [`~AutoTokenizer.from_pretrained`]. The resulting tokenizer encodes and decodes exactly as `tokenizer.json` specifies.
 
-Check which backend a tokenizer is using with the `backend` property.
+Check which backend a tokenizer is using with the `backend` property. It's set by the tokenizer class and can't be changed.
 
 ```py
 from transformers import AutoTokenizer

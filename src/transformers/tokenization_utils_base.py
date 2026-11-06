@@ -993,6 +993,21 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         "mask_token",
     ]
 
+    # Name of the tokenization backend this class implements, returned by the `backend` property. Set by each backend
+    # base class (`TokenizersBackend`, `SentencePieceBackend`, ...) and resolved through the MRO, so a subclass always
+    # reports the most specific backend it inherits from
+    _backend_name: str | None = None
+
+    @property
+    def backend(self) -> str | None:
+        """
+        `str`: The tokenization backend this tokenizer uses determined by the its class.
+        """
+        if self._backend_name is not None:
+            return self._backend_name
+        # Tokenizers outside the backend base classes keep the values they were given.
+        return getattr(self, "_custom_backend", None)
+
     def __init__(self, **kwargs):
         self.init_inputs = ()
         for key in kwargs:
@@ -1002,6 +1017,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         # V5: Convert deprecated additional_special_tokens to extra_special_tokens before storing init_kwargs
         if "additional_special_tokens" in kwargs and "extra_special_tokens" not in kwargs:
             kwargs["extra_special_tokens"] = kwargs.pop("additional_special_tokens")
+
+        # `backend` comes from the class (see the `backend` property): drop the kwarg so it's never stored or saved
+        if self._backend_name is None:
+            self._custom_backend = kwargs.get("backend")
+        else:
+            kwargs.pop("backend", None)
 
         self.init_kwargs = copy.deepcopy(kwargs)
         self.name_or_path = kwargs.pop("name_or_path", "")
@@ -1101,8 +1122,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         self.deprecation_warnings = {}
 
-        # Backend information (V5: tracking which backend and files were used)
-        self.backend = kwargs.pop("backend", None)
+        # Backend information (V5: tracking which files were used)
         self.files_loaded = kwargs.pop("files_loaded", [])
 
     def _set_processor_class(self, processor_class: str):
