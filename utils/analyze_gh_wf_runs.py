@@ -18,18 +18,13 @@ Usage:
 
 Known gaps (not handled yet — we will monitor the real CI runs and improve if
 any of these show up):
-  - Only "FAILED" entries of the short test summary are parsed; "ERROR" entries
-    (fixture / setup / teardown / collection errors) are not reported.
   - Only the first "short test summary info" section is parsed, so a job that
     runs pytest more than once only reports the first run's failures.
-  - FAILED lines without " - <message>", or node ids containing spaces (e.g. a
-    parametrize id with a space), are not matched.
-  - Failure blocks are matched by the bare test name (the "____ name ____"
-    header), so:
-      - two tests with the same name in different files of one job both get
-        the last block;
-      - class-based tests (header "TestFoo.test_bar") are not found; the fuzzy
-        fallback may return the first lines of another parametrization's block.
+  - Node ids containing spaces (e.g. a parametrize id with a space) are not matched.
+  - Failure blocks are matched by name (the "____ name ____" header has no file
+    path), so two tests with the same name in different files of one job both
+    get the last block; if no block matches, the fuzzy fallback may return the
+    first lines of another parametrization's block.
   - VLLMPlugin only recognizes "(Worker pid=N)" / "(EngineCore pid=N)" ERROR
     lines; other tags such as "(EngineCore_DP0 pid=N)" or "(APIServer pid=N)"
     are not picked up. Possible fix: accept any process name in the
@@ -119,20 +114,26 @@ def _strip_timestamp(line):
     return re.sub(r"^\d{4}-\d{2}-\d{2}T[\d:.]+Z ", "", line)
 
 
+# A failing entry of pytest's short test summary: "FAILED <nodeid> - <message>" or "ERROR <nodeid> - <message>"
+# (ERROR = error in setup/teardown/collection). The node id must look like a test path, so that log lines such as
+# "ERROR 08-25 10:31:30 [file.py:12] ..." are not mistaken for test errors.
+_SUMMARY_ENTRY_RE = re.compile(r"(FAILED|ERROR)\s+(\S+\.py(?:::\S+)?)(?:\s+-\s+(.*))?$")
+
+
 def extract_failures_with_errors(log):
     """
     Parse the 'short test summary info' section of a pytest log.
-    Returns list of (test_nodeid, short_error_text) tuples.
+    Returns list of (test_nodeid, short_error_text) tuples, for both FAILED and ERROR entries.
 
-    Handles multi-line error messages — continuation lines between FAILED entries
+    Handles multi-line error messages — continuation lines between entries
     are joined and included in the error text, e.g.:
 
         FAILED tests/foo.py::test_bar[ExaoneForCausalLM] - OSError: You are trying to access a gated repo.
         Make sure to have access to it at https://huggingface.co/LGAI-EXAONE/...
         403 Client Error. ...
-        FAILED tests/foo.py::test_bar[Cheers] - OSError: [Errno 30] Read-only file system: ...
+        ERROR tests/foo.py::TestBaz::test_qux - ValueError: ...
 
-    Falls back to scanning bare FAILED lines anywhere in the log if the summary
+    Falls back to scanning bare FAILED/ERROR lines anywhere in the log if the summary
     section is not present (e.g. truncated log).
     """
     lines = [_strip_timestamp(l) for l in log.splitlines()]
@@ -144,12 +145,12 @@ def extract_failures_with_errors(log):
             break
 
     if summary_start is None:
-        # Fallback: parse FAILED lines anywhere in log (single-line errors only)
+        # Fallback: parse FAILED/ERROR lines anywhere in log (single-line errors only)
         results = []
         for line in lines:
-            m = re.match(r"FAILED\s+(\S+)\s+-\s+(.*)", line.strip())
-            if m:
-                results.append((m.group(1), m.group(2).strip()))
+            m = _SUMMARY_ENTRY_RE.match(line.strip())
+            if m and m.group(3) is not None:
+                results.append((m.group(2), m.group(3).strip()))
         return results
 
     results = []
@@ -163,12 +164,12 @@ def extract_failures_with_errors(log):
         if re.match(r"=+", stripped):
             break
 
-        m = re.match(r"FAILED\s+(\S+)\s+-\s+(.*)", stripped)
+        m = _SUMMARY_ENTRY_RE.match(stripped)
         if m:
             if current_test is not None:
                 results.append((current_test, "\n".join(current_error_lines).strip()))
-            current_test = m.group(1)
-            current_error_lines = [m.group(2).strip()]
+            current_test = m.group(2)
+            current_error_lines = [(m.group(3) or "").strip()]
         elif current_test is not None:
             # Continuation line of a multi-line error (may be empty)
             current_error_lines.append(stripped)
@@ -184,15 +185,21 @@ def extract_failures(log):
     return [test_id for test_id, _ in extract_failures_with_errors(log)]
 
 
+# Prefix of failure-block headers for errors outside the test call, e.g. "ERROR at setup of TestFoo.test_bar".
+_BLOCK_ERROR_PREFIX_RE = re.compile(r"^ERROR (?:at (?:setup|teardown) of|collecting) ")
+
+
 def extract_all_failure_blocks(log):
     """
     Split a pytest log into {test_name: [lines]} by parsing failure blocks.
 
     Pytest structure:
-      ________ test_name ________
-      ...traceback...
+      ________ test_name ________            (or "TestClass.test_name" for class-based tests,
+      ...traceback...                         "ERROR at setup of ..." for setup/teardown errors)
       E   ActualError: message
       ________ next test ________
+
+    Keys are the header names without the "ERROR at setup of " / "ERROR at teardown of " prefix.
     """
     lines = [_strip_timestamp(l) for l in log.splitlines()]
 
@@ -205,7 +212,7 @@ def extract_all_failure_blocks(log):
         if m:
             if current_name:
                 blocks[current_name] = current_lines
-            current_name = m.group(1)
+            current_name = _BLOCK_ERROR_PREFIX_RE.sub("", m.group(1))
             current_lines = []
         elif "short test summary info" in line or "warnings summary" in line:
             if current_name:
@@ -227,7 +234,11 @@ def classify_by_scanning_log(log, failures):
 
     for test_nodeid in failures:
         test_name = test_nodeid.split("::")[-1]  # e.g. test_foo[param-bar]
-        if test_name in blocks:
+        # Class-based tests: node id "file.py::TestFoo::test_bar" has the header "TestFoo.test_bar"
+        qualified_name = ".".join(test_nodeid.split("::")[1:])
+        if qualified_name in blocks:
+            results[test_nodeid] = "\n".join(blocks[qualified_name])
+        elif test_name in blocks:
             results[test_nodeid] = "\n".join(blocks[test_name])
         else:
             # Fuzzy: find a block key that starts with the same function name
