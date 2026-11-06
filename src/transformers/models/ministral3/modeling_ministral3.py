@@ -164,6 +164,7 @@ class Ministral3Attention(nn.Module):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             sliding_window=getattr(self.config, "sliding_window", None),  # main diff with Llama
+            position_ids=position_ids,
             **kwargs,
         )
 

@@ -15,6 +15,7 @@
 
 import gc
 import unittest
+from unittest.mock import patch
 
 import pytest
 
@@ -38,6 +39,7 @@ if is_torch_available():
     from transformers import (
         Ministral3Model,
     )
+    from transformers.models.ministral3.modeling_ministral3 import eager_attention_forward
 
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -73,6 +75,24 @@ class Ministral3ModelTest(CausalLMModelTest, unittest.TestCase):
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest(reason="Ministral3 flash attention does not support right padding")
+
+    def test_attention_interface_receives_position_ids(self):
+        # Flash attention needs `position_ids` to find the sequence boundaries of a padding-free batch
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config._attn_implementation = "eager"
+        model = Ministral3Model(config).to(torch_device).eval()
+        input_ids = inputs_dict["input_ids"][:1]
+        position_ids = torch.cat([torch.arange(3), torch.arange(input_ids.shape[1] - 3)]).unsqueeze(0).to(torch_device)
+
+        with patch(
+            "transformers.models.ministral3.modeling_ministral3.eager_attention_forward", wraps=eager_attention_forward
+        ) as mocked_attention:
+            with torch.no_grad():
+                model(input_ids, position_ids=position_ids)
+
+        self.assertEqual(mocked_attention.call_count, config.num_hidden_layers)
+        for call in mocked_attention.call_args_list:
+            self.assertIs(call.kwargs.get("position_ids"), position_ids)
 
 
 @require_torch
