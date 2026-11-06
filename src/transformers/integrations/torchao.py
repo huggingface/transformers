@@ -49,21 +49,31 @@ class TorchAoQuantize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
-    def _quantize(self, module, config, *args, **kwargs):
-        """Run quantize_, moving to CUDA first if CPU offloading is active.
+    def _quantize(self, module, config, *args, parameter_name: str | None = None, **kwargs):
+        """Run quantize_, temporarily moving CPU-offloaded weights to an accelerator.
 
-        Some torchao quantization ops (e.g. int4 packing) only have CUDA kernels.
-        When a layer is destined for CPU (e.g. CPU offloading), we temporarily move
-        it to CUDA for quantization, then move the result back to CPU.
+        For custom parameters, move only the active parameter: its siblings may
+        still be on meta or may already have been quantized and offloaded.
         """
         from torchao.quantization import quantize_
 
-        target_device = next(module.parameters()).device
-        if self.hf_quantizer.offload_to_cpu and target_device.type == "cpu":
+        param = module._parameters[parameter_name] if parameter_name is not None else next(module.parameters())
+        if self.hf_quantizer.offload_to_cpu and param.device.type == "cpu":
             device = get_current_accelerator() or "cuda"
-            module.to(device)
+            if parameter_name is None:
+                module.to(device)
+            else:
+                module._parameters[parameter_name] = torch.nn.Parameter(
+                    param.to(device), requires_grad=param.requires_grad
+                )
             quantize_(module, config, *args, **kwargs)
-            module.to("cpu")
+            if parameter_name is None:
+                module.to("cpu")
+            else:
+                param = module._parameters[parameter_name]
+                module._parameters[parameter_name] = torch.nn.Parameter(
+                    param.to("cpu"), requires_grad=param.requires_grad
+                )
         else:
             quantize_(module, config, *args, **kwargs)
         # TP must use local tensors because this quantization path does not support DTensor inputs or weights.
@@ -146,7 +156,7 @@ class TorchAoQuantize(ConversionOps):
                 else:
                     # need to apply to custom param name
                     custom_param_fqn_config = FqnToConfig({top_level_param_name: c})
-                    self._quantize(module, custom_param_fqn_config, filter_fn=None)
+                    self._quantize(module, custom_param_fqn_config, parameter_name=tensor_name, filter_fn=None)
                     missing_keys.discard(full_layer_name)
                     module._is_hf_initialized = True
                     for param in module.parameters(recurse=False):
@@ -156,7 +166,11 @@ class TorchAoQuantize(ConversionOps):
 
         if is_embedding_param and untie_embedding_weights:
             lm_head = module.weight.clone()
-        self._quantize(module, self.hf_quantizer.quantization_config.get_apply_tensor_subclass())
+        if tensor_name == "weight":
+            self._quantize(module, config)
+        else:
+            # Other parameters in this module may still be on meta while loading.
+            self._quantize(module, FqnToConfig({tensor_name: config}), parameter_name=tensor_name, filter_fn=None)
         missing_keys.discard(full_layer_name)
         module._is_hf_initialized = True
         for param in module.parameters(recurse=False):
