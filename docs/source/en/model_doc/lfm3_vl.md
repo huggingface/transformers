@@ -20,8 +20,8 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-LFM3-VL is the vision-language model family built on [LFM3](lfm3) by [Liquid AI](https://liquid.ai/). It takes images
-and videos at their native resolution together with text.
+LFM3-VL is the vision-language model family built on [LFM3](https://huggingface.co/docs/transformers/main/en/model_doc/lfm3)
+by [Liquid AI](https://liquid.ai/). It takes images and videos at their native resolution together with text.
 
 ## Architecture
 

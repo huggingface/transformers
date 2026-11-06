@@ -18,45 +18,15 @@ from types import SimpleNamespace
 
 import numpy as np
 
+from transformers import AutoTokenizer
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
-from transformers.utils import is_tokenizers_available, is_vision_available
+from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import Lfm3VlProcessor, Qwen2VLImageProcessor, Qwen3VLVideoProcessor
-
-if is_tokenizers_available():
-    from tokenizers import Tokenizer, decoders, models, pre_tokenizers
-
-    from transformers import PreTrainedTokenizerFast
-
-
-SPECIAL_TOKENS = {
-    "pad_token": "<|pad|>",
-    "bos_token": "<|startoftext|>",
-    "eos_token": "<|im_end|>",
-    "unk_token": "<unk>",
-}
-VISION_TOKENS = {
-    "image_token": "<|image|>",
-    "video_token": "<|video|>",
-    "vision_start_token": "<|vision_start|>",
-    "vision_end_token": "<|vision_end|>",
-}
-CHAT_TEMPLATE = (
-    "{% for message in messages %}"
-    "<|im_start|>{{ message['role'] }}\n"
-    "{% if message['content'] is string %}{{ message['content'] }}"
-    "{% else %}{% for content in message['content'] %}"
-    "{% if content['type'] == 'image' %}<|vision_start|><|image|><|vision_end|>"
-    "{% elif content['type'] == 'video' %}<|vision_start|><|video|><|vision_end|>"
-    "{% elif content['type'] == 'text' %}{{ content['text'] }}{% endif %}"
-    "{% endfor %}{% endif %}"
-    "<|im_end|>\n{% endfor %}"
-    "{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}"
-)
+    from transformers import Lfm3VlProcessor
 
 
 @require_vision
@@ -73,20 +43,13 @@ class Lfm3VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_tokenizer(cls):
-        """A word-level tokenizer carrying the LFM3-VL vision tokens as tokenizer attributes, like the released one."""
-        words = ["▁", "▁lower", "▁newer", "▁upper", "▁older", "▁longer", "▁string", "<|im_start|>", "▁seconds"]
-        vocabulary = {token: index for index, token in enumerate([*SPECIAL_TOKENS.values(), *VISION_TOKENS.values()])}
-        for word in words:
-            vocabulary[word] = len(vocabulary)
-        backend = Tokenizer(models.WordLevel(vocabulary, unk_token="<unk>"))
-        backend.pre_tokenizer = pre_tokenizers.Metaspace()
-        backend.decoder = decoders.Metaspace()
-        return PreTrainedTokenizerFast(tokenizer_object=backend, extra_special_tokens=VISION_TOKENS, **SPECIAL_TOKENS)
+        return AutoTokenizer.from_pretrained("LiquidAI/LFM3-VL-2B")
 
+    # the Hub processor config still names remote-code image and video processors: build the native ones with the
+    # released patch, merge and normalization values and small pixel budgets
     @classmethod
     def _setup_image_processor(cls):
-        # the released patch, merge and normalization values with small pixel budgets
-        return Qwen2VLImageProcessor(
+        return cls._get_component_class_from_processor("image_processor")(
             size={"shortest_edge": 32 * 32, "longest_edge": 64 * 64},
             patch_size=16,
             temporal_patch_size=2,
@@ -97,7 +60,7 @@ class Lfm3VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_video_processor(cls):
-        return Qwen3VLVideoProcessor(
+        return cls._get_component_class_from_processor("video_processor")(
             size={"shortest_edge": 32 * 32, "longest_edge": 64 * 64 * 4},
             image_mean=[0.5, 0.5, 0.5],
             image_std=[0.5, 0.5, 0.5],
@@ -105,9 +68,9 @@ class Lfm3VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             fps=2,
         )
 
-    @staticmethod
-    def prepare_processor_dict():
-        return {"chat_template": CHAT_TEMPLATE}
+    @classmethod
+    def prepare_processor_dict(cls):
+        return {"chat_template": cls._setup_tokenizer().chat_template}
 
     @property
     def video_sampling_expectations(self):
@@ -139,10 +102,6 @@ class Lfm3VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         placeholder = processor.replace_video_token(video_inputs, video_idx=0)
         frame = "<|vision_start|>" + "<|video|>" * 4 + "<|vision_end|>"
         self.assertEqual(placeholder, "<0.5 seconds>" + frame + "<2.5 seconds>" + frame)
-
-    @unittest.skip("The word-level test tokenizer cannot round-trip the frame timestamps")
-    def test_replacement_offsets(self):
-        pass
 
     @unittest.skip("LFM3-VL cannot sample frames from decoded frames without their metadata, like Qwen3-VL")
     def test_apply_chat_template_video_2(self):

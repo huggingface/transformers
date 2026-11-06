@@ -27,25 +27,31 @@ from ..auto import AutoConfig
 @auto_docstring(checkpoint="LiquidAI/LFM3-VL-2B")
 @strict
 class Lfm3VlVisionConfig(PreTrainedConfig):
+    r"""
+    conv_kernel_size (`int`, *optional*, defaults to 3):
+        Kernel size of the depthwise convolution over the patch grid of each frame.
+    """
+
     model_type = "lfm3_vl_vision"
     base_config_key = "vision_config"
-    default_theta = 1_000_000.0
     default_rope_type = "axial"
+    attribute_map = {"embed_dim": "hidden_size", "num_heads": "num_attention_heads"}
 
     hidden_size: int = 1024
     intermediate_size: int = 2560
+    in_channels: int = 3
+    patch_size: int | list[int] | tuple[int, int] = 16
+    spatial_merge_size: int = 2
+    temporal_patch_size: int | list[int] | tuple[int, int] = 2
+    initializer_range: float = 0.02
+    rope_parameters: dict | None = None
+    default_theta = 1_000_000.0
     num_hidden_layers: int = 14
     num_attention_heads: int = 16
     num_key_value_heads: int = 8
     layer_types: list[str] | None = None
-    patch_size: int = 16
-    temporal_patch_size: int = 2
-    in_channels: int = 3
-    spatial_merge_size: int = 2
     conv_kernel_size: int = 3
     norm_eps: float = 1e-5
-    initializer_range: float = 0.02
-    rope_parameters: dict | None = None
 
     def __post_init__(self, **kwargs):
         if self.layer_types is None:

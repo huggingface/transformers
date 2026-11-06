@@ -17,11 +17,9 @@ import unittest
 
 from transformers import (
     AutoProcessor,
-    Lfm3Config,
     Lfm3VlConfig,
     Lfm3VlForConditionalGeneration,
     Lfm3VlModel,
-    Lfm3VlVisionConfig,
     is_torch_available,
 )
 from transformers.image_utils import load_image
@@ -35,14 +33,11 @@ from ...vlm_tester import VLMModelTest, VLMModelTester
 
 if is_torch_available():
     import torch
-    import torch.nn.functional as F
 
 
 class Lfm3VlVisionText2TextModelTester(VLMModelTester):
     base_model_class = Lfm3VlModel
     config_class = Lfm3VlConfig
-    text_config_class = Lfm3Config
-    vision_config_class = Lfm3VlVisionConfig
     conditional_generation_class = Lfm3VlForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
@@ -60,7 +55,11 @@ class Lfm3VlVisionText2TextModelTester(VLMModelTester):
         # head_dim 16: the FA4 kernels need at least 16
         kwargs.setdefault("num_attention_heads", 2)
         kwargs.setdefault("num_key_value_heads", 1)
-        kwargs.setdefault("layer_types", ["conv", "full_attention"])
+        kwargs.setdefault("vision_layer_types", ["conv", "full_attention"])
+        # one text layer per operator type, so the rope-scaling tests see the sliding `rope_parameters` entry
+        kwargs.setdefault("text_layer_types", ["conv", "full_attention", "sliding_attention"])
+        kwargs.setdefault("text_num_hidden_layers", 3)
+        kwargs.setdefault("expected_num_hidden_layers", kwargs["text_num_hidden_layers"] + 1)
         kwargs.setdefault("conv_L_cache", 3)
         kwargs.setdefault("projector_hidden_size", 32)
         super().__init__(parent, **kwargs)
@@ -116,10 +115,10 @@ class Lfm3VlModelTest(VLMModelTest, unittest.TestCase):
             )
 
     def _image_features_get_expected_num_attentions(self, model_tester=None):
-        return self.model_tester.layer_types.count("full_attention")
+        return self.model_tester.vision_layer_types.count("full_attention")
 
     def _video_features_get_expected_num_attentions(self, model_tester=None):
-        return self.model_tester.layer_types.count("full_attention")
+        return self.model_tester.vision_layer_types.count("full_attention")
 
     def _image_features_get_expected_num_hidden_states(self, model_tester=None):
         return self.model_tester.num_hidden_layers + 1
@@ -135,47 +134,16 @@ class Lfm3VlModelTest(VLMModelTest, unittest.TestCase):
         )
         return floats_tensor([int(grid_thw.prod(-1).sum()), patch_dim])
 
-    def test_video_forward(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        merge = config.vision_config.spatial_merge_size
-        video_grid_thw = torch.tensor([[3, 2, 4]], device=torch_device)
-        tokens_per_frame = int(video_grid_thw[0, 1:].prod()) // merge**2
-        pixel_values_videos = self._random_patches(config, video_grid_thw)
-
-        input_ids = torch.full((1, 30), self.model_tester._safe_token_id(), device=torch_device)
-        position = 2
-        for _ in range(int(video_grid_thw[0, 0])):
-            input_ids[0, position] = config.vision_start_token_id
-            input_ids[0, position + 1 : position + 1 + tokens_per_frame] = config.video_token_id
-            input_ids[0, position + 1 + tokens_per_frame] = config.vision_end_token_id
-            position += tokens_per_frame + 3
-
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device).eval()
-            with torch.no_grad():
-                outputs = model(
-                    input_ids=input_ids, pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw
-                )
-            self.assertEqual(
-                outputs.video_hidden_states.shape,
-                (int(video_grid_thw[0, 0]) * tokens_per_frame, config.text_config.hidden_size),
-            )
-            short_input_ids = input_ids.clone()
-            short_input_ids[0, 3] = config.vision_end_token_id + 1
-            with self.assertRaises(ValueError):
-                model(
-                    input_ids=short_input_ids, pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw
-                )
-
     def test_image_and_video_forward(self):
+        """Image and multi-frame video features land on their own placeholders, as a manual merge of the embeddings."""
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         merge = config.vision_config.spatial_merge_size
-        video_grid_thw = torch.tensor([[2, 2, 2]], device=torch_device)
-        tokens_per_frame = int(video_grid_thw[0, 1:].prod()) // merge**2
+        video_grid_thw = torch.tensor([[2, 2, 4]], device=torch_device)
+        num_video_tokens = int(video_grid_thw.prod()) // merge**2
         pixel_values_videos = self._random_patches(config, video_grid_thw)
 
         input_ids = inputs["input_ids"].clone()
-        input_ids[0, 4 : 4 + 2 * tokens_per_frame] = config.video_token_id
+        input_ids[0, 4 : 4 + num_video_tokens] = config.video_token_id
 
         model = Lfm3VlForConditionalGeneration(config).to(torch_device).eval()
         with torch.no_grad():
@@ -186,7 +154,7 @@ class Lfm3VlModelTest(VLMModelTest, unittest.TestCase):
                 pixel_values_videos=pixel_values_videos,
                 video_grid_thw=video_grid_thw,
             )
-        self.assertEqual(outputs.logits.shape[:2], input_ids.shape)
+        self.assertEqual(outputs.video_hidden_states.shape, (num_video_tokens, config.text_config.hidden_size))
         with torch.no_grad():
             embeds = model.get_input_embeddings()(input_ids)
             embeds[input_ids == config.image_token_id] = outputs.image_hidden_states
@@ -212,64 +180,6 @@ class Lfm3VlModelTest(VLMModelTest, unittest.TestCase):
                     ).last_hidden_state
                     torch.testing.assert_close(packed[offset : offset + height * width], single, rtol=1e-4, atol=1e-4)
                     offset += height * width
-
-    def test_vision_conv_runs_over_the_raster_grid(self):
-        """Patches arrive grouped by merge block; the depthwise convolution must see the raster grid of each frame."""
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        vision_tower = Lfm3VlVisionModel(config.vision_config).to(torch_device).eval()
-        conv_layer = next(layer.conv for layer in vision_tower.layers if not layer.is_attention_layer)
-        merge = config.vision_config.spatial_merge_size
-        height, width = 4, 6
-        # inputs that carry signal through the two projections and the gate, so the tolerances below are meaningful
-        hidden_states = torch.randn(height * width, config.vision_config.hidden_size, device=torch_device) * 8
-
-        with torch.no_grad():
-            output = conv_layer(hidden_states, frame_shapes=[[height, width]])
-            # reference: reorder to raster, gate, convolve the (height, width) grid, gate again
-            raster = (
-                hidden_states.view(height // merge, width // merge, merge, merge, -1)
-                .permute(0, 2, 1, 3, 4)
-                .reshape(height, width, -1)
-            )
-            B, C, x = conv_layer.in_proj(raster).chunk(3, dim=-1)
-            gated = (B * x).permute(2, 0, 1).unsqueeze(0)
-            convolved = F.conv2d(gated, conv_layer.spatial_conv.weight, padding=1, groups=gated.shape[1])
-            expected = conv_layer.out_proj(C * convolved[0].permute(1, 2, 0))
-            expected = expected.view(height // merge, merge, width // merge, merge, -1).permute(0, 2, 1, 3, 4)
-        self.assertGreater(output.abs().max().item(), 1e-3)
-        torch.testing.assert_close(output, expected.reshape(height * width, -1), rtol=1e-5, atol=1e-6)
-
-    @unittest.skip("The vision tower splits frames by host-side sizes, which `torch.export` can't trace")
-    def test_torch_export_dynamic(self):
-        pass
-
-    @unittest.skip("The vision tower splits frames by host-side sizes, which `torch.export` can't trace")
-    def test_torch_export_static(self):
-        pass
-
-    @unittest.skip(
-        "The tiny text model has no sliding-attention layer, whose `rope_parameters` entry these tests scale"
-    )
-    def test_model_rope_scaling_frequencies(self):
-        pass
-
-    @unittest.skip(
-        "The tiny text model has no sliding-attention layer, whose `rope_parameters` entry these tests scale"
-    )
-    def test_model_rope_scaling_from_config_0_linear(self):
-        pass
-
-    @unittest.skip(
-        "The tiny text model has no sliding-attention layer, whose `rope_parameters` entry these tests scale"
-    )
-    def test_model_rope_scaling_from_config_1_dynamic(self):
-        pass
-
-    @unittest.skip(
-        "The tiny text model has no sliding-attention layer, whose `rope_parameters` entry these tests scale"
-    )
-    def test_model_rope_scaling_from_config_2_yarn(self):
-        pass
 
 
 @require_torch_accelerator

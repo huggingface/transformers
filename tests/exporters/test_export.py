@@ -159,6 +159,15 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "CUDAGraphs / export failures. TODO: handle in a follow-up PR."
         ),
     },
+    # Every backend, forward export only: the generate path still runs.
+    "forward": {
+        "Lfm3VlModel": (
+            "The vision tower's gated convolution reshapes each frame to its patch grid, which needs host-side "
+            "frame sizes from `grid_thw` (`.tolist()`), so `torch.export` hits `GuardOnDataDependentSymNode`. "
+            "The generate exports pass."
+        ),
+        "Lfm3VlForConditionalGeneration": "Same as `Lfm3VlModel`.",
+    },
     # Every backend, dynamic-shape only.
     "dynamic": {
         "HieraForPreTraining": (
@@ -904,13 +913,16 @@ class ExportTesterMixin:
         for that shape variant on every backend, ``"generate.dynamic"`` for the multi-token decode path,
         ``"static-cache"`` for a variant whose ``generation_config`` requests a static cache,
         ``"<backend>"`` for that backend, and ``"<backend>.<variant>"`` (including
-        ``"<backend>.static-cache"``) for the more-specific intersections.
+        ``"<backend>.static-cache"``) for the more-specific intersections. ``"forward"`` is the counterpart of
+        ``"generate"`` for the other tests.
         """
         scopes = ["all"]
         if generate:
             scopes.append("generate")
             if dynamic:
                 scopes.append("generate.dynamic")
+        else:
+            scopes.append("forward")
         scopes.append("dynamic" if dynamic else "static")
         if static_cache:
             scopes.append("static-cache")
