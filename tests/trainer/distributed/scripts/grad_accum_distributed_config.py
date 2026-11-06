@@ -20,10 +20,8 @@ Launched via ``torchrun`` from ``test_trainer_distributed_transformers.py``.
 """
 
 import argparse
-import os
 from datetime import timedelta
 
-import torch
 import torch.distributed as dist
 from datasets import Dataset
 
@@ -50,34 +48,31 @@ def main():
     parser.add_argument("--dp_replicate_size", type=int, default=1)
     script_args = parser.parse_args()
 
-    if torch_device != "cpu":
-        torch.accelerator.set_device_index(int(os.environ["LOCAL_RANK"]))
     dist.init_process_group(backend=get_distributed_backend(torch_device), timeout=timedelta(seconds=60))
-    try:
-        distributed_config = DistributedConfig(
-            dp_replicate_size=script_args.dp_replicate_size,
-            fsdp_size=dist.get_world_size() // script_args.dp_replicate_size,
-        )
-        model = AutoModelForCausalLM.from_pretrained(
-            "trl-internal-testing/tiny-Qwen3ForCausalLM", distributed_config=distributed_config
-        )
-        input_ids = [[i + 10] * 8 for i in range(32)]
-        args = TrainingArguments(
-            output_dir=script_args.output_dir,
-            max_steps=2,
-            per_device_train_batch_size=1,
-            gradient_accumulation_steps=4,
-            save_strategy="no",
-        )
-        callback = GradientReductionCallback()
-        dataset = Dataset.from_dict({"input_ids": input_ids, "labels": input_ids})
-        Trainer(model=model, args=args, train_dataset=dataset, callbacks=[callback]).train()
+    distributed_config = DistributedConfig(
+        dp_replicate_size=script_args.dp_replicate_size,
+        fsdp_size=dist.get_world_size() // script_args.dp_replicate_size,
+    )
+    model = AutoModelForCausalLM.from_pretrained(
+        "trl-internal-testing/tiny-Qwen3ForCausalLM", distributed_config=distributed_config
+    )
+    input_ids = [[i + 10] * 8 for i in range(32)]
+    args = TrainingArguments(
+        output_dir=script_args.output_dir,
+        max_steps=2,
+        per_device_train_batch_size=1,
+        gradient_accumulation_steps=4,
+        save_strategy="no",
+    )
+    callback = GradientReductionCallback()
+    dataset = Dataset.from_dict({"input_ids": input_ids, "labels": input_ids})
+    trainer = Trainer(model=model, args=args, train_dataset=dataset, callbacks=[callback])
+    trainer.train()
 
-        # 3 micro-batches without reduction, then the reduced gradients of the optimizer step, twice
-        expected = [False, False, False, True] * 2
-        assert callback.reduced == expected, f"rank {dist.get_rank()}: {callback.reduced} != {expected}"
-    finally:
-        dist.destroy_process_group()
+    # 3 micro-batches without reduction, then the reduced gradients of the optimizer step, twice
+    expected = [False, False, False, True] * 2
+    assert callback.reduced == expected, f"rank {dist.get_rank()}: {callback.reduced} != {expected}"
+    trainer.end()
 
 
 if __name__ == "__main__":
