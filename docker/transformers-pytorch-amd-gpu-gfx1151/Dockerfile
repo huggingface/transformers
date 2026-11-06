@@ -211,6 +211,16 @@ RUN cd transformers && python3 setup.py develop
 # tested on NVIDIA either.
 RUN python3 -m pip uninstall -y py3nvml pynvml nvidia-ml-py apex || true
 
+# pytest-rerunfailures 16.7, over transformers[testing]'s <16.0 (that pin is for
+# pytest-rerunfailures#303, fixed in 16.0.1). Before 16.7, when an xdist worker
+# dies -- an OOM kill loading a big checkpoint -- the controller's StatusDB
+# thread spins on recv() of the dead worker's socket and nothing is scheduled
+# again: the job idles, GPU at ~1%, until its timeout. That looked like a KFD
+# wedge; it is not. 16.7 raises on EOF (pytest-rerunfailures#358). Not in the
+# constraints files, and --no-deps, for the reason urllib3 has its own step
+# below: a constraint would make the [testing] install unresolvable.
+RUN python3 -m pip install --no-cache-dir --no-deps "pytest-rerunfailures==16.7"
+
 # `kernels` is pinned in below, not uninstalled; see the note there.
 
 # Common extra deps used across the test suite. scipy, librosa and soundfile
@@ -387,4 +397,6 @@ ENV LOCAL_KERNELS=Atlas-Inference/gdn=/opt/hub-kernels/gdn/build/torch214-cxx11-
 # Last: urllib3 must still be 2.x (pinned on the kernels step above, against
 # transformers[testing]'s <2) and kernels must still import. A later step that
 # resolved deps would silently move urllib3 back to 1.26 and break kernels' tuf.
-RUN python3 -c "import urllib3, kernels; assert urllib3.__version__.startswith('2.'), urllib3.__version__"
+# The same resolve would take pytest-rerunfailures back below 16.7.
+RUN python3 -c "import urllib3, kernels; assert urllib3.__version__.startswith('2.'), urllib3.__version__; \
+from importlib.metadata import version as v; assert v('pytest-rerunfailures') == '16.7', v('pytest-rerunfailures')"
