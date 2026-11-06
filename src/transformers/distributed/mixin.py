@@ -263,9 +263,10 @@ class DistributedMixin:
                     f"or set `{kind}_size=1`."
                 )
 
-        if "ep_dispatch_experts" in ep_plan.values() and "ep_router" in ep_plan.values():
+        if "ep_router" in ep_plan.values():
             raise ValueError(
-                "`ep_dispatch_experts` routes tokens itself; remove the `ep_router` rules from `ep_plan`."
+                "The `ep_router` style was removed. Name the experts `ep_dispatch_experts` and drop the router rule. "
+                '`DistributedConfig(ep_implementation="all_reduce")` gives the same masking and all-reduce.'
             )
 
         # EP rules take precedence: drop TP rules on EP modules and their children.
@@ -324,10 +325,7 @@ class DistributedMixin:
             tp_mesh = mesh_manager.get_mesh("tp")
             ep_mesh = mesh_manager.get_mesh("ep")
 
-            if {"ep_router", "moe_tp_experts"}.issubset(ep_plan.values()):
-                # Legacy masked EP: the EP group is the TP group, every rank keeps every token.
-                model = apply_tensor_parallelism(model, tp_mesh, ep_plan)
-            elif "ep_dispatch_experts" in ep_plan.values():
+            if "ep_dispatch_experts" in ep_plan.values():
                 # EP + DP with tp_size >= 1: the ranks of a TP group share the same batch. If we want a specific token,
                 # we will have to slice the batch here in order to avoid computing tp_size times the same batch.
                 model = apply_expert_parallelism(
