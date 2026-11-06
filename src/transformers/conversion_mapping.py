@@ -2205,21 +2205,13 @@ def _build_checkpoint_conversion_mapping():
             operations=[MergeModulelist(dim=0)],
         ),
     ]
-    # Original `OpenGVLab/InternVL2-*` checkpoints declare `model_type: "internvl_chat"` and store a
-    # different weight layout than the native `InternVLForConditionalGeneration`. These rules map the
-    # original names onto the native ones (and split the fused vision `attn.qkv`), so the checkpoints
-    # load without remote code. Keyed on `internvl_chat` rather than `internvl` so that native
-    # checkpoints keep the plain `llava` mapping, which `test_reverse_loading_mapping` checks against
-    # the native serialized keys.
+    # Keyed on `internvl_chat` so that native `internvl` checkpoints keep the plain `llava` mapping
     mapping["internvl_chat"] = [
-        # Language model (Qwen2 / InternLM2 backbone).
         WeightRenaming(source_patterns=r"^language_model\.lm_head", target_patterns="lm_head"),
         WeightRenaming(source_patterns=r"^language_model\.model\.", target_patterns="model.language_model."),
-        # Multi-modal projector (`mlp1.{0,1,3}` -> layer_norm / linear_1 / linear_2).
         WeightRenaming(source_patterns=r"^mlp1\.0\.", target_patterns="model.multi_modal_projector.layer_norm."),
         WeightRenaming(source_patterns=r"^mlp1\.1\.", target_patterns="model.multi_modal_projector.linear_1."),
         WeightRenaming(source_patterns=r"^mlp1\.3\.", target_patterns="model.multi_modal_projector.linear_2."),
-        # Vision embeddings.
         WeightRenaming(
             source_patterns=r"^vision_model\.embeddings\.class_embedding",
             target_patterns="model.vision_tower.embeddings.cls_token",
@@ -2232,18 +2224,18 @@ def _build_checkpoint_conversion_mapping():
             source_patterns=r"^vision_model\.embeddings\.patch_embedding\.",
             target_patterns="model.vision_tower.embeddings.patch_embeddings.projection.",
         ),
-        # Vision encoder: prefix + `layers` -> `layer`, then per-layer leaf renames.
         WeightRenaming(
             source_patterns=r"^vision_model\.encoder\.layers\.",
             target_patterns="model.vision_tower.encoder.layer.",
         ),
         WeightRenaming(source_patterns=r"\.attn\.proj\.", target_patterns=".attention.projection_layer."),
         WeightRenaming(source_patterns=r"\.attn\.qkv\.", target_patterns=".attention.qkv."),
+        WeightRenaming(source_patterns=r"\.attn\.q_norm\.", target_patterns=".attention.q_norm."),
+        WeightRenaming(source_patterns=r"\.attn\.k_norm\.", target_patterns=".attention.k_norm."),
         WeightRenaming(source_patterns=r"\.norm1\.", target_patterns=".layernorm_before."),
         WeightRenaming(source_patterns=r"\.norm2\.", target_patterns=".layernorm_after."),
         WeightRenaming(source_patterns=r"\.ls1$", target_patterns=".lambda_1"),
         WeightRenaming(source_patterns=r"\.ls2$", target_patterns=".lambda_2"),
-        # Split the fused vision attention `qkv` into `q_proj`/`k_proj`/`v_proj`.
         WeightConverter(
             source_patterns="attention.qkv.weight",
             target_patterns=[
