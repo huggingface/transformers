@@ -3073,7 +3073,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 Whether to tokenize the output. If `False`, the output will be a string.
             sanitize_control_tokens (`bool`, defaults to `False`):
                 If set, control tokens that appear in messages, tools or documents are encoded as ordinary text, so
-                only the control tokens written by the chat template itself are encoded as tokens. Control tokens are
+                only the control tokens written by the chat template itself are encoded as tokens. With a tokenizers
+                backend, they are encoded together with the surrounding text, the same way as when a model writes
+                them, so a model's output that contains them encodes back to the same ids. Control tokens are
                 the tokenizer's special tokens, plus the added tokens in `tokenizer.chat_control_tokens`. If that
                 variable is not set, control tokens are inferred from the added tokens that appear in the chat
                 template's text and string literals. Only whole control tokens are sanitized, so if the template joins
