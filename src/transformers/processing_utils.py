@@ -681,11 +681,10 @@ class ProcessorMixin(PushToHubMixin):
                         "and will be removed in v5.29.0. "
                         "Pass it directly to the processor instead."
                     )
-            # return_mm_token_type_ids in text_kwargs has priority for backwards compatibility
+            # return_mm_token_type_ids/return_text_replacement_offsets in text_kwargs have priority for backwards compatibility
             return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop(
                 "return_mm_token_type_ids", merged_kwargs["return_mm_token_type_ids"]
             )
-            # return_text_replacement_offsets in text_kwargs has priority for backwards compatibility
             return_text_replacement_offsets = merged_kwargs["text_kwargs"].pop(
                 "return_text_replacement_offsets", merged_kwargs["return_text_replacement_offsets"]
             )
@@ -2525,11 +2524,10 @@ class OmniModalProcessorMixin(ProcessorMixin):
                         "and will be removed in v5.29.0. "
                         "Pass it directly to the processor instead."
                     )
-            # return_mm_token_type_ids in text_kwargs has priority for backwards compatibility
+            # return_mm_token_type_ids/return_text_replacement_offsets in text_kwargs have priority for backwards compatibility
             return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop(
                 "return_mm_token_type_ids", merged_kwargs["return_mm_token_type_ids"]
             )
-            # return_text_replacement_offsets in text_kwargs has priority for backwards compatibility
             return_text_replacement_offsets = merged_kwargs["text_kwargs"].pop(
                 "return_text_replacement_offsets", merged_kwargs["return_text_replacement_offsets"]
             )
