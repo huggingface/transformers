@@ -62,7 +62,7 @@ inputs = processor.apply_chat_template(
     return_tensors="pt",
     return_dict=True,
     tokenize=True,
-).to(model.device)
+).to(model.device, model.dtype)
 
 outputs = model.generate(**inputs, max_new_tokens=64)
 processor.batch_decode(outputs, skip_special_tokens=True)[0]

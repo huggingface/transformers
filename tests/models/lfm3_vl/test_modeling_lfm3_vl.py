@@ -243,7 +243,7 @@ class Lfm3VlIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         model = Lfm3VlForConditionalGeneration.from_pretrained(
             self.model_id, device_map=torch_device, dtype=torch.bfloat16
         )
-        generated_ids = model.generate(**self.inputs, max_new_tokens=24, do_sample=False)
+        generated_ids = model.generate(**self.inputs.to(model.dtype), max_new_tokens=24, do_sample=False)
         text = self.processor.batch_decode(
             generated_ids[:, self.inputs["input_ids"].shape[1] :], skip_special_tokens=True
         )[0]

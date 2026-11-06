@@ -303,19 +303,20 @@ class Lfm3VlVisionShortConv(nn.Module):
         )
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
-    def forward(self, hidden_states: torch.Tensor, frame_shapes: list[list[int]]):
+    def forward(self, hidden_states: torch.Tensor, grid_thw: list[list[int]]):
         B, C, x = self.in_proj(hidden_states).chunk(3, dim=-1)
         gated = B * x
         merge = self.spatial_merge_size
-        # patches arrive in merge-block order: raster each frame to its grid, convolve, and go back
+        # patches arrive in merge-block order: raster the frames of each image or video to their grid, convolve them
+        # as one batch (the frames of an item share a shape), and go back
         conv_outputs = []
-        lengths = [height * width for height, width in frame_shapes]
-        for frame, (height, width) in zip(torch.split(gated, lengths, dim=0), frame_shapes):
-            frame = frame.view(height // merge, width // merge, merge, merge, -1)
-            frame = frame.permute(4, 0, 2, 1, 3).reshape(1, -1, height, width)
-            frame = self.spatial_conv(frame)
-            frame = frame.view(-1, height // merge, merge, width // merge, merge).permute(1, 3, 2, 4, 0)
-            conv_outputs.append(frame.reshape(height * width, -1))
+        lengths = [temporal * height * width for temporal, height, width in grid_thw]
+        for item, (temporal, height, width) in zip(torch.split(gated, lengths, dim=0), grid_thw):
+            item = item.view(temporal, height // merge, width // merge, merge, merge, -1)
+            item = item.permute(0, 5, 1, 3, 2, 4).reshape(temporal, -1, height, width)
+            item = self.spatial_conv(item)
+            item = item.view(temporal, -1, height // merge, merge, width // merge, merge).permute(0, 2, 4, 3, 5, 1)
+            conv_outputs.append(item.reshape(temporal * height * width, -1))
         hidden_states = torch.cat(conv_outputs, dim=0)
         hidden_states = C * hidden_states
         return self.out_proj(hidden_states)
@@ -338,7 +339,7 @@ class Lfm3VlVisionLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        frame_shapes: list[list[int]],
+        grid_thw: list[list[int]],
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
@@ -350,7 +351,7 @@ class Lfm3VlVisionLayer(GradientCheckpointingLayer):
                 **kwargs,
             )
         else:
-            operator_output = self.conv(self.operator_norm(hidden_states), frame_shapes)
+            operator_output = self.conv(self.operator_norm(hidden_states), grid_thw)
         hidden_states = hidden_states + operator_output
         hidden_states = hidden_states + self.feed_forward(self.ffn_norm(hidden_states))
         return hidden_states
@@ -420,9 +421,9 @@ class Lfm3VlVisionModel(Lfm3VlPreTrainedModel):
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
         # diff -> the convolution reshapes each frame to its grid, which needs host-side sizes
-        frame_shapes = grid_thw[:, 1:].repeat_interleave(grid_thw[:, 0], dim=0).tolist()
+        grid_thw_list = grid_thw.tolist()
 
-        hidden_states = self.patch_embed(pixel_values.to(self.patch_embed.weight.dtype))
+        hidden_states = self.patch_embed(pixel_values)
         hidden_states = self.embedding_norm(hidden_states)
         position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
 
@@ -430,7 +431,7 @@ class Lfm3VlVisionModel(Lfm3VlPreTrainedModel):
             hidden_states = layer(
                 hidden_states,
                 cu_seqlens=cu_seqlens,
-                frame_shapes=frame_shapes,
+                grid_thw=grid_thw_list,
                 max_seqlen=max_seqlen,
                 position_embeddings=position_embeddings,
                 **kwargs,
@@ -747,7 +748,7 @@ class Lfm3VlForConditionalGeneration(Lfm3VlPreTrainedModel, GenerationMixin):
 
         >>> inputs = processor.apply_chat_template(
         ...     conversation, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
-        ... )
+        ... ).to(model.device, model.dtype)
 
         >>> outputs = model.generate(**inputs, max_new_tokens=45)
         >>> processor.batch_decode(outputs, skip_special_tokens=True)[0]
