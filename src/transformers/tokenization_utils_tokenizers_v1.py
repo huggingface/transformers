@@ -79,8 +79,12 @@ class TokenizersV1Backend(PreTrainedTokenizerBase):
     def added_tokens_decoder(self) -> dict[int, AddedToken]:
         return self._tokenizer.added_tokens
 
+    @property
+    def added_tokens_encoder(self) -> dict[str, int]:
+        return {token.content: index for index, token in sorted(self.added_tokens_decoder.items())}
+
     def get_added_vocab(self) -> dict[str, int]:
-        return {token.content: index for index, token in self.added_tokens_decoder.items()}
+        return self.added_tokens_encoder
 
     def _add_tokens(self, new_tokens: list[str | AddedToken], special_tokens: bool = False) -> int:
         added_vocab = self.get_added_vocab()
