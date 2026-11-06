@@ -220,7 +220,7 @@ def extract_all_failure_blocks(log):
             if current_name:
                 blocks[current_name] = current_lines
             break
-        elif current_name:
+        elif current_name and not re.match(r"-+ generated xml file: ", line):  # printed by `--junitxml`
             current_lines.append(line)
 
     return blocks

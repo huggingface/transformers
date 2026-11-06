@@ -161,3 +161,76 @@ jobs:
           name: sglang-${{ matrix.suite }}-results
           path: ${{ github.workspace }}/reports/
           if-no-files-found: ignore
+
+  sglang-ci-report:
+    name: "Generate SGLang CI failure report"
+    runs-on:
+      group: aws-m8i-8xl-cache
+    container:
+      image: huggingface/transformers-torch-light
+    # Run when test jobs fail, but not when the run is cancelled (unlike `always()`).
+    if: ${{ !cancelled() }}
+    needs: [sglang-inference]
+    # Override workflow-level permissions to add actions:read (needed to fetch job logs).
+    permissions:
+      actions: read
+      contents: read
+
+    steps:
+      - name: Checkout Transformers
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: huggingface/transformers
+          persist-credentials: false
+          path: transformers
+
+      - name: Generate failure report
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 transformers/utils/analyze_ci_report.py \
+            --run-id "$GITHUB_RUN_ID" \
+            --workflow sglang-ci-caller.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --output-dir ./sglang-ci-reports
+
+      - name: Show new failing tests
+        if: ${{ !cancelled() }}
+        run: |
+          python3 - <<'EOF'
+          import glob, json, sys
+
+          files = glob.glob("sglang-ci-reports/new_failing_tests_*.json")
+          files = [f for f in files if "with_trace" not in f]
+          if not files:
+              print("No new_failing_tests_*.json found — report may have failed to generate.")
+              sys.exit(0)
+
+          with open(files[0]) as f:
+              data = json.load(f)
+
+          total = data.get("total_new_failing", 0)
+          prev_url = data.get("previous_run_url") or "(none)"
+          print(f"Previous run : {prev_url}")
+          print(f"New failures : {total}")
+          print()
+
+          jobs = data.get("jobs", {})
+          if not jobs:
+              print("No new failing tests.")
+          else:
+              for job_name, job in jobs.items():
+                  print(f"  [{job_name}]  ({job['num_failing']} new)")
+                  print(f"    {job['job_url']}")
+                  for t in job["tests"]:
+                      print(f"    - {t}")
+                  print()
+          EOF
+
+      - name: Upload failure reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: sglang-ci-failure-reports
+          path: sglang-ci-reports/
+          if-no-files-found: warn
