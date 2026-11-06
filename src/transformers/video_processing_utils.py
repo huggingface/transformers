@@ -36,7 +36,7 @@ from .utils import (
     auto_docstring,
     copy_func,
     is_torch_available,
-    is_torchcodec_available,
+    is_torchcodec_usable,
     is_torchvision_v2_available,
     is_vision_available,
     logging,
@@ -564,15 +564,15 @@ class VideoProcessorMixin(BaseImageProcessor):
         returned.
         """
         backend = "torchcodec"
-        if not is_torchcodec_available():
+        if not is_torchcodec_usable(decode="video"):
             # `torchvision` is only a valid fallback while it still ships the (now removed) video decoding API.
             if not is_torchvision_video_decoding_available():
                 raise ImportError(
-                    "`torchcodec` is not installed and cannot be used to decode the video by default. "
+                    "`torchcodec` is not installed or can't be loaded, so it cannot decode the video by default. "
                     f"{TORCHVISION_VIDEO_DECODING_ERROR}"
                 )
             warnings.warn(
-                "`torchcodec` is not installed and cannot be used to decode the video by default. "
+                "`torchcodec` is not installed or can't be loaded, so it cannot decode the video by default. "
                 "Falling back to `torchvision`. Note that `torchvision` decoding is deprecated and will be removed in future versions. "
             )
             backend = "torchvision"

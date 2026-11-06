@@ -495,7 +495,7 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
         super().__init__()
         # How the (square) learned position grid is resampled to each image's grid.
         self.num_grid_per_side = int(self.num_positions**0.5)
-        self.interpolation_align_corners = True
+        self.interpolation_align_corners = False
         self.interpolation_mode = "bilinear"
 
     def interpolate_pos_encoding(self, **super_kwargs):
