@@ -338,6 +338,12 @@ various ways models mangle JSON in the wild:
   object literals rather than strict JSON.
 - `string_delims` (list of `[open, close]` pairs, optional): for models that wrap string
   values in custom delimiters instead of `"..."`. Each pair gives an opening and closing marker.
+  Markers inside standard `"..."` strings are ignored, so `'` delimiters still work alongside `"don't"`.
+- `backslash_escapes` (bool, default `false`): enable when `string_delims` strings use backslash
+  escapes. An escaped character never closes the string, and escapes are decoded like Python string
+  literals: `\n`, `\r` and `\t` become control characters, `\'`, `\"` and `\\` become the character
+  itself, and unknown escapes like `\d` are kept as written. Leave it off for models that never escape
+  inside their delimiters, so backslashes stay literal.
 - `allow_non_json` (bool, default `false`): if parsing fails, return the stripped raw text instead
   of raising. Useful as a fallback for fields where the model *usually* emits JSON but occasionally
   drops to plain text.
@@ -349,6 +355,21 @@ almost-but-not-quite-JSON output, so you should only need them for a handful of 
 field = {"args": {"open": "<args>", "close": "</args>", "content": "json", "content_args": {"unquoted_keys": True}}}
 input = '<args>{city: "London"}</args>'
 # Returns: {"args": {"city": "London"}}
+```
+
+For a model that writes Python-style string literals, with `\` escapes:
+
+```python
+field = {
+    "args": {
+        "open": "<args>",
+        "close": "</args>",
+        "content": "json",
+        "content_args": {"string_delims": [["'", "'"]], "backslash_escapes": True},
+    }
+}
+input = r"""<args>{"city": 'Saint-Jean-d\'Angély', "note": 'line one\nline two'}</args>"""
+# Returns: {"args": {"city": "Saint-Jean-d'Angély", "note": "line one\nline two"}}
 ```
 
 #### xml-inline
