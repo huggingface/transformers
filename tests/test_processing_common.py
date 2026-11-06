@@ -1997,7 +1997,7 @@ class ProcessorTesterMixin:
                     )
 
     def test_valid_processor_kwargs_set(self):
-        """Check that processor.valid_processor_kwargs is set to the correct class."""
+        """Check that if a processor defines a custom `ProcessorKwargs` class it is set as `valid_processor_kwargs` on the processor."""
         processor = self.get_processor()
         processor_module = sys.modules[processor.__class__.__module__]
         expected_kwargs_class = vars(processor_module).get(f"{processor.__class__.__name__}Kwargs", ProcessingKwargs)
