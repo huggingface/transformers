@@ -57,7 +57,7 @@ from .core_model_loading import (
 from .distributed import DistributedConfig
 from .distributed.checkpoint import _get_resolved_distributed_checkpoint_files, get_distributed_checkpoint_dir
 from .distributed.mixin import DistributedMixin
-from .distributed.sharding_utils import _dtensor_from_local_like
+from .distributed.sharding_utils import _dtensor_from_local_like, _tied_params_are_equal
 from .distributed.tensor_parallel import verify_tp_plan
 from .distributed.utils import is_local_dist_rank_0
 from .dynamic_module_utils import custom_object_save
@@ -2565,7 +2565,7 @@ class PreTrainedModel(
 
                     # If both are present, check if the weights are exactly similar, and only tie in this case
                     # This check is important, as torch `.bin` checkpoints always contain both keys, referencing the same storage
-                    if not torch.equal(source_param, target_param):
+                    if not _tied_params_are_equal(source_param, target_param):
                         logger.warning(
                             f"The tied weights mapping and config for this model specifies to tie {source_param_name} to "
                             f"{target_param_name}, but both are present in the checkpoints with different values, so we will NOT "
