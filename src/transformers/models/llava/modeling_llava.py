@@ -151,7 +151,6 @@ class LlavaModel(LlavaPreTrainedModel):
         image_sizes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        kwargs = {k: v for k, v in kwargs.items() if v is not None}
         if image_sizes is not None:  # pass only when not-None, not all vision backbones accept it
             kwargs["image_sizes"] = image_sizes
         image_outputs = self.vision_tower(

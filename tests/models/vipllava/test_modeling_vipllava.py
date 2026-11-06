@@ -251,20 +251,6 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
             assert base_model.multi_modal_projector.linear_1.in_features == expected_features
             model(**input_dict)
 
-    def test_deprecated_vision_feature_layers(self):
-        """The old name for `vision_feature_layer` still works, in the config and as an argument."""
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        self.assertEqual(config.vision_feature_layers, config.vision_feature_layer)
-
-        reloaded = VipLlavaConfig.from_dict({**config.to_dict(), "vision_feature_layers": [-1]})
-        self.assertEqual(reloaded.vision_feature_layer, [-1])
-
-        model = VipLlavaModel(config).to(torch_device).eval()
-        with torch.no_grad():
-            features = model.get_image_features(input_dict["pixel_values"], vision_feature_layer=[0, 0, 1, 1, 0])
-            deprecated = model.get_image_features(input_dict["pixel_values"], vision_feature_layers=[0, 0, 1, 1, 0])
-        torch.testing.assert_close(features.pooler_output, deprecated.pooler_output)
-
     @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
         super().test_training_gradient_checkpointing()

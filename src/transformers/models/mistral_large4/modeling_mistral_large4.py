@@ -903,7 +903,6 @@ class MistralLarge4Model(MistralLarge4PreTrainedModel):
         vision_feature_layer: int | list[int] | list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        kwargs = {k: v for k, v in kwargs.items() if v is not None}
         image_outputs = self.vision_tower(
             pixel_values,
             image_sizes=image_sizes,
