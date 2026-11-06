@@ -803,6 +803,7 @@ _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "deep-gemm": {"repo_id": "kernels-community/deep-gemm", "version": 2},
     "sonic-moe": {"repo_id": "kernels-community/sonic-moe", "revision": "ep-support"},
     "nvfp4": {"repo_id": "kernels-community/nvfp4-gemm", "version": 1},
+    "flash-mla": {"repo_id": "kernels-community/flash-mla", "version": 1},
 }
 
 _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}

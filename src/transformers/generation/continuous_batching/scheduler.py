@@ -217,6 +217,11 @@ class Scheduler(ABC):
         # Check safety margin
         in_safety_margin = self._try_to_meet_safety_margin()
 
+        # When the cache asks for it, the requests that are not decoding are batched apart, first, so the decoding
+        # requests stay on the decode fast path
+        if self.cache.prefills_apart:
+            candidates = [state for state in candidates if state.status != RequestStatus.DECODING] or candidates
+
         for state in candidates:
             # If we are outside the safety margin, we only accept decoding requests or the first prefill request
             if not in_safety_margin and scheduled_requests and state.status != RequestStatus.DECODING:

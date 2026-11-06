@@ -37,6 +37,7 @@ from ...integrations import (
     use_kernelized_func,
 )
 from ...integrations.accelerate import force_accelerate_hooks
+from ...integrations.latent_attention_paged import paged_latent_attention
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -294,29 +295,30 @@ class KimiLinearAttention(nn.Module):
 
         # Cache read / write is performed while latent KV is still compressed
         paged_cache = kwargs.get("cache")
-        if paged_cache is not None:  # continuous batching
+        if paged_cache is not None and kwargs.get("block_table") is None:  # continuous batching
             latent = torch.cat((kv_nope, k_rot), dim=-1)[0, 0]
             latent = paged_cache.update_rows(self.layer_idx, {"latent": latent}, kwargs)["latent"]
             kv_nope, k_rot = latent[None, None].split([self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
         elif past_key_values is not None:
             kv_nope, k_rot = past_key_values.update(kv_nope, k_rot, self.layer_idx)
 
-        key_states, value_states = self.expand_kv(kv_nope, k_rot)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
+        if kwargs.get("block_table") is not None:  # decode fast path of continuous batching
+            attn_output, attn_weights = paged_latent_attention(self, query_states, kv_nope, k_rot, **kwargs)
+        else:
+            key_states, value_states = self.expand_kv(kv_nope, k_rot)
+            attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+                self.config._attn_implementation, eager_attention_forward
+            )
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                scaling=self.scaling,
+                **kwargs,
+            )
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
