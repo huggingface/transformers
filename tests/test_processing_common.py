@@ -2018,16 +2018,22 @@ class ProcessorTesterMixin:
 
             # Also add nested kwargs as _merge_kwargs promotes flat to nested kwargs.
             if is_typeddict(annotation):
-                if annotation.__name__.startswith("Deprecated"):
-                    # Fall back to default in case class is Deprecated
-                    annotation = {
-                        "text_kwargs": TextKwargs,
-                        "images_kwargs": ImagesKwargs,
-                        "videos_kwargs": VideosKwargs,
-                        "audio_kwargs": AudioKwargs,
-                    }[name]
                 kwargs_names.update(annotation.__annotations__)
         return kwargs_names
+
+    # TODO: Remove this method once we remove all the deprecated processor kwargs in v5.29.0
+    def _get_deprecated_processor_kwargs_names(self):
+        base_kwargs = {
+            "text_kwargs": TextKwargs,
+            "images_kwargs": ImagesKwargs,
+            "videos_kwargs": VideosKwargs,
+            "audio_kwargs": AudioKwargs,
+        }
+        deprecated_names = set()
+        for name, annotation in self.processor_class.valid_processor_kwargs.__annotations__.items():
+            if is_typeddict(annotation) and annotation.__name__.startswith("Deprecated"):
+                deprecated_names.update(set(annotation.__annotations__) - set(base_kwargs[name].__annotations__))
+        return deprecated_names
 
     def test_init_arguments_not_in_class_attributes(self):
         """Check that explicit `__init__` arguments are not also class attributes.
@@ -2077,6 +2083,8 @@ class ProcessorTesterMixin:
         call_arguments = self._get_explicit_arguments(processor_class.__call__)
 
         overlapping_kwargs = call_arguments & self._get_valid_processor_kwargs_names()
+        # Deprecated nested kwargs are kept for BC and can overlap with the explicit arguments that replace them.
+        overlapping_kwargs -= self._get_deprecated_processor_kwargs_names()
         self.assertFalse(
             overlapping_kwargs,
             f"`{processor_class.__name__}.__call__` has explicit arguments {sorted(overlapping_kwargs)} that are also "
