@@ -29,7 +29,11 @@ from ..image_processing_utils import BaseImageProcessor
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
 from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoImageProcessor
-from ..models.auto.modeling_auto import AutoModelForDepthEstimation, AutoModelForImageToImage
+from ..models.auto.modeling_auto import (
+    MODEL_FOR_DECISION_MAPPING,
+    AutoModelForDepthEstimation,
+    AutoModelForImageToImage,
+)
 from ..models.auto.processing_auto import PROCESSOR_MAPPING, AutoProcessor
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..models.auto.video_processing_auto import AutoVideoProcessor
@@ -69,6 +73,7 @@ _PIPELINE_CLASS_TO_MODULE = {
     "AnyToAnyPipeline": "transformers.pipelines.any_to_any",
     "AudioClassificationPipeline": "transformers.pipelines.audio_classification",
     "AutomaticSpeechRecognitionPipeline": "transformers.pipelines.automatic_speech_recognition",
+    "DecisionPipeline": "transformers.pipelines.decision",
     "DepthEstimationPipeline": "transformers.pipelines.depth_estimation",
     "DocumentQuestionAnsweringPipeline": "transformers.pipelines.document_question_answering",
     "FeatureExtractionPipeline": "transformers.pipelines.feature_extraction",
@@ -113,6 +118,7 @@ if is_torch_available():
         AutoModelForAudioClassification,
         AutoModelForCausalLM,
         AutoModelForCTC,
+        AutoModelForDecision,
         AutoModelForDocumentQuestionAnswering,
         AutoModelForImageClassification,
         AutoModelForImageSegmentation,
@@ -145,6 +151,7 @@ if TYPE_CHECKING:
     from .any_to_any import AnyToAnyPipeline
     from .audio_classification import AudioClassificationPipeline
     from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
+    from .decision import DecisionPipeline
     from .depth_estimation import DepthEstimationPipeline
     from .document_question_answering import DocumentQuestionAnsweringPipeline
     from .feature_extraction import FeatureExtractionPipeline
@@ -297,6 +304,14 @@ SUPPORTED_TASKS = {
         "default": {"model": ("google/owlvit-base-patch32", "cbc355f")},
         "type": "multimodal",
     },
+    "decision": {
+        "impl": "transformers.pipelines.decision.DecisionPipeline",
+        "pt": (AutoModelForDecision, AutoModelForImageTextToText, AutoModelForCausalLM)
+        if is_torch_available()
+        else (),
+        "default": {"model": ("Qwen/Qwen2.5-0.5B-Instruct", "7ae5576")},
+        "type": "multimodal",
+    },
     "depth-estimation": {
         "impl": "transformers.pipelines.depth_estimation.DepthEstimationPipeline",
         "pt": (AutoModelForDepthEstimation,) if is_torch_available() else (),
@@ -405,6 +420,7 @@ def check_task(task: str) -> tuple[str, dict, Any]:
             - `"audio-classification"`
             - `"automatic-speech-recognition"`
             - `"conversational"`
+            - `"decision"`
             - `"depth-estimation"`
             - `"document-question-answering"`
             - `"feature-extraction"`
@@ -465,6 +481,8 @@ def pipeline(task: Literal["any-to-any"], model: str | PreTrainedModel | None = 
 def pipeline(task: Literal["audio-classification"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> AudioClassificationPipeline: ...
 @overload
 def pipeline(task: Literal["automatic-speech-recognition"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> AutomaticSpeechRecognitionPipeline: ...
+@overload
+def pipeline(task: Literal["decision"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> DecisionPipeline: ...
 @overload
 def pipeline(task: Literal["depth-estimation"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> DepthEstimationPipeline: ...
 @overload
@@ -785,6 +803,7 @@ def pipeline(
 
             - `"audio-classification"`: will return a [`AudioClassificationPipeline`].
             - `"automatic-speech-recognition"`: will return a [`AutomaticSpeechRecognitionPipeline`].
+            - `"decision"`: will return a [`DecisionPipeline`].
             - `"depth-estimation"`: will return a [`DepthEstimationPipeline`].
             - `"document-question-answering"`: will return a [`DocumentQuestionAnsweringPipeline`].
             - `"feature-extraction"`: will return a [`FeatureExtractionPipeline`].
@@ -1012,6 +1031,13 @@ def pipeline(
                         )
 
         config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+        # A checkpoint shipping a decision head next to its weights: the decision model whose config files it has
+        if task == "decision":
+            from ..decision.modeling_utils import decision_checkpoint_config
+
+            config = decision_checkpoint_config(
+                model, config, revision=hub_kwargs["revision"], token=hub_kwargs["token"]
+            )
 
     custom_tasks = {}
     if config is not None and len(getattr(config, "custom_pipelines", {})) > 0:
@@ -1114,6 +1140,10 @@ def pipeline(
     # Load the correct model if possible
     if isinstance(model, str):
         model_classes = targeted_task["pt"]
+        # A decision model reading the checkpoint, which builds its config from the files of the checkpoint itself
+        if task == "decision" and type(config) in MODEL_FOR_DECISION_MAPPING:
+            model_classes = (MODEL_FOR_DECISION_MAPPING[type(config)],)
+            hub_kwargs.pop("code_revision", None)  # for remote code, which only the auto classes read
         model = load_model(
             adapter_path if adapter_path is not None else model,
             model_classes=model_classes,

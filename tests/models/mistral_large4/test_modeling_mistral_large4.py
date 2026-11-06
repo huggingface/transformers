@@ -186,6 +186,11 @@ class MistralLarge4ModelTest(VLMModelTest, unittest.TestCase):
             attended = (attentions > 0).sum(dim=-1)
             self.assertLessEqual(attended.max().item(), 2)
 
+    def test_left_padding_compatibility(self):
+        # Padded and unpadded inputs score keys of different shapes
+        with indexer_leaky_relu():
+            super().test_left_padding_compatibility()
+
     def test_reverse_loading_mapping(self):
         super().test_reverse_loading_mapping(skip_base_model=True)
 

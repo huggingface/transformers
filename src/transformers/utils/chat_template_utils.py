@@ -462,7 +462,7 @@ def mark_control_tokens(obj: Any, control_tokens_re: re.Pattern) -> Any:
     return obj
 
 
-def encode_marked_chat(tokenizer, chat: str, markers_re: re.Pattern) -> list[int]:
+def encode_marked_chat(tokenizer, chat: str) -> list[int]:
     """
     Encode a chat rendered from inputs marked by `mark_control_tokens`. Marked control tokens are encoded as plain text,
     without their markers, and the rest of the chat, including the template's own control tokens, is encoded normally.
@@ -473,10 +473,10 @@ def encode_marked_chat(tokenizer, chat: str, markers_re: re.Pattern) -> list[int
     Args:
         tokenizer: The tokenizer that rendered the chat.
         chat: The rendered chat.
-        markers_re: A regex that matches a marked control token or a lone marker, from `_get_control_token_patterns`.
     """
     # Splitting on the markers gives [text, marked token, text, marked token, ..., text], with None in place of the
     # token for a lone marker
+    _, markers_re = _get_control_token_patterns(tuple(tokenizer.added_tokens_encoder))
     pieces = markers_re.split(chat)
     newline_ids = tokenizer.encode("\n", add_special_tokens=False)
     ids = tokenizer.encode(pieces[0], add_special_tokens=False)

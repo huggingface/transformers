@@ -2210,6 +2210,27 @@ class ModelArgs:
         "shape": None,
     }
 
+    marks = {
+        "description": """
+    Positions recorded by the `<|mark|>` of a decision template: the number of tokens of the prompt before each of them.
+    """,
+        "shape": "of shape `(num_marks,)`",
+    }
+
+    num_options = {
+        "description": """
+    Number of options of each question of the prompt.
+    """,
+        "shape": "of shape `(num_questions,)`",
+    }
+
+    question_type_ids = {
+        "description": """
+    Type of each question of the prompt, as its index in `Question.questions_types`.
+    """,
+        "shape": "of shape `(num_questions,)`",
+    }
+
     position_embeddings = {
         "description": """
     Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
