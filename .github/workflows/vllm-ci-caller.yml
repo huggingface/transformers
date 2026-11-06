@@ -394,21 +394,23 @@ jobs:
           echo "=== Disk ===" && df -h
 
       - name: Prepare HF memory budget plugin
+        # vLLM's test run doesn't load transformers' root conftest.py, so apply the same psutil cap here
+        # (loaded below via `pytest -p hf_ci_memory`).
         run: |
           cat > /tmp/hf_ci_memory.py << 'EOF'
+          import math
+
           import psutil
-          try:
-              from transformers.testing_utils import get_ci_cpu_memory_budget_gib, patch_psutil_cpu_memory
-              before = psutil.virtual_memory().total / 1024**3
-              budget = get_ci_cpu_memory_budget_gib()
-              if budget is not None:
-                  patch_psutil_cpu_memory(int(budget * 1024**3))
-                  after = psutil.virtual_memory().total / 1024**3
-                  print(f"[HF memory patch] before={before:.1f} GiB  budget={budget:.1f} GiB  after={after:.1f} GiB", flush=True)
-              else:
-                  print(f"[HF memory patch] No budget set, psutil reports {before:.1f} GiB", flush=True)
-          except Exception as e:
-              print(f"[HF memory patch] Skipped: {e}", flush=True)
+
+          from transformers.testing_utils import get_cpu_ram_total_gib, patch_psutil_cpu_memory
+
+
+          before = psutil.virtual_memory().total / 1024**3
+          limit = get_cpu_ram_total_gib()
+          if not math.isinf(limit):
+              patch_psutil_cpu_memory(int(limit * 1024**3))
+          after = psutil.virtual_memory().total / 1024**3
+          print(f"[HF memory patch] psutil total: {before:.1f} GiB -> {after:.1f} GiB", flush=True)
           EOF
 
       # TODO: deselect test_mtp_draft_loads_mtp_weights (e.g. `--deselect` or `-k "not test_mtp_draft_loads_mtp_weights"`):
