@@ -31,6 +31,8 @@ from transformers.processing_utils import (
     MODALITY_TO_AUTOPROCESSOR_MAPPING,
     AudioKwargs,
     ImagesKwargs,
+    OmniModalProcessingKwargs,
+    OmniModalProcessorMixin,
     ProcessingKwargs,
     TextKwargs,
     VideosKwargs,
@@ -2094,7 +2096,12 @@ class ProcessorTesterMixin:
         """Check that if a processor defines a custom `ProcessorKwargs` class it is set as `valid_processor_kwargs` on the processor."""
         processor = self.get_processor()
         processor_module = sys.modules[processor.__class__.__module__]
-        expected_kwargs_class = vars(processor_module).get(f"{processor.__class__.__name__}Kwargs", ProcessingKwargs)
+        default_kwargs_class = (
+            OmniModalProcessingKwargs if isinstance(processor, OmniModalProcessorMixin) else ProcessingKwargs
+        )
+        expected_kwargs_class = vars(processor_module).get(
+            f"{processor.__class__.__name__}Kwargs", default_kwargs_class
+        )
         self.assertIs(processor.valid_processor_kwargs, expected_kwargs_class)
 
     @staticmethod

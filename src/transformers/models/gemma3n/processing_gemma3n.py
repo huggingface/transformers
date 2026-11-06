@@ -25,7 +25,6 @@ from ...utils.deprecation import deprecate_attr
 
 @auto_docstring
 class Gemma3nProcessor(ProcessorMixin):
-    valid_processor_kwargs = Gemma3nProcessorKwargs
     return_mm_token_type_ids = True
 
     def __init__(

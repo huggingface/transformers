@@ -256,6 +256,7 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
         """
         merged_kwargs = self._merge_kwargs(**kwargs)
         images_kwargs = merged_kwargs["images_kwargs"]
+
         patch_size = images_kwargs.get("patch_size", None) or self.image_processor.patch_size
         pooling_kernel_size = (
             images_kwargs.get("pooling_kernel_size", None) or self.image_processor.pooling_kernel_size

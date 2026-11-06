@@ -451,6 +451,14 @@ class ProcessorArgs:
         "type": "bool",
     }
 
+    load_audio_from_video = {
+        "description": """
+    Whether to load the audio track of the input videos. The audio tokens are interleaved with the video tokens
+    if the model supports it.
+    """,
+        "type": "bool",
+    }
+
     # Standard tokenizer arguments
     add_special_tokens = {
         "description": """

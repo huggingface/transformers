@@ -2794,9 +2794,6 @@ class DeprecatedQwen3OmniMoeVideosKwargs(VideosKwargs, total=False):
 
 class Qwen3OmniMoeProcessorKwargs(Qwen2_5OmniProcessorKwargs, total=False):
     """
-    load_audio_from_video (`bool`, *optional*, defaults to `False`):
-        Whether to incorporate audio information when processing videos. When enabled, audio tokens are
-        interleaved with video tokens based on temporal alignment, creating a unified multimodal representation.
     seconds_per_chunk (`float`, *optional*, defaults to `2.0`):
         The duration (in seconds) of each video chunk when splitting long videos. This parameter controls how
         videos are divided into temporal segments for processing.
@@ -2829,7 +2826,6 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor):
     }
     position_id_per_seconds = 13.0
     n_window = 50
-    load_audio_from_video = False
 
     def __call__(
         self,
@@ -2881,18 +2877,12 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor):
         videos: VideoInput,
         audio: AudioInput | None = None,
         processed_audio: dict | None = None,
-        audio_kwargs: dict | None = None,
         video_to_audio_indices: list | None = None,
-        **kwargs,
+        **kwargs: Unpack[Qwen3OmniMoeProcessorKwargs],
     ):
-        # pop so they are not passed down to video processor
-        load_audio_from_video = kwargs.pop("load_audio_from_video", None)
-        seconds_per_chunk = kwargs.pop("seconds_per_chunk")
-        position_id_per_seconds = kwargs.pop("position_id_per_seconds")
-        kwargs.pop("use_audio_in_video", None)
-        processed_videos = self.video_processor(videos, **kwargs)
+        processed_videos = self.video_processor(videos, **kwargs["videos_kwargs"])
 
-        fps = kwargs.get("fps")
+        fps = kwargs["videos_kwargs"].get("fps")
         fps = fps if fps is not None else 1.0
         video_grid_thw = processed_videos["video_grid_thw"]
         processed_videos["video_second_per_grid"] = [self.video_processor.temporal_patch_size / fps] * len(
@@ -2905,16 +2895,19 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor):
                 processed_videos,
                 video_idx=idx,
                 processed_audio=processed_audio,
-                load_audio_from_video=load_audio_from_video,
                 video_to_audio_indices=video_to_audio_indices,
-                seconds_per_chunk=seconds_per_chunk,
-                position_id_per_seconds=position_id_per_seconds,
+                **kwargs,
             )
             video_replacements.append(replacement_text)
         return processed_videos, video_replacements
 
     def replace_video_with_audio_token(
-        self, video_inputs: dict, video_idx: int, audio_inputs: dict, audio_idx: int, **kwargs
+        self,
+        video_inputs: dict,
+        video_idx: int,
+        audio_inputs: dict,
+        audio_idx: int,
+        **kwargs: Unpack[Qwen3OmniMoeProcessorKwargs],
     ) -> str:
         # Each video grid (`temporal_patch_size` frames) goes at its start time, followed by the audio tokens up to
         # the next grid. Times are counted in position ids, one per audio token

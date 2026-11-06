@@ -232,17 +232,14 @@ class ShieldGemma2Processor(ProcessorMixin):
     ):
         super().validate_inputs(images=images, text=text, **kwargs)
 
-        if images is not None and text is not None:
-            if len(images) != len(text):
+        if text is not None and images is not None:
+            n_images_in_text = [sample.count(self.image_token) for sample in text]
+            n_images_in_images = [len(sublist) for sublist in images]
+            if n_images_in_text != n_images_in_images:
                 raise ValueError(
-                    f"Received inconsistently sized batches of images ({len(images)}) and text ({len(text)})."
+                    f"The number of {self.image_token} tokens in each prompt should be the same as the number of images passed."
+                    f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
                 )
-
-            for prompt, images in zip(text, images):
-                if len(images) != prompt.count(self.boi_token):
-                    raise ValueError(
-                        f"Prompt contained {prompt.count(self.boi_token)} image tokens but received {len(images)} images."
-                    )
 
     def _check_special_mm_tokens(self, text: list[str], text_inputs: "BatchFeature", modalities: list[str]):
         """

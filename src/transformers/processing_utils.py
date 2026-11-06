@@ -474,6 +474,10 @@ class ProcessingKwargs(TypedDict, total=False):
     return_text_replacement_offsets: bool
 
 
+class OmniModalProcessingKwargs(ProcessingKwargs, total=False):
+    load_audio_from_video: bool
+
+
 class TokenizerChatTemplateKwargs(TypedDict, total=False):
     """
     NOTE: `TokenizerChatTemplateKwargs` is deprecated and will be removed in future versions
@@ -610,8 +614,8 @@ class ProcessorMixin(PushToHubMixin):
     videos_kwargs: VideosKwargs
     audio_kwargs: AudioKwargs
 
-    return_mm_token_type_ids: bool = False
-    return_text_replacement_offsets: bool = False
+    return_mm_token_type_ids = False
+    return_text_replacement_offsets = False
 
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):
@@ -2512,6 +2516,10 @@ class OmniModalProcessorMixin(ProcessorMixin):
     for cross-modal interactions.
     """
 
+    valid_processor_kwargs = OmniModalProcessingKwargs
+
+    load_audio_from_video = False
+
     @auto_docstring
     def __call__(
         self,
@@ -2520,7 +2528,7 @@ class OmniModalProcessorMixin(ProcessorMixin):
         videos: VideoInput | None = None,
         audio: AudioInput | None = None,
         audio_from_video_indices: list[int] | None = None,
-        **kwargs: Unpack[ProcessingKwargs],
+        **kwargs: Unpack[OmniModalProcessingKwargs],
     ):
         r"""
         audio_from_video_indices (`list[int]`, *optional*):
@@ -2537,9 +2545,19 @@ class OmniModalProcessorMixin(ProcessorMixin):
             **kwargs,
         )
 
-        # TODO @guarin: move it to processor level argument. Used by EG2 and qwen-omni series
+        if "load_audio_from_video" in merged_kwargs["videos_kwargs"]:
+            logger.warning_once(
+                "Passing `load_audio_from_video` in `videos_kwargs` is deprecated "
+                "and will be removed in v5.29.0. "
+                "Pass it directly to the processor instead."
+            )
+        # "videos_kwargs" has priority for backwards compatibility
         # Without videos there is no audio track to load, so `audio` is processed as usual
-        load_audio_from_video = merged_kwargs["videos_kwargs"].get("load_audio_from_video") and videos is not None
+        load_audio_from_video = (
+            merged_kwargs["videos_kwargs"].pop("load_audio_from_video", merged_kwargs["load_audio_from_video"])
+            and videos is not None
+        )
+        merged_kwargs["load_audio_from_video"] = load_audio_from_video
 
         # Audio of a video has no placeholder in text, so only standalone slots are counted against it
         standalone_audio = audio
@@ -2569,14 +2587,13 @@ class OmniModalProcessorMixin(ProcessorMixin):
                 additional_kwargs = {
                     "audio": audio,
                     "processed_audio": processed_audio,
-                    "audio_kwargs": merged_kwargs["audio_kwargs"],
                     "video_to_audio_indices": video_to_audio_indices,
                 }
                 processed_videos, videos_replacements = self._process_videos(
-                    videos, **merged_kwargs["videos_kwargs"], **additional_kwargs
+                    videos, **additional_kwargs, **merged_kwargs
                 )
             else:
-                processed_videos, videos_replacements = self._process_videos(videos, **merged_kwargs["videos_kwargs"])
+                processed_videos, videos_replacements = self._process_videos(videos, **merged_kwargs)
 
         text_inputs = {}
         return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
@@ -2706,13 +2723,10 @@ class OmniModalProcessorMixin(ProcessorMixin):
         videos: VideoInput,
         audio: AudioInput | None = None,
         processed_audio: dict | None = None,
-        audio_kwargs: dict | None = None,
         video_to_audio_indices: list | None = None,
-        **kwargs: Unpack[VideosKwargs],
+        **kwargs: Unpack[OmniModalProcessingKwargs],
     ):
-        # pop so it is not passed down to video processor
-        load_audio_from_video = kwargs.pop("load_audio_from_video", None)
-        processed_videos = self.video_processor(videos, **kwargs)
+        processed_videos = self.video_processor(videos, **kwargs["videos_kwargs"])
 
         video_replacements = []
         videos = make_batched_videos(videos)
@@ -2721,7 +2735,6 @@ class OmniModalProcessorMixin(ProcessorMixin):
                 processed_videos,
                 video_idx=idx,
                 processed_audio=processed_audio,
-                load_audio_from_video=load_audio_from_video,
                 video_to_audio_indices=video_to_audio_indices,
                 **kwargs,
             )
@@ -2734,9 +2747,8 @@ class OmniModalProcessorMixin(ProcessorMixin):
         video_idx: int,
         audio: AudioInput | None = None,
         processed_audio: dict | None = None,
-        audio_kwargs: dict | None = None,
         video_to_audio_indices: list | None = None,
-        **kwargs: Unpack[VideosKwargs],
+        **kwargs: Unpack[OmniModalProcessingKwargs],
     ) -> str:
         raise NotImplementedError()
 
@@ -2744,7 +2756,12 @@ class OmniModalProcessorMixin(ProcessorMixin):
     # Not used by default and should be called explicitly by overriding `_process_video`
     # since models might have diff conditions to apply video+audio interleaved tokens
     def replace_video_with_audio_token(
-        self, video_inputs: dict, video_idx: int, audio_inputs: dict, audio_idx: int, **kwargs: VideosKwargs
+        self,
+        video_inputs: dict,
+        video_idx: int,
+        audio_inputs: dict,
+        audio_idx: int,
+        **kwargs: Unpack[OmniModalProcessingKwargs],
     ) -> str:
         raise NotImplementedError()
 

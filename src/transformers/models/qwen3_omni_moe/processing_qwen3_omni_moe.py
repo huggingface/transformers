@@ -24,7 +24,14 @@ import numpy as np
 from ...audio_utils import AudioInput
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import MultiModalData, OmniModalProcessorMixin, ProcessingKwargs, Unpack, VideosKwargs
+from ...processing_utils import (
+    MultiModalData,
+    OmniModalProcessingKwargs,
+    OmniModalProcessorMixin,
+    ProcessingKwargs,
+    Unpack,
+    VideosKwargs,
+)
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 from ...utils.deprecation import deprecate_attr
@@ -88,11 +95,8 @@ class DeprecatedQwen3OmniMoeVideosKwargs(VideosKwargs, total=False):
     position_id_per_seconds: int | float
 
 
-class Qwen3OmniMoeProcessorKwargs(ProcessingKwargs, total=False):
+class Qwen3OmniMoeProcessorKwargs(OmniModalProcessingKwargs, total=False):
     """
-    load_audio_from_video (`bool`, *optional*, defaults to `False`):
-        Whether to incorporate audio information when processing videos. When enabled, audio tokens are
-        interleaved with video tokens based on temporal alignment, creating a unified multimodal representation.
     seconds_per_chunk (`float`, *optional*, defaults to `2.0`):
         The duration (in seconds) of each video chunk when splitting long videos. This parameter controls how
         videos are divided into temporal segments for processing.
@@ -105,64 +109,9 @@ class Qwen3OmniMoeProcessorKwargs(ProcessingKwargs, total=False):
 
     videos_kwargs: DeprecatedQwen3OmniMoeVideosKwargs
 
-    load_audio_from_video: bool
     seconds_per_chunk: float
     position_id_per_seconds: int | float
     n_window: int
-
-
-# Redefine kwargs for videos because Qwen-Omni uses some kwargs for processing omni
-# and does not use them in video processor class
-class DeprecatedQwen2_5_OmniVideosKwargs(VideosKwargs, total=False):
-    """
-    min_pixels (`int`, *optional*):
-        Minimum number of pixels (height × width) for video frames after resizing. Frames smaller than this
-        threshold will be upscaled to meet the minimum requirement.
-    max_pixels (`int`, *optional*):
-        Maximum number of pixels (height × width) for video frames after resizing. Frames larger than this
-        threshold will be downscaled to fit within the limit.
-    patch_size (`int`, *optional*):
-        The spatial patch size used by the vision encoder. Video frames are divided into patches of this size
-        in both height and width dimensions.
-    temporal_patch_size (`int`, *optional*):
-        The temporal patch size used by the vision encoder. This determines how many consecutive frames are
-        grouped together as a single temporal patch.
-    merge_size (`int`, *optional*):
-        The merge size used for combining spatial patches. Multiple patches are merged together to reduce the
-        sequence length while maintaining spatial information.
-    min_frames (`int`, *optional*):
-        Minimum number of frames to extract from the video. Videos with fewer frames will be padded or repeated
-        to meet this requirement.
-    max_frames (`int`, *optional*):
-        Maximum number of frames to extract from the video. Longer videos will be truncated or sampled to fit
-        within this limit.
-    load_audio_from_video (`bool`, *optional*, defaults to `False`):
-        Deprecated, use [`Qwen3OmniMoeProcessorKwargs.load_audio_from_video`] instead.
-        Whether to incorporate audio information when processing videos. When enabled, audio tokens are
-        interleaved with video tokens based on temporal alignment, creating a unified multimodal representation.
-    use_audio_in_video (`bool`, *optional*, defaults to `False`):
-        Deprecated arg - use `load_audio_from_video` instead.
-    seconds_per_chunk (`float`, *optional*, defaults to `2.0`):
-        Deprecated, use [`Qwen3OmniMoeProcessorKwargs.seconds_per_chunk`] instead.
-        The duration (in seconds) of each video chunk when splitting long videos. This parameter controls how
-        videos are divided into temporal segments for processing.
-    position_id_per_seconds (`int` or `float`, *optional*, defaults to `25`):
-        Deprecated, use [`Qwen3OmniMoeProcessorKwargs.position_id_per_seconds`] instead.
-        The number of position IDs allocated per second of video. This parameter controls the temporal resolution
-        of position embeddings and is used to align video tokens with audio tokens when `use_audio_in_video=True`.
-    """
-
-    min_pixels: int
-    max_pixels: int
-    patch_size: int
-    temporal_patch_size: int
-    merge_size: int
-    min_frames: int
-    max_frames: int
-    use_audio_in_video: bool
-    load_audio_from_video: bool
-    seconds_per_chunk: float
-    position_id_per_seconds: int | float
 
 
 def _get_feat_extract_output_lengths(input_lengths, n_window=50):
@@ -193,7 +142,6 @@ class Qwen3OmniMoeProcessor(OmniModalProcessorMixin):
         "truncation": False,
         "return_attention_mask": True,
     }
-    load_audio_from_video = False
     seconds_per_chunk = 2.0
     position_id_per_seconds = 13.0
     n_window = 50
@@ -231,21 +179,21 @@ class Qwen3OmniMoeProcessor(OmniModalProcessorMixin):
         # "audio_kwargs" has priority for backwards compatibility. The omni hooks read it from "audio_kwargs"
         audio_kwargs.setdefault("n_window", kwargs.pop("n_window", self.n_window))
         videos_kwargs = dict(kwargs.pop("videos_kwargs", {}))
-        for key in ("seconds_per_chunk", "position_id_per_seconds", "load_audio_from_video"):
+        for key in ("seconds_per_chunk", "position_id_per_seconds"):
             if key in videos_kwargs:
                 logger.warning_once(
                     f"Passing `{key}` in `videos_kwargs` is deprecated "
                     "and will be removed in v5.29.0. "
                     "Pass it directly to the processor instead."
                 )
-            # "videos_kwargs" has priority for backwards compatibility. The omni hooks read them from "videos_kwargs"
-            videos_kwargs.setdefault(key, kwargs.pop(key, getattr(self, key)))
+                # "videos_kwargs" has priority for backwards compatibility
+                kwargs[key] = videos_kwargs.pop(key)
 
         if kwargs.pop("use_audio_in_video", False) or videos_kwargs.pop("use_audio_in_video", False):
             logger.warning(
                 "`use_audio_in_video` is depreacted and will be removed in v5.25, use `load_audio_from_video` instead"
             )
-            videos_kwargs["load_audio_from_video"] = True
+            kwargs["load_audio_from_video"] = True
         return super().__call__(
             images=images, text=text, videos=videos, audio=audio, videos_kwargs=videos_kwargs, **kwargs
         )
@@ -283,18 +231,12 @@ class Qwen3OmniMoeProcessor(OmniModalProcessorMixin):
         videos: VideoInput,
         audio: AudioInput | None = None,
         processed_audio: dict | None = None,
-        audio_kwargs: dict | None = None,
         video_to_audio_indices: list | None = None,
-        **kwargs,
+        **kwargs: Unpack[Qwen3OmniMoeProcessorKwargs],
     ):
-        # pop so they are not passed down to video processor
-        load_audio_from_video = kwargs.pop("load_audio_from_video", None)
-        seconds_per_chunk = kwargs.pop("seconds_per_chunk")
-        position_id_per_seconds = kwargs.pop("position_id_per_seconds")
-        kwargs.pop("use_audio_in_video", None)
-        processed_videos = self.video_processor(videos, **kwargs)
+        processed_videos = self.video_processor(videos, **kwargs["videos_kwargs"])
 
-        fps = kwargs.get("fps")
+        fps = kwargs["videos_kwargs"].get("fps")
         fps = fps if fps is not None else 1.0
         video_grid_thw = processed_videos["video_grid_thw"]
         processed_videos["video_second_per_grid"] = [self.video_processor.temporal_patch_size / fps] * len(
@@ -307,10 +249,8 @@ class Qwen3OmniMoeProcessor(OmniModalProcessorMixin):
                 processed_videos,
                 video_idx=idx,
                 processed_audio=processed_audio,
-                load_audio_from_video=load_audio_from_video,
                 video_to_audio_indices=video_to_audio_indices,
-                seconds_per_chunk=seconds_per_chunk,
-                position_id_per_seconds=position_id_per_seconds,
+                **kwargs,
             )
             video_replacements.append(replacement_text)
         return processed_videos, video_replacements
@@ -329,19 +269,28 @@ class Qwen3OmniMoeProcessor(OmniModalProcessorMixin):
         video_idx: int,
         processed_audio: dict | None = None,
         video_to_audio_indices: list | None = None,
-        **kwargs: Unpack[DeprecatedQwen2_5_OmniVideosKwargs],
+        **kwargs: Unpack[Qwen3OmniMoeProcessorKwargs],
     ) -> str:
         # When loading audio from video and if current video has an associated audio, i.e. no silent
-        if kwargs.get("load_audio_from_video") and video_to_audio_indices[video_idx] is not None:
+        if kwargs["load_audio_from_video"] and video_to_audio_indices[video_idx] is not None:
             return self.replace_video_with_audio_token(
-                video_inputs, video_idx, processed_audio, video_to_audio_indices[video_idx], **kwargs
+                video_inputs,
+                video_idx,
+                processed_audio,
+                video_to_audio_indices[video_idx],
+                **kwargs,
             )
 
         video_seq_length = video_inputs["video_grid_thw"][video_idx].prod() // self.video_processor.merge_size**2
         return self.video_token * video_seq_length
 
     def replace_video_with_audio_token(
-        self, video_inputs: dict, video_idx: int, audio_inputs: dict, audio_idx: int, **kwargs
+        self,
+        video_inputs: dict,
+        video_idx: int,
+        audio_inputs: dict,
+        audio_idx: int,
+        **kwargs: Unpack[Qwen3OmniMoeProcessorKwargs],
     ) -> str:
         # Each video grid (`temporal_patch_size` frames) goes at its start time, followed by the audio tokens up to
         # the next grid. Times are counted in position ids, one per audio token
