@@ -194,6 +194,23 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
 
+
+    def test_encoder_padding_alignment(self):
+        config = self.model_tester.get_config()
+        model = MimiModel(config).to(torch_device).eval()
+
+        frame_size = config.frame_size
+        input_values = floats_tensor([1, config.audio_channels, frame_size + 1]).to(torch_device)
+
+        padding_length = -input_values.shape[-1] % frame_size
+        padded_input_values = torch.nn.functional.pad(input_values, (0, padding_length))
+
+        with torch.no_grad():
+            audio_codes = model.encode(input_values).audio_codes
+            padded_audio_codes = model.encode(padded_input_values).audio_codes
+
+        torch.testing.assert_close(audio_codes, padded_audio_codes)
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
