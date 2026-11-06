@@ -208,6 +208,34 @@ EXPECTED_OUTPUT = [
 assert decoded_outputs == EXPECTED_OUTPUT
 ```
 
+### Training
+
+Pass the target transcripts to `apply_transcription_request` with `transcription`, and the returned `labels` are used to compute the loss.
+
+```python
+from datasets import Audio, load_dataset
+from transformers import AutoProcessor, GlmAsrForConditionalGeneration
+
+model_id = "zai-org/GLM-ASR-Nano-2512"
+NUM_SAMPLES = 2
+
+processor = AutoProcessor.from_pretrained(model_id)
+model = GlmAsrForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+model.train()
+
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+speech_samples = [el["array"] for el in ds["audio"][:NUM_SAMPLES]]
+text_samples = ds["text"][:NUM_SAMPLES]
+
+inputs = processor.apply_transcription_request(speech_samples, transcription=text_samples)
+inputs.to(model.device, dtype=model.dtype)
+
+loss = model(**inputs).loss
+print("Loss:", loss.item())
+loss.backward()
+```
+
 ## GlmAsrEncoderConfig
 
 [[autodoc]] GlmAsrEncoderConfig

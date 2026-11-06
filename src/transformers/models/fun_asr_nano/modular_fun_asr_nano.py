@@ -144,7 +144,8 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
                 Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
                 the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
                 audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
-                `tokenize=True`.
+                `tokenize=True`, except for the `labels`: only `tokenize=True` masks
+                them outside the assistant turn.
             **kwargs:
                 Additional keyword arguments forwarded to [`~FunAsrNanoProcessor.apply_chat_template`].
                 Processor kwargs (for example `text_kwargs`, `audio_kwargs`, ...) should be passed as
@@ -169,6 +170,8 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
         transcriptions = prepare_prompt_input(transcription, batch_size, input_name="transcription", broadcast=False)
         if is_training:
             kwargs["processor_kwargs"] = {"output_labels": True, **kwargs.get("processor_kwargs", {})}
+            # the labels are masked outside the assistant turns, located from the conversation structure
+            kwargs["return_assistant_tokens_mask"] = tokenize
 
         conversations = []
         for audio_item, prompt_text, keyword_list, language_name, transcript in zip(
