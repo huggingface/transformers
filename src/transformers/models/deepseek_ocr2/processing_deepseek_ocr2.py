@@ -77,13 +77,6 @@ class DeepseekOcr2Processor(ProcessorMixin):
         if text is None:
             raise ValueError("You have to specify text.")
 
-        if images is not None:
-            total_placeholders = sum(prompt.count(self.image_token) for prompt in text)
-            if total_placeholders != len(images):
-                raise ValueError(
-                    f"Found {total_placeholders} placeholders across the batch, but have {len(images)} flattened images."
-                )
-
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> TextInput:
         size = kwargs.get("size") or self.image_processor.size
         tile_size = kwargs.get("tile_size") or self.image_processor.tile_size

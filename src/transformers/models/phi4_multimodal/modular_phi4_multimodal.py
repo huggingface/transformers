@@ -93,6 +93,7 @@ class Phi4MultimodalVisionConfig(SiglipVisionConfig):
     crop_size: int = 448
     image_token_id: int = 200010
     feature_layer: int = -2
+    vision_use_head = AttributeError()
 
 
 @auto_docstring(checkpoint="microsoft/Phi-4-multimodal-instruct")
@@ -547,7 +548,7 @@ class Phi4MultimodalImageEmbedding(nn.Module):
 
     def get_img_features(self, img_embeds: torch.Tensor, attention_mask=None) -> torch.Tensor:
         img_processor_output = self.img_processor(
-            img_embeds, patch_attention_mask=attention_mask, output_hidden_states=True
+            img_embeds, patch_attention_mask=attention_mask, output_hidden_states=self.layer_idx
         )
         img_feature = img_processor_output.hidden_states[self.layer_idx]
 

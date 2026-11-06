@@ -34,7 +34,7 @@ from enum import Enum
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import packaging.version
 from packaging import version
@@ -1070,6 +1070,21 @@ def is_openvino_available() -> bool:
 
 
 @lru_cache
+def is_openvino_greater_or_equal(library_version: str, accept_dev: bool = False) -> bool:
+    """
+    Accepts a library version and returns True if the current version of the library is greater than or equal to the
+    given version. If `accept_dev` is True, it will also accept development versions (e.g. 2026.5.0.dev20260901
+    matches 2026.5.0).
+    """
+    available, openvino_version = _is_package_available("openvino", return_version=True)
+    if not available:
+        return False
+    if accept_dev:
+        return version.parse(version.parse(openvino_version).base_version) >= version.parse(library_version)
+    return version.parse(openvino_version) >= version.parse(library_version)
+
+
+@lru_cache
 def is_nncf_available() -> bool:
     return _is_package_available("nncf")[0]
 
@@ -1196,6 +1211,47 @@ def is_decord_available() -> bool:
 @_make_compile_constant
 def is_torchcodec_available() -> bool:
     return _is_package_available("torchcodec")[0]
+
+
+@lru_cache
+@_make_compile_constant
+def is_torchcodec_usable(decode: Literal["image", "audio", "video"]) -> bool:
+    """
+    Checks if torchcodec can decode the given modality: its native libraries must load (they must match the installed
+    torch, which pip doesn't enforce) and, for audio and video, it must have found FFmpeg.
+
+    Only use it when transformers picks torchcodec as a default backend (e.g. `load_audio(backend="auto")`), so a
+    broken install falls back to another backend instead of failing users who never asked for torchcodec. When
+    torchcodec is explicitly requested, import it directly to surface its own error.
+
+    Args:
+        decode (`str`):
+            The modality to decode, one of `"image"`, `"audio"` or `"video"`.
+    """
+    if not is_torchcodec_available():
+        return False
+
+    try:
+        import torchcodec
+    except Exception as error:
+        while error.__cause__ is not None:  # "Could not load this library" hides the missing library / symbol
+            error = error.__cause__
+        logger.warning_once(
+            f"torchcodec is installed but failed to load ({error}), so it will not be used. Check its requirements "
+            "(e.g. a build matching the installed torch): see "
+            "https://github.com/meta-pytorch/torchcodec#installing-torchcodec."
+        )
+        return False
+
+    # Since 0.16, torchcodec imports even when FFmpeg can't be loaded (its image decoders don't need it) and sets
+    # `ffmpeg_major_version` to None. Older versions fail to import instead.
+    if decode != "image" and is_torchcodec_greater_or_equal("0.16") and torchcodec.ffmpeg_major_version is None:
+        logger.warning_once(
+            "torchcodec loaded but could not load FFmpeg, so it will not be used to decode audio or video. Install a "
+            "supported FFmpeg: https://github.com/meta-pytorch/torchcodec#installing-torchcodec."
+        )
+        return False
+    return True
 
 
 @lru_cache
@@ -2017,10 +2073,7 @@ Please note that you may need to restart your runtime after installation.
 """
 
 TORCHCODEC_IMPORT_ERROR = """
-{0} requires the TorchCodec (https://github.com/pytorch/torchcodec) library, but it was not found in your environment. You can install it with:
-```
-pip install torchcodec
-```
+{0} requires the TorchCodec library, but it was not found in your environment. See https://github.com/meta-pytorch/torchcodec#installing-torchcodec to install it.
 Please note that you may need to restart your runtime after installation.
 """
 
