@@ -2085,6 +2085,11 @@ class ModelTesterMixin(ExportTesterMixin):
                     count,
                     f"The loss of {model_class.__name__} needs a count in `LOSS_ITEM_COUNTS` taking fields of the batch",
                 )
+                # The Trainer only passes `num_items_in_batch` to models accepting loss kwargs
+                self.assertTrue(
+                    getattr(model, "accepts_loss_kwargs", True),
+                    f"{model_class.__name__} sets `accepts_loss_kwargs = False`, the Trainer passes it no `num_items_in_batch`",
+                )
                 loss = model(**inputs).loss
                 self.assertIsNotNone(loss, f"{model_class.__name__} computes no loss from `labels`")
                 # With twice the count, the loss is halved
