@@ -204,6 +204,19 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
             )
         return inputs_dict
 
+    def test_num_items_in_batch(self):
+        # Pad the end of the first codebook: the loss skips padding, and the codebooks get different label counts
+        prepare_for_class = self._prepare_for_class
+
+        def prepare_with_padding(inputs_dict, model_class, return_labels=False):
+            inputs = prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+            if return_labels:
+                inputs["labels"][:, -2:, 0] = self.model_tester.pad_token_id
+            return inputs
+
+        self._prepare_for_class = prepare_with_padding
+        super().test_num_items_in_batch()
+
     # Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenDecoderTest.check_training_gradient_checkpointing with Musicgen->MusicgenMelody
     def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
         if not self.model_tester.is_training:

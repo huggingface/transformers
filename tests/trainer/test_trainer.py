@@ -46,6 +46,8 @@ from transformers import (
     LlamaForCausalLM,
     Trainer,
     TrainingArguments,
+    XLMConfig,
+    XLMWithLMHeadModel,
     default_data_collator,
     logging,
 )
@@ -380,7 +382,6 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
                 train_dataset=self._ga_dataset,
                 data_collator=self._ga_data_collator,
             )
-            self.assertTrue(trainer._loss_shifts_labels)
 
             # batch[0]: 5 valid label positions, 3 padding (-100) → 5 - 1 = 4 after the shift.
             # batch[1]: 8 valid label positions, 0 padding         → 8 - 1 = 7 after the shift.
@@ -411,18 +412,12 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_num_items_in_batch_non_causal_lm(self):
         """For non-causal-LM losses, `_get_num_items_in_batch` must count the full label tensor."""
         with tempfile.TemporaryDirectory() as tmp_dir:
-            config = LlamaConfig(
-                vocab_size=64, hidden_size=16, intermediate_size=32, num_hidden_layers=2, num_attention_heads=2
-            )
-            # ForTokenClassification → LOSS_MAPPING entry is not ForCausalLMLoss → no shift.
-            from transformers import LlamaForTokenClassification
-
-            model = LlamaForTokenClassification(config)
+            # Its loss is `ForMaskedLMLoss`, which does not shift the labels
+            model = XLMWithLMHeadModel(XLMConfig(vocab_size=64, emb_dim=16, n_layers=1, n_heads=2))
             trainer = Trainer(
                 model=model,
                 args=TrainingArguments(output_dir=tmp_dir, per_device_train_batch_size=2),
             )
-            self.assertFalse(trainer._loss_shifts_labels)
 
             # 5 valid + 8 valid = 13 (no shift).
             batch_samples = [
@@ -463,7 +458,6 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
                 model=model,
                 args=TrainingArguments(output_dir=tmp_dir, per_device_train_batch_size=2),
             )
-            self.assertFalse(trainer._loss_shifts_labels)
 
             # 5 valid + 8 valid = 13, counted in full (no shift).
             batch_samples = [
@@ -475,13 +469,9 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @require_torch_non_multi_accelerator
     def test_num_items_in_batch_keeps_fraction_under_model_parallelism(self):
-        from transformers import LlamaForTokenClassification
-
-        config = LlamaConfig(
-            vocab_size=64, hidden_size=16, intermediate_size=32, num_hidden_layers=2, num_attention_heads=2
-        )
+        model = XLMWithLMHeadModel(XLMConfig(vocab_size=64, emb_dim=16, n_layers=1, n_heads=2))
         with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = Trainer(model=LlamaForTokenClassification(config), args=TrainingArguments(output_dir=tmp_dir))
+            trainer = Trainer(model=model, args=TrainingArguments(output_dir=tmp_dir))
             batch_samples = [{"labels": torch.tensor([[1, 2, 3, -100]])}]
             with patch.object(trainer, "get_cp_size", return_value=2):
                 num_items = trainer._get_num_items_in_batch(batch_samples, torch.device("cpu"))

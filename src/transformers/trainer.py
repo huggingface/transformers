@@ -72,7 +72,7 @@ from .integrations.liger import apply_liger_kernel
 from .integrations.neftune import activate_neftune, deactivate_neftune
 from .integrations.peft import MIN_PEFT_VERSION
 from .integrations.tpu import save_tpu_checkpoint, tpu_spmd_dataloader, wrap_model_xla_fsdp
-from .loss.loss_utils import LOSS_MAPPING, ForCausalLMLoss
+from .loss.loss_utils import count_labels, get_num_items_count
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, unwrap_model
 from .models.auto.modeling_auto import (
@@ -531,18 +531,6 @@ class Trainer:
         default_label_names = find_labels(model_to_inspect.__class__)
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
         self.can_return_loss = can_return_loss(model_to_inspect.__class__)
-
-        # Causal LM losses shift labels internally (predictions at position i target label[i+1]), so position 0 of
-        # each row is never a prediction target. The valid-prediction count used by `num_items_in_batch` must therefore
-        # be taken over `labels[..., 1:]`, not the full label tensor. Inspect the actual loss function via
-        # LOSS_MAPPING so model-specific loss_types that route to ForCausalLMLoss (e.g. GPT2LMHeadModel)
-        # are caught too. Encoder-decoder models are excluded: their loss is aligned with unshifted targets (usually
-        # because they feed right-shifted `decoder_input_ids` to the decoder), so every non-`-100` label is a
-        # prediction target and the decoder-only `labels[..., 1:]` counting rule must not apply -- it would
-        # under-count and over-scale the loss.
-        self._loss_shifts_labels = LOSS_MAPPING.get(
-            getattr(model_to_inspect, "loss_type", None)
-        ) is ForCausalLMLoss and not getattr(getattr(model_to_inspect, "config", None), "is_encoder_decoder", False)
 
         if self.args.label_smoothing_factor != 0:
             if getattr(self.model.config, "problem_type", None) == "multi_label_classification":
@@ -2305,36 +2293,18 @@ class Trainer:
             None if the number of items in the batch doesn't need to be computed else the number of items in the batch
         """
         num_items_in_batch = None
-        count_num_items_in_batch = (
-            len(batch_samples) > 0
-            and "labels" in batch_samples[0]
-            and (
-                # num_items_in_batch is passed to model forward
-                # https://github.com/huggingface/transformers/blob/v4.49.0/src/transformers/trainer.py#L3757
-                self.model_accepts_loss_kwargs
-                # num_items_in_batch is passed to compute_loss_func
-                # https://github.com/huggingface/transformers/blob/v4.49.0/src/transformers/trainer.py#L3773
-                or self.compute_loss_func is not None
-                # num_items_in_batch is also verified if (self.model_accepts_loss_kwargs or self.compute_loss_func)
-                # https://github.com/huggingface/transformers/blob/v4.49.0/src/transformers/trainer.py#L3790
-            )
-        )
-        if count_num_items_in_batch:
-            # For now we don't support object detection
-            try:
-                # Causal LM losses shift labels; count over `labels[..., 1:]` to avoid over-counting position 0.
-                # If the collator already provides `shift_labels` (e.g. padding-free collators), use it as-is.
-                labels_for_count = [
-                    batch["shift_labels"]
-                    if "shift_labels" in batch
-                    else batch["labels"][..., 1:]
-                    if self._loss_shifts_labels
-                    else batch["labels"]
-                    for batch in batch_samples
-                ]
-                num_items_in_batch = sum(labels.ne(-100).sum() for labels in labels_for_count)
-            except (TypeError, AttributeError):
-                pass
+        if batch_samples:
+            default = count_labels if self.compute_loss_func is not None else None
+            count = get_num_items_count(unwrap_peft_model(self.model), batch_samples[0], default=default)
+            if self.compute_loss_func is None and not self.model_accepts_loss_kwargs:
+                # The model's forward can't take `num_items_in_batch`
+                count = None
+            if count is not None:
+                # For now we don't support object detection
+                try:
+                    num_items_in_batch = sum(count(batch) for batch in batch_samples)
+                except (TypeError, AttributeError):
+                    pass
 
         if num_items_in_batch is not None:
             if self.args.average_tokens_across_devices:

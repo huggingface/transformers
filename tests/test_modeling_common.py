@@ -59,7 +59,7 @@ from transformers.integrations.moe import (
     sonicmoe_experts_forward,
 )
 from transformers.integrations.sonicmoe import is_sonicmoe_loadable
-from transformers.loss.loss_utils import LOSS_MAPPING, ForCausalLMLoss
+from transformers.loss.loss_utils import get_num_items_count
 from transformers.modeling_layers import GradientCheckpointingLayer
 from transformers.modeling_utils import FLASH_ATTN_KERNEL_FALLBACK, _get_tied_weight_keys
 from transformers.models.auto import get_values
@@ -2044,44 +2044,69 @@ class ModelTesterMixin(ExportTesterMixin):
         losses up. So with twice this batch's label count, the loss must be half the plain loss, router aux loss
         included.
         """
-        head_names = {model_class.__name__ for model_class in self.all_model_classes}
         model_classes = []
         for model_class in self.all_model_classes:
             forward_params = inspect.signature(model_class.forward).parameters
-            # Fixed so far: MoE heads, and every head of text decoder models (a causal LM head and no masked LM head)
-            supports_num_items_in_batch = "output_router_logits" in forward_params or (
+            # Fixed so far: MoE heads (not MoE base models, which compute no loss from `labels`), and causal LM heads
+            # of text models
+            if ("output_router_logits" in forward_params and "labels" in forward_params) or (
                 model_class.input_modalities in ("text", ("text",))
-                and bool(head_names & set(get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES)))
-                and not head_names & set(get_values(MODEL_FOR_MASKED_LM_MAPPING_NAMES))
-            )
-            if "labels" in forward_params and supports_num_items_in_batch:
+                and model_class.__name__ in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES)
+            ):
                 model_classes.append(model_class)
         if not model_classes:
             self.skipTest(reason="No head to check computes a loss from `labels`")
 
-        for model_class in model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config).to(torch_device).eval()
+        def prepare_inputs(model_class, ignored_label=None):
+            _, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             if "output_router_logits" in inspect.signature(model_class.forward).parameters:
                 inputs["output_router_logits"] = True
             labels = inputs["labels"]
-            if labels.ndim == 2 and not labels.is_floating_point():
-                # Token labels: ignore the last one of each row, the count must skip it like the loss does
+            if not labels.is_floating_point():
                 labels = labels.clone()
-                labels[:, -1] = -100
+                # Token labels: ignore the last one of each row, the count must skip it like the loss does
+                if labels.ndim == 2:
+                    labels[:, -1] = -100
+                if ignored_label is not None:
+                    labels[..., ignored_label] = -100
                 inputs["labels"] = labels
-            # Same count as the Trainer: a causal LM loss never predicts the first token of a row
-            if LOSS_MAPPING.get(model.loss_type) is ForCausalLMLoss and not config.is_encoder_decoder:
-                labels = labels[..., 1:]
-            num_items_in_batch = 2 * labels.ne(-100).sum()
+            return inputs
+
+        for model_class in model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config).to(torch_device).eval()
+            inputs = prepare_inputs(model_class)
 
             with self.subTest(model_class.__name__), torch.no_grad():
-                loss = getattr(model(**inputs), "loss", None)
-                # Only the heads computing a loss from `labels`
-                if loss is not None:
-                    half_loss = model(**inputs, num_items_in_batch=num_items_in_batch).loss
-                    torch.testing.assert_close(half_loss, loss / 2)
+                # Counts the labels the loss sums over, like the Trainer
+                count = get_num_items_count(model, inputs)
+                self.assertIsNotNone(
+                    count,
+                    f"The loss of {model_class.__name__} needs a count in `LOSS_ITEM_COUNTS` taking fields of the batch",
+                )
+                loss = model(**inputs).loss
+                self.assertIsNotNone(loss, f"{model_class.__name__} computes no loss from `labels`")
+                # With twice the count, the loss is halved
+                half_loss = model(**inputs, num_items_in_batch=2 * count(inputs)).loss
+                torch.testing.assert_close(half_loss, loss / 2)
+
+                # Gradient accumulation: the losses of two batches with different inputs and label counts, divided by
+                # their total count, add up to the loss of one batch made of both
+                other_inputs = prepare_inputs(model_class, ignored_label=1)
+                total = count(inputs) + count(other_inputs)
+                accumulated_loss = (
+                    model(**inputs, num_items_in_batch=total).loss
+                    + model(**other_inputs, num_items_in_batch=total).loss
+                )
+                whole_batch = {
+                    key: torch.cat([value, other_inputs[key]]) if torch.is_tensor(value) and value.ndim > 0 else value
+                    for key, value in inputs.items()
+                }
+                # The router aux loss uses the share of tokens of each expert in its batch, which no batch knows for
+                # both: it can only be close
+                tolerance = {"atol": 1e-3, "rtol": 0} if "output_router_logits" in inputs else {}
+                torch.testing.assert_close(accumulated_loss, model(**whole_batch).loss, **tolerance)
 
     def test_training_gradient_checkpointing(self):
         # Scenario - 1 default behaviour
