@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 from typing import Optional, Union
 
 import torch
@@ -23,12 +22,12 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import TextInput
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
 from ...utils.import_utils import requires
 from ..auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
-from ..colpali.modeling_colpali import ColPaliForRetrieval, ColPaliPreTrainedModel
+from ..colpali.modeling_colpali import ColPaliForRetrieval, ColPaliForRetrievalOutput, ColPaliPreTrainedModel
 from ..colqwen2.configuration_colqwen2 import ColQwen2Config
 from ..idefics3.processing_idefics3 import Idefics3Processor, Idefics3ProcessorKwargs
 
@@ -299,29 +298,8 @@ class ColModernVBertPreTrainedModel(ColPaliPreTrainedModel):
     config: ColModernVBertConfig
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for ColModernVBert embeddings output.
-    """
-)
-@dataclass
-class ColModernVBertForRetrievalOutput(ModelOutput):
-    r"""
-    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    embeddings (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        The embeddings of the model.
-    image_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True` and `pixel_values` are provided):
-        Tuple of `torch.Tensor` (one for the output of the image modality projection + one for the output of each layer) of shape
-        `(batch_size, num_channels, image_size, image_size)`.
-        Hidden-states of the image encoder at the output of each layer plus the initial modality projection outputs.
-    """
-
-    loss: torch.Tensor | None = None
-    embeddings: torch.Tensor | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    image_hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
+class ColModernVBertForRetrievalOutput(ColPaliForRetrievalOutput):
+    pass
 
 
 @auto_docstring(
@@ -376,9 +354,10 @@ class ColModernVBertForRetrieval(ColPaliForRetrieval):
 
         return ColModernVBertForRetrievalOutput(
             embeddings=embeddings,
+            last_hidden_state=vlm_output.last_hidden_state,
             hidden_states=vlm_output.hidden_states,
             attentions=vlm_output.attentions,
-            image_hidden_states=vlm_output.image_hidden_states,
+            image_pooler_output=vlm_output.image_pooler_output,
         )
 
 

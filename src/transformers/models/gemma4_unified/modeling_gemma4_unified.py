@@ -39,7 +39,13 @@ from ...masking_utils import (
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    ModelOutput,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -47,6 +53,7 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    logging,
     torch_compilable_check,
 )
 from ...utils.generic import merge_with_config_defaults
@@ -58,6 +65,9 @@ from .configuration_gemma4_unified import (
     Gemma4UnifiedTextConfig,
     Gemma4UnifiedVisionConfig,
 )
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring
@@ -88,75 +98,60 @@ class Gemma4UnifiedTextModelOutputWithPast(BaseModelOutputWithPast):
     shared_kv_states: KVSharingDict | None = None
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Gemma4Unified causal language model (or autoregressive) outputs.
-    """
-)
+@auto_docstring
 @dataclass
-class Gemma4UnifiedCausalLMOutputWithPast(ModelOutput):
+class Gemma4UnifiedCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
     r"""
-    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.text_config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
-    audio_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
     shared_kv_states (`dict`, *optional*):
         Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
         Used to pass shared KV states between layers during KV sharing.
     """
 
-    loss: torch.Tensor | None = None
-    logits: torch.Tensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: torch.Tensor | None = None
-
-    audio_hidden_states: torch.Tensor | None = None
-
     shared_kv_states: KVSharingDict | None = None
 
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+        )
+        return self.image_pooler_output
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Gemma4Unified outputs, with hidden states and attentions.
-    """
-)
+    @property
+    def audio_hidden_states(self):
+        logger.warning_once(
+            "`audio_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `audio_pooler_output` to obtain pooled features."
+        )
+        return self.audio_pooler_output
+
+
+@auto_docstring
 @dataclass
-class Gemma4UnifiedModelOutputWithPast(BaseModelOutputWithPast):
+class Gemma4UnifiedModelOutputWithPast(MultimodalBaseModelOutputWithPast):
     r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    audio_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
     shared_kv_states (`dict`, *optional*):
         Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
         Used to pass shared KV states between layers during KV sharing.
     """
 
-    image_hidden_states: torch.Tensor | None = None
-
-    audio_hidden_states: torch.Tensor | None = None
-
     shared_kv_states: KVSharingDict | None = None
+
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+        )
+        return self.image_pooler_output
+
+    @property
+    def audio_hidden_states(self):
+        logger.warning_once(
+            "`audio_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `audio_pooler_output` to obtain pooled features."
+        )
+        return self.audio_pooler_output
 
 
 class Gemma4UnifiedRMSNorm(nn.Module):
@@ -1120,15 +1115,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
             **kwargs,
         )
 
-        return Gemma4UnifiedModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
-            audio_hidden_states=audio_features if input_features is not None else None,
-            shared_kv_states=outputs.shared_kv_states,
-        )
+        return Gemma4UnifiedModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
     @can_return_tuple
     @auto_docstring(
@@ -1372,8 +1359,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
-            audio_hidden_states=outputs.audio_hidden_states,
+            modality_outputs=outputs.modality_outputs,
             shared_kv_states=outputs.shared_kv_states,
         )
 

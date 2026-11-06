@@ -13,6 +13,8 @@
 # limitations under the License.
 """PyTorch Qwen3-VL-MOE model."""
 
+from dataclasses import dataclass
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -24,8 +26,8 @@ from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
-    MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -159,6 +161,12 @@ class Qwen3VLMoeConfig(Qwen3VLConfig):
     ```"""
 
     pass
+
+
+@auto_docstring
+@dataclass
+class Qwen3VLMoeCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
+    router_logits: tuple[torch.Tensor] | None = None
 
 
 class Qwen3VLMoeTextRMSNorm(Qwen3MoeRMSNorm):
@@ -345,7 +353,7 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration):
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MoeCausalLMOutputWithPast:
+    ) -> tuple | Qwen3VLMoeCausalLMOutputWithPast:
         r"""
         Example:
 
@@ -434,13 +442,14 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration):
                     loss.device
                 )  # make sure to reside in the same device
 
-        return MoeCausalLMOutputWithPast(
+        return Qwen3VLMoeCausalLMOutputWithPast(
             loss=loss,
             aux_loss=aux_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            modality_outputs=outputs.modality_outputs,
             router_logits=outputs.router_logits,
         )
 

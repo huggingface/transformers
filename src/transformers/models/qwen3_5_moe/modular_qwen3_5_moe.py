@@ -13,6 +13,8 @@
 # limitations under the License.
 """PyTorch Qwen3.5Moe model."""
 
+from dataclasses import dataclass
+
 import torch
 from huggingface_hub.dataclasses import strict
 
@@ -21,7 +23,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast, MultimodalBaseModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, no_inherit_decorator
@@ -153,6 +155,12 @@ class Qwen3_5MoeConfig(Qwen3VLConfig):
     video_token_id: int = 248057
     vision_start_token_id: int = 248053
     vision_end_token_id: int = 248054
+
+
+@auto_docstring
+@dataclass
+class Qwen3_5MoeBaseModelOutputWithPast(MultimodalBaseModelOutputWithPast):
+    router_logits: tuple[torch.Tensor] | None = None
 
 
 class Qwen3_5MoeVisionRotaryEmbedding(Qwen3_5VisionRotaryEmbedding):
@@ -326,7 +334,7 @@ class Qwen3_5MoeModel(Qwen3_5Model):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MoeModelOutputWithPast:
+    ) -> tuple | Qwen3_5MoeBaseModelOutputWithPast:
         if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
             raise ValueError(
                 "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
@@ -384,7 +392,7 @@ class Qwen3_5MoeModel(Qwen3_5Model):
             use_cache=use_cache,
             **kwargs,
         )
-        return outputs
+        return Qwen3_5MoeBaseModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 class Qwen3_5MoeForCausalLM(Qwen3NextForCausalLM):

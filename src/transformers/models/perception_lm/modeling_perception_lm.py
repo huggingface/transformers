@@ -26,12 +26,19 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
+)
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ..auto import AutoModel
 from .configuration_perception_lm import PerceptionLMConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 class PerceptionLMAdaptiveAvgPooling(nn.Module):
@@ -101,13 +108,9 @@ class PerceptionLMPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for PerceptionLM outputs, with hidden states and attentions.
-    """
-)
+@auto_docstring
 @dataclass
-class PerceptionLMModelOutputWithPast(BaseModelOutputWithPast):
+class PerceptionLMModelOutputWithPast(MultimodalBaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
@@ -122,18 +125,20 @@ class PerceptionLMModelOutputWithPast(BaseModelOutputWithPast):
         Video hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    image_hidden_states: torch.Tensor | None = None
-
     video_hidden_states: torch.Tensor | None = None
 
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+        )
+        return self.image_pooler_output
 
-@auto_docstring(
-    custom_intro="""
-    Base class for PerceptionLM causal language model (or autoregressive) outputs.
-    """
-)
+
+@auto_docstring
 @dataclass
-class PerceptionLMCausalLMOutputWithPast(ModelOutput):
+class PerceptionLMCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
     r"""
     loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
@@ -152,14 +157,15 @@ class PerceptionLMCausalLMOutputWithPast(ModelOutput):
         Video hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    loss: torch.Tensor | None = None
-    logits: torch.Tensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: torch.Tensor | None = None
-
     video_hidden_states: torch.Tensor | None = None
+
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+        )
+        return self.image_pooler_output
 
 
 @auto_docstring
@@ -287,14 +293,7 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
             return_dict=True,
             **kwargs,
         )
-        return PerceptionLMModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states,
-            past_key_values=outputs.past_key_values,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-            video_hidden_states=video_features if mm_encoder_outputs.get("video") is not None else None,
-        )
+        return PerceptionLMModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 @auto_docstring
@@ -403,8 +402,7 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
-            video_hidden_states=outputs.video_hidden_states,
+            modality_outputs=outputs.modality_outputs,
         )
 
 

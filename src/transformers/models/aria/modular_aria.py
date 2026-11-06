@@ -863,6 +863,7 @@ class AriaModel(LlavaModel):
                 pixel_mask=pixel_mask,
                 vision_feature_layer=self.config.vision_feature_layer,
                 return_dict=True,
+                **kwargs,
             )
 
         if mm_encoder_outputs.get("image") is not None:
@@ -882,14 +883,7 @@ class AriaModel(LlavaModel):
             **kwargs,
         )
 
-        return AriaModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-            router_logits=outputs.router_logits,
-        )
+        return AriaModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 @auto_docstring(
@@ -1025,6 +1019,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            modality_outputs=outputs.modality_outputs,
             router_logits=outputs.router_logits,
         )
 

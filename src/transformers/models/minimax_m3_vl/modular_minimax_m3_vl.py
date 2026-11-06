@@ -922,51 +922,39 @@ class MiniMaxM3VLMultiModalProjector(nn.Module):
 
 class MiniMaxM3VLModelOutputWithPast(LlavaModelOutputWithPast):
     r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(num_image_patches, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    video_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(num_video_patches, hidden_size)`.
-        video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed):
         Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
     """
 
-    video_hidden_states: torch.Tensor | None = None
     router_logits: tuple[torch.Tensor] | None = None
+
+    @property
+    def video_hidden_states(self):
+        logger.warning_once(
+            "`video_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `video_pooler_output` to obtain pooled features."
+        )
+        return self.video_pooler_output
 
 
 class MiniMaxM3VLCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
     r"""
-    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(num_image_patches, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    video_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(num_video_patches, hidden_size)`.
-        video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     aux_loss (`torch.Tensor`, *optional*, returned when `output_router_logits=True` is passed):
         Load-balancing auxiliary loss for the sparse modules.
     router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed):
         Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
     """
 
-    video_hidden_states: torch.Tensor | None = None
     aux_loss: torch.Tensor | None = None
     router_logits: tuple[torch.Tensor] | None = None
+
+    @property
+    def video_hidden_states(self):
+        logger.warning_once(
+            "`video_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `video_pooler_output` to obtain pooled features."
+        )
+        return self.video_pooler_output
 
 
 @auto_docstring(custom_intro="MiniMax M3 VL backbone (vision + projector + text), without LM head.")
@@ -1115,15 +1103,7 @@ class MiniMaxM3VLModel(LlavaModel):
             **kwargs,
         )
 
-        return MiniMaxM3VLModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=getattr(outputs, "hidden_states", None),
-            attentions=getattr(outputs, "attentions", None),
-            image_hidden_states=mm_encoder_outputs["image"].pooler_output if mm_encoder_outputs.get("image") else None,
-            video_hidden_states=mm_encoder_outputs["video"].pooler_output if mm_encoder_outputs.get("video") else None,
-            router_logits=getattr(outputs, "router_logits", None),
-        )
+        return MiniMaxM3VLModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 @auto_docstring(custom_intro="MiniMax M3 VL full model with LM head (text + vision).")
@@ -1203,8 +1183,7 @@ class MiniMaxM3SparseForConditionalGeneration(LlavaForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
-            video_hidden_states=outputs.video_hidden_states,
+            modality_outputs=outputs.modality_outputs,
         )
 
 

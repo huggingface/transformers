@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from dataclasses import dataclass
 
 from torch import nn
@@ -25,8 +26,9 @@ from torch import nn
 from transformers import AutoModel
 
 from ...cache_utils import Cache
+from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torch_available
+from ...utils import auto_docstring, can_return_tuple, is_torch_available
 from .configuration_colqwen2 import ColQwen2Config
 
 
@@ -66,6 +68,8 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
+    image_pooler_output (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        The embeddings of the embedded images from vision backbone.
     """
 
     loss: torch.Tensor | None = None
@@ -73,6 +77,7 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
     past_key_values: Cache | None = None
     hidden_states: tuple[torch.Tensor] | None = None
     attentions: tuple[torch.Tensor] | None = None
+    image_pooler_output: torch.Tensor | None = None
 
 
 @auto_docstring(

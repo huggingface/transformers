@@ -22,10 +22,14 @@ from transformers import AutoModel
 
 from ...backbone_utils import filter_output_hidden_states
 from ...cache_utils import Cache
+from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from .configuration_colpali import ColPaliConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring
@@ -60,9 +64,8 @@ class ColPaliForRetrievalOutput(ModelOutput):
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
+    image_pooler_output (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        The embeddings of the embedded images from vision backbone.
     """
 
     loss: torch.Tensor | None = None
@@ -70,7 +73,7 @@ class ColPaliForRetrievalOutput(ModelOutput):
     past_key_values: Cache | None = None
     hidden_states: tuple[torch.Tensor] | None = None
     attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: torch.Tensor | None = None
+    image_pooler_output: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -120,8 +123,6 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
             pixel_values=pixel_values,
             **kwargs,
         )
-        vlm_hidden_states = vlm_output.hidden_states
-        vlm_image_hidden_states = vlm_output.image_hidden_states if pixel_values is not None else None
 
         last_hidden_states = vlm_output[0]  # (batch_size, sequence_length, hidden_size)
         proj_dtype = self.embedding_proj_layer.weight.dtype
@@ -135,10 +136,11 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
 
         return ColPaliForRetrievalOutput(
             embeddings=embeddings,
-            past_key_values=vlm_output.past_key_values,
-            hidden_states=vlm_hidden_states,
+            last_hidden_state=vlm_output.last_hidden_state,
+            hidden_states=vlm_output.hidden_states,
             attentions=vlm_output.attentions,
-            image_hidden_states=vlm_image_hidden_states,
+            past_key_values=vlm_output.past_key_values,
+            image_pooler_output=vlm_output.image_pooler_output,
         )
 
 

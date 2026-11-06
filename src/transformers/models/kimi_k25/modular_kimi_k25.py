@@ -168,11 +168,11 @@ class Kimi_K25Config(PreTrainedConfig):
 
 
 class Kimi_K25ModelOutputWithPast(LlavaModelOutputWithPast):
-    pass
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 class Kimi_K25CausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
-    pass
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 class Kimi_K25VisionPositionEmbeddings(nn.Module):
@@ -609,12 +609,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
             use_cache=use_cache,
             **kwargs,
         )
-        return Kimi_K25ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+        return Kimi_K25ModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
 @auto_docstring
@@ -707,6 +702,8 @@ class Kimi_K25ForConditionalGeneration(Glm4vForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            modality_outputs=outputs.modality_outputs,
+            router_logits=outputs.router_logits,
         )
 
     def _prepare_position_ids_for_generation(self, **kwargs):

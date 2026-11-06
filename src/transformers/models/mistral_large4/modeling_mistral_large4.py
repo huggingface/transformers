@@ -35,19 +35,22 @@ from ...integrations import use_experts_implementation, use_kernel_forward_from_
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
-    BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    ModelOutput,
     MoeModelOutputWithPast,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
 from .configuration_mistral_large4 import MistralLarge4Config, MistralLarge4TextConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -785,13 +788,9 @@ class MistralLarge4TextModel(MistralLarge4PreTrainedModel):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for MistralLarge4 outputs, with hidden states and attentions.
-    """
-)
+@auto_docstring
 @dataclass
-class MistralLarge4ModelOutputWithPast(BaseModelOutputWithPast):
+class MistralLarge4ModelOutputWithPast(MultimodalBaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
@@ -805,9 +804,15 @@ class MistralLarge4ModelOutputWithPast(BaseModelOutputWithPast):
         Tuple of `torch.Tensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`.
     """
 
-    image_hidden_states: torch.Tensor | None = None
-
     router_logits: tuple[torch.Tensor] | None = None
+
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+        )
+        return self.image_pooler_output
 
 
 class MistralLarge4PatchMerger(nn.Module):
@@ -1004,45 +1009,21 @@ class MistralLarge4Model(MistralLarge4PreTrainedModel):
             **kwargs,
         )
 
-        return MistralLarge4ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            router_logits=outputs.router_logits,  # only diff with Mistral3Model: we also return the router logits
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-        )
+        return MistralLarge4ModelOutputWithPast(**outputs, modality_outputs=mm_encoder_outputs)
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for MistralLarge4 causal language model (or autoregressive) outputs.
-    """
-)
+@auto_docstring
 @dataclass
-class MistralLarge4CausalLMOutputWithPast(ModelOutput):
-    r"""
-    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    """
-
-    loss: torch.Tensor | None = None
-    logits: torch.Tensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: torch.Tensor | None = None
+class MistralLarge4CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
     router_logits: tuple[torch.Tensor] | None = None
+
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+        )
+        return self.image_pooler_output
 
 
 @auto_docstring(
@@ -1158,7 +1139,7 @@ class MistralLarge4ForConditionalGeneration(MistralLarge4PreTrainedModel, Genera
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
-            image_hidden_states=outputs.image_hidden_states,
+            modality_outputs=outputs.modality_outputs,
         )
 
 

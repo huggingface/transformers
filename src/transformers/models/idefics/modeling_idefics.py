@@ -33,7 +33,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import ModelOutput
+from ...modeling_outputs import ModelOutput, MultimodalBaseModelOutputWithPast, MultimodalCausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedConfig, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -48,63 +48,28 @@ from .vision import IdeficsVisionEmbeddings, IdeficsVisionTransformer
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Idefics model's outputs that may also contain a past key/values (to speed up sequential decoding).
-    """
-)
+@auto_docstring
 @dataclass
-class IdeficsBaseModelOutputWithPast(ModelOutput):
-    r"""
-    last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the model.
-
-        If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
-        hidden_size)` is output.
-    image_hidden_states (`tuple(torch.Tensor)`, *optional*):
-        Tuple of `torch.Tensor` (one for the output of the image embeddings, `(batch_size, num_images,
-        sequence_length, hidden_size)`.
-
-        image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
-    """
-
-    last_hidden_state: torch.Tensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: tuple[torch.Tensor] | None = None
+class IdeficsBaseModelOutputWithPast(MultimodalBaseModelOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+        )
+        return self.image_pooler_output
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Idefics causal language model (or autoregressive) outputs.
-    """
-)
+@auto_docstring
 @dataclass
-class IdeficsCausalLMOutputWithPast(ModelOutput):
-    r"""
-    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`tuple(torch.Tensor)`, *optional*):
-        Tuple of `torch.Tensor` (one for the output of the image embeddings, `(batch_size, num_images,
-        sequence_length, hidden_size)`.
-
-        image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
-    """
-
-    loss: torch.Tensor | None = None
-    logits: torch.Tensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: tuple[torch.Tensor] | None = None
+class IdeficsCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `image_pooler_output` to obtain pooled features."
+        )
+        return self.image_pooler_output
 
 
 def expand_inputs_for_generation(
@@ -968,7 +933,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
 
         seq_length = inputs_embeds.shape[1]
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        seq_length_with_past = seq_length + past_key_values_length
 
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
@@ -979,43 +943,42 @@ class IdeficsModel(IdeficsPreTrainedModel):
             position_ids = torch.arange(seq_length, device=inputs_embeds.device) + past_key_values_length
             position_ids = position_ids.unsqueeze(0)
 
+        mm_encoder_outputs = {}
         if sum(x is None for x in [pixel_values, image_encoder_embeddings, perceiver_embeddings]) != 2:
             raise ValueError(
                 "Exactly 1 of pixel_values, image_encoder_embeddings or perceiver_embeddings has to be not-None."
             )
 
         elif pixel_values is not None:
-            pixel_values = pixel_values.to(dtype=self.dtype, device=device)  # fp16 compatibility
-            batch_size, num_images = pixel_values.shape[:2]
-            pixel_values = pixel_values.contiguous().view(batch_size * num_images, *pixel_values.shape[2:])
-
-            # Get sequence from the vision encoder
-            image_hidden_states = self.vision_model(
+            pixel_values = pixel_values.flatten(0, 1).to(dtype=self.dtype, device=device).contiguous()
+            mm_encoder_outputs["image"] = self.vision_model(
                 pixel_values=pixel_values, interpolate_pos_encoding=interpolate_pos_encoding
-            ).last_hidden_state
+            )
+            image_hidden_states = mm_encoder_outputs["image"].last_hidden_state
 
         elif image_encoder_embeddings is not None:
-            batch_size, num_images, image_seq_len, image_hidden_size = image_encoder_embeddings.size()
-            image_hidden_states = image_encoder_embeddings.to(dtype=self.dtype, device=device)
-            image_hidden_states = image_hidden_states.view(batch_size * num_images, image_seq_len, image_hidden_size)
+            image_hidden_states = (
+                image_encoder_embeddings.flatten(0, 1)
+                if image_encoder_embeddings.ndim == 4
+                else image_encoder_embeddings
+            )
+        else:
+            image_hidden_states = perceiver_embeddings
 
         if self.config.use_resampler:
             if perceiver_embeddings is None:
-                perceiver_embeddings = self.perceiver_resampler(image_hidden_states)
-                image_seq_len, image_hidden_size = perceiver_embeddings.size(1), perceiver_embeddings.size(2)
+                image_hidden_states = self.perceiver_resampler(image_hidden_states)
             else:
-                batch_size, num_images, image_seq_len, image_hidden_size = perceiver_embeddings.size()
-            image_hidden_states = perceiver_embeddings
-        elif perceiver_embeddings is None:
-            image_seq_len, image_hidden_size = image_hidden_states.size(1), image_hidden_states.size(2)
-        else:
+                image_hidden_states = perceiver_embeddings
+        elif perceiver_embeddings is not None:
             raise ValueError("If `perceiver_embeddings` are passed, use_resampler should be True")
-
-        image_hidden_states = image_hidden_states.view(batch_size, num_images * image_seq_len, image_hidden_size)
 
         # Mask is in 3D (incompatible with our mask API --> manual expansion)
         # image_attention_mask:    [batch_size,    text_seq_length,       num_images          ]
         #                       -> [batch_size, 1, text_seq_length, num_images * image_seq_len]
+        image_seq_len = image_hidden_states.size(1)
+        num_images = image_attention_mask.size(-1)
+        image_hidden_states = image_hidden_states.view(-1, num_images * image_seq_len, image_hidden_states.size(2))
         image_attention_mask = (
             image_attention_mask[..., None]
             .expand(-1, -1, -1, image_seq_len)
@@ -1037,7 +1000,9 @@ class IdeficsModel(IdeficsPreTrainedModel):
         # embed positions
         if attention_mask is None:
             attention_mask = torch.ones(
-                (batch_size, seq_length_with_past), dtype=torch.bool, device=inputs_embeds.device
+                (inputs_embeds.shape[0], seq_length + past_key_values_length),
+                dtype=torch.bool,
+                device=inputs_embeds.device,
             )
 
         causal_mask = create_causal_mask(
@@ -1049,7 +1014,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
         )
 
         hidden_states = inputs_embeds
-
         for idx, decoder_layer in enumerate(self.layers):
             # TODO(ls): Add cross attention values to respective lists
             if idx % self.cross_layer_interval == 0:
@@ -1073,12 +1037,10 @@ class IdeficsModel(IdeficsPreTrainedModel):
             )
 
         hidden_states = self.norm(hidden_states)
-        image_hidden_states = image_hidden_states.view(batch_size, num_images, image_seq_len, image_hidden_size)
-
         return IdeficsBaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            image_hidden_states=image_hidden_states,
             past_key_values=past_key_values,
+            modality_outputs=mm_encoder_outputs,
         )
 
 
@@ -1187,7 +1149,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            modality_outputs=outputs.modality_outputs,
         )
 
     def prepare_inputs_for_generation(
@@ -1216,10 +1178,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         )
 
         if image_hidden_states is not None:
-            if self.config.use_resampler:
-                model_inputs["perceiver_embeddings"] = image_hidden_states
-            else:
-                model_inputs["image_encoder_embeddings"] = image_hidden_states
+            model_inputs["image_encoder_embeddings"] = image_hidden_states
         else:
             model_inputs["pixel_values"] = pixel_values
         model_inputs["interpolate_pos_encoding"] = kwargs.pop("interpolate_pos_encoding", False)
@@ -1259,7 +1218,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
                 model_kwargs["image_attention_mask"] = torch.cat([image_attention_mask, last_mask], dim=1)
 
         # Get the precomputed image_hidden_states
-        model_kwargs["image_hidden_states"] = outputs.image_hidden_states
+        model_kwargs["image_hidden_states"] = outputs.image_last_hidden_state
         return model_kwargs
 
 

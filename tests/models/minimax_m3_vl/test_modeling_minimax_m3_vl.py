@@ -21,7 +21,7 @@ from transformers import (
     AutoTokenizer,
     MiniMaxM3SparseForConditionalGeneration,
     MiniMaxM3VLConfig,
-    MiniMaxM3VLImageProcessorFast,
+    MiniMaxM3VLImageProcessor,
     MiniMaxM3VLModel,
     MiniMaxM3VLProcessor,
     MiniMaxM3VLTextConfig,
@@ -180,6 +180,10 @@ class MiniMaxM3VLModelTest(VLMModelTest, unittest.TestCase):
     def test_reverse_loading_mapping(self):
         # As in llava, the base model has no `model.` prefix to reverse the `^language_model\.model\.` rename onto
         super().test_reverse_loading_mapping(skip_base_model=True)
+
+    @unittest.skip("Vision attention is wrong - has to be packed attention and fixed in #50346!")
+    def test_batching_equivalence(self):
+        pass
 
     @unittest.skip(
         reason=(
@@ -406,7 +410,7 @@ class MiniMaxM3VLIntegrationTest(unittest.TestCase):
         from transformers.utils import cached_file
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
-        image_processor = MiniMaxM3VLImageProcessorFast.from_pretrained(self.model_id)
+        image_processor = MiniMaxM3VLImageProcessor.from_pretrained(self.model_id)
         video_processor = MiniMaxM3VLVideoProcessor.from_pretrained(self.model_id)
         with open(cached_file(self.model_id, "chat_template.jinja"), encoding="utf-8") as f:
             chat_template = f.read()

@@ -69,7 +69,7 @@ class QianfanOCRVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("vision_hidden_act", "quick_gelu")
         kwargs.setdefault("drop_path_rate", 0.0)
         kwargs.setdefault("use_absolute_position_embeddings", True)
-        kwargs.setdefault("image_seq_length", 16)
+        kwargs.setdefault("num_image_tokens", 16)
         kwargs.setdefault("bos_token_id", 3)
         kwargs.setdefault("eos_token_id", 4)
         kwargs.setdefault("pad_token_id", 5)
@@ -77,9 +77,6 @@ class QianfanOCRVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("max_position_embeddings", 512)
         kwargs.setdefault("rope_theta", 10000)
         super().__init__(parent, **kwargs)
-
-        # image_seq_length overrides the VLMModelTester default num_image_tokens-based seq_length
-        self.seq_length = 7 + self.image_seq_length
 
     def get_vision_config(self):
         return self.vision_config_class(
@@ -100,7 +97,7 @@ class QianfanOCRVisionText2TextModelTester(VLMModelTester):
             text_config=self.get_text_config().to_dict(),
             vision_config=self.get_vision_config().to_dict(),
             image_token_id=self.image_token_id,
-            image_seq_length=self.image_seq_length,
+            image_seq_length=self.num_image_tokens,
             vision_feature_layer=self.vision_feature_layer,
             pad_token_id=self.pad_token_id,
         )
@@ -108,7 +105,7 @@ class QianfanOCRVisionText2TextModelTester(VLMModelTester):
     def place_image_tokens(self, input_ids, config):
         input_ids = input_ids.clone()
         input_ids[input_ids == self.image_token_id] = self.pad_token_id
-        input_ids[:, : self.image_seq_length] = self.image_token_id
+        input_ids[:, : self.num_image_tokens] = self.image_token_id
         return input_ids
 
 
