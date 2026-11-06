@@ -175,9 +175,7 @@ class GenericForSequenceClassification:
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(
-                logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config, **kwargs
-            )
+            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
 
         return SequenceClassifierOutputWithPast(
             loss=loss,
@@ -302,7 +300,7 @@ class GenericForTokenClassification:
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.config, **kwargs)
+            loss = self.loss_function(logits, labels, self.config)
 
         return TokenClassifierOutput(
             loss=loss,

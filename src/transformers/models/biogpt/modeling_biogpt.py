@@ -23,6 +23,7 @@ from collections.abc import Callable
 
 import torch
 import torch.nn as nn
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
@@ -534,7 +535,16 @@ class BioGptForTokenClassification(BioGptPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.config, **kwargs)
+            loss_fct = CrossEntropyLoss()
+            if attention_mask is not None:
+                active_loss = attention_mask.view(-1) == 1
+                active_logits = logits.view(-1, self.num_labels)
+                active_labels = torch.where(
+                    active_loss, labels.view(-1), torch.tensor(loss_fct.ignore_index).type_as(labels)
+                )
+                loss = loss_fct(active_logits, active_labels)
+            else:
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         return TokenClassifierOutput(
             loss=loss,
@@ -620,7 +630,26 @@ class BioGptForSequenceClassification(BioGptPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(labels=labels, pooled_logits=pooled_logits, config=self.config, **kwargs)
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(pooled_logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(pooled_logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(pooled_logits, labels)
 
         return SequenceClassifierOutputWithPast(
             loss=loss,

@@ -21,11 +21,11 @@ from typing import Any
 
 import torch
 from torch import nn
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import gelu_new, get_activation, silu
 from ...generation import GenerationMixin
-from ...loss.loss_utils import ForMultipleChoiceLoss
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...pytorch_utils import Conv1D
@@ -575,9 +575,13 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
 
         lm_loss, mc_loss = None, None
         if mc_labels is not None:
-            mc_loss = ForMultipleChoiceLoss(mc_logits, mc_labels)
+            loss_fct = CrossEntropyLoss()
+            mc_loss = loss_fct(mc_logits.view(-1, mc_logits.size(-1)), mc_labels.view(-1))
         if labels is not None:
-            lm_loss = self.loss_function(lm_logits, labels, vocab_size=lm_logits.size(-1), **kwargs)
+            shift_logits = lm_logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            loss_fct = CrossEntropyLoss()
+            lm_loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
         if not return_dict:
             output = (lm_logits, mc_logits) + transformer_outputs[1:]
@@ -672,7 +676,26 @@ class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(labels=labels, pooled_logits=pooled_logits, config=self.config, **kwargs)
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(pooled_logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(pooled_logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(pooled_logits, labels)
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output

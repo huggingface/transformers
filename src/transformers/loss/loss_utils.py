@@ -14,10 +14,10 @@
 
 import inspect
 from collections.abc import Callable
-from functools import partial
 
 import torch
 import torch.nn as nn
+from torch.nn import BCEWithLogitsLoss, MSELoss
 
 from .loss_ctc import ForCTCLoss
 from .loss_d_fine import DFineForObjectDetectionLoss
@@ -27,35 +27,12 @@ from .loss_for_object_detection import ForObjectDetectionLoss, ForSegmentationLo
 from .loss_grounding_dino import GroundingDinoForObjectDetectionLoss
 from .loss_lsd import PocketTTSForConditionalGenerationLoss
 from .loss_lw_detr import LwDetrForObjectDetectionLoss
-from .loss_moshi import MoshiDepthDecoderLoss
 from .loss_musicgen import MusicgenForCausalLMLoss, count_musicgen_labels
 from .loss_prophetnet import ProphetNetForCausalLMLoss
 from .loss_rf_detr import RfDetrForSegmentationLoss
 from .loss_rnnt import ParakeetForRNNTLoss
 from .loss_rt_detr import RTDetrForObjectDetectionLoss
 from .loss_tdt import ParakeetForTDTLoss
-
-
-def fixed_loss(
-    loss_fn: Callable,
-    source: torch.Tensor,
-    target: torch.Tensor,
-    num_items_in_batch: torch.Tensor | int | None = None,
-    **kwargs,
-) -> torch.Tensor:
-    """
-    `loss_fn`, a `torch.nn.functional` loss taking a `reduction`, averaged over this batch's items, or summed and
-    divided by `num_items_in_batch` when given, so the losses of the batches of an optimizer step (gradient accumulation
-    steps, devices) add up to one average over all their items.
-    """
-    reduction = "sum" if num_items_in_batch is not None else "mean"
-    loss = loss_fn(source, target, reduction=reduction)
-    if reduction == "sum":
-        # just in case users pass an int for num_items_in_batch, which could be the case for custom trainer
-        if torch.is_tensor(num_items_in_batch):
-            num_items_in_batch = num_items_in_batch.to(loss.device)
-        loss = loss / num_items_in_batch
-    return loss
 
 
 def fixed_cross_entropy(
@@ -65,9 +42,14 @@ def fixed_cross_entropy(
     ignore_index: int = -100,
     **kwargs,
 ) -> torch.Tensor:
-    return fixed_loss(
-        partial(nn.functional.cross_entropy, ignore_index=ignore_index), source, target, num_items_in_batch
-    )
+    reduction = "sum" if num_items_in_batch is not None else "mean"
+    loss = nn.functional.cross_entropy(source, target, ignore_index=ignore_index, reduction=reduction)
+    if reduction == "sum":
+        # just in case users pass an int for num_items_in_batch, which could be the case for custom trainer
+        if torch.is_tensor(num_items_in_batch):
+            num_items_in_batch = num_items_in_batch.to(loss.device)
+        loss = loss / num_items_in_batch
+    return loss
 
 
 def loss_share(
@@ -235,26 +217,7 @@ def ForMaskedLMLoss(
     return loss
 
 
-def ForMultipleChoiceLoss(
-    logits: torch.Tensor,
-    labels: torch.Tensor,
-    num_items_in_batch: torch.Tensor | None = None,
-    ignore_index: int = -100,
-    **kwargs,
-) -> torch.Tensor:
-    # One label per example, picking one of the `logits.shape[-1]` choices
-    logits = logits.view(-1, logits.shape[-1])
-    labels = labels.view(-1).to(logits.device)
-    return fixed_cross_entropy(logits, labels, num_items_in_batch, ignore_index, **kwargs)
-
-
-def ForSequenceClassificationLoss(
-    labels: torch.Tensor,
-    pooled_logits: torch.Tensor,
-    config,
-    num_items_in_batch: torch.Tensor | None = None,
-    **kwargs,
-) -> torch.Tensor:
+def ForSequenceClassificationLoss(labels: torch.Tensor, pooled_logits: torch.Tensor, config, **kwargs) -> torch.Tensor:
     num_labels = config.num_labels
     if config.problem_type is None:
         if num_labels == 1:
@@ -266,13 +229,17 @@ def ForSequenceClassificationLoss(
 
     labels = labels.to(pooled_logits.device)
     if config.problem_type == "regression":
+        loss_fct = MSELoss()
         if num_labels == 1:
-            return fixed_loss(nn.functional.mse_loss, pooled_logits.squeeze(), labels.squeeze(), num_items_in_batch)
-        return fixed_loss(nn.functional.mse_loss, pooled_logits, labels, num_items_in_batch)
+            return loss_fct(pooled_logits.squeeze(), labels.squeeze())
+        else:
+            return loss_fct(pooled_logits, labels)
     if config.problem_type == "single_label_classification":
-        return fixed_cross_entropy(pooled_logits.view(-1, num_labels), labels.view(-1), num_items_in_batch, **kwargs)
+        return fixed_cross_entropy(pooled_logits.view(-1, num_labels), labels.view(-1), **kwargs)
+
     if config.problem_type == "multi_label_classification":
-        return fixed_loss(nn.functional.binary_cross_entropy_with_logits, pooled_logits, labels, num_items_in_batch)
+        loss_fct = BCEWithLogitsLoss()
+        return loss_fct(pooled_logits, labels)
 
     raise RuntimeError(f"Invalid problem type: {config.problem_type}")
 
@@ -333,7 +300,6 @@ LOSS_MAPPING = {
     "ForSemanticSegmentation": ForSemanticSegmentationLoss,
     "ForCausalLM": ForCausalLMLoss,
     "ForMaskedLM": ForMaskedLMLoss,
-    "ForMultipleChoice": ForMultipleChoiceLoss,
     "ForQuestionAnswering": ForQuestionAnsweringLoss,
     "ForSequenceClassification": ForSequenceClassificationLoss,
     "ForImageClassification": ForSequenceClassificationLoss,
@@ -350,9 +316,7 @@ LOSS_MAPPING = {
             "BertGenerationDecoder",
             "BertLMHeadModel",
             "CTRLLMHeadModel",
-            "GPT2DoubleHeadsModel",
             "GPT2LMHeadModel",
-            "OpenAIGPTDoubleHeadsModel",
             "OpenAIGPTLMHeadModel",
             "ReformerModelWithLMHead",
         ],
@@ -389,7 +353,6 @@ LOSS_MAPPING = {
     "ProphetNetForCausalLM": ProphetNetForCausalLMLoss,
     "MusicgenForCausalLM": MusicgenForCausalLMLoss,
     "MusicgenMelodyForCausalLM": MusicgenForCausalLMLoss,
-    "MoshiDepthDecoder": MoshiDepthDecoderLoss,
 }
 
 # The losses that divide by `num_items_in_batch`, and how to count the labels they sum over. The Trainer gives no
