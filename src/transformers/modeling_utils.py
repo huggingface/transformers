@@ -4791,9 +4791,12 @@ class PreTrainedModel(
         torch_tpu registers its own TorchDynamo backend named `"tpu"`; route
         `device.type == "tpu"` through it with static shapes to match the
         common StaticCache + fixed-prefill usage. Neuron registers a `"neuron"`
-        backend and is handled the same way."""
+        backend and is handled the same way. On CPU and XPU, keep Inductor but
+        use the default mode because `reduce-overhead` relies on CUDA graphs."""
         if self.device.type in ("tpu", "neuron"):
             return CompileConfig(backend=self.device.type, dynamic=False, mode="default")
+        if self.device.type in ("cpu", "xpu"):
+            return CompileConfig(mode="default")
         return CompileConfig()
 
     def get_compiled_call(self, compile_config: CompileConfig | None) -> Callable:
@@ -4805,13 +4808,11 @@ class PreTrainedModel(
         if "llama4" in self.config.model_type:  # TODO try to enable for FULL COMPILE HYBRID CACHE SUPPORT
             return self.__call__
         compile_config = compile_config or self._default_compile_config()
-        default_config = getattr(self.generation_config, "compile_config", None) or self._default_compile_config()
-        if (
-            not hasattr(self, "_compiled_call")
-            or getattr(self, "_last_compile_config", default_config) != compile_config
-        ):
-            self._last_compile_config = compile_config
-            self._compiled_call = torch.compile(self.__call__, **compile_config.to_dict())
+        compile_kwargs = compile_config.to_dict()
+        if not hasattr(self, "_compiled_call") or getattr(self, "_last_compile_config", None) != compile_kwargs:
+            compiled_call = torch.compile(self.__call__, **compile_kwargs)
+            self._compiled_call = compiled_call
+            self._last_compile_config = copy.deepcopy(compile_kwargs)
         return self._compiled_call
 
     @classmethod

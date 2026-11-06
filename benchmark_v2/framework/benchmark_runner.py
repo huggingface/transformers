@@ -313,7 +313,7 @@ class BenchmarkRunner:
         return e2e_latency, timestamps, shape_and_decoded_output, gpu_metrics
 
     def profile_generate(self, num_tokens_to_profile: int, config_name: str) -> None:
-        """Profile the latency of a call to model.generate() with the given (inputs) and (max_new_tokens)."""
+        """Profile generation latency, memory usage, and the most expensive operations."""
         activities = [torch.profiler.ProfilerActivity.CPU]
         if self.device_type == "cuda":
             activities.append(torch.profiler.ProfilerActivity.CUDA)
@@ -323,16 +323,27 @@ class BenchmarkRunner:
         profiler = torch.profiler.profile(
             activities=activities,
             record_shapes=True,
+            profile_memory=True,
         )
         with profiler as prof:
             _ = self.model.generate(
                 **self.inputs,
                 max_new_tokens=num_tokens_to_profile,
             )
+        key_averages = prof.key_averages()
+        self.logger.info(
+            "Top generation operators by self CPU time:\n%s",
+            key_averages.table(sort_by="self_cpu_time_total", row_limit=10),
+        )
+        if self.device_type in ("cuda", "xpu"):
+            self.logger.info(
+                "Top generation operators by self device time:\n%s",
+                key_averages.table(sort_by="self_device_time_total", row_limit=10),
+            )
         if self.profile_dir is None:
             self.profile_dir = self.output_dir + "_profiles"
             os.makedirs(self.profile_dir, exist_ok=True)
-        prof.export_chrome_trace(f"{self.profile_dir}/{config_name}.json")
+        prof.export_chrome_trace(os.path.join(self.profile_dir, f"{config_name}.json"))
 
     @torch.inference_mode()
     def run_benchmarks(

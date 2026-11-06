@@ -52,6 +52,7 @@ if is_torch_available():
         CTRLConfig,
         CTRLLMHeadModel,
         DynamicCache,
+        EncoderDecoderCache,
         Ernie4_5_VLMoeConfig,
         Ernie4_5_VLMoeForConditionalGeneration,
         Gemma2Config,
@@ -340,6 +341,91 @@ class CacheTest(unittest.TestCase):
         self.assertIsInstance(layers[2], DynamicSlidingWindowLayer)
         self.assertEqual(layers[2].sliding_window, 16)
         self.assertFalse(layers[3].is_sliding)
+
+    def test_dynamic_layer_empty_update_does_not_copy_cached_states(self):
+        layer = DynamicLayer()
+        empty_keys = torch.empty(1, 2, 0, 8)
+        empty_values = torch.empty_like(empty_keys)
+        with torch.no_grad():
+            keys, values = layer.update(empty_keys, empty_values)
+        self.assertIs(keys, empty_keys)
+        self.assertIs(values, empty_values)
+        self.assertFalse(layer.is_initialized)
+
+        key_states = torch.randn(1, 2, 4, 8)
+        value_states = torch.randn_like(key_states)
+        with torch.no_grad():
+            layer.update(key_states, value_states)
+            cached_keys, cached_values = layer.keys, layer.values
+            keys, values = layer.update(empty_keys, empty_values)
+
+        self.assertIs(keys, cached_keys)
+        self.assertIs(values, cached_values)
+        self.assertEqual(layer.get_seq_length(), 4)
+
+    def test_dynamic_layer_batch_repeat_interleave_one_preserves_storage(self):
+        layer = DynamicLayer()
+        key_states = torch.randn(2, 1, 3, 4)
+        layer.update(key_states, torch.randn_like(key_states))
+        cached_keys, cached_values = layer.keys, layer.values
+
+        layer.batch_repeat_interleave(1)
+
+        self.assertIs(layer.keys, cached_keys)
+        self.assertIs(layer.values, cached_values)
+
+    def test_dynamic_sliding_window_layer_empty_update_does_not_copy_cached_states(self):
+        layer = DynamicSlidingWindowLayer(sliding_window=8)
+        empty_keys = torch.empty(1, 2, 0, 8)
+        empty_values = torch.empty_like(empty_keys)
+        with torch.no_grad():
+            keys, values = layer.update(empty_keys, empty_values)
+        self.assertIs(keys, empty_keys)
+        self.assertIs(values, empty_values)
+        self.assertFalse(layer.is_initialized)
+
+        key_states = torch.randn(1, 2, 4, 8)
+        value_states = torch.randn_like(key_states)
+        with torch.no_grad():
+            layer.update(key_states, value_states)
+            cached_keys, cached_values = layer.keys, layer.values
+            keys, values = layer.update(empty_keys, empty_values)
+
+        self.assertIs(keys, cached_keys)
+        self.assertIs(values, cached_values)
+        self.assertEqual(layer.get_seq_length(), 4)
+
+    def test_dynamic_indexed_layer_empty_indexer_update_does_not_copy_cached_states(self):
+        layer = DynamicIndexedLayer()
+        empty_indexer_keys = torch.empty(1, 0, 8)
+        with torch.no_grad():
+            indexer_keys = layer.update_indexer(empty_indexer_keys)
+        self.assertIs(indexer_keys, empty_indexer_keys)
+        self.assertFalse(layer.is_indexer_initialized)
+
+        indexer_states = torch.randn(1, 4, 8)
+        with torch.no_grad():
+            layer.update_indexer(indexer_states)
+            cached_indexer_keys = layer.indexer_keys
+            indexer_keys = layer.update_indexer(empty_indexer_keys)
+
+        self.assertIs(indexer_keys, cached_indexer_keys)
+        self.assertEqual(layer.indexer_keys.shape[1], 4)
+
+    def test_static_layers_initialize_on_empty_update(self):
+        empty_states = torch.empty(1, 2, 0, 8)
+        layers = (StaticLayer(max_cache_len=8), StaticSlidingWindowLayer(max_cache_len=8, sliding_window=4))
+        expected_cache_lengths = (8, 4)
+
+        with torch.no_grad():
+            for layer, expected_cache_length in zip(layers, expected_cache_lengths):
+                keys, values = layer.update(empty_states, empty_states)
+
+                self.assertTrue(layer.is_initialized)
+                self.assertEqual(keys.shape, (1, 2, expected_cache_length, 8))
+                self.assertIs(keys, layer.keys)
+                self.assertIs(values, layer.values)
+                self.assertEqual(layer.get_seq_length(), 0)
 
     def test_static_cache_uses_per_layer_sliding_windows(self):
         config = LlamaConfig(
@@ -2022,6 +2108,49 @@ class SyntheticCacheTest(unittest.TestCase):
             cache.layers[0].keys[:, 0, :, 0].tolist(),
             [[1.0, 2.0], [100.0, 200.0]],
         )
+
+    def test_dynamic_cache_batch_repeat_interleave_one_preserves_storage(self):
+        cache = DynamicCache()
+        key_states = torch.randn(2, 1, 3, 4)
+        value_states = torch.randn_like(key_states)
+        cache.update(key_states, value_states, 0)
+        cached_keys, cached_values = cache.layers[0].keys, cache.layers[0].values
+
+        cache.batch_repeat_interleave(1)
+
+        self.assertIs(cache.layers[0].keys, cached_keys)
+        self.assertIs(cache.layers[0].values, cached_values)
+
+    def test_dynamic_indexed_layer_batch_repeat_interleave_one_preserves_storage(self):
+        layer = DynamicIndexedLayer()
+        key_states = torch.randn(2, 1, 3, 4)
+        layer.update(key_states, torch.randn_like(key_states))
+        indexer_keys = layer.update_indexer(torch.randn(2, 3, 5))
+        indexer_position_ids = torch.arange(6).reshape(1, 2, 3)
+        layer.indexer_position_ids = indexer_position_ids
+        cached_keys, cached_values = layer.keys, layer.values
+
+        layer.batch_repeat_interleave(1)
+
+        self.assertIs(layer.keys, cached_keys)
+        self.assertIs(layer.values, cached_values)
+        self.assertIs(layer.indexer_keys, indexer_keys)
+        self.assertIs(layer.indexer_position_ids, indexer_position_ids)
+
+    def test_encoder_decoder_cache_batch_repeat_interleave_one_preserves_storage(self):
+        self_attention_cache = DynamicCache()
+        cross_attention_cache = DynamicCache()
+        key_states = torch.randn(2, 1, 3, 4)
+        self_attention_cache.update(key_states, torch.randn_like(key_states), 0)
+        cross_attention_cache.update(key_states, torch.randn_like(key_states), 0)
+        cache = EncoderDecoderCache(self_attention_cache, cross_attention_cache)
+        cached_self_keys = self_attention_cache.layers[0].keys
+        cached_cross_keys = cross_attention_cache.layers[0].keys
+
+        cache.batch_repeat_interleave(1)
+
+        self.assertIs(self_attention_cache.layers[0].keys, cached_self_keys)
+        self.assertIs(cross_attention_cache.layers[0].keys, cached_cross_keys)
 
     def test_hybrid_cache(self):
         """

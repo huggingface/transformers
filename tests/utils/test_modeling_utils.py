@@ -452,6 +452,103 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIn(torch.device("cpu"), total_byte_count)
         self.assertGreater(total_byte_count[torch.device("cpu")], 0)
 
+    def test_get_compiled_call_recompiles_after_config_mutation(self):
+        from transformers import CompileConfig
+
+        model = BaseModel(PreTrainedConfig())
+        compile_config = CompileConfig(options={"triton.cudagraphs": True})
+
+        with patch(
+            "transformers.modeling_utils.torch.compile", side_effect=lambda *args, **kwargs: mock.Mock()
+        ) as mock_compile:
+            first_compiled_call = model.get_compiled_call(compile_config)
+            compile_config.options["triton.cudagraphs"] = False
+            second_compiled_call = model.get_compiled_call(compile_config)
+            model.get_compiled_call(compile_config)
+
+        self.assertEqual(mock_compile.call_count, 2)
+        self.assertIsNot(first_compiled_call, second_compiled_call)
+
+    def test_benchmark_config_does_not_mutate_compile_kwargs(self):
+        from benchmark_v2.framework.benchmark_config import BenchmarkConfig
+
+        compile_kwargs = {"mode": "default"}
+        config = BenchmarkConfig(compile_kwargs=compile_kwargs)
+
+        self.assertEqual(compile_kwargs, {"mode": "default"})
+        self.assertTrue(config.compile_config.fullgraph)
+
+    @parameterized.expand(
+        [
+            ("cpu", [torch.profiler.ProfilerActivity.CPU], ["self_cpu_time_total"]),
+            (
+                "cuda",
+                [torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
+                ["self_cpu_time_total", "self_device_time_total"],
+            ),
+            (
+                "xpu",
+                [torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.XPU],
+                ["self_cpu_time_total", "self_device_time_total"],
+            ),
+        ]
+    )
+    def test_profile_generate_reports_top_operators(self, device_type, activities, sort_columns):
+        from benchmark_v2.framework.benchmark_runner import BenchmarkRunner
+
+        profiler = mock.MagicMock()
+        profiler.__enter__.return_value = profiler
+        key_averages = profiler.key_averages.return_value
+        key_averages.table.return_value = "profile summary"
+        runner = object.__new__(BenchmarkRunner)
+        runner.device_type = device_type
+        runner.profile_dir = None
+        runner.model = mock.Mock()
+        runner.inputs = {}
+        runner.logger = mock.Mock()
+
+        with tempfile.TemporaryDirectory() as output_dir:
+            runner.output_dir = output_dir
+            with patch("torch.profiler.profile", return_value=profiler) as profile:
+                runner.profile_generate(4, "test-config")
+
+            profile.assert_called_once_with(activities=activities, record_shapes=True, profile_memory=True)
+            self.assertEqual(
+                [call.kwargs["sort_by"] for call in key_averages.table.call_args_list],
+                sort_columns,
+            )
+            runner.logger.info.assert_any_call(
+                "Top generation operators by self CPU time:\n%s", "profile summary"
+            )
+            if device_type in ("cuda", "xpu"):
+                runner.logger.info.assert_any_call(
+                    "Top generation operators by self device time:\n%s", "profile summary"
+                )
+            profiler.export_chrome_trace.assert_called_once_with(
+                os.path.join(output_dir + "_profiles", "test-config.json")
+            )
+
+    @parameterized.expand(
+        [
+            ("cpu", "inductor", "default", None),
+            ("xpu", "inductor", "default", None),
+            ("cuda", "inductor", "reduce-overhead", None),
+            ("tpu", "tpu", "default", False),
+            ("neuron", "neuron", "default", False),
+        ]
+    )
+    def test_default_compile_config_matches_device(
+        self, device_type, expected_backend, expected_mode, expected_dynamic
+    ):
+        model = BaseModel(PreTrainedConfig())
+        with patch.object(PreTrainedModel, "device", new_callable=mock.PropertyMock) as mock_device:
+            mock_device.return_value = mock.Mock(type=device_type)
+            compile_config = model._default_compile_config()
+
+        self.assertEqual(compile_config.backend, expected_backend)
+        self.assertEqual(compile_config.mode, expected_mode)
+        self.assertEqual(compile_config.dynamic, expected_dynamic)
+
     @parameterized.expand(
         [
             ("fsdp", {"fsdp_size": 8}),

@@ -51,6 +51,19 @@ class MiniMaxModelTester(CausalLMModelTester):
 class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = MiniMaxModelTester
 
+    def test_cache_batch_repeat_interleave_one_preserves_storage(self):
+        cache = MiniMaxCache()
+        key_states = torch.randn(2, 1, 3, 4)
+        cache.update(key_states, torch.randn_like(key_states), 0)
+        linear_states = torch.randn(2, 1, 4, 4)
+        cache.set_linear_cache(1, linear_states)
+        cached_keys = cache.layers[0].keys
+
+        cache.batch_repeat_interleave(1)
+
+        self.assertIs(cache.layers[0].keys, cached_keys)
+        self.assertIs(cache.linear_cache[1], linear_states)
+
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
         self,
