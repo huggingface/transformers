@@ -89,9 +89,6 @@ class DistributedMixin:
             self._tp_plan.update(self.config.base_model_tp_plan or {})
             self._ep_plan.update(self.config.base_model_ep_plan or {})
             self._fsdp_plan.update(self.config.base_model_fsdp_plan or {})
-            # Shard the input embeddings on the vocabulary unless the plan already names them.
-            if self._tp_plan and isinstance(getattr(self, "embed_tokens", None), torch.nn.Embedding):
-                self._tp_plan = {"embed_tokens": "embedding_rowwise", **self._tp_plan}
 
         for name, module in self.named_children():
             if plan := getattr(module, "_ep_plan", None):
@@ -102,6 +99,20 @@ class DistributedMixin:
                 self._pp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_fsdp_plan", None):
                 self._fsdp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+
+        # Shard the input embeddings on the vocabulary unless the plan already names them, and a head tied to them the
+        # same way. Runs after merging the children plans, so a head rule alone also covers a base model with no plan.
+        if self._tp_plan:
+            try:
+                embeddings = self.get_input_embeddings()
+            except NotImplementedError:
+                embeddings = None
+            if isinstance(embeddings, torch.nn.Embedding):
+                names = {module: name for name, module in self.named_modules()}
+                self._tp_plan = {names[embeddings]: "embedding_rowwise", **self._tp_plan}
+                head = self.get_output_embeddings()
+                if isinstance(head, torch.nn.Linear) and f"{names[head]}.weight" in (self._tied_weights_keys or {}):
+                    self._tp_plan = {names[head]: "colwise_gather_output", **self._tp_plan}
 
     @property
     def tp_plan(self) -> dict[str, str]:
