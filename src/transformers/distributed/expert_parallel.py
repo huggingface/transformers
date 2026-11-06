@@ -214,17 +214,15 @@ class EPImplementation:
     # Set by implementations that only run when every rank of the EP group holds the same batch, e.g. `AllReduceEP`.
     needs_shared_batch = False
 
-    def __init__(self, experts, ep_mesh, tp_mesh=None):
+    def __init__(self, experts, ep_mesh, tp_mesh):
         self.experts = experts
         self.experts_forward = experts.forward  # the experts' own forward, on local expert ids
         self.num_local_experts = experts.num_experts
         self.ep_mesh = ep_mesh
         self.tp_mesh = tp_mesh
         # Every rank of the EP group holds the same batch when the EP group is the TP group.
-        self.shares_batch = False
-        if tp_mesh is not None:
-            tp_ranks, ep_ranks = (get_process_group_ranks(mesh.get_group()) for mesh in (tp_mesh, ep_mesh))
-            self.shares_batch = tp_ranks == ep_ranks
+        tp_ranks, ep_ranks = (get_process_group_ranks(mesh.get_group()) for mesh in (tp_mesh, ep_mesh))
+        self.shares_batch = tp_ranks == ep_ranks
         if self.needs_shared_batch and not self.shares_batch:
             raise ValueError(
                 f"{type(self).__name__} needs every rank of the expert group to hold the same batch (`ep_size == tp_size`)."
@@ -289,7 +287,7 @@ class AllToAllEP(EPImplementation):
         """Each (token, expert) pair to the expert's rank: the rows this rank's experts run on, their local expert ids
         and weights, and what `_combine_tokens` needs to bring the results back."""
         num_tokens = hidden_states.size(0)
-        if self.tp_mesh is not None and self.tp_mesh.size() > 1:
+        if self.tp_mesh.size() > 1:
             # Replicate -> Shard(0) is a local chunk (no communication); its backward all-gathers the row gradients.
             hidden_states, top_k_index, top_k_weights = (
                 DTensor.from_local(t, self.tp_mesh, [Replicate()], run_check=False)
@@ -335,7 +333,7 @@ class AllToAllEP(EPImplementation):
         token_outputs[state.order] = recv_out
         token_outputs = token_outputs.view(*state.top_k_weights.shape, hidden_dim)
         output = (token_outputs * state.top_k_weights.unsqueeze(-1)).sum(dim=1)
-        if self.tp_mesh is None or self.tp_mesh.size() == 1:
+        if self.tp_mesh.size() == 1:
             return output
         # Shard(0) -> Replicate is one all-gather of the row slices, uneven or empty ones too.
         output = DTensor.from_local(
@@ -391,7 +389,7 @@ class AutoEP(EPImplementation):
     back to the host, so decode captures in a CUDA graph.
     """
 
-    def __init__(self, experts, ep_mesh, tp_mesh=None):
+    def __init__(self, experts, ep_mesh, tp_mesh):
         super().__init__(experts, ep_mesh, tp_mesh)
         self.all_to_all = AllToAllEP(experts, ep_mesh, tp_mesh)
         # Only built where it can run: an EP group whose ranks hold different batches has no all-reduce path.
@@ -412,8 +410,8 @@ class EpDispatchExpertsParallel(ExpertParallelLayer):
     def should_use_local_tensors(self, module):
         return True
 
-    def install_forward(self, module, ep_mesh, *, tp_mesh=None, ep_implementation="auto"):
-        """`tp_mesh` is the group of ranks holding the same batch."""
+    def install_forward(self, module, ep_mesh, *, tp_mesh, ep_implementation="auto"):
+        """`tp_mesh` is the group of ranks holding the same batch (size 1 without TP)."""
         if ep_implementation not in self.ep_implementations:
             raise ValueError(
                 f"`ep_implementation={ep_implementation!r}` names no registered implementation: use one of "

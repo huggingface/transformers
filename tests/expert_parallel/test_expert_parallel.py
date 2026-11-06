@@ -13,6 +13,7 @@
 # limitations under the License.
 from unittest.mock import patch
 
+import pytest
 import torch
 from parameterized import parameterized
 from torch.distributed.device_mesh import init_device_mesh
@@ -107,20 +108,7 @@ class TestExpertParallelLayer(TestCasePlus):
 
     def test_install_forward_checks_ep_implementation(self):
         """An unknown name and `"all_reduce"` without a shared batch are refused; a registered implementation runs."""
-        with self.assertRaises(ValueError):
-            EpDispatchExpertsParallel().install_forward(_DummyExperts(), None, ep_implementation="fast")
-        with self.assertRaises(ValueError):
-            EpDispatchExpertsParallel().install_forward(
-                _DummyExperts(), self.MockDeviceMesh(2, 0), ep_implementation="all_reduce"
-            )
-
-        class Custom(EPImplementation):
-            def __call__(self, hidden_states, top_k_index, top_k_weights):
-                return hidden_states + 1
-
-        with patch.dict(EpDispatchExpertsParallel.ep_implementations, {"custom": Custom}):
-            experts = EpDispatchExpertsParallel().install_forward(_DummyExperts(), None, ep_implementation="custom")
-        torch.testing.assert_close(experts(torch.zeros(2, 4), None, torch.ones(2, 1)), torch.ones(2, 4))
+        run_distributed(world_size=2, backend="gloo")(_install_forward_checks_ep_implementation)()
 
 
 class _DummyExperts(torch.nn.Module):
@@ -136,8 +124,30 @@ class _DummyExperts(torch.nn.Module):
 # Worker functions for the expert-parallel layer tests, spawned through `run_distributed`.
 def _dispatch_hands_experts_the_received_rows(rank):
     hidden_states = torch.arange(32.0).view(4, 8) + 100 * rank
-    experts = EpDispatchExpertsParallel().install_forward(_DummyExperts(), init_device_mesh("cpu", (2,)))
+    mesh = init_device_mesh("cpu", (2, 1), mesh_dim_names=("ep", "tp"))
+    experts = EpDispatchExpertsParallel().install_forward(_DummyExperts(), mesh["ep"], tp_mesh=mesh["tp"])
     experts(hidden_states, torch.tensor([[0, 3], [1, 2], [2, 1], [3, 0]]), torch.ones(4, 2))
+
+
+def _install_forward_checks_ep_implementation(rank):
+    mesh = init_device_mesh("cpu", (2, 1), mesh_dim_names=("ep", "tp"))
+    ep_mesh, tp_mesh = mesh["ep"], mesh["tp"]
+    # an unknown name, and `"all_reduce"` on ranks holding different batches
+    for ep_implementation in ("fast", "all_reduce"):
+        with pytest.raises(ValueError):
+            EpDispatchExpertsParallel().install_forward(
+                _DummyExperts(), ep_mesh, tp_mesh=tp_mesh, ep_implementation=ep_implementation
+            )
+
+    class Custom(EPImplementation):
+        def __call__(self, hidden_states, top_k_index, top_k_weights):
+            return hidden_states + 1
+
+    with patch.dict(EpDispatchExpertsParallel.ep_implementations, {"custom": Custom}):
+        experts = EpDispatchExpertsParallel().install_forward(
+            _DummyExperts(), ep_mesh, tp_mesh=tp_mesh, ep_implementation="custom"
+        )
+    torch.testing.assert_close(experts(torch.zeros(2, 4), None, torch.ones(2, 1)), torch.ones(2, 4))
 
 
 def _auto_ep_picks_all_reduce_only_at_inference_on_a_shared_batch(rank):
