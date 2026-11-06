@@ -24,10 +24,7 @@ from ...utils import auto_docstring
 
 class Gemma3nProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": True,
-        },
+        "text_kwargs": {"padding": False, "return_mm_token_type_ids": True},
     }
 
 
@@ -86,39 +83,23 @@ class Gemma3nProcessor(ProcessorMixin):
             model_inputs["token_type_ids"] = model_inputs.pop("mm_token_type_ids")
         return model_inputs
 
-    def prepare_inputs_layout(self, images=None, text=None, audio=None, **kwargs):
-        images, text, videos, audio = super().prepare_inputs_layout(images=images, text=text, audio=audio, **kwargs)
-        if images is not None:
-            images = make_nested_list_of_images(images)
-            # Create empty text to be replaced with placeholders
-            if not text:
-                text = [" ".join([self.image_token] * len(image_list)) for image_list in images]
-        if audio is not None and not text:
-            text = [self.audio_token] * len(audio)
-        return images, text, videos, audio
-
-    def validate_inputs(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        **kwargs: Unpack[ProcessingKwargs],
-    ):
-        super().validate_inputs(images=images, text=text, **kwargs)
-
-        if text is not None and not isinstance(text, str):
-            if not isinstance(text, list) or not isinstance(text[0], str):
-                raise TypeError("Invalid input text. Please provide a string, or a list of strings")
-
-        if images is not None and text is not None and len(images) != len(text):
-            raise ValueError(
-                f"Received inconsistently sized batches of images ({len(images)}) and text ({len(text)})."
-            )
-
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         return self.full_image_sequence
 
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         return self.full_audio_sequence
+
+    def prepare_inputs_layout(self, images=None, text=None, audio=None, **kwargs):
+        images, text, _, audio = super().prepare_inputs_layout(images=images, text=text, audio=audio, **kwargs)
+        if images is not None:
+            images = make_nested_list_of_images(images)
+            # Create empty text to be replaced with placeholders
+            if not text:
+                text = [" ".join([self.image_token] * len(image_list)) for image_list in images]
+
+        if audio is not None and not text:
+            text = " ".join([self.audio_token] * len(audio))
+        return images, text, None, audio
 
     def _get_num_multimodal_tokens(self, image_sizes=None, audio_lengths=None, **kwargs):
         """

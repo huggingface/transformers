@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import sys
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Union
 
@@ -19,7 +20,7 @@ from huggingface_hub.utils import httpx
 
 from ..generation import GenerationConfig
 from ..tokenization_python import PreTrainedTokenizer
-from ..utils import is_torch_available, is_torchaudio_available, is_torchcodec_available, logging
+from ..utils import is_torch_available, is_torchaudio_available, logging
 from .audio_utils import ffmpeg_read
 from .base import ChunkPipeline
 
@@ -406,9 +407,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if isinstance(inputs, torch.Tensor):
                 inputs = inputs.cpu().numpy()
 
-        if is_torchcodec_available():
-            import torchcodec
-
+        # An `AudioDecoder` input means torchcodec is already imported: no need to check (or load) it otherwise
+        if torchcodec := sys.modules.get("torchcodec"):
             if isinstance(inputs, torchcodec.decoders.AudioDecoder):
                 _audio_samples = inputs.get_all_samples()
 

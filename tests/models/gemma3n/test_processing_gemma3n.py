@@ -38,12 +38,13 @@ class Gemma3nProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Tiny processor created with make_tiny_processor.py from "hf-internal-testing/namespace-google-repo_name-gemma-3n-E4B-it"
     tiny_model_id = "hf-internal-testing/tiny-processor-gemma3n"
 
+    @staticmethod
+    def prepare_processor_dict():
+        """Override this method to provide custom kwargs for processor initialization."""
+        return {"audio_seq_length": 7, "image_seq_length": 5}
+
     def prepare_images_inputs(self, batch_size: int | None = None, nested: bool = False):
         return super().prepare_images_inputs(batch_size=batch_size, nested=True)
-
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.boi_token
 
     def test_get_num_multimodal_tokens_matches_processor_call(self):
         "Tests that the helper used internally in vLLM works correctly"
@@ -92,7 +93,7 @@ class Gemma3nProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         raw_speech = floats_list((3, 1000))
         input_feat_extract = feature_extractor(raw_speech, return_tensors="pt")
-        input_processor = processor(text="Transcribe:", audio=raw_speech, return_tensors="pt")
+        input_processor = processor(text=f"Transcribe: {self.audio_token * 3}", audio=raw_speech, return_tensors="pt")
 
         for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)

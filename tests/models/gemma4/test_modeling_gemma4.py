@@ -256,7 +256,13 @@ class Gemma4Audio2TextModelTester(ALMModelTester):
         return floats_tensor([batch_size, self.feat_seq_length, self.num_mel_bins])
 
     def create_audio_mask(self, batch_size: int | None = None):
-        return super().create_audio_mask(batch_size).bool()
+        # Keep the random lengths of the base mask, but right-pad (like the Gemma4 feature extractor). With left padding,
+        # the causal conv in `lconv1d` mixes the (all-zero) padded frames into the valid ones, and the gradients flowing
+        # back into those zero frames get amplified by each `Gemma4RMSNorm` (x 1/sqrt(eps)) until they overflow to NaN.
+        audio_mask = super().create_audio_mask(batch_size).bool()
+        lengths = audio_mask.sum(dim=-1, keepdim=True)
+        positions = torch.arange(audio_mask.shape[-1], device=audio_mask.device)[None, :]
+        return positions < lengths
 
     def get_audio_embeds_mask(self, audio_mask):
         # Each of the two stride-2 subsampling convs keeps every other mask position
@@ -463,6 +469,38 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
         inputs.pop("pixel_values", None)
         loss = model(**inputs).loss
         loss.backward()
+
+    def test_forward_with_videos(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Gemma4ForConditionalGeneration(config).to(torch_device).eval()
+
+        # Two videos with 2 and 3 frames
+        num_frames_per_video = torch.tensor([2, 3], device=torch_device)
+        pixel_values_videos = self.model_tester.create_pixel_values(5).to(torch_device)
+        video_position_ids = self.model_tester.create_image_position_ids(5)
+        num_tokens = self.model_tester.num_image_tokens  # per frame
+        input_ids = torch.ones((2, 3 * num_tokens + 2), dtype=torch.long, device=torch_device)
+        input_ids[0, 1 : 1 + 2 * num_tokens] = config.video_token_id
+        input_ids[1, 1 : 1 + 3 * num_tokens] = config.video_token_id
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == config.video_token_id] = 2
+
+        with torch.no_grad():
+            video_features = model.model.get_video_features(
+                pixel_values_videos, video_position_ids, num_frames_per_video=num_frames_per_video
+            )
+            # `generate` encodes the videos first, so check that raw pixels give the same output
+            expected = model(
+                input_ids, mm_token_type_ids=mm_token_type_ids, mm_encoder_outputs={"video": video_features}
+            )
+            output = model(
+                input_ids,
+                mm_token_type_ids=mm_token_type_ids,
+                pixel_values_videos=pixel_values_videos,
+                video_position_ids=video_position_ids,
+                num_frames_per_video=num_frames_per_video,
+            )
+        torch.testing.assert_close(output.logits, expected.logits)
 
     def test_vision_axial_rope(self):
         # override -> model shipped weirdly to from the start, pos IDs have actual batch dim

@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
-@auto_docstring(checkpoint="zai-org/GLM-5")
+@auto_docstring(checkpoint="mistralai/Mistral-Large-4-1T-A52B")
 @strict
 class MistralLarge4TextConfig(PreTrainedConfig):
     r"""
@@ -50,9 +50,6 @@ class MistralLarge4TextConfig(PreTrainedConfig):
         List with at least the same length as the number of layers in the model.
         A `1` at an index position indicates that the corresponding layer will use RoPE,
         while a `0` indicates that it's a NoPE layer.
-    no_rope_layer_interval (`int`, *optional*, defaults to 4):
-        Every `no_rope_layer_interval`-th layer is a NoPE layer (no rotary embedding in the attention nor in the
-        indexer). The other layers use RoPE.
     kv_source_layers (`list[int]`, *optional*):
         For each layer, the index of the layer whose latent KV cache it attends to. A layer whose entry is its own
         index computes and caches its own latent KV; a layer pointing at an earlier layer has no `kv_a_proj_with_mqa`
@@ -138,7 +135,6 @@ class MistralLarge4TextConfig(PreTrainedConfig):
     # `"full"` runs the indexer, `"shared"` reuses the previous full layer's index mask.
     indexer_types: list[str] | None = None
     no_rope_layers: list[int] | None = None
-    no_rope_layer_interval: int = 4
     kv_source_layers: list[int] | None = None
     final_logit_softcapping: float = 30.0
 
@@ -156,8 +152,9 @@ class MistralLarge4TextConfig(PreTrainedConfig):
             }
         # NoPE every `no_rope_layer_interval`-th layer (smollm3 convention: 1 == uses RoPE)
         if self.no_rope_layers is None:
+            no_rope_layer_interval = kwargs.pop("no_rope_layer_interval", 4)
             self.no_rope_layers = [
-                int((layer_idx + 1) % self.no_rope_layer_interval != 0) for layer_idx in range(self.num_hidden_layers)
+                int((layer_idx + 1) % no_rope_layer_interval != 0) for layer_idx in range(self.num_hidden_layers)
             ]
         # KV sharing: by default every layer owns its latent KV cache
         if self.kv_source_layers is None:
@@ -204,8 +201,24 @@ class MistralLarge4TextConfig(PreTrainedConfig):
                 )
         super().validate_architecture()
 
+    @property
+    def kv_sharing_modes(self) -> list[str | None]:
+        kv_sharing_modes = [None if i == self.kv_source_layers[i] else "reuse" for i in range(self.num_hidden_layers)]
+        for i in range(self.num_hidden_layers):
+            # These specific layers share the k/v part, but still need a cache for the indexer part - setting it to `reuse_but_indexer`
+            # will still attribute them an IndexedLayer cache
+            if kv_sharing_modes[i] == "reuse" and self.indexer_types[i] != "shared":
+                kv_sharing_modes[i] = "reuse_but_indexer"
+        # Find indices of layers that compute AND share their cache (i.e. their index appears at least twice in `kv_source_layers`)
+        producers = [i for i in range(self.num_hidden_layers) if i in self.kv_source_layers[i + 1 :]]
+        # Mark producers as such
+        for producer_index in producers:
+            kv_sharing_modes[producer_index] = "store"
 
-@auto_docstring(checkpoint="mistralai/Mistral-Small-3.1-24B-Instruct-2503")
+        return kv_sharing_modes
+
+
+@auto_docstring(checkpoint="mistralai/Mistral-Large-4-1T-A52B")
 @strict
 class MistralLarge4Config(PreTrainedConfig):
     r"""

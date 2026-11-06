@@ -74,7 +74,7 @@ class PPOCRV6TinyRecHead(nn.Module):
         self.fc1 = nn.Linear(in_channels, mid_channels)
         self.fc2 = nn.Linear(mid_channels, config.head_out_channels)
 
-    def forward(self, hidden_states: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
         hidden_states = hidden_states.squeeze(2)
         hidden_states = self.act_fn(self.norm1(self.conv1(hidden_states)))
         hidden_states = self.act_fn(self.norm2(self.conv2(hidden_states)))
@@ -101,9 +101,9 @@ class PPOCRV6TinyRecModel(PPOCRV6TinyRecPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+    ) -> tuple[torch.Tensor] | BaseModelOutputWithNoAttention:
         outputs = self.backbone(pixel_values, **kwargs)
         hidden_state = outputs.feature_maps[-1]
         hidden_state = F.avg_pool2d(hidden_state, (3, 2))
@@ -129,9 +129,9 @@ class PPOCRV6TinyRecForTextRecognition(PPOCRV6TinyRecPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+    ) -> tuple[torch.Tensor] | BaseModelOutputWithNoAttention:
         outputs = self.model(pixel_values, **kwargs)
         head_outputs = self.head(outputs.last_hidden_state, **kwargs)
 
