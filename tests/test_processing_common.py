@@ -2107,7 +2107,30 @@ class ProcessorTesterMixin:
 
         This ensures that `__call__` arguments which can have defaults are in `valid_processor_kwargs` instead.
         """
+        # Processors whose `__call__` defaults cannot be changed without breaking BC.
+        # Do not add new processors to this list: use `valid_processor_kwargs` for arguments with defaults.
+        skipped_processors = {
+            "AudioFlamingo3Processor",  # output_labels
+            "CsmProcessor",  # output_labels, depth_decoder_labels_ratio
+            "FunAsrNanoProcessor",  # output_labels
+            "FuyuProcessor",  # return_legacy_image_output
+            "GlmAsrProcessor",  # output_labels
+            "InstructBlipVideoProcessor",  # add_special_tokens, padding, stride, return_overflowing_tokens, return_special_tokens_mask, return_offsets_mapping, return_token_type_ids, return_length, verbose
+            "LayoutLMv2Processor",  # add_special_tokens, padding, truncation, stride, return_overflowing_tokens, return_special_tokens_mask, return_offsets_mapping, return_length, verbose
+            "LayoutLMv3Processor",  # add_special_tokens, padding, stride, return_overflowing_tokens, return_special_tokens_mask, return_offsets_mapping, return_length, verbose
+            "LayoutXLMProcessor",  # add_special_tokens, padding, stride, return_overflowing_tokens, return_special_tokens_mask, return_offsets_mapping, return_length, verbose
+            "MossTranscribeDiarizeProcessor",  # output_labels
+            "MusicFlamingoProcessor",  # output_labels
+            "Nemotron3_5TranscribeProcessor",  # output_labels
+            "Qwen3ASRProcessor",  # output_labels
+            "VibeVoiceAsrProcessor",  # output_labels
+            "VibeVoiceProcessor",  # output_labels
+            "VoxtralRealtimeProcessor",  # is_streaming, is_first_audio_chunk
+        }
         processor_class = self.processor_class
+        if processor_class.__name__ in skipped_processors:
+            self.skipTest(f"Cannot change the defaults of `{processor_class.__name__}.__call__` without breaking BC.")
+
         parameters = inspect.signature(processor_class.__call__).parameters
         call_arguments = self._get_explicit_arguments(processor_class.__call__)
 
