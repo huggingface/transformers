@@ -302,12 +302,9 @@ class VLLMPlugin(TracePlugin):
                         break
                 return i + 1, end
 
-        # Strategy 2: first timestamped line with test_nodeid → nearest FAILED line.
-        # If the test_nodeid line itself already contains "FAILED", there is no
-        # live log block in between — nothing to extract.
-        # Only match lines where pytest starts reporting this test (the line begins
-        # with the node id), not lines that merely mention it, e.g. a
-        # "Running N items in this shard: <all node ids>" listing.
+        # Strategy 2: first line where pytest starts reporting this test (it begins with the node id, unlike
+        # e.g. a "Running N items in this shard: <all node ids>" listing) → nearest FAILED line.
+        # If that line already contains "FAILED", there is no live log block in between: nothing to extract.
         start = None
         for i, raw in enumerate(lines):
             if not self._TIMESTAMP_RE.match(raw):
