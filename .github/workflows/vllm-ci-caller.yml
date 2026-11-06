@@ -11,6 +11,10 @@ on:
 
 env:
   VLLM_TARGET_DEVICE: cpu
+  # KV cache size (GiB) for vLLM's CPU backend, read by vllm/platforms/cpu.py. Replaces patching the
+  # gpu_memory_utilization default in vLLM's source with sed, which silently stopped matching when vLLM
+  # changed that code (vllm-project/vllm#56492), so vLLM fell back to reserving 92% of the NUMA node.
+  VLLM_CPU_KVCACHE_SPACE: 32
   HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   HF_HOME: /mnt/cache
 
@@ -95,17 +99,15 @@ jobs:
           VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
           uv pip install tblib pqdm open-clip-torch==2.32.0 albumentations==1.4.6
 
-      - name: Patch vLLM gpu_memory_utilization for CPU
+      - name: Patch vLLM for CPU
         # Probably not needed on the larger aws-m8i-8xl-cache runner, but not verified yet. Keeping for now.
         run: |
           # Lower hardcoded value in test_initialization.py. Kept in case other tests hit the same OOM issue.
           sed -i 's/gpu_memory_utilization=0.80/gpu_memory_utilization=0.4/g' vllm/tests/models/test_initialization.py
-          # Lower the global default in CacheConfig (covers EngineArgs default and anything reading the field)
-          sed -i 's/gpu_memory_utilization: float = Field(default=0.92/gpu_memory_utilization: float = Field(default=0.4/g' vllm/vllm/config/cache.py
-          # Lower the hardcoded default in LLM.__init__ (separate from CacheConfig)
-          sed -i 's/gpu_memory_utilization: float = 0.92,/gpu_memory_utilization: float = 0.4,/g' vllm/vllm/entrypoints/llm.py
-          grep "gpu_memory_utilization" vllm/vllm/config/cache.py | head -2
-          grep "gpu_memory_utilization: float" vllm/vllm/entrypoints/llm.py
+          if ! grep -q "gpu_memory_utilization=0.4" vllm/tests/models/test_initialization.py; then
+            echo "ERROR: gpu_memory_utilization=0.80 not found in vllm/tests/models/test_initialization.py; update this patch" >&2
+            exit 1
+          fi
 
       - name: Pip freeze
         run: pip freeze
@@ -242,13 +244,13 @@ jobs:
           VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
           uv pip install tblib pqdm pytest-shard open-clip-torch==2.32.0 albumentations==1.4.6
 
-      - name: Patch vLLM gpu_memory_utilization for CPU
+      - name: Patch vLLM for CPU
         run: |
           sed -i 's/gpu_memory_utilization=0.80/gpu_memory_utilization=0.4/g' vllm/tests/models/test_initialization.py
-          sed -i 's/gpu_memory_utilization: float = Field(default=0.92/gpu_memory_utilization: float = Field(default=0.4/g' vllm/vllm/config/cache.py
-          sed -i 's/gpu_memory_utilization: float = 0.92,/gpu_memory_utilization: float = 0.4,/g' vllm/vllm/entrypoints/llm.py
-          grep "gpu_memory_utilization" vllm/vllm/config/cache.py | head -2
-          grep "gpu_memory_utilization: float" vllm/vllm/entrypoints/llm.py
+          if ! grep -q "gpu_memory_utilization=0.4" vllm/tests/models/test_initialization.py; then
+            echo "ERROR: gpu_memory_utilization=0.80 not found in vllm/tests/models/test_initialization.py; update this patch" >&2
+            exit 1
+          fi
           # -------------------------------------------------------------------------
           # vLLM bug: two CPU-only failures in mamba_mixer.py (affects all Mamba-based
           # models: JambaForCausalLM, FalconMambaForCausalLM, MambaForCausalLM,
@@ -376,13 +378,13 @@ jobs:
           VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
           uv pip install tblib pqdm pytest-shard sentence-transformers open-clip-torch==2.32.0 albumentations==1.4.6
 
-      - name: Patch vLLM gpu_memory_utilization for CPU
+      - name: Patch vLLM for CPU
         run: |
           sed -i 's/gpu_memory_utilization=0.80/gpu_memory_utilization=0.4/g' vllm/tests/models/test_initialization.py
-          sed -i 's/gpu_memory_utilization: float = Field(default=0.92/gpu_memory_utilization: float = Field(default=0.4/g' vllm/vllm/config/cache.py
-          sed -i 's/gpu_memory_utilization: float = 0.92,/gpu_memory_utilization: float = 0.4,/g' vllm/vllm/entrypoints/llm.py
-          grep "gpu_memory_utilization" vllm/vllm/config/cache.py | head -2
-          grep "gpu_memory_utilization: float" vllm/vllm/entrypoints/llm.py
+          if ! grep -q "gpu_memory_utilization=0.4" vllm/tests/models/test_initialization.py; then
+            echo "ERROR: gpu_memory_utilization=0.80 not found in vllm/tests/models/test_initialization.py; update this patch" >&2
+            exit 1
+          fi
 
       - name: Pip freeze
         run: pip freeze
@@ -575,11 +577,6 @@ jobs:
           uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
           VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
           uv pip install tblib pqdm pytest-shard open-clip-torch==2.32.0 albumentations==1.4.6
-
-      - name: Patch vLLM gpu_memory_utilization for CPU
-        run: |
-          sed -i 's/gpu_memory_utilization: float = Field(default=0.92/gpu_memory_utilization: float = Field(default=0.4/g' vllm/vllm/config/cache.py
-          sed -i 's/gpu_memory_utilization: float = 0.92,/gpu_memory_utilization: float = 0.4,/g' vllm/vllm/entrypoints/llm.py
 
       - name: "Test: multimodal processing (shard ${{ matrix.shard }} / 4)"
         working-directory: vllm
