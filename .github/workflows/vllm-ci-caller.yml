@@ -620,8 +620,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           python3 transformers/utils/analyze_vllm_ci.py \
-            --run-id "${{ github.run_id }}" \
-            --repo "${{ github.repository }}" \
+            --run-id "$GITHUB_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
             --output-dir ./vllm-ci-reports \
             --plugin vllm
 
