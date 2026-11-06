@@ -16,6 +16,7 @@
 import tempfile
 import unittest
 from contextlib import contextmanager
+from unittest.mock import patch
 
 import pytest
 from parameterized import parameterized
@@ -171,6 +172,39 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
 
         for attention in out.attentions:
             self.assertTrue((attention[..., :4, :4] != 0).all().item())
+
+    def test_kv_shared_prefill_truncation(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_hidden_layers = 4
+        config.layer_types = ["sliding_attention", "full_attention", "sliding_attention", "full_attention"]
+        config.num_kv_shared_layers = 2
+
+        model = Gemma4ForCausalLM(config)
+        model.eval()
+
+        input_ids = torch.randint(10, 60, (2, 14))
+        mask = torch.ones_like(input_ids)
+
+        COUNTER = 0
+
+        def new_slice(*args, **kwargs):
+            nonlocal COUNTER
+            COUNTER += 1
+            # slice 1:5 to absorb self
+            return args[1:5]
+
+        with torch.no_grad():
+            out_skipped = model(input_ids, mask, logits_to_keep=1)
+            with patch(
+                "transformers.models.gemma4.modeling_gemma4.Gemma4TextModel._maybe_slice_kv_shared_inputs", new_slice
+            ):
+                out_unskipped = model(input_ids, mask, logits_to_keep=1)
+
+        # Make sure we skipped correctly
+        self.assertEqual(COUNTER, 1)
+        # Make sure outputs are the same
+        torch.testing.assert_close(out_skipped.logits, out_unskipped.logits)
+        torch.testing.assert_close(out_skipped.shared_kv_states, out_unskipped.shared_kv_states)
 
     def test_model_training(self):
         pass
