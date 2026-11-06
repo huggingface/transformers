@@ -269,9 +269,17 @@ def collect_run_failures(run_id, repo=REPO, token=None, plugin=None):
 # Seen on run 42196234595: 10 identical vLLM KV-cache errors ("Available memory on
 # node 0 (X/111.33 GiB) ... less than requested memory for kv (Y/102.42 GiB)") ended
 # up in 10 categories.
+# Also, for tests without vLLM worker output the category comes from the pytest summary
+# line, i.e. the *last* exception of a chain, which may embed input data. Seen on run
+# 42207123286: 3 FireRedASR2 failures ended up in 2 categories, because the summary error
+# is "ValueError: Failed to apply FireRedASR2Processor on data={... array([0.64, ...". The
+# real cause is the first exception of the chain in the trace:
+# "ModuleNotFoundError: No module named 'kaldi_native_fbank'".
 # Possible approach: fixed labels for well-known cases (OOM, gated repo, timeout,
-# network) matched on the root-cause line only, then replace numbers with a
-# placeholder in the remaining messages and keep one original message as an example.
+# network) matched on the root-cause line only; prefer the first exception of a chain
+# (the first "E   SomeError: ..." line in the trace) over the summary line; strip data
+# reprs (e.g. "data={...}", "array([...])") and replace numbers with a placeholder in the
+# remaining messages; keep one original message as an example.
 
 # A top-level exception line, e.g. "ValueError: No common block size for 16."
 # or "vllm.v1.engine.exceptions.EngineDeadError: EngineCore encountered ...".

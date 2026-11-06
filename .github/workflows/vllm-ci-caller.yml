@@ -411,6 +411,9 @@ jobs:
               print(f"[HF memory patch] Skipped: {e}", flush=True)
           EOF
 
+      # TODO: deselect test_mtp_draft_loads_mtp_weights (e.g. `--deselect` or `-k "not test_mtp_draft_loads_mtp_weights"`):
+      # it needs a GPU but has no CPU skip, so it fails here with "Cannot access accelerator device when none is
+      # available" (added in vllm-project/vllm#61270).
       - name: "Test: test_transformers (shard ${{ matrix.shard }} / 4)"
         working-directory: vllm
         env:
@@ -573,6 +576,9 @@ jobs:
           uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh
           uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
           VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
+          # TODO: install `kaldi-native-fbank` (listed in vLLM's requirements/test/cpu.txt, "required for fireredasr2
+          # test"). Without it, test_processing_correctness[...-vllm-project/FireRedASR2-LLM-vllm] fails with
+          # `ModuleNotFoundError: No module named 'kaldi_native_fbank'` (3 failures in run 42207123286).
           uv pip install tblib pqdm pytest-shard open-clip-torch==2.32.0 albumentations==1.4.6
 
       - name: "Test: multimodal processing (shard ${{ matrix.shard }} / 4)"
