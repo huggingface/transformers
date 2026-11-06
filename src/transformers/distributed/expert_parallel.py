@@ -38,7 +38,7 @@ if is_torch_distributed_available():
     from torch.distributed._functional_collectives import all_to_all_single_autograd
     from torch.distributed.tensor import DTensor, Replicate, Shard, distribute_tensor
 
-    from .parallel_utils import _AllReduceBackward, _AllReduceForward, _WaitTensor
+    from .parallel_utils import _all_reduce_backward, _AllReduceForward, _WaitTensor
 
 
 class ExpertParallelLayer:
@@ -172,8 +172,7 @@ class EpRouterParallel(ExpertParallelLayer):
         # Each rank's score gradient covers only its local experts' slots; sum the per-rank partials
         # before the mask (each slot has exactly one owning rank, so the sum is exact).
         process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
-        if torch.is_grad_enabled() and router_scores.requires_grad:
-            router_scores = _AllReduceBackward.apply(router_scores, process_group)
+        router_scores = _all_reduce_backward(router_scores, process_group)
         non_local_mask = (router_indices // num_local_experts) != ep_rank
         router_scores = router_scores.masked_fill(non_local_mask, 0.0)
         router_indices = router_indices.masked_fill(non_local_mask, -1)
@@ -372,10 +371,8 @@ class AllReduceEP(EPImplementation):
         ep_group = self.ep_mesh.get_group()
         # Each rank backpropagates through its own experts only, so the gradients of the shared inputs it computes are
         # partial: sum them over the group (the forward all-reduce has an identity backward).
-        if torch.is_grad_enabled() and hidden_states.requires_grad:
-            hidden_states = _AllReduceBackward.apply(hidden_states, ep_group)
-        if torch.is_grad_enabled() and top_k_weights.requires_grad:
-            top_k_weights = _AllReduceBackward.apply(top_k_weights, ep_group)
+        hidden_states = _all_reduce_backward(hidden_states, ep_group)
+        top_k_weights = _all_reduce_backward(top_k_weights, ep_group)
         off_rank = (top_k_index // self.num_local_experts) != self.ep_mesh.get_local_rank()
         local_index = torch.where(off_rank, self.num_local_experts, top_k_index % self.num_local_experts)
         expert_output = self.run_experts(hidden_states, local_index, top_k_weights.masked_fill(off_rank, 0.0))
@@ -480,7 +477,7 @@ def apply_expert_parallelism(
             module = modules[name]
             # Dispatch hooks need both meshes to redistribute tokens between TP and EP ranks.
             if style_name == "ep_dispatch_experts":
-                style.install_forward(module, ep_mesh, tp_mesh=tp_mesh, ep_implementation=ep_implementation)
+                style.install_forward(module, ep_mesh=ep_mesh, tp_mesh=tp_mesh, ep_implementation=ep_implementation)
             else:
                 style.install_forward(module, ep_mesh)
         module._is_hooked = True

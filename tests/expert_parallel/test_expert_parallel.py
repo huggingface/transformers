@@ -112,13 +112,21 @@ class TestExpertParallelLayer(TestCasePlus):
 
 
 class _DummyExperts(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.num_experts = 2
+    """Toy experts: expert `i` multiplies a token by `scales[i]` (1 by default, on 2 experts). The id `num_experts`
+    marks a route to another rank's expert (`AllReduceEP` masks them that way) and adds nothing."""
 
-    def forward(self, tokens, expert_ids, weights):
-        assert type(tokens) is torch.Tensor, type(tokens)
-        return tokens
+    def __init__(self, scales=None):
+        super().__init__()
+        scales = torch.ones(2) if scales is None else scales
+        self.num_experts = len(scales)
+        # one extra scale of 0 for the id `num_experts`
+        self.scales = torch.cat([scales, torch.zeros(1)])
+
+    def forward(self, hidden_states, top_k_index, top_k_weights):
+        assert type(hidden_states) is torch.Tensor, type(hidden_states)
+        # each expert is a scalar, so a token's output is the token times the weighted sum of its experts' scales
+        factor = (self.scales[top_k_index] * top_k_weights).sum(dim=-1, keepdim=True)
+        return hidden_states * factor
 
 
 # Worker functions for the expert-parallel layer tests, spawned through `run_distributed`.
@@ -163,22 +171,6 @@ def _auto_ep_picks_all_reduce_only_at_inference_on_a_shared_batch(rank):
         assert (all_reduce_call.called, all_to_all_call.called) == (all_reduce, not all_reduce), (tp_mesh, grad)
 
 
-class _ScaledExperts(torch.nn.Module):
-    """Toy experts: expert `i` multiplies a token by `scales[i]`. The id `num_experts` marks a route to another rank's
-    expert (`AllReduceEP` masks them that way) and adds nothing."""
-
-    def __init__(self, scales):
-        super().__init__()
-        self.num_experts = len(scales)
-        # one extra scale of 0 for the id `num_experts`
-        self.scales = torch.cat([scales, torch.zeros(1)])
-
-    def forward(self, hidden_states, top_k_index, top_k_weights):
-        # each expert is a scalar, so a token's output is the token times the weighted sum of its experts' scales
-        factor = (self.scales[top_k_index] * top_k_weights).sum(dim=-1, keepdim=True)
-        return hidden_states * factor
-
-
 def _ep_implementation_matches_one_process(rank, ep_implementation, mode):
     """`ep_implementation` on 2 ranks gives the output and input gradients of all 4 experts on one process."""
     # 4 experts with distinct scales: rank 0 owns experts 0 and 1, rank 1 owns experts 2 and 3
@@ -195,14 +187,14 @@ def _ep_implementation_matches_one_process(rank, ep_implementation, mode):
 
     # expected: all 4 experts on one process
     expected_inputs = [t.clone().requires_grad_() for t in (hidden_states, top_k_weights)]
-    expected = forward(_ScaledExperts(scales), *expected_inputs)
+    expected = forward(_DummyExperts(scales), *expected_inputs)
     expected.backward(grad_output)
 
     # actual: the same batch through this rank's 2 experts, behind `ep_implementation`. Both ranks hold the batch
     # (the EP group is the TP group), so every implementation applies.
     mesh = init_device_mesh("cpu", (2,))
     experts = EpDispatchExpertsParallel().install_forward(
-        _ScaledExperts(scales[2 * rank : 2 * rank + 2]), mesh, tp_mesh=mesh, ep_implementation=ep_implementation
+        _DummyExperts(scales[2 * rank : 2 * rank + 2]), mesh, tp_mesh=mesh, ep_implementation=ep_implementation
     )
     inputs = [t.clone().requires_grad_() for t in (hidden_states, top_k_weights)]
     if mode == "inference":
