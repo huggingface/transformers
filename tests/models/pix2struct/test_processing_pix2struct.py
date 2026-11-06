@@ -64,3 +64,7 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_key = getattr(self, f"{modality}_input_name")
         if modality in ["image"]:
             self.assertEqual(len(inputs[input_key][0]), 2048)
+
+    @unittest.skip(reason="Skip for BC because of weird `add_special_tokens` handling.")
+    def test_no_redundant_default_kwargs(self):
+        pass

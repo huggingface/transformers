@@ -22,10 +22,11 @@ import inspect
 import json
 import os
 import re
+from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any, Literal, TypedDict, TypeVar, Union, Unpack
+from typing import Annotated, Any, Literal, TypedDict, TypeVar, Union, Unpack, is_typeddict
 
 import numpy as np
 from huggingface_hub import is_offline_mode
@@ -203,8 +204,10 @@ class TextKwargs(TypedDict, total=False):
         padding_side (`str`, *optional*):
             The side on which padding will be applied.
         return_mm_token_type_ids (`bool`, *optional*):
+            Deprecated, use [`ProcessingKwargs.return_mm_token_type_ids`] instead.
             Whether to return multimodal token type ids indicating mm placeholder token positions.
         return_text_replacement_offsets (`bool`, *optional*):
+            Deprecated, use [`ProcessingKwargs.return_text_replacement_offsets`] instead.
             Whether to return character offsets for each mm placeholder and its replacement.
         return_tensors (`str` or [`~utils.TensorType`], *optional*):
             If set, will return tensors of a particular framework. Acceptable values are:
@@ -439,58 +442,40 @@ class AudioKwargs(TypedDict, total=False):
 
 
 class ProcessingKwargs(TypedDict, total=False):
-    """
-    Base class for kwargs passing to processors.
+    """Base class for kwargs passing to processors.
+
     In case a model has specific kwargs that are not present in the base class or default values for existing keys,
-    it should have its own `ModelProcessorKwargs` class that inherits from `ProcessingKwargs` to provide:
-        1) Additional typed keys and that this model requires to process inputs.
-        2) Default values for existing keys under a `_defaults` attribute.
+    it should have its own `ModelProcessorKwargs` class that inherits from `ProcessingKwargs` to provide additional
+    typed keys that this model requires to process inputs.
+
     New keys have to be defined as follows to ensure type hinting is done correctly.
 
     ```python
-    # adding a new image kwarg for this model
-    class ModelImagesKwargs(ImagesKwargs, total=False):
-        new_image_kwarg: Optional[bool]
-
     class ModelProcessorKwargs(ProcessingKwargs, total=False):
-        images_kwargs: ModelImagesKwargs
-        _defaults = {
-            "images_kwargs: {
-                "new_image_kwarg": False,
-            }
-            "text_kwargs": {
-                "padding": "max_length",
-            },
-        }
+        my_kwarg: float
 
+    class ModelProcessor(ProcessorMixin):
+        valid_processor_kwargs = ModelProcessorKwargs
+
+        @auto_docstring
+        def __call__(self, images: ImageInput | None = None, ..., **kwargs: Unpack[ModelProcessorKwargs]):
+            my_kwarg = kwargs.get("my_kwarg")
     ```
-
-    For Python 3.8 compatibility, when inheriting from this class and overriding one of the kwargs,
-    you need to manually update the __annotations__ dictionary. This can be done as follows:
-
-    ```python
-    class CustomProcessorKwargs(ProcessingKwargs, total=False):
-        images_kwargs: CustomImagesKwargs
-
-    CustomProcessorKwargs.__annotations__["images_kwargs"] = CustomImagesKwargs  # python 3.8 compatibility
-    ```
-
     """
 
-    _defaults = {}
+    _defaults = {}  # Deprecated, kept for BC. Set defaults as class variables on the processor class inheriting from ProcessorMixin instead.
 
-    text_kwargs: TextKwargs = {
-        **TextKwargs.__annotations__,
-    }
-    images_kwargs: ImagesKwargs = {
-        **ImagesKwargs.__annotations__,
-    }
-    videos_kwargs: VideosKwargs = {
-        **VideosKwargs.__annotations__,
-    }
-    audio_kwargs: AudioKwargs = {
-        **AudioKwargs.__annotations__,
-    }
+    text_kwargs: TextKwargs
+    images_kwargs: ImagesKwargs
+    videos_kwargs: VideosKwargs
+    audio_kwargs: AudioKwargs
+
+    return_mm_token_type_ids: bool
+    return_text_replacement_offsets: bool
+
+
+class OmniModalProcessingKwargs(ProcessingKwargs, total=False):
+    load_audio_from_video: bool
 
 
 class TokenizerChatTemplateKwargs(TypedDict, total=False):
@@ -620,6 +605,18 @@ class ProcessorMixin(PushToHubMixin):
     valid_processor_kwargs = ProcessingKwargs
     skip_tensor_conversion = ["video_metadata", "text_replacement_offsets"]
 
+    # Default values for ProcessingKwargs.
+    # Only override subprocessor kwargs if the subprocessor has a different default.
+    # For example, to set `videos_kwargs = {"return_metadata": True}` to always request
+    # metadata from the video processor.
+    text_kwargs: TextKwargs
+    images_kwargs: ImagesKwargs
+    videos_kwargs: VideosKwargs
+    audio_kwargs: AudioKwargs
+
+    return_mm_token_type_ids = False
+    return_text_replacement_offsets = False
+
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):
         # First, extract chat template from kwargs. It can never be a positional arg
@@ -671,7 +668,6 @@ class ProcessorMixin(PushToHubMixin):
         self.validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
 
         merged_kwargs = self._merge_kwargs(
-            self.valid_processor_kwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
             **kwargs,
         )
@@ -688,9 +684,19 @@ class ProcessorMixin(PushToHubMixin):
         text_inputs = {}
         return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
         if getattr(self, "tokenizer", None) is not None and text is not None:
-            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+            for key in ("return_mm_token_type_ids", "return_text_replacement_offsets"):
+                if key in merged_kwargs["text_kwargs"]:
+                    logger.warning_once(
+                        f"Passing `{key}` in `text_kwargs` is deprecated "
+                        "and will be removed in v5.29.0. "
+                        "Pass it directly to the processor instead."
+                    )
+            # return_mm_token_type_ids/return_text_replacement_offsets in text_kwargs have priority for backwards compatibility
+            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop(
+                "return_mm_token_type_ids", merged_kwargs["return_mm_token_type_ids"]
+            )
             return_text_replacement_offsets = merged_kwargs["text_kwargs"].pop(
-                "return_text_replacement_offsets", False
+                "return_text_replacement_offsets", merged_kwargs["return_text_replacement_offsets"]
             )
 
             text, text_replacement_offsets = self.get_text_with_replacements(
@@ -1575,36 +1581,61 @@ class ProcessorMixin(PushToHubMixin):
 
     def _merge_kwargs(
         self,
-        ModelProcessorKwargs: ProcessingKwargs,
+        ModelProcessorKwargs: ProcessingKwargs | None = None,
         tokenizer_init_kwargs: dict | None = None,
         **kwargs,
     ) -> dict[str, dict]:
         """
         Method to merge dictionaries of kwargs cleanly separated by modality within a Processor instance.
+
         The order of operations is as follows:
-            1) kwargs passed as before have highest priority to preserve BC.
+            1) Deprecated in favor of 2): kwargs passed as before have highest priority to preserve BC.
                 ```python
                 high_priority_kwargs = {"crop_size" = {"height": 222, "width": 222}, "padding" = "max_length"}
                 processor(..., **high_priority_kwargs)
                 ```
-            2) kwargs passed as modality-specific kwargs have second priority. This is the recommended API.
+            2) Recommended: kwargs passed as modality-specific kwargs have second priority. This is the recommended API.
                 ```python
                 processor(..., text_kwargs={"padding": "max_length"}, images_kwargs={"crop_size": {"height": 222, "width": 222}}})
                 ```
-            3) kwargs passed during instantiation of a modality processor have fourth priority.
+            3) Deprecated in favor of 2): "common_kwargs" passed as part of kwargs
+                ```python
+                kwargs = {"common_kwargs": {"return_tensors": "pt"}}
+                processor(..., **kwargs)
+                ```
+            4) Deprecated in favor of 7): _defaults "common_kwargs" specified at processor level
+                ```python
+                class MyProcessingKwargs(ProcessingKwargs, total=False):
+                    _defaults = {
+                        # Common kwargs are passed to all modality-specific processors. They have priority over
+                        # modality-specific defaults like "text_kwargs" or "images_kwargs".
+                        "common_kwargs": {
+                            "return_tensors": "pt",
+                        },
+                    }
+                ```
+            5) tokenizer attributes, followed by tokenizer init kwargs
                 ```python
                 tokenizer = tokenizer_class(..., {"padding": "max_length"})
                 image_processor = image_processor_class(...)
-                processor(tokenizer, image_processor) # will pass max_length unless overridden by kwargs at call
+                processor(tokenizer, image_processor) # will pass max_length to all modalities that support it unless overridden by kwargs at call
                 ```
-            4) defaults kwargs specified at processor level have lowest priority.
+            6) Deprecated in favor of 7): defaults kwargs specified at processor level
                 ```python
-                class MyProcessingKwargs(ProcessingKwargs, CommonKwargs, TextKwargs, ImagesKwargs, total=False):
+                class MyProcessingKwargs(ProcessingKwargs, total=False):
                     _defaults = {
                         "text_kwargs": {
                             "padding": "max_length",
                             "max_length": 64,
                         },
+                    }
+                ```
+            7) Recommended: processor attributes have lowest priority. Defaults can be registered as class variables:
+                ```python
+                class MyProcessor(ProcessorMixin):
+                    text_kwargs = {
+                        "padding": "max_length",
+                        "max_length": 64,
                     }
                 ```
         Args:
@@ -1615,22 +1646,18 @@ class ProcessorMixin(PushToHubMixin):
 
         Returns:
             output_kwargs (`Dict`):
-                Dictionary of per-modality kwargs to be passed to each modality-specific processor.
+                ProcessingKwargs dictionary including per-modality kwargs to be passed to each modality-specific processor.
 
         """
+        if ModelProcessorKwargs is None:
+            ModelProcessorKwargs = self.valid_processor_kwargs
+
         # holding a copy to avoid mutating user-provided arguments
         # Use deepcopy to also copy nested dicts (like videos_kwargs) that will be modified via pop()
         kwargs = copy.deepcopy(kwargs)
 
         # Initialize dictionaries
         output_kwargs = {
-            "text_kwargs": {},
-            "images_kwargs": {},
-            "audio_kwargs": {},
-            "videos_kwargs": {},
-        }
-
-        default_kwargs = {
             "text_kwargs": {},
             "images_kwargs": {},
             "audio_kwargs": {},
@@ -1645,106 +1672,99 @@ class ProcessorMixin(PushToHubMixin):
         }
 
         possible_modality_keywords = {"text", "audio", "videos", "images"}
-        used_keys = set()
 
-        # get defaults from set model processor kwargs if they exist
-        for modality in default_kwargs:
-            default_kwargs[modality] = ModelProcessorKwargs._defaults.get(modality, {}).copy()
-            # Some preprocessors define a set of accepted "valid_kwargs" (currently only vision).
-            # In those cases, we don’t declare a `ModalityKwargs` attribute in the TypedDict.
-            # Instead, we dynamically obtain the kwargs from the preprocessor and merge them
-            # with the general kwargs set. This ensures consistency between preprocessor and
-            # processor classes, and helps prevent accidental mismatches.
-            modality_valid_kwargs = set(ModelProcessorKwargs.__annotations__[modality].__annotations__)
-            if modality in map_preprocessor_kwargs:
-                preprocessor = getattr(self, map_preprocessor_kwargs[modality], None)
-                preprocessor_valid_kwargs = (
-                    getattr(preprocessor, "valid_kwargs", None) if preprocessor is not None else None
-                )
-                modality_valid_kwargs.update(
-                    set(preprocessor_valid_kwargs.__annotations__ if preprocessor_valid_kwargs is not None else [])
-                )
-            # update defaults with arguments from tokenizer init
-            for modality_key in modality_valid_kwargs:
-                # init with tokenizer init kwargs if necessary
-                if tokenizer_init_kwargs is not None and modality_key in tokenizer_init_kwargs:
-                    value = (
-                        getattr(self.tokenizer, modality_key)
-                        if hasattr(self.tokenizer, modality_key)
-                        else tokenizer_init_kwargs[modality_key]
-                    )
-                    default_kwargs[modality][modality_key] = value
-        # now defaults kwargs are updated with the tokenizers defaults.
-        # pass defaults to output dictionary
-        output_kwargs.update(default_kwargs)
+        modality_valid_kwargs = {}
+        for modality in map_preprocessor_kwargs:
+            # typed dict from e.g. ModelProcessorKwargs.images_kwargs
+            valid_kwargs = set(ModelProcessorKwargs.__annotations__[modality].__annotations__)
+            # typed dict from modality-specific processor.valid_kwargs
+            # This is necessary because processor.valid_kwargs.images_kwargs == processor.image_processor.valid_kwargs
+            # is not always the case as the image processor (or any other modality) can be from a different model.
+            # E.g. when loading the image processor from a config.
+            preprocessor = getattr(self, map_preprocessor_kwargs[modality], None)
+            preprocessor_valid_kwargs = getattr(getattr(preprocessor, "valid_kwargs", None), "__annotations__", {})
+            modality_valid_kwargs[modality] = set(valid_kwargs).union(preprocessor_valid_kwargs)
 
-        # For `common_kwargs` just update all modality-specific kwargs with same key/values
-        common_kwargs = ModelProcessorKwargs._defaults.get("common_kwargs", {})
-        common_kwargs.update(kwargs.get("common_kwargs", {}))
-        if common_kwargs:
-            for kwarg in output_kwargs.values():
-                kwarg.update(common_kwargs)
+        valid_kwarg_to_modalities = defaultdict(list)
+        for modality, valid_kwargs in modality_valid_kwargs.items():
+            for key in valid_kwargs:
+                valid_kwarg_to_modalities[key].append(modality)
 
-        # update modality kwargs with passed kwargs
-        non_modality_kwargs = set(kwargs) - set(output_kwargs)
-        for modality, output_kwarg in output_kwargs.items():
-            modality_valid_kwargs = set(ModelProcessorKwargs.__annotations__[modality].__annotations__)
-            if modality in map_preprocessor_kwargs:
-                preprocessor = getattr(self, map_preprocessor_kwargs[modality], None)
-                preprocessor_valid_kwargs = (
-                    getattr(preprocessor, "valid_kwargs", None) if preprocessor is not None else None
-                )
-                modality_valid_kwargs.update(
-                    set(preprocessor_valid_kwargs.__annotations__ if preprocessor_valid_kwargs is not None else [])
-                )
-            for modality_key in modality_valid_kwargs:
-                # check if we received a structured kwarg dict or not to handle it correctly
-                if modality in kwargs:
-                    kwarg_value = kwargs[modality].pop(modality_key, "__empty__")
-                    # check if this key was passed as a flat kwarg.
-                    if kwarg_value != "__empty__" and modality_key in non_modality_kwargs:
+        # 7): flat, not modality-specific processor attributes
+        for key in ModelProcessorKwargs.__annotations__:
+            if key not in map_preprocessor_kwargs and hasattr(self, key):
+                output_kwargs[key] = copy.copy(getattr(self, key))
+
+        processor_kwargs_defaults = getattr(ModelProcessorKwargs, "_defaults", {})
+        for modality in map_preprocessor_kwargs:
+            # 7): modality-specific processor attributes
+            output_kwargs[modality].update(getattr(self, modality, {}).copy())
+
+            # 6): _defaults overrides (BC)
+            output_kwargs[modality].update(processor_kwargs_defaults.get(modality, {}).copy())
+
+        # 5): update defaults with arguments from tokenizer init
+        if tokenizer_init_kwargs is not None:
+            for key in valid_kwarg_to_modalities:
+                if key in tokenizer_init_kwargs:
+                    # Yes, we update all modalities with tokenizer defaults. This is no bug.
+                    for modality in valid_kwarg_to_modalities[key]:
+                        output_kwargs[modality][key] = getattr(self.tokenizer, key, tokenizer_init_kwargs[key])
+
+        # 4): `_defaults.common_kwargs` overrides (BC)
+        common_kwargs = processor_kwargs_defaults.get("common_kwargs", {}).copy()
+        # 3): common_kwargs passed by user (BC)
+        common_kwargs.update(kwargs.pop("common_kwargs", {}))
+        for modality in map_preprocessor_kwargs:
+            output_kwargs[modality].update(common_kwargs)
+
+        # kwargs passed by user
+        for key, value in kwargs.items():
+            if key in modality_valid_kwargs:
+                # 2) key is modality-specific kwarg, e.g. "text_kwargs"
+                modality = key
+                for subkey, subvalue in value.items():
+                    if subkey in kwargs and subkey in modality_valid_kwargs[modality]:
                         raise ValueError(
-                            f"Keyword argument {modality_key} was passed two times:\n"
+                            f"Keyword argument {subkey} was passed two times:\n"
                             f"in a dictionary for {modality} and as a **kwarg."
                         )
-                    # fall back to the flat kwarg when the modality dict is present but doesn't carry this key
-                    if kwarg_value == "__empty__" and modality_key in non_modality_kwargs:
-                        kwarg_value = kwargs[modality_key]
-                elif modality_key in kwargs:
-                    # we get a modality_key instead of popping it because modality-specific processors
-                    # can have overlapping kwargs
-                    kwarg_value = kwargs.get(modality_key, "__empty__")
-                else:
-                    kwarg_value = "__empty__"
-                if not isinstance(kwarg_value, str) or kwarg_value != "__empty__":
-                    output_kwarg[modality_key] = kwarg_value
-                    used_keys.add(modality_key)
+                    output_kwargs[modality][subkey] = subvalue
+            elif key in ModelProcessorKwargs.__annotations__:
+                # 1) key is a processor kwarg, don't propagate to modality-specific kwargs
+                output_kwargs[key] = value
+            elif key in valid_kwarg_to_modalities:
+                # 1) key is a valid kwarg for one or more modality-specific kwargs (BC)
+                for modality in valid_kwarg_to_modalities[key]:
+                    output_kwargs[modality][key] = value
+            elif key not in possible_modality_keywords:
+                logger.warning_once(
+                    f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
+                )
 
-        # Determine if kwargs is a flat dictionary or contains nested dictionaries
-        if any(key in default_kwargs for key in kwargs):
-            # kwargs is dictionary-based, and some keys match modality names
-            for modality, subdict in kwargs.items():
-                if modality in default_kwargs:
-                    for subkey, subvalue in subdict.items():
-                        if subkey not in used_keys:
-                            output_kwargs[modality][subkey] = subvalue
-                            used_keys.add(subkey)
-        else:
-            # kwargs is a flat dictionary
-            for key, kwarg in kwargs.items():
-                if key not in used_keys and key not in possible_modality_keywords:
-                    logger.warning_once(
-                        f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
-                    )
+        # Validate flat processor kwargs
+        flat_kwargs = {
+            key: value
+            for key, value in output_kwargs.items()
+            if not is_typeddict(ModelProcessorKwargs.__annotations__.get(key)) and key != "common_kwargs"
+        }
+        validate_typed_dict(ModelProcessorKwargs, flat_kwargs)
 
-        for key, typed_dict_obj in ModelProcessorKwargs.__annotations__.items():
-            if key in map_preprocessor_kwargs:
-                preprocessor = getattr(self, map_preprocessor_kwargs[key], None)
+        # Validate modality-specific kwargs
+        for modality, typed_dict_obj in ModelProcessorKwargs.__annotations__.items():
+            if not is_typeddict(typed_dict_obj):
+                continue
+            elif modality in map_preprocessor_kwargs:
+                # Same trick as for modality_valid_kwargs. Processor and preprocessor kwargs
+                # are not necessarily the same.
+                preprocessor = getattr(self, map_preprocessor_kwargs[modality], None)
                 if preprocessor is None or getattr(preprocessor, "valid_kwargs", None) is None:
                     continue
                 preprocessor_typed_dict_obj = getattr(preprocessor, "valid_kwargs")
                 typed_dict_obj = _merge_typed_dict(preprocessor_typed_dict_obj, typed_dict_obj)
-            validate_typed_dict(typed_dict_obj, output_kwargs[key])
+
+            validate_typed_dict(typed_dict_obj, output_kwargs[modality])
+
         return output_kwargs
 
     @classmethod
@@ -2185,7 +2205,10 @@ class ProcessorMixin(PushToHubMixin):
 
         backend = processor_kwargs.get("load_audio_backend", audio_kwargs_from_user.get("load_audio_backend"))
         if backend is None:
-            default_audio_kwargs = self.valid_processor_kwargs._defaults.get("audio_kwargs", {})
+            default_audio_kwargs = {
+                **getattr(self, "audio_kwargs", {}),
+                **getattr(self.valid_processor_kwargs, "_defaults", {}).get("audio_kwargs", {}),
+            }
             backend = default_audio_kwargs.get("load_audio_backend", "auto")
 
         return {"sampling_rate": sampling_rate, "backend": backend}
@@ -2493,6 +2516,10 @@ class OmniModalProcessorMixin(ProcessorMixin):
     for cross-modal interactions.
     """
 
+    valid_processor_kwargs = OmniModalProcessingKwargs
+
+    load_audio_from_video = False
+
     @auto_docstring
     def __call__(
         self,
@@ -2501,7 +2528,7 @@ class OmniModalProcessorMixin(ProcessorMixin):
         videos: VideoInput | None = None,
         audio: AudioInput | None = None,
         audio_from_video_indices: list[int] | None = None,
-        **kwargs: Unpack[ProcessingKwargs],
+        **kwargs: Unpack[OmniModalProcessingKwargs],
     ):
         r"""
         audio_from_video_indices (`list[int]`, *optional*):
@@ -2514,14 +2541,23 @@ class OmniModalProcessorMixin(ProcessorMixin):
             images=images, text=text, videos=videos, audio=audio, **kwargs
         )
         merged_kwargs = self._merge_kwargs(
-            self.valid_processor_kwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
             **kwargs,
         )
 
-        # TODO @guarin: move it to processor level argument. Used by EG2 and qwen-omni series
+        if "load_audio_from_video" in merged_kwargs["videos_kwargs"]:
+            logger.warning_once(
+                "Passing `load_audio_from_video` in `videos_kwargs` is deprecated "
+                "and will be removed in v5.29.0. "
+                "Pass it directly to the processor instead."
+            )
+        # "videos_kwargs" has priority for backwards compatibility
         # Without videos there is no audio track to load, so `audio` is processed as usual
-        load_audio_from_video = merged_kwargs["videos_kwargs"].get("load_audio_from_video") and videos is not None
+        load_audio_from_video = (
+            merged_kwargs["videos_kwargs"].pop("load_audio_from_video", merged_kwargs["load_audio_from_video"])
+            and videos is not None
+        )
+        merged_kwargs["load_audio_from_video"] = load_audio_from_video
 
         # Audio of a video has no placeholder in text, so only standalone slots are counted against it
         standalone_audio = audio
@@ -2551,21 +2587,30 @@ class OmniModalProcessorMixin(ProcessorMixin):
                 additional_kwargs = {
                     "audio": audio,
                     "processed_audio": processed_audio,
-                    "audio_kwargs": merged_kwargs["audio_kwargs"],
                     "video_to_audio_indices": video_to_audio_indices,
                 }
                 processed_videos, videos_replacements = self._process_videos(
-                    videos, **merged_kwargs["videos_kwargs"], **additional_kwargs
+                    videos, **additional_kwargs, **merged_kwargs
                 )
             else:
-                processed_videos, videos_replacements = self._process_videos(videos, **merged_kwargs["videos_kwargs"])
+                processed_videos, videos_replacements = self._process_videos(videos, **merged_kwargs)
 
         text_inputs = {}
         return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
         if getattr(self, "tokenizer", None) is not None and text is not None:
-            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+            for key in ("return_mm_token_type_ids", "return_text_replacement_offsets"):
+                if key in merged_kwargs["text_kwargs"]:
+                    logger.warning_once(
+                        f"Passing `{key}` in `text_kwargs` is deprecated "
+                        "and will be removed in v5.29.0. "
+                        "Pass it directly to the processor instead."
+                    )
+            # return_mm_token_type_ids/return_text_replacement_offsets in text_kwargs have priority for backwards compatibility
+            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop(
+                "return_mm_token_type_ids", merged_kwargs["return_mm_token_type_ids"]
+            )
             return_text_replacement_offsets = merged_kwargs["text_kwargs"].pop(
-                "return_text_replacement_offsets", False
+                "return_text_replacement_offsets", merged_kwargs["return_text_replacement_offsets"]
             )
 
             text, text_replacement_offsets = self.get_text_with_replacements(
@@ -2678,13 +2723,10 @@ class OmniModalProcessorMixin(ProcessorMixin):
         videos: VideoInput,
         audio: AudioInput | None = None,
         processed_audio: dict | None = None,
-        audio_kwargs: dict | None = None,
         video_to_audio_indices: list | None = None,
-        **kwargs: Unpack[VideosKwargs],
+        **kwargs: Unpack[OmniModalProcessingKwargs],
     ):
-        # pop so it is not passed down to video processor
-        load_audio_from_video = kwargs.pop("load_audio_from_video", None)
-        processed_videos = self.video_processor(videos, **kwargs)
+        processed_videos = self.video_processor(videos, **kwargs["videos_kwargs"])
 
         video_replacements = []
         videos = make_batched_videos(videos)
@@ -2693,7 +2735,6 @@ class OmniModalProcessorMixin(ProcessorMixin):
                 processed_videos,
                 video_idx=idx,
                 processed_audio=processed_audio,
-                load_audio_from_video=load_audio_from_video,
                 video_to_audio_indices=video_to_audio_indices,
                 **kwargs,
             )
@@ -2706,9 +2747,8 @@ class OmniModalProcessorMixin(ProcessorMixin):
         video_idx: int,
         audio: AudioInput | None = None,
         processed_audio: dict | None = None,
-        audio_kwargs: dict | None = None,
         video_to_audio_indices: list | None = None,
-        **kwargs: Unpack[VideosKwargs],
+        **kwargs: Unpack[OmniModalProcessingKwargs],
     ) -> str:
         raise NotImplementedError()
 
@@ -2716,7 +2756,12 @@ class OmniModalProcessorMixin(ProcessorMixin):
     # Not used by default and should be called explicitly by overriding `_process_video`
     # since models might have diff conditions to apply video+audio interleaved tokens
     def replace_video_with_audio_token(
-        self, video_inputs: dict, video_idx: int, audio_inputs: dict, audio_idx: int, **kwargs: VideosKwargs
+        self,
+        video_inputs: dict,
+        video_idx: int,
+        audio_inputs: dict,
+        audio_idx: int,
+        **kwargs: Unpack[OmniModalProcessingKwargs],
     ) -> str:
         raise NotImplementedError()
 

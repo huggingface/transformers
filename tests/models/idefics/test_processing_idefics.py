@@ -156,3 +156,11 @@ class IdeficsProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @unittest.skip("processor artifically adds BOS token to text")
     def test_subprocessor_defaults_0_text(self):
         pass
+
+    @unittest.skip(reason="Skip for BC. Hub subprocessor configs might not have the same defaults as the processor.")
+    def test_no_redundant_default_kwargs(self):
+        pass
+
+    @unittest.skip(reason="Cannot remove add_end_of_utterance_token argument from __init__ without breaking BC.")
+    def test_init_arguments_not_in_processor_kwargs(self):
+        pass
