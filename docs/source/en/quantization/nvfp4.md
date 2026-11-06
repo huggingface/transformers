@@ -23,7 +23,14 @@ not replaced.
 
 > [!TIP]
 > NVFP4 requires a Blackwell GPU with compute capability 10.0 or newer, a compatible CUDA-enabled PyTorch build, and
-> the [kernels](https://github.com/huggingface/kernels) package.
+> the [kernels](https://github.com/huggingface/kernels) package. On NVIDIA GB10 (`SM121`, DGX Spark), `kernels-community/nvfp4-gemm` only ships `sm_100a` and `sm_120a` builds, so `transformers` automatically routes `NVFP4Config` to [`Atlas-Inference/nvfp4-dense-gemm`](https://huggingface.co/kernels/Atlas-Inference/nvfp4-dense-gemm). Measured on GB10 (`SM121`, torch 2.12 + CUDA 13.0, paired with `use_kernels=True`):
+>
+> | Model | Config | GPU Footprint | 1024-tok TTFT | Decode |
+> | --- | --- | --- | --- | --- |
+> | `Qwen/Qwen3.5-0.8B` | BF16 | 1,435 MiB | 71.0 ms | 80.0 tok/s |
+> | `Qwen/Qwen3.5-0.8B` | `NVFP4Config()` | 797 MiB (-44%) | 75.3 ms | 90.0 tok/s |
+> | `Qwen/Qwen3.5-4B` | BF16 | 8,022 MiB | 211.7 ms | 18.3 tok/s |
+> | `Qwen/Qwen3.5-4B` | `NVFP4Config()` | 3,376 MiB (-58%) | 252.8 ms | 41.7 tok/s |
 
 Install Accelerate and a compatible version of `kernels`.
 
