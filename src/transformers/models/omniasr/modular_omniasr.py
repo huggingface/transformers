@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import dataclass
 
 import torch
 from torch import nn
@@ -19,7 +20,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -29,8 +30,7 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..parakeet.modeling_parakeet import ParakeetEncoderModelOutput, ParakeetPreTrainedModel
-from ..vibevoice.modeling_vibevoice import VibeVoiceModel
-from ..voxtral.modeling_voxtral import VoxtralForConditionalGeneration
+from ..voxtral.modeling_voxtral import VoxtralForConditionalGeneration, VoxtralModel
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Attention,
     Wav2Vec2EncoderLayer,
@@ -216,13 +216,24 @@ class OmniASRAudioModel(OmniASRPreTrainedModel):
         )
 
 
+@auto_docstring(custom_intro="""Base class for OmniASR outputs, with hidden states and attentions.""")
+@dataclass
+class OmniASRBaseModelOutputWithPast(BaseModelOutputWithPast):
+    r"""
+    audio_features (`torch.Tensor` of shape `(num_audio_frames, hidden_size)`, *optional*):
+        Encoder output frames, before the multi-modal projector, for the non-padded audio frames.
+    """
+
+    audio_features: torch.Tensor | None = None
+
+
 @auto_docstring(
     custom_intro="""
     The OmniASR model, which consists of a Wav2Vec2 encoder, a multi-modal projector and a LLama language model,
     without a language modeling head.
     """
 )
-class OmniASRModel(VibeVoiceModel):
+class OmniASRModel(VoxtralModel):
     config: OmniASRConfig
     main_input_name = "input_ids"
     input_modalities = ("audio", "text")
@@ -230,11 +241,6 @@ class OmniASRModel(VibeVoiceModel):
     def __init__(self, config):
         super().__init__(config)
         self.multi_modal_projector = nn.Linear(config.audio_config.hidden_size, config.text_config.hidden_size)
-        del self.semantic_tokenizer_encoder
-        del self.semantic_connector
-        del self.diffusion_head
-        del self.latent_scaling_factor
-        del self.latent_bias_factor
 
     @can_return_tuple
     @auto_docstring(custom_intro="Encode audio into embeddings that can be used by the language model.")
@@ -260,6 +266,40 @@ class OmniASRModel(VibeVoiceModel):
             audio_embeds = audio_embeds[frames_mask.to(audio_embeds.device).bool()]
         audio_output.pooler_output = audio_embeds
         return audio_output
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        input_values: torch.Tensor | None = None,
+        padding_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | OmniASRBaseModelOutputWithPast:
+        r"""
+        padding_mask (`torch.Tensor` of shape `(batch_size, num_samples)`, *optional*):
+            Padding mask to remove padded parts of audio.
+        """
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        audio_features = None
+        if input_values is not None:
+            audio_outputs = self.get_audio_features(input_values, padding_mask)
+            audio_embeds = audio_outputs.pooler_output
+            audio_features = audio_outputs.last_hidden_state
+
+            # Replace text-audio token placeholders with audio embeddings
+            special_audio_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, audio_features=audio_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(
+                special_audio_mask, audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            )
+
+        outputs = self.language_model(inputs_embeds=inputs_embeds, **kwargs)
+        return OmniASRBaseModelOutputWithPast(audio_features=audio_features, **outputs)
 
 
 @auto_docstring(

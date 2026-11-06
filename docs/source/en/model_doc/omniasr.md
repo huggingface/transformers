@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-11-12 and contributed to Hugging Face Transformers on 2026-10-27.*
+*This model was published in HF papers on 2025-11-12 and contributed to Hugging Face Transformers on 2026-11-06.*
 
 # OmniASR
 
@@ -171,11 +171,11 @@ for i, text in enumerate(processor.decode(generated_ids, skip_special_tokens=Tru
 ### Training
 
 The model can be trained with the loss it outputs. Pass the target transcripts to `apply_transcription_request` with
-`transcription`, which writes them as the assistant turn and returns `labels`. Everything but the transcript and its EOS
-(the audio placeholders, the language prompt and the padding) is masked automatically. With
+`transcription`, which writes them as the assistant turn and returns `labels`. Everything but the transcript and its EOS is masked automatically (namely the audio placeholders, the language prompt and the padding). With
 [`apply_chat_template`](#chat-template), the same is done by putting the transcript in an assistant turn and passing
-`processor_kwargs={"output_labels": True}`. Note that OmniASR transcribes in lowercase, so the (uppercase) LibriSpeech
-transcripts are lowercased below.
+`processor_kwargs={"output_labels": True}`.
+
+Note that OmniASR transcribes in lowercase, so the (uppercase) LibriSpeech transcripts are lowercased below.
 
 ```python
 from datasets import Audio, load_dataset

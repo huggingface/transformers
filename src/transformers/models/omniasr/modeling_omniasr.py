@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -422,11 +421,11 @@ class OmniASRAudioModel(OmniASRPreTrainedModel):
 @dataclass
 class OmniASRBaseModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    audio_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`, *optional*):
-        Extracted audio features that can be used for conditioning the language model.
+    audio_features (`torch.Tensor` of shape `(num_audio_frames, hidden_size)`, *optional*):
+        Encoder output frames, before the multi-modal projector, for the non-padded audio frames.
     """
 
-    audio_features: torch.FloatTensor | None = None
+    audio_features: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -473,7 +472,7 @@ class OmniASRModel(OmniASRPreTrainedModel):
         return audio_output
 
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, audio_features: torch.FloatTensor
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, audio_features: torch.Tensor
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -500,14 +499,14 @@ class OmniASRModel(OmniASRPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        input_values: torch.FloatTensor | None = None,
-        padding_mask: torch.BoolTensor | None = None,
+        input_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        input_values: torch.Tensor | None = None,
+        padding_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> tuple | OmniASRBaseModelOutputWithPast:
         r"""
-        padding_mask (`torch.Tensor` of shape `(batch_size, padded_audio_length)`):
+        padding_mask (`torch.Tensor` of shape `(batch_size, num_samples)`, *optional*):
             Padding mask to remove padded parts of audio.
         """
         if inputs_embeds is None:
@@ -523,7 +522,9 @@ class OmniASRModel(OmniASRPreTrainedModel):
             special_audio_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, audio_features=audio_embeds
             )
-            inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_embeds.to(inputs_embeds.device))
+            inputs_embeds = inputs_embeds.masked_scatter(
+                special_audio_mask, audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            )
 
         outputs = self.language_model(inputs_embeds=inputs_embeds, **kwargs)
         return OmniASRBaseModelOutputWithPast(audio_features=audio_features, **outputs)
@@ -539,7 +540,7 @@ class OmniASRForConditionalGeneration(OmniASRPreTrainedModel, GenerationMixin):
     main_input_name = "input_ids"
     input_modalities = ("audio", "text")
 
-    def __init__(self, config):
+    def __init__(self, config: OmniASRConfig):
         super().__init__(config)
         self.model = OmniASRModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)

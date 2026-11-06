@@ -80,7 +80,9 @@ NUM_RESERVED_TOKENS = 2
 # The language-agnostic mode the original model reaches by looking up row 0 of its language embedding table.
 LANGUAGE_AGNOSTIC = "auto"
 
-# The decoder prompt `audio | lid_marker | language | bos`, from which the transcription is decoded.
+# The decoder prompt `audio | lid_marker | language | bos`, from which the transcription is decoded. The prompt always
+# closes with BOS, so `add_generation_prompt` adds nothing. The assistant turn (the transcript and its EOS) is wrapped
+# in `{% generation %}`, so that `return_assistant_tokens_mask=True` masks everything else out of the training loss.
 CHAT_TEMPLATE = (
     "{%- for message in messages -%}"
         "{%- if message['role'] == 'user' -%}"
@@ -92,7 +94,13 @@ CHAT_TEMPLATE = (
             "{%- endfor -%}"
             "<extra_id_0><|lang:{{ ns.language }}|><s>"
         "{%- elif message['role'] == 'assistant' -%}"
-            "{%- for item in message['content'] if item['type'] == 'text' -%}{{ item['text'] }}{%- endfor -%}</s>"
+            "{% generation %}"
+                "{%- if message['content'] is string -%}{{ message['content'] }}"
+                "{%- else -%}"
+                    "{%- for item in message['content'] if item['type'] == 'text' -%}{{ item['text'] }}{%- endfor -%}"
+                "{%- endif -%}"
+                "</s>"
+            "{% endgeneration %}"
         "{%- endif -%}"
     "{%- endfor -%}"
 )
