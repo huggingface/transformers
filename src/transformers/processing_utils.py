@@ -58,6 +58,7 @@ from .utils import (
     hf_api,
     is_torch_available,
     is_torchcodec_greater_or_equal,
+    is_torchcodec_usable,
     list_repo_templates,
     logging,
     resolve_revision,
@@ -2566,9 +2567,10 @@ class OmniModalProcessorMixin(ProcessorMixin):
                 f"`audio_from_video_indices` has {audio_from_video_indices.count(None)} standalone slots but {len(audio)} audio inputs."
             )
 
-        if not is_torchcodec_greater_or_equal("0.17"):
+        if not (is_torchcodec_greater_or_equal("0.17") and is_torchcodec_usable(decode="audio")):
             raise ImportError(
-                "`load_audio_from_video=True` requires torchcodec>=0.17. Install it with `pip install -U torchcodec`."
+                "`load_audio_from_video=True` requires torchcodec>=0.17 with FFmpeg. See "
+                "https://github.com/meta-pytorch/torchcodec#installing-torchcodec."
             )
         from torchcodec.decoders import get_container_metadata
 

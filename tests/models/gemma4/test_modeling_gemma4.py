@@ -254,7 +254,13 @@ class Gemma4Audio2TextModelTester(ALMModelTester):
         return floats_tensor([batch_size, self.feat_seq_length, self.num_mel_bins])
 
     def create_audio_mask(self, batch_size: int | None = None):
-        return super().create_audio_mask(batch_size).bool()
+        # Keep the random lengths of the base mask, but right-pad (like the Gemma4 feature extractor). With left padding,
+        # the causal conv in `lconv1d` mixes the (all-zero) padded frames into the valid ones, and the gradients flowing
+        # back into those zero frames get amplified by each `Gemma4RMSNorm` (x 1/sqrt(eps)) until they overflow to NaN.
+        audio_mask = super().create_audio_mask(batch_size).bool()
+        lengths = audio_mask.sum(dim=-1, keepdim=True)
+        positions = torch.arange(audio_mask.shape[-1], device=audio_mask.device)[None, :]
+        return positions < lengths
 
     def get_audio_embeds_mask(self, audio_mask):
         # Each of the two stride-2 subsampling convs keeps every other mask position
