@@ -45,6 +45,11 @@ Without the pipeline, decision models are used like `generate`: the decision con
 one for all of them) with the chat template, `decide` scores the options of each question, and `decode_decision` turns
 the scores into answers:
 
+> [!IMPORTANT]
+> `from_pretrained` does not load the LoRA of checkpoints that keep it in a subfolder (`decision_config.adapter`, e.g.
+> `adapter/` for JEV). The pipeline loads it for you; without the pipeline, call `load_adapter` yourself as below, or
+> the model answers with the base weights.
+
 ```python
 import torch
 from transformers import AutoTokenizer, JevForDecision
