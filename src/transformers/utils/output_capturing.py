@@ -185,6 +185,9 @@ def install_all_output_capturing_hooks(model: PreTrainedModel, prefix: str | Non
     Install the output recording hooks on all the modules in `model`. This will take care of correctly dispatching
     the `_can_record_outputs` property of each individual submodels in case of composite models.
     """
+    if getattr(model, "_output_capturing_hooks_installed", False):
+        return
+
     # _can_record_outputs is None by default
     capture_flags = _CAN_RECORD_REGISTRY.get(str(model.__class__)) or {}  # there is a weak ref for executorch
 

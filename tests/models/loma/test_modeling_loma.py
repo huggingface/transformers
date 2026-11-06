@@ -1,0 +1,734 @@
+# Copyright 2026 the HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+import inspect
+import unittest
+
+from transformers.models.loma.configuration_loma import LoMaConfig
+from transformers.testing_utils import get_device_properties, require_torch, require_vision, slow, torch_device
+from transformers.utils import is_torch_available, is_vision_available
+
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
+
+
+if is_vision_available():
+    from PIL import Image
+
+if is_torch_available():
+    import requests
+    import torch
+
+    from transformers import AutoImageProcessor, LoMaForKeypointMatching
+    from transformers.models.loma.modeling_loma import (
+        LoMaDescriptorNetwork,
+        LoMaMatchAssignmentLayer,
+        LoMaPositionalEncoder,
+        LoMaTransformerLayer,
+    )
+
+
+class LoMaModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=2,
+        image_width=80,
+        image_height=60,
+        keypoint_detector_config={
+            "encoder_hidden_sizes": [32, 32, 64],
+            "decoder_hidden_size": 64,
+            "keypoint_decoder_dim": 65,
+            "descriptor_decoder_dim": 64,
+            "keypoint_threshold": 0.005,
+            "max_keypoints": 256,
+            "nms_radius": 4,
+            "border_removal_distance": 4,
+        },
+        descriptor_dim: int = 64,
+        num_layers: int = 2,
+        num_heads: int = 4,
+        filter_threshold: float = 0.1,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.image_width = image_width
+        self.image_height = image_height
+
+        self.keypoint_detector_config = keypoint_detector_config
+        self.descriptor_dim = descriptor_dim
+        self.num_layers = num_layers
+        self.num_heads = num_heads
+        self.filter_threshold = filter_threshold
+        self.backbone_config = {
+            "model_type": "dinov2",
+            "hidden_size": 32,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 2,
+            "patch_size": 14,
+            "image_size": 70,
+            "out_features": ["stage2"],
+            "reshape_hidden_states": False,
+        }
+
+    def prepare_config_and_inputs(self):
+        # LoMa expects a grayscale image as input
+        pixel_values = floats_tensor([self.batch_size, 2, 3, self.image_height, self.image_width])
+        config = self.get_config()
+        return config, pixel_values
+
+    def get_config(self):
+        return LoMaConfig(
+            keypoint_detector_config=self.keypoint_detector_config,
+            descriptor_dim=self.descriptor_dim,
+            descriptor_hidden_blocks=1,
+            num_hidden_layers=self.num_layers,
+            num_attention_heads=self.num_heads,
+            filter_threshold=self.filter_threshold,
+            backbone_config=self.backbone_config,
+            attn_implementation="eager",
+        )
+
+    def create_and_check_model(self, config, pixel_values):
+        model = LoMaForKeypointMatching(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+        maximum_num_matches = result.mask.shape[-1]
+        self.parent.assertEqual(
+            result.keypoints.shape,
+            (self.batch_size, 2, maximum_num_matches, 2),
+        )
+        self.parent.assertEqual(
+            result.matches.shape,
+            (self.batch_size, 2, maximum_num_matches),
+        )
+        self.parent.assertEqual(
+            result.matching_scores.shape,
+            (self.batch_size, 2, maximum_num_matches),
+        )
+        self.parent.assertEqual(
+            result.prune.shape,
+            (self.batch_size, 2, maximum_num_matches),
+        )
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, pixel_values = config_and_inputs
+        inputs_dict = {"pixel_values": pixel_values}
+        return config, inputs_dict
+
+
+@require_torch
+class LoMaModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (LoMaForKeypointMatching,) if is_torch_available() else ()
+    all_generative_model_classes = () if is_torch_available() else ()
+
+    test_resize_embeddings = False
+    has_attentions = False
+    test_torch_exportable = False  # keypoint matching has data-dependent top-k / non-max suppression
+
+    def setUp(self):
+        self.model_tester = LoMaModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=LoMaConfig, has_text_modality=False, hidden_size=32)
+
+    def test_config(self):
+        self.config_tester.create_and_test_config_to_json_string()
+        self.config_tester.create_and_test_config_to_json_file()
+        self.config_tester.create_and_test_config_from_and_save_pretrained()
+        self.config_tester.create_and_test_config_with_num_labels()
+        self.config_tester.check_config_can_be_init_without_params()
+        self.config_tester.check_config_arguments_init()
+
+    def test_config_matches_loma_architecture(self):
+        config = LoMaConfig()
+
+        self.assertEqual(config.input_descriptor_dim, 256)
+        self.assertEqual(config.descriptor_dim, 256)
+        self.assertEqual(config.head_dim, 64)
+        self.assertEqual(config.num_attention_heads, 4)
+        self.assertEqual(config.num_hidden_layers, 9)
+        self.assertEqual(config.filter_threshold, 0.1)
+
+        for attribute in (
+            "depth_confidence",
+            "width_confidence",
+        ):
+            self.assertFalse(hasattr(config, attribute))
+
+    def test_config_derives_attention_heads(self):
+        config = LoMaConfig(descriptor_dim=512)
+        self.assertEqual(config.num_attention_heads, 8)
+
+        with self.assertRaisesRegex(ValueError, "head_dim"):
+            LoMaConfig(descriptor_dim=250)
+
+    def test_descriptor_network_configuration(self):
+        config = LoMaConfig(
+            input_descriptor_dim=16,
+            descriptor_hidden_blocks=1,
+            encoder_config={"hidden_sizes": [8, 16, 32, 64], "num_hidden_layers": [1, 1, 1, 1]},
+            decoder_config={
+                "hidden_sizes": [64, 32, 16, 8, 4],
+                "context_channels": [32, 16, 8, 4, 1],
+            },
+            backbone_config=self.model_tester.backbone_config,
+        )
+        model = LoMaDescriptorNetwork(config)
+
+        self.assertEqual(model.encoder.layers[0].blocks[0].conv.out_channels, 8)
+        self.assertEqual(model.decoder.layers["14"].block1.conv.out_channels, 64)
+        self.assertEqual(model.decoder.layers["8"].block1.conv.in_channels, 64 + 32)
+
+        with self.assertRaisesRegex(ValueError, "hidden_sizes and num_hidden_layers"):
+            LoMaConfig(encoder_config={"hidden_sizes": [64], "num_hidden_layers": []})
+
+    def test_descriptor_network(self):
+        config = LoMaConfig(input_descriptor_dim=16, descriptor_hidden_blocks=1)
+        model = LoMaDescriptorNetwork(config).to(torch_device)
+        pixel_values = floats_tensor([2, 3, 32, 48]).to(torch_device)
+        keypoints = torch.tensor(
+            [[[-0.5, -0.5], [0.0, 0.0], [0.5, 0.5]], [[-0.25, 0.25], [0.25, -0.25], [0.0, 0.0]]],
+            device=torch_device,
+        )
+
+        descriptor_grid = model(pixel_values)
+        descriptors = model.describe_keypoints(pixel_values, keypoints)
+
+        self.assertEqual(descriptor_grid.shape, (2, 16, 32, 48))
+        self.assertEqual(descriptors.shape, (2, 3, 16))
+
+    def test_auxiliary_backbone_runs_in_inference_mode(self):
+        config = LoMaConfig(
+            input_descriptor_dim=16,
+            descriptor_hidden_blocks=1,
+            backbone_config=self.model_tester.backbone_config,
+        )
+        model = LoMaDescriptorNetwork(config).to(torch_device)
+        self.assertFalse(model.training)
+        model.train()
+        self.assertFalse(model.training)
+        pixel_values = floats_tensor([1, 3, 32, 48]).to(torch_device)
+
+        features = model._extract_auxiliary_features(pixel_values)
+
+        self.assertFalse(model.auxiliary_backbone.training)
+        self.assertFalse(features.requires_grad)
+
+    def test_auxiliary_backbone_respects_out_features(self):
+        backbone_config = self.model_tester.backbone_config.copy()
+        backbone_config["out_features"] = ["stage1"]
+        stage1_model = LoMaDescriptorNetwork(
+            LoMaConfig(input_descriptor_dim=16, descriptor_hidden_blocks=1, backbone_config=backbone_config)
+        ).eval()
+
+        backbone_config["out_features"] = ["stage2"]
+        stage2_model = LoMaDescriptorNetwork(
+            LoMaConfig(input_descriptor_dim=16, descriptor_hidden_blocks=1, backbone_config=backbone_config)
+        ).eval()
+        stage2_model.auxiliary_backbone.load_state_dict(stage1_model.auxiliary_backbone.state_dict())
+
+        pixel_values = floats_tensor([1, 3, 70, 70])
+        with torch.inference_mode():
+            stage1_features = stage1_model._extract_auxiliary_features(pixel_values)
+            stage2_features = stage2_model._extract_auxiliary_features(pixel_values)
+
+        self.assertEqual(stage1_features.shape, stage2_features.shape)
+        self.assertFalse(torch.allclose(stage1_features, stage2_features))
+
+    def test_descriptor_network_accepts_grayscale_images(self):
+        config = LoMaConfig(input_descriptor_dim=16, descriptor_hidden_blocks=1)
+        model = LoMaDescriptorNetwork(config).to(torch_device)
+        pixel_values = floats_tensor([2, 1, 32, 48]).to(torch_device)
+        keypoints = torch.tensor(
+            [[[-0.5, -0.5], [0.0, 0.0], [0.5, 0.5]], [[-0.25, 0.25], [0.25, -0.25], [0.0, 0.0]]],
+            device=torch_device,
+        )
+
+        descriptors = model.describe_keypoints(pixel_values, keypoints)
+
+        self.assertEqual(descriptors.shape, (2, 3, 16))
+
+    def test_matching_transformer(self):
+        config = LoMaConfig(
+            descriptor_dim=64,
+            num_attention_heads=4,
+            num_hidden_layers=2,
+            backbone_config={
+                "model_type": "dinov2",
+                "hidden_size": 32,
+                "num_hidden_layers": 2,
+                "num_attention_heads": 2,
+                "patch_size": 14,
+                "image_size": 70,
+                "out_features": ["stage2"],
+                "reshape_hidden_states": False,
+            },
+        )
+        positional_encoder = LoMaPositionalEncoder(config).to(torch_device)
+        transformer_layer = LoMaTransformerLayer(config, layer_idx=0).to(torch_device)
+        match_assignment = LoMaMatchAssignmentLayer(config).to(torch_device).eval()
+
+        # Interleaved batch format: (batch*2, num_keypoints, dim)
+        num_kp = 5
+        descriptors = floats_tensor([4, num_kp, 64]).to(torch_device)  # batch=2, interleaved -> 4
+        keypoints = floats_tensor([4, num_kp, 2]).to(torch_device)
+        position_embeddings = positional_encoder(keypoints)
+
+        output, hidden_states, attentions = transformer_layer(descriptors, position_embeddings[0], attention_mask=None)
+        scores = match_assignment(output)
+
+        self.assertEqual(output.shape, (4, num_kp, 64))
+        self.assertEqual(scores.shape, (2, num_kp, num_kp))  # batch=2 after de-interleave
+        self.assertTrue(torch.all((scores >= 0) & (scores <= 1)))
+
+    def test_batching_equivalence(self, atol=1e-4, rtol=1e-5):
+        device_properties = get_device_properties()
+        if device_properties[0] == "cuda" and device_properties[1] == 8:
+            # TODO: (ydshieh) fix this
+            self.skipTest(reason="After switching to A10, this test always fails, but pass on CPU or T4.")
+        # DINOv2's traced feature maps and the descriptor tower have small float32 differences across batch shapes.
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
+
+    @unittest.skip(reason="LoMa includes a VGG-19 descriptor network and is not a small model")
+    def test_model_is_small(self):
+        pass
+
+    @unittest.skip(reason="LoMaForKeypointMatching does not use inputs_embeds")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="LoMaForKeypointMatching does not support input and output embeddings")
+    def test_model_get_set_embeddings(self):
+        pass
+
+    @unittest.skip(reason="LoMaForKeypointMatching does not use feedforward chunking")
+    def test_feed_forward_chunking(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        pass
+
+    @unittest.skip(reason="LoMa does not output any loss term in the forward pass")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["pixel_values"]
+            self.assertListEqual(arg_names[:1], expected_arg_names)
+
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.hidden_states
+            self.assertIsNotNone(hidden_states)
+            self.assertEqual(len(hidden_states), config.num_hidden_layers + 1)
+
+            # Each hidden state should have interleaved batch format (batch*2, n, dim)
+            for hidden_state in hidden_states:
+                self.assertEqual(hidden_state.shape[0], self.model_tester.batch_size * 2)
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # Check that output_hidden_states also works when configured on the model.
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_output_tracing_does_not_change_inference(self):
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
+        model = LoMaForKeypointMatching(config).to(torch_device).eval()
+
+        with torch.inference_mode():
+            outputs = model(pixel_values)
+            traced_outputs = model(pixel_values, output_hidden_states=True)
+            repeated_outputs = model(pixel_values)
+
+        self.assertEqual(len(traced_outputs.hidden_states), config.num_hidden_layers + 1)
+        torch.testing.assert_close(outputs.matches, repeated_outputs.matches)
+        torch.testing.assert_close(outputs.matching_scores, repeated_outputs.matching_scores)
+
+    def test_output_tracing_does_not_duplicate_backbone_features(self):
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
+        model = LoMaForKeypointMatching(config).to(torch_device).eval()
+        pixel_values_flat = pixel_values.reshape(-1, *pixel_values.shape[2:])
+
+        with torch.inference_mode():
+            features_before = model.descriptor_network._extract_auxiliary_features(pixel_values_flat)
+            model(pixel_values, output_hidden_states=True)
+            features_after = model.descriptor_network._extract_auxiliary_features(pixel_values_flat)
+
+        torch.testing.assert_close(features_before, features_after)
+
+    def test_torch_compile_with_precomputed_keypoints(self):
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
+        model = LoMaForKeypointMatching(config).eval()
+        inputs = {
+            "pixel_values": pixel_values,
+            "keypoints": torch.rand(self.model_tester.batch_size, 2, 8, 2),
+            "mask": torch.ones(self.model_tester.batch_size, 2, 8, dtype=torch.bool),
+        }
+
+        with torch.inference_mode():
+            expected = model(**inputs)
+            compiled_outputs = torch.compile(model, fullgraph=True, backend="eager")(**inputs)
+
+        torch.testing.assert_close(compiled_outputs.matches, expected.matches)
+        torch.testing.assert_close(compiled_outputs.matching_scores, expected.matching_scores)
+
+    def test_training_mode_forward(self):
+        """Verify inference-only descriptor BatchNorm statistics remain fixed in train() mode."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.train()
+            batch_norms = [
+                module for module in model.descriptor_network.modules() if isinstance(module, torch.nn.BatchNorm2d)
+            ]
+            running_stats = [(module.running_mean.clone(), module.running_var.clone()) for module in batch_norms]
+
+            self.assertTrue(model.training)
+            self.assertFalse(model.descriptor_network.training)
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            self.assertIsNotNone(outputs.matches)
+            self.assertEqual(outputs.matches.shape[0], self.model_tester.batch_size)
+            for module, (running_mean, running_var) in zip(batch_norms, running_stats):
+                torch.testing.assert_close(module.running_mean, running_mean)
+                torch.testing.assert_close(module.running_var, running_var)
+
+    @unittest.skip(reason="LoMa uses scaled dot-product attention without exposing attention weights")
+    def test_attention_outputs(self):
+        def check_attention_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            attentions = outputs.attentions
+            maximum_num_matches = outputs.mask.shape[-1]
+
+            expected_attention_shape = [self.model_tester.num_heads, maximum_num_matches, maximum_num_matches]
+
+            for i, attention in enumerate(attentions):
+                self.assertListEqual(
+                    list(attention.shape[-3:]),
+                    expected_attention_shape,
+                )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            check_attention_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+
+            check_attention_output(inputs_dict, config, model_class)
+
+    # Copied from tests.models.superglue.test_modeling_superglue.SuperGlueModelTest.test_forward_labels_should_be_none
+    def test_forward_labels_should_be_none(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                model_inputs = self._prepare_for_class(inputs_dict, model_class)
+                # Provide an arbitrary sized Tensor as labels to model inputs
+                model_inputs["labels"] = torch.rand((128, 128))
+
+                with self.assertRaises(ValueError) as cm:
+                    model(**model_inputs)
+                self.assertEqual(ValueError, cm.exception.__class__)
+
+    def test_precomputed_keypoints_require_normalized_coordinates(self):
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
+        model = LoMaForKeypointMatching(config).to(torch_device)
+        model.eval()
+        keypoints = torch.tensor(
+            [
+                [[[-0.5, 0.5]], [[0.5, 1.5]]],
+                [[[0.25, 0.75]], [[0.75, 0.25]]],
+            ],
+            device=torch_device,
+        )
+
+        with self.assertRaisesRegex(ValueError, "normalized coordinates"):
+            model(pixel_values, keypoints=keypoints)
+
+    def test_precomputed_keypoint_mask_has_matching_shape(self):
+        config, pixel_values = self.model_tester.prepare_config_and_inputs()
+        model = LoMaForKeypointMatching(config).to(torch_device)
+        model.eval()
+        keypoints = torch.rand(2, 2, 3, 2, device=torch_device)
+        mask = torch.ones(2, 2, 2, dtype=torch.bool, device=torch_device)
+
+        with self.assertRaisesRegex(ValueError, "mask must have shape"):
+            model(pixel_values, keypoints=keypoints, mask=mask)
+
+    def test_interleaved_qkv_split(self):
+        """Verify the per-head interleaved QKV split matches reference SelfBlock activations."""
+        from transformers.models.loma.convert_loma_to_hf import _split_interleaved_qkv
+
+        num_heads = 4
+        head_dim = 16
+        embed_dim = num_heads * head_dim
+        weight = torch.randn(3 * embed_dim, embed_dim, dtype=torch.float64)
+        bias = torch.randn(3 * embed_dim, dtype=torch.float64)
+
+        q_w, k_w, v_w = _split_interleaved_qkv(weight, num_heads)
+        q_b, k_b, v_b = _split_interleaved_qkv(bias, num_heads)
+
+        x = torch.randn(2, 5, embed_dim, dtype=torch.float64)
+        ref_qkv = torch.nn.functional.linear(x, weight, bias).unflatten(-1, (num_heads, -1, 3))
+        ref_q = ref_qkv[..., 0].flatten(2, 3)
+        ref_k = ref_qkv[..., 1].flatten(2, 3)
+        ref_v = ref_qkv[..., 2].flatten(2, 3)
+
+        hf_q = torch.nn.functional.linear(x, q_w, q_b)
+        hf_k = torch.nn.functional.linear(x, k_w, k_b)
+        hf_v = torch.nn.functional.linear(x, v_w, v_b)
+
+        torch.testing.assert_close(hf_q, ref_q)
+        torch.testing.assert_close(hf_k, ref_k)
+        torch.testing.assert_close(hf_v, ref_v)
+
+    def test_convert_state_dict_qkv_routing(self):
+        """Verify convert_state_dict routes Wqkv to the interleaved split helper and renames correctly."""
+        from transformers.models.loma.convert_loma_to_hf import _split_interleaved_qkv, convert_state_dict
+
+        num_heads = 4
+        head_dim = 16
+        embed_dim = num_heads * head_dim
+        weight = torch.randn(3 * embed_dim, embed_dim)
+        bias = torch.randn(3 * embed_dim)
+
+        ref_state_dict = {
+            "transformers.0.self_attn.Wqkv.weight": weight,
+            "transformers.0.self_attn.Wqkv.bias": bias,
+        }
+
+        converted = convert_state_dict(ref_state_dict, num_hidden_layers=1, num_attention_heads=num_heads)
+
+        expected_q_w, expected_k_w, expected_v_w = _split_interleaved_qkv(weight, num_heads)
+        expected_q_b, expected_k_b, expected_v_b = _split_interleaved_qkv(bias, num_heads)
+
+        self.assertIn("layers.0.self_attention.q_proj.weight", converted)
+        self.assertIn("layers.0.self_attention.k_proj.weight", converted)
+        self.assertIn("layers.0.self_attention.v_proj.weight", converted)
+        self.assertIn("layers.0.self_attention.q_proj.bias", converted)
+        self.assertIn("layers.0.self_attention.k_proj.bias", converted)
+        self.assertIn("layers.0.self_attention.v_proj.bias", converted)
+
+        torch.testing.assert_close(converted["layers.0.self_attention.q_proj.weight"], expected_q_w)
+        torch.testing.assert_close(converted["layers.0.self_attention.k_proj.weight"], expected_k_w)
+        torch.testing.assert_close(converted["layers.0.self_attention.v_proj.weight"], expected_v_w)
+        torch.testing.assert_close(converted["layers.0.self_attention.q_proj.bias"], expected_q_b)
+        torch.testing.assert_close(converted["layers.0.self_attention.k_proj.bias"], expected_k_b)
+        torch.testing.assert_close(converted["layers.0.self_attention.v_proj.bias"], expected_v_b)
+
+
+@require_torch
+@require_vision
+class LoMaModelIntegrationTest(unittest.TestCase):
+    checkpoint_id = "Falcon7211/loma-b"
+
+    @slow
+    def test_matcher_matches_reference_output(self):
+        """Check the converted matcher against outputs from the official LoMa-B checkpoint."""
+        model = LoMaForKeypointMatching.from_pretrained(self.checkpoint_id).to(torch_device)
+        model.eval()
+
+        keypoints_0 = torch.tensor([[[-0.8, -0.6], [-0.3, 0.1], [0.2, -0.4], [0.7, 0.5]]], device=torch_device)
+        keypoints_1 = torch.tensor([[[-0.7, 0.4], [-0.1, -0.2], [0.4, 0.3], [0.8, -0.5]]], device=torch_device)
+        descriptors = torch.arange(2048, dtype=torch.float32, device=torch_device).reshape(1, 2, 4, 256) / 1024
+
+        with torch.no_grad():
+            # Use interleaved batch format
+            descriptors_flat = model.input_projection(descriptors.reshape(2, 4, 256))
+            keypoints_flat = torch.cat([keypoints_0, keypoints_1], dim=0)  # (2, 4, 2)
+            pos_out = model.positional_encoder(keypoints_flat)
+            position_embeddings = pos_out[0]  # (cos, sin) tuple
+
+            for layer in model.layers:
+                descriptors_flat, _, _ = layer(descriptors_flat, position_embeddings, attention_mask=None)
+            mask = torch.ones(2, 4, dtype=torch.bool, device=torch_device)
+            scores = model.match_assignment(descriptors_flat, mask)
+
+        # Values generated from official davnords/LoMa checkpoint loma_B.pt with correct per-head QKV unbind.
+        expected_scores = torch.tensor(
+            [
+                [
+                    [0.020573, 0.0025817, 0.00057579, 6.4956e-06],
+                    [0.16517, 0.0041020, 0.0011885, 2.3902e-05],
+                    [0.55115, 0.0038557, 0.0015510, 6.5036e-05],
+                    [0.0011464, 0.19158, 0.27597, 0.48650],
+                ]
+            ],
+            device=torch_device,
+        )
+        # The pinned reference scores are rounded; keep tolerance below 1e-5 absolute error.
+        torch.testing.assert_close(scores, expected_scores, rtol=1e-4, atol=1e-5)
+
+        # Mutual matching on this score matrix yields [-1, -1, 0, 3] for image 0
+        maximum_scores_0, maximum_scores_1 = scores.max(dim=2), scores.max(dim=1)
+        matches_0, matches_1 = maximum_scores_0.indices, maximum_scores_1.indices
+        indices = torch.arange(4, device=scores.device)[None]
+        mutual_0 = indices == matches_1.gather(1, matches_0)
+        valid_0 = mutual_0 & (maximum_scores_0.values > 0.1)
+        matches_0 = torch.where(valid_0, matches_0, torch.full_like(matches_0, -1))
+        expected_matches_0 = torch.tensor([[-1, -1, 0, 3]], device=torch_device)
+        torch.testing.assert_close(matches_0, expected_matches_0)
+
+    @slow
+    def test_inference_documentation_image_pair(self):
+        """Test end-to-end inference on the documentation image pair with non-square dimensions (480x640)."""
+        image_processor = AutoImageProcessor.from_pretrained(self.checkpoint_id)
+        model = LoMaForKeypointMatching.from_pretrained(self.checkpoint_id).to(torch_device)
+        model.eval()
+
+        url_0 = (
+            "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/"
+            "phototourism_sample_images/united_states_capitol_98169888_3347710852.jpg"
+        )
+        url_1 = (
+            "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/"
+            "phototourism_sample_images/united_states_capitol_26757027_6717084061.jpg"
+        )
+        images = [Image.open(requests.get(url, stream=True).raw).convert("RGB") for url in (url_0, url_1)]
+        inputs = image_processor(images=images, return_tensors="pt").to(torch_device)
+        self.assertEqual(tuple(inputs["pixel_values"].shape[-2:]), (480, 640))
+
+        with torch.inference_mode():
+            outputs = model(**inputs)
+
+        valid_matches = outputs.matches[0, 0] >= 0
+        self.assertGreaterEqual(valid_matches.sum().item(), 250)
+        valid_indices = torch.where(valid_matches)[0]
+        if torch_device == "cpu":
+            expected_first_matches = torch.tensor([78, 105, 104, 117, 114], device=torch_device)
+            torch.testing.assert_close(outputs.matches[0, 0][valid_indices[:5]], expected_first_matches)
+        expected_first_scores = torch.tensor([0.9990, 0.9939, 0.9950, 0.9985, 0.9992], device=torch_device)
+        torch.testing.assert_close(
+            outputs.matching_scores[0, 0][valid_indices[:5]], expected_first_scores, atol=1e-3, rtol=1e-3
+        )
+
+    @slow
+    def test_inference(self):
+        """Test LoMa inference loads from Hub and produces valid outputs."""
+        model = LoMaForKeypointMatching.from_pretrained(self.checkpoint_id).to(torch_device)
+        model.eval()
+
+        torch.manual_seed(0)
+        pixel_values = torch.rand(1, 2, 3, 120, 160, device=torch_device)
+
+        with torch.no_grad():
+            outputs = model(pixel_values=pixel_values)
+
+        # Verify output structure
+        self.assertIsNotNone(outputs.matches)
+        self.assertIsNotNone(outputs.matching_scores)
+
+        # Verify shapes: [batch_size, num_pairs, num_keypoints]
+        self.assertEqual(outputs.matches.dim(), 3)
+        self.assertEqual(outputs.matching_scores.dim(), 3)
+        self.assertEqual(outputs.matches.shape[0], 1)  # batch_size
+        self.assertEqual(outputs.matches.shape[1], 2)  # num_pairs (one per image)
+        self.assertEqual(outputs.matches.shape, outputs.matching_scores.shape)
+
+        # Verify dtypes
+        self.assertEqual(outputs.matches.dtype, torch.int64)
+        self.assertEqual(outputs.matching_scores.dtype, torch.float32)
+
+        # Verify value ranges
+        self.assertTrue((outputs.matching_scores >= 0).all())
+        self.assertTrue((outputs.matching_scores <= 1).all())
+        self.assertTrue((outputs.matches >= -1).all())
+
+    @slow
+    def test_inference_with_keypoints(self):
+        """Test LoMa inference with pre-computed keypoints."""
+        model = LoMaForKeypointMatching.from_pretrained(self.checkpoint_id).to(torch_device)
+        model.eval()
+
+        torch.manual_seed(0)
+        num_kp = 32
+        pixel_values = torch.rand(1, 2, 3, 120, 160, device=torch_device)
+        keypoints0 = torch.rand(1, num_kp, 2, device=torch_device)
+        keypoints1 = torch.rand(1, num_kp, 2, device=torch_device)
+        keypoints = torch.stack([keypoints0, keypoints1], dim=1)
+
+        with torch.no_grad():
+            outputs = model(pixel_values=pixel_values, keypoints=keypoints)
+
+        # With pre-computed keypoints, num_keypoints should match input
+        self.assertEqual(outputs.matches.shape[-1], num_kp)
+        self.assertEqual(outputs.matching_scores.shape[-1], num_kp)
+
+    @slow
+    def test_inference_batched(self):
+        """Test LoMa inference with batched image pairs."""
+        model = LoMaForKeypointMatching.from_pretrained(self.checkpoint_id).to(torch_device)
+        model.eval()
+
+        torch.manual_seed(0)
+        batch_size = 2
+        pixel_values = torch.rand(batch_size, 2, 3, 120, 160, device=torch_device)
+
+        with torch.no_grad():
+            outputs = model(pixel_values=pixel_values)
+
+        self.assertEqual(outputs.matches.shape[0], batch_size)
+        self.assertEqual(outputs.matching_scores.shape[0], batch_size)
