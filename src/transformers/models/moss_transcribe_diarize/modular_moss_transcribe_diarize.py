@@ -469,7 +469,8 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
                 Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
                 the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
                 audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
-                `tokenize=True`.
+                `tokenize=True`, except for the `labels`: only `tokenize=True` masks them outside the assistant
+                turn.
             **kwargs:
                 Additional keyword arguments forwarded to [`~MossTranscribeDiarizeProcessor.apply_chat_template`].
                 Processor kwargs (for example `text_kwargs`, `audio_kwargs`, ...) should be passed as
@@ -489,6 +490,8 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
         transcriptions = prepare_prompt_input(transcription, batch_size, input_name="transcription", broadcast=False)
         if is_training:
             kwargs["processor_kwargs"] = {"output_labels": True, **kwargs.get("processor_kwargs", {})}
+            # use assistant tokens mask to only keep those outputs for loss computation
+            kwargs["return_assistant_tokens_mask"] = tokenize
 
         conversations = []
         for audio_item, prompt_text, keyword_list, transcript in zip(

@@ -111,7 +111,8 @@ from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
 NUM_SAMPLES = 2
 
-processor = AutoProcessor.from_pretrained(model_id)
+# NOTE: the revision must be used until the chat template marking the assistant turn (for training) is merged
+processor = AutoProcessor.from_pretrained(model_id, revision="refs/pr/5")
 model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, device_map="auto")
 model.train()
 

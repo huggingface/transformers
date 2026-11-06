@@ -147,7 +147,7 @@ class MossTranscribeDiarizeForConditionalGenerationModelTest(ALMModelTest, unitt
 
 @require_torch
 class MossTranscribeDiarizeForConditionalGenerationIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
-    checkpoint = "itazap/MOSS-Transcribe-Diarize-HF"
+    checkpoint = "hf-audio/MOSS-Transcribe-Diarize-HF"
 
     @classmethod
     def setUpClass(cls):

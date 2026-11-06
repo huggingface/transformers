@@ -258,7 +258,8 @@ from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
 model_id = "nvidia/audio-flamingo-3-hf"
 NUM_SAMPLES = 2
 
-processor = AutoProcessor.from_pretrained(model_id)
+# NOTE: the revision must be used until the chat template marking the assistant turn (for training) is merged
+processor = AutoProcessor.from_pretrained(model_id, revision="refs/pr/6")
 model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 model.train()
 
@@ -278,14 +279,16 @@ loss.backward()
 </hfoption>
 <hfoption id="chat template">
 
-For other tasks, put the target in the assistant turn and pass `processor_kwargs={"output_labels": True}`.
+For other tasks, put the target in the assistant turn and pass `processor_kwargs={"output_labels": True}`, with
+`return_assistant_tokens_mask=True` for only the assistant turns to contribute to the loss.
 
 ```python
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
 
 
 model_id = "nvidia/audio-flamingo-3-hf"
-processor = AutoProcessor.from_pretrained(model_id)
+# NOTE: the revision must be used until the chat template marking the assistant turn (for training) is merged
+processor = AutoProcessor.from_pretrained(model_id, revision="refs/pr/6")
 model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 model.train()
 
@@ -307,6 +310,7 @@ inputs = processor.apply_chat_template(
     conversation,
     tokenize=True,
     return_dict=True,
+    return_assistant_tokens_mask=True,
     processor_kwargs={"output_labels": True},
 ).to(model.device, dtype=model.dtype)
 

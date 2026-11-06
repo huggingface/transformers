@@ -14,6 +14,7 @@
 
 import unittest
 
+from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
 from transformers import AutoProcessor, FunAsrNanoProcessor
@@ -33,6 +34,16 @@ class FunAsrNanoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # TODO: swap for `tiny_model_id = "hf-internal-testing/tiny-processor-fun_asr_nano"` once that repo exists.
     # The generic component setup builds a Qwen2 tokenizer with an empty vocab, which tokenizes to nothing.
     model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # TODO: remove once the chat template with `{% generation %}` blocks (for training) is merged:
+        # https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512-hf/discussions/5
+        processor = cls.processor_class.from_pretrained(cls.tmpdirname)
+        with open(hf_hub_download(cls.model_id, "chat_template.jinja", revision="refs/pr/5"), encoding="utf-8") as f:
+            processor.chat_template = f.read()
+        processor.save_pretrained(cls.tmpdirname)
 
     # Overwrite to skip the numpy cases (keeping as many cases as the parent), as
     # `FunAsrNanoProcessor.__call__` is PyTorch-only like `AudioFlamingo3Processor`.

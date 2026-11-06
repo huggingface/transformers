@@ -29,7 +29,7 @@ from transformers.testing_utils import require_librosa, require_torch
 from ...test_processing_common import MODALITY_INPUT_DATA, ProcessorTesterMixin, url_to_local_path
 
 
-_CHECKPOINT = "itazap/MOSS-Transcribe-Diarize-HF"
+_CHECKPOINT = "hf-audio/MOSS-Transcribe-Diarize-HF"
 
 
 class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase):

@@ -501,7 +501,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
         transcriptions = prepare_prompt_input(transcription, batch_size, input_name="transcription", broadcast=False)
         if is_training:
             kwargs["processor_kwargs"] = {"output_labels": True, **kwargs.get("processor_kwargs", {})}
-            # the labels are masked outside the assistant turns, i.e. the `{% generation %}` blocks of the chat template
+            # use assistant tokens mask to only keep those outputs for loss computation
             kwargs["return_assistant_tokens_mask"] = tokenize
 
         conversations = []

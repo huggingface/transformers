@@ -1328,6 +1328,13 @@ class ProcessorTesterMixin:
             self.skipTest(
                 f"{self.processor_class.__name__} does not support training with `apply_transcription_request`."
             )
+        # the assistant turn is located with the `{% generation %}` blocks of the chat template, for only the
+        # transcription to be in the loss
+        if not re.search(r"\{%-?\s*generation\s*-?%\}", processor.chat_template or ""):
+            raise ValueError(
+                f"The chat template of {self.processor_class.__name__} must wrap the assistant turn in "
+                "`{% generation %}` ... `{% endgeneration %}` blocks for training with `apply_transcription_request`."
+            )
         return processor
 
     @require_torch
@@ -1345,20 +1352,20 @@ class ProcessorTesterMixin:
         for key in expected_outputs.keys() - {"labels"}:
             self.assertTrue(outputs[key].equal(expected_outputs[key]))
 
-        if re.search(r"\{%-?\s*generation\s*-?%\}", processor.chat_template):
-            # the prompt is masked out of the loss: each row only keeps its transcription and the end of the turn
-            kept_positions = outputs["labels"] != -100
-            self.assertTrue(outputs["labels"][kept_positions].equal(expected_outputs["labels"][kept_positions]))
-            for labels, transcription in zip(outputs["labels"], transcriptions):
-                kept_text = processor.tokenizer.decode(labels[labels != -100])
-                self.assertTrue(kept_text.startswith(transcription), f"{kept_text!r} doesn't start with it")
-                # the end-of-turn token is kept for the model to learn when to stop
-                self.assertNotEqual(kept_text.strip(), transcription)
-        else:
-            # without `{% generation %}` blocks, the assistant turn can't be located and the prompt is kept
-            self.assertTrue(outputs["labels"].equal(expected_outputs["labels"]))
-            for labels, transcription in zip(outputs["labels"], transcriptions):
-                self.assertIn(transcription, processor.tokenizer.decode(labels[labels != -100]))
+        # the prompt is masked out of the loss: each row only keeps its assistant turn, i.e. the transcription and the
+        # end of the turn
+        user_turn = [{"role": "user", "content": [{"type": "text", "text": "Hi."}]}]
+        assistant_header = processor.apply_chat_template(user_turn, add_generation_prompt=True)[
+            len(processor.apply_chat_template(user_turn)) :
+        ].strip()
+        kept_positions = outputs["labels"] != -100
+        self.assertTrue(outputs["labels"][kept_positions].equal(expected_outputs["labels"][kept_positions]))
+        for labels, transcription in zip(outputs["labels"], transcriptions):
+            kept_text = processor.tokenizer.decode(labels[labels != -100])
+            self.assertIn(transcription, kept_text)
+            self.assertNotIn(assistant_header, kept_text)
+            # the end-of-turn token is kept for the model to learn when to stop
+            self.assertNotEqual(kept_text.strip(), transcription)
 
         # user `processor_kwargs` are merged with the labels request
         merged_outputs = processor.apply_transcription_request(
@@ -1375,8 +1382,6 @@ class ProcessorTesterMixin:
             self.skipTest(
                 f"{self.processor_class.__name__} does not accept a `prompt` in `apply_transcription_request`."
             )
-        if not re.search(r"\{%-?\s*generation\s*-?%\}", processor.chat_template):
-            self.skipTest("The chat template has no `{% generation %}` blocks to mask the prompt out of the labels.")
         user_turn = [{"role": "user", "content": [{"type": "text", "text": "Hi."}]}]
         assistant_header = processor.apply_chat_template(user_turn, add_generation_prompt=True)[
             len(processor.apply_chat_template(user_turn)) :
@@ -1390,7 +1395,7 @@ class ProcessorTesterMixin:
         )
         for labels, transcription in zip(outputs["labels"], transcriptions):
             kept_text = processor.tokenizer.decode(labels[labels != -100])
-            self.assertTrue(kept_text.startswith(transcription), f"{kept_text!r} doesn't start with the transcription")
+            self.assertIn(transcription, kept_text)
             self.assertNotIn("Not an answer.", kept_text)
 
     @require_torch

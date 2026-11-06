@@ -16,6 +16,7 @@ import shutil
 import tempfile
 import unittest
 
+from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
 from transformers import (
@@ -41,6 +42,13 @@ class GlmAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
         processor = GlmAsrProcessor.from_pretrained(cls.tiny_model_id)
+        # TODO: remove once the chat template with `{% generation %}` blocks (for training) is merged and copied to the
+        # tiny processor: https://huggingface.co/zai-org/GLM-ASR-Nano-2512/discussions/14
+        with open(
+            hf_hub_download("zai-org/GLM-ASR-Nano-2512", "chat_template.jinja", revision="refs/pr/14"),
+            encoding="utf-8",
+        ) as f:
+            processor.chat_template = f.read()
         processor.save_pretrained(cls.tmpdirname)
 
     @require_torch

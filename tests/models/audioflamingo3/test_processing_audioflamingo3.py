@@ -17,6 +17,7 @@ import shutil
 import tempfile
 import unittest
 
+from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
 from transformers import (
@@ -43,6 +44,10 @@ class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
         processor = AudioFlamingo3Processor.from_pretrained(cls.tiny_model_id)
+        # TODO: remove once the chat template with `{% generation %}` blocks (for training) is merged and copied to the
+        # tiny processor: https://huggingface.co/nvidia/audio-flamingo-3-hf/discussions/6
+        with open(hf_hub_download(cls.checkpoint, "chat_template.jinja", revision="refs/pr/6"), encoding="utf-8") as f:
+            processor.chat_template = f.read()
         processor.save_pretrained(cls.tmpdirname)
 
     @require_torch

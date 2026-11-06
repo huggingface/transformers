@@ -25,7 +25,7 @@ speaker diarization, and timestamps. It combines a Whisper-style encoder, a 4× 
 projector, and a Qwen3 language model.
 
 The model checkpoint is available at:
-[itazap/MOSS-Transcribe-Diarize-HF](https://huggingface.co/itazap/MOSS-Transcribe-Diarize-HF)
+[hf-audio/MOSS-Transcribe-Diarize-HF](https://huggingface.co/hf-audio/MOSS-Transcribe-Diarize-HF)
 
 Key capabilities include:
 
@@ -37,7 +37,7 @@ Key capabilities include:
 * **Multilingual support** across 50+ languages.
 
 This model was contributed by [Ita Zaporozhets](https://huggingface.co/itazap) from the Hugging Face team. See the
-[model card](https://huggingface.co/itazap/MOSS-Transcribe-Diarize-HF) and the
+[model card](https://huggingface.co/hf-audio/MOSS-Transcribe-Diarize-HF) and the
 [OpenMOSS repository](https://github.com/OpenMOSS/MOSS-Transcribe-Diarize) for more details.
 
 ## Usage
@@ -56,7 +56,7 @@ string, the parsed segments as a list of dicts (`return_format="parsed"`), or ju
 ```python
 from transformers import AutoProcessor, AutoModelForCausalLM
 
-model_id = "itazap/MOSS-Transcribe-Diarize-HF"
+model_id = "hf-audio/MOSS-Transcribe-Diarize-HF"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 
@@ -106,7 +106,7 @@ Below we transcribe an audio clip that mentions "Yorùbá", comparing with and w
 ```python
 from transformers import AutoProcessor, AutoModelForCausalLM
 
-model_id = "itazap/MOSS-Transcribe-Diarize-HF"
+model_id = "hf-audio/MOSS-Transcribe-Diarize-HF"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 
@@ -139,7 +139,7 @@ WITH keywords   : Let's talk about the most spoken languages in the world. Manda
 ```python
 from transformers import AutoProcessor, AutoModelForCausalLM
 
-model_id = "itazap/MOSS-Transcribe-Diarize-HF"
+model_id = "hf-audio/MOSS-Transcribe-Diarize-HF"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 
@@ -176,7 +176,7 @@ Set an entry to `None` to skip it for that sample.
 ```python
 from transformers import AutoProcessor, AutoModelForCausalLM
 
-model_id = "itazap/MOSS-Transcribe-Diarize-HF"
+model_id = "hf-audio/MOSS-Transcribe-Diarize-HF"
 processor = AutoProcessor.from_pretrained(model_id)
 # `from_pretrained` is used here for convenience, the model can also be built from a config directly.
 model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
@@ -201,7 +201,7 @@ Pass the target transcriptions, in the model's timestamped and speaker-tagged ou
 ```python
 from transformers import AutoModelForCausalLM, AutoProcessor
 
-model_id = "itazap/MOSS-Transcribe-Diarize-HF"
+model_id = "hf-audio/MOSS-Transcribe-Diarize-HF"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 model.train()
@@ -235,7 +235,7 @@ import torch
 from transformers import AutoProcessor, AutoModelForCausalLM
 
 
-model_id = "itazap/MOSS-Transcribe-Diarize-HF"
+model_id = "hf-audio/MOSS-Transcribe-Diarize-HF"
 
 num_warmup = 5
 num_runs = 20
@@ -298,7 +298,7 @@ providing a `CompileConfig` object instead of compiling `model.forward` directly
 import torch
 from transformers import AutoProcessor, AutoModelForCausalLM, CompileConfig
 
-model_id = "itazap/MOSS-Transcribe-Diarize-HF"
+model_id = "hf-audio/MOSS-Transcribe-Diarize-HF"
 num_warmup = 3
 
 processor = AutoProcessor.from_pretrained(model_id)
