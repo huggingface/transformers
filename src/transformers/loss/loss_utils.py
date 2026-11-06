@@ -29,6 +29,7 @@ from .loss_rf_detr import RfDetrForSegmentationLoss
 from .loss_rnnt import ParakeetForRNNTLoss
 from .loss_rt_detr import RTDetrForObjectDetectionLoss
 from .loss_tdt import ParakeetForTDTLoss
+from .loss_xiaomi_lens0 import XiaomiLens0ForConditionalGenerationLoss
 
 
 def fixed_cross_entropy(
@@ -203,4 +204,5 @@ LOSS_MAPPING = {
     "ParakeetForTDT": ParakeetForTDTLoss,
     "RfDetrForObjectDetection": LwDetrForObjectDetectionLoss,
     "RfDetrForInstanceSegmentation": RfDetrForSegmentationLoss,
+    "XiaomiLens0ForConditionalGeneration": XiaomiLens0ForConditionalGenerationLoss,
 }

@@ -71,6 +71,7 @@ else:
             ("qwen3_vl_moe", {"torchvision": "Qwen3VLVideoProcessor"}),
             ("qwen4_exp", {"torchvision": "Qwen3VLVideoProcessor"}),
             ("videoprism", {"torchvision": "LlavaOnevisionVideoProcessor"}),
+            ("xiaomi_lens0", {"torchvision": "Qwen3VLVideoProcessor"}),
         ]
     )
     VIDEO_PROCESSOR_MAPPING_NAMES.update(MISSING_VIDEO_PROCESSOR_MAPPING_NAMES)
