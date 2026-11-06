@@ -17,18 +17,23 @@ import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, MSELoss
 
+from .loss_clm import ClmForDecisionLoss
 from .loss_ctc import ForCTCLoss
 from .loss_d_fine import DFineForObjectDetectionLoss
 from .loss_deformable_detr import DeformableDetrForObjectDetectionLoss, DeformableDetrForSegmentationLoss
 from .loss_deimv2 import Deimv2ForObjectDetectionLoss
 from .loss_for_object_detection import ForObjectDetectionLoss, ForSegmentationLoss
 from .loss_grounding_dino import GroundingDinoForObjectDetectionLoss
+from .loss_jev import JevForDecisionLoss
+from .loss_jeva import JevaForDecisionLoss
+from .loss_kev import KevForDecisionLoss
 from .loss_lsd import PocketTTSForConditionalGenerationLoss
 from .loss_lw_detr import LwDetrForObjectDetectionLoss
 from .loss_rf_detr import RfDetrForSegmentationLoss
 from .loss_rnnt import ParakeetForRNNTLoss
 from .loss_rt_detr import RTDetrForObjectDetectionLoss
 from .loss_tdt import ParakeetForTDTLoss
+from .loss_von import VonForDecisionLoss
 
 
 def fixed_cross_entropy(
@@ -172,6 +177,11 @@ def ForSemanticSegmentationLoss(
 
 
 LOSS_MAPPING = {
+    "ClmForDecision": ClmForDecisionLoss,
+    "JevForDecision": JevForDecisionLoss,
+    "JevaForDecision": JevaForDecisionLoss,
+    "KevForDecision": KevForDecisionLoss,
+    "VonForDecision": VonForDecisionLoss,
     "ForSemanticSegmentation": ForSemanticSegmentationLoss,
     "ForCausalLM": ForCausalLMLoss,
     "ForMaskedLM": ForMaskedLMLoss,

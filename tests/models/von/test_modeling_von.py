@@ -34,7 +34,7 @@ if is_torch_available():
         VonConfig,
         VonForDecision,
     )
-    from transformers.models.von.modeling_von import von_loss
+    from transformers.loss.loss_von import VonForDecisionLoss as von_loss
 
 
 @require_torch

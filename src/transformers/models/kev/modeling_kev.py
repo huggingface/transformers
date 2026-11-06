@@ -52,24 +52,6 @@ class KevDecisionOutput(ModelOutput):
     logits: torch.Tensor | None = None
 
 
-def kev_loss(logits: torch.Tensor, labels: torch.Tensor, num_options: torch.Tensor) -> torch.Tensor:
-    """The default objective of `jaredpalmer/kev/kev/train.py::question_loss`, averaged over questions."""
-    logits, labels = logits.float(), labels.to(logits.device).reshape(-1)
-    sizes = num_options.reshape(-1).tolist()
-    soft_labels = labels.is_floating_point()
-    expected_labels = logits.numel() if soft_labels else len(sizes)
-    if labels.numel() != expected_labels:
-        raise ValueError(f"Expected {expected_labels} labels, got {labels.numel()}.")
-    targets = labels.split(sizes) if soft_labels else labels.unbind()
-    losses = []
-    for scores, target in zip(logits.split(sizes), targets):
-        if soft_labels:
-            losses.append(-(target.float() * nn.functional.log_softmax(scores, dim=-1)).sum())
-        elif target != -100:
-            losses.append(nn.functional.cross_entropy(scores[None], target.long()[None]))
-    return torch.stack(losses).mean() if losses else logits.sum() * 0.0
-
-
 @auto_docstring(
     custom_intro="""
     kev (jaredpalmer/kev-4b): the model of its repo and a decision head, each option is scored by the dot product of the
@@ -110,7 +92,9 @@ class KevForDecision(DecisionMixin, KevPreTrainedModel):
         blocks = torch.split(hidden_states[marks - 1], (num_options + 1).tolist())
         scores = torch.cat([self.key(block[:-1]) @ self.query(block[-1]) for block in blocks])
         scores = scores / math.sqrt(self.config.head_dim)
-        loss = kev_loss(scores, labels, num_options) if labels is not None else None
+        loss = (
+            self.loss_function(logits=scores, labels=labels, num_options=num_options) if labels is not None else None
+        )
         return KevDecisionOutput(loss=loss, logits=scores)
 
 

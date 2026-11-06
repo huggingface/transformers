@@ -25,7 +25,7 @@ if is_torch_available():
     import torch
 
     from transformers import AutoModelForDecision, KevConfig, KevForDecision, Qwen2Config, Trainer, TrainingArguments
-    from transformers.models.kev.modeling_kev import kev_loss
+    from transformers.loss.loss_kev import KevForDecisionLoss as kev_loss
 
 
 @require_torch

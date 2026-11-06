@@ -212,24 +212,7 @@ class ClmForDecision(DecisionMixin, ClmPreTrainedModel):
             logits = scale * states @ options.T
             loss = None
             if labels is not None:
-                targets = (
-                    nn.functional.one_hot(labels, options.shape[0]).float() if labels.ndim == 1 else labels.float()
-                )
-                loss_logits = logits.float()
-                if group_ids is not None:
-                    same_group = group_ids[:, None] == group_ids[None, :]
-                    same_group.fill_diagonal_(False)
-                    loss_logits = loss_logits.masked_fill(same_group, -torch.inf)
-                state_log_probs = loss_logits.log_softmax(-1).masked_fill(targets == 0, 0.0)
-                state_loss = -(targets * state_log_probs).sum(-1).mean()
-                reverse_targets = targets.T
-                positive_candidates = reverse_targets.sum(-1) > 0
-                reverse_targets = reverse_targets[positive_candidates]
-                reverse_targets = reverse_targets / reverse_targets.sum(-1, keepdim=True)
-                action_log_probs = loss_logits.T[positive_candidates].log_softmax(-1)
-                action_log_probs = action_log_probs.masked_fill(reverse_targets == 0, 0.0)
-                action_loss = -(reverse_targets * action_log_probs).sum(-1).mean()
-                loss = (state_loss + action_loss) / 2
+                loss = self.loss_function(logits=logits, labels=labels, group_ids=group_ids)
             return ClmDecisionOutput(loss=loss, logits=logits)
 
     @torch.no_grad()

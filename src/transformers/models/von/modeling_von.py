@@ -59,26 +59,6 @@ class VonDecisionOutput(ModelOutput):
     logits: torch.Tensor | None = None
 
 
-def von_loss(logits: torch.Tensor, labels: torch.Tensor, brier_weight: float = 0.5) -> torch.Tensor:
-    """The CE + Brier objective of `wfzyx/von/training/train_option_marker.py::compute_marker_rlcd_loss`."""
-    scores, labels = logits.float(), labels.to(logits.device).reshape(-1)
-    if labels.is_floating_point():
-        if labels.numel() != scores.numel():
-            raise ValueError(f"Expected {scores.numel()} probabilities, got {labels.numel()}.")
-        target = labels.float()
-    else:
-        if labels.numel() != 1:
-            raise ValueError("Von expects one label for the question of the prompt.")
-        if labels[0] == -100:
-            return scores.sum() * 0.0
-        target = nn.functional.one_hot(labels[0].long(), num_classes=scores.numel()).to(scores.dtype)
-    probabilities = scores.softmax(dim=-1)
-    # Retain the upstream epsilon: replacing this with log_softmax changes saturated predictions and their gradients.
-    cross_entropy = -(target * (probabilities + 1e-8).log()).sum()
-    brier = (probabilities - target).square().sum()
-    return cross_entropy + brier_weight * brier
-
-
 @auto_docstring(
     custom_intro="""
     von (wfzyx/von): the model of its repo and a decision head, each option is scored by an MLP on the hidden state of its `[MASK]` (the token before
@@ -178,7 +158,11 @@ class VonForDecision(DecisionMixin, VonPreTrainedModel):
         hidden_states = self.input_norm(hidden_states[reads])
         logits = self.out_proj(self.norm(nn.functional.gelu(self.dense(hidden_states))))[..., 0]
         scores = logits[0]
-        loss = von_loss(scores, labels, self.config.brier_weight) if labels is not None else None
+        loss = (
+            self.loss_function(logits=scores, labels=labels, brier_weight=self.config.brier_weight)
+            if labels is not None
+            else None
+        )
         if (
             labels is None and len(logits) == 2
         ):  # zero-shot noul: the block without the state lowers the score of `true`

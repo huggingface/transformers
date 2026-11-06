@@ -471,17 +471,16 @@ class JevaForDecision(DecisionMixin, JevaPreTrainedModel):
         aux_loss = weighted_aux_loss / aux_tokens.clamp(min=1) if self.router_aux_loss_coef else None
         loss = None
         if labels is not None:
-            candidates = labels[:, 1:].to(device=log_q.device, dtype=torch.float32)
-            candidate_loss = -(candidates * log_q.masked_fill(~option_mask, 0.0)).sum(-1)
-            coverage = candidates.sum(-1)
-            coverage_loss = coverage * F.softplus(-coverage_logit) + (1 - coverage) * F.softplus(coverage_logit)
-            if allow_null is None:
-                allow_null = torch.zeros_like(coverage, dtype=torch.bool)
-            per_example_loss = candidate_loss + coverage_loss * allow_null.to(log_q.device)
-            normalizer = len(per_example_loss) if num_items_in_batch is None else num_items_in_batch
-            loss = per_example_loss.sum() / normalizer
-            if aux_loss is not None:
-                loss = loss + self.router_aux_loss_coef * aux_loss
+            loss = self.loss_function(
+                logits=log_q,
+                labels=labels,
+                coverage_logits=coverage_logit,
+                option_mask=option_mask,
+                allow_null=allow_null,
+                aux_loss=aux_loss,
+                router_aux_loss_coef=self.router_aux_loss_coef,
+                num_items_in_batch=num_items_in_batch,
+            )
         return JevaDecisionOutput(loss=loss, logits=log_q, coverage_logits=coverage_logit, aux_loss=aux_loss)
 
     @torch.no_grad()
