@@ -14,7 +14,6 @@
 
 import copy
 import random
-from inspect import signature
 from unittest.mock import patch
 
 from .multimodal_tester import MultiModalModelTest, MultiModalModelTester
@@ -31,13 +30,11 @@ if is_torch_available():
 
 
 class ALMModelTester(MultiModalModelTester):
-    audio_config_class = None
     audio_config_key = "audio_config"
     # Name under which the audio mask is passed to the model's forward (e.g. "feature_attention_mask"
     # for Qwen2Audio). Leave as `None` if the model does not consume a separate audio-level mask;
     # `_prepare_modality_inputs` then skips adding it to the inputs dict.
     audio_mask_key = None
-    _required_attributes = MultiModalModelTester._required_attributes + ("audio_config_class",)
 
     @property
     def pipeline_model_mapping(self):
@@ -124,9 +121,6 @@ class ALMModelTester(MultiModalModelTester):
     def _special_token_ids(self):
         return super()._special_token_ids | {self.audio_token_id}
 
-    def _build_modality_sub_configs(self):
-        return {self.audio_config_key: self.get_audio_config()}
-
     def _prepare_modality_inputs(self, input_ids, config, batch_size: int | None = None):
         audio_features = self.create_audio_features(batch_size=batch_size)
         audio_mask = self.create_audio_mask(batch_size=batch_size)
@@ -143,16 +137,6 @@ class ALMModelTester(MultiModalModelTester):
         )
         modality_inputs.update(additional_inputs)
         return input_ids, modality_inputs
-
-    # -- Audio sub-config construction -------------------------------------------------------
-
-    @property
-    def audio_config_args(self):
-        return list(signature(self.audio_config_class.__init__).parameters.keys())
-
-    def get_audio_config(self):
-        kwargs = self._collect_kwargs(self.audio_config_args, self.audio_config_class)
-        return self.audio_config_class(**kwargs)
 
 
 class ALMModelTest(MultiModalModelTest):

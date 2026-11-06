@@ -93,6 +93,7 @@ class Phi4MultimodalVisionConfig(SiglipVisionConfig):
     crop_size: int = 448
     image_token_id: int = 200010
     feature_layer: int = -2
+    vision_use_head = AttributeError()
 
 
 @auto_docstring(checkpoint="microsoft/Phi-4-multimodal-instruct")

@@ -16,7 +16,7 @@ from typing import Literal
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 from ...utils.type_validators import activation_fn_key, interval, positive_int_field
@@ -113,7 +113,7 @@ class PocketTTSConfig(PreTrainedConfig):
     """
 
     model_type = "pocket_tts"
-    sub_configs_defaults = {"flow_head_config": SubConfigSpec(config_class=PocketTTSFlowHeadConfig)}
+    sub_configs_defaults = {"flow_head_config": PocketTTSFlowHeadConfig}
 
     flow_head_config: dict | PreTrainedConfig | None = None
     vocab_size: int = positive_int_field(default=4004)
