@@ -2513,8 +2513,6 @@ class OmniModalProcessorMixin(ProcessorMixin):
         images, text, videos, audio = self.prepare_inputs_layout(
             images=images, text=text, videos=videos, audio=audio, **kwargs
         )
-        self.validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
-
         merged_kwargs = self._merge_kwargs(
             self.valid_processor_kwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
@@ -2524,6 +2522,13 @@ class OmniModalProcessorMixin(ProcessorMixin):
         # TODO @guarin: move it to processor level argument. Used by EG2 and qwen-omni series
         # Without videos there is no audio track to load, so `audio` is processed as usual
         load_audio_from_video = merged_kwargs["videos_kwargs"].get("load_audio_from_video") and videos is not None
+
+        # Audio of a video has no placeholder in text, so only standalone slots are counted against it
+        standalone_audio = audio
+        if load_audio_from_video and audio and len(audio) == len(audio_from_video_indices or []):
+            standalone_audio = [sample for sample, idx in zip(audio, audio_from_video_indices) if idx is None]
+        self.validate_inputs(images=images, text=text, videos=videos, audio=standalone_audio, **kwargs)
+
         if load_audio_from_video:
             audio, video_to_audio_indices = self._resolve_audio_from_video(
                 videos,

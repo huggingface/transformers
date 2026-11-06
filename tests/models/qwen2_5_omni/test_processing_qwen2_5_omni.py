@@ -86,11 +86,6 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             {"expected_dim": 0, "output_length": 3360},
         ]
 
-    def prepare_audio_inputs(self, batch_size: int = 3):
-        """This function prepares a list of numpy audios."""
-        audio_inputs = [np.random.rand(160000) * 2 - 1] * batch_size
-        return audio_inputs
-
     @parameterized.expand(
         [
             ("text",),
