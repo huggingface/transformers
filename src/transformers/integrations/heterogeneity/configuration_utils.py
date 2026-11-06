@@ -197,6 +197,7 @@ def _get_layer_config(
 ) -> PreTrainedConfig:
     output_config = copy.copy(config)
     output_config.__dict__.pop("_heterogeneity_spec", None)
+    output_config.__dict__["_per_layer_parent"] = config
 
     output_config.skip = layer_overrides.get("skip", [])
 

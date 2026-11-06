@@ -170,6 +170,42 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"\.hc_head_base", ".hc_base"),
             WeightRenaming(r"\.hc_head_scale", ".hc_scale"),
         ],
+        # The original H-Net nests each stage in the previous one (`backbone.main_network.main_network...`): unroll
+        # the stages into per-stage lists, the innermost network being `main_network`. Every target is unique so that
+        # saving reverses each rename (the main network is saved at the 2-stage depth, which loads back the same).
+        "hnet": [
+            WeightRenaming(r"embeddings\.", "embed_tokens."),
+            WeightRenaming(r"routing_module\.q_proj_layer\.", "routing_module.q_proj."),
+            WeightRenaming(r"routing_module\.k_proj_layer\.", "routing_module.k_proj."),
+            WeightRenaming(r"\.rmsnorm\.", ".norm_f."),
+            WeightRenaming(r"\.norm1\.", ".input_layernorm."),
+            WeightRenaming(r"\.norm2\.", ".post_attention_layernorm."),
+            WeightRenaming(r"\.mlp\.fc2\.", ".mlp.down_proj."),
+            WeightRenaming(r"backbone\.main_network\.main_network\.pad_dimension", "pad_dimensions.1"),
+            WeightRenaming(r"backbone\.main_network\.pad_dimension", "pad_dimensions.0"),
+            WeightRenaming(r"backbone\.main_network\.(encoder|decoder|routing_module|residual_proj)\.", r"\1s.1."),
+            WeightRenaming(r"backbone\.(encoder|decoder|routing_module|residual_proj)\.", r"\1s.0."),
+            WeightRenaming([r"backbone\.main_network\.main_network\.", r"backbone\.main_network\."], "main_network."),
+            # Both Mamba and attention layers keep their output projection in `mixer.out_proj`: every released layout
+            # has attention in all main network layers, the first stage-1 encoder layer and the last stage-1 decoder layer
+            WeightRenaming(
+                r"main_network\.layers\.(\d+)\.mixer\.out_proj\.", r"main_network.layers.\1.self_attn.o_proj."
+            ),
+            WeightRenaming(r"encoders\.1\.layers\.0\.mixer\.out_proj\.", "encoders.1.layers.0.self_attn.o_proj."),
+            WeightRenaming(r"decoders\.1\.layers\.4\.mixer\.out_proj\.", "decoders.1.layers.4.self_attn.o_proj."),
+            WeightRenaming(r"\.mixer\.Wqkv\.", ".self_attn.Wqkv."),
+            WeightRenaming(r"\.mixer\.", ".mamba."),
+            WeightConverter(
+                source_patterns=r"\.mlp\.fc1\.weight",
+                target_patterns=[".mlp.up_proj.weight", ".mlp.gate_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=r"\.self_attn\.Wqkv\.weight",
+                target_patterns=[".self_attn.q_proj.weight", ".self_attn.k_proj.weight", ".self_attn.v_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+        ],
         # Cosmos3 Edge's composite checkpoint stores its dense reasoner text tower as conventional attention + MLP
         # blocks. The visual/projector tensors already use their native module names and intentionally need no mapping.
         "cosmos3_edge": [

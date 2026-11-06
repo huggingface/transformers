@@ -43,13 +43,10 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_nemotron_h import NemotronHConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 class NemotronHRMSNormGated(torch.nn.Module):
@@ -447,12 +444,6 @@ class NemotronHMamba2Mixer(nn.Module):
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
 
         self.layer_type = config.layer_types[layer_idx]
-        if not config.use_mamba_kernels:
-            logger.warning_once(
-                "`use_mamba_kernels=False` is deprecated and has no effect. The implementation is selected "
-                "automatically: Hub kernels when loading with `use_kernels=True`, otherwise the `mamba-ssm` and "
-                "`causal-conv1d` packages if installed, otherwise the PyTorch implementation."
-            )
         self.use_mem_eff_path = True
 
     @torch.no_grad()
