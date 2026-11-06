@@ -2248,6 +2248,32 @@ def _build_checkpoint_conversion_mapping():
     # The `readout.safetensors` of the decision models of vLLM (pplx-decider, d3): the weight of the head, no bias
     mapping["jev"] = [WeightRenaming(r"^weight", "proj.weight")]
 
+    # LiquidAI's released D1 Omni: PyTorch's fused head QKV and NeMo audio names.
+    mapping["d1_omni"] = [
+        WeightRenaming(r"head\.head\.layers\.", "head.layers."),
+        WeightRenaming(r"head\.scorer\.0\.", "head.scorer.layer_norm."),
+        WeightRenaming(r"head\.scorer\.1\.", "head.scorer.dense."),
+        WeightRenaming(r"head\.scorer\.3\.", "head.scorer.out_proj."),
+        WeightConverter(
+            r"self_attn.in_proj_",
+            ["self_attn.q_proj.", "self_attn.k_proj.", "self_attn.v_proj."],
+            operations=[Chunk(dim=0)],
+            scope_prefix="head",
+        ),
+        *[WeightRenaming(rf"\.linear{i}\.", f".mlp.fc{i}.", scope_prefix="head") for i in (1, 2)],
+        *[WeightRenaming(rf"\.norm{i}\.", f".layer_norm{i}.", scope_prefix="head") for i in (1, 2)],
+        WeightRenaming(r"pre_encode\.conv\.", "subsampling.layers.", scope_prefix="audio.encoder"),
+        WeightRenaming(r"pre_encode\.out\.", "subsampling.linear.", scope_prefix="audio.encoder"),
+        *[
+            WeightRenaming(rf"self_attn\.linear_{q}\.", f"self_attn.{q}_proj.", scope_prefix="audio.encoder")
+            for q in ("q", "k", "v")
+        ],
+        WeightRenaming(r"self_attn\.linear_out\.", "self_attn.o_proj.", scope_prefix="audio.encoder"),
+        WeightRenaming(r"self_attn\.linear_pos\.", "self_attn.relative_k_proj.", scope_prefix="audio.encoder"),
+        WeightRenaming(r"self_attn\.pos_bias_", "self_attn.bias_", scope_prefix="audio.encoder"),
+        WeightRenaming(r"conv\.batch_norm\.", "conv.norm.", scope_prefix="audio.encoder"),
+    ]
+
     # Gradium's runtime checkpoint (`model.safetensors` next to the runtime's files). Its codec (`mimi.`) and its
     # training-only tensors are left unexpected: the codec is the processor's audio tokenizer.
     conditioners = r"^flow_lm\.condition_provider\.conditioners\."

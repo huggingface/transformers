@@ -114,6 +114,9 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("ctrl", "CTRLModel"),
         ("cvt", "CvtModel"),
         ("cwm", "CwmModel"),
+        ("d1_omni", "D1OmniModel"),
+        ("d1_omni_audio_encoder", "D1OmniAudioEncoder"),
+        ("d1_omni_text", "D1OmniTextModel"),
         ("d_fine", "DFineModel"),
         ("dab-detr", "DabDetrModel"),
         ("dac", "DacModel"),
@@ -2114,6 +2117,7 @@ MODEL_FOR_DECISION_MAPPING_NAMES = OrderedDict(
     [
         ("clef", "ClefForDecision"),
         ("clm", "ClmForDecision"),
+        ("d1_omni", "D1OmniForDecision"),
         ("jev", "JevForDecision"),
         ("jeva", "JevaForDecision"),
         ("kev", "KevForDecision"),

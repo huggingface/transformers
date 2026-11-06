@@ -100,6 +100,7 @@ if TYPE_CHECKING:
     from .ctrl import *
     from .cvt import *
     from .cwm import *
+    from .d1_omni import *
     from .d_fine import *
     from .dab_detr import *
     from .dac import *
