@@ -30,6 +30,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import select_hidden_states
 from .configuration_aya_vision import AyaVisionConfig
 
 
@@ -105,6 +106,7 @@ class AyaVisionModel(LlavaModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
+    @select_hidden_states("vision_feature_layer")
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
@@ -113,7 +115,6 @@ class AyaVisionModel(LlavaModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
-        kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or vision_feature_layer
         image_outputs = self.vision_tower(
             pixel_values,
             return_dict=True,

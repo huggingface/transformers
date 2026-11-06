@@ -42,7 +42,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import capture_outputs, select_hidden_states
 from ..auto import AutoModel
 from .configuration_granite4_vision import Granite4VisionConfig, Granite4VisionTextConfig
 
@@ -830,6 +830,12 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
+    @select_hidden_states(
+        lambda self: [
+            *(vision_layer for vision_layer, _ in self.config.deepstack_layer_map),
+            self.config.spatial_vision_layer,
+        ]
+    )
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
@@ -867,10 +873,6 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         elif pixel_values.dim() != 4:
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
-        kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or [
-            *(vision_layer for vision_layer, _ in self.config.deepstack_layer_map),
-            self.config.spatial_vision_layer,
-        ]
         vision_outputs = self.vision_tower(pixel_values, **kwargs)
 
         # Deepstack features: extract from multiple vision layers, downsample via interpolation

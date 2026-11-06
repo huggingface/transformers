@@ -59,7 +59,7 @@ class VipLlavaVisionText2TextModelTester:
         image_token_index=0,
         projector_hidden_act="gelu",
         seq_length=7,
-        vision_feature_layers=[0, 0, 1, 1, 0],
+        vision_feature_layer=[0, 0, 1, 1, 0],
         text_config={
             "model_type": "llama",
             "seq_length": 7,
@@ -104,7 +104,7 @@ class VipLlavaVisionText2TextModelTester:
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
-        self.vision_feature_layers = vision_feature_layers
+        self.vision_feature_layer = vision_feature_layer
         self.text_config = text_config
         self.vision_config = vision_config
         self.pad_token_id = text_config["pad_token_id"]
@@ -129,7 +129,7 @@ class VipLlavaVisionText2TextModelTester:
             ignore_index=self.ignore_index,
             image_token_index=self.image_token_index,
             projector_hidden_act=self.projector_hidden_act,
-            vision_feature_layers=self.vision_feature_layers,
+            vision_feature_layer=self.vision_feature_layer,
             image_seq_length=self.num_image_tokens,
         )
 
@@ -184,7 +184,7 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
 
     def setUp(self):
         self.model_tester = VipLlavaVisionText2TextModelTester(self)
-        common_properties = ["image_token_index", "vision_feature_layers", "image_seq_length"]
+        common_properties = ["image_token_index", "vision_feature_layer", "image_seq_length"]
         self.config_tester = ConfigTester(
             self, config_class=VipLlavaConfig, has_text_modality=False, common_properties=common_properties
         )
@@ -231,20 +231,15 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
             ([-1, -2],),
         ],
     )
-    def test_vision_feature_layers(self, vision_feature_layers):
+    def test_vision_feature_layers(self, vision_feature_layer):
         """
         Test that we can use either one vision feature layer, or a list of
         vision feature layers.
         """
-        # NOTE: vipllava uses vision_feature_layers instead of vision_feature_layer as the
-        # config key. The reason is that other llava classes supported one vision feature layer
-        # and added support for a list of layers with granite vision support, while vipllava
-        # originally supported multiple feature layers, and added support for a single layer for
-        # for compatibility reasons.
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.vision_feature_layers = vision_feature_layers
+        config.vision_feature_layer = vision_feature_layer
 
-        num_feature_layers = 1 if isinstance(vision_feature_layers, int) else len(vision_feature_layers)
+        num_feature_layers = 1 if isinstance(vision_feature_layer, int) else len(vision_feature_layer)
         hidden_size = config.vision_config.hidden_size
         expected_features = hidden_size * num_feature_layers
 
@@ -255,6 +250,20 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
             base_model = getattr(model, "model", model)
             assert base_model.multi_modal_projector.linear_1.in_features == expected_features
             model(**input_dict)
+
+    def test_deprecated_vision_feature_layers(self):
+        """The old name for `vision_feature_layer` still works, in the config and as an argument."""
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        self.assertEqual(config.vision_feature_layers, config.vision_feature_layer)
+
+        reloaded = VipLlavaConfig.from_dict({**config.to_dict(), "vision_feature_layers": [-1]})
+        self.assertEqual(reloaded.vision_feature_layer, [-1])
+
+        model = VipLlavaModel(config).to(torch_device).eval()
+        with torch.no_grad():
+            features = model.get_image_features(input_dict["pixel_values"], vision_feature_layer=[0, 0, 1, 1, 0])
+            deprecated = model.get_image_features(input_dict["pixel_values"], vision_feature_layers=[0, 0, 1, 1, 0])
+        torch.testing.assert_close(features.pooler_output, deprecated.pooler_output)
 
     @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):

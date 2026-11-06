@@ -5651,8 +5651,7 @@ class ModelTesterMixin(ExportTesterMixin):
 
         uses_vision_feature_layers = False
         for sub_config in [config, *(getattr(config, key, None) for key in config.sub_configs)]:
-            for attribute in ("vision_feature_layer", "vision_feature_layers"):
-                uses_vision_feature_layers |= getattr(sub_config, attribute, None) is not None
+            uses_vision_feature_layers |= getattr(sub_config, "vision_feature_layer", None) is not None
 
         if uses_vision_feature_layers:
             self.assertTrue(

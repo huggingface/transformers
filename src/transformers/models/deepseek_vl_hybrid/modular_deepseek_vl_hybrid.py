@@ -43,6 +43,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.output_capturing import select_hidden_states
 from ..auto import AutoConfig, AutoModel
 from ..deepseek_vl.configuration_deepseek_vl import DeepseekVLConfig
 from ..deepseek_vl.image_processing_deepseek_vl import DeepseekVLImageProcessor
@@ -225,12 +226,12 @@ class DeepseekVLHybridModel(DeepseekVLModel):
     def get_low_res_image_features(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
         return self.vision_model(pixel_values, return_dict=True, **kwargs)
 
+    @select_hidden_states(lambda self: self.global_attn_index + 1)
     def get_high_res_image_features(
         self,
         pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or self.global_attn_index + 1
         high_res_outputs = self.high_res_vision_model(
             pixel_values=pixel_values,
             return_dict=True,

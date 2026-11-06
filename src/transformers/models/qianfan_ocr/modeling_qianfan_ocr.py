@@ -36,7 +36,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check, torch_int
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import capture_outputs, select_hidden_states
 from ..auto import AutoModel
 from .configuration_qianfan_ocr import QianfanOCRConfig, QianfanOCRVisionConfig
 
@@ -533,6 +533,7 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
+    @select_hidden_states("vision_feature_layer")
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
@@ -549,8 +550,6 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
         pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
 
         downsample_ratio = self.config.downsample_ratio
-        if vision_feature_layer != -1:
-            kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or vision_feature_layer
         vision_outputs = self.vision_tower(pixel_values=pixel_values, return_dict=True, **kwargs)
         if vision_feature_layer == -1:
             vision_features = vision_outputs.last_hidden_state

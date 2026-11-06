@@ -18,7 +18,9 @@ This mostly describe the hooks used and the logic to make capture thread/context
 
 from __future__ import annotations
 
+import inspect
 import threading
+from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import wraps
@@ -273,6 +275,36 @@ def resolve_hidden_states_indices(
             return set(selected)
         num_hidden_states = num_layers + int(getattr(specs, "capture_initial_hidden_state", True))
     return {i % num_hidden_states for i in selected if -num_hidden_states <= i < num_hidden_states}
+
+
+def select_hidden_states(selection: str | Callable[[PreTrainedModel], int | list[int]]):
+    """
+    Decorator for methods which only use some hidden states, so that only those are captured by the `capture_outputs`
+    of the submodels they forward their kwargs to. If the caller requests hidden states, that takes precedence.
+
+    Args:
+        selection (`str` or `Callable`):
+            The name of the argument of the decorated method holding the hidden state indices, or a function which
+            returns them given the model.
+    """
+
+    def wrapped_fn(func):
+        signature = inspect.signature(func)
+
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            if not kwargs.get("output_hidden_states"):
+                if callable(selection):
+                    kwargs["output_hidden_states"] = selection(self)
+                else:
+                    arguments = signature.bind(self, *args, **kwargs)
+                    arguments.apply_defaults()
+                    kwargs["output_hidden_states"] = arguments.arguments[selection]
+            return func(self, *args, **kwargs)
+
+        return wrapper
+
+    return wrapped_fn
 
 
 def capture_outputs(func=None, *, tie_last_hidden_states=True):

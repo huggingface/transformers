@@ -45,7 +45,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs, select_hidden_states
 from ..auto import AutoModel
 from .configuration_mistral_large4 import MistralLarge4Config, MistralLarge4TextConfig
 
@@ -895,6 +895,7 @@ class MistralLarge4Model(MistralLarge4PreTrainedModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
+    @select_hidden_states("vision_feature_layer")
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
@@ -902,7 +903,6 @@ class MistralLarge4Model(MistralLarge4PreTrainedModel):
         vision_feature_layer: int | list[int] | list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or vision_feature_layer
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
         image_outputs = self.vision_tower(
             pixel_values,

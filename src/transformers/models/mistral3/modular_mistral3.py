@@ -23,6 +23,7 @@ from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import select_hidden_states
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
@@ -126,6 +127,7 @@ class Mistral3Model(LlavaModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
+    @select_hidden_states("vision_feature_layer")
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
@@ -133,7 +135,6 @@ class Mistral3Model(LlavaModel):
         vision_feature_layer: int | list[int] | list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or vision_feature_layer
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
         image_outputs = self.vision_tower(
             pixel_values,
