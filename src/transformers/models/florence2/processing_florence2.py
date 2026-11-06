@@ -20,9 +20,7 @@
 import re
 from typing import Any
 
-from ...image_utils import ImageInput
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, is_torch_available, logging
 
 
@@ -150,20 +148,6 @@ class Florence2Processor(ProcessorMixin):
             text = [self.image_token + self.tokenizer.bos_token + sample + self.tokenizer.eos_token for sample in text]
 
         return images, text, None, None
-
-    def validate_inputs(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        **kwargs: Unpack[ProcessingKwargs],
-    ):
-        super().validate_inputs(images=images, text=text)
-
-        if not isinstance(text, list) or not all(isinstance(token, str) for token in text):
-            raise ValueError("`text` must be a string or list of strings.")
-
-        if isinstance(images, list) and len(images) != len(text):
-            raise ValueError(f"Number of images ({len(images)}) must match number of texts ({len(text)}).")
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         return self.image_token * self.num_image_tokens

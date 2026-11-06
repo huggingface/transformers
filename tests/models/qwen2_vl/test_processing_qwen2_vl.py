@@ -61,7 +61,7 @@ class Qwen2VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_kwargs_overrides_custom_image_processor_kwargs(self):
         processor = self.get_processor()
 
-        input_str = self.prepare_text_inputs()
+        input_str = self.prepare_text_inputs(modalities="image")
         image_input = self.prepare_images_inputs()
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
         self.assertEqual(inputs[self.images_input_name].shape[0], 100)
