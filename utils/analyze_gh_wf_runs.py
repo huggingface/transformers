@@ -9,7 +9,7 @@ Low-level utilities for:
 Import the parsing functions from other scripts, or run directly for interactive debugging.
 
 Usage:
-  python analyze_gh_wf_runs.py <url-or-id> [--list | --traces] [--plugin vllm] [--file <log.txt>]
+  python utils/analyze_gh_wf_runs.py <url-or-id> [--list | --traces] [--plugin vllm] [--file <log.txt>]
 
   url-or-id can be:
     - Workflow run URL:  https://github.com/huggingface/transformers/actions/runs/31430051419
@@ -42,12 +42,14 @@ import re
 import subprocess
 import sys
 
+
 REPO = "huggingface/transformers"
 
 
 # ---------------------------------------------------------------------------
 # GitHub API via gh CLI
 # ---------------------------------------------------------------------------
+
 
 def gh_api(path, extra_args=None):
     """Call the gh CLI and return stdout, or None on error."""
@@ -99,7 +101,10 @@ def get_job_log(job_id):
     """Return raw log text for a job via gh CLI."""
     result = subprocess.run(
         ["gh", "api", f"repos/{REPO}/actions/jobs/{job_id}/logs"],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     return result.stdout
 
@@ -107,6 +112,7 @@ def get_job_log(job_id):
 # ---------------------------------------------------------------------------
 # Log parsing
 # ---------------------------------------------------------------------------
+
 
 def _strip_timestamp(line):
     """Remove GitHub Actions log timestamp prefix (e.g. '2026-08-07T14:16:35.123Z ')."""
@@ -239,12 +245,14 @@ def classify_by_scanning_log(log, failures):
 # Plugin system
 # ---------------------------------------------------------------------------
 
+
 class TracePlugin:
     """
     Base plugin. enhance_trace() receives the log text, test node id, and the
     base trace extracted by classify_by_scanning_log(), and returns a
     (possibly augmented) trace string. Default implementation is a no-op.
     """
+
     name = "default"
 
     def enhance_trace(self, log: str, test_nodeid: str, base_trace: str) -> str:
@@ -268,6 +276,7 @@ class VLLMPlugin(TracePlugin):
     Those lines are prepended to the base trace so the real root cause is
     visible.
     """
+
     name = "vllm"
 
     _WORKER_ERROR_RE = re.compile(r"\((?:Worker|EngineCore) pid=\d+\)\s+ERROR")
@@ -287,9 +296,8 @@ class VLLMPlugin(TracePlugin):
         for i, s in enumerate(stripped):
             if fork_anchor in s:
                 end = len(lines)
-                for j, s2 in enumerate(stripped[i + 1:], i + 1):
-                    if ("Fork a new process to run a test 0" in s2
-                            or re.match(r"(PASSED|FAILED|={5,})", s2.strip())):
+                for j, s2 in enumerate(stripped[i + 1 :], i + 1):
+                    if "Fork a new process to run a test 0" in s2 or re.match(r"(PASSED|FAILED|={5,})", s2.strip()):
                         end = j
                         break
                 return i + 1, end
@@ -313,7 +321,7 @@ class VLLMPlugin(TracePlugin):
         if start is None:
             return None
         end = len(lines)
-        for j, raw in enumerate(lines[start + 1:], start + 1):
+        for j, raw in enumerate(lines[start + 1 :], start + 1):
             if self._FAILED_LINE_RE.match(raw):
                 end = j + 1
                 break
@@ -338,9 +346,7 @@ class VLLMPlugin(TracePlugin):
                     error_lines.append("")
                 last_proc_prefix = proc_prefix
                 # Strip the "(Worker pid=XXXX) ERROR HH:MM:SS [mod:line] " prefix for readability
-                clean = re.sub(
-                    r"^\((?:Worker|EngineCore) pid=\d+\)\s+ERROR[\d: .-]*\[[\w/.]+:\d+\] ?", "", s
-                )
+                clean = re.sub(r"^\((?:Worker|EngineCore) pid=\d+\)\s+ERROR[\d: .-]*\[[\w/.]+:\d+\] ?", "", s)
                 error_lines.append(clean if clean.strip() else s)
 
         if not error_lines:
@@ -363,26 +369,31 @@ def apply_plugin(plugin: TracePlugin, log: str, test_nodeid: str, base_trace: st
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def main():
     import argparse
-    parser = argparse.ArgumentParser(
-        description="Fetch and parse GitHub Actions job logs for pytest failures."
-    )
+
+    parser = argparse.ArgumentParser(description="Fetch and parse GitHub Actions job logs for pytest failures.")
     parser.add_argument("url", nargs="?", help="Workflow run URL, job URL, or bare run ID")
     parser.add_argument(
-        "--list", action="store_true",
+        "--list",
+        action="store_true",
         help="Print (test_nodeid, short_error) pairs and save findings_list.json",
     )
     parser.add_argument(
-        "--traces", action="store_true",
+        "--traces",
+        action="store_true",
         help="Print (test_nodeid, short_error, full_trace) and save findings_traces.json",
     )
     parser.add_argument(
-        "--plugin", default=None, choices=list(PLUGINS),
+        "--plugin",
+        default=None,
+        choices=list(PLUGINS),
         help="Trace-enhancement plugin (e.g. vllm)",
     )
     parser.add_argument(
-        "--file", default=None,
+        "--file",
+        default=None,
         help="Read log from a local file instead of fetching from GitHub",
     )
     args = parser.parse_args()
@@ -432,30 +443,32 @@ def main():
 
     # Build full traces (needed for --traces)
     nodeid_to_log = {}
-    for job_name, log in job_logs.items():
+    for log in job_logs.values():
         for test_nodeid, _ in extract_failures_with_errors(log):
             if test_nodeid not in nodeid_to_log:
                 nodeid_to_log[test_nodeid] = log
 
     failures_with_traces = []
-    for job_name, log in job_logs.items():
+    for log in job_logs.values():
         job_nodeids = [t for t, _ in extract_failures_with_errors(log) if nodeid_to_log.get(t) is log]
         error_map = classify_by_scanning_log(log, job_nodeids)
-        short_error_map = {t: e for t, e in extract_failures_with_errors(log)}
+        short_error_map = dict(extract_failures_with_errors(log))
         for test_nodeid in job_nodeids:
             base_trace = error_map.get(test_nodeid, "(not found)")
             enhanced_trace = apply_plugin(plugin, log, test_nodeid, base_trace)
-            failures_with_traces.append((
-                test_nodeid,
-                short_error_map.get(test_nodeid, ""),
-                enhanced_trace,
-            ))
+            failures_with_traces.append(
+                (
+                    test_nodeid,
+                    short_error_map.get(test_nodeid, ""),
+                    enhanced_trace,
+                )
+            )
 
     if args.traces:
         for test_nodeid, short_error, full_trace in failures_with_traces:
             print(f"{test_nodeid}")
             print(f"  short: {short_error}")
-            print(f"  trace:\n    " + "\n    ".join(full_trace.splitlines()))
+            print("  trace:\n    " + "\n    ".join(full_trace.splitlines()))
             print()
         data = [[t, s, tr] for t, s, tr in failures_with_traces]
         with open("findings_traces.json", "w", encoding="utf-8") as f:

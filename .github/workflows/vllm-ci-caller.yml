@@ -614,7 +614,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python3 transformers/analyze_vllm_ci.py \
+          python3 transformers/utils/analyze_vllm_ci.py \
             --run-id "${{ github.run_id }}" \
             --repo "${{ github.repository }}" \
             --output-dir ./vllm-ci-reports \

@@ -6,7 +6,7 @@ Docker containers that don't have gh installed). Imports log-parsing functions
 from analyze_gh_wf_runs.py, which must be in the same directory.
 
 Usage:
-  python analyze_vllm_ci.py --run-id <RUN_ID> [--token <TOKEN>]
+  python utils/analyze_vllm_ci.py --run-id <RUN_ID> [--token <TOKEN>]
                              [--output-dir <DIR>] [--repo <OWNER/REPO>]
                              [--workflow <WORKFLOW_FILE>] [--plugin vllm]
 
@@ -54,7 +54,8 @@ import sys
 import urllib.error
 import urllib.request
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 
 # ---------------------------------------------------------------------------
 # Import parsing functions from analyze_gh_wf_runs (same directory as this file)
@@ -71,6 +72,7 @@ from analyze_gh_wf_runs import (  # noqa: E402
     extract_failures_with_errors,
 )
 
+
 REPO = "huggingface/transformers"
 WORKFLOW_FILE = "vllm-ci-caller.yml"
 
@@ -78,6 +80,7 @@ WORKFLOW_FILE = "vllm-ci-caller.yml"
 # ---------------------------------------------------------------------------
 # GitHub REST API helpers (urllib only, no gh CLI)
 # ---------------------------------------------------------------------------
+
 
 def _api_get(url, token=None):
     """GET a GitHub API URL and return parsed JSON, or None on error."""
@@ -118,6 +121,7 @@ def fetch_run_jobs(run_id, repo=REPO, token=None):
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     """Redirect handler that refuses to follow redirects so we can read Location ourselves."""
+
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
 
@@ -188,6 +192,7 @@ def get_previous_run(current_run_id, repo=REPO, workflow=WORKFLOW_FILE, token=No
 # Failure collection
 # ---------------------------------------------------------------------------
 
+
 def collect_run_failures(run_id, repo=REPO, token=None, plugin=None):
     """
     Fetch all job logs for a workflow run and parse pytest failures.
@@ -231,7 +236,7 @@ def collect_run_failures(run_id, repo=REPO, token=None, plugin=None):
 
         test_ids = [t for t, _ in failures]
         trace_map = classify_by_scanning_log(log, test_ids)
-        short_error_map = {t: e for t, e in failures}
+        short_error_map = dict(failures)
 
         seen_tests = set()
         for test_id in test_ids:
@@ -241,11 +246,13 @@ def collect_run_failures(run_id, repo=REPO, token=None, plugin=None):
 
             base_trace = trace_map.get(test_id, "(not found)")
             enhanced_trace = apply_plugin(plugin, log, test_id, base_trace)
-            grouped[job_name].append({
-                "test": test_id,
-                "short_error": short_error_map.get(test_id, ""),
-                "trace": enhanced_trace,
-            })
+            grouped[job_name].append(
+                {
+                    "test": test_id,
+                    "short_error": short_error_map.get(test_id, ""),
+                    "trace": enhanced_trace,
+                }
+            )
 
     return jobs, dict(grouped)
 
@@ -360,16 +367,13 @@ def group_by_category(grouped_failures, job_urls):
 # New-failure computation
 # ---------------------------------------------------------------------------
 
+
 def compute_new_failures(current_grouped, previous_grouped):
     """
     Return a grouped_failures dict containing only tests that are *new*:
     failing in the current run but not present in the previous run's failures.
     """
-    prev_tests = {
-        item["test"]
-        for items in previous_grouped.values()
-        for item in items
-    }
+    prev_tests = {item["test"] for items in previous_grouped.values() for item in items}
     new_grouped = {}
     for job_name, items in current_grouped.items():
         new_items = [item for item in items if item["test"] not in prev_tests]
@@ -381,6 +385,7 @@ def compute_new_failures(current_grouped, previous_grouped):
 # ---------------------------------------------------------------------------
 # Report writing
 # ---------------------------------------------------------------------------
+
 
 def _format_jobs(grouped, job_urls, with_trace):
     """
@@ -401,7 +406,7 @@ def _format_jobs(grouped, job_urls, with_trace):
 def write_reports(run_id, run_url, current_grouped, job_urls, previous_run, previous_grouped, output_dir):
     """Write the five report files to output_dir."""
     os.makedirs(output_dir, exist_ok=True)
-    date_str = datetime.now(timezone.utc).strftime("%Y_%m_%d")
+    date_str = datetime.now(UTC).strftime("%Y_%m_%d")
     date_iso = date_str.replace("_", "-")
 
     total_failing = sum(len(v) for v in current_grouped.values())
@@ -413,13 +418,18 @@ def write_reports(run_id, run_url, current_grouped, job_urls, previous_run, prev
     # ------------------------------------------------------------------
     path = os.path.join(output_dir, f"failing_tests_{date_str}.json")
     with open(path, "w", encoding="utf-8") as f:
-        json.dump({
-            "run_id": str(run_id),
-            "run_url": run_url,
-            "date": date_iso,
-            "total_failing": total_failing,
-            "jobs": _format_jobs(current_grouped, job_urls, with_trace=False),
-        }, f, indent=2, ensure_ascii=False)
+        json.dump(
+            {
+                "run_id": str(run_id),
+                "run_url": run_url,
+                "date": date_iso,
+                "total_failing": total_failing,
+                "jobs": _format_jobs(current_grouped, job_urls, with_trace=False),
+            },
+            f,
+            indent=2,
+            ensure_ascii=False,
+        )
     print(f"Wrote {path}", file=sys.stderr)
 
     # ------------------------------------------------------------------
@@ -427,13 +437,18 @@ def write_reports(run_id, run_url, current_grouped, job_urls, previous_run, prev
     # ------------------------------------------------------------------
     path = os.path.join(output_dir, f"failing_tests_with_trace_{date_str}.json")
     with open(path, "w", encoding="utf-8") as f:
-        json.dump({
-            "run_id": str(run_id),
-            "run_url": run_url,
-            "date": date_iso,
-            "total_failing": total_failing,
-            "jobs": _format_jobs(current_grouped, job_urls, with_trace=True),
-        }, f, indent=2, ensure_ascii=False)
+        json.dump(
+            {
+                "run_id": str(run_id),
+                "run_url": run_url,
+                "date": date_iso,
+                "total_failing": total_failing,
+                "jobs": _format_jobs(current_grouped, job_urls, with_trace=True),
+            },
+            f,
+            indent=2,
+            ensure_ascii=False,
+        )
     print(f"Wrote {path}", file=sys.stderr)
 
     # ------------------------------------------------------------------
@@ -441,37 +456,44 @@ def write_reports(run_id, run_url, current_grouped, job_urls, previous_run, prev
     # ------------------------------------------------------------------
     new_grouped = compute_new_failures(current_grouped, previous_grouped)
     total_new = sum(len(v) for v in new_grouped.values())
-    new_note = (
-        "Tests that fail in the current run but were not failing "
-        "in the most recent completed main-branch run."
-    )
+    new_note = "Tests that fail in the current run but were not failing in the most recent completed main-branch run."
 
     path = os.path.join(output_dir, f"new_failing_tests_{date_str}.json")
     with open(path, "w", encoding="utf-8") as f:
-        json.dump({
-            "run_id": str(run_id),
-            "run_url": run_url,
-            "previous_run_id": prev_run_id,
-            "previous_run_url": prev_run_url,
-            "date": date_iso,
-            "total_new_failing": total_new,
-            "note": new_note,
-            "jobs": _format_jobs(new_grouped, job_urls, with_trace=False),
-        }, f, indent=2, ensure_ascii=False)
+        json.dump(
+            {
+                "run_id": str(run_id),
+                "run_url": run_url,
+                "previous_run_id": prev_run_id,
+                "previous_run_url": prev_run_url,
+                "date": date_iso,
+                "total_new_failing": total_new,
+                "note": new_note,
+                "jobs": _format_jobs(new_grouped, job_urls, with_trace=False),
+            },
+            f,
+            indent=2,
+            ensure_ascii=False,
+        )
     print(f"Wrote {path}", file=sys.stderr)
 
     path = os.path.join(output_dir, f"new_failing_tests_with_trace_{date_str}.json")
     with open(path, "w", encoding="utf-8") as f:
-        json.dump({
-            "run_id": str(run_id),
-            "run_url": run_url,
-            "previous_run_id": prev_run_id,
-            "previous_run_url": prev_run_url,
-            "date": date_iso,
-            "total_new_failing": total_new,
-            "note": new_note,
-            "jobs": _format_jobs(new_grouped, job_urls, with_trace=True),
-        }, f, indent=2, ensure_ascii=False)
+        json.dump(
+            {
+                "run_id": str(run_id),
+                "run_url": run_url,
+                "previous_run_id": prev_run_id,
+                "previous_run_url": prev_run_url,
+                "date": date_iso,
+                "total_new_failing": total_new,
+                "note": new_note,
+                "jobs": _format_jobs(new_grouped, job_urls, with_trace=True),
+            },
+            f,
+            indent=2,
+            ensure_ascii=False,
+        )
     print(f"Wrote {path}", file=sys.stderr)
 
     # ------------------------------------------------------------------
@@ -480,13 +502,18 @@ def write_reports(run_id, run_url, current_grouped, job_urls, previous_run, prev
     categories = group_by_category(current_grouped, job_urls)
     path = os.path.join(output_dir, f"failing_tests_categories_{date_str}.json")
     with open(path, "w", encoding="utf-8") as f:
-        json.dump({
-            "run_id": str(run_id),
-            "run_url": run_url,
-            "date": date_iso,
-            "total_failing": total_failing,
-            "categories": categories,
-        }, f, indent=2, ensure_ascii=False)
+        json.dump(
+            {
+                "run_id": str(run_id),
+                "run_url": run_url,
+                "date": date_iso,
+                "total_failing": total_failing,
+                "categories": categories,
+            },
+            f,
+            indent=2,
+            ensure_ascii=False,
+        )
     print(f"Wrote {path}", file=sys.stderr)
 
 
@@ -494,29 +521,36 @@ def write_reports(run_id, run_url, current_grouped, job_urls, previous_run, prev
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Generate vLLM CI failure report files from a GitHub Actions workflow run."
     )
     parser.add_argument("--run-id", required=True, help="GitHub Actions workflow run ID")
     parser.add_argument(
-        "--token", default=None,
+        "--token",
+        default=None,
         help="GitHub token with actions:read scope (default: GITHUB_TOKEN env var)",
     )
     parser.add_argument(
-        "--output-dir", default=".",
+        "--output-dir",
+        default=".",
         help="Directory to write report files (default: current directory)",
     )
     parser.add_argument(
-        "--repo", default=REPO,
+        "--repo",
+        default=REPO,
         help=f"GitHub repo in owner/name format (default: {REPO})",
     )
     parser.add_argument(
-        "--workflow", default=WORKFLOW_FILE,
+        "--workflow",
+        default=WORKFLOW_FILE,
         help=f"Workflow file name used to find the previous run (default: {WORKFLOW_FILE})",
     )
     parser.add_argument(
-        "--plugin", default=None, choices=list(PLUGINS),
+        "--plugin",
+        default=None,
+        choices=list(PLUGINS),
         help="Trace-enhancement plugin (e.g. vllm)",
     )
     args = parser.parse_args()
@@ -536,9 +570,7 @@ def main():
     # Collect failures for the current run
     # ------------------------------------------------------------------
     print(f"\n=== Current run: {args.run_id} ===", file=sys.stderr)
-    current_jobs, current_grouped = collect_run_failures(
-        args.run_id, repo=args.repo, token=token, plugin=plugin
-    )
+    current_jobs, current_grouped = collect_run_failures(args.run_id, repo=args.repo, token=token, plugin=plugin)
     job_urls = {job["name"]: job.get("html_url") for job in current_jobs}
     total = sum(len(v) for v in current_grouped.values())
     print(f"  Total unique failures: {total}", file=sys.stderr)
@@ -546,10 +578,8 @@ def main():
     # ------------------------------------------------------------------
     # Find and collect failures for the previous completed run on main
     # ------------------------------------------------------------------
-    print(f"\n=== Finding previous completed run on main branch ===", file=sys.stderr)
-    previous_run = get_previous_run(
-        args.run_id, repo=args.repo, workflow=args.workflow, token=token
-    )
+    print("\n=== Finding previous completed run on main branch ===", file=sys.stderr)
+    previous_run = get_previous_run(args.run_id, repo=args.repo, workflow=args.workflow, token=token)
     previous_grouped = {}
     if previous_run:
         prev_id = str(previous_run["id"])
@@ -572,8 +602,12 @@ def main():
     # ------------------------------------------------------------------
     print(f"\n=== Writing reports to: {args.output_dir} ===", file=sys.stderr)
     write_reports(
-        args.run_id, run_url,
-        current_grouped, job_urls, previous_run, previous_grouped,
+        args.run_id,
+        run_url,
+        current_grouped,
+        job_urls,
+        previous_run,
+        previous_grouped,
         args.output_dir,
     )
     print("\nDone.", file=sys.stderr)
