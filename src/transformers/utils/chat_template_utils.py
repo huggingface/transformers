@@ -631,8 +631,10 @@ def render_jinja_template(
     **kwargs,
 ) -> str:
     if return_assistant_tokens_mask and not re.search(r"\{\%-?\s*generation\s*-?\%\}", chat_template):
-        logger.warning_once(
-            "return_assistant_tokens_mask==True but chat template does not contain `{% generation %}` keyword."
+        raise ValueError(
+            "`return_assistant_tokens_mask=True` requires the chat template to wrap the assistant turns in "
+            "`{% generation %}` ... `{% endgeneration %}` blocks, but this chat template has none, so the mask would "
+            "be all zeros. Add these blocks to the chat template, or build the mask yourself."
         )
 
     # Compilation function uses a cache to avoid recompiling the same template

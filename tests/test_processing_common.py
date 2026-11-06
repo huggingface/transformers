@@ -1776,6 +1776,18 @@ class ProcessorTesterMixin:
             for input_ids, mask, expected in zip(inputs["input_ids"], masks, expected_ids):
                 self.assertEqual(input_ids[mask].tolist(), expected)
 
+        # Without `{% generation %}` blocks the mask would silently be all zeros, so it must raise instead
+        template_without_blocks = re.sub(r"\{% (end)?generation %\}", "", dummy_template)
+        with self.assertRaisesRegex(ValueError, "generation"):
+            processor.apply_chat_template(
+                messages[:1],
+                tokenize=True,
+                return_dict=True,
+                return_assistant_tokens_mask=True,
+                chat_template=template_without_blocks,
+                image_token=image_token,
+            )
+
     def test_apply_chat_template_tool_calls_no_content(self):
         processor = self.get_processor()
 
