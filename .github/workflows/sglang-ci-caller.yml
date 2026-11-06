@@ -16,15 +16,87 @@ env:
 permissions: {}
 
 jobs:
+  # Test against the latest published SGLang CPU release: the newest `lmsysorg/sglang:vX.Y.Z-xeon` image
+  # (pinned by digest) and the SGLang commit it was built from (its `VER_SGLANG` build arg).
+  find-sglang-image:
+    permissions:
+      contents: read
+    name: Find latest SGLang CPU image
+    runs-on: ubuntu-22.04
+    outputs:
+      image: ${{ steps.find.outputs.image }}
+      sglang_sha: ${{ steps.find.outputs.sglang_sha }}
+    steps:
+      - name: Find latest SGLang xeon image and its commit
+        id: find
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 - <<'EOF'
+          import json
+          import os
+          import re
+          import urllib.request
+
+
+          def get(url, headers=None):
+              req = urllib.request.Request(url, headers=headers or {})
+              with urllib.request.urlopen(req, timeout=60) as resp:
+                  return json.loads(resp.read()), resp.headers
+
+
+          # 1. Newest published release image: lmsysorg/sglang:vX.Y.Z[.postN]-xeon
+          tag_re = re.compile(r"v(\d+)\.(\d+)\.(\d+)(?:\.post(\d+))?-xeon")
+          tags = []
+          url = "https://hub.docker.com/v2/repositories/lmsysorg/sglang/tags?page_size=100&name=xeon"
+          while url:
+              data, _ = get(url)
+              tags += [t["name"] for t in data["results"] if tag_re.fullmatch(t["name"])]
+              url = data.get("next")
+          tag = max(tags, key=lambda t: tuple(int(x or 0) for x in tag_re.fullmatch(t).groups()))
+
+          # 2. Its manifest digest (to pin the image) and the SGLang ref it was built from (`VER_SGLANG` build arg)
+          token, _ = get("https://auth.docker.io/token?service=registry.docker.io&scope=repository:lmsysorg/sglang:pull")
+          auth = {"Authorization": f"Bearer {token['token']}"}
+          manifest, headers = get(
+              f"https://registry-1.docker.io/v2/lmsysorg/sglang/manifests/{tag}",
+              {**auth, "Accept": "application/vnd.docker.distribution.manifest.v2+json"},
+          )
+          digest = headers["Docker-Content-Digest"]
+          config, _ = get(f"https://registry-1.docker.io/v2/lmsysorg/sglang/blobs/{manifest['config']['digest']}", auth)
+          history = " ".join(h.get("created_by", "") for h in config["history"])
+          sglang_ref = re.search(r"VER_SGLANG=(\S+)", history).group(1)
+
+          # 3. The commit of that ref
+          gh_headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {os.environ['GH_TOKEN']}"}
+          commit, _ = get(f"https://api.github.com/repos/sgl-project/sglang/commits/{sglang_ref}", gh_headers)
+          sha = commit["sha"]
+
+          # Validate everything before it is used as a container image / checkout ref
+          if not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
+              raise SystemExit(f"Unexpected image digest: {digest!r}")
+          if sglang_ref != tag.removesuffix("-xeon"):
+              raise SystemExit(f"Image {tag} was built from VER_SGLANG={sglang_ref!r}, expected {tag.removesuffix('-xeon')!r}")
+          if not re.fullmatch(r"[0-9a-f]{40}", sha):
+              raise SystemExit(f"Unexpected commit SHA: {sha!r}")
+
+          print(f"SGLang image : lmsysorg/sglang:{tag} ({digest})")
+          print(f"SGLang commit: {sha} ({sglang_ref})")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+              f.write(f"image=lmsysorg/sglang@{digest}\n")
+              f.write(f"sglang_sha={sha}\n")
+          EOF
+
   sglang-inference:
+    needs: find-sglang-image
     permissions:
       contents: read
     name: SGLang integration (${{ matrix.suite }})
     runs-on:
       group: aws-m8i-8xl-cache
     container:
-      # v0.5.19-xeon supplies the Intel CPU build environment and runtime dependencies.
-      image: lmsysorg/sglang@sha256:dec15decb555242b67471b984e51bd44e3faa44fc5c2b5258d46e5fa926e7cde
+      # The latest SGLang xeon release image: the Intel CPU build environment and runtime dependencies.
+      image: ${{ needs.find-sglang-image.outputs.image }}
       options: --shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/
     defaults:
       run:
@@ -88,9 +160,20 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           repository: sgl-project/sglang
-          ref: 55b4f4f19506c5571d7c4b04b1b47e85790b6db3
+          ref: ${{ needs.find-sglang-image.outputs.sglang_sha }}
           persist-credentials: false
           path: sglang
+
+      - name: Check SGLang commit matches the image
+        env:
+          EXPECTED_SHA: ${{ needs.find-sglang-image.outputs.sglang_sha }}
+        run: |
+          image_sha=$(git -c safe.directory='*' -C /sgl-workspace/sglang rev-parse HEAD)
+          echo "SGLang commit: ${EXPECTED_SHA} (image: ${image_sha})"
+          if [ "${image_sha}" != "${EXPECTED_SHA}" ]; then
+            echo "ERROR: the image's SGLang checkout (${image_sha}) differs from ${EXPECTED_SHA}" >&2
+            exit 1
+          fi
 
       - name: Install dependencies
         run: |
