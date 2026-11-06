@@ -33,7 +33,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ProcessorMixin, Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
-from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_interpolation_indices_and_weights
 from ..auto import AutoModel
@@ -324,7 +324,9 @@ class MuseSparkTopkRouter(MiniMaxM2TopKRouter):
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = hidden_states.view(-1, self.hidden_dim)
         # Different from MiniMaxM2: convert to float32 before linear projection and scale by output multiplier.
-        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
+        device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
         router_logits = router_logits * self.output_multiplier
         routing_weights = self.scoring_function(router_logits)
         scores_for_choice = routing_weights + self.e_score_correction_bias

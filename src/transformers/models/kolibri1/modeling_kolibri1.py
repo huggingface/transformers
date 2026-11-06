@@ -37,7 +37,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_greater_or_equal
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_kolibri1 import Kolibri1Config
 
@@ -284,7 +284,9 @@ class Kolibri1TopKRouter(nn.Module):
             # `out_dtype` is CUDA-only, has no autograd and needs matching dtypes
             router_logits = torch.mm(hidden_states, self.weight.t(), out_dtype=torch.float32)
         else:
-            router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
+            device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
+            with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+                router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
         router_indices = torch.topk(router_logits + self.e_score_correction_bias, self.top_k, dim=-1)[1]
         router_scores = router_logits.gather(1, router_indices).sigmoid()
         if self.norm_topk_prob:
