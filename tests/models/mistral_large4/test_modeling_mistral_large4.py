@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch Mistral Large 4 model."""
 
 import inspect
+import tempfile
 import unittest
 from contextlib import contextmanager
 from unittest.mock import patch
@@ -65,37 +66,47 @@ class MistralLarge4VisionText2TextModelTester(VLMModelTester):
     vision_config_class = PixtralVisionConfig
     conditional_generation_class = MistralLarge4ForConditionalGeneration
 
+    @staticmethod
+    def get_small_config_defaults():
+        """Return fresh, literal tester defaults that tools can extract without importing the test module."""
+        return {
+            # Pixtral: 16x16 images, 4x4 patches, merged 2x2 by the projector -> 4 image tokens per image
+            "image_token_id": 3,
+            "image_size": 16,
+            "patch_size": 4,
+            "spatial_merge_size": 2,
+            "num_image_tokens": 4,
+            "hidden_act": "silu",
+            "attention_probs_dropout_prob": 0.0,
+            # MLA without Q-LoRA
+            "kv_lora_rank": 16,
+            # Keep the rotary and non-rotary widths together. The config derives head_dim and qk_head_dim;
+            # LeRoPE's alpha has qk_rope_head_dim // 2 entries, so it must be rebuilt with the model.
+            "qk_rope_head_dim": 32,
+            "qk_nope_head_dim": 32,
+            "v_head_dim": 16,
+            # DSA indexer. `index_topk` is smaller than the test sequences, so the indexer drops tokens
+            "index_topk": 4,
+            "index_head_dim": 32,
+            "index_n_heads": 2,
+            # RoPE, NoPE, RoPE, NoPE. Since KV can only be shared by layers with the same PE, layer 3 reuse layer 1's KV,
+            # and layer 2 reuses layer 0's KV. We also test index sharing in the last two layers.
+            "num_hidden_layers": 4,
+            "no_rope_layers": [1, 0, 1, 0],
+            "kv_source_layers": [0, 1, 0, 1],
+            "indexer_types": ["full", "full", "shared", "shared"],
+            # MoE: layer 0 is dense, the others route to 2 of 8 experts plus a shared expert
+            "first_k_dense_replace": 1,
+            "moe_intermediate_size": 16,
+            "n_routed_experts": 8,
+            "n_shared_experts": 1,
+            "n_group": 1,
+            "topk_group": 1,
+        }
+
     def __init__(self, parent, **kwargs):
-        # Pixtral: 16x16 images, 4x4 patches, merged 2x2 by the projector -> 4 image tokens per image
-        kwargs.setdefault("image_token_id", 3)
-        kwargs.setdefault("image_size", 16)
-        kwargs.setdefault("patch_size", 4)
-        kwargs.setdefault("spatial_merge_size", 2)
-        kwargs.setdefault("num_image_tokens", 4)
-        kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("attention_probs_dropout_prob", 0.0)
-        # MLA without Q-LoRA
-        kwargs.setdefault("kv_lora_rank", 16)
-        kwargs.setdefault("qk_rope_head_dim", 8)
-        kwargs.setdefault("qk_nope_head_dim", 8)
-        kwargs.setdefault("v_head_dim", 16)
-        # DSA indexer. `index_topk` is smaller than the test sequences, so the indexer drops tokens
-        kwargs.setdefault("index_topk", 4)
-        kwargs.setdefault("index_head_dim", 16)
-        kwargs.setdefault("index_n_heads", 2)
-        # RoPE, NoPE, RoPE, NoPE. Since KV can only be shared by layers with the same PE, layer 3 reuse layer 1's KV,
-        # and layer 2 reuses layer 0's KV. We also test index sharing in the last two layers.
-        kwargs.setdefault("num_hidden_layers", 4)
-        kwargs.setdefault("no_rope_layers", [1, 0, 1, 0])
-        kwargs.setdefault("kv_source_layers", [0, 1, 0, 1])
-        kwargs.setdefault("indexer_types", ["full", "full", "shared", "shared"])
-        # MoE: layer 0 is dense, the others route to 2 of 8 experts plus a shared expert
-        kwargs.setdefault("first_k_dense_replace", 1)
-        kwargs.setdefault("moe_intermediate_size", 16)
-        kwargs.setdefault("n_routed_experts", 8)
-        kwargs.setdefault("n_shared_experts", 1)
-        kwargs.setdefault("n_group", 1)
-        kwargs.setdefault("topk_group", 1)
+        for name, value in self.get_small_config_defaults().items():
+            kwargs.setdefault(name, value)
         super().__init__(parent, **kwargs)
 
     def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
@@ -110,6 +121,36 @@ class MistralLarge4ModelTest(VLMModelTest, unittest.TestCase):
     skip_test_image_features_output_shape = True
     # The DSA indexer runs under `torch.no_grad`
     test_all_params_have_gradient = False
+
+    def test_small_config_save_load(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        config.text_config._attn_implementation = "eager"
+        model = MistralLarge4ForConditionalGeneration(config).to(torch_device).eval()
+        text_config = config.text_config
+        self.assertEqual(text_config.head_dim, text_config.qk_rope_head_dim)
+        self.assertEqual(text_config.qk_head_dim, text_config.qk_nope_head_dim + text_config.qk_rope_head_dim)
+        self.assertGreaterEqual(text_config.index_head_dim, text_config.qk_rope_head_dim)
+        self.assertEqual(model.model.language_model.rotary_emb.alpha.shape, (text_config.qk_rope_head_dim // 2,))
+        for layer_idx, layer in enumerate(model.model.language_model.layers):
+            self.assertEqual(
+                layer.self_attn.q_proj.weight.shape,
+                (text_config.num_attention_heads * text_config.qk_head_dim, text_config.hidden_size),
+            )
+            source = text_config.kv_source_layers[layer_idx]
+            self.assertEqual(text_config.no_rope_layers[layer_idx], text_config.no_rope_layers[source])
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            reloaded = MistralLarge4ForConditionalGeneration.from_pretrained(tmp_dir, attn_implementation="eager")
+        reloaded = reloaded.to(torch_device).eval()
+        self.assertEqual(
+            {name: tensor.shape for name, tensor in model.state_dict().items()},
+            {name: tensor.shape for name, tensor in reloaded.state_dict().items()},
+        )
+        with torch.no_grad():
+            expected = model(**inputs).logits
+            actual = reloaded(**inputs).logits
+        self.assertTrue(torch.isfinite(actual).all())
+        torch.testing.assert_close(actual, expected)
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         # KV-shared layers attend to the cache of their source layer and leave their own cache layer empty, and NoPE
