@@ -2191,7 +2191,8 @@ class ProcessorMixin(PushToHubMixin):
         return {"sampling_rate": sampling_rate, "backend": backend}
 
     def _normalize_conversations(self, conversation) -> tuple[list, bool]:
-        """Batch a single conversation if needed and convert OpenAI image_url blocks to HF image blocks."""
+        """Batch a single conversation if needed, drop `content=None`, and convert OpenAI image_url blocks to HF image
+        blocks."""
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
         ):
@@ -2200,6 +2201,14 @@ class ProcessorMixin(PushToHubMixin):
         else:
             is_batched = False
             conversations = [conversation]
+
+        # Normalize: drop `content` from assistant messages when it is None.
+        # Some APIs (e.g. OpenAI) return content=None for tool-call-only messages, but many chat templates
+        # crash or produce wrong output (e.g. rendering literal "None") when they encounter it.
+        conversations = [
+            [{k: v for k, v in msg.items() if k != "content" or v is not None} for msg in conversation]
+            for conversation in conversations
+        ]
 
         # Normalize OpenAI-style "image_url" content blocks to HuggingFace-style "image" blocks
         # OpenAI format: {"type": "image_url", "image_url": {"url": "..."}}
