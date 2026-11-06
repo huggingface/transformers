@@ -46,63 +46,26 @@ from .configuration_ultravbert import UltraVBertConfig
 @auto_docstring
 @dataclass
 class UltraVBertBaseModelOutput(BaseModelOutput):
-    """
-    Base class for UltraVBert model's outputs.
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
-            hidden_size)` is output.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
-            sequence_length, hidden_size)`.
-            image_hidden_states of the model produced by the vision encoder
+    r"""
+    image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+        Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
+       sequence_length, hidden_size)`.
+       image_hidden_states of the model produced by the vision encoder
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
     image_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring
 @dataclass
 class UltraVBertMaskedLMOutput(MaskedLMOutput):
-    """
-    Base class for UltraVBert model's outputs with masked language modeling loss.
-    Args:
-        loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided):
-            Masked language modeling (MLM) loss.
-        logits (`torch.FloatTensor`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
-            sequence_length, hidden_size)`.
-            image_hidden_states of the model produced by the vision encoder
+    r"""
+    image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+        Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
+        sequence_length, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
     image_hidden_states: torch.FloatTensor | None = None
 
 
@@ -180,7 +143,6 @@ class UltraVBertPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_attention_backend = True
-    config_class = UltraVBertConfig
     _keys_to_ignore_on_load_unexpected = [r"vision_model\.head\."]
 
     @torch.no_grad()
@@ -250,12 +212,12 @@ class UltraVBertModel(UltraVBertPreTrainedModel):
     )
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         pixel_attention_mask: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
         pixel_attention_mask (`torch.LongTensor`, *optional*):
             The attention mask indicating padded regions in the image.
@@ -310,16 +272,16 @@ class UltraVBertModel(UltraVBertPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         pixel_attention_mask: torch.BoolTensor | None = None,
-        image_hidden_states: torch.FloatTensor | None = None,
+        image_hidden_states: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | UltraVBertBaseModelOutput:
         r"""
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_images, image_size, image_size)`, *optional*):
             Mask over the real pixels of each image tile.
-        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        image_hidden_states (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The hidden states of the image encoder after modality projection.
         """
 
@@ -357,7 +319,7 @@ class UltraVBertModel(UltraVBertPreTrainedModel):
         )
 
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -421,17 +383,17 @@ class UltraVBertForMaskedLM(UltraVBertPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         pixel_attention_mask: torch.BoolTensor | None = None,
-        image_hidden_states: torch.FloatTensor | None = None,
+        image_hidden_states: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | UltraVBertMaskedLMOutput:
         r"""
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_images, image_size, image_size)`, *optional*):
             Mask over the real pixels of each image tile.
-        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        image_hidden_states (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The hidden states of the image encoder after modality projection.
         """
 
@@ -489,17 +451,17 @@ class UltraVBertForSequenceClassification(UltraVBertPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         pixel_attention_mask: torch.BoolTensor | None = None,
-        image_hidden_states: torch.FloatTensor | None = None,
+        image_hidden_states: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutput:
         r"""
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_images, image_size, image_size)`, *optional*):
             Mask over the real pixels of each image tile.
-        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        image_hidden_states (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The hidden states of the image encoder after modality projection.
         """
         outputs = self.model(
@@ -589,17 +551,17 @@ class UltraVBertForTokenClassification(UltraVBertPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         pixel_attention_mask: torch.BoolTensor | None = None,
-        image_hidden_states: torch.FloatTensor | None = None,
+        image_hidden_states: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | TokenClassifierOutput:
         r"""
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_images, image_size, image_size)`, *optional*):
             Mask over the real pixels of each image tile.
-        image_hidden_states (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        image_hidden_states (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The hidden states of the image encoder after modality projection.
         """
 

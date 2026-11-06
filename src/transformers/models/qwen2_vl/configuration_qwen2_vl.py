@@ -17,7 +17,7 @@ import inspect
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -28,7 +28,7 @@ class Qwen2VLVisionConfig(PreTrainedConfig):
     model_type = "qwen2_vl_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
-    attribute_map = {"num_attention_heads": "num_heads"}
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 32
     embed_dim: int = 1280
@@ -155,8 +155,8 @@ class Qwen2VLConfig(PreTrainedConfig):
 
     model_type = "qwen2_vl"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Qwen2VLVisionConfig),
-        "text_config": SubConfigSpec(config_class=Qwen2VLTextConfig),
+        "vision_config": Qwen2VLVisionConfig,
+        "text_config": Qwen2VLTextConfig,
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 

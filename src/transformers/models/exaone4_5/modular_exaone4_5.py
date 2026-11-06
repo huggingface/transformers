@@ -71,7 +71,7 @@ class Exaone4_5_VisionConfig(Qwen2_5_VLVisionConfig):
 class Exaone4_5_Config(PreTrainedConfig):
     model_type = "exaone4_5"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="exaone4_5_vision"),
+        "vision_config": Exaone4_5_VisionConfig,
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="exaone4"),
     }
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -193,13 +193,13 @@ class Exaone4_5_VisionBlock(Qwen2_5_VLVisionBlock):
 
 
 class Exaone4_5_PreTrainedModel(Exaone4PreTrainedModel):
-    config_class = Exaone4_5_Config
+    config: Exaone4_5_Config
     _no_split_modules = ["Exaone4_5_VisionBlock", "Exaone4_5_DecoderLayer"]
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
 
 class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel, Qwen2_5_VisionTransformerPretrainedModel):
-    config_class = Exaone4_5_VisionConfig
+    config: Exaone4_5_VisionConfig
 
     def __init__(self, config: Exaone4_5_VisionConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -235,10 +235,10 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2VLModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
@@ -333,11 +333,11 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,

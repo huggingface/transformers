@@ -24,10 +24,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
-from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
-from transformers import ProcessorMixin
 from transformers.processing_utils import MODALITY_TO_AUTOPROCESSOR_MAPPING
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
@@ -874,6 +872,54 @@ class ProcessorTesterMixin:
             )
             self.assertTrue(self.text_input_name in inputs_chat_template)
 
+    def test_if_input_has_mismatching_tokens_and_mm_data(self):
+        """
+        Tests that vision models raise an error when number of data doesn't match number
+        of special token in input text.
+        """
+        processor = self.get_processor()
+        call_signature = inspect.signature(processor.__call__)
+        input_args = [param.name for param in call_signature.parameters.values() if param.annotation != param.empty]
+
+        if not ("text" in input_args and hasattr(processor, "tokenizer")):
+            self.skipTest(f"{self.processor_class} doesn't accpet text inputs.")
+
+        processing_kwargs = {"return_tensors": "pt", "padding": True}
+        if (
+            "images" in input_args
+            and getattr(processor, "image_token", None) is not None
+            and self.does_processor_return_mm_offsets(processor.__class__, "replace_image_token")
+        ):
+            image_inputs = self.prepare_images_inputs(batch_size=4)
+            image_inputs_nested = [[image] if not isinstance(image, list) else image for image in image_inputs]
+            text = self.prepare_text_inputs(batch_size=3, modalities=["image"])
+
+            with self.assertRaisesRegex(ValueError, " tokens in the prompts should be the same as the number of "):
+                processor(images=image_inputs_nested, text=text, **processing_kwargs)
+
+        if (
+            "videos" in input_args
+            and getattr(processor, "video_token", None) is not None
+            and self.does_processor_return_mm_offsets(processor.__class__, "replace_video_token")
+        ):
+            video_inputs = self.prepare_videos_inputs(batch_size=4)
+            videos = [[video] for video in video_inputs]
+            text = self.prepare_text_inputs(batch_size=3, modalities=["video"])
+
+            with self.assertRaisesRegex(ValueError, " tokens in the prompts should be the same as the number of "):
+                processor(videos=videos, text=text, do_sample_frames=False, **processing_kwargs)
+
+        if (
+            "audio" in input_args
+            and getattr(processor, "audio_token", None) is not None
+            and self.does_processor_return_mm_offsets(processor.__class__, "replace_audio_token")
+        ):
+            audio_inputs = self.prepare_audio_inputs(batch_size=4)
+            text = self.prepare_text_inputs(batch_size=3, modalities=["audio"])
+
+            with self.assertRaisesRegex(ValueError, " tokens in the prompts should be the same as the number of "):
+                processor(audio=audio_inputs, text=text, **processing_kwargs)
+
     # These kwargs-related tests ensure that processors are correctly instantiated.
     # they need to be applied only if an image_processor exists.
 
@@ -1318,6 +1364,52 @@ class ProcessorTesterMixin:
         for prompt in continue_prompt:
             self.assertTrue(prompt.endswith("It is the sound of"))  # no `eos` token at the end
 
+    def _get_transcription_training_processor(self):
+        """Processor whose `apply_transcription_request` accepts a target `transcription`, or skip the test."""
+        processor = self.get_processor()
+        apply_transcription_request = getattr(processor, "apply_transcription_request", None)
+        if (
+            apply_transcription_request is None
+            or "transcription" not in inspect.signature(apply_transcription_request).parameters
+        ):
+            self.skipTest(
+                f"{self.processor_class.__name__} does not support training with `apply_transcription_request`."
+            )
+        return processor
+
+    @require_torch
+    def test_apply_transcription_request_with_transcription(self):
+        processor = self._get_transcription_training_processor()
+        audio = self.prepare_audio_inputs(batch_size=2)
+        transcriptions = ["Hello world.", "A longer transcription so that padding is applied."]
+        outputs = processor.apply_transcription_request(audio=audio, transcription=transcriptions)
+
+        # the same as processing the untokenized prompts, with labels
+        prompts = processor.apply_transcription_request(audio=audio, transcription=transcriptions, tokenize=False)
+        expected_outputs = processor(text=prompts, audio=audio, output_labels=True)
+        self.assertIn("labels", outputs)
+        self.assertEqual(set(outputs.keys()), set(expected_outputs.keys()))
+        for key in outputs:
+            self.assertTrue(outputs[key].equal(expected_outputs[key]))
+
+        # each target transcription is in the labels of its audio
+        for labels, transcription in zip(outputs["labels"], transcriptions):
+            self.assertIn(transcription, processor.tokenizer.decode(labels[labels != -100]))
+
+        # user `processor_kwargs` are merged with the labels request
+        merged_outputs = processor.apply_transcription_request(
+            audio=audio, transcription=transcriptions, processor_kwargs={"text_kwargs": {"padding": True}}
+        )
+        self.assertTrue(merged_outputs["labels"].equal(outputs["labels"]))
+
+    @require_torch
+    def test_apply_transcription_request_single_transcription_not_broadcast(self):
+        # a transcription is specific to its audio, so a single one is not broadcast to the batch
+        processor = self._get_transcription_training_processor()
+        audio = self.prepare_audio_inputs(batch_size=2)
+        with self.assertRaises(ValueError):
+            processor.apply_transcription_request(audio=audio, transcription="Hello world.")
+
     @require_librosa
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
     def test_apply_chat_template_audio(self, batch_size: int, return_tensors: str):
@@ -1489,34 +1581,32 @@ class ProcessorTesterMixin:
                 processor_kwargs={"do_sample_frames": True},
             )
 
-    @require_librosa
     @require_torchcodec
     def test_chat_template_audio_from_video(self):
         processor = self.get_processor()
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
-        signature = inspect.signature(processor.__call__)
-        if "videos" not in {*signature.parameters.keys()} or (
-            signature.parameters.get("videos") is not None
-            and signature.parameters["videos"].annotation == inspect._empty
-        ):
-            self.skipTest(f"{self.processor_class} does not support video inputs")
+        if "video_processor" not in self.processor_class.get_attributes():
+            self.skipTest(f"{self.processor_class.__name__} does not support video inputs")
 
         if (
             "feature_extractor" not in self.processor_class.get_attributes()
-            or "audio_processor" not in self.processor_class.get_attributes()
+            and "audio_processor" not in self.processor_class.get_attributes()
         ):
-            self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
+            self.skipTest(f"{self.processor_class.__name__} does not support audio inputs")
 
-        video_file_path = hf_hub_download(
-            repo_id="hf-internal-testing/test-videos", filename="sample_demo_1_320x240.mp4", repo_type="dataset"
+        video_file_path = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/test-videos/resolve/main/sample_demo_1_320x240.mp4"
         )
-        messages = [
+        video_expected_shape = processor.video_processor(videos=video_file_path)[self.videos_input_name].shape
+
+        Video_audio_message = [
             {
                 "role": "user",
                 "content": [
                     {"type": "video", "path": video_file_path},
+                    {"type": "audio"},
                     {"type": "text", "text": "Which of these animals is making the sound?"},
                 ],
             },
@@ -1532,25 +1622,52 @@ class ProcessorTesterMixin:
             },
         ]
 
-        formatted_prompt = processor.apply_chat_template([messages], add_generation_prompt=True, tokenize=False)
-        self.assertEqual(len(formatted_prompt), 1)  # batch size=1
-
         out_dict = processor.apply_chat_template(
-            messages,
+            Video_audio_message,
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
+            load_audio_backend="torchcodec",
             load_audio_from_video=True,
         )
         self.assertTrue(self.audio_input_name in out_dict)
         self.assertTrue(self.videos_input_name in out_dict)
 
-        # should always have input_ids and attention_mask
-        self.assertEqual(len(out_dict["input_ids"]), 1)  # batch-size=1
-        self.assertEqual(len(out_dict["attention_mask"]), 1)  # batch-size=1
-        self.assertEqual(len(out_dict[self.audio_input_name]), 1)  # 1 audio in the conversation
-        self.assertEqual(len(out_dict[self.videos_input_name]), 1)  # 1 video in the conversation
+        self.assertEqual(out_dict["input_ids"].shape[0], 1)  # batch-size=1
+        self.assertEqual(out_dict["attention_mask"].shape[0], 1)  # batch-size=1
+        self.assertEqual(out_dict[self.audio_input_name].shape[0], 1)  # 1 audio from video
+        self.assertListEqual(list(out_dict[self.videos_input_name].shape), list(video_expected_shape))
+
+        audio_file_path = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/glass-breaking-151256.mp3"
+        )
+        audio_message = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "audio", "path": audio_file_path},
+                    {"type": "text", "text": "What do you hear in this track?"},
+                ],
+            },
+        ]
+        out_dict = processor.apply_chat_template(
+            [Video_audio_message, audio_message],
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
+            load_audio_backend="torchcodec",
+            load_audio_from_video=True,
+        )
+        self.assertTrue(self.audio_input_name in out_dict)
+        self.assertTrue(self.videos_input_name in out_dict)
+
+        self.assertEqual(out_dict["input_ids"].shape[0], 2)
+        self.assertEqual(out_dict["attention_mask"].shape[0], 2)
+        self.assertEqual(out_dict[self.audio_input_name].shape[0], 2)  # 2 audios
+        self.assertListEqual(list(out_dict[self.videos_input_name].shape), list(video_expected_shape))
 
     def test_chat_template_jinja_kwargs(self):
         """Tests that users can pass any kwargs and they will be used in jinja templates."""
@@ -1796,14 +1913,61 @@ class ProcessorTesterMixin:
         num_video_tokens_from_helper = processor._get_num_multimodal_tokens(video_sizes=video_sizes * 2)
         self.assertEqual(sum(num_video_tokens_from_call), sum(num_video_tokens_from_helper["num_video_tokens"]))
 
+    def test_get_num_multimodal_tokens_matches_processor_call_audio(self):
+        "Tests that the helper used internally in vLLM works correctly"
+
+        processor = self.get_processor()
+
+        if not hasattr(processor, "_get_num_multimodal_tokens"):
+            self.skipTest("Processor doesn't support `_get_num_multimodal_tokens` yet")
+
+        if processor.tokenizer.pad_token_id is None:
+            processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
+
+        if processor._audio_processor is None:
+            self.skipTest("Processor has no audio processor")
+
+        if "audio_lengths" not in inspect.signature(processor._get_num_multimodal_tokens).parameters:
+            self.skipTest("Processor doesn't count audio tokens yet")
+
+        sampling_rate = processor._audio_processor.sampling_rate
+        # Lengths that aren't a multiple of the hop length, so that the frame rounding of the counters is covered
+        audio_lengths = [sampling_rate, 4 * sampling_rate, int(1.7 * sampling_rate) + 50]
+        audio_inputs = [np.zeros(length, dtype=np.float32) for length in audio_lengths]
+
+        num_audio_tokens_from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths)
+
+        audio_token = getattr(self, "audio_token", "")
+        text = [f"This is an audio {audio_token}"] * len(audio_inputs)
+        inputs = processor(
+            text=text, audio=audio_inputs, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
+        )
+
+        if "mm_token_type_ids" not in inputs:
+            self.skipTest("Processor doesn't support `mm_token_type_ids`")
+
+        num_audio_tokens_from_call = (inputs.mm_token_type_ids == 3).sum(-1).tolist()
+        self.assertListEqual(num_audio_tokens_from_call, num_audio_tokens_from_helper["num_audio_tokens"])
+
+        # Test with two audios per single text
+        text = [f"These are two audios {audio_token}{audio_token}"] * len(audio_inputs)
+        inputs = processor(
+            text=text, audio=audio_inputs * 2, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
+        )
+
+        num_audio_tokens_from_call = (inputs.mm_token_type_ids == 3).sum(-1).tolist()
+        num_audio_tokens_from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths * 2)
+        self.assertEqual(sum(num_audio_tokens_from_call), sum(num_audio_tokens_from_helper["num_audio_tokens"]))
+
     @staticmethod
     def does_processor_return_mm_offsets(processor_class, method_name: str):
         """
         Updated processor need to override a `replace_xxx_method` which is the only
         reliable way to tell if processor is old format or not.
         """
+        parent_class = processor_class.__mro__[1]
         child_method = getattr(processor_class, method_name)
-        base_method = getattr(ProcessorMixin, method_name)
+        base_method = getattr(parent_class, method_name)
         return child_method is not base_method
 
     def test_replacement_offsets(self):

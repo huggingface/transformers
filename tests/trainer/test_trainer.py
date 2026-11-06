@@ -20,6 +20,7 @@ mixed precision, logging, NEFTune, memory metrics, and end-to-end training.
 import math
 import tempfile
 from functools import partial
+from unittest.mock import patch
 
 import datasets
 import numpy as np
@@ -472,6 +473,20 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
             num_items = trainer._get_num_items_in_batch(batch_samples, torch.device("cpu"))
             self.assertEqual(int(num_items), 13)
 
+    @require_torch_non_multi_accelerator
+    def test_num_items_in_batch_keeps_fraction_under_model_parallelism(self):
+        from transformers import LlamaForTokenClassification
+
+        config = LlamaConfig(
+            vocab_size=64, hidden_size=16, intermediate_size=32, num_hidden_layers=2, num_attention_heads=2
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = Trainer(model=LlamaForTokenClassification(config), args=TrainingArguments(output_dir=tmp_dir))
+            batch_samples = [{"labels": torch.tensor([[1, 2, 3, -100]])}]
+            with patch.object(trainer, "get_cp_size", return_value=2):
+                num_items = trainer._get_num_items_in_batch(batch_samples, torch.device("cpu"))
+            self.assertEqual(num_items.item(), 1.5)
+
     @require_torch_multi_accelerator
     def test_num_batches_in_training_with_gradient_accumulation(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -518,7 +533,7 @@ class TrainerGradientCheckpointingTest(TestCasePlus):
             trainer = get_regression_trainer(
                 per_device_train_batch_size=1,
                 learning_rate=0.1,
-                gradient_checkpointing=True,
+                activation_checkpointing=True,
                 output_dir=tmp_dir,
             )
             previous_params = {k: v.detach().clone() for k, v in trainer.model.named_parameters()}
@@ -531,6 +546,28 @@ class TrainerGradientCheckpointingTest(TestCasePlus):
                     torch.allclose(previous_params[k], v, rtol=1e-4, atol=1e-4),
                     f"Model weights for {k} have not been updated",
                 )
+
+    def test_gradient_checkpointing_on_a_model_outside_pretrained_model(self):
+        # A model that is not a `PreTrainedModel` and only defines the deprecated `gradient_checkpointing_enable`
+        # (e.g. sentence-transformers) is still enabled through it until v6
+        class Model(RegressionModel):
+            def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None, **kwargs):
+                self.checkpointing_kwargs = gradient_checkpointing_kwargs
+
+        model = Model()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                activation_checkpointing=True,
+                activation_checkpointing_kwargs={"use_reentrant": False},
+                max_steps=1,
+                report_to="none",
+            )
+            trainer = Trainer(model=model, args=args, train_dataset=RegressionDataset())
+            with self.assertWarnsRegex(FutureWarning, "only defines `gradient_checkpointing_enable`"):
+                trainer.train()
+
+        self.assertEqual(model.checkpointing_kwargs, {"use_reentrant": False})
 
 
 # ---------------------------------------------------------------------------
@@ -637,6 +674,30 @@ class TrainerLoggingTest(TestCasePlus):
 
         self.assertTrue(is_any_loss_nan_or_inf(log_history_no_filter))
         self.assertFalse(is_any_loss_nan_or_inf(log_history_filter))
+
+    def test_eval_loss_inf_nan_filter(self):
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        x = torch.randint(0, 100, (16,))
+        valid = [{"input_ids": x, "labels": x}] * 8
+        # Batches whose labels are all masked have a NaN loss. 8 in a row keeps them apart from valid batches
+        # even when DataParallel merges the per-device batches.
+        masked = [{"input_ids": x, "labels": torch.full_like(x, -100)}] * 8
+
+        def eval_loss(eval_dataset, logging_nan_inf_filter):
+            args = TrainingArguments(
+                self.get_auto_remove_tmp_dir(),
+                per_device_eval_batch_size=1,
+                logging_nan_inf_filter=logging_nan_inf_filter,
+            )
+            return Trainer(tiny_gpt2, args).evaluate(eval_dataset)["eval_loss"]
+
+        self.assertTrue(math.isnan(eval_loss(masked + valid, logging_nan_inf_filter=False)))
+        self.assertAlmostEqual(
+            eval_loss(masked + valid, logging_nan_inf_filter=True),
+            eval_loss(valid, logging_nan_inf_filter=True),
+            places=5,
+        )
 
     def test_log_level(self):
         # testing only --log_level (--log_level_replica requires multiple gpus and DDP and is tested elsewhere)

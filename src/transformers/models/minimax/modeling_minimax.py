@@ -557,7 +557,7 @@ class MiniMaxDecoderLayer(GradientCheckpointingLayer):
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         hidden_states = self.input_layernorm(hidden_states)
         residual = hidden_states
         hidden_states, _ = self.self_attn(
@@ -640,7 +640,7 @@ class MiniMaxModel(MiniMaxPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: MiniMaxCache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MoeModelOutputWithPast:
@@ -776,7 +776,7 @@ class MiniMaxForCausalLM(MiniMaxPreTrainedModel, GenerationMixin):
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: MiniMaxConfig):
         super().__init__(config)
         self.model = MiniMaxModel(config)
         self.vocab_size = config.vocab_size
@@ -796,7 +796,7 @@ class MiniMaxForCausalLM(MiniMaxPreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         output_router_logits: bool | None = None,

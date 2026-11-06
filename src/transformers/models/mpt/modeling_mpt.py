@@ -664,7 +664,7 @@ class MptForTokenClassification(MptPreTrainedModel):
 
 @auto_docstring
 class MptForQuestionAnswering(MptPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MptConfig):
         super().__init__(config)
         self.transformer = MptModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
@@ -676,8 +676,8 @@ class MptForQuestionAnswering(MptPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
         output_attentions: bool | None = None,

@@ -20,7 +20,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import divide_to_patches, group_images_by_shape, reorder_images
@@ -90,6 +90,22 @@ __all__ = [
 @auto_docstring(checkpoint="stepfun-ai/Step-3.7-Flash")
 @strict
 class Step3p7VisionConfig(SiglipVisionConfig):
+    r"""
+    Example:
+
+    ```python
+    >>> from transformers import Step3p7VisionConfig, Step3p7VisionModel
+
+    >>> # Initializing a Step3p7VisionConfig with google/step3p7-base-patch16-224 style configuration
+    >>> configuration = Step3p7VisionConfig()
+
+    >>> # Initializing a Step3p7VisionModel (with random weights) from the google/step3p7-base-patch16-224 style configuration
+    >>> model = Step3p7VisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "step3p5_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
@@ -107,6 +123,8 @@ class Step3p7VisionConfig(SiglipVisionConfig):
     layer_scale_init_value: float = 0.1
     rope_parameters: dict | None = None
     max_position_embeddings: int = 2704  # (image_size // patch_size)^2 = (728//14)^2
+
+    vision_use_head = AttributeError()
 
     def __post_init__(self, **kwargs):
         self.hidden_size = kwargs.pop("width", self.hidden_size)
@@ -319,8 +337,8 @@ class Step3p7TextConfig(MiniMaxM3VLTextConfig):
 class Step3p7Config(PreTrainedConfig):
     model_type = "step3p7"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Step3p7VisionConfig),
-        "text_config": SubConfigSpec(config_class=Step3p7TextConfig),
+        "vision_config": Step3p7VisionConfig,
+        "text_config": Step3p7TextConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -928,7 +946,7 @@ class Step3p7TextModel(Gemma3TextModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:

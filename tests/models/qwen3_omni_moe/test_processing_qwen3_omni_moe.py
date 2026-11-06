@@ -21,10 +21,9 @@ from parameterized import parameterized
 
 from transformers import Qwen3OmniMoeProcessor
 from transformers.testing_utils import (
-    require_librosa,
     require_torch,
     require_torchaudio,
-    require_torchcodec,
+    require_torchcodec_greater_or_equal,
     require_torchvision,
     require_vision,
 )
@@ -79,11 +78,6 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             {"num_frames": None, "fps": 18, "expected_dim": 0, "output_length": 2160},
             {"do_sample_frames": False, "fps": 2, "expected_dim": 0, "output_length": 4320},
         ]
-
-    def prepare_audio_inputs(self, batch_size: int = 3):
-        """This function prepares a list of numpy audios."""
-        audio_inputs = [np.random.rand(160000) * 2 - 1] * batch_size
-        return audio_inputs
 
     @parameterized.expand(
         [
@@ -164,8 +158,7 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(audio_outputs), 1)
         self.assertTrue(np.array_equal(audio_outputs[0], np.arange(6, dtype=np.float32)))
 
-    @require_librosa
-    @require_torchcodec
+    @require_torchcodec_greater_or_equal("0.17.0")
     def test_chat_template_audio_from_video(self):
         processor = self.get_processor()
         if processor.chat_template is None:
@@ -223,3 +216,23 @@ class Qwen3OmniMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(out_dict["attention_mask"]), 1)  # batch-size=1
         self.assertEqual(len(out_dict[self.audio_input_name]), 1)  # 1 audio in the conversation
         self.assertEqual(len(out_dict[self.videos_input_name]), 10800)  # 1 video in the conversation
+
+    def test_load_audio_from_video_with_decoded_audio(self):
+        processor = self.get_processor()
+        video = np.random.randint(255, size=(4, 112, 112, 3), dtype=np.uint8)
+        audio = [np.zeros(48000, dtype=np.float32), np.zeros(32000, dtype=np.float32)]
+        text = (
+            f"{processor.audio_bos_token}{processor.audio_token}{processor.audio_eos_token}"
+            f"{processor.vision_bos_token}{processor.video_token}{processor.vision_eos_token}"
+        )
+        inputs = processor(
+            text=text, videos=[video], audio=audio, load_audio_from_video=True, audio_from_video_indices=[None, 0]
+        )
+        deprecated_inputs = processor(
+            text=text, videos=[video], audio=audio, use_audio_in_video=True, audio_from_video_indices=[None, 0]
+        )
+        self.assertListEqual(inputs["input_ids"], deprecated_inputs["input_ids"])
+
+        audio_token_id = processor.tokenizer.convert_tokens_to_ids(processor.audio_token)
+        num_audio_tokens = processor._get_num_multimodal_tokens(audio_lengths=[48000, 32000])["num_audio_tokens"]
+        self.assertEqual(inputs["input_ids"][0].count(audio_token_id), sum(num_audio_tokens))

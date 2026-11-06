@@ -344,7 +344,7 @@ class Lfm2ShortConv(nn.Module):
         hidden_states: torch.Tensor,
         past_key_values: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
-        seq_idx: torch.IntTensor | None = None,
+        **kwargs,
     ):
         seq_len = hidden_states.shape[1]
 
@@ -369,9 +369,7 @@ class Lfm2ShortConv(nn.Module):
                     hidden_states, self.layer_idx, conv_kernel_size=self.conv_kernel_size
                 )
 
-            hidden_states = causal_conv1d_fn(
-                hidden_states, self.conv.weight.squeeze(1), self.conv.bias, seq_idx=seq_idx
-            )
+            hidden_states = causal_conv1d_fn(hidden_states, self.conv.weight.squeeze(1), self.conv.bias, **kwargs)
 
             # Drop the additional previous states
             if past_key_values is not None:
@@ -386,7 +384,7 @@ class Lfm2ShortConv(nn.Module):
 class Lfm2DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Lfm2Config, layer_idx: int):
         super().__init__()
-        self.is_attention_layer = config.layer_types[layer_idx] == "full_attention"
+        self.is_attention_layer = config.layer_types[layer_idx] != "conv"
 
         if self.is_attention_layer:
             self.self_attn = Lfm2Attention(config, layer_idx)
@@ -420,7 +418,7 @@ class Lfm2DecoderLayer(GradientCheckpointingLayer):
                 hidden_states=self.operator_norm(hidden_states),
                 past_key_values=past_key_values,
                 attention_mask=attention_mask,
-                seq_idx=kwargs.get("seq_idx"),
+                **kwargs,
             )
         hidden_states = hidden_states + residual
         hidden_states = hidden_states + self.feed_forward(self.ffn_norm(hidden_states))
@@ -474,7 +472,7 @@ class Lfm2Model(Lfm2PreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -534,7 +532,7 @@ class Lfm2ForCausalLM(Lfm2PreTrainedModel, GenerationMixin):
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: Lfm2Config):
         super().__init__(config)
         self.model = Lfm2Model(config)
         self.vocab_size = config.vocab_size
@@ -551,7 +549,7 @@ class Lfm2ForCausalLM(Lfm2PreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,

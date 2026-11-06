@@ -306,7 +306,7 @@ class CircleCIJob:
 torch_job = CircleCIJob(
     "torch",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
-    marker="not (generate or is_training_test or is_tensor_parallel_test or is_fsdp_test)",
+    marker="not (generate or is_training_test or is_tensor_parallel_test or is_expert_parallel_test or is_fsdp_test)",
     parallelism=6,
 )
 
@@ -388,6 +388,15 @@ tensor_parallel_ci_job = CircleCIJob(
     parallelism=6,
 )
 
+expert_parallel_ci_job = CircleCIJob(
+    "expert_parallel_ci",
+    additional_env={"RUN_EXPERT_PARALLEL_TESTS": True},
+    docker_image=[{"image": "huggingface/transformers-torch-light"}],
+    install_steps=["uv pip install ."],
+    marker="is_expert_parallel_test",
+    parallelism=6,
+)
+
 fsdp_ci_job = CircleCIJob(
     "fsdp_ci",
     additional_env={"RUN_FSDP_TESTS": True},
@@ -434,9 +443,10 @@ REPO_UTIL_TESTS = [repo_utils_job]
 DOC_TESTS = [doc_test_job]
 TRAINING_CI_TESTS = [training_ci_job]
 TENSOR_PARALLEL_CI_TESTS = [tensor_parallel_ci_job]
+EXPERT_PARALLEL_CI_TESTS = [expert_parallel_ci_job]
 FSDP_CI_TESTS = [fsdp_ci_job]
 PEFT_INTEGRATION_TESTS = [peft_integration_job]
-ALL_TESTS = REGULAR_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job] + TRAINING_CI_TESTS + TENSOR_PARALLEL_CI_TESTS + FSDP_CI_TESTS + PEFT_INTEGRATION_TESTS  # fmt: skip
+ALL_TESTS = REGULAR_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job] + TRAINING_CI_TESTS + TENSOR_PARALLEL_CI_TESTS + EXPERT_PARALLEL_CI_TESTS + FSDP_CI_TESTS + PEFT_INTEGRATION_TESTS  # fmt: skip
 
 
 def create_circleci_config(folder=None):

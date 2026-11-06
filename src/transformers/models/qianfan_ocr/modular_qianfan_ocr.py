@@ -20,7 +20,7 @@ import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import SubConfigSpec
-from ...image_utils import ImageInput
+from ...image_utils import ImageInput, make_flat_list_of_images
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -106,7 +106,7 @@ class QianfanOCRConfig(InternVLConfig):
     model_type = "qianfan_ocr"
     sub_configs_defaults = {
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3"),
-        "vision_config": SubConfigSpec(config_class=QianfanOCRVisionConfig),
+        "vision_config": QianfanOCRVisionConfig,
     }
 
     tie_word_embeddings: bool = False
@@ -164,7 +164,7 @@ class QianfanOCRVisionEmbeddings(InternVLVisionEmbeddings):
 
 class QianfanOCRVisionModelOutputWithPooling(BaseModelOutputWithPooling):
     r"""
-    pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+    pooler_output (`torch.Tensor` of shape `(batch_size, hidden_size)`):
         Average of the last layer hidden states of the patch tokens (excluding the *[CLS]* token) if
         *config.use_mean_pooling* is set to True. If set to False, then the final hidden state of the *[CLS]* token
         will be returned.
@@ -175,7 +175,7 @@ class QianfanOCRVisionModelOutputWithPooling(BaseModelOutputWithPooling):
 
 @auto_docstring
 class QianfanOCRVisionPreTrainedModel(InternVLVisionPreTrainedModel):
-    config_class = QianfanOCRVisionConfig
+    config: QianfanOCRVisionConfig
     base_model_prefix = "vision_model"
     _no_split_modules = ["QianfanOCRVisionLayer"]
     _can_record_outputs = {
@@ -222,7 +222,7 @@ class QianfanOCRMultiModalProjector(InternVLMultiModalProjector):
 
 
 class QianfanOCRPreTrainedModel(InternVLPreTrainedModel):
-    config_class = QianfanOCRConfig
+    config: QianfanOCRConfig
     input_modalities = ("image", "text")
 
 
@@ -234,8 +234,8 @@ class QianfanOCRPreTrainedModel(InternVLPreTrainedModel):
 @dataclass
 class QianfanOCRModelOutputWithPast(InternVLModelOutputWithPast):
     r"""
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+    image_hidden_states (`torch.Tensor`, *optional*):
+        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
@@ -421,12 +421,35 @@ class QianfanOCRProcessor(InternVLProcessor):
         videos=None,
         **kwargs: Unpack[QianfanOCRProcessorKwargs],
     ):
-        super().validate_inputs(images=images, text=text, videos=videos, **kwargs)
         if text is None:
             raise ValueError("You have to specify text.")
 
         if videos is not None:
             raise ValueError("QianfanOCR does not support video input.")
+
+        if images is None and text is None:
+            raise ValueError(f"You need to provide at least one input to call {self.__class__.__name__}")
+
+        # Check that number of placeholders in text is same as number of mm-data for models
+        # that have a special multimodal placeholder token defined
+        if text is not None:
+            if not (
+                isinstance(text, str) or (isinstance(text, list) and all(isinstance(sample, str) for sample in text))
+            ):
+                raise ValueError("`text` must be a string or list of strings.")
+
+            n_images_in_text = [sample.count(self.image_placeholder_token) for sample in text]
+            if images is not None:
+                images = make_flat_list_of_images(images)
+                if sum(n_images_in_text) != len(images):
+                    raise ValueError(
+                        f"The total number of {self.image_placeholder_token} tokens in the prompts should be the same as the number of images passed."
+                        f" Found total {sum(n_images_in_text)} {self.image_placeholder_token} tokens and {len(images)} images."
+                    )
+            elif any(n_images_in_text):
+                raise ValueError(
+                    f"Found {sum(n_images_in_text)} {self.image_placeholder_token} tokens in the text but no images were passed."
+                )
 
     def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         raise NotImplementedError("QianfanOCR does not support video input")

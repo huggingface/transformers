@@ -56,6 +56,7 @@ class Sam3LiteTextDETREncoderConfig(PreTrainedConfig):
     """
 
     model_type = "sam3_lite_text_detr_encoder"
+    attribute_map = {"num_hidden_layers": "num_layers"}
 
     hidden_size: int = 256
     num_layers: int = 6
@@ -77,6 +78,7 @@ class Sam3LiteTextDETRDecoderConfig(PreTrainedConfig):
     """
 
     model_type = "sam3_lite_text_detr_decoder"
+    attribute_map = {"num_hidden_layers": "num_layers"}
 
     hidden_size: int = 256
     num_layers: int = 6
@@ -168,12 +170,12 @@ class Sam3LiteTextConfig(PreTrainedConfig):
 
     model_type = "sam3_lite_text"
     sub_configs_defaults = {
-        "geometry_encoder_config": SubConfigSpec(config_class=Sam3LiteTextGeometryEncoderConfig),
-        "detr_encoder_config": SubConfigSpec(config_class=Sam3LiteTextDETREncoderConfig),
-        "detr_decoder_config": SubConfigSpec(config_class=Sam3LiteTextDETRDecoderConfig),
-        "mask_decoder_config": SubConfigSpec(config_class=Sam3LiteTextMaskDecoderConfig),
+        "geometry_encoder_config": Sam3LiteTextGeometryEncoderConfig,
+        "detr_encoder_config": Sam3LiteTextDETREncoderConfig,
+        "detr_decoder_config": Sam3LiteTextDETRDecoderConfig,
+        "mask_decoder_config": Sam3LiteTextMaskDecoderConfig,
         "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="sam3_vision_model"),
-        "text_config": SubConfigSpec(config_class=Sam3LiteTextTextConfig),
+        "text_config": Sam3LiteTextTextConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None

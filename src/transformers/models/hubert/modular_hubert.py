@@ -219,7 +219,7 @@ class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        mask_time_indices: torch.FloatTensor | None = None,
+        mask_time_indices: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,

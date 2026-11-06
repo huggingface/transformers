@@ -628,7 +628,7 @@ class IBertModel(IBertPreTrainedModel):
 
     """
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: IBertConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -655,15 +655,15 @@ class IBertModel(IBertPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> BaseModelOutputWithPoolingAndCrossAttentions | tuple[torch.FloatTensor]:
+    ) -> BaseModelOutputWithPoolingAndCrossAttentions | tuple[torch.Tensor]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -731,7 +731,7 @@ class IBertForMaskedLM(IBertPreTrainedModel):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: IBertConfig):
         super().__init__(config)
 
         self.ibert = IBertModel(config, add_pooling_layer=False)
@@ -751,16 +751,16 @@ class IBertForMaskedLM(IBertPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> MaskedLMOutput | tuple[torch.FloatTensor]:
+    ) -> MaskedLMOutput | tuple[torch.Tensor]:
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.ibert(
@@ -822,7 +822,7 @@ class IBertLMHead(nn.Module):
     """
 )
 class IBertForSequenceClassification(IBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: IBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -836,16 +836,16 @@ class IBertForSequenceClassification(IBertPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> SequenceClassifierOutput | tuple[torch.FloatTensor]:
+    ) -> SequenceClassifierOutput | tuple[torch.Tensor]:
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.ibert(
@@ -897,7 +897,7 @@ class IBertForSequenceClassification(IBertPreTrainedModel):
 
 @auto_docstring
 class IBertForMultipleChoice(IBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: IBertConfig):
         super().__init__(config)
 
         self.ibert = IBertModel(config)
@@ -912,15 +912,15 @@ class IBertForMultipleChoice(IBertPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> MultipleChoiceModelOutput | tuple[torch.FloatTensor]:
+    ) -> MultipleChoiceModelOutput | tuple[torch.Tensor]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -942,7 +942,7 @@ class IBertForMultipleChoice(IBertPreTrainedModel):
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -995,7 +995,7 @@ class IBertForMultipleChoice(IBertPreTrainedModel):
 
 @auto_docstring
 class IBertForTokenClassification(IBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: IBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1010,16 +1010,16 @@ class IBertForTokenClassification(IBertPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> TokenClassifierOutput | tuple[torch.FloatTensor]:
+    ) -> TokenClassifierOutput | tuple[torch.Tensor]:
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.ibert(
@@ -1076,7 +1076,7 @@ class IBertClassificationHead(nn.Module):
 
 @auto_docstring
 class IBertForQuestionAnswering(IBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: IBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1090,17 +1090,17 @@ class IBertForQuestionAnswering(IBertPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> QuestionAnsweringModelOutput | tuple[torch.FloatTensor]:
+    ) -> QuestionAnsweringModelOutput | tuple[torch.Tensor]:
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.ibert(
