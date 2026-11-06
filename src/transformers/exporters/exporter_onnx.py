@@ -155,8 +155,9 @@ class OnnxExporter(DynamoExporter):
     ) -> tuple[ONNXProgram, dict[str, Any]]:
         config = self._as_config(config)
 
-        with patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("onnx"):
+        with patch_model_outputs(model) as (inputs_names, outputs_names, out_specs), apply_patches("onnx"):
             exported_program, metadata = super().export_program(model, sample_inputs, config=config)
+            metadata["out_spec"] = torch.utils._pytree.treespec_dumps(out_specs[-1])
             inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
             apply_fx_node_fixes("onnx", exported_program.graph_module)
             onnx_program: ONNXProgram = torch.onnx.export(
@@ -202,9 +203,7 @@ class OnnxExporter(DynamoExporter):
 
 def update_onnx_metadata(metadata: dict[str, Any], onnx_program: ONNXProgram) -> None:
     """Record the ONNX graph's own input and output names, which differ from the traced program's (dotted leaf
-    paths, `input.` / `output.` prefixes on mutated inputs). The traced program's positional layout doesn't apply."""
-    metadata.pop("constant_inputs", None)
-    metadata.pop("num_user_outputs", None)
+    paths, `input.` / `output.` prefixes on mutated inputs)."""
     metadata["input_names"] = [value.name for value in onnx_program.model.graph.inputs]
     metadata["output_names"] = [value.name for value in onnx_program.model.graph.outputs]
 
@@ -213,23 +212,28 @@ def update_onnx_metadata(metadata: dict[str, Any], onnx_program: ONNXProgram) ->
 def patch_model_outputs(model):
     """Wrap `model.forward` to return a flat `dict[str, Tensor]` with duplicated outputs,
     and capture the input/output tensor names from the traced forward in the yielded
-    `(inputs_names, outputs_names)` lists.
+    `(inputs_names, outputs_names, out_specs)` lists, with the pytree spec of what the model returned. Traced ints
+    in it (a sliding cache's length) are no graph outputs, so they are made concrete and join the spec's context.
     """
 
     inputs_names: list[str] = []
     outputs_names: list[str] = []
+    out_specs: list[torch.utils._pytree.TreeSpec] = []
     original_forward = model.forward
 
     @functools.wraps(original_forward)
     def patched_forward(*args, **kwargs):
-        outputs = get_leaf_tensors(duplicate_leaf_tensors(original_forward(*args, **kwargs)))
+        original_outputs = original_forward(*args, **kwargs)
+        concrete = torch.utils._pytree.tree_map_only(torch.SymInt, lambda value: value.node.hint, original_outputs)
+        out_specs.append(torch.utils._pytree.tree_structure(concrete))
+        outputs = get_leaf_tensors(duplicate_leaf_tensors(original_outputs))
         inputs_names.extend(get_leaf_tensors(kwargs).keys())
         outputs_names.extend(outputs.keys())
         return outputs
 
     try:
         model.forward = patched_forward
-        yield inputs_names, outputs_names
+        yield inputs_names, outputs_names, out_specs
     finally:
         model.forward = original_forward
 
@@ -296,16 +300,22 @@ def _patch_sdpa(original):
     zeros; ONNX Runtime evaluates the softmax literally and, when the mask is `-inf` (parakeet's
     relative-position bias masks that way), returns `NaN` — which a later BatchNorm then spreads over
     the whole batch. Rows like these are routine: any padded frame under a padding mask has one.
+
+    A boolean mask goes in as an additive one: torchlib guards its boolean softmax with an `IsNaN`/`Where`
+    over the whole `(query, key)` weight matrix, which the zeroing here already makes redundant.
     """
 
     def patch(query, key, value, attn_mask=None, *args, **kwargs):
-        attn_output = original(query, key, value, attn_mask, *args, **kwargs)
         if attn_mask is None:
-            return attn_output
+            return original(query, key, value, attn_mask, *args, **kwargs)
         if attn_mask.dtype == torch.bool:
             unattended = ~attn_mask.any(dim=-1, keepdim=True)
+            attn_mask = torch.zeros(attn_mask.shape, dtype=query.dtype, device=query.device).masked_fill(
+                ~attn_mask, torch.finfo(query.dtype).min
+            )
         else:
             unattended = attn_mask.amax(dim=-1, keepdim=True) <= torch.finfo(attn_mask.dtype).min
+        attn_output = original(query, key, value, attn_mask, *args, **kwargs)
         zero = torch.zeros((), dtype=attn_output.dtype, device=attn_output.device)
         return torch.where(unattended, zero, attn_output)
 
@@ -655,6 +665,45 @@ def _fix_dead_comparison(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
         node.replace_all_uses_with(result)
         gm.graph.erase_node(node)
         return True
+    return False
+
+
+# Each takes `(input, weight, bias, ...)`.
+_CONVOLUTIONS = frozenset(
+    {
+        torch.ops.aten.conv1d.default,
+        torch.ops.aten.conv2d.default,
+        torch.ops.aten.conv3d.default,
+        torch.ops.aten.convolution.default,
+    }
+)
+
+
+@register_fx_node_fix("onnx")
+def _fix_bfloat16_convolution(gm: torch.fx.GraphModule, node: torch.fx.Node) -> bool:
+    """Run a bf16 convolution in fp32: ONNX's `Conv` takes no bf16 before opset 22 (Qwen3.5's causal conv1d)."""
+    if node.target not in _CONVOLUTIONS or node.meta.get("_bf16_convolution_cast"):
+        return False
+    value = node.args[0].meta.get("val") if isinstance(node.args[0], torch.fx.Node) else None
+    if value is None or value.dtype != torch.bfloat16:
+        return False
+
+    def to(argument, dtype):
+        if not isinstance(argument, torch.fx.Node):
+            return argument
+        with gm.graph.inserting_before(node):
+            cast = gm.graph.call_function(torch.ops.aten._to_copy.default, (argument,), {"dtype": dtype})
+        cast.meta["val"] = argument.meta["val"].to(dtype)
+        return cast
+
+    output = node.meta["val"]
+    node.args = (*(to(argument, torch.float32) for argument in node.args[:3]), *node.args[3:])
+    node.meta["val"] = output.to(torch.float32)
+    node.meta["_bf16_convolution_cast"] = True
+    with gm.graph.inserting_after(node):
+        cast = gm.graph.call_function(torch.ops.aten._to_copy.default, (node,), {"dtype": torch.bfloat16})
+    cast.meta["val"] = output
+    node.replace_all_uses_with(cast, delete_user_cb=lambda user: user is not cast)
     return False
 
 

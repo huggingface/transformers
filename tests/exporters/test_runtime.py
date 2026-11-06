@@ -35,6 +35,7 @@ Current coverage — the generation `decode` component:
 
 import copy
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -194,9 +195,9 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             entry, loaded = self._save_and_load_decode(ExecutorchExporter(), ExecutorchConfig(), directory)
             self.assertEqual(entry["file"], "model.pte")
-            # Positional binding needs these, and they can't be recovered from a saved `.pte`.
-            self.assertIn("num_user_outputs", entry["metadata"])
-            self.assertIn("constant_inputs", entry["metadata"])
+            # Binding inputs and rebuilding outputs need these, and they can't be recovered from a saved `.pte`.
+            self.assertIsNotNone(entry["metadata"]["in_spec"])
+            self.assertIsNotNone(entry["metadata"]["out_spec"])
             self.assertIsInstance(loaded.program, Program)
             self.assertIn("forward", loaded.program.method_names)
 
@@ -215,7 +216,6 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
             self.assertEqual(entry["metadata"]["input_names"], [node.name for node in session.get_inputs()])
             self.assertEqual(entry["metadata"]["output_names"], [node.name for node in session.get_outputs()])
         self.assertTrue(any(name.startswith("input.") for name in entry["metadata"]["input_names"]))
-        self.assertIsNone(entry["metadata"]["num_user_outputs"])
 
     @require_onnxscript
     @require_onnxruntime
@@ -297,7 +297,6 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
             self.assertEqual(entry["metadata"]["input_names"], [port.get_any_name() for port in ov_model.inputs])
             self.assertEqual(entry["metadata"]["output_names"], [port.get_any_name() for port in ov_model.outputs])
         self.assertIn("beam_idx", entry["metadata"]["input_names"])
-        self.assertIsNone(entry["metadata"]["num_user_outputs"])
 
     # ──────────────────────── ONNX Runtime ────────────────────────
 
@@ -403,3 +402,127 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
                 out["logits"].cpu(), eager(torch.tensor([[7]]), torch.tensor([position])), atol=1e-3, rtol=1e-3
             )
             self.assertEqual(int(cache[counter_name].cpu().item()), position + 1)
+
+
+@slow
+@require_torch
+class ExportedModelTest(unittest.TestCase):
+    """A single-graph export runs like its source model on every backend: built from the export (`runtime()`), and
+    loaded from disk (`ExportedModel.from_pretrained`)."""
+
+    def _model_and_inputs(self):
+        from transformers import BertConfig, BertModel
+
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=2, num_attention_heads=4, intermediate_size=37
+        )
+        inputs = {"input_ids": torch.randint(0, 99, (2, 7)), "attention_mask": torch.ones(2, 7, dtype=torch.long)}
+        return BertModel(config).eval(), inputs
+
+    def _check_runs_like_eager(self, exporter, config, atol, device=None):
+        from transformers.exporters import ExportedModel
+
+        model, inputs = self._model_and_inputs()
+        with torch.no_grad():
+            expected = model(**inputs)
+        exported = exporter.export(model, copy.deepcopy(inputs), config)
+        with tempfile.TemporaryDirectory() as directory:
+            exported.save_pretrained(directory)
+            for name, runtime in (
+                ("runtime", exported.runtime(device=device)),
+                ("from_pretrained", ExportedModel.from_pretrained(directory, device=device)),
+            ):
+                with self.subTest(name):
+                    # Inputs the trace never saw are dropped, as when passing a processor's whole output.
+                    outputs = runtime(**inputs, token_type_ids=torch.zeros(2, 7, dtype=torch.long))
+                    self.assertIs(type(outputs), type(expected))
+                    for key in expected:
+                        torch.testing.assert_close(outputs[key].cpu(), expected[key], atol=atol, rtol=atol)
+                    self.assertEqual(runtime.dtype, torch.float32)
+                    # Copied by default: the next call leaves them as they are.
+                    runtime(**{**inputs, "input_ids": inputs["input_ids"].flip(-1)})
+                    torch.testing.assert_close(
+                        outputs["last_hidden_state"].cpu(), expected["last_hidden_state"], atol=atol, rtol=atol
+                    )
+                    # Shared outputs are right until the next call.
+                    shared = runtime(**inputs, share_inputs=False, share_outputs=True)
+                    torch.testing.assert_close(
+                        shared["last_hidden_state"].cpu(), expected["last_hidden_state"], atol=atol, rtol=atol
+                    )
+                    # A loaded runtime saves back what it runs.
+                    with tempfile.TemporaryDirectory() as resaved:
+                        runtime.save_pretrained(resaved)
+                        self.assertEqual(sorted(os.listdir(resaved)), sorted(os.listdir(directory)))
+
+    @pytest.mark.torch_export_test
+    def test_dynamo(self):
+        from transformers.exporters import DynamoConfig, DynamoExporter
+
+        self._check_runs_like_eager(DynamoExporter(), DynamoConfig(dynamic=True), atol=1e-4)
+
+    @require_onnxscript
+    @require_onnxruntime
+    @pytest.mark.onnx_export_test
+    def test_onnx(self):
+        from transformers.exporters import OnnxConfig, OnnxExporter
+
+        self._check_runs_like_eager(OnnxExporter(), OnnxConfig(dynamic=True), atol=1e-3, device="cpu")
+
+    @require_openvino
+    @pytest.mark.openvino_export_test
+    def test_openvino(self):
+        from transformers.exporters import OpenVINOConfig, OpenVINOExporter
+
+        self._check_runs_like_eager(OpenVINOExporter(), OpenVINOConfig(dynamic=True), atol=1e-3, device="cpu")
+
+    @require_executorch
+    @pytest.mark.executorch_export_test
+    def test_executorch(self):
+        from transformers.exporters import ExecutorchConfig, ExecutorchExporter
+
+        self._check_runs_like_eager(ExecutorchExporter(), ExecutorchConfig(), atol=1e-3)
+
+    def _check_loads_cache_output(self, exporter, config):
+        """An export whose output holds a cache loads in a process that never exported, where the cache isn't a
+        pytree node yet."""
+        from transformers import DynamicCache, LlamaConfig, LlamaModel
+        from transformers.exporters import ExportedModel
+
+        llama_config = LlamaConfig(
+            vocab_size=99,
+            hidden_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            intermediate_size=37,
+        )
+        model = LlamaModel(llama_config).eval()
+        inputs = {"input_ids": torch.randint(0, 99, (1, 7))}
+        exported = exporter.export(model, inputs, config)
+        with tempfile.TemporaryDirectory() as directory:
+            exported.save_pretrained(directory)
+            torch.utils._pytree._deregister_pytree_node(DynamicCache)
+            outputs = ExportedModel.from_pretrained(directory, device="cpu")(**inputs)
+        self.assertIsInstance(outputs.past_key_values, DynamicCache)
+
+    @pytest.mark.torch_export_test
+    def test_dynamo_loads_cache_output(self):
+        from transformers.exporters import DynamoConfig, DynamoExporter
+
+        self._check_loads_cache_output(DynamoExporter(), DynamoConfig())
+
+    @require_onnxscript
+    @require_onnxruntime
+    @pytest.mark.onnx_export_test
+    def test_onnx_loads_cache_output(self):
+        from transformers.exporters import OnnxConfig, OnnxExporter
+
+        self._check_loads_cache_output(OnnxExporter(), OnnxConfig())
+
+    def test_runtime_refuses_several_components(self):
+        from transformers.exporters import ExportArtifacts, ExportedComponent, ExportMetadata
+
+        component = ExportedComponent("program", ExportMetadata())
+        artifacts = ExportArtifacts({"prefill": component, "decode": component}, "dynamo")
+        with self.assertRaisesRegex(ValueError, "2 components"):
+            artifacts.runtime()

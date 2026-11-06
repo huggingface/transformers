@@ -29,8 +29,9 @@ from ..models.auto.configuration_auto import AutoConfig
 from ..utils import CONFIG_NAME, GENERATION_CONFIG_NAME, PushToHubMixin, logging
 from ..utils.hub import DownloadKwargs, cached_file, cached_files, hf_api
 from .configs import ExportConfigMixin, ExportFormat
-from .metadata import ExportMetadata, export_config_metadata
+from .metadata import ExportMetadata, export_config_metadata, register_treespec_types
 from .quantizers.utils import capture_calibration_inputs
+from .runtimes.base import ExportedModel
 from .utils import check_packages, decompose_for_generation
 
 
@@ -98,6 +99,25 @@ class ExportArtifacts(Mapping, PushToHubMixin):
                 "no single `.program`; index it by name and take that component's."
             )
         return next(iter(self.components.values())).program
+
+    def runtime(self, device=None, **runner_kwargs) -> ExportedModel:
+        """Run this single-graph export on `device` (the backend's default when `None`), as an [`ExportedModel`].
+        `runner_kwargs` go to the backend's runner: `providers` and `session_options` for ONNX Runtime, `config`
+        (compile properties) and `torch_threads` (split the CPU with torch work around the model) for OpenVINO."""
+        from .auto import get_runner_class
+
+        if len(self.components) != 1:
+            raise ValueError(
+                f"This export has {len(self.components)} components ({list(self.components)}); their runtime isn't "
+                "available yet. `runtime()` runs a single-graph export, as `HfExporter.export` returns."
+            )
+        component = next(iter(self.components.values()))
+        runner = get_runner_class(self.export_format).from_program(
+            component.program, component.metadata, device, **runner_kwargs
+        )
+        model = ExportedModel(runner, self.config)
+        model.artifacts = self
+        return model
 
     def save_pretrained(self, save_directory: str | Path, push_to_hub: bool = False, **kwargs) -> None:
         """Write the components (one file each), the configs, and a manifest naming each component's file and the
@@ -170,12 +190,14 @@ class ExportArtifacts(Mapping, PushToHubMixin):
             **kwargs,
         )
         directory = Path(manifest_file).parent
-        components = {
-            name: ExportedComponent(
-                exporter.load_program(directory / entry["file"]), ExportMetadata(**entry["metadata"])
-            )
-            for name, entry in manifest["components"].items()
-        }
+        components = {}
+        for name, entry in manifest["components"].items():
+            metadata = ExportMetadata(**entry["metadata"])
+            # A program whose inputs or outputs hold a cache can't be read back until the cache is a pytree node.
+            for spec in (metadata.in_spec, metadata.out_spec):
+                if spec is not None:
+                    register_treespec_types(spec)
+            components[name] = ExportedComponent(exporter.load_program(directory / entry["file"]), metadata)
         config = AutoConfig.from_pretrained(directory) if (directory / CONFIG_NAME).exists() else None
         generation_config = (
             GenerationConfig.from_pretrained(directory) if (directory / GENERATION_CONFIG_NAME).exists() else None
@@ -286,10 +308,10 @@ class HfExporter(ABC):
 
         Returns:
             [`ExportArtifacts`]: A single `"model"` component; the backend's program is `.program`, and
-            `save_pretrained` writes it with its metadata and the model config.
+            `save_pretrained` writes it with its metadata and the model config (none for a plain `nn.Module`, such
+            as a decomposed `FSMTEncoder`).
         """
         component = self._export_component(model, sample_inputs, config)
-        # A decomposed component (e.g. `FSMTEncoder`) is a plain `nn.Module` with no config.
         return ExportArtifacts({"model": component}, self.export_format, config=getattr(model, "config", None))
 
     def export_for_generation(

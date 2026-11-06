@@ -115,8 +115,9 @@ class OpenVINOExporter(DynamoExporter):
     ) -> tuple[openvino.Model, dict[str, Any]]:
         config = self._as_config(config)
 
-        with patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("openvino"):
+        with patch_model_outputs(model) as (inputs_names, outputs_names, out_specs), apply_patches("openvino"):
             exported_program, metadata = super().export_program(model, sample_inputs, config=config)
+            metadata["out_spec"] = torch.utils._pytree.treespec_dumps(out_specs[-1])
 
         exported_program, graph_module = _fix_exported_program(exported_program)
         ov_model = _convert_to_openvino(graph_module)
@@ -162,9 +163,7 @@ class OpenVINOExporter(DynamoExporter):
 
 def update_openvino_metadata(metadata: dict[str, Any], ov_model: openvino.Model) -> None:
     """Record the OpenVINO model's own port names: dotted leaf paths, and once `stateful`, no cache ports but a
-    `beam_idx` input. The traced program's positional layout doesn't apply."""
-    metadata.pop("constant_inputs", None)
-    metadata.pop("num_user_outputs", None)
+    `beam_idx` input."""
     metadata["input_names"] = [port.get_any_name() for port in ov_model.inputs]
     metadata["output_names"] = [port.get_any_name() for port in ov_model.outputs]
 

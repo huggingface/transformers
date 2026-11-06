@@ -49,6 +49,7 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 
 [[autodoc]] exporters.base.ExportArtifacts
     - program
+    - runtime
     - save_pretrained
     - from_pretrained
 
@@ -59,6 +60,17 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 ## ExportMetadata
 
 [[autodoc]] exporters.metadata.ExportMetadata
+
+## ExportedModel
+
+[[autodoc]] exporters.runtimes.base.ExportedModel
+    - from_pretrained
+
+## ModelRunner
+
+[[autodoc]] exporters.runtimes.base.ModelRunner
+
+[[autodoc]] exporters.auto.get_runner_class
 
 ## DynamoExporter
 
