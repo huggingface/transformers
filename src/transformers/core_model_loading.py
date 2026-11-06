@@ -1416,7 +1416,12 @@ def set_param_for_module(
         # For DTensor parameters, compare against the local shard loaded on this rank.
         expected_shape = ref._local_tensor.shape if is_dtensor(ref) else ref.shape
 
-        if ref is not None and param_value.shape != expected_shape and hf_quantizer is None:
+        # Shape errors result in mismatched key, except for quantized params
+        if (
+            ref is not None
+            and param_value.shape != expected_shape
+            and (hf_quantizer is None or not hf_quantizer.param_needs_quantization(model, target_name))
+        ):
             loading_info.mismatched_keys.add((target_name, param_value.shape, expected_shape))
         else:
             if is_dtensor(ref):
