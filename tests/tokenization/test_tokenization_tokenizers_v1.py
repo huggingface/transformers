@@ -25,6 +25,12 @@ from transformers import AutoTokenizer
 from transformers.testing_utils import require_tokenizers_v1
 from transformers.utils import is_tokenizers_available, is_tokenizers_v1_available
 
+from ..test_tokenization_common import TokenizerTesterMixin
+
+
+if is_tokenizers_v1_available():
+    from transformers.tokenization_utils_tokenizers_v1 import TokenizersV1Backend
+
 
 VOCAB = {"[UNK]": 0, "[CLS]": 1, "[SEP]": 2, "[PAD]": 3, "hello": 4, "world": 5, "how": 6, "are": 7, "you": 8}
 
@@ -244,3 +250,25 @@ class TokenizersV1BackendTest(unittest.TestCase):
 
         with self.assertRaises(NotImplementedError):
             self.tokenizer([["hello", "world"]], is_split_into_words=True)
+
+    def test_training_raises(self):
+        with self.assertRaises(NotImplementedError):
+            self.tokenizer.train_new_from_iterator([["hello world"]], vocab_size=10)
+
+
+@require_tokenizers_v1
+class TokenizersV1BackendBertCommonTest(TokenizerTesterMixin, unittest.TestCase):
+    tokenizer_class = TokenizersV1Backend if is_tokenizers_v1_available() else None
+    from_pretrained_id = "google-bert/bert-base-uncased"
+
+
+@require_tokenizers_v1
+class TokenizersV1BackendGPT2CommonTest(TokenizerTesterMixin, unittest.TestCase):
+    tokenizer_class = TokenizersV1Backend if is_tokenizers_v1_available() else None
+    from_pretrained_id = "openai-community/gpt2"
+
+
+@require_tokenizers_v1
+class TokenizersV1BackendT5CommonTest(TokenizerTesterMixin, unittest.TestCase):
+    tokenizer_class = TokenizersV1Backend if is_tokenizers_v1_available() else None
+    from_pretrained_id = "google-t5/t5-base"
