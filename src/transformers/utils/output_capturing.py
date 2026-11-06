@@ -252,23 +252,26 @@ def selected_hidden_states(output_hidden_states: bool | int | list[int] | None) 
     return list(output_hidden_states)
 
 
-def resolve_hidden_states_indices(model: PreTrainedModel, selected: list[int]) -> set[int]:
+def resolve_hidden_states_indices(
+    model: PreTrainedModel, selected: list[int], num_hidden_states: int | None = None
+) -> set[int]:
     """
-    Resolve the negative indices in `selected` using the number of hidden states `model` returns. That is
-    `config.num_hidden_layers` (or the recorder's `num_hidden_layers_key`), plus one if the initial hidden state is captured.
-    Indices out of range are dropped, as they select nothing.
+    Resolve the negative indices in `selected` using the number of hidden states `model` returns. Unless given as
+    `num_hidden_states`, that is `config.num_hidden_layers` (or the recorder's `num_hidden_layers_key`), plus one if
+    the initial hidden state is captured. Indices out of range are dropped, as they select nothing.
     """
-    specs = _CAN_RECORD_REGISTRY.get(model).get("hidden_states")
-    num_hidden_layers_key = getattr(specs, "num_hidden_layers_key", "num_hidden_layers")
-    num_layers = getattr(model.config, num_hidden_layers_key, None)
-    if num_layers is None:
-        if any(i < 0 for i in selected):
-            raise ValueError(
-                f"{model.__class__.__name__} cannot select hidden states with negative indices {selected} because "
-                f"its config does not define `{num_hidden_layers_key}`."
-            )
-        return set(selected)
-    num_hidden_states = num_layers + int(getattr(specs, "capture_initial_hidden_state", True))
+    if num_hidden_states is None:
+        specs = _CAN_RECORD_REGISTRY.get(model).get("hidden_states")
+        num_hidden_layers_key = getattr(specs, "num_hidden_layers_key", "num_hidden_layers")
+        num_layers = getattr(model.config, num_hidden_layers_key, None)
+        if num_layers is None:
+            if any(i < 0 for i in selected):
+                raise ValueError(
+                    f"{model.__class__.__name__} cannot select hidden states with negative indices {selected} because "
+                    f"its config does not define `{num_hidden_layers_key}`."
+                )
+            return set(selected)
+        num_hidden_states = num_layers + int(getattr(specs, "capture_initial_hidden_state", True))
     return {i % num_hidden_states for i in selected if -num_hidden_states <= i < num_hidden_states}
 
 

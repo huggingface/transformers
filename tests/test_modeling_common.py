@@ -6239,18 +6239,20 @@ class ModelTesterMixin(ExportTesterMixin):
                     )
 
                 # Indices select hidden states as they appear in the full output, so negative indices count from the end.
-                # They are resolved with `config.num_hidden_layers`, so models whose config doesn't define it reject them
+                # They are resolved from the config, so every capturing model's config must define the number of layers
+                supports_negative_indices = all(
+                    getattr(module.config, getattr(specs, "num_hidden_layers_key", "num_hidden_layers"), None)
+                    is not None
+                    for module in model.modules()
+                    if isinstance(module, PreTrainedModel)
+                    and (specs := (module._can_record_outputs or {}).get("hidden_states")) is not None
+                )
                 num_hidden_states = len(hidden_states)
-                indices_to_capture = [*range(0, num_hidden_states, 2), -1]
-                try:
-                    torch.manual_seed(0)
-                    out = model(**inputs, output_hidden_states=indices_to_capture)
-                except ValueError as e:
-                    if "cannot select hidden states with negative indices" not in str(e):
-                        raise
-                    indices_to_capture = indices_to_capture[:-1]
-                    torch.manual_seed(0)
-                    out = model(**inputs, output_hidden_states=indices_to_capture)
+                indices_to_capture = [*range(0, num_hidden_states, 2)]
+                if supports_negative_indices:
+                    indices_to_capture.append(-1)
+                torch.manual_seed(0)
+                out = model(**inputs, output_hidden_states=indices_to_capture)
                 captured = out.hidden_states if "hidden_states" in out else out.text_model_output.hidden_states
                 self.assertEqual(len(captured), num_hidden_states)
                 kept = {i % num_hidden_states for i in indices_to_capture}
