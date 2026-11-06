@@ -1502,24 +1502,29 @@ def split_deprecate_attr_assignment(node: cst.CSTNode, model_name: str) -> dict[
     call_node = node.body[0].value
     if not m.matches(call_node, m.Call(func=m.Name("deprecate_attr"))):
         return deprecate_attr_per_file
+
     module_name_arg, *dict_args = call_node.args
     dict_args_per_file = defaultdict(list)
     for dict_arg in dict_args:
         if not isinstance(dict_arg.value, cst.Dict):
             continue
+
         elements_per_file = defaultdict(list)
         for element in dict_arg.value.elements:
             file = find_file_type(element.key.evaluated_value, model_name)
             elements_per_file[file].append(element)
+
         for file, elements in elements_per_file.items():
             # Remove trailing commas so that ruff does not force a multi-line layout
             elements[-1] = elements[-1].with_changes(comma=cst.MaybeSentinel.DEFAULT)
             new_dict = dict_arg.value.with_changes(elements=elements)
             dict_args_per_file[file].append(dict_arg.with_changes(value=new_dict))
+
     for file, file_dict_args in dict_args_per_file.items():
         file_dict_args[-1] = file_dict_args[-1].with_changes(comma=cst.MaybeSentinel.DEFAULT)
         new_call = call_node.with_changes(args=[module_name_arg, *file_dict_args])
         deprecate_attr_per_file[file] = node.with_changes(body=[node.body[0].with_changes(value=new_call)])
+
     return deprecate_attr_per_file
 
 
