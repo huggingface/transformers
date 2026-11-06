@@ -19,6 +19,7 @@ This mostly describe the hooks used and the logic to make capture thread/context
 from __future__ import annotations
 
 import threading
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import wraps
@@ -59,10 +60,10 @@ class OutputRecorder:
 
 class CompileableContextVar:
     """
-    Convenience wrapper around a ContextVar for usage with `torch.compile`.
-    This behaves exactly as a `ContextVar`, except when compilation is triggered in which case it behaves as a simple
-    global variable. This is useful as `torch.compile` cannot trace the `get` method of `ContextVar`. This however means
-    that the access to the underlying variable is not thread-safe when compilation is triggered.
+    Compatibility wrapper around a ContextVar for use with `torch.compile`.
+
+    Uses context-local state outside tracing and a shared value when set during tracing. The shared fallback avoids
+    ContextVar mutation during tracing, but does not provide thread/context isolation.
     """
 
     def __init__(self, name):
@@ -92,9 +93,84 @@ class CompileableContextVar:
         else:
             self.context_var.reset(token)
 
+    @contextmanager
+    def temporary_value(self, value):
+        """Temporarily use `value` in this Python context, restoring the previous binding on exit.
 
-# Thread/context-safe global variable
+        Enter outside tracing, while `get()` reads `context_var`.
+        This leaves `global_var` and `compiling` unchanged.
+        """
+        token = self.context_var.set(value)
+        try:
+            yield
+        finally:
+            self.context_var.reset(token)
+
+
+# Context-local outside tracing; the compilation fallback uses shared state.
 _active_collector = CompileableContextVar("output_collector")
+
+
+def _append_captured_output(collector, key, initial_args, output, index):
+    """Append one output, preserving initial and selected hidden-state positions."""
+    values = collector[key]
+    selected = collector.get("_hidden_states_layers") if key == "hidden_states" else None
+    if initial_args is not None and not values and selected is None:
+        values.append(initial_args[0])
+    if selected is not None and len(values) not in selected:
+        values.append(None)
+        return
+    if not isinstance(output, tuple):
+        values.append(output)
+    elif output[index] is not None:
+        values.append(output[index])
+
+
+@contextmanager
+def _fresh_output_collection():
+    """
+    Collect requested router, attention and hidden-state outputs in fresh lists for each region.
+
+    Enter from eager code around the call to a compiled region. Fresh lists prevent Dynamo from specializing on
+    the number of outputs collected by earlier regions. Merge them into the enclosing collector on exit, including
+    when the region raises. Resolve hidden-state layer positions on exit, outside the compiled region.
+    Native ContextVar support (#46370) does not remove compilation guards rightfully triggering on a growing list.
+    Whole-model tracing captures the enclosing loop and list growth together, so leave its collector unchanged.
+    """
+    if is_torchdynamo_compiling() or _active_collector.compiling:
+        yield
+        return
+
+    collector = _active_collector.get()
+    if collector is None:
+        yield
+        return
+
+    keys = tuple(key for key in ("router_logits", "attentions", "hidden_states") if key in collector)
+    if not keys:
+        yield
+        return
+
+    local_collector = dict(collector)
+    for key in keys:
+        local_collector[key] = []
+    if "hidden_states" in keys:
+        local_collector["_pending_hidden_states"] = []
+    try:
+        with _active_collector.temporary_value(local_collector):
+            yield
+    finally:
+        for key in keys:
+            if key == "hidden_states":
+                pending_hidden_states = local_collector["_pending_hidden_states"]
+                parent_pending = collector.get("_pending_hidden_states")
+                if parent_pending is not None:
+                    parent_pending.extend(pending_hidden_states)
+                else:
+                    for initial_args, output, index in pending_hidden_states:
+                        _append_captured_output(collector, key, initial_args, output, index)
+            else:
+                collector[key].extend(local_collector[key])
 
 
 def install_output_capuring_hook(
@@ -109,31 +185,18 @@ def install_output_capuring_hook(
         if collected_outputs is None or key not in collected_outputs.keys():
             return
 
-        # Optionally capture only some layer's hidden_states
-        hidden_states_layers = collected_outputs.get("_hidden_states_layers")
-
-        # Historically, the first hidden_states output is actually the input of layer 0 (or inputs_embeds), so the hidden_states outputs
-        # have length `num_hidden_layers + 1`. When we request a list of explicit layers to capture, do not add this into the result, so
-        # that the indexing of the output is the same as the actual requested layers
+        initial_args = None
         if (
-            capture_initial_hidden_state
-            and key == "hidden_states"
-            and len(collected_outputs[key]) == 0
-            and hidden_states_layers is None
+            key == "hidden_states"
+            and capture_initial_hidden_state
+            and collected_outputs.get("_hidden_states_layers") is None
         ):
-            collected_outputs[key].append(args[0])
-
-        # If we are capturing only some layer's hidden_states, skip capture if not part of the requested indices
-        if key == "hidden_states" and hidden_states_layers is not None:
-            current_layer_idx = len(collected_outputs[key])
-            if current_layer_idx not in hidden_states_layers:
-                collected_outputs[key].append(None)
-                return
-
-        if not isinstance(output, tuple):
-            collected_outputs[key].append(output)
-        elif output[index] is not None:
-            collected_outputs[key].append(output[index])
+            initial_args = args[:1]
+        pending_hidden_states = collected_outputs.get("_pending_hidden_states")
+        if key == "hidden_states" and pending_hidden_states is not None:
+            pending_hidden_states.append((initial_args, output, index))
+        else:
+            _append_captured_output(collected_outputs, key, initial_args, output, index)
 
     module.register_forward_hook(output_capturing_hook)
 
