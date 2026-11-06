@@ -13,12 +13,12 @@
 # limitations under the License.
 import unittest
 
-from transformers import AutoProcessor, SiglipVisionConfig, UltrabertConfig, UltraVBertConfig, is_torch_available
+from transformers import AutoProcessor, UltraVBertConfig, is_torch_available
 from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
 
 from ...test_image_processing_common import load_test_image
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
-from ...test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import floats_tensor, ids_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
@@ -38,10 +38,9 @@ if is_torch_available():
 class UltraVBertModelTester(VLMModelTester):
     base_model_class = UltraVBertModel
     config_class = UltraVBertConfig
-    text_config_class = UltrabertConfig
-    vision_config_class = SiglipVisionConfig
+
     # NOTE: we don't want a generation class here so it's a workaround
-    _required_attributes = ("config_class", "text_config_class", "base_model_class", "vision_config_class")
+    _required_attributes = ("config_class", "base_model_class")
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("image_size", 8)
@@ -50,20 +49,13 @@ class UltraVBertModelTester(VLMModelTester):
         kwargs.setdefault("num_image_tokens", 4)
         kwargs.setdefault("prediction_head_size", 16)
         kwargs.setdefault("sliding_window", 2)
+        kwargs.setdefault("vision_use_head", False)
         kwargs.setdefault("layer_types", ["sliding_attention", "full_attention"])
         super().__init__(parent, **kwargs)
 
     def create_pixel_values(self, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size
         return floats_tensor([batch_size, 1, self.num_channels, self.image_size, self.image_size])
-
-    def create_attention_mask(self, input_ids):
-        return random_attention_mask(input_ids.shape).to(torch_device)
-
-    def get_vision_config(self):
-        config = super().get_vision_config()
-        config.vision_use_head = False
-        return config
 
     def prepare_config_and_inputs(self):
         config, inputs_dict = self.prepare_config_and_inputs_for_common()

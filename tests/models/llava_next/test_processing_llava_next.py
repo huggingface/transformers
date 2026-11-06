@@ -40,10 +40,6 @@ class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 tokenizer.pad_token_id = 0
         return tokenizer
 
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-
     @staticmethod
     def prepare_processor_dict():
         return {

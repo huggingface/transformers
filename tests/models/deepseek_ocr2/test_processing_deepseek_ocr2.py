@@ -38,10 +38,6 @@ class DeepseekOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor.tile_size = 512
         return image_processor
 
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-
     def test_image_token_expansion_small_image(self):
         """Small image (< tile_size) should produce no local patches → 257 image tokens."""
         processor = self.get_processor()

@@ -884,6 +884,54 @@ class ProcessorTesterMixin:
             )
             self.assertTrue(self.text_input_name in inputs_chat_template)
 
+    def test_if_input_has_mismatching_tokens_and_mm_data(self):
+        """
+        Tests that vision models raise an error when number of data doesn't match number
+        of special token in input text.
+        """
+        processor = self.get_processor()
+        call_signature = inspect.signature(processor.__call__)
+        input_args = [param.name for param in call_signature.parameters.values() if param.annotation != param.empty]
+
+        if not ("text" in input_args and hasattr(processor, "tokenizer")):
+            self.skipTest(f"{self.processor_class} doesn't accpet text inputs.")
+
+        processing_kwargs = {"return_tensors": "pt", "padding": True}
+        if (
+            "images" in input_args
+            and getattr(processor, "image_token", None) is not None
+            and self.does_processor_return_mm_offsets(processor.__class__, "replace_image_token")
+        ):
+            image_inputs = self.prepare_images_inputs(batch_size=4)
+            image_inputs_nested = [[image] if not isinstance(image, list) else image for image in image_inputs]
+            text = self.prepare_text_inputs(batch_size=3, modalities=["image"])
+
+            with self.assertRaisesRegex(ValueError, " tokens in the prompts should be the same as the number of "):
+                processor(images=image_inputs_nested, text=text, **processing_kwargs)
+
+        if (
+            "videos" in input_args
+            and getattr(processor, "video_token", None) is not None
+            and self.does_processor_return_mm_offsets(processor.__class__, "replace_video_token")
+        ):
+            video_inputs = self.prepare_videos_inputs(batch_size=4)
+            videos = [[video] for video in video_inputs]
+            text = self.prepare_text_inputs(batch_size=3, modalities=["video"])
+
+            with self.assertRaisesRegex(ValueError, " tokens in the prompts should be the same as the number of "):
+                processor(videos=videos, text=text, do_sample_frames=False, **processing_kwargs)
+
+        if (
+            "audio" in input_args
+            and getattr(processor, "audio_token", None) is not None
+            and self.does_processor_return_mm_offsets(processor.__class__, "replace_audio_token")
+        ):
+            audio_inputs = self.prepare_audio_inputs(batch_size=4)
+            text = self.prepare_text_inputs(batch_size=3, modalities=["audio"])
+
+            with self.assertRaisesRegex(ValueError, " tokens in the prompts should be the same as the number of "):
+                processor(audio=audio_inputs, text=text, **processing_kwargs)
+
     # These kwargs-related tests ensure that processors are correctly instantiated.
     # they need to be applied only if an image_processor exists.
 
@@ -1876,6 +1924,52 @@ class ProcessorTesterMixin:
         num_video_tokens_from_call = (inputs.mm_token_type_ids == 2).sum(-1).tolist()
         num_video_tokens_from_helper = processor._get_num_multimodal_tokens(video_sizes=video_sizes * 2)
         self.assertEqual(sum(num_video_tokens_from_call), sum(num_video_tokens_from_helper["num_video_tokens"]))
+
+    def test_get_num_multimodal_tokens_matches_processor_call_audio(self):
+        "Tests that the helper used internally in vLLM works correctly"
+
+        processor = self.get_processor()
+
+        if not hasattr(processor, "_get_num_multimodal_tokens"):
+            self.skipTest("Processor doesn't support `_get_num_multimodal_tokens` yet")
+
+        if processor.tokenizer.pad_token_id is None:
+            processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
+
+        if processor._audio_processor is None:
+            self.skipTest("Processor has no audio processor")
+
+        if "audio_lengths" not in inspect.signature(processor._get_num_multimodal_tokens).parameters:
+            self.skipTest("Processor doesn't count audio tokens yet")
+
+        sampling_rate = processor._audio_processor.sampling_rate
+        # Lengths that aren't a multiple of the hop length, so that the frame rounding of the counters is covered
+        audio_lengths = [sampling_rate, 4 * sampling_rate, int(1.7 * sampling_rate) + 50]
+        audio_inputs = [np.zeros(length, dtype=np.float32) for length in audio_lengths]
+
+        num_audio_tokens_from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths)
+
+        audio_token = getattr(self, "audio_token", "")
+        text = [f"This is an audio {audio_token}"] * len(audio_inputs)
+        inputs = processor(
+            text=text, audio=audio_inputs, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
+        )
+
+        if "mm_token_type_ids" not in inputs:
+            self.skipTest("Processor doesn't support `mm_token_type_ids`")
+
+        num_audio_tokens_from_call = (inputs.mm_token_type_ids == 3).sum(-1).tolist()
+        self.assertListEqual(num_audio_tokens_from_call, num_audio_tokens_from_helper["num_audio_tokens"])
+
+        # Test with two audios per single text
+        text = [f"These are two audios {audio_token}{audio_token}"] * len(audio_inputs)
+        inputs = processor(
+            text=text, audio=audio_inputs * 2, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
+        )
+
+        num_audio_tokens_from_call = (inputs.mm_token_type_ids == 3).sum(-1).tolist()
+        num_audio_tokens_from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths * 2)
+        self.assertEqual(sum(num_audio_tokens_from_call), sum(num_audio_tokens_from_helper["num_audio_tokens"]))
 
     @staticmethod
     def does_processor_return_mm_offsets(processor_class, method_name: str):

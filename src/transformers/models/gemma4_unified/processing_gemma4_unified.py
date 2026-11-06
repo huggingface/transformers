@@ -186,7 +186,7 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
         audio: AudioInput = None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
-        super().validate_inputs(images=images, text=text, **kwargs)
+        super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
 
         if text is None and images is None:
             raise ValueError("You must provide either `text` or `images`.")
@@ -194,23 +194,13 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
         if audio is not None and self.audio_token is None or self.boa_token is None or self.eoa_token is None:
             raise ValueError("Audio inputs were provided, but the tokenizer does not have an `audio_token` defined.")
 
-        if text is not None:
+        if text is not None and images is not None:
             n_images_in_text = [sample.count(self.image_token) for sample in text]
-            if images is not None:
-                if len(images) != len(text):
-                    raise ValueError(
-                        f"Received inconsistently sized batches of images ({len(images)}) and text ({len(text)})."
-                    )
-
-                n_images_in_images = [len(sublist) for sublist in images]
-                if n_images_in_text != n_images_in_images:
-                    raise ValueError(
-                        f"The total number of {self.image_token} tokens in the prompts should be the same as the number of images passed."
-                        f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
-                    )
-            elif images is None and any(n_images_in_text):
+            n_images_in_images = [len(sublist) for sublist in images]
+            if n_images_in_text != n_images_in_images:
                 raise ValueError(
-                    f"Found {sum(n_images_in_text)} {self.image_token} tokens in the text but no images were passed."
+                    f"The number of {self.image_token} tokens in each prompt should be the same as the number of images passed."
+                    f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
                 )
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
@@ -265,8 +255,7 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
             input modalities, along with other useful data.
         """
         merged_kwargs = self._merge_kwargs(**kwargs)
-        images_kwargs = merged_kwargs.get("images_kwargs", {})
-
+        images_kwargs = merged_kwargs["images_kwargs"]
         patch_size = images_kwargs.get("patch_size", None) or self.image_processor.patch_size
         pooling_kernel_size = (
             images_kwargs.get("pooling_kernel_size", None) or self.image_processor.pooling_kernel_size
@@ -294,7 +283,7 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
-            videos_kwargs = merged_kwargs.get("videos_kwargs", {})
+            videos_kwargs = merged_kwargs["videos_kwargs"]
             patch_size = videos_kwargs.get("patch_size", None) or self.video_processor.patch_size
             pooling_kernel_size = (
                 videos_kwargs.get("pooling_kernel_size", None) or self.video_processor.pooling_kernel_size
