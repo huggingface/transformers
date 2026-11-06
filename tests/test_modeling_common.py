@@ -5626,36 +5626,35 @@ class ModelTesterMixin(ExportTesterMixin):
         inputs_dict = {k: v for k, v in inputs_dict.items() if k != "output_hidden_states"}
         model = model_class(copy.deepcopy(config)).to(torch_device).eval()
         with torch.no_grad():
-            outputs = getattr(model, method_name)(**inputs_dict)
-            outputs_all = getattr(model, method_name)(**inputs_dict, output_hidden_states=True)
+            outputs = getattr(model, method_name)(**inputs_dict, return_dict=True)
+            outputs_all = getattr(model, method_name)(**inputs_dict, output_hidden_states=True, return_dict=True)
 
         def features(output):
-            if not isinstance(output, dict):
-                return output
             return {
-                k: features(v)
+                k: features(v) if isinstance(v, dict) else v
                 for k, v in output.items()
                 if not k.endswith(("hidden_states", "attentions")) and isinstance(v, (torch.Tensor, dict, tuple, list))
             }
 
         torch.testing.assert_close(features(outputs), features(outputs_all))
 
-        hidden_states = outputs.get("hidden_states")
-        hidden_states_all = outputs_all.get("hidden_states")
+        hidden_states = outputs.hidden_states
+        hidden_states_all = outputs_all.hidden_states
         if hidden_states is None or hidden_states_all is None:
             return
+
         self.assertEqual(len(hidden_states), len(hidden_states_all))
         for h, h_all in zip(hidden_states, hidden_states_all):
             self.assertIsNotNone(h_all, "`output_hidden_states=True` should capture all hidden states")
             if h is not None:
                 torch.testing.assert_close(h, h_all)
-        selects_layers = any(
-            getattr(c, attr, None) is not None
-            for c in [config, *(getattr(config, k, None) for k in config.sub_configs)]
-            for attr in ("vision_feature_layer", "vision_feature_layers")
-            if c is not None
-        )
-        if selects_layers:
+
+        uses_vision_feature_layers = False
+        for sub_config in [config, *(getattr(config, key, None) for key in config.sub_configs)]:
+            for attribute in ("vision_feature_layer", "vision_feature_layers"):
+                uses_vision_feature_layers |= getattr(sub_config, attribute, None) is not None
+
+        if uses_vision_feature_layers:
             self.assertTrue(
                 any(h is None for h in hidden_states),
                 "Features built from `vision_feature_layer(s)` should only capture the hidden states they use",
