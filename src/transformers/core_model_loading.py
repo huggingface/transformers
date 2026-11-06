@@ -108,6 +108,10 @@ class _IdentityOp(ConversionOps):
     def convert(self, input_dict: dict[str, Any], **kwargs) -> dict[str, Any]:
         return input_dict
 
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return _IdentityOp()
+
 
 class Chunk(ConversionOps):
     """Split a tensor along `dim` into equally sized chunks. Additionally, `num_shards_attribute` is a config field to read
@@ -212,7 +216,9 @@ class Concatenate(ConversionOps):
                 all_tensors.extend(tensors)
             else:
                 all_tensors.append(tensors)
-        return {target_pattern: torch.cat(all_tensors, dim=self.dim)}
+        # Tensors without `dim` (e.g. one scale per expert after a merge) are stacked along it
+        join = torch.stack if all_tensors[0].dim() <= self.dim else torch.cat
+        return {target_pattern: join(all_tensors, dim=self.dim)}
 
     def get_target_pattern(self, target_patterns: list[str]) -> str:
         # Here we always return the target pattern
@@ -1716,22 +1722,16 @@ def convert_and_load_state_dict_in_model(
             # If we enter here, we have a WeightConverter operation to perform
             if source_pattern is not None:
                 new_converter = deepcopy(pattern_to_converter[source_pattern])
-                # each target key gets its own converter instance
-                mapping = param_name_to_load.setdefault(renamed_key, new_converter)
             # Otherwise, only potential renaming
             else:
-                mapping = param_name_to_load.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
+                new_converter = WeightRenaming(original_key, renamed_key)
                 source_pattern = original_key
+            # each target key gets its own converter instance, with the ops of its quantizer
+            if hf_quantizer is not None and renamed_key not in param_name_to_load:
+                new_converter = hf_quantizer.update_weight_transform(new_converter, model, renamed_key)
+            mapping = param_name_to_load.setdefault(renamed_key, new_converter)
 
             # 3. Handle dtype casting
-            needs_quantization = (
-                hf_quantizer
-                and not hf_quantizer.pre_quantized
-                and hf_quantizer.param_needs_quantization(model, renamed_key)
-            )
-            if needs_quantization:
-                mapping.quantization_operation = hf_quantizer.get_quantize_ops()
-
             _dtype = dtype
             if dtype_plan != {} and dtype_policy_alt.search(renamed_key):
                 matched_dtype_pattern = dtype_policy_alt.search(renamed_key)

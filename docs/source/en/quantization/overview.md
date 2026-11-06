@@ -83,6 +83,31 @@ model = AutoModelForCausalLM.from_pretrained(
 
 Most GGUF models are dequantized to full precision as they load, so they use as much memory as an unquantized model. Weights stay packed only on MPS with the [kernels](https://huggingface.co/docs/kernels/index) package installed, for Qwen3.5 and Qwen3.5 MoE. See [GGUF](./gguf) for details.
 
+### Several methods in one model
+
+A quantization plan maps glob patterns, matched like the dtype plan's, to the config quantizing the params they match. Params no pattern matches stay unquantized. For example, FP8 attention and experts with NVFP4 shared experts:
+
+```py
+from transformers import FineGrainedFP8Config, Mistral4ForCausalLM, NVFP4Config
+
+plan = {
+    "*.self_attn.*_proj*": FineGrainedFP8Config(weight_block_size=(32, 32)),
+    "*.mlp.experts.*": FineGrainedFP8Config(weight_block_size=(128, 128)),
+    "*.mlp.shared_experts.*": NVFP4Config(),
+}
+model = Mistral4ForCausalLM.from_pretrained("hf-internal-testing/tiny-random-Mistral4-fp8-nvfp4", quantization_config=plan)
+```
+
+A checkpoint saved with a plan stores it in its `config.json`, so loading it needs no `quantization_config`. Loading attributes apply to every pattern of the stored plan, e.g. to load the checkpoint in full precision:
+
+```py
+model = Mistral4ForCausalLM.from_pretrained(
+    "hf-internal-testing/tiny-random-Mistral4-fp8-nvfp4", quantization_config={"dequantize": True}
+)
+```
+
+Pass a plan of configs instead to change a single pattern, e.g. `NVFP4Config(dequantize=True)` for the shared experts only.
+
 ## Save a quantized model
 
 Call [`~PreTrainedModel.save_pretrained`] or [`~PreTrainedModel.push_to_hub`] to save the quantized weights and their `quantization_config`. Not every method can save its quantized weights.

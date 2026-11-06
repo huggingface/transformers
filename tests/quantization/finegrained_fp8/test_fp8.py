@@ -33,9 +33,7 @@ from transformers.testing_utils import (
     get_device_properties,
     require_accelerate,
     require_torch_accelerator,
-    require_torch_gpu,
     require_torch_multi_accelerator,
-    require_torch_multi_gpu,
     slow,
     torch_device,
 )
@@ -161,7 +159,8 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
         Simple test that checks if the quantized model has been converted properly
         """
 
-        from transformers.integrations import FP8Linear, replace_with_fp8_linear
+        from transformers.integrations import FP8Linear
+        from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 
         model_id = "facebook/opt-350m"
         config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
@@ -174,7 +173,7 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
         for module in model.modules():
             if isinstance(module, torch.nn.Linear):
                 nb_linears += 1
-        model = replace_with_fp8_linear(model, quantization_config=quantization_config)
+        FineGrainedFP8HfQuantizer(quantization_config).replace_modules(model)
         nb_fp8_linear = 0
         for module in model.modules():
             if isinstance(module, FP8Linear):
@@ -183,7 +182,9 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
         with torch.device("meta"):
             model = OPTForCausalLM(config)
         quantization_config = FineGrainedFP8Config()
-        model = replace_with_fp8_linear(model, modules_to_not_convert=["fc1"], quantization_config=quantization_config)
+        quantizer = FineGrainedFP8HfQuantizer(quantization_config)
+        quantizer.modules_to_not_convert = ["fc1"]
+        quantizer.replace_modules(model)
         nb_fp8_linear = 0
         for module in model.modules():
             if isinstance(module, FP8Linear):
@@ -538,7 +539,7 @@ class FP8EmbeddingTest(unittest.TestCase):
         scale = table.abs().max().float() / torch.finfo(torch.float8_e4m3fn).max
         embedding = FP8Embedding(64, 16)
         embedding.weight = torch.nn.Parameter((table.float() / scale).to(torch.float8_e4m3fn), requires_grad=False)
-        embedding.weight_scale = torch.nn.Parameter(scale.to(torch.bfloat16).reshape(1), requires_grad=False)
+        embedding.weight_scale_inv = torch.nn.Parameter(scale.to(torch.bfloat16).reshape(1), requires_grad=False)
 
         ids = torch.randint(0, 64, (2, 5))
         rows, expected = embedding(ids), table[ids]
@@ -549,52 +550,30 @@ class FP8EmbeddingTest(unittest.TestCase):
 
     def test_patterns_match_by_suffix_and_honour_the_skip_list(self):
         """Suffixes match whether or not the text model is nested under a multimodal wrapper."""
-        from transformers.integrations import FP8Embedding, replace_with_fp8_embedding
+        from transformers.integrations import FP8Embedding
+        from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 
         model = torch.nn.ModuleDict(
             {n: torch.nn.ModuleDict({"table": torch.nn.Embedding(8, 4)}) for n in ("layers", "language_model")}
         )
         model.other = torch.nn.Embedding(8, 4)
-        replace_with_fp8_embedding(model, ["table"], modules_to_not_convert=["language_model.table"])
+        quantizer = FineGrainedFP8HfQuantizer(FineGrainedFP8Config(modules_to_convert=["table"]), pre_quantized=True)
+        quantizer.modules_to_not_convert = ["language_model.table"]
+        quantizer.replace_modules(model)
 
         self.assertIsInstance(model["layers"]["table"], FP8Embedding)  # matched by suffix
         self.assertIs(type(model["language_model"]["table"]), torch.nn.Embedding)  # skip-listed
         self.assertIs(type(model.other), torch.nn.Embedding)  # no pattern match
 
 
-class FP8DeepGEMMMultiDeviceTest(unittest.TestCase):
-    """`_disable_deepgemm_on_multi_device` must flag FP8 modules based on the devices they actually
-    occupy — DeepGEMM's kernels are bound to a single CUDA context and corrupt across devices, but a
-    model that fits on one device must keep DeepGEMM even when other GPUs are visible (no overshoot).
-    """
+class FP8DeepGEMMDeviceTest(unittest.TestCase):
+    def test_only_the_first_device_runs_deepgemm(self):
+        from transformers.integrations import deepgemm
 
-    @staticmethod
-    def _fp8_module(device):
-        from transformers.integrations import FP8Linear
-
-        return FP8Linear(256, 256, block_size=(128, 128)).to(device)
-
-    @require_torch_multi_gpu
-    def test_multi_device_disables_deepgemm(self):
-        from transformers.integrations.finegrained_fp8 import _disable_deepgemm_on_multi_device
-
-        model = torch.nn.Module()
-        model.a = self._fp8_module("cuda:0")
-        model.b = self._fp8_module("cuda:1")
-        _disable_deepgemm_on_multi_device(model)
-        self.assertTrue(model.a._deepgemm_disabled)
-        self.assertTrue(model.b._deepgemm_disabled)
-
-    @require_torch_gpu
-    def test_single_device_keeps_deepgemm(self):
-        from transformers.integrations.finegrained_fp8 import _disable_deepgemm_on_multi_device
-
-        model = torch.nn.Module()
-        model.a = self._fp8_module("cuda:0")
-        model.b = self._fp8_module("cuda:0")
-        _disable_deepgemm_on_multi_device(model)
-        self.assertFalse(model.a._deepgemm_disabled)
-        self.assertFalse(model.b._deepgemm_disabled)
+        with patch.object(deepgemm, "_DEEPGEMM_DEVICE", None):
+            self.assertTrue(deepgemm.deepgemm_allowed(torch.device("cuda:0")))
+            self.assertTrue(deepgemm.deepgemm_allowed(torch.device("cuda:0")))
+            self.assertFalse(deepgemm.deepgemm_allowed(torch.device("cuda:1")))
 
 
 class FP8Ue8m0LoadingTest(unittest.TestCase):
@@ -630,3 +609,88 @@ class FP8Ue8m0LoadingTest(unittest.TestCase):
         for name, scale in scales.items():
             self.assertEqual(scale.dtype, torch.float8_e8m0fnu, name)
             torch.testing.assert_close(scale.float(), expected[name], rtol=0, atol=0)
+
+
+def _save_modelopt_fp8(path, layers, quantization_config):
+    """
+    A tiny Llama saved like a ModelOpt FP8 export: each of `layers` as `weight ~= fp8 * weight_scale`, the scale
+    `amax / 448` per 128x128 block, or per tensor with a static `input_scale` for `None`. Returns the bf16 weights.
+    """
+    from safetensors.torch import load_file, save_file
+
+    from transformers import LlamaConfig, LlamaForCausalLM
+
+    config = LlamaConfig(
+        vocab_size=64, hidden_size=256, intermediate_size=384, num_hidden_layers=1, num_attention_heads=4,
+        num_key_value_heads=2, quantization_config=quantization_config,
+    )  # fmt: skip
+    LlamaForCausalLM(config).save_pretrained(path)
+    state_dict, dense = load_file(f"{path}/model.safetensors"), {}
+    for name, block in layers.items():
+        dense[name] = weight = state_dict[f"{name}.weight"]
+        rows, columns = (block, block) if block else weight.shape  # one block per tensor
+        blocks = weight.unflatten(1, (-1, columns)).unflatten(0, (-1, rows))
+        scale = blocks.abs().amax(dim=(1, 3), keepdim=True) / 448  # saved 4-D per block: (out / 128, 1, in / 128, 1)
+        state_dict[f"{name}.weight"] = (blocks / scale).flatten(2).flatten(0, 1).to(torch.float8_e4m3fn)
+        state_dict[f"{name}.weight_scale"] = scale if block else scale.reshape(())
+        if block is None and name.endswith("proj"):
+            state_dict[f"{name}.input_scale"] = torch.tensor(0.02)
+    save_file(state_dict, f"{path}/model.safetensors", metadata={"format": "pt"})
+    return dense, state_dict
+
+
+class FP8ModelOptLoadingTest(unittest.TestCase):
+    FP8 = ("model.layers.0.self_attn.q_proj", "model.layers.0.self_attn.k_proj")  # per tensor, static activations
+    FP8_PB_WO = ("model.layers.0.mlp.gate_proj", "model.layers.0.mlp.down_proj")  # per 128x128 block, weight-only
+    LAYERS = dict.fromkeys(FP8) | dict.fromkeys(FP8_PB_WO, 128)
+    CONFIG = {
+        "quant_method": "modelopt",
+        "quant_algo": "MIXED_PRECISION",
+        "quantized_layers": {
+            name: {"quant_algo": "FP8" if block is None else "FP8_PB_WO"} for name, block in LAYERS.items()
+        },
+    }
+
+    def test_load_dequantized(self):
+        embedding = {"quant_method": "fp8", "modules_to_convert": ["embed_tokens"]}
+        for layers, config, dequantize in [
+            (self.LAYERS, self.CONFIG, {"dequantize": True}),
+            ({"model.embed_tokens": None}, embedding, FineGrainedFP8Config(dequantize=True)),
+        ]:
+            with tempfile.TemporaryDirectory() as tmp:
+                dense, _ = _save_modelopt_fp8(tmp, layers, config)
+                model, info = AutoModelForCausalLM.from_pretrained(
+                    tmp, quantization_config=dequantize, output_loading_info=True
+                )
+            self.assertFalse(any(info.values()), info)
+            for name, weight in dense.items():  # a plain model, the FP8 embedding table included
+                self.assertIn(type(model.get_submodule(name)), (torch.nn.Linear, torch.nn.Embedding), name)
+                # Within one e4m3 step: 1/8 of the value, 2**-9 of the scale for subnormals
+                error = (model.get_submodule(name).weight - weight).abs()
+                self.assertTrue((error <= weight.abs() / 8 + weight.abs().amax() / 448 * 2**-9).all(), name)
+
+    @patch.object(FineGrainedFP8HfQuantizer, "validate_environment", lambda *args, **kwargs: None)
+    def test_quantized(self):
+        from transformers.integrations import FP8Linear
+
+        with tempfile.TemporaryDirectory() as tmp:
+            dense, saved = _save_modelopt_fp8(tmp, self.LAYERS, self.CONFIG)
+            model, info = AutoModelForCausalLM.from_pretrained(tmp, device_map="cpu", output_loading_info=True)
+        self.assertFalse(any(info.values()), info)
+        for name in dense:
+            linear = model.get_submodule(name)
+            self.assertIsInstance(linear, FP8Linear, name)
+            torch.testing.assert_close(linear.weight.view(torch.uint8), saved[f"{name}.weight"].view(torch.uint8))
+            scale = saved[f"{name}.weight_scale"]
+            torch.testing.assert_close(linear.weight_scale_inv, scale.flatten(1) if scale.ndim == 4 else scale)
+        attention = model.model.layers[0].self_attn.q_proj
+        self.assertEqual((attention.activation_scheme, attention.block_size), ("static", None))
+        torch.testing.assert_close(attention.activation_scale, torch.tensor(0.02))
+
+        # Weight-only: the block-dequantized weight, in the activations' dtype
+        mlp = model.model.layers[0].mlp.down_proj
+        self.assertEqual((mlp.activation_scheme, mlp.block_size, mlp.activation_scale), ("none", (128, 128), None))
+        x = torch.randn(2, 3, 384)
+        mlp.bias = torch.nn.Parameter(torch.randn(256))
+        dequantized = mlp.weight.float() * mlp.weight_scale_inv.repeat_interleave(128, 0).repeat_interleave(128, 1)
+        torch.testing.assert_close(mlp(x), x @ dequantized.T + mlp.bias)

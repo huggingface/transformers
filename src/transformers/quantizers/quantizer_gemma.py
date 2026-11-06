@@ -73,7 +73,6 @@ class GemmaQuantizer(HfQuantizer):
             if style and (name.endswith("activation_scale") or name.endswith(".weight_scale") and "rowwise" in style):
                 plan[name] = "replicate"
 
-    @property
     def is_serializable(self):
         return True
 

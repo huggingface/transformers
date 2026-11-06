@@ -293,6 +293,13 @@ class classproperty(property):
         return self.fget(owner_cls)
 
 
+def _quantization_config_to_dict(quantization_config):
+    "A quantization config, or a plan mapping glob patterns to configs"
+    if isinstance(quantization_config, dict):
+        return {key: getattr(value, "to_dict", lambda: value)() for key, value in quantization_config.items()}
+    return quantization_config.to_dict() if quantization_config is not None else None
+
+
 @dataclass_transform(kw_only_default=True)
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
@@ -1243,11 +1250,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             del serializable_config_dict["_name_or_path"]
 
         if hasattr(self, "quantization_config"):
-            serializable_config_dict["quantization_config"] = (
-                self.quantization_config.to_dict()
-                if not isinstance(self.quantization_config, dict) and self.quantization_config is not None
-                else self.quantization_config
-            )
+            serializable_config_dict["quantization_config"] = _quantization_config_to_dict(self.quantization_config)
         self.dict_dtype_to_str(serializable_config_dict)
 
         # HeterogeneousConfigMixin: update the serialized output.
@@ -1293,11 +1296,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         self._remove_keys_not_serialized(output)
 
         if hasattr(self, "quantization_config"):
-            output["quantization_config"] = (
-                self.quantization_config.to_dict()
-                if not isinstance(self.quantization_config, dict) and self.quantization_config is not None
-                else self.quantization_config
-            )
+            output["quantization_config"] = _quantization_config_to_dict(self.quantization_config)
         self.dict_dtype_to_str(output)
 
         # HeterogeneousConfigMixin: update the serialized output.
