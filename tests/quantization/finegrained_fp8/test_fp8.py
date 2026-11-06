@@ -82,14 +82,22 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
         self.assertEqual(dict["modules_to_not_convert"], quantization_config.modules_to_not_convert)
         self.assertEqual(dict["quant_method"], quantization_config.quant_method)
 
-    def test_megamoe_takes_over_the_experts_ep_rule(self):
-        """Mega MoE dispatches inside its kernel, so it replaces the token-dispatch experts rule of the EP plan."""
-        config = DeepseekV4Config()
-        config._experts_implementation = "deepgemm_megamoe"
-        config = FineGrainedFP8HfQuantizer(FineGrainedFP8Config()).update_tp_plan(config)
-        self.assertEqual(config.base_model_ep_plan["layers.*.mlp.experts"], "megamoe_experts")
-        with self.assertRaisesRegex(ValueError, "Mega MoE expert parallelism requires `ep_size=tp_size`"):
-            DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8)._validate_resolved_ep_plan(config.base_model_ep_plan)
+    def test_megamoe_selects_its_ep_implementation(self):
+        """Mega MoE exchanges the tokens inside its kernel, so loading with it selects the `deepgemm_megamoe` EP
+        implementation and rejects any other."""
+        model = torch.nn.Linear(2, 2)
+        model.config = DeepseekV4Config()
+        model.config._experts_implementation = "deepgemm_megamoe"
+        quantizer = FineGrainedFP8HfQuantizer(FineGrainedFP8Config())
+        for ep_implementation in ("auto", "deepgemm_megamoe"):
+            model.config.distributed_config = DistributedConfig(
+                tp_size=2, ep_size=2, ep_implementation=ep_implementation
+            )
+            quantizer.update_parallel_plan(model, {})
+            self.assertEqual(model.config.distributed_config.ep_implementation, "deepgemm_megamoe")
+        model.config.distributed_config = DistributedConfig(tp_size=2, ep_size=2, ep_implementation="all_to_all")
+        with self.assertRaisesRegex(ValueError, "deepgemm_megamoe"):
+            quantizer.update_parallel_plan(model, {})
 
 
 @slow
