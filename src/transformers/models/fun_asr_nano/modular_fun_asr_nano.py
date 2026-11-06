@@ -68,7 +68,6 @@ LANGUAGE_CODE_TO_NAME = {
 
 class FunAsrNanoProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF019
     _defaults = {
-        "audio_kwargs": {"sampling_rate": 16000},
         "common_kwargs": {"return_tensors": "pt"},
     }
 

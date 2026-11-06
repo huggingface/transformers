@@ -348,7 +348,7 @@ class HiggsAudioV2Processor(ProcessorMixin):
             **kwargs,
         )
         audio_kwargs = output_kwargs["audio_kwargs"]
-        sampling_rate = audio_kwargs["sampling_rate"]
+        sampling_rate = audio_kwargs.get("sampling_rate") or self.feature_extractor.sampling_rate
 
         for audio_value, p in zip(audio, saving_path):
             if isinstance(audio_value, torch.Tensor):

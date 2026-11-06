@@ -27,7 +27,6 @@ logger = logging.get_logger(__name__)
 class ParakeetProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "audio_kwargs": {
-            "sampling_rate": 16000,
             "padding": "longest",
             "return_attention_mask": True,
             "subsampling_factor": 8,
@@ -80,10 +79,8 @@ class ParakeetProcessor(ProcessorMixin):
     ):
         r"""
         sampling_rate (`int`, *optional*):
-            The sampling rate of the input audio in Hz. This should match the sampling rate expected by the feature
-            extractor (defaults to 16000 Hz). If provided, it will be validated against the processor's expected
-            sampling rate, and an error will be raised if they don't match. If not provided, a warning will be
-            issued and the default sampling rate will be assumed.
+            The sampling rate of the input audio in Hz. It is forwarded to the feature extractor, which raises an error
+            if it doesn't match the sampling rate it expects, and warns if it is not provided.
         """
         audio = make_list_of_audio(audio)
 
@@ -93,14 +90,8 @@ class ParakeetProcessor(ProcessorMixin):
             **kwargs,
         )
 
-        if sampling_rate is None:
-            logger.warning_once(
-                f"You've provided audio without specifying the sampling rate. It will be assumed to be {output_kwargs['audio_kwargs']['sampling_rate']}, which can result in silent errors."
-            )
-        elif sampling_rate != output_kwargs["audio_kwargs"]["sampling_rate"]:
-            raise ValueError(
-                f"The sampling rate of the audio ({sampling_rate}) does not match the sampling rate of the processor ({output_kwargs['audio_kwargs']['sampling_rate']}). Please provide resampled the audio to the expected sampling rate."
-            )
+        if sampling_rate is not None:
+            output_kwargs["audio_kwargs"]["sampling_rate"] = sampling_rate
 
         if audio is not None:
             inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])

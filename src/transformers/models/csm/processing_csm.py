@@ -61,7 +61,6 @@ class CsmProcessorKwargs(ProcessingKwargs, total=False):
                 "dilations": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                 "use_causal_conv": True,
             },
-            "sampling_rate": 24000,
         },
         "common_kwargs": {"return_tensors": "pt"},
     }
@@ -158,7 +157,7 @@ class CsmProcessor(ProcessorMixin):
             **kwargs,
         )
         audio_kwargs = output_kwargs["audio_kwargs"]
-        sampling_rate = audio_kwargs["sampling_rate"]
+        sampling_rate = audio_kwargs.get("sampling_rate") or self.feature_extractor.sampling_rate
 
         for audio_value, p in zip(audio, saving_path):
             if isinstance(audio_value, torch.Tensor):
