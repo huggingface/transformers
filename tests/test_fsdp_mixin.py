@@ -45,6 +45,7 @@ from .distributed_testing_utils import (
     _get_distributed_device_type,
     _get_rank_device,
     _set_rank_device,
+    _start_rank_processes,
 )
 
 
@@ -54,7 +55,6 @@ logger = logging.getLogger("transformers.training_test")
 if is_torch_available():
     import torch
     import torch.distributed as dist
-    import torch.multiprocessing as mp
     from torch.distributed.tensor import Replicate, Shard
     from torch.nn.parallel import DistributedDataParallel as DDP
 
@@ -91,7 +91,7 @@ FSDP_DISTRIBUTED_TEST_MODEL_TYPES = {
 
 
 # =============================================================================
-# Distributed helpers (top-level for pickling by mp.spawn)
+# Distributed helpers (top-level for pickling to the rank processes)
 # =============================================================================
 
 
@@ -323,7 +323,7 @@ def train_fsdp2(
 
 
 # =============================================================================
-# Distributed test implementations (top-level for pickling by mp.spawn)
+# Distributed test implementations (top-level for pickling to the rank processes)
 # =============================================================================
 
 
@@ -829,7 +829,7 @@ class FSDPTesterMixin(ABC):
         rendezvous_store = dist.TCPStore("localhost", 0, world_size=None, is_master=True, wait_for_workers=False)
 
         try:
-            mp.spawn(
+            _start_rank_processes(
                 _fsdp_global_wrapper,
                 args=(
                     test_name,
