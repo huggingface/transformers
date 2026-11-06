@@ -234,7 +234,7 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin):
         audio: AudioInput = None,
         **kwargs: Unpack[EmbeddingGemma2ProcessorKwargs],
     ):
-        super().validate_inputs(images=images, text=text, **kwargs)
+        super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
 
         # Unlike Gemma 4, any single modality on its own is a valid embedding input.
         if text is None and images is None and videos is None and audio is None:
@@ -243,50 +243,14 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin):
         if audio is not None and (self.audio_token is None or self.boa_token is None or self.eoa_token is None):
             raise ValueError("Audio inputs were provided, but the tokenizer does not have an `audio_token` defined.")
 
-        if text is not None:
+        if text is not None and images is not None:
             n_images_in_text = [sample.count(self.image_token) for sample in text]
-            if images is not None:
-                if len(images) != len(text):
-                    raise ValueError(
-                        f"Received inconsistently sized batches of images ({len(images)}) and text ({len(text)})."
-                    )
-
-                n_images_in_images = [len(sublist) for sublist in images]
-                if n_images_in_text != n_images_in_images:
-                    raise ValueError(
-                        f"The total number of {self.image_token} tokens in the prompts should be the same as the number of images passed."
-                        f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
-                    )
-            elif any(n_images_in_text):
+            n_images_in_images = [len(sublist) for sublist in images]
+            if n_images_in_text != n_images_in_images:
                 raise ValueError(
-                    f"Found {sum(n_images_in_text)} {self.image_token} tokens in the text but no images were passed."
+                    f"The number of {self.image_token} tokens in each prompt should be the same as the number of images passed."
+                    f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
                 )
-
-            n_videos_in_text = [sample.count(self.video_token) for sample in text]
-            if videos is not None:
-                if sum(n_videos_in_text) != len(videos):
-                    raise ValueError(
-                        f"The total number of {self.video_token} tokens in the prompts should be the same as the number of videos passed."
-                        f" Found {sum(n_videos_in_text)} {self.video_token} tokens and {len(videos)} videos."
-                    )
-            elif any(n_videos_in_text):
-                raise ValueError(
-                    f"Found {sum(n_videos_in_text)} {self.video_token} tokens in the text but no videos were passed."
-                )
-
-            if self.audio_token is not None:
-                n_audio_in_text = [sample.count(self.audio_token) for sample in text]
-                if audio is not None:
-                    n_audio_passed = len(audio) if isinstance(audio, (list, tuple)) else 1
-                    if sum(n_audio_in_text) != n_audio_passed:
-                        raise ValueError(
-                            f"The total number of {self.audio_token} tokens in the prompts should be the same as the number of audio inputs passed."
-                            f" Found {sum(n_audio_in_text)} {self.audio_token} tokens and {n_audio_passed} audio inputs."
-                        )
-                elif any(n_audio_in_text):
-                    raise ValueError(
-                        f"Found {sum(n_audio_in_text)} {self.audio_token} tokens in the text but no audio inputs were passed."
-                    )
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         num_soft_tokens = image_inputs["num_soft_tokens_per_image"][image_idx]
@@ -358,8 +322,8 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin):
             input modalities, along with other useful data.
         """
 
-        images_kwargs = EmbeddingGemma2ProcessorKwargs._defaults.get("images_kwargs", {})
-        images_kwargs.update(kwargs)
+        merged_kwargs = self._merge_kwargs(self.valid_processor_kwargs, **kwargs)
+        images_kwargs = merged_kwargs["images_kwargs"]
         patch_size = images_kwargs.get("patch_size", None) or self.image_processor.patch_size
         pooling_kernel_size = (
             images_kwargs.get("pooling_kernel_size", None) or self.image_processor.pooling_kernel_size
@@ -387,8 +351,7 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
-            videos_kwargs = EmbeddingGemma2ProcessorKwargs._defaults.get("videos_kwargs", {})
-            videos_kwargs.update(kwargs)
+            videos_kwargs = merged_kwargs["videos_kwargs"]
             patch_size = videos_kwargs.get("patch_size", None) or self.video_processor.patch_size
             pooling_kernel_size = (
                 videos_kwargs.get("pooling_kernel_size", None) or self.video_processor.pooling_kernel_size

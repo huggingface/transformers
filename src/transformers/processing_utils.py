@@ -35,7 +35,12 @@ from huggingface_hub.errors import EntryNotFoundError
 from .audio_utils import AudioInput, load_audio, make_list_of_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
-from .image_utils import ChannelDimension, ImageInput, is_vision_available, make_flat_list_of_images
+from .image_utils import (
+    ChannelDimension,
+    ImageInput,
+    is_vision_available,
+    make_flat_list_of_images,
+)
 from .tokenization_utils_base import (
     PaddingStrategy,
     PreTokenizedInput,
@@ -58,6 +63,7 @@ from .utils import (
     hf_api,
     is_torch_available,
     is_torchcodec_greater_or_equal,
+    is_torchcodec_usable,
     list_repo_templates,
     logging,
     resolve_revision,
@@ -776,6 +782,57 @@ class ProcessorMixin(PushToHubMixin):
 
         if images is None and text is None and videos is None and audio is None:
             raise ValueError(f"You need to provide at least one input to call {self.__class__.__name__}")
+
+        # Check that number of placeholders in text is same as number of mm-data for models
+        # that have a special multimodal placeholder token defined
+        if text is not None:
+            if not (
+                isinstance(text, str) or (isinstance(text, list) and all(isinstance(sample, str) for sample in text))
+            ):
+                raise ValueError("`text` must be a string or list of strings.")
+
+            if getattr(self, "image_token", None) is not None:
+                n_images_in_text = [sample.count(self.image_token) for sample in text]
+                if images is not None:
+                    images = make_flat_list_of_images(images)
+                    if sum(n_images_in_text) != len(images):
+                        raise ValueError(
+                            f"The total number of {self.image_token} tokens in the prompts should be the same as the number of images passed."
+                            f" Found total {sum(n_images_in_text)} {self.image_token} tokens and {len(images)} images."
+                        )
+                elif any(n_images_in_text):
+                    raise ValueError(
+                        f"Found {sum(n_images_in_text)} {self.image_token} tokens in the text but no images were passed."
+                    )
+
+            if getattr(self, "video_token", None) is not None:
+                n_videos_in_text = [sample.count(self.video_token) for sample in text]
+                if videos is not None:
+                    videos = make_batched_videos(videos)
+                    if sum(n_videos_in_text) != len(videos):
+                        raise ValueError(
+                            f"The total number of {self.video_token} tokens in the prompts should be the same as the number of videos passed."
+                            f" Found total {sum(n_videos_in_text)} {self.video_token} tokens and {len(videos)} videos."
+                        )
+                elif any(n_videos_in_text):
+                    raise ValueError(
+                        f"Found {sum(n_videos_in_text)} {self.video_token} tokens in the text but no videos were passed."
+                    )
+
+            if getattr(self, "audio_token", None) is not None:
+                # by this point audio is a flat list because `prepare_inputs` has applied `make_list`
+                n_audio_in_text = [sample.count(self.audio_token) for sample in text]
+                if audio is not None:
+                    n_audio_passed = len(audio) if isinstance(audio, (list, tuple)) else 1
+                    if sum(n_audio_in_text) != n_audio_passed:
+                        raise ValueError(
+                            f"The total number of {self.audio_token} tokens in the prompts should be the same as the number of audio inputs passed."
+                            f" Found total {sum(n_audio_in_text)} {self.audio_token} tokens and {n_audio_passed} audio inputs."
+                        )
+                elif any(n_audio_in_text):
+                    raise ValueError(
+                        f"Found {sum(n_audio_in_text)} {self.audio_token} tokens in the text but no audio inputs were passed."
+                    )
 
     # Simple preprocessing includes calling the `subprocessor` and optionally
     # building placeholder strings. Each processor can override and add their
@@ -2492,12 +2549,11 @@ class OmniModalProcessorMixin(ProcessorMixin):
             A list that describes the source of each audio slot where
                 - `None` -> standalone audio associated with no video track
                 - `i`    -> audio extracted from videos[i]
+            If `audio` has one entry per slot, the audio of `videos[i]` is taken from it instead of decoded.
         """
         images, text, videos, audio = self.prepare_inputs_layout(
             images=images, text=text, videos=videos, audio=audio, **kwargs
         )
-        self.validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
-
         merged_kwargs = self._merge_kwargs(
             self.valid_processor_kwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
@@ -2505,7 +2561,15 @@ class OmniModalProcessorMixin(ProcessorMixin):
         )
 
         # TODO @guarin: move it to processor level argument. Used by EG2 and qwen-omni series
-        load_audio_from_video = merged_kwargs["videos_kwargs"].get("load_audio_from_video")
+        # Without videos there is no audio track to load, so `audio` is processed as usual
+        load_audio_from_video = merged_kwargs["videos_kwargs"].get("load_audio_from_video") and videos is not None
+
+        # Audio of a video has no placeholder in text, so only standalone slots are counted against it
+        standalone_audio = audio
+        if load_audio_from_video and audio and len(audio) == len(audio_from_video_indices or []):
+            standalone_audio = [sample for sample, idx in zip(audio, audio_from_video_indices) if idx is None]
+        self.validate_inputs(images=images, text=text, videos=videos, audio=standalone_audio, **kwargs)
+
         if load_audio_from_video:
             audio, video_to_audio_indices = self._resolve_audio_from_video(
                 videos,
@@ -2582,6 +2646,7 @@ class OmniModalProcessorMixin(ProcessorMixin):
         `audio_from_video_indices` describes the source of each audio slot:
             - `None` -> standalone audio associated with no video track
             - `i`    -> audio extracted from videos[i]
+        If `audio` has one entry per slot, the audio of `videos[i]` is taken from it instead of decoded.
 
         Returns:
             `audio (list[str | np.ndarray | torch.Tensor])`:
@@ -2602,14 +2667,23 @@ class OmniModalProcessorMixin(ProcessorMixin):
                 )
             audio_from_video_indices = list(range(len(videos)))  # videos only: one audio per video
 
+        # Callers that already decoded the audio track of each video (e.g. vLLM) pass one audio per slot
+        if len(audio) == len(audio_from_video_indices):
+            video_to_audio = [None] * len(videos)
+            for audio_idx, video_idx in enumerate(audio_from_video_indices):
+                if video_idx is not None:
+                    video_to_audio[video_idx] = audio_idx
+            return audio if audio else None, video_to_audio
+
         if audio_from_video_indices.count(None) != len(audio):
             raise ValueError(
                 f"`audio_from_video_indices` has {audio_from_video_indices.count(None)} standalone slots but {len(audio)} audio inputs."
             )
 
-        if not is_torchcodec_greater_or_equal("0.17"):
+        if not (is_torchcodec_greater_or_equal("0.17") and is_torchcodec_usable(decode="audio")):
             raise ImportError(
-                "`load_audio_from_video=True` requires torchcodec>=0.17. Install it with `pip install -U torchcodec`."
+                "`load_audio_from_video=True` requires torchcodec>=0.17 with FFmpeg. See "
+                "https://github.com/meta-pytorch/torchcodec#installing-torchcodec."
             )
         from torchcodec.decoders import get_container_metadata
 

@@ -33,7 +33,7 @@ from transformers import (
     EdgeTamVideoModel,
     EdgeTamVideoPromptEncoderConfig,
     EdgeTamVisionConfig,
-    Sam2ImageProcessorFast,
+    Sam2ImageProcessor,
     Sam2VideoProcessor,
     Sam2VideoVideoProcessor,
     TimmWrapperConfig,
@@ -238,7 +238,7 @@ def convert_edgetam_checkpoint(model_name, checkpoint_path, pytorch_dump_folder,
     state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
     state_dict = replace_keys(state_dict)
 
-    image_processor = Sam2ImageProcessorFast()
+    image_processor = Sam2ImageProcessor()
     video_processor = Sam2VideoVideoProcessor()
     processor = Sam2VideoProcessor(image_processor=image_processor, video_processor=video_processor)
     hf_model = EdgeTamVideoModel(config)
