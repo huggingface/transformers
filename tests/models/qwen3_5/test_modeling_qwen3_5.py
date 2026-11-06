@@ -39,10 +39,12 @@ from ...test_modeling_common import (
     ids_tensor,
 )
 from ...test_processing_common import url_to_local_path
+from ...test_tensor_parallel_mixin import _init_distributed
 
 
 if is_torch_available():
     import torch
+    from torch.distributed.device_mesh import init_device_mesh
 
     from transformers import (
         AutoModelForCausalLM,
@@ -58,7 +60,8 @@ if is_torch_available():
         Qwen3_5TextForSequenceClassification,
         Qwen3_5TextModel,
     )
-
+    from transformers.distributed.tensor_parallel import apply_tensor_parallelism
+    from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5GatedDeltaNet
 
 class Qwen3_5TextModelTester(CausalLMModelTester):
     if is_torch_available():
@@ -83,6 +86,89 @@ class Qwen3_5TextModelTester(CausalLMModelTester):
         self.linear_num_key_heads = 4
         self.linear_num_value_heads = 8
 
+def _gated_deltanet_tensor_parallel_matches_reference(rank):
+    torch.manual_seed(0)
+
+    config = Qwen3_5TextConfig(
+        vocab_size=99,
+        hidden_size=32,
+        intermediate_size=64,
+        num_hidden_layers=1,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        head_dim=8,
+        layer_types=["linear_attention"],
+        linear_num_key_heads=4,
+        linear_num_value_heads=8,
+        linear_key_head_dim=4,
+        linear_value_head_dim=4,
+        linear_conv_kernel_dim=2,
+        hidden_act="silu",
+    )
+
+    reference = Qwen3_5GatedDeltaNet(config, layer_idx=0).eval()
+
+    wrapper = torch.nn.Module()
+    wrapper.linear_attn = copy.deepcopy(reference)
+
+    mesh = init_device_mesh("cpu", (2,))
+    tp_plan = {
+        "linear_attn": "gated_deltanet",
+        "linear_attn.conv1d": "shard_dim_0",
+        "linear_attn.in_proj_qkv": "colwise",
+        "linear_attn.in_proj_z": "colwise",
+        "linear_attn.in_proj_b": "colwise",
+        "linear_attn.in_proj_a": "colwise",
+        "linear_attn.out_proj": "rowwise",
+    }
+    apply_tensor_parallelism(wrapper, mesh, tp_plan)
+
+    torch.manual_seed(1)
+    hidden_states = torch.randn(2, 5, config.hidden_size)
+
+    with torch.no_grad():
+        expected = reference(hidden_states)
+        actual = wrapper.linear_attn(hidden_states)
+
+    torch.testing.assert_close(actual, expected, rtol=1e-5, atol=1e-5)
+
+    # Verify the DeltaNet state itself is head-sharded, not replicated.
+    assert wrapper.linear_attn.A_log.to_local().shape == (config.linear_num_value_heads // 2,)
+    assert wrapper.linear_attn.dt_bias.to_local().shape == (config.linear_num_value_heads // 2,)
+    assert wrapper.linear_attn.conv1d.weight.to_local().shape[0] == reference.conv1d.weight.shape[0] // 2
+
+    # Check cached prefill followed by single-token decode.
+    reference_cache = DynamicCache(config=config)
+    tp_cache = DynamicCache(config=config)
+
+    torch.manual_seed(2)
+    prefill_hidden_states = torch.randn(2, 4, config.hidden_size)
+    decode_hidden_states = torch.randn(2, 1, config.hidden_size)
+
+    with torch.no_grad():
+        expected_prefill = reference(prefill_hidden_states, cache_params=reference_cache)
+        actual_prefill = wrapper.linear_attn(prefill_hidden_states, cache_params=tp_cache)
+
+        expected_decode = reference(decode_hidden_states, cache_params=reference_cache)
+        actual_decode = wrapper.linear_attn(decode_hidden_states, cache_params=tp_cache)
+
+    torch.testing.assert_close(actual_prefill, expected_prefill, rtol=1e-5, atol=1e-5)
+    torch.testing.assert_close(actual_decode, expected_decode, rtol=1e-5, atol=1e-5)
+
+    tp_conv_state = tp_cache.get_conv_state(0)
+    tp_recurrent_state = tp_cache.get_recurrent_state(0)
+
+    assert tp_conv_state.shape == (
+        2,
+        (2 * reference.key_dim + reference.value_dim) // 2,
+        config.linear_conv_kernel_dim,
+    )
+    assert tp_recurrent_state.shape == (
+        2,
+        config.linear_num_value_heads // 2,
+        config.linear_key_head_dim,
+        config.linear_value_head_dim,
+    )
 
 @require_torch
 class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
@@ -153,6 +239,9 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertEqual(out_len + 1, len(outputs))
             self.assertEqual(len(self_attentions), sum(layer == "full_attention" for layer in config.layer_types))
             self.assertListEqual(list(self_attentions[0].shape[-3:]), [config.num_attention_heads, seq_len, seq_len])
+
+    def test_gated_deltanet_tensor_parallel_matches_reference(self):
+        _init_distributed(tp=2, backend="gloo")(_gated_deltanet_tensor_parallel_matches_reference)()
 
     @unittest.skip("Intentionally not reversable (no changes) as only load time within a VLM depends on this")
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
