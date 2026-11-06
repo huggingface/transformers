@@ -663,7 +663,7 @@ def _test_fsdp2_expert_parallel_bf16_grads_impl(rank, config_class, config_dict)
         logger.debug("FSDP2+EP (bf16) gradient checks passed.")
 
 
-def _test_hsdp_grad_accumulation_vs_single_device_impl(rank, config_class, config_dict, dp_replicate_size):
+def _test_hsdp_grad_accumulation_vs_single_device_impl(rank, config_class, config_dict, dp_replicate_size, ep_size=1):
     """
     HSDP on a (dp_replicate, fsdp) mesh with gradient accumulation vs one device on the whole batch. Each HSDP rank
     sees its own slice of every micro-batch, and the all-reduce across replicas only runs on the last micro-batch.
@@ -717,7 +717,7 @@ def _test_hsdp_grad_accumulation_vs_single_device_impl(rank, config_class, confi
             init_model_dir,
             torch_dtype=dtype,
             distributed_config=DistributedConfig(
-                dp_replicate_size=dp_replicate_size, fsdp_size=world_size // dp_replicate_size
+                dp_replicate_size=dp_replicate_size, fsdp_size=world_size // dp_replicate_size, ep_size=ep_size
             ),
         )
         model.train()
@@ -912,14 +912,18 @@ class FSDPTesterMixin(ABC):
             "test_hsdp_save_load_dcp", _test_fsdp2_save_load_dcp_impl, world_size=4, dp_replicate_size=2
         )
 
-    @parameterized.expand([("replicate_and_shard", 4), ("replicate_only", 2)])
+    @parameterized.expand([("replicate_and_shard", 4, 1), ("replicate_only", 2, 1), ("expert_parallel", 8, 2)])
     @require_torch_greater_or_equal("2.7")
     @is_fsdp_test
-    def test_hsdp_grad_accumulation_vs_single_device(self, label, world_size):
+    def test_hsdp_grad_accumulation_vs_single_device(self, label, world_size, ep_size):
+        config = self.model_tester.get_config()
+        if ep_size > 1 and "ep_dispatch_experts" not in (getattr(config, "base_model_ep_plan", None) or {}).values():
+            self.skipTest("Model does not have a token-dispatch expert parallel plan")
         self._run_fsdp2_distributed_test(
             f"test_hsdp_grad_accumulation_vs_single_device_{label}",
             _test_hsdp_grad_accumulation_vs_single_device_impl,
             2,
+            ep_size,
             world_size=world_size,
         )
 

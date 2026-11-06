@@ -178,9 +178,6 @@ class DistributedConfig:
                 "Use DistributedConfig(tp_size=N, fsdp_size=M), or combine TP and PP."
             )
 
-        if self.dp_replicate_size > 1 and self.ep_size > 1:
-            raise ValueError("Combining `dp_replicate_size` with expert parallelism is not supported yet.")
-
     def _validate_resolved_ep_plan(self, ep_plan: dict[str, str]):
         """Validate the layout against the resolved EP plan, once the model's defaults and overrides are merged."""
         if self.ep_size <= 1 or not ep_plan:
