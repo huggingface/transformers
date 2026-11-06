@@ -2508,12 +2508,11 @@ class OmniModalProcessorMixin(ProcessorMixin):
             A list that describes the source of each audio slot where
                 - `None` -> standalone audio associated with no video track
                 - `i`    -> audio extracted from videos[i]
+            If `audio` has one entry per slot, the audio of `videos[i]` is taken from it instead of decoded.
         """
         images, text, videos, audio = self.prepare_inputs_layout(
             images=images, text=text, videos=videos, audio=audio, **kwargs
         )
-        self.validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
-
         merged_kwargs = self._merge_kwargs(
             self.valid_processor_kwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
@@ -2521,7 +2520,15 @@ class OmniModalProcessorMixin(ProcessorMixin):
         )
 
         # TODO @guarin: move it to processor level argument. Used by EG2 and qwen-omni series
-        load_audio_from_video = merged_kwargs["videos_kwargs"].get("load_audio_from_video")
+        # Without videos there is no audio track to load, so `audio` is processed as usual
+        load_audio_from_video = merged_kwargs["videos_kwargs"].get("load_audio_from_video") and videos is not None
+
+        # Audio of a video has no placeholder in text, so only standalone slots are counted against it
+        standalone_audio = audio
+        if load_audio_from_video and audio and len(audio) == len(audio_from_video_indices or []):
+            standalone_audio = [sample for sample, idx in zip(audio, audio_from_video_indices) if idx is None]
+        self.validate_inputs(images=images, text=text, videos=videos, audio=standalone_audio, **kwargs)
+
         if load_audio_from_video:
             audio, video_to_audio_indices = self._resolve_audio_from_video(
                 videos,
@@ -2598,6 +2605,7 @@ class OmniModalProcessorMixin(ProcessorMixin):
         `audio_from_video_indices` describes the source of each audio slot:
             - `None` -> standalone audio associated with no video track
             - `i`    -> audio extracted from videos[i]
+        If `audio` has one entry per slot, the audio of `videos[i]` is taken from it instead of decoded.
 
         Returns:
             `audio (list[str | np.ndarray | torch.Tensor])`:
@@ -2617,6 +2625,14 @@ class OmniModalProcessorMixin(ProcessorMixin):
                     "Mixing `audio` with `load_audio_from_video=True` requires `audio_from_video_indices`."
                 )
             audio_from_video_indices = list(range(len(videos)))  # videos only: one audio per video
+
+        # Callers that already decoded the audio track of each video (e.g. vLLM) pass one audio per slot
+        if len(audio) == len(audio_from_video_indices):
+            video_to_audio = [None] * len(videos)
+            for audio_idx, video_idx in enumerate(audio_from_video_indices):
+                if video_idx is not None:
+                    video_to_audio[video_idx] = audio_idx
+            return audio if audio else None, video_to_audio
 
         if audio_from_video_indices.count(None) != len(audio):
             raise ValueError(
