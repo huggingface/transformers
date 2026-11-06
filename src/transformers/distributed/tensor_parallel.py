@@ -183,8 +183,8 @@ class ColwiseParallel(TensorParallelLayer):
         # wrapping it as a DTensor. If its gradient is needed, synchronize the partial
         # input-gradient contributions explicitly.
         if is_local_input and getattr(module, "_hf_quantized_needs_local_tp", False):
+            process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
             if torch.is_grad_enabled() and x.requires_grad:
-                process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
                 x = _AllReduceBackward.apply(x, process_group)
             return (x,) + args[1:], kwargs
 
@@ -439,7 +439,8 @@ class MlaKvAProjParallel(TensorParallelLayer):
             )
         rope_dim = module.config.qk_rope_head_dim
         pass_output, rope_output = output.split([output.shape[-1] - rope_dim, rope_dim], dim=-1)
-        rope_output = _AllReduceBackward.apply(rope_output, mesh.get_group())
+        if torch.is_grad_enabled() and rope_output.requires_grad:
+            rope_output = _AllReduceBackward.apply(rope_output, mesh.get_group())
         return torch.cat([pass_output, rope_output], dim=-1)
 
 
@@ -559,14 +560,16 @@ class MoeExpertsParallel(TensorParallelLayer):
         tp_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
         if isinstance(hidden_states, DTensor):
             hidden_states = hidden_states.to_local()
-        hidden_states = _AllReduceBackward.apply(hidden_states, tp_group)
+        if torch.is_grad_enabled() and hidden_states.requires_grad:
+            hidden_states = _AllReduceBackward.apply(hidden_states, tp_group)
 
         if len(routing_args) >= 2:
             top_k_index, top_k_weights, *extra_args = routing_args
             if isinstance(top_k_weights, DTensor):
                 top_k_weights = top_k_weights.to_local()
             if not is_expert_parallel:
-                top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_group)
+                if torch.is_grad_enabled() and top_k_weights.requires_grad:
+                    top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_group)
             routing_args = [top_k_index, top_k_weights, *extra_args]
 
         return (hidden_states, *routing_args), kwargs
