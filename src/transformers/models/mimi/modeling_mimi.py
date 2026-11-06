@@ -1239,6 +1239,10 @@ class MimiEncoderModel(MimiPreTrainedModel):
         if channels < 1 or channels > 2:
             raise ValueError(f"Number of audio channels must be 1 or 2, but got {channels}")
 
+        if not use_streaming and padding_cache is None:
+            padding_length = -input_values.shape[-1] % self.config.frame_size
+            input_values = nn.functional.pad(input_values, (0, padding_length))
+
         if use_streaming and padding_cache is None:
             per_layer_padding, per_layer_padding_mode, per_layer_in_channels = [], [], []
             for layer_name in self.encoder_seanet._conv1d_layer_names:
