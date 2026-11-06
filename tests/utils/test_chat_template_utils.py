@@ -785,3 +785,31 @@ class ReasoningFieldAliasTest(unittest.TestCase):
                     continue_final_message=message_field,
                 )
                 self.assertEqual(rendered[0], expected)
+
+
+@require_jinja
+class TemplateSandboxTest(unittest.TestCase):
+    def render(self, template):
+        rendered, _ = render_jinja_template([[{"role": "user", "content": "Hi"}]], chat_template=template)
+        return rendered[0]
+
+    def test_dict_global_is_not_a_type(self):
+        self.assertEqual(self.render("{{ dict(a=1) }}"), "{'a': 1}")
+        self.assertEqual(self.render("{{ dict.fromkeys(['a']) }}"), "{'a': None}")
+        # With the real `dict` type, this would build a `types.GenericAlias`
+        self.assertEqual(self.render("{{ dict[1] is defined }}"), "False")
+
+    def test_namespace_rejects_underscore_names(self):
+        from jinja2.exceptions import SecurityError
+
+        self.assertEqual(
+            self.render("{% set ns = namespace(a=1, self=2) %}{% set ns.b = 3 %}{{ ns.a }}{{ ns.self }}{{ ns.b }}"),
+            "123",
+        )
+        for template in (
+            "{% set ns = namespace(_a=1) %}",
+            "{% set ns = namespace({'__a': 1}) %}",
+            "{% set ns = namespace() %}{% set ns.__a = 1 %}",
+        ):
+            with self.subTest(template=template), self.assertRaises(SecurityError):
+                self.render(template)

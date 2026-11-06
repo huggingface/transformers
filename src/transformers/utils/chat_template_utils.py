@@ -595,12 +595,45 @@ def _cached_compile_jinja_template(chat_template):
     def strftime_now(format):
         return datetime.now().strftime(format)
 
+    class TemplateDict:
+        # Make a limited subclass so that users can't break out with dictionary attribute access
+        # or type-hackery
+        def __call__(self, *args, **kwargs):
+            return dict(*args, **kwargs)
+
+        def fromkeys(self, *args, **kwargs):
+            return dict.fromkeys(*args, **kwargs)
+
+    class TemplateNamespace(jinja2.utils.Namespace):
+        # Namespaces reject any dunder attributes to prevent access to CPython internals
+        def __init__(*args, **kwargs):
+            # Same signature trick as Jinja's Namespace, so that `namespace(self=...)` still works
+            self, args = args[0], args[1:]
+            attrs = dict(*args, **kwargs)
+            for name in attrs:
+                TemplateNamespace._check_name(name)
+            jinja2.utils.Namespace.__init__(self, attrs)
+
+        def __setitem__(self, name, value):
+            TemplateNamespace._check_name(name)
+            jinja2.utils.Namespace.__setitem__(self, name, value)
+
+        @staticmethod
+        def _check_name(name):
+            if isinstance(name, str) and name.startswith("_"):
+                raise jinja2.exceptions.SecurityError(
+                    f"Chat templates cannot store underscore-prefixed attributes on a namespace, but got {name!r}. "
+                    "Please rename the attribute."
+                )
+
     jinja_env = ImmutableSandboxedEnvironment(
         trim_blocks=True, lstrip_blocks=True, extensions=[AssistantTracker, jinja2.ext.loopcontrols]
     )
     jinja_env.filters["tojson"] = tojson
     jinja_env.globals["raise_exception"] = raise_exception
     jinja_env.globals["strftime_now"] = strftime_now
+    jinja_env.globals["dict"] = TemplateDict()
+    jinja_env.globals["namespace"] = TemplateNamespace
     return jinja_env.from_string(chat_template)
 
 
