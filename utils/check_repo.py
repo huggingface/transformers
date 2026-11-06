@@ -152,126 +152,77 @@ PRIVATE_MODELS = [
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
 # Being in this list is an exception and should **not** be the rule.
-IGNORE_NON_TESTED = (
-    PRIVATE_MODELS.copy()
-    + [
-        # models to ignore for not tested
-        "RecurrentGemmaModel",  # Building part of bigger (tested) model.
-        "FuyuForCausalLM",  # Not tested fort now
-        "UMT5EncoderModel",  # Building part of bigger (tested) model.
-        "ErnieMForInformationExtraction",
-        "FastSpeech2ConformerHifiGan",  # Already tested by SpeechT5HifiGan (# Copied from)
-        "FastSpeech2ConformerWithHifiGan",  # Built with two smaller (tested) models.
-        "GraphormerDecoderHead",  # Building part of bigger (tested) model.
-        "JukeboxVQVAE",  # Building part of bigger (tested) model.
-        "JukeboxPrior",  # Building part of bigger (tested) model.
-        "DecisionTransformerGPT2Model",  # Building part of bigger (tested) model.
-        "SegformerDecodeHead",  # Building part of bigger (tested) model.
-        "MgpstrModel",  # Building part of bigger (tested) model.
-        "BertLMHeadModel",  # Needs to be setup as decoder.
-        "MegatronBertLMHeadModel",  # Building part of bigger (tested) model.
-        "RealmBertModel",  # Building part of bigger (tested) model.
-        "RealmReader",  # Not regular model.
-        "RealmScorer",  # Not regular model.
-        "RealmForOpenQA",  # Not regular model.
-        "ReformerForMaskedLM",  # Needs to be setup as decoder.
-        "SeparableConv1D",  # Building part of bigger (tested) model.
-        "OPTDecoderWrapper",
-        "AltRobertaModel",  # Building part of bigger (tested) model.
-        "BlipTextLMHeadModel",  # No need to test it as it is tested by BlipTextVision models
-        "BridgeTowerTextModel",  # No need to test it as it is tested by BridgeTowerModel model.
-        "BridgeTowerVisionModel",  # No need to test it as it is tested by BridgeTowerModel model.
-        "BarkCausalModel",  # Building part of bigger (tested) model.
-        "BarkModel",  # Does not have a forward signature - generation tested with integration tests.
-        "Sam2HieraDetModel",  # Building part of bigger (tested) model.
-        "Sam3TrackerVideoModel",  # Partly tested in Sam3TrackerModel, not regular model.
-        "Sam2VideoModel",  # Partly tested in Sam2Model, not regular model.
-        "Sam3ViTModel",  # Building part of bigger (tested) model.
-        "Sam3VideoModel",  # Partly tested in Sam3Model, not regular model.
-        "EdgeTamVisionModel",  # Building part of bigger (tested) model.
-        "EdgeTamVideoModel",  # Partly tested in EdgeTamModel, not regular model.
-        "SeamlessM4TTextToUnitModel",  # Building part of bigger (tested) model.
-        "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
-        "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
-        "PPFormulaNetTextModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
-        "PPFormulaNetVisionModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
-        "PPOCRV5MobileDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
-        "PPOCRV5ServerDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerDetForObjectDetection.
-        "PPDocLayoutV2ReadingOrder",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
-        "PPDocLayoutV2Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
-        "PPDocLayoutV3Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV3ForObjectDetection.
-        "PPDocLayoutV4Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV4ForObjectDetection.
-        "PPOCRV5MobileRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileRecForTextRecognition.
-        "PPOCRV5MobileRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileRecForTextRecognition.
-        "PPOCRV5ServerRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerRecForTextRecognition.
-        "PPOCRV5ServerRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerRecForTextRecognition.
-        "PPOCRV6MediumDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6MediumDetForObjectDetection.
-        "PPOCRV6SmallDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6SmallDetForObjectDetection.
-        "PPOCRV6SmallRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6SmallRecForTextRecognition.
-        "PPOCRV6SmallRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6SmallRecForTextRecognition.
-        "PPOCRV6TinyRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6TinyRecForTextRecognition.
-        "PPLCNetModel",  # Building part of bigger (tested) model. Tested implicitly through PPLCNetForImageClassification.
-        "PaddleOCRVLModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
-        "PaddleOCRVisionModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
-        "PaddleOCRVisionTransformer",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
-        "PaddleOCRTextModel",  # Building part of bigger (tested) model. Tested implicitly through PaddleOCRVLForConditionalGeneration.
-        "Qwen2VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2VLForConditionalGeneration.
-        "Qwen2_5_VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5_VLForConditionalGeneration.
-        "MiniCPMV4_7VisionModel",  # Building part of bigger (tested) model - FIXME: raushan; adding each VLM backbone here is annoying!
-        "MiniCPMOcrVisionModel",  # Building part of bigger (tested) model. Tested implicitly through MiniCPMOcrForConditionalGeneration.
-        "MiniMaxM3VLForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through MiniMaxM3SparseForConditionalGeneration.
-        "MiniMaxM3VLTextModel",  # Building part of bigger (tested) model. Tested implicitly through MiniMaxM3SparseForConditionalGeneration.
-        "MiniMaxM3VLVisionModel",  # Building part of bigger (tested) model. Tested implicitly through MiniMaxM3SparseForConditionalGeneration.
-        "Qwen3VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3VLForConditionalGeneration.
-        "Qwen3VLMoeModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3VLMoeForConditionalGeneration.
-        "Qwen3VLTextModel",  # Building part of bigger (tested) model.
-        "Qwen3VLMoeTextModel",  # Building part of bigger (tested) model.
-        "Qwen3_5TextModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3_5ForConditionalGeneration.
-        "Qwen3_5MoeTextModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3_5MoeForConditionalGeneration.
-        "MistralLarge4TextModel",  # Building part of bigger (tested) model. Tested implicitly through MistralLarge4ForConditionalGeneration.
-        "Qwen2_5OmniForConditionalGeneration",  # Not a regular model. Tested in Qwen2_5OmniModelIntegrationTest
-        "Qwen2_5OmniTalkerForConditionalGeneration",  #  Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntegrationTest.
-        "Qwen2_5OmniTalkerModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntegrationTest.
-        "Qwen2_5OmniThinkerTextModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntegrationTest.
-        "Qwen2_5OmniToken2WavModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntegrationTest.
-        "Qwen2_5OmniToken2WavDiTModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntegrationTest.
-        "Qwen2_5OmniToken2WavBigVGANModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntegrationTest.
-        "Qwen3OmniMoeCode2Wav",  # Building part of bigger (tested) model. Tested implicitly through Qwen3OmniMoeForConditionalGenerationIntegrationTest.
-        "Qwen3OmniMoeCode2WavDecoderBlock",
-        "Qwen3OmniMoeText2Wav",  # Building part of bigger (tested) model. Tested implicitly through Qwen3OmniMoeForConditionalGenerationIntegrationTest.
-        "Qwen3OmniMoeTalkerCodePredictorModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3OmniMoeForConditionalGenerationIntegrationTest.
-        "Qwen3OmniMoeCode2WavTransformerModel",
-        "Qwen3OmniMoeTalkerForConditionalGeneration",
-        "Qwen3OmniMoeTalkerModel",
-        "Qwen3OmniMoeForConditionalGeneration",  # Bigger model tested through Qwen3OmniMoeForConditionalGenerationIntegrationTest.
-        "Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration",  # Building part of bigger (tested) model. Tested implicitly through Qwen3OmniMoeForConditionalGenerationIntegrationTest.
-        "PPDocLayoutV3Model",  # Building part of bigger (tested) model
-        "PPDocLayoutV4Model",  # Building part of bigger (tested) model
-        "TimesFmModel",  # Building part of bigger (tested) model
-        "TimesFm2_5Model",  # Building part of bigger (tested) model
-        "Ernie4_5_VL_MoeForConditionalGeneration",  # BC alias
-        "Ernie4_5_VL_MoeModel",  # BC alias
-        "Ernie4_5_VL_MoeTextModel",  # BC alias
-        "PeAudioFrameLevelModel",
-        "PI0Model",  # special arch, tested through PI0ForConditionalGeneration
-        "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
-        "InklingForCausalLM",
-        "VibeVoiceAcousticTokenizerDecoderModel",
-        "VibeVoiceAcousticTokenizerEncoderModel",
-        "PocketTTSAudioTokenizerEncoderModel",
-        "PocketTTSAudioTokenizerDecoderModel",
-        "MimiEncoderModel",
-        "MimiDecoderModel",
-        "DiffusionGemmaDecoderModel",
-        "DiffusionGemmaEncoderModel",
-        "SLANetSLAHead",
-        "SLANeXtBackbone",
-        "SLANeXtSLAHead",
-        "SLANetBackbone",
-        "CsmBackboneModel",
-        "PeAudioVideoModel",  # FIXME @eustlib, model isn't convered as backbone
-    ]
-)
+IGNORE_NON_TESTED = [
+    # models to ignore for not tested
+    "ErnieMForInformationExtraction",
+    "GraphormerDecoderHead",  # Building part of bigger (tested) model.
+    "JukeboxVQVAE",  # Building part of bigger (tested) model.
+    "JukeboxPrior",  # Building part of bigger (tested) model.
+    "DecisionTransformerGPT2Model",  # Building part of bigger (tested) model.
+    "SegformerDecodeHead",  # Building part of bigger (tested) model.
+    "MgpstrModel",  # Building part of bigger (tested) model.
+    "MegatronBertLMHeadModel",  # Building part of bigger (tested) model.
+    "RealmBertModel",  # Building part of bigger (tested) model.
+    "RealmReader",  # Not regular model.
+    "RealmScorer",  # Not regular model.
+    "RealmForOpenQA",  # Not regular model.
+    "ReformerForMaskedLM",  # Needs to be setup as decoder.
+    "SeparableConv1D",  # Building part of bigger (tested) model.
+    "OPTDecoderWrapper",
+    "BlipTextLMHeadModel",  # No need to test it as it is tested by BlipTextVision models
+    "BarkCausalModel",  # Building part of bigger (tested) model.
+    "BarkModel",  # Does not have a forward signature - generation tested with integration tests.
+    "Sam2HieraDetModel",  # Building part of bigger (tested) model.
+    "Sam3TrackerVideoModel",  # Partly tested in Sam3TrackerModel, not regular model.
+    "Sam2VideoModel",  # Partly tested in Sam2Model, not regular model.
+    "Sam3ViTModel",  # Building part of bigger (tested) model.
+    "Sam3VideoModel",  # Partly tested in Sam3Model, not regular model.
+    "EdgeTamVisionModel",  # Building part of bigger (tested) model.
+    "EdgeTamVideoModel",  # Partly tested in EdgeTamModel, not regular model.
+    "SeamlessM4TTextToUnitModel",  # Building part of bigger (tested) model.
+    "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
+    "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
+    "PPFormulaNetTextModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
+    "PPOCRV5MobileDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
+    "PPDocLayoutV2ReadingOrder",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
+    "PPDocLayoutV2Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
+    "PPDocLayoutV3Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV3ForObjectDetection.
+    "PPDocLayoutV4Model",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV4ForObjectDetection.
+    "PPOCRV5MobileRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileRecForTextRecognition.
+    "PPOCRV5MobileRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileRecForTextRecognition.
+    "PPOCRV5ServerRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerRecForTextRecognition.
+    "PPOCRV5ServerRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerRecForTextRecognition.
+    "PPOCRV6SmallDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6SmallDetForObjectDetection.
+    "PPOCRV6SmallRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6SmallRecForTextRecognition.
+    "PPOCRV6SmallRecEncoderWithSVTR",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6SmallRecForTextRecognition.
+    "PPOCRV6TinyRecModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV6TinyRecForTextRecognition.
+    "PPLCNetModel",  # Building part of bigger (tested) model. Tested implicitly through PPLCNetForImageClassification.
+    "Qwen2_5OmniForConditionalGeneration",  # Not a regular model. Tested in Qwen2_5OmniModelIntegrationTest
+    "Qwen3OmniMoeForConditionalGeneration",  # # Not a regular model. Tested in Qwen3OmniMoeForConditionalGenerationIntegrationTest.
+    "PPDocLayoutV3Model",  # Building part of bigger (tested) model
+    "PPDocLayoutV4Model",  # Building part of bigger (tested) model
+    "TimesFmModel",  # Building part of bigger (tested) model
+    "TimesFm2_5Model",  # Building part of bigger (tested) model
+    "Ernie4_5_VL_MoeForConditionalGeneration",  # BC alias
+    "Ernie4_5_VL_MoeModel",  # BC alias
+    "PeAudioFrameLevelModel",
+    "PI0Model",  # special arch, tested through PI0ForConditionalGeneration
+    "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
+    "VibeVoiceAcousticTokenizerDecoderModel",
+    "VibeVoiceAcousticTokenizerEncoderModel",
+    "PocketTTSAudioTokenizerEncoderModel",
+    "PocketTTSAudioTokenizerDecoderModel",
+    "MimiEncoderModel",
+    "MimiDecoderModel",
+    "DiffusionGemmaDecoderModel",
+    "DiffusionGemmaEncoderModel",
+    "SLANetSLAHead",
+    "SLANeXtBackbone",
+    "SLANeXtSLAHead",
+    "SLANetBackbone",
+    "CsmBackboneModel",
+    "PeAudioVideoModel",  # FIXME @eustlib, model isn't covered as backbone
+]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
 # trigger the common tests.
@@ -424,7 +375,6 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "XCLIPTextModel",
         "AltCLIPTextModel",
         "AltCLIPVisionModel",
-        "AltRobertaModel",
         "TvltForAudioVisualClassification",
         "BarkCausalModel",
         "BarkCoarseModel",
@@ -879,15 +829,21 @@ def filter_out_non_tested_backbones(defined_models: tuple):
                 if specs.config_class is not None:
                     backbone_configs.append(specs.config_class)
 
-    tested_models = [(name, module) for name, module in defined_models if module.config_class not in backbone_configs]
-    return tested_models
+    backbone_models = {name for name, module in defined_models if module.config_class in backbone_configs}
+    if wrongly_ignored := backbone_models & set(IGNORE_NON_TESTED):
+        raise ValueError(
+            "These models are not expected to have tests as they are building backbones. "
+            f"Remove them from `IGNORE_NON_TESTED`: {sorted(wrongly_ignored)}"
+        )
+
+    return [(name, module) for name, module in defined_models if name not in backbone_models]
 
 
 def should_be_tested(model_name: str) -> bool:
     """
     Whether or not a model should be tested.
     """
-    if model_name in IGNORE_NON_TESTED:
+    if model_name in IGNORE_NON_TESTED or model_name in PRIVATE_MODELS:
         return False
     return not is_building_block(model_name)
 
@@ -925,6 +881,12 @@ def check_models_are_tested(module: types.ModuleType, test_file: str) -> list[st
                 f"{os.path.join(PATH_TO_TESTS, test_file)}. Add it to the `all_model_classes` in that file or, if "
                 "it inherits from `CausalLMModelTester`, fill in the model class attributes. "
                 "If common tests should not applied to that model, add its name to `IGNORE_NON_TESTED`"
+                "in the file `utils/check_repo.py`."
+            )
+        elif model_name in tested_models and model_name in IGNORE_NON_TESTED:
+            failures.append(
+                f"{model_name} is defined in IGNORE_NON_TESTED but is already tested in "
+                f"{os.path.join(PATH_TO_TESTS, test_file)}. Remove it from `IGNORE_NON_TESTED` "
                 "in the file `utils/check_repo.py`."
             )
     return failures
