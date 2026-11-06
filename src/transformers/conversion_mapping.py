@@ -289,6 +289,31 @@ def _build_checkpoint_conversion_mapping():
             # the prefix also renames the `weight_scale_inv` companion).
             WeightRenaming(source_patterns=r"self_attn\.q_b_proj\.", target_patterns="self_attn.q_gate_proj."),
         ],
+        "qwen3_tts_tokenizer_12hz": [
+            WeightRenaming(
+                source_patterns=r"decoder\.quantizer\.rvq_first\.",
+                target_patterns="quantizer.semantic_residual_vector_quantizer.",
+            ),
+            WeightRenaming(
+                source_patterns=r"decoder\.quantizer\.rvq_rest\.",
+                target_patterns="quantizer.acoustic_residual_vector_quantizer.",
+            ),
+            WeightRenaming(source_patterns=r"\.vq\.layers\.", target_patterns=".layers."),
+            WeightRenaming(source_patterns=r"\._codebook\.", target_patterns=".codebook."),
+            WeightRenaming(source_patterns=r"\.embedding_sum", target_patterns=".embed_sum"),
+            WeightRenaming(
+                source_patterns=r"decoder\.pre_transformer\.input_proj\.", target_patterns="decoder.input_proj."
+            ),
+            WeightRenaming(
+                source_patterns=r"decoder\.pre_transformer\.output_proj\.", target_patterns="decoder.output_proj."
+            ),
+        ],
+        # The original encoder stores its SEANet stack as `encoder.layers`; `MimiEncoderModel` names it `encoder_seanet`.
+        # Unanchored: loaded alone from the full checkpoint, the encoder sees these keys before its `encoder.` prefix
+        # is stripped (`encoder.encoder.layers.`).
+        "qwen3_tts_tokenizer_encoder": [
+            WeightRenaming(source_patterns=r"encoder\.layers\.", target_patterns="encoder_seanet.layers."),
+        ],
         "gemma4_unified": [
             WeightRenaming(source_patterns=r"vision_embedder\.patch_ln1", target_patterns="embed_vision.patch_ln1"),
             WeightRenaming(

@@ -24,6 +24,8 @@ if utils_path not in sys.path:
     sys.path.append(utils_path)
 
 import check_modular_conversion  # noqa: E402
+import libcst as cst  # noqa: E402
+from modular_model_converter import ModularFileMapper, get_cased_name  # noqa: E402
 
 
 class ConverterChangedInDiffTest(unittest.TestCase):
@@ -68,6 +70,20 @@ class ConverterChangedInDiffTest(unittest.TestCase):
                 os.path.exists(os.path.join(git_repo_path, rel_path)),
                 f"{rel_path} listed in CONVERTER_FILES but does not exist on disk",
             )
+
+
+class ModelNameInferenceTest(unittest.TestCase):
+    def test_shared_suffix_preserves_acronym_prefix(self):
+        module = cst.parse_module("class Qwen3TTSTokenizerModel(VibeVoiceAcousticTokenizerModel):\n    pass\n")
+        mapper = ModularFileMapper(module, "qwen3_tts_tokenizer", "transformers")
+        mapper.classes = {"Qwen3TTSTokenizerModel": module.body[0]}
+        parent_module = "transformers.models.vibevoice_acoustic_tokenizer.modeling_vibevoice_acoustic_tokenizer"
+        mapper.model_specific_imported_objects = {"VibeVoiceAcousticTokenizerModel": parent_module}
+        mapper.model_specific_modules = {parent_module: cst.parse_module("")}
+
+        inferred_name = mapper.infer_new_model_name()[parent_module]
+
+        self.assertEqual(get_cased_name(inferred_name), "Qwen3TTSTokenizer")
 
 
 if __name__ == "__main__":

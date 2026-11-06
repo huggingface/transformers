@@ -301,6 +301,8 @@ class MyNewConfig(ParentConfig):
 
 The linter removes the attribute declaration from the generated config file entirely. Config classes use a dataclass-style layout with no `__init__`, so assigning `AttributeError()` at the class level is the correct approach.
 
+The same works for an inherited property: assigning `AttributeError()` to its name removes the property and its setter from the generated class.
+
 For an `nn.Module` subclass, use `del self.attribute` after `super().__init__(...)`.
 
 ```py
