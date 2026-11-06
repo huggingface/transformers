@@ -11,6 +11,10 @@ on:
 
 env:
   VLLM_TARGET_DEVICE: cpu
+  # KV cache size (GiB) for vLLM's CPU backend, read by vllm/platforms/cpu.py. Replaces patching the
+  # gpu_memory_utilization default in vLLM's source with sed, which silently stopped matching when vLLM
+  # changed that code (vllm-project/vllm#56492), so vLLM fell back to reserving 92% of the NUMA node.
+  VLLM_CPU_KVCACHE_SPACE: 32
   HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   HF_HOME: /mnt/cache
 
@@ -74,7 +78,18 @@ jobs:
         # TODO: Better to build a dedicated Docker image for vLLM CI.
         # But the workflow only runs once a day, so installing at runtime is fine for now.
         run: |
-          uv pip install 'torch<=2.13.0' torchaudio torchvision 'torchcodec<=0.15.0' --index-url https://download.pytorch.org/whl/cpu
+          # vLLM pins torch exactly (its compiled kernels are built against that version), so install
+          # the torch version required by the vLLM commit under test instead of hard-coding it.
+          # torchvision / torchaudio pin torch exactly, so uv picks the matching versions.
+          # torchcodec does not pin torch, but torchcodec >= 0.12 supports torch >= 2.11 (see the
+          # compatibility table in the torchcodec README), so the latest torchcodec is fine.
+          TORCH_VERSION=$(sed -nE 's/^torch==([0-9.]+)\+cpu.*/\1/p' vllm/requirements/cpu.txt | head -n 1)
+          if [ -z "$TORCH_VERSION" ]; then
+            echo "ERROR: could not find the torch==<version>+cpu pin in vllm/requirements/cpu.txt" >&2
+            exit 1
+          fi
+          echo "torch version required by vLLM: $TORCH_VERSION"
+          uv pip install "torch==${TORCH_VERSION}" torchaudio torchvision torchcodec --index-url https://download.pytorch.org/whl/cpu
           uv pip install --no-deps timm accelerate
           uv pip install librosa
           uv pip install -e 'transformers/[sklearn,sentencepiece,vision,testing,tiktoken,num2words,video]'
@@ -83,17 +98,15 @@ jobs:
           VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
           uv pip install tblib pqdm open-clip-torch==2.32.0 albumentations==1.4.6
 
-      - name: Patch vLLM gpu_memory_utilization for CPU
+      - name: Patch vLLM for CPU
         # Probably not needed on the larger aws-m8i-8xl-cache runner, but not verified yet. Keeping for now.
         run: |
           # Lower hardcoded value in test_initialization.py. Kept in case other tests hit the same OOM issue.
           sed -i 's/gpu_memory_utilization=0.80/gpu_memory_utilization=0.4/g' vllm/tests/models/test_initialization.py
-          # Lower the global default in CacheConfig (covers EngineArgs default and anything reading the field)
-          sed -i 's/gpu_memory_utilization: float = Field(default=0.92/gpu_memory_utilization: float = Field(default=0.4/g' vllm/vllm/config/cache.py
-          # Lower the hardcoded default in LLM.__init__ (separate from CacheConfig)
-          sed -i 's/gpu_memory_utilization: float = 0.92,/gpu_memory_utilization: float = 0.4,/g' vllm/vllm/entrypoints/llm.py
-          grep "gpu_memory_utilization" vllm/vllm/config/cache.py | head -2
-          grep "gpu_memory_utilization: float" vllm/vllm/entrypoints/llm.py
+          if ! grep -q "gpu_memory_utilization=0.4" vllm/tests/models/test_initialization.py; then
+            echo "ERROR: gpu_memory_utilization=0.80 not found in vllm/tests/models/test_initialization.py; update this patch" >&2
+            exit 1
+          fi
 
       - name: Pip freeze
         run: pip freeze
@@ -209,7 +222,18 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv pip install 'torch<=2.13.0' torchaudio torchvision 'torchcodec<=0.15.0' --index-url https://download.pytorch.org/whl/cpu
+          # vLLM pins torch exactly (its compiled kernels are built against that version), so install
+          # the torch version required by the vLLM commit under test instead of hard-coding it.
+          # torchvision / torchaudio pin torch exactly, so uv picks the matching versions.
+          # torchcodec does not pin torch, but torchcodec >= 0.12 supports torch >= 2.11 (see the
+          # compatibility table in the torchcodec README), so the latest torchcodec is fine.
+          TORCH_VERSION=$(sed -nE 's/^torch==([0-9.]+)\+cpu.*/\1/p' vllm/requirements/cpu.txt | head -n 1)
+          if [ -z "$TORCH_VERSION" ]; then
+            echo "ERROR: could not find the torch==<version>+cpu pin in vllm/requirements/cpu.txt" >&2
+            exit 1
+          fi
+          echo "torch version required by vLLM: $TORCH_VERSION"
+          uv pip install "torch==${TORCH_VERSION}" torchaudio torchvision torchcodec --index-url https://download.pytorch.org/whl/cpu
           uv pip install --no-deps timm accelerate
           uv pip install librosa
           uv pip install -e 'transformers/[sklearn,sentencepiece,vision,testing,tiktoken,num2words,video]'
@@ -218,13 +242,13 @@ jobs:
           VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
           uv pip install tblib pqdm pytest-shard open-clip-torch==2.32.0 albumentations==1.4.6
 
-      - name: Patch vLLM gpu_memory_utilization for CPU
+      - name: Patch vLLM for CPU
         run: |
           sed -i 's/gpu_memory_utilization=0.80/gpu_memory_utilization=0.4/g' vllm/tests/models/test_initialization.py
-          sed -i 's/gpu_memory_utilization: float = Field(default=0.92/gpu_memory_utilization: float = Field(default=0.4/g' vllm/vllm/config/cache.py
-          sed -i 's/gpu_memory_utilization: float = 0.92,/gpu_memory_utilization: float = 0.4,/g' vllm/vllm/entrypoints/llm.py
-          grep "gpu_memory_utilization" vllm/vllm/config/cache.py | head -2
-          grep "gpu_memory_utilization: float" vllm/vllm/entrypoints/llm.py
+          if ! grep -q "gpu_memory_utilization=0.4" vllm/tests/models/test_initialization.py; then
+            echo "ERROR: gpu_memory_utilization=0.80 not found in vllm/tests/models/test_initialization.py; update this patch" >&2
+            exit 1
+          fi
           # -------------------------------------------------------------------------
           # vLLM bug: two CPU-only failures in mamba_mixer.py (affects all Mamba-based
           # models: JambaForCausalLM, FalconMambaForCausalLM, MambaForCausalLM,
@@ -332,7 +356,18 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv pip install 'torch<=2.13.0' torchaudio torchvision 'torchcodec<=0.15.0' --index-url https://download.pytorch.org/whl/cpu
+          # vLLM pins torch exactly (its compiled kernels are built against that version), so install
+          # the torch version required by the vLLM commit under test instead of hard-coding it.
+          # torchvision / torchaudio pin torch exactly, so uv picks the matching versions.
+          # torchcodec does not pin torch, but torchcodec >= 0.12 supports torch >= 2.11 (see the
+          # compatibility table in the torchcodec README), so the latest torchcodec is fine.
+          TORCH_VERSION=$(sed -nE 's/^torch==([0-9.]+)\+cpu.*/\1/p' vllm/requirements/cpu.txt | head -n 1)
+          if [ -z "$TORCH_VERSION" ]; then
+            echo "ERROR: could not find the torch==<version>+cpu pin in vllm/requirements/cpu.txt" >&2
+            exit 1
+          fi
+          echo "torch version required by vLLM: $TORCH_VERSION"
+          uv pip install "torch==${TORCH_VERSION}" torchaudio torchvision torchcodec --index-url https://download.pytorch.org/whl/cpu
           uv pip install --no-deps timm accelerate
           uv pip install librosa
           uv pip install -e 'transformers/[sklearn,sentencepiece,vision,testing,tiktoken,num2words,video]'
@@ -341,13 +376,13 @@ jobs:
           VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
           uv pip install tblib pqdm pytest-shard sentence-transformers open-clip-torch==2.32.0 albumentations==1.4.6
 
-      - name: Patch vLLM gpu_memory_utilization for CPU
+      - name: Patch vLLM for CPU
         run: |
           sed -i 's/gpu_memory_utilization=0.80/gpu_memory_utilization=0.4/g' vllm/tests/models/test_initialization.py
-          sed -i 's/gpu_memory_utilization: float = Field(default=0.92/gpu_memory_utilization: float = Field(default=0.4/g' vllm/vllm/config/cache.py
-          sed -i 's/gpu_memory_utilization: float = 0.92,/gpu_memory_utilization: float = 0.4,/g' vllm/vllm/entrypoints/llm.py
-          grep "gpu_memory_utilization" vllm/vllm/config/cache.py | head -2
-          grep "gpu_memory_utilization: float" vllm/vllm/entrypoints/llm.py
+          if ! grep -q "gpu_memory_utilization=0.4" vllm/tests/models/test_initialization.py; then
+            echo "ERROR: gpu_memory_utilization=0.80 not found in vllm/tests/models/test_initialization.py; update this patch" >&2
+            exit 1
+          fi
 
       - name: Pip freeze
         run: pip freeze
@@ -358,10 +393,35 @@ jobs:
           echo "=== Memory ===" && free -h
           echo "=== Disk ===" && df -h
 
+      - name: Prepare HF memory budget plugin
+        # vLLM's test run doesn't load transformers' root conftest.py, so apply the same psutil cap here
+        # (loaded below via `pytest -p hf_ci_memory`).
+        run: |
+          cat > /tmp/hf_ci_memory.py << 'EOF'
+          import math
+
+          import psutil
+
+          from transformers.testing_utils import get_cpu_ram_total_gib, patch_psutil_cpu_memory
+
+
+          before = psutil.virtual_memory().total / 1024**3
+          limit = get_cpu_ram_total_gib()
+          if not math.isinf(limit):
+              patch_psutil_cpu_memory(int(limit * 1024**3))
+          after = psutil.virtual_memory().total / 1024**3
+          print(f"[HF memory patch] psutil total: {before:.1f} GiB -> {after:.1f} GiB", flush=True)
+          EOF
+
+      # TODO: deselect test_mtp_draft_loads_mtp_weights (e.g. `--deselect` or `-k "not test_mtp_draft_loads_mtp_weights"`):
+      # it needs a GPU but has no CPU skip, so it fails here with "Cannot access accelerator device when none is
+      # available" (added in vllm-project/vllm#61270).
       - name: "Test: test_transformers (shard ${{ matrix.shard }} / 4)"
         working-directory: vllm
+        env:
+          PYTHONPATH: /tmp
         run: |
-          pytest -v -s tests/models/transformers/ \
+          pytest -p hf_ci_memory -v -s tests/models/transformers/ \
             --num-shards=4 --shard-id=$SHARD_ID
 
   # NOTE: This job was created to verify that the two mamba_mixer CPU bugs patched in
@@ -500,19 +560,28 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv pip install 'torch<=2.13.0' torchaudio torchvision 'torchcodec<=0.15.0' --index-url https://download.pytorch.org/whl/cpu
+          # vLLM pins torch exactly (its compiled kernels are built against that version), so install
+          # the torch version required by the vLLM commit under test instead of hard-coding it.
+          # torchvision / torchaudio pin torch exactly, so uv picks the matching versions.
+          # torchcodec does not pin torch, but torchcodec >= 0.12 supports torch >= 2.11 (see the
+          # compatibility table in the torchcodec README), so the latest torchcodec is fine.
+          TORCH_VERSION=$(sed -nE 's/^torch==([0-9.]+)\+cpu.*/\1/p' vllm/requirements/cpu.txt | head -n 1)
+          if [ -z "$TORCH_VERSION" ]; then
+            echo "ERROR: could not find the torch==<version>+cpu pin in vllm/requirements/cpu.txt" >&2
+            exit 1
+          fi
+          echo "torch version required by vLLM: $TORCH_VERSION"
+          uv pip install "torch==${TORCH_VERSION}" torchaudio torchvision torchcodec --index-url https://download.pytorch.org/whl/cpu
           uv pip install --no-deps timm accelerate
           uv pip install librosa
           uv pip install -e 'transformers/[sklearn,sentencepiece,vision,testing,tiktoken,num2words,video]'
           uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh
           uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
           VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
+          # TODO: install `kaldi-native-fbank` (listed in vLLM's requirements/test/cpu.txt, "required for fireredasr2
+          # test"). Without it, test_processing_correctness[...-vllm-project/FireRedASR2-LLM-vllm] fails with
+          # `ModuleNotFoundError: No module named 'kaldi_native_fbank'` (3 failures in run 42207123286).
           uv pip install tblib pqdm pytest-shard open-clip-torch==2.32.0 albumentations==1.4.6
-
-      - name: Patch vLLM gpu_memory_utilization for CPU
-        run: |
-          sed -i 's/gpu_memory_utilization: float = Field(default=0.92/gpu_memory_utilization: float = Field(default=0.4/g' vllm/vllm/config/cache.py
-          sed -i 's/gpu_memory_utilization: float = 0.92,/gpu_memory_utilization: float = 0.4,/g' vllm/vllm/entrypoints/llm.py
 
       - name: "Test: multimodal processing (shard ${{ matrix.shard }} / 4)"
         working-directory: vllm
@@ -521,3 +590,78 @@ jobs:
           pytest -v -s tests/models/multimodal/processing/ \
             --ignore tests/models/multimodal/processing/test_tensor_schema.py \
             --num-shards=4 --shard-id=$SHARD_ID
+
+  # Runs after all test jobs (even on failure) and produces structured JSON
+  # reports of failing tests, new failures vs the previous main-branch run,
+  # and a breakdown by error category. Reports are uploaded as an artifact.
+  vllm-ci-report:
+    name: "Generate vLLM CI failure report"
+    runs-on:
+      group: aws-m8i-8xl-cache
+    container:
+      image: huggingface/transformers-torch-light
+    if: always()
+    needs: [vllm, vllm-test-init, vllm-test-transformers, vllm-multimodal-processing]
+    # Override workflow-level permissions to add actions:read (needed to fetch job logs).
+    permissions:
+      actions: read
+      contents: read
+
+    steps:
+      - name: Checkout Transformers
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: huggingface/transformers
+          persist-credentials: false
+          path: transformers
+
+      - name: Generate failure report
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 transformers/utils/analyze_vllm_ci.py \
+            --run-id "$GITHUB_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --output-dir ./vllm-ci-reports \
+            --plugin vllm
+
+      - name: Show new failing tests
+        if: always()
+        run: |
+          python3 - <<'EOF'
+          import glob, json, os, sys
+
+          files = glob.glob("vllm-ci-reports/new_failing_tests_*.json")
+          files = [f for f in files if "with_trace" not in f]
+          if not files:
+              print("No new_failing_tests_*.json found — report may have failed to generate.")
+              sys.exit(0)
+
+          with open(files[0]) as f:
+              data = json.load(f)
+
+          total = data.get("total_new_failing", 0)
+          prev_url = data.get("previous_run_url") or "(none)"
+          print(f"Previous run : {prev_url}")
+          print(f"New failures : {total}")
+          print()
+
+          jobs = data.get("jobs", {})
+          if not jobs:
+              print("No new failing tests.")
+          else:
+              for job_name, job in jobs.items():
+                  print(f"  [{job_name}]  ({job['num_failing']} new)")
+                  print(f"    {job['job_url']}")
+                  for t in job["tests"]:
+                      print(f"    - {t}")
+                  print()
+          EOF
+
+      - name: Upload failure reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vllm-ci-failure-reports
+          path: vllm-ci-reports/
+          if-no-files-found: warn

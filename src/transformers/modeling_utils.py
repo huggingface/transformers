@@ -1284,7 +1284,7 @@ class PreTrainedModel(
                 loss_type = None
         self.loss_type = loss_type
 
-        _CAN_RECORD_REGISTRY[str(self.__class__)] = self._can_record_outputs  # added for executorch support only
+        _CAN_RECORD_REGISTRY[self] = self._can_record_outputs  # added for executorch support only
 
     def post_init(self):
         """
