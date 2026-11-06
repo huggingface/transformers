@@ -405,7 +405,10 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor.chat_template = (
             "{% if task == 'document' %}{{ document_token }}{% else %}{{ query_token }}{% endif %}"
         )
-        with self.assertRaisesRegex(ValueError, "the total number of <img> tokens"):
+        with self.assertRaisesRegex(
+            ValueError,
+            "The total number of <img> tokens in the prompts should be the same as the number of images passed",
+        ):
             processor.apply_chat_template(messages, task="document", tokenize=True)
 
         processor.chat_template = "{% if task %}{{ document_token + image_token + row_token }}{% endif %}"
