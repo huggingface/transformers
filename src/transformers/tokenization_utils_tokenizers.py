@@ -96,6 +96,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
     specific vocabulary augmentation methods of the various underlying dictionary structures (BPE, sentencepiece...).
     """
 
+    _backend_name = "tokenizers"
+
     vocab_files_names = VOCAB_FILES_NAMES
     model = None
     _tokenizer = None
@@ -446,10 +448,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             kwargs.setdefault("padding_side", _padding["direction"])
             kwargs.setdefault("max_length", _padding["length"])
             kwargs.setdefault("pad_to_multiple_of", _padding["pad_to_multiple_of"])
-
-        # Set backend to "tokenizers" if not already set
-        if "backend" not in kwargs:
-            kwargs["backend"] = "tokenizers"
 
         explicit_bos_eos_in_kwargs = "add_bos_token" in kwargs or "add_eos_token" in kwargs
         self._add_bos_token = kwargs.get("add_bos_token", False)
