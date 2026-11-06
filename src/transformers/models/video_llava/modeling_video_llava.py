@@ -165,11 +165,11 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
 
     @merge_with_config_defaults
     @can_return_tuple
+    @deprecate_kwarg("pixel_values_images", version="v5.23", new_name="pixel_values")
+    @select_hidden_states("vision_feature_layer")
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    @deprecate_kwarg("pixel_values_images", version="v5.23", new_name="pixel_values")
-    @select_hidden_states("vision_feature_layer")
     def get_image_features(
         self,
         pixel_values: torch.Tensor | None = None,
@@ -211,10 +211,10 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
 
     @merge_with_config_defaults
     @can_return_tuple
+    @select_hidden_states("vision_feature_layer")
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower and apply multimodal projection."
     )
-    @select_hidden_states("vision_feature_layer")
     def get_video_features(
         self,
         pixel_values_videos: torch.Tensor,

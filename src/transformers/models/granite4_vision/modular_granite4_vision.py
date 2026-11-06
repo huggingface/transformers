@@ -534,14 +534,14 @@ class Granite4VisionModel(LlavaNextModel):
 
     @merge_with_config_defaults
     @can_return_tuple
-    @auto_docstring(
-        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
-    )
     @select_hidden_states(
         lambda self: [
             *(vision_layer for vision_layer, _ in self.config.deepstack_layer_map),
             self.config.spatial_vision_layer,
         ]
+    )
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
     def get_image_features(
         self,

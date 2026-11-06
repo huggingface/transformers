@@ -388,10 +388,10 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
 
     @merge_with_config_defaults
     @can_return_tuple
+    @select_hidden_states("vision_feature_layer")
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    @select_hidden_states("vision_feature_layer")
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
@@ -594,10 +594,10 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
 
     @merge_with_config_defaults
     @can_return_tuple
+    @select_hidden_states("vision_feature_layer")
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower and apply multimodal projection."
     )
-    @select_hidden_states("vision_feature_layer")
     def get_video_features(
         self,
         pixel_values_videos: torch.Tensor,
