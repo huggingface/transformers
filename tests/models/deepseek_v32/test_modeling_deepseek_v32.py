@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch DeepSeekV3.2 model."""
 
+import tempfile
 import unittest
 
 import pytest
@@ -221,6 +222,17 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
 @slow
 @require_torch_accelerator
 class DeepseekV32IntegrationTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # `device_map="auto"` offloads most of this 1.37 TB checkpoint to disk. Weights that cannot be reused
+        # from the checkpoint (e.g. `lm_head`) are re-saved, which requires an `offload_folder`.
+        cls.offload_dir = tempfile.TemporaryDirectory()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.offload_dir.cleanup()
+        super().tearDownClass()
+
     def test_deepseek_v32(self):
         EXPECTED_TEXT = ['An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors. The output is computed as a weighted sum of the values, where the weight assigned to each value is computed by a compatibility function of the query with the corresponding key.\n\nWe call our particular attention "Scaled Dot-Product Attention" (Figure (left']  # fmt: skip
 
@@ -229,6 +241,7 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
             "deepseek-ai/DeepSeek-V3.2-Exp",
             device_map="auto",
             dtype=torch.bfloat16,
+            offload_folder=self.offload_dir.name,
         )
 
         input_text = [
@@ -248,6 +261,7 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
             device_map="auto",
             dtype=torch.bfloat16,
             attn_implementation="eager",
+            offload_folder=self.offload_dir.name,
         )
 
         with torch.no_grad():
@@ -268,6 +282,7 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
             device_map="auto",
             dtype=torch.bfloat16,
             attn_implementation="eager",
+            offload_folder=self.offload_dir.name,
         )
 
         inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
@@ -308,6 +323,7 @@ class DeepseekV32IntegrationTest(unittest.TestCase):
             device_map="auto",
             dtype=torch.bfloat16,
             attn_implementation="eager",
+            offload_folder=self.offload_dir.name,
         )
 
         # Left padding: the whole batch is correct.
