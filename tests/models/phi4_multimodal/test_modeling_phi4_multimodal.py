@@ -42,7 +42,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torchcodec_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -56,10 +55,6 @@ if is_torch_available():
 
 if is_vision_available():
     from PIL import Image
-
-
-if is_torchcodec_available():
-    pass
 
 
 class Phi4MultimodalModelTester:
