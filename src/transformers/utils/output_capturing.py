@@ -294,12 +294,12 @@ def select_hidden_states(selection: str | Callable[[PreTrainedModel], int | list
         @wraps(func)
         def wrapper(self, *args, **kwargs):
             if not kwargs.get("output_hidden_states"):
-                if callable(selection):
-                    kwargs["output_hidden_states"] = selection(self)
-                else:
+                if isinstance(selection, str):
                     arguments = signature.bind(self, *args, **kwargs)
                     arguments.apply_defaults()
                     kwargs["output_hidden_states"] = arguments.arguments[selection]
+                else:
+                    kwargs["output_hidden_states"] = selection(self)
             return func(self, *args, **kwargs)
 
         return wrapper
