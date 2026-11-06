@@ -2048,10 +2048,8 @@ class ModelTesterMixin(ExportTesterMixin):
         for model_class in self.all_model_classes:
             forward_params = inspect.signature(model_class.forward).parameters
             # Fixed so far: MoE heads (not MoE base models, which compute no loss from `labels`), and causal LM heads
-            # of text models
             if ("output_router_logits" in forward_params and "labels" in forward_params) or (
-                model_class.input_modalities in ("text", ("text",))
-                and model_class.__name__ in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES)
+                model_class.__name__ in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES)
             ):
                 model_classes.append(model_class)
         if not model_classes:

@@ -2321,8 +2321,6 @@ class Gemma3nModel(PaliGemmaModel):
     """
 )
 class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
-    accepts_loss_kwargs = False
-
     def get_per_layer_input_embeddings(self):
         return self.model.get_per_layer_input_embeddings()
 
