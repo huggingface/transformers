@@ -46,8 +46,7 @@ class AudioFlamingo3ModelTester(ALMModelTester):
     config_class = AudioFlamingo3Config
     base_model_class = AudioFlamingo3Model
     conditional_generation_class = AudioFlamingo3ForConditionalGeneration
-    text_config_class = Qwen2Config
-    audio_config_class = AudioFlamingo3EncoderConfig
+
     audio_mask_key = "input_features_mask"
 
     def __init__(self, parent, **kwargs):
