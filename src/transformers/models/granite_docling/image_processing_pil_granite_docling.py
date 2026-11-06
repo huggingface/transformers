@@ -31,6 +31,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
+    get_image_size,
     infer_channel_dimension_format,
     make_nested_list_of_images,
 )
@@ -168,6 +169,36 @@ def get_tile_budget(
     return dense_max_patches
 
 
+def get_page_max_patches(
+    height: int,
+    width: int,
+    size: SizeDict | dict,
+    crop_to_patches: bool,
+    min_patches: int,
+    max_patches: int,
+    dense_max_patches: int = 0,
+    dense_max_scale: float = 0.0,
+    dense_min_aspect: float = 0.0,
+    dense_max_aspect: float = 0.0,
+) -> int:
+    """
+    The most tiles a page may be split into: 1 when pages are not split, `dense_max_patches` when the spread rule
+    selects the page, otherwise `max_patches`.
+    """
+    if not crop_to_patches or max_patches <= 1:
+        return 1
+    return get_tile_budget(
+        (height, width),
+        (size["height"], size["width"]),
+        min_patches,
+        max_patches,
+        dense_max_patches,
+        dense_max_scale,
+        dense_min_aspect,
+        dense_max_aspect,
+    )
+
+
 def get_page_tile_grid(
     height: int,
     width: int,
@@ -181,12 +212,11 @@ def get_page_tile_grid(
     dense_max_aspect: float = 0.0,
 ) -> tuple[int, int]:
     """The `(num_rows, num_columns)` tile grid of a page. A page that is not split is a 1x1 grid."""
-    if not crop_to_patches or max_patches <= 1:
-        return 1, 1
-    tile_size = (size["height"], size["width"])
-    max_patches = get_tile_budget(
-        (height, width),
-        tile_size,
+    max_patches = get_page_max_patches(
+        height,
+        width,
+        size,
+        crop_to_patches,
         min_patches,
         max_patches,
         dense_max_patches,
@@ -194,6 +224,9 @@ def get_page_tile_grid(
         dense_min_aspect,
         dense_max_aspect,
     )
+    if max_patches <= 1:
+        return 1, 1
+    tile_size = (size["height"], size["width"])
     num_columns, num_rows = get_optimal_tiled_canvas((height, width), tile_size, min_patches, max_patches)
     return num_rows, num_columns
 
@@ -229,20 +262,53 @@ class GraniteDoclingImageProcessorPil(PilBackend):
     def crop_image_to_patches(
         self,
         image: np.ndarray,
-        num_rows: int,
-        num_columns: int,
-        patch_size: SizeDict,
+        min_patches: int,
+        max_patches: int,
         use_thumbnail: bool = True,
-        resample=None,
+        patch_size: SizeDict | None = None,
+        resample: "PILImageResampling | None" = None,
     ):
-        """GotOcr2's PIL crop, on the `(num_rows, num_columns)` grid from `get_tile_grid`."""
+        """
+        Crop the image to patches and return a list of cropped images.
+        The number of patches and their grid arrangement are determined by the original image size,
+        the target patch size and the minimum and maximum number of patches.
+        The aspect ratio of the patches grid is chosen to be the closest to the original image aspect ratio.
+
+        Args:
+            image (`np.ndarray`):
+                The image to be cropped.
+            min_patches (`int`):
+                The minimum number of patches to be extracted from the image.
+            max_patches (`int`):
+                The maximum number of patches to be extracted from the image.
+            use_thumbnail (`bool`, *optional*, defaults to `True`):
+                Whether to add a thumbnail image to the list of cropped patches.
+            patch_size (`SizeDict`, *optional*):
+                The size of the output patches.
+            resample (`PILImageResampling | int | None`, *optional*):
+                Resampling filter to use when resizing.
+        """
+        # Ensure image is in CHW format for processing
         input_data_format = infer_channel_dimension_format(image)
         image = to_channel_dimension_format(image, ChannelDimension.FIRST, input_data_format)
-        patch_size_height, patch_size_width = patch_size["height"], patch_size["width"]
-        target_size = SizeDict(height=patch_size_height * num_rows, width=patch_size_width * num_columns)
-        resized_image = self.resize(image, target_size, resample=resample)
+
+        patch_size_height, patch_size_width = patch_size.height, patch_size.width
+        original_height, original_width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
+        # find the closest aspect ratio to the target
+        num_columns, num_rows = get_optimal_tiled_canvas(
+            (original_height, original_width), (patch_size_height, patch_size_width), min_patches, max_patches
+        )
+
+        # calculate the target width and height
+        target_width = patch_size_width * num_columns
+        target_height = patch_size_height * num_rows
+        num_blocks = num_columns * num_rows
+
+        # resize the image so that each patch is of patch_size
+        resized_image = self.resize(image, SizeDict(height=target_height, width=target_width), resample=resample)
+        # split the image into patches
         processed_images = []
-        for i in range(num_columns * num_rows):
+        for i in range(num_blocks):
             column = i % num_columns
             row = i // num_columns
             box = (
@@ -251,15 +317,17 @@ class GraniteDoclingImageProcessorPil(PilBackend):
                 (column + 1) * patch_size_width,
                 (row + 1) * patch_size_height,
             )
+            # split the image (images are CHW format)
             patch_image = resized_image[..., box[1] : box[3], box[0] : box[2]]
-            processed_images.append(
-                to_channel_dimension_format(patch_image, input_data_format, ChannelDimension.FIRST)
-            )
+            # Convert back to original format
+            patch_image = to_channel_dimension_format(patch_image, input_data_format, ChannelDimension.FIRST)
+            processed_images.append(patch_image)
+
         if use_thumbnail and len(processed_images) != 1:
             thumbnail_img = self.resize(image, patch_size, resample=resample)
-            processed_images.append(
-                to_channel_dimension_format(thumbnail_img, input_data_format, ChannelDimension.FIRST)
-            )
+            thumbnail_img = to_channel_dimension_format(thumbnail_img, input_data_format, ChannelDimension.FIRST)
+            processed_images.append(thumbnail_img)
+
         return processed_images
 
     def _preprocess(
@@ -298,8 +366,14 @@ class GraniteDoclingImageProcessorPil(PilBackend):
         for sample in images:
             sample_tiles, sample_rows, sample_cols = [], [], []
             for image in sample:
-                num_rows, num_cols = self.get_tile_grid(*image.shape[-2:], grid_kwargs)
-                for tile in self.crop_image_to_patches(image, num_rows, num_cols, size, resample=resample):
+                height, width = image.shape[-2:]
+                num_rows, num_cols = self.get_tile_grid(height, width, grid_kwargs)
+                # GotOcr2's crop selects the grid itself, from the same tile budget as `get_tile_grid`
+                max_tiles = get_page_max_patches(height, width, **grid_kwargs)
+                tiles_of_image = self.crop_image_to_patches(
+                    image, min(min_patches, max_tiles), max_tiles, patch_size=size, resample=resample
+                )
+                for tile in tiles_of_image:
                     if do_rescale:
                         tile = self.rescale(tile, rescale_factor)
                     if do_normalize:

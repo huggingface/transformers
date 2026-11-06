@@ -148,7 +148,7 @@ output = model.generate(**inputs, max_new_tokens=4096)
 The 500M model (`config.density_router_hidden_size` is set) predicts which pages need the fine path from its default image tokens:
 
 ```python
-needs_fine = model.model.predict_fine_route(inputs["pixel_values"])  # (batch_size,) bool
+needs_fine = model.model.predict_fine_route(inputs["pixel_values"], inputs["pixel_attention_mask"])  # (batch_size,) bool
 if needs_fine[0]:
     inputs = processor.apply_chat_template(
         conversation,
@@ -163,7 +163,7 @@ output = model.generate(**inputs, max_new_tokens=4096)
 
 ### Batched inference
 
-Pages get different tile grids, so `pixel_values` is padded to the largest tile count in the batch with all-zero tiles that the model discards.
+Pages get different tile grids, so `pixel_values` is padded to the largest tile count in the batch. `pixel_attention_mask` marks the real tiles and the model discards the padding.
 
 ```python
 pages = [
@@ -189,7 +189,7 @@ for row in output:
     print(doclang.removesuffix(processor.tokenizer.eos_token).strip())
 ```
 
-Add `"fine_route": True` to `processor_kwargs` to route the whole batch through the fine path; `tile_fine_mask` in the inputs then marks the tiles that take it.
+Add `"fine_route": True` to `processor_kwargs` to route the whole batch through the fine path; the processor then returns `tile_fine_mask`. A batch takes one path, so run the pages the router sends to the fine path as their own batch.
 
 ### Export DocLang with Docling
 

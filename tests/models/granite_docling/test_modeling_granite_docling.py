@@ -13,10 +13,10 @@
 # limitations under the License.
 """Testing suite for the PyTorch GraniteDocling model."""
 
-import copy
 import tempfile
 import unittest
 
+from huggingface_hub import hf_hub_download
 from huggingface_hub.errors import StrictDataclassClassValidationError
 
 from transformers import (
@@ -69,7 +69,7 @@ class GraniteDoclingModelTester(VLMModelTester):
         # The checkpoint defaults scale attention scores by 1/64; keep the usual 1/sqrt(head_dim) for the tiny model
         kwargs.setdefault("attention_multiplier", (kwargs["hidden_size"] // kwargs["num_attention_heads"]) ** -0.5)
         # A 16x16 tile with 4x4 patches gives 16 patch tokens per tile; pixel shuffling by 2 leaves 4 image tokens
-        # on the coarse path and 16 on the fine path.
+        # on the coarse path, which the shared tests take, and 16 on the fine path.
         kwargs.setdefault("image_size", 16)
         kwargs.setdefault("patch_size", 4)
         kwargs.setdefault("scale_factor", 2)
@@ -91,17 +91,14 @@ class GraniteDoclingModelTester(VLMModelTester):
         input_ids = input_ids.clone()
         input_ids[input_ids == image_token_id] = self.bos_token_id
         input_ids[:, : self.num_image_tokens] = image_token_id
-        # The first sample takes the fine path, so both connector routes receive a gradient.
-        input_ids[0, : self.num_image_tokens * 4] = image_token_id
         return input_ids
 
     def get_additional_inputs(self, config, input_ids, pixel_values, batch_size=None):
-        batch = pixel_values.shape[0]
-        tile_fine_mask = torch.zeros(batch, dtype=torch.bool)
-        tile_fine_mask[0] = True
-        router_labels = torch.zeros(batch, dtype=torch.float32)
+        # As from the processor: every tile is real and the batch takes the coarse path (no `tile_fine_mask`)
+        pixel_attention_mask = torch.ones(pixel_values.shape[:2], dtype=torch.bool, device=pixel_values.device)
+        router_labels = torch.zeros(pixel_values.shape[0], dtype=torch.float32)
         router_labels[0] = 1.0
-        return {"tile_fine_mask": tile_fine_mask, "router_labels": router_labels}
+        return {"pixel_attention_mask": pixel_attention_mask, "router_labels": router_labels}
 
 
 @require_torch
@@ -109,6 +106,8 @@ class GraniteDoclingModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = GraniteDoclingModelTester
     # Image tokens of all tiles come flattened in tile order, not one row per image
     skip_test_image_features_output_shape = True
+    # A batch takes one connector path, so the fine path gets no gradient from the coarse batch of the shared tests
+    test_all_params_have_gradient = False
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         # Like `labels`, the router labels are a training target, not a generation input
@@ -119,38 +118,49 @@ class GraniteDoclingModelTest(VLMModelTest, unittest.TestCase):
     def test_fine_route_image_features(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = GraniteDoclingModel(config).to(torch_device).eval()
-        pixel_values = inputs_dict["pixel_values"]
+        pixel_values, pixel_attention_mask = inputs_dict["pixel_values"], inputs_dict["pixel_attention_mask"]
         batch_size = pixel_values.shape[0]
         hidden_size = config.text_config.hidden_size
         coarse_tokens = self.model_tester.num_image_tokens
         fine_tokens = coarse_tokens * 4
 
         with torch.no_grad():
-            coarse = model.get_image_features(pixel_values)
-            fine = model.get_image_features(pixel_values, tile_fine_mask=torch.ones(batch_size, dtype=torch.bool))
-            mixed_mask = torch.zeros(batch_size, dtype=torch.bool)
-            mixed_mask[0] = True
-            mixed = model.get_image_features(pixel_values, tile_fine_mask=mixed_mask)
+            coarse = model.get_image_features(pixel_values, pixel_attention_mask)
+            fine = model.get_image_features(
+                pixel_values, pixel_attention_mask, tile_fine_mask=torch.ones(batch_size, dtype=torch.bool)
+            )
 
-        coarse_tokens_all = _concat_features(coarse.pooler_output)
-        fine_tokens_all = _concat_features(fine.pooler_output)
-        mixed_tokens_all = _concat_features(mixed.pooler_output)
-        self.assertEqual(coarse_tokens_all.shape, (batch_size * coarse_tokens, hidden_size))
-        self.assertEqual(fine_tokens_all.shape, (batch_size * fine_tokens, hidden_size))
-        # Mixed routes: the first tile is fine, the others coarse
-        self.assertEqual(mixed_tokens_all.shape, (fine_tokens + (batch_size - 1) * coarse_tokens, hidden_size))
-        torch.testing.assert_close(mixed_tokens_all[:fine_tokens], fine_tokens_all[:fine_tokens])
-        torch.testing.assert_close(mixed_tokens_all[fine_tokens:], coarse_tokens_all[coarse_tokens:])
-        for coarse_features, fine_features, mixed_features in zip(
-            coarse.deepstack_features, fine.deepstack_features, mixed.deepstack_features
-        ):
-            coarse_features = _concat_features(coarse_features)
-            fine_features = _concat_features(fine_features)
-            mixed_features = _concat_features(mixed_features)
-            self.assertEqual(coarse_features.shape, (batch_size * coarse_tokens, hidden_size))
-            self.assertEqual(fine_features.shape, (batch_size * fine_tokens, hidden_size))
-            torch.testing.assert_close(mixed_features[:fine_tokens], fine_features[:fine_tokens])
-            torch.testing.assert_close(mixed_features[fine_tokens:], coarse_features[coarse_tokens:])
+        # One tensor per sample, four times as many image tokens per tile on the fine path
+        self.assertEqual(len(coarse.pooler_output), batch_size)
+        self.assertEqual(_concat_features(coarse.pooler_output).shape, (batch_size * coarse_tokens, hidden_size))
+        self.assertEqual(_concat_features(fine.pooler_output).shape, (batch_size * fine_tokens, hidden_size))
+        for coarse_features, fine_features in zip(coarse.deepstack_features, fine.deepstack_features):
+            self.assertEqual(_concat_features(coarse_features).shape, (batch_size * coarse_tokens, hidden_size))
+            self.assertEqual(_concat_features(fine_features).shape, (batch_size * fine_tokens, hidden_size))
+        # The vision encoder does not depend on the route
+        torch.testing.assert_close(coarse.last_hidden_state, fine.last_hidden_state)
+
+    def test_padding_tiles_are_dropped(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = GraniteDoclingModel(config).to(torch_device).eval()
+        pixel_values = inputs_dict["pixel_values"]
+        batch_size = pixel_values.shape[0]
+        # Every sample gets a second tile, which is a real tile for the first sample only
+        padded_pixel_values = torch.cat([pixel_values, torch.rand_like(pixel_values)], dim=1)
+        pixel_attention_mask = torch.ones(batch_size, 2, dtype=torch.bool, device=pixel_values.device)
+        pixel_attention_mask[1:, 1] = False
+
+        with torch.no_grad():
+            features = model.get_image_features(padded_pixel_values, pixel_attention_mask)
+            reference = model.get_image_features(pixel_values, inputs_dict["pixel_attention_mask"])
+
+        tile_tokens = self.model_tester.num_image_tokens
+        self.assertEqual(
+            [len(sample) for sample in features.pooler_output], [2 * tile_tokens] + [tile_tokens] * (batch_size - 1)
+        )
+        for sample, expected in zip(features.pooler_output[1:], reference.pooler_output[1:]):
+            torch.testing.assert_close(sample, expected)
+        self.assertEqual(features.router_logits.shape, (batch_size,))
 
     def test_router_loss(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -177,54 +187,6 @@ class GraniteDoclingModelTest(VLMModelTest, unittest.TestCase):
         self.assertIsNone(outputs.router_logits)
         self.assertTrue(torch.isfinite(outputs.loss))
 
-    def test_mismatching_num_image_tokens(self):
-        # The shared test concatenates the batch, which repeats the first sample's fine route.
-        # The new pixel batch only marks sample 0, so mark that repeated sample as fine too.
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model.eval()
-            curr_input_dict = copy.deepcopy(input_dict)
-
-            input_ids = curr_input_dict["input_ids"]
-            batch_size = input_ids.shape[0]
-            _ = model(**curr_input_dict)
-
-            smaller_input_ids, smaller_input_dict = self.model_tester._prepare_modality_inputs(
-                input_ids, config, batch_size=batch_size - 1
-            )
-            smaller_input_dict.update({k: v for k, v in curr_input_dict.items() if k not in smaller_input_dict})
-            if "mm_token_type_ids" in curr_input_dict:
-                smaller_input_dict["mm_token_type_ids"] = curr_input_dict["mm_token_type_ids"]
-            elif "token_type_ids" in curr_input_dict:
-                smaller_input_dict["token_type_ids"] = curr_input_dict["token_type_ids"]
-            with self.assertRaises(ValueError):
-                _ = model(**smaller_input_dict)
-
-            single_input_ids, single_input_dict = self.model_tester._prepare_modality_inputs(
-                input_ids, config, batch_size=1
-            )
-            batch_tensors_to_double = ["input_ids", "attention_mask", "token_type_ids", "mm_token_type_ids"]
-            for key in batch_tensors_to_double:
-                if key in curr_input_dict and curr_input_dict[key] is not None:
-                    curr_input_dict[key] = torch.cat([curr_input_dict[key], curr_input_dict[key]], dim=0)
-            with self.assertRaises(ValueError):
-                _ = model(**curr_input_dict)
-
-            double_input_ids, double_input_dict = self.model_tester._prepare_modality_inputs(
-                input_ids, config, batch_size=batch_size * 2
-            )
-            double_input_dict.update({k: v for k, v in curr_input_dict.items() if k not in double_input_dict})
-            if "mm_token_type_ids" in curr_input_dict:
-                double_input_dict["mm_token_type_ids"] = curr_input_dict["mm_token_type_ids"]
-            elif "token_type_ids" in curr_input_dict:
-                double_input_dict["token_type_ids"] = curr_input_dict["token_type_ids"]
-            fine = torch.zeros(batch_size * 2, dtype=torch.bool)
-            fine[0] = True
-            fine[batch_size] = True
-            double_input_dict["tile_fine_mask"] = fine
-            _ = model(**double_input_dict)
-
     def test_mtp_heads_of_a_checkpoint_are_ignored(self):
         # Serving engines use the multi-token prediction heads; transformers loads the checkpoint without them
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -241,7 +203,9 @@ class GraniteDoclingModelTest(VLMModelTest, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = GraniteDoclingForConditionalGeneration(config).to(torch_device).eval()
         with torch.no_grad():
-            fine_route = model.model.predict_fine_route(inputs_dict["pixel_values"])
+            fine_route = model.model.predict_fine_route(
+                inputs_dict["pixel_values"], inputs_dict["pixel_attention_mask"]
+            )
         self.assertEqual(fine_route.shape, (inputs_dict["pixel_values"].shape[0],))
         self.assertEqual(fine_route.dtype, torch.bool)
 
@@ -252,16 +216,18 @@ class GraniteDoclingModelTest(VLMModelTest, unittest.TestCase):
         fine_tokens = 4 * self.model_tester.num_image_tokens
         fine_input_ids = torch.full((batch_size, fine_tokens + 5), 4, dtype=torch.long, device=torch_device)
         fine_input_ids[:, :fine_tokens] = config.image_token_id
-        tile_fine_mask = torch.ones(batch_size, dtype=torch.bool, device=torch_device)
+        pixel_inputs = {
+            "pixel_values": inputs_dict["pixel_values"],
+            "pixel_attention_mask": inputs_dict["pixel_attention_mask"],
+            "tile_fine_mask": torch.ones(batch_size, dtype=torch.bool, device=torch_device),
+        }
 
         with torch.no_grad():
-            outputs = model(
-                input_ids=fine_input_ids, pixel_values=inputs_dict["pixel_values"], tile_fine_mask=tile_fine_mask
-            )
+            outputs = model(input_ids=fine_input_ids, **pixel_inputs)
         self.assertEqual(outputs.logits.shape, (batch_size, fine_input_ids.shape[1], config.text_config.vocab_size))
         coarse_input_ids = fine_input_ids[:, : self.model_tester.num_image_tokens + 5]
         with self.assertRaises(ValueError):
-            model(input_ids=coarse_input_ids, pixel_values=inputs_dict["pixel_values"], tile_fine_mask=tile_fine_mask)
+            model(input_ids=coarse_input_ids, **pixel_inputs)
 
     def test_deepstack_taps_vision_layer_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -279,18 +245,16 @@ class GraniteDoclingModelTest(VLMModelTest, unittest.TestCase):
             for index, layer in enumerate(model.vision_model.encoder.layers)
         ]
         with torch.no_grad():
-            features = model.get_image_features(pixel_values)
+            features = model.get_image_features(pixel_values, inputs_dict["pixel_attention_mask"])
         for hook in hooks:
             hook.remove()
 
         self.assertEqual(len(features.deepstack_features), len(config.vision_config.deepstack_visual_indexes))
         for slot, vision_layer_idx in enumerate(config.vision_config.deepstack_visual_indexes):
-            connector = model.vision_model.connector
+            coarse = model.vision_model.connector.coarse
             with torch.no_grad():
-                expected = connector.coarse.deepstack_mergers[slot](
-                    connector.pixel_shuffle(
-                        layer_outputs[vision_layer_idx].contiguous(), connector.coarse.scale_factor
-                    )
+                expected = coarse.deepstack_mergers[slot](
+                    coarse.pixel_shuffle(layer_outputs[vision_layer_idx].contiguous(), coarse.scale_factor)
                 )
             torch.testing.assert_close(_concat_features(features.deepstack_features[slot]), expected.flatten(0, 1))
 
@@ -305,13 +269,11 @@ class GraniteDoclingModelTest(VLMModelTest, unittest.TestCase):
 
         pixel_values = inputs_dict["pixel_values"]
         with torch.no_grad():
-            coarse = model.get_image_features(pixel_values)
+            coarse = model.get_image_features(pixel_values, inputs_dict["pixel_attention_mask"])
         self.assertEqual(
             _concat_features(coarse.pooler_output).shape,
             (pixel_values.shape[0] * self.model_tester.num_image_tokens, config.text_config.hidden_size),
         )
-        with self.assertRaises(ValueError):
-            model.get_image_features(pixel_values, tile_fine_mask=torch.ones(pixel_values.shape[0], dtype=torch.bool))
         # The density router selects the fine path, so it cannot be built without it
         with self.assertRaisesRegex(StrictDataclassClassValidationError, "use_fine_route=True"):
             GraniteDoclingConfig(
@@ -321,7 +283,7 @@ class GraniteDoclingModelTest(VLMModelTest, unittest.TestCase):
 
     def test_beam_search_expands_per_sample_image_features(self):
         # Generation repeats each sample's image features once per beam, which needs one feature tensor per sample.
-        # The two samples have different tile counts, so the second one carries an all-zero padding tile.
+        # The two samples have different tile counts, so the second one carries a padding tile.
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         model = GraniteDoclingForConditionalGeneration(config).to(torch_device).eval()
         tile_tokens = self.model_tester.num_image_tokens
@@ -332,16 +294,22 @@ class GraniteDoclingModelTest(VLMModelTest, unittest.TestCase):
         input_ids[1, :tile_tokens] = config.image_token_id
         tester = self.model_tester
         pixel_values = floats_tensor([2, 2, tester.num_channels, tester.image_size, tester.image_size], scale=1.0)
-        pixel_values[1, 1] = 0.0
+        pixel_attention_mask = torch.tensor([[True, True], [True, False]], device=torch_device)
         generate_kwargs = {"max_new_tokens": 4, "min_new_tokens": 4, "pad_token_id": config.text_config.pad_token_id}
 
         with torch.no_grad():
             beams = model.generate(
-                input_ids=input_ids, pixel_values=pixel_values, num_beams=2, num_return_sequences=2, **generate_kwargs
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                pixel_attention_mask=pixel_attention_mask,
+                num_beams=2,
+                num_return_sequences=2,
+                **generate_kwargs,
             )
             sampled = model.generate(
                 input_ids=input_ids,
                 pixel_values=pixel_values,
+                pixel_attention_mask=pixel_attention_mask,
                 do_sample=True,
                 num_return_sequences=2,
                 **generate_kwargs,
@@ -349,6 +317,7 @@ class GraniteDoclingModelTest(VLMModelTest, unittest.TestCase):
             first_alone = model.generate(
                 input_ids=input_ids[:1],
                 pixel_values=pixel_values[:1],
+                pixel_attention_mask=pixel_attention_mask[:1],
                 num_beams=2,
                 num_return_sequences=2,
                 **generate_kwargs,
@@ -356,6 +325,7 @@ class GraniteDoclingModelTest(VLMModelTest, unittest.TestCase):
             second_alone = model.generate(
                 input_ids=input_ids[1:],
                 pixel_values=pixel_values[1:, :1],
+                pixel_attention_mask=pixel_attention_mask[1:, :1],
                 num_beams=2,
                 num_return_sequences=2,
                 **generate_kwargs,
@@ -370,13 +340,12 @@ class GraniteDoclingModelTest(VLMModelTest, unittest.TestCase):
 
 @require_torch
 class GraniteDoclingIntegrationTest(unittest.TestCase):
-    # Local copy of the checkpoint until the renamed checkpoint is on the Hub (docling-project/granite-for-docling-500m)
-    model_id = "/proj/docling-vision/models/GraniteDocling500m-2026-10-19"
+    model_id = "ibm-granite/granite-for-docling-500m"
 
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained(self.model_id)
         # Page 1 of Auer et al., "Docling Technical Report", arXiv:2408.09869, stored next to the checkpoint
-        self.image = load_image(f"{self.model_id}/docling_technical_report_p1.png")
+        self.image = load_image(hf_hub_download(self.model_id, "docling_technical_report_p1.png"))
         messages = [{"role": "user", "content": [{"type": "image"}, {"type": "text", "text": "<doclang>"}]}]
         self.prompt = self.processor.apply_chat_template(messages, add_generation_prompt=True)
 
@@ -430,51 +399,27 @@ class GraniteDoclingIntegrationTest(unittest.TestCase):
         generated_text = self.processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=False)
         self.assertEqual(generated_text, expected_output.get_expectation())
 
-    def _batch_coarse_and_fine(self, coarse, fine):
-        """Batch one coarse page and one fine page. Prompts are left-padded, tiles are padded at the end."""
-        pad_id = self.processor.tokenizer.pad_token_id
-        max_len = max(coarse["input_ids"].shape[1], fine["input_ids"].shape[1])
-        max_tiles = max(coarse["pixel_values"].shape[1], fine["pixel_values"].shape[1])
-
-        def left_pad(values, value):
-            extra = max_len - values.shape[1]
-            return torch.cat([values.new_full((values.shape[0], extra), value), values], dim=1)
-
-        def pad_tiles(values):
-            extra = max_tiles - values.shape[1]
-            return torch.cat([values, values.new_zeros(values.shape[0], extra, *values.shape[2:])], dim=1)
-
-        return {
-            "input_ids": torch.cat([left_pad(coarse["input_ids"], pad_id), left_pad(fine["input_ids"], pad_id)]),
-            "attention_mask": torch.cat([left_pad(coarse["attention_mask"], 0), left_pad(fine["attention_mask"], 0)]),
-            "pixel_values": torch.cat([pad_tiles(coarse["pixel_values"]), pad_tiles(fine["pixel_values"])]),
-            "pixel_attention_mask": torch.cat(
-                [pad_tiles(coarse["pixel_attention_mask"]), pad_tiles(fine["pixel_attention_mask"])]
-            ),
-            "tile_fine_mask": torch.tensor([False, True]),
-        }
-
     @slow
     def test_model_integration_batched(self):
         expected_output = Expectations(
             {
                 ("cuda", None): [
                     '<doclang><page_header><layer value="furniture"/><location value="15"/><location value="105"/><location value="30"/><location value="359"/>arXiv:2408.09869v5  [cs.CL]  9 Dec ',
-                    '<doclang><picture><label value="logo"/><location value="221"/><location value="151"/><location value="290"/><location value="317"/></picture><heading level="2"><location value="177"/><location value="432"/><location value="334"/><location value="467"/>Docling Technical Report</heading><page_footer><layer value="furniture"/><location value="13"/><location value="417"/><location value="29"/><location value="496"/>2024</page_footer></doclang>',
+                    '<doclang><picture><label value="logo"/><location value="220"/><location value="150"/><location value="291"/><location value="318"/></picture><heading level="2"><location value="177"/><location value="432"/><location value="334"/><location value="467"/>Docling Technical Report</heading><page_footer><layer value="furniture"/><location value="13"/><location value="417"/><location value="29"/><location value="496"/>2024</page_footer></doclang>',
                 ]
             }
         )
         model = GraniteDoclingForConditionalGeneration.from_pretrained(self.model_id, dtype=torch.bfloat16).to(
             torch_device
         )
-        # The top third of the report page is a wide strip, so it takes a different tile grid from the full page.
-        # The full page stays coarse and the strip takes the fine route.
+        # The top third of the report page is a wide strip, so it takes a different tile grid from the full page
+        # and the processor pads its tiles.
         strip = self.image.crop((0, 0, self.image.width, self.image.height // 3))
-        coarse = self.processor(text=self.prompt, images=self.image, return_tensors="pt")
-        fine = self.processor(text=self.prompt, images=strip, return_tensors="pt", fine_route=True)
-        self.assertNotEqual(coarse["pixel_values"].shape[1], fine["pixel_values"].shape[1])
-        self.assertNotIn("tile_fine_mask", coarse)
-        inputs = {name: value.to(model.device) for name, value in self._batch_coarse_and_fine(coarse, fine).items()}
+        pages = [self.image, strip]
+        inputs = self.processor(
+            text=[self.prompt, self.prompt], images=[[page] for page in pages], padding=True, return_tensors="pt"
+        ).to(model.device)
+        self.assertFalse(inputs["pixel_attention_mask"].all())
 
         output = model.generate(**inputs, max_new_tokens=32, do_sample=False)
         generated_texts = self.processor.batch_decode(
@@ -483,8 +428,8 @@ class GraniteDoclingIntegrationTest(unittest.TestCase):
         self.assertEqual(generated_texts, expected_output.get_expectation())
 
         # Each page of the batch decodes as it does alone
-        for single, generated_text in zip((coarse, fine), generated_texts):
-            single = single.to(model.device)
+        for page, generated_text in zip(pages, generated_texts):
+            single = self.processor(text=self.prompt, images=page, return_tensors="pt").to(model.device)
             alone = model.generate(**single, max_new_tokens=32, do_sample=False)
             alone_text = self.processor.decode(alone[0, single["input_ids"].shape[1] :], skip_special_tokens=False)
             self.assertEqual(alone_text, generated_text)
@@ -495,6 +440,6 @@ class GraniteDoclingIntegrationTest(unittest.TestCase):
             torch_device
         )
         inputs = self.processor(text=self.prompt, images=self.image, return_tensors="pt").to(model.device)
-        route = model.model.predict_fine_route(inputs["pixel_values"])
+        route = model.model.predict_fine_route(inputs["pixel_values"], inputs["pixel_attention_mask"])
         self.assertEqual(tuple(route.shape), (1,))
         self.assertEqual(route.dtype, torch.bool)

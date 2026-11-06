@@ -30,8 +30,8 @@ if is_torch_available():
 @require_vision
 class GraniteDoclingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = GraniteDoclingProcessor
-    # Local copy of the checkpoint until the renamed checkpoint is on the Hub (docling-project/granite-for-docling-500m)
-    model_id = "/proj/docling-vision/models/GraniteDocling500m-2026-10-19"
+    tiny_model_id = "hf-internal-testing/tiny-processor-granite-docling"
+    model_id = "ibm-granite/granite-for-docling-500m"
 
     @classmethod
     def _setup_test_attributes(cls, processor):

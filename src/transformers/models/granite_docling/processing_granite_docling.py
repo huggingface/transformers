@@ -20,8 +20,6 @@
 from itertools import accumulate
 from typing import TYPE_CHECKING, Union
 
-import numpy as np
-
 from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, TextInput
@@ -144,27 +142,6 @@ class GraniteDoclingProcessor(ProcessorMixin):
                 f"\n{self.fake_image_token}{self.global_image_tag}{image_tokens}{self.fake_image_token}"
             )
         return text_split_images
-
-    def create_mm_token_type_ids(self, input_ids: list, batch_image_seq_lengths: list[int]) -> list[list[int]]:
-        # We have to iterate for each list separately because inputs
-        # might be non-padded lists and we can't cast numpy on that!
-        # Then cast numpy as each input for faster indexing
-        mm_token_type_ids = []
-        for i, seq_lengths in enumerate(batch_image_seq_lengths):
-            array_ids = np.array(input_ids[i])
-            mm_token_types = np.zeros_like(array_ids)
-            image_start_positions = np.where(array_ids == self.fake_image_token_id)[0]
-            j = 0
-            for seq_len in seq_lengths:
-                if j >= len(image_start_positions):
-                    break
-                start = image_start_positions[j]
-                end = start + seq_len
-                mm_token_types[start:end] = 1
-                j = np.searchsorted(image_start_positions, end)
-            mm_token_type_ids.append(mm_token_types.tolist())
-
-        return mm_token_type_ids
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
