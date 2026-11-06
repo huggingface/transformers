@@ -980,6 +980,11 @@ class MiniMaxM3VLModel(LlavaModel):
         self.language_model = MiniMaxM3VLTextModel(config.text_config)
         self.post_init()
 
+    @merge_with_config_defaults
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
     def get_image_features(
         self,
         pixel_values: torch.Tensor,

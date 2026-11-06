@@ -765,7 +765,7 @@ class PeAudioModel(PeAudioPreTrainedModel):
             input_values=input_values, padding_mask=padding_mask, **kwargs
         )
 
-        kwargs["output_hidden_states"] = True
+        kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or -1
         text_outputs: MaskedLMOutput = self.text_model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
 
         audio_embeds = audio_outputs.pooler_output
@@ -831,7 +831,7 @@ class PeAudioFrameLevelModel(PeAudioModel):
         audio_outputs: BaseModelOutputWithPooling = self.audio_encoder(
             input_values=input_values, padding_mask=padding_mask, **kwargs
         )
-        kwargs["output_hidden_states"] = True
+        kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or -1
         text_outputs: MaskedLMOutput = self.text_model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
 
         audio_embeds = audio_outputs.last_hidden_state
