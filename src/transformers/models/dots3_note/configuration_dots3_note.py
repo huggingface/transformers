@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
@@ -27,14 +27,12 @@ from ...utils import auto_docstring
 @strict
 class Dots3NoteVisionConfig(PreTrainedConfig):
     r"""
-    embed_dim (`int`, *optional*, defaults to 1536):
-        Width of the patch embeddings and transformer blocks.
     mlp_layer_types (`list[str]`, *optional*):
         Dense or sparse MLP for each layer. Expert counts are specified through `per_layer_config`.
     router_scaling_factor (`float`, *optional*, defaults to 1.0):
         Scale applied to the vision router scores.
     adapter_in_dim (`int`, *optional*, defaults to 1536):
-        Input width of the vision adapter. It must match `embed_dim`.
+        Input width of the vision adapter. It must match `hidden_size`.
     adapter_out_dim (`int`, *optional*, defaults to 5120):
         Output width of the vision adapter. It must match the text hidden size.
     adapter_merge_size (`int`, *optional*, defaults to 2):
@@ -43,6 +41,7 @@ class Dots3NoteVisionConfig(PreTrainedConfig):
 
     model_type = "dots3_note_vision_encoder"
     base_config_key = "vision_config"
+
     hidden_size: int = 1536
     intermediate_size: int = 4224
     num_hidden_layers: int = 42
@@ -54,8 +53,16 @@ class Dots3NoteVisionConfig(PreTrainedConfig):
     default_rope_type = "axial"
     initializer_range: float = 0.02
     rope_parameters: dict | None = None
-
-    embed_dim: int = 1536
+    base_model_tp_plan = {
+        "blocks.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "blocks.*.mlp.experts.down_proj": "rowwise",
+        "blocks.*.mlp.experts": "moe_tp_experts",
+    }
+    base_model_ep_plan = {
+        "blocks.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "blocks.*.mlp.experts.down_proj": "grouped_gemm",
+        "blocks.*.mlp.experts": "ep_dispatch_experts",
+    }
     moe_intermediate_size: int = 2112
     spatial_merge_size: int = 2
     rms_norm_eps: float = 1e-5
@@ -87,17 +94,17 @@ class Dots3NoteVisionConfig(PreTrainedConfig):
                     if count > 0
                 },
             )
-        self.hidden_size = self.embed_dim
+        self.hidden_size = kwargs.pop("embed_dim", self.hidden_size)
         self.num_attention_heads = kwargs.pop("num_heads", self.num_attention_heads)
         self.attention_bias = kwargs.pop("use_bias", self.attention_bias)
         kwargs.pop("is_causal", None)
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
-        if self.embed_dim % self.num_attention_heads != 0:
-            raise ValueError("embed_dim must be divisible by num_attention_heads")
-        if self.adapter_in_dim != self.embed_dim:
-            raise ValueError("adapter_in_dim must match embed_dim")
+        if self.hidden_size % self.num_attention_heads != 0:
+            raise ValueError("hidden_size must be divisible by num_attention_heads")
+        if self.adapter_in_dim != self.hidden_size:
+            raise ValueError("adapter_in_dim must match hidden_size")
         if self.mlp_bias and "sparse" in self.mlp_layer_types:
             raise ValueError("Dots3 vision stacked experts require mlp_bias=False")
         if self.adapter_merge_size != self.spatial_merge_size:
@@ -116,7 +123,7 @@ class Dots3NoteAudioConfig(PreTrainedConfig):
         Hidden width of the temporal downsampling projection.
     adapter_input_size (`int`, *optional*, defaults to 1280):
         Input width of the audio-to-text adapter.
-    adapter_output_size (`int`, *optional*, defaults to 5120):
+    adapter_out_dim (`int`, *optional*, defaults to 5120):
         Output width of the audio-to-text adapter. It must match the text hidden size.
     """
 
@@ -130,6 +137,7 @@ class Dots3NoteAudioConfig(PreTrainedConfig):
     hidden_act: str = "silu"
 
     max_position_embeddings: int = 6000
+    initializer_range: float = 0.02
     rope_parameters: dict | None = None
     attention_dropout: float | int = 0.0
     base_config_key = "audio_config"
@@ -141,11 +149,13 @@ class Dots3NoteAudioConfig(PreTrainedConfig):
     head_dim: int | None = None
     attention_bias: bool = True
     adapter_input_size: int = 1280
-    adapter_output_size: int = 5120
+    adapter_out_dim: int = 5120
 
     def __post_init__(self, **kwargs):
         self.adapter_input_size = kwargs.pop("whisper_adapter_in_dim", self.adapter_input_size)
-        self.adapter_output_size = kwargs.pop("whisper_adapter_out_dim", self.adapter_output_size)
+        self.adapter_out_dim = kwargs.pop(
+            "whisper_adapter_out_dim", kwargs.pop("adapter_output_size", self.adapter_out_dim)
+        )
         # Released checkpoints store encoder dimensions in a Whisper-style dictionary.
         whisper_config = kwargs.pop("whisper_config", None) or {}
         for legacy_name, name in {
@@ -198,6 +208,9 @@ class Dots3NoteTextConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_b_proj": "colwise",
+        "layers.*.self_attn.q_a_layernorm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.kv_a_layernorm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.k_rope_only_layernorm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.g_proj": "colwise",
@@ -211,6 +224,11 @@ class Dots3NoteTextConfig(PreTrainedConfig):
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
@@ -297,27 +315,11 @@ class Dots3NoteTextConfig(PreTrainedConfig):
             ]
         else:
             self.layer_types = list(self.layer_types)
-        self.layer_types = [
-            "indexed_attention"
-            if use_dsa is True and layer_type == "full_attention"
-            else "full_attention"
-            if use_dsa is False and layer_type == "indexed_attention"
-            else layer_type
-            for layer_type in self.layer_types
-        ]
-
-        swa_rope_theta = kwargs.pop("swa_rope_theta", 50_000.0)
-        rope_theta = kwargs.pop("rope_theta", self.default_theta)
-        if self.rope_parameters is None:
-            self.rope_parameters = kwargs.pop("rope_scaling", None) or {
-                layer_type: {
-                    "rope_type": "default",
-                    "rope_theta": swa_rope_theta if layer_type == "sliding_attention" else rope_theta,
-                }
-                for layer_type in set(self.layer_types)
-            }
-        if not self.nested_rope_parameter_keys(self.rope_parameters):
-            self.rope_parameters = {layer_type: dict(self.rope_parameters) for layer_type in set(self.layer_types)}
+        if use_dsa is not None:
+            old_type, new_type = ("full_attention", "indexed_attention")
+            if not use_dsa:
+                old_type, new_type = new_type, old_type
+            self.layer_types = [new_type if layer_type == old_type else layer_type for layer_type in self.layer_types]
         # Normalize the released checkpoint's SWA aliases into the shared per-layer configuration.
         sliding_config = {
             name: kwargs.pop(f"swa_{name}", default)
@@ -341,6 +343,18 @@ class Dots3NoteTextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
     def convert_rope_params_to_dict(self, **kwargs):
+        swa_rope_theta = kwargs.pop("swa_rope_theta", 50_000.0)
+        rope_theta = kwargs.get("rope_theta", self.default_theta)
+        if self.rope_parameters is None:
+            self.rope_parameters = kwargs.pop("rope_scaling", None) or {
+                layer_type: {
+                    "rope_type": "default",
+                    "rope_theta": swa_rope_theta if layer_type == "sliding_attention" else rope_theta,
+                }
+                for layer_type in set(self.layer_types)
+            }
+        if not self.nested_rope_parameter_keys(self.rope_parameters):
+            self.rope_parameters = {layer_type: dict(self.rope_parameters) for layer_type in set(self.layer_types)}
         kwargs = super().convert_rope_params_to_dict(**kwargs)
         per_layer_config = {int(i): values for i, values in (kwargs.get("per_layer_config") or {}).items()}
         for layer_type in set(self.layer_types):
@@ -378,9 +392,9 @@ class Dots3NoteTextConfig(PreTrainedConfig):
 class Dots3NoteConfig(PreTrainedConfig):
     model_type = "dots3_note"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Dots3NoteTextConfig),
-        "vision_config": SubConfigSpec(config_class=Dots3NoteVisionConfig, optional=True),
-        "audio_config": SubConfigSpec(config_class=Dots3NoteAudioConfig, optional=True),
+        "text_config": Dots3NoteTextConfig,
+        "vision_config": Dots3NoteVisionConfig,
+        "audio_config": Dots3NoteAudioConfig,
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 
@@ -400,9 +414,9 @@ class Dots3NoteConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
-        if self.vision_config is not None and self.vision_config.adapter_out_dim != self.text_config.hidden_size:
+        if self.vision_config.adapter_out_dim != self.text_config.hidden_size:
             raise ValueError("vision adapter output width must match the text hidden size")
-        if self.audio_config is not None and self.audio_config.adapter_output_size != self.text_config.hidden_size:
+        if self.audio_config.adapter_out_dim != self.text_config.hidden_size:
             raise ValueError("audio adapter output width must match the text hidden size")
 
 

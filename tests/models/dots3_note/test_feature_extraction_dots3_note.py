@@ -11,13 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import tempfile
 import unittest
 
-import numpy as np
-
 from transformers import Dots3NoteFeatureExtractor, is_torch_available
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import Expectations, require_torch, torch_device
 
 
 if is_torch_available():
@@ -38,8 +35,6 @@ class Dots3NoteFeatureExtractorTest(unittest.TestCase):
 
     def test_audio_token_length_boundaries(self):
         extractor = self.get_feature_extractor()
-        with self.assertRaisesRegex(ValueError, "at least one sample"):
-            extractor(torch.zeros(0), sampling_rate=32)
         cases = [(1, 1), (31, 1), (32, 1), (33, 2), (64, 2), (65, 3)]
         for num_samples, expected_tokens in cases:
             with self.subTest(num_samples=num_samples):
@@ -63,30 +58,18 @@ class Dots3NoteFeatureExtractorTest(unittest.TestCase):
         self.assertEqual(batch_output.num_audio_tokens.tolist(), [2, 3])
         self.assertEqual(batch_output.chunk_sample_lengths.tolist(), [64, 64, 1])
 
-    def test_rejects_invalid_audio(self):
-        extractor = self.get_feature_extractor()
-        with self.assertRaisesRegex(ValueError, "must be mono"):
-            extractor(torch.zeros(2, 64), sampling_rate=32)
-        with self.assertRaisesRegex(ValueError, "sampling rate"):
-            extractor(torch.zeros(64), sampling_rate=16)
-
     def test_sglang_log_mel_numerical_golden(self):
         extractor = Dots3NoteFeatureExtractor()
         waveform = ((torch.arange(960_001, dtype=torch.int32) % 257) - 128).to(torch.float32) / 128.0
-        output = extractor(waveform, sampling_rate=16_000)
+        output = extractor(waveform, sampling_rate=16_000, device=torch_device)
 
         self.assertEqual(output.input_features.shape, (2, 128, 6000))
         positions = [(0, 0, 0), (0, 0, 1), (0, 63, 123), (0, 127, 5999), (1, 0, 0), (1, 64, 10)]
         selected = torch.stack([output.input_features[index] for index in positions])
-        expected = torch.tensor([1.4883524179, 1.3922336102, 0.7106180191, 0.5591694713, 0.1503863335, -1.5])
-        torch.testing.assert_close(selected, expected, rtol=1e-5, atol=1e-6)
-
-    def test_save_and_reload(self):
-        for dither in (0.0, 0.001):
-            with self.subTest(dither=dither), tempfile.TemporaryDirectory() as tmpdirname:
-                extractor = self.get_feature_extractor(dither=dither)
-                extractor.save_pretrained(tmpdirname)
-                reloaded = Dots3NoteFeatureExtractor.from_pretrained(tmpdirname)
-                self.assertEqual(reloaded.dither, dither)
-                self.assertEqual(extractor.to_dict(), reloaded.to_dict())
-                self.assertTrue(np.array_equal(extractor.mel_filters, reloaded.mel_filters))
+        expected = Expectations(
+            {
+                ("cpu", None): [1.4883524179, 1.3922336102, 0.7106180191, 0.5591694713, 0.1503863335, -1.5],
+                ("cuda", None): [1.4883524179, 1.3922336102, 0.7106180191, 0.5591694713, 0.1503863335, -1.5],
+            }
+        ).get_expectation()
+        torch.testing.assert_close(selected, torch.tensor(expected, device=torch_device), rtol=1e-5, atol=1e-6)

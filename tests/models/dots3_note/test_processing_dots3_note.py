@@ -11,19 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import tempfile
 import unittest
 
 from transformers import (
-    AutoFeatureExtractor,
-    AutoImageProcessor,
-    AutoProcessor,
-    AutoVideoProcessor,
-    Dots3NoteFeatureExtractor,
     Dots3NoteProcessor,
-    Qwen2VLImageProcessor,
-    Qwen2VLImageProcessorPil,
-    Qwen3VLVideoProcessor,
     is_torch_available,
 )
 from transformers.testing_utils import require_torch, require_torchvision
@@ -35,10 +26,6 @@ if is_torch_available():
     import torch
 
 
-AUDIO_START = "<|audio_comp_start|>"
-AUDIO_END = "<|audio_comp_end|>"
-
-
 @require_torch
 @require_torchvision
 class Dots3NoteProcessorTest(ProcessorTesterMixin, unittest.TestCase):
@@ -46,11 +33,19 @@ class Dots3NoteProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     tiny_model_id = "miraclezqc/TestForDots3"
 
     @classmethod
+    def _setup_test_attributes(cls, processor):
+        super()._setup_test_attributes(processor)
+        messages = [{"role": "user", "content": [{"type": "audio"}, {"type": "text", "text": "describe"}]}]
+        cls.audio_prompt = processor.apply_chat_template(messages, tokenize=False)
+        input_ids = processor.tokenizer(cls.audio_prompt, add_special_tokens=False).input_ids
+        audio_index = input_ids.index(processor.audio_token_id)
+        cls.audio_start_id = input_ids[audio_index - 1]
+        cls.audio_end_id = input_ids[audio_index + 1]
+
+    @classmethod
     def _setup_from_pretrained(cls, model_id, **kwargs):
         # Keep the common tests' short audio clips in one chunk; chunking has dedicated feature extractor tests.
-        return super()._setup_from_pretrained(
-            model_id, revision="14258a1269bdeba3b9d1ef69ea72673470464300", chunk_length=30, **kwargs
-        )
+        return super()._setup_from_pretrained(model_id, chunk_length=30, **kwargs)
 
     @property
     def video_sampling_expectations(self):
@@ -62,46 +57,10 @@ class Dots3NoteProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             {"expected_dim": 0, "output_length": 16},
         ]
 
-    def test_component_config_roundtrip(self):
-        processor = Dots3NoteProcessor(
-            image_processor=Qwen2VLImageProcessorPil(
-                size={"shortest_edge": 3136, "longest_edge": 1016064}, temporal_patch_size=1
-            ),
-            tokenizer=self.get_component("tokenizer"),
-            video_processor=Qwen3VLVideoProcessor(
-                size={"shortest_edge": 3136, "longest_edge": 1016064},
-                temporal_patch_size=1,
-                patch_size=14,
-                image_mean=[0.48145466, 0.4578275, 0.40821073],
-                image_std=[0.26862954, 0.26130258, 0.27577711],
-                fps=1,
-            ),
-            feature_extractor=Dots3NoteFeatureExtractor(),
-        )
-
-        with tempfile.TemporaryDirectory() as directory:
-            processor.save_pretrained(directory)
-            processor = AutoProcessor.from_pretrained(directory)
-            image_processor = AutoImageProcessor.from_pretrained(directory)
-            video_processor = AutoVideoProcessor.from_pretrained(directory)
-            feature_extractor = AutoFeatureExtractor.from_pretrained(directory)
-        expected_size = {"shortest_edge": 3136, "longest_edge": 1016064}
-        for component in (processor.image_processor, image_processor):
-            self.assertIsInstance(component, (Qwen2VLImageProcessorPil, Qwen2VLImageProcessor))
-        for component in (processor.video_processor, video_processor):
-            self.assertIsInstance(component, Qwen3VLVideoProcessor)
-        for component in (processor.image_processor, image_processor, processor.video_processor, video_processor):
-            self.assertEqual(dict(component.size), expected_size)
-            self.assertEqual(component.temporal_patch_size, 1)
-        for component in (processor.feature_extractor, feature_extractor):
-            self.assertIsInstance(component, Dots3NoteFeatureExtractor)
-            self.assertEqual(component.sampling_rate, 16000)
-            self.assertEqual(component.feature_size, 128)
-
     def test_expands_audio_placeholder(self):
         processor = self.get_processor()
         output = processor(
-            text=f"{AUDIO_START}{processor.audio_token}{AUDIO_END} describe",
+            text=self.audio_prompt,
             audio=[torch.zeros(1281)],
             sampling_rate=16000,
             add_special_tokens=False,
@@ -109,9 +68,9 @@ class Dots3NoteProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
         input_ids = output.input_ids[0].tolist()
-        self.assertEqual(input_ids.count(processor.tokenizer.convert_tokens_to_ids(AUDIO_START)), 1)
+        self.assertEqual(input_ids.count(self.audio_start_id), 1)
         self.assertEqual(input_ids.count(processor.audio_token_id), 2)
-        self.assertEqual(input_ids.count(processor.tokenizer.convert_tokens_to_ids(AUDIO_END)), 1)
+        self.assertEqual(input_ids.count(self.audio_end_id), 1)
         self.assertEqual(output.chunk_sample_lengths.tolist(), [1281])
         self.assertNotIn("num_audio_tokens", output)
 

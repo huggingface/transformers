@@ -1233,8 +1233,8 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"(blocks\.\d+\.mlp)\.fc1\.", r"\1.gate_proj."),
             WeightRenaming(r"(blocks\.\d+\.mlp)\.fc2\.", r"\1.down_proj."),
             WeightRenaming(r"(blocks\.\d+\.mlp)\.fc3\.", r"\1.up_proj."),
-            WeightRenaming(r"\.mlp\.gate_weight$", ".mlp.gate.weight"),
-            WeightRenaming(r"\.mlp\.router_bias$", ".mlp.e_score_correction_bias"),
+            WeightRenaming(r"\.mlp\.gate_weight", ".mlp.gate.weight"),
+            WeightRenaming(r"\.mlp\.router_bias", ".mlp.e_score_correction_bias"),
             WeightConverter(
                 source_patterns=[".mlp.experts.*.fc1.weight", ".mlp.experts.*.fc3.weight"],
                 target_patterns=".mlp.experts.gate_up_proj",
@@ -1247,6 +1247,7 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "Dots3NoteModel": [
+            PrefixChange(prefix_to_remove="model"),
             WeightRenaming(r"^(embed_tokens|layers|norm)\.", r"language_model.\1."),
             WeightRenaming(r"^vision_encoder\.", "vision_tower."),
             WeightRenaming(r"^audio_encoder\.audio_adapter\.proj\.0\.", "audio_adapter.norm."),

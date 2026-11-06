@@ -122,11 +122,6 @@ class Dots3NoteFeatureExtractor(SequenceFeatureExtractor):
         """Extract chunked log-mel features and their waveform sample lengths."""
         if sampling_rate is not None and sampling_rate != self.sampling_rate:
             raise ValueError(f"Expected sampling rate {self.sampling_rate}, got {sampling_rate}")
-        if isinstance(raw_speech, (list, tuple)):
-            if not raw_speech:
-                raise ValueError("received an empty audio batch")
-            if isinstance(raw_speech[0], (int, float, np.integer, np.floating)):
-                raw_speech = np.asarray(raw_speech)
         chunks = []
         chunk_sample_lengths = []
         chunk_token_lengths = []
@@ -134,12 +129,6 @@ class Dots3NoteFeatureExtractor(SequenceFeatureExtractor):
 
         for waveform in make_list_of_audio(raw_speech):
             waveform = torch.as_tensor(waveform, dtype=torch.float32)
-            if waveform.ndim == 2 and waveform.shape[0] == 1:
-                waveform = waveform.squeeze(0)
-            if waveform.ndim != 1:
-                raise ValueError(f"Dots 3 Note Preview audio must be mono, got shape={tuple(waveform.shape)}")
-            if waveform.numel() == 0:
-                raise ValueError("audio waveform must contain at least one sample")
             per_audio_tokens = 0
             for chunk in waveform.split(self.n_samples):
                 sample_length = int(chunk.numel())

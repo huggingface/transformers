@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-10-13.*
+*This model was contributed to Hugging Face Transformers on 2026-11-06.*
 
 # Dots 3 Note Preview
 
@@ -21,13 +21,14 @@ Dots 3 Note Preview is a mixture-of-experts causal language model with native te
 a shared vision encoder for images and videos and a Whisper-style audio encoder. Both encoders project their outputs
 into the language model's hidden space before autoregressive text generation.
 
-Use BF16 checkpoints. FP8 text decoder weights require BF16 indexer weights, with vision/audio modules and `lm_head`
-excluded from FP8 conversion.
+BF16 and FP8 inference are supported.
 
-Vision fullgraph compilation is validated with eager/SDPA attention, precomputed metadata, and `spatial_merge_size=2`.
+<Tip>
 
 The checkpoint needs a standard `processor_config.json` with Qwen image/video components and Dots preprocessing settings.
 Saved configs use the native Transformers schema; older serving frameworks may need a compatibility adapter.
+
+</Tip>
 
 ## Usage
 
