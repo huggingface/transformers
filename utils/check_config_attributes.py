@@ -100,6 +100,9 @@ SPECIAL_CASES_TO_ALLOW = {
     "MellumConfig": ["mtp_layer_types", "mtp_mlp_layer_types"],
     "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
     "Lfm2Config": ["full_attn_idxs"],
+    "D1OmniTextConfig": ["full_attn_idxs"],
+    # Modality-specific text budgets are consumed by D1OmniProcessor.
+    "D1OmniConfig": ["audio_text_length", "image_text_length"],
     "DiaConfig": ["delay_pattern"],
     "BambaConfig": ["attn_layer_indices"],
     "Dots1Config": ["max_window_layers", "n_routed_experts"],
