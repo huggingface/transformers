@@ -623,11 +623,6 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel):
                 "attention_mask": attention_mask,
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
-                "allow_is_causal_skip": isinstance(logits_to_keep, int)
-                and (
-                    logits_to_keep == 0
-                    or (logits_to_keep == 1 and not getattr(past_key_values, "is_compileable", False))
-                ),
             }
             # Create the masks
             causal_mask_mapping = {
@@ -792,6 +787,7 @@ class Gemma4UnifiedForCausalLM(Gemma4UnifiedPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
+        # May have been already sliced to logits_to_kep
         if hidden_states.shape[1] == (input_ids if input_ids is not None else inputs_embeds).shape[1]:
             hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
@@ -1428,6 +1424,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
         )
 
         hidden_states = outputs.last_hidden_state
+        # May have been already sliced to logits_to_kep
         if hidden_states.shape[1] == (input_ids if input_ids is not None else inputs_embeds).shape[1]:
             hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)

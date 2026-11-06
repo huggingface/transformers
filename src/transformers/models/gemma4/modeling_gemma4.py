@@ -1915,6 +1915,7 @@ class Gemma4ForCausalLM(Gemma4PreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
+        # May have been already sliced to logits_to_kep
         if hidden_states.shape[1] == (input_ids if input_ids is not None else inputs_embeds).shape[1]:
             hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
@@ -2682,6 +2683,7 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
+        # May have been already sliced to logits_to_kep
         if hidden_states.shape[1] == (input_ids if input_ids is not None else inputs_embeds).shape[1]:
             hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
