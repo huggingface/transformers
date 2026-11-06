@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import dataclasses
 import inspect
 import json
 import re
@@ -23,6 +24,7 @@ from functools import lru_cache, partial
 from inspect import isfunction
 from typing import Any, Literal, Union, get_args, get_origin, get_type_hints, no_type_check
 
+import numpy as np
 from packaging import version
 
 from . import logging
@@ -578,9 +580,11 @@ def _cached_compile_jinja_template(chat_template):
                 self._rendered_blocks = None
                 self._generation_indices = None
 
-    if version.parse(jinja2.__version__) < version.parse("3.1.0"):
+    if version.parse(jinja2.__version__) < version.parse("3.1.6"):
+        # Older versions have known sandbox escapes, and chat templates from the Hub are untrusted code
         raise ImportError(
-            f"apply_chat_template requires jinja2>=3.1.0 to be installed. Your version is {jinja2.__version__}."
+            f"apply_chat_template requires jinja2>=3.1.6 to be installed. Your version is {jinja2.__version__}. "
+            "You can upgrade it with `pip install -U jinja2`."
         )
 
     def raise_exception(message):
@@ -674,6 +678,15 @@ def _plain_template_data(value: Any) -> Any:
         return [_plain_template_data(item) for item in value]
     elif isinstance(value, tuple):
         return tuple(_plain_template_data(item) for item in value)
+    elif isinstance(value, np.generic):
+        # `np.bool_(False)` would otherwise become a truthy placeholder string
+        return _plain_template_data(value.item())
+    elif dataclasses.is_dataclass(value) and not isinstance(value, type):
+        # Fields are read one level at a time, so arrays and images inside are not deep-copied
+        return {field.name: _plain_template_data(getattr(value, field.name)) for field in dataclasses.fields(value)}
+    elif callable(getattr(value, "model_dump", None)):
+        # Pydantic models
+        return _plain_template_data(value.model_dump())
     else:
         # Anything else becomes a placeholder naming its type, e.g. "<ndarray>"
         return f"<{type(value).__name__}>"
@@ -730,15 +743,12 @@ def render_jinja_template(
         if hasattr(chat, "messages"):
             # Indicates it's a Conversation object
             chat = chat.messages
-        for message in chat:
-            # Message objects (e.g. from pydantic) would become placeholders, so we reject them explicitly
-            if not isinstance(message, Mapping):
-                raise TypeError(
-                    f"Chat messages should be dicts, but got a message of type {type(message).__name__}. If you're "
-                    "using message objects, please convert them to dicts first, e.g. with `.model_dump()` for pydantic."
-                )
         # The converted chat is a fresh copy, so the edits below never touch the caller's messages
-        chat = _alias_reasoning_fields(_plain_template_data(chat))
+        chat = _plain_template_data(chat)
+        for message in chat:
+            if not isinstance(message, dict):
+                raise TypeError(f"Chat messages should be dicts, dataclasses or pydantic models, but got {message!r}.")
+        chat = _alias_reasoning_fields(chat)
         if continue_final_message:
             continue_final_message = continue_final_message if isinstance(continue_final_message, str) else "content"
 

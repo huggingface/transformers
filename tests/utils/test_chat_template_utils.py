@@ -13,9 +13,12 @@
 # limitations under the License.
 
 import copy
+import dataclasses
 import unittest
 from enum import Enum
 from typing import Literal
+
+import numpy as np
 
 from transformers.testing_utils import require_jinja
 from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
@@ -842,13 +845,31 @@ class TemplateSandboxTest(unittest.TestCase):
         )
         self.assertEqual(rendered, "user False")
 
-    def test_non_dict_messages_raise(self):
+    def test_message_objects_render_like_dicts(self):
+        @dataclasses.dataclass
+        class Message:
+            role: str
+            content: str
+
+        self.assertEqual(
+            self.render("{{ messages[0].role }}: {{ messages[0].content }}", [Message("user", "Hi")]), "user: Hi"
+        )
+
+    def test_opaque_messages_raise(self):
         class Message:
             role = "user"
             content = "Hi"
 
         with self.assertRaises(TypeError):
             self.render("{{ messages[0].content }}", [Message()])
+
+    def test_numpy_scalars_keep_their_value(self):
+        template = "{{ 'on' if flag else 'off' }} {{ count + 1 }}"
+        rendered, _ = render_jinja_template(
+            [[{"role": "user", "content": "Hi"}]], chat_template=template, flag=np.bool_(False), count=np.int64(1)
+        )
+        # A placeholder string would be truthy and turn the flag on
+        self.assertEqual(rendered[0], "off 2")
 
     def test_continue_final_message_does_not_modify_chat(self):
         chat = [
