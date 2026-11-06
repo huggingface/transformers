@@ -326,6 +326,125 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 torch.stack(with_cache.logits), torch.stack(from_scratch.logits), rtol=1e-4, atol=1e-4
             )
 
+    def test_generate_with_vision_cache_and_new_vision(self):
+        config = self.model_tester.get_config()
+        patch_width = (
+            self.model_tester.num_channels
+            * config.vision_config.patch_size**2
+            * config.vision_config.temporal_patch_size
+        )
+        generation_kwargs = {
+            "max_new_tokens": 3,
+            "do_sample": False,
+            "eos_token_id": None,
+            "suppress_tokens": [config.vision_start_token_id, config.image_token_id, config.video_token_id],
+            "return_dict_in_generate": True,
+            "output_logits": True,
+        }
+        prefix_ids = torch.tensor(
+            [
+                [config.text_config.pad_token_id] * 2
+                + [10, config.vision_start_token_id]
+                + [config.image_token_id] * 4
+                + [11, 12],
+                [10, 11, config.vision_start_token_id] + [config.image_token_id] * 6 + [12],
+            ],
+            device=torch_device,
+        )
+        prefix_mask = torch.ones_like(prefix_ids)
+        prefix_mask[0, :2] = 0
+        prefix_grids = torch.tensor([[1, 2, 2], [1, 2, 3]], device=torch_device)
+
+        for modality in ("image", "video"):
+            with self.subTest(modality=modality):
+                model = Qwen2VLForConditionalGeneration(config).to(torch_device).eval()
+                prefix_pixels = [floats_tensor([count, patch_width]) for count in (4, 6)]
+                first_turn = model.generate(
+                    input_ids=prefix_ids,
+                    attention_mask=prefix_mask,
+                    mm_token_type_ids=(prefix_ids == config.image_token_id).long(),
+                    image_grid_thw=prefix_grids,
+                    pixel_values=torch.cat(prefix_pixels),
+                    **generation_kwargs,
+                )
+                cached_deltas = model.model.rope_deltas.clone()
+                self.assertTrue(bool((cached_deltas != 0).all()))
+                self.assertNotEqual(cached_deltas[0].item(), cached_deltas[1].item())
+
+                frames = 1 if modality == "image" else 2
+                token_id = config.image_token_id if modality == "image" else config.video_token_id
+                new_grids = torch.tensor([[frames, 2, 3]] * 2, device=torch_device)
+                new_pixels = [floats_tensor([frames * 6, patch_width]) for _ in range(2)]
+                new_ids = torch.tensor(
+                    [[config.vision_start_token_id] + [token_id] * (frames * 6) + [10, 11]] * 2,
+                    device=torch_device,
+                )
+                input_ids = torch.cat([first_turn.sequences, new_ids], dim=1)
+                attention_mask = torch.cat([prefix_mask, torch.ones_like(input_ids[:, prefix_ids.shape[1] :])], dim=1)
+                mm_token_type_ids = (input_ids == config.image_token_id).long()
+                mm_token_type_ids[input_ids == config.video_token_id] = 2
+                inputs = {
+                    "input_ids": input_ids,
+                    "attention_mask": attention_mask,
+                    "mm_token_type_ids": mm_token_type_ids,
+                }
+                if modality == "image":
+                    cached_inputs = dict(inputs, image_grid_thw=new_grids, pixel_values=torch.cat(new_pixels))
+                    all_grids = torch.stack([prefix_grids[0], new_grids[0], prefix_grids[1], new_grids[1]])
+                    all_pixels = torch.cat([prefix_pixels[0], new_pixels[0], prefix_pixels[1], new_pixels[1]])
+                    reference_inputs = dict(inputs, image_grid_thw=all_grids, pixel_values=all_pixels)
+                else:
+                    cached_inputs = dict(inputs, video_grid_thw=new_grids, pixel_values_videos=torch.cat(new_pixels))
+                    reference_inputs = dict(
+                        cached_inputs, image_grid_thw=prefix_grids, pixel_values=torch.cat(prefix_pixels)
+                    )
+
+                expected_positions, expected_deltas = model.model.get_rope_index(**reference_inputs)
+                past_length = first_turn.past_key_values.get_seq_length()
+                new_length = input_ids.shape[1] - past_length
+                chunk_inputs = dict(
+                    cached_inputs,
+                    input_ids=input_ids[:, past_length:],
+                    mm_token_type_ids=mm_token_type_ids[:, past_length:],
+                )
+                with torch.no_grad():
+                    if modality == "image":
+                        features = model.model.get_image_features(torch.cat(new_pixels), new_grids)
+                    else:
+                        features = model.model.get_video_features(torch.cat(new_pixels), new_grids)
+                full_metadata_inputs = {
+                    key: value for key, value in reference_inputs.items() if not key.startswith("pixel_values")
+                }
+                full_metadata_inputs["mm_encoder_outputs"] = {modality: features}
+                cases = {
+                    "full_ids_new_metadata": cached_inputs,
+                    "new_ids_new_metadata": chunk_inputs,
+                    "full_ids_full_metadata": full_metadata_inputs,
+                }
+                for layout, current_inputs in cases.items():
+                    with self.subTest(layout=layout):
+                        model.model.rope_deltas = cached_deltas.clone()
+                        positions = model._prepare_position_ids_for_generation(
+                            current_inputs["input_ids"],
+                            dict(current_inputs, past_key_values=first_turn.past_key_values),
+                        )
+                        torch.testing.assert_close(
+                            positions[-3:, :, -new_length:], expected_positions[:, :, past_length:]
+                        )
+                        torch.testing.assert_close(model.model.rope_deltas, expected_deltas)
+
+                        model.model.rope_deltas = cached_deltas.clone()
+                        with_cache = model.generate(
+                            **current_inputs,
+                            past_key_values=copy.deepcopy(first_turn.past_key_values),
+                            **generation_kwargs,
+                        )
+                        from_scratch = model.generate(**reference_inputs, **generation_kwargs)
+                        torch.testing.assert_close(
+                            torch.stack(with_cache.logits), torch.stack(from_scratch.logits), rtol=1e-4, atol=1e-4
+                        )
+                        torch.testing.assert_close(with_cache.sequences[:, -3:], from_scratch.sequences[:, -3:])
+
     def test_vision_position_ids(self):
         """
         Tests that vision position ids are built correctly for images and for videos.

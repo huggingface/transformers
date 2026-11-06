@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch Ernie 4.5 VL model."""
 
 import unittest
+from unittest.mock import Mock
 
 from parameterized import parameterized
 
@@ -125,6 +126,33 @@ class Ernie4_5_VLMoeModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Ernie4_5_VLMoeVisionText2TextModelTester
     model_split_percents = [0.7, 0.9]  # model too big to split at 0.5
     test_all_params_have_gradient = False  # e score correction bias + moe
+
+    def test_cached_video_position_ids_with_full_metadata(self):
+        config = self.model_tester.get_config()
+        model = Ernie4_5_VLMoeForConditionalGeneration(config).to(torch_device).eval()
+        temporal_merge = config.vision_config.temporal_merge_size
+        prefix_ids = torch.tensor([[10] + [config.video_token_id] * 4 + [11]], device=torch_device)
+        input_ids = torch.cat(
+            [prefix_ids, torch.tensor([[12] + [config.video_token_id] * 6 + [13]], device=torch_device)], dim=1
+        )
+        grids = torch.tensor([[temporal_merge, 2, 2], [temporal_merge, 2, 3]], device=torch_device)
+        _, cached_deltas = model.model.get_rope_index(
+            prefix_ids, (prefix_ids == config.video_token_id).long() * 2, video_grid_thw=grids[:1]
+        )
+        self.assertTrue(bool((cached_deltas != 0).all()))
+        model.model.rope_deltas = cached_deltas
+        inputs = {
+            "input_ids": input_ids,
+            "mm_token_type_ids": (input_ids == config.video_token_id).long() * 2,
+            "video_grid_thw": grids,
+            "attention_mask": torch.ones_like(input_ids),
+        }
+        expected_positions, expected_deltas = model.model.get_rope_index(**inputs)
+        cache = Mock()
+        cache.get_seq_length.return_value = prefix_ids.shape[1]
+        positions = model._prepare_position_ids_for_generation(input_ids, dict(inputs, past_key_values=cache))
+        torch.testing.assert_close(positions[-3:], expected_positions)
+        torch.testing.assert_close(model.model.rope_deltas, expected_deltas)
 
     @unittest.skip(
         reason="Its TP and EP plans don't reach the text and vision experts yet; they come with their own PR, "

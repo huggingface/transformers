@@ -1373,22 +1373,26 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
         # Overwritten -- requires 3D position ids
 
         text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
+        if "input_ids" in model_kwargs and model_kwargs["input_ids"].shape[1] > 0:
+            inputs_tensor = model_kwargs["input_ids"]
 
         # Early exit in case we are continuing generation from past kv. The stored `rope_deltas` come from an earlier
         # call, so if the uncached tokens hold new images or videos their 3D positions have to be computed below.
         past_length = 0
         if (cache := model_kwargs.get("past_key_values")) is not None:
             past_length = cache.get_seq_length()
+        attention_mask = model_kwargs.get("attention_mask")
+        input_start = type_start = past_length
+        if past_length != 0 and attention_mask is not None and attention_mask.shape[1] > inputs_tensor.shape[1]:
+            input_start = 0
+            type_start = -inputs_tensor.shape[1]
         mm_token_type_ids = model_kwargs.get("mm_token_type_ids")
-        has_new_vision_tokens = mm_token_type_ids is not None and bool(mm_token_type_ids[:, past_length:].any())
+        has_new_vision_tokens = mm_token_type_ids is not None and bool(mm_token_type_ids[:, type_start:].any())
         if past_length != 0 and self.model.rope_deltas is not None and not has_new_vision_tokens:
             position_ids = text_positions[None, ...] + self.model.rope_deltas
             return position_ids
 
         # Otherwise compute 3d position ids for vision tokens and concat with text position ids
-        if "input_ids" in model_kwargs and model_kwargs["input_ids"].shape[1] > 0:
-            inputs_tensor = model_kwargs["input_ids"]
-
         is_input_ids = len(inputs_tensor.shape) == 2 and inputs_tensor.dtype in [torch.int, torch.long]
         if (
             is_input_ids
@@ -1396,7 +1400,39 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
             and (model_kwargs.get("image_grid_thw") is not None or model_kwargs.get("video_grid_thw") is not None)
         ):
             model_kwargs = {k: v for k, v in model_kwargs.items() if k != "input_ids"}
+            cached_deltas = self.model.rope_deltas
+            use_cached_chunk = past_length != 0
+            if use_cached_chunk and input_start != 0:
+                # Full grids can reconstruct the prompt; new-only grids need the cached position offset.
+                merge_size = self.config.vision_config.spatial_merge_size
+                use_cached_chunk = False
+                for modality, key in ((1, "image_grid_thw"), (2, "video_grid_thw")):
+                    grid_tokens = 0
+                    if (grid := model_kwargs.get(key)) is not None:
+                        temporal_merge = (
+                            getattr(self.config.vision_config, "temporal_merge_size", 1) if modality == 2 else 1
+                        )
+                        grid_tokens = (
+                            (grid[:, 0] // temporal_merge) * (grid[:, 1] // merge_size) * (grid[:, 2] // merge_size)
+                        ).sum()
+                    if grid_tokens != (mm_token_type_ids == modality).sum():
+                        use_cached_chunk = True
+                        break
+            if use_cached_chunk:
+                inputs_tensor = inputs_tensor[:, input_start:]
+                model_kwargs["mm_token_type_ids"] = model_kwargs["mm_token_type_ids"][:, type_start:]
+                if attention_mask is not None:
+                    prefix_length = attention_mask[:, :past_length].sum(dim=-1, keepdim=True)
+                    model_kwargs["attention_mask"] = attention_mask[:, past_length:]
+                else:
+                    prefix_length = past_length
+                text_positions = text_positions[:, -inputs_tensor.shape[1] :]
             vision_positions, rope_deltas = self.model.get_rope_index(inputs_tensor, **model_kwargs)
+            if use_cached_chunk:
+                vision_positions += prefix_length
+                if cached_deltas is not None:
+                    vision_positions += cached_deltas
+                    rope_deltas += cached_deltas
             self.model.rope_deltas = rope_deltas
         else:
             vision_positions = text_positions.unsqueeze(0).expand(3, -1, -1)
