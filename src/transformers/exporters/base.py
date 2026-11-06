@@ -104,21 +104,29 @@ class ExportArtifacts(Mapping, PushToHubMixin):
         return next(iter(self.components.values())).program
 
     def runtime(self, device=None, **runner_kwargs) -> ExportedModel:
-        """Run this single-graph export on `device` (the backend's default when `None`), as an [`ExportedModel`].
-        `runner_kwargs` go to the backend's runner: `providers` and `session_options` for ONNX Runtime, `config`
-        (compile properties) and `torch_threads` (split the CPU with torch work around the model) for OpenVINO."""
+        """Run this export on `device` (the backend's default when `None`), as an [`ExportedModel`]: a single graph
+        ([`~HfExporter.export`]), or a multimodal split ([`~HfExporter.export_multimodal`]) as an
+        [`ExportedMultimodalModel`]. `runner_kwargs` go to the backend's runners: `providers` and `session_options`
+        for ONNX Runtime, `config` (compile properties) and `torch_threads` (split the CPU with torch work around the
+        model) for OpenVINO."""
         from .auto import get_runner_class
+        from .runtimes.multimodal import MULTIMODAL_COMPONENTS, ExportedMultimodalModel
 
-        if len(self.components) != 1:
+        multimodal = {"language_model", "text_embeddings_model"} <= self.components.keys() <= MULTIMODAL_COMPONENTS
+        if len(self.components) != 1 and not multimodal:
             raise ValueError(
-                f"This export has {len(self.components)} components ({list(self.components)}); their runtime isn't "
-                "available yet. `runtime()` runs a single-graph export, as `HfExporter.export` returns."
+                f"This export has components {list(self.components)}, whose runtime isn't available yet. `runtime()` "
+                "runs a single graph (`HfExporter.export`) or a multimodal split (`HfExporter.export_multimodal`)."
             )
-        component = next(iter(self.components.values()))
-        runner = get_runner_class(self.export_format).from_program(
-            component.program, component.metadata, device, **runner_kwargs
-        )
-        model = ExportedModel(runner, self.config)
+        runner_class = get_runner_class(self.export_format)
+        runners = {
+            name: runner_class.from_program(component.program, component.metadata, device, **runner_kwargs)
+            for name, component in self.components.items()
+        }
+        if multimodal:
+            model = ExportedMultimodalModel(runners, self.config)
+        else:
+            model = ExportedModel(next(iter(runners.values())), self.config)
         model.artifacts = self
         return model
 

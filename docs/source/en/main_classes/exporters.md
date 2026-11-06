@@ -66,6 +66,10 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 [[autodoc]] exporters.runtimes.base.ExportedModel
     - from_pretrained
 
+## ExportedMultimodalModel
+
+[[autodoc]] exporters.runtimes.multimodal.ExportedMultimodalModel
+
 ## ModelRunner
 
 [[autodoc]] exporters.runtimes.base.ModelRunner
