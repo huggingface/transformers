@@ -339,6 +339,14 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         # Requires LEFT padding to work correctly
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
 
+        # Packed sequences: `cu_seq_lens_q` and `seq_idx` index the flattened rows (as in flash attention), and the
+        # varlen kernels take a single row
+        input_shape = hidden_states.shape
+        if kwargs.get("cu_seq_lens_q") is not None:
+            hidden_states = hidden_states.reshape(1, -1, input_shape[-1])
+            if kwargs.get("seq_idx") is not None:
+                kwargs["seq_idx"] = kwargs["seq_idx"].reshape(1, -1)
+
         batch_size, seq_len, _ = hidden_states.shape
 
         use_cache = cache_params is not None
@@ -448,7 +456,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
 
         output = self.o_proj(output)
 
-        return output
+        return output.reshape(input_shape)
 
 
 class OlmoHybridMLP(Olmo3MLP):

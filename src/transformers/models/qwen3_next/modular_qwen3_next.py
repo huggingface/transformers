@@ -497,6 +497,14 @@ class Qwen3NextGatedDeltaNet(nn.Module):
     ):
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
 
+        # Packed sequences: `cu_seq_lens_q` and `seq_idx` index the flattened rows (as in flash attention), and the
+        # varlen kernels take a single row
+        input_shape = hidden_states.shape
+        if kwargs.get("cu_seq_lens_q") is not None:
+            hidden_states = hidden_states.reshape(1, -1, input_shape[-1])
+            if kwargs.get("seq_idx") is not None:
+                kwargs["seq_idx"] = kwargs["seq_idx"].reshape(1, -1)
+
         # Set up dimensions for reshapes later
         seq_len = hidden_states.shape[1]
         # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
@@ -602,7 +610,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
         core_attn_out = core_attn_out.reshape(core_attn_out.shape[0], core_attn_out.shape[1], -1)
 
         output = self.out_proj(core_attn_out)
-        return output
+        return output.reshape(input_shape)
 
 
 class Qwen3NextMLP(Qwen3MoeMLP):
