@@ -320,6 +320,8 @@ SPECIAL_CASES_TO_ALLOW = {
     # Internally uses Got Ocr2 so no need to use in the modeling code as we remap in auto instead
     "PPChart2TableConfig": True,
     "PPChart2TableVisionConfig": True,
+    # Config-only folder, these are used by `modeling_internvl.py`
+    "InternVL2Config": ["downsample_ratio", "projector_hidden_act", "vision_config"],
     "GlmgaConfig": ["vision_config"],
     "Sapiens2Config": [
         "num_first_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer

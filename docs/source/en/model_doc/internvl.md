@@ -337,6 +337,10 @@ decoded_outputs
 
 [[autodoc]] InternVLConfig
 
+## InternVL2Config
+
+[[autodoc]] InternVL2Config
+
 ## InternVLVisionModel
 
 [[autodoc]] InternVLVisionModel
