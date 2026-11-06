@@ -1937,14 +1937,16 @@ class ProcessorMixin(PushToHubMixin):
                         f"Cannot instantiate {sub_processor_type}: missing '{type_key}' in `processor_config.json`. "
                         f"Config keys: {list(sub_processor_config.keys())}"
                     )
-                processor_class = cls.get_possibly_dynamic_module(class_name)
+                subprocessor_class = cls.get_possibly_dynamic_module(class_name)
                 valid_subprocessor_kwargs = (
-                    cls.valid_kwargs.__annotations__ if hasattr(cls, "valid_kwargs") else sub_processor_config.keys()
+                    subprocessor_class.valid_kwargs.__annotations__
+                    if hasattr(subprocessor_class, "valid_kwargs")
+                    else sub_processor_config.keys()
                 )
                 sub_kwargs = {k: kwargs[k] for k in kwargs.keys() & valid_subprocessor_kwargs}
                 keys_to_remove |= sub_kwargs.keys()
 
-                sub_processor = processor_class(**{**sub_processor_config, **sub_kwargs})
+                sub_processor = subprocessor_class(**{**sub_processor_config, **sub_kwargs})
                 processor_dict[sub_processor_type] = sub_processor
             else:
                 # Fallback for non-tokenizer sub-processor: try loading via Auto class
