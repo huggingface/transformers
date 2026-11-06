@@ -2754,11 +2754,16 @@ class ModelUtilsTest(TestCasePlus):
             model.save_pretrained(tmpdirname, state_dict=state_dict)
 
             quant_config = FineGrainedFP8Config(modules_to_not_convert=["self_attn.q_proj"])
-            # Even with a quantizer, since q_proj is not quantized we should raise for the shape mismatch
-            with self.assertRaisesRegex(
-                RuntimeError, "You set `ignore_mismatched_sizes` to `False`, thus raising an error."
+            # Skip the GPU check, we won't run any forward anyway
+            with patch(
+                "transformers.quantizers.quantizer_finegrained_fp8.FineGrainedFP8HfQuantizer.validate_environment",
+                lambda *arg, **kwargs: None,
             ):
-                _ = LlamaForCausalLM.from_pretrained(tmpdirname, quantization_config=quant_config)
+                # Even with a quantizer, since q_proj is not quantized we should raise for the shape mismatch
+                with self.assertRaisesRegex(
+                    RuntimeError, "You set `ignore_mismatched_sizes` to `False`, thus raising an error."
+                ):
+                    _ = LlamaForCausalLM.from_pretrained(tmpdirname, quantization_config=quant_config)
 
 
 @slow
