@@ -114,6 +114,44 @@ class EomtImageProcessingTest(ImageProcessingTestMixin, PostProcessSemanticSegme
             )
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
+    def test_split_image_per_image_mappings(self):
+        for backend, image_processing_class in self.image_processing_classes.items():
+            for shapes in ([(16, 32)], [(16, 24), (24, 16), (16, 24)]):
+                for do_split_image in (False, True):
+                    with self.subTest(backend=backend, shapes=shapes, do_split_image=do_split_image):
+                        processor = image_processing_class(
+                            size={"shortest_edge": 16, "longest_edge": None},
+                            do_split_image=do_split_image,
+                        )
+                        images = [np.zeros((3, h, w), dtype=np.uint8) for h, w in shapes]
+                        maps = [np.ones((h, w), dtype=np.uint8) for h, w in shapes]
+                        mappings = [{1: i + 7} for i in range(len(shapes))]
+                        kwargs = {"disable_grouping": False} if backend == "torchvision" else {}
+                        outputs = processor(
+                            images=images,
+                            segmentation_maps=maps,
+                            instance_id_to_semantic_id=mappings,
+                            **kwargs,
+                        )
+                        repeats = 2 if do_split_image else 1
+                        expected_labels = [[i + 7] for i in range(len(shapes)) for _ in range(repeats)]
+                        self.assertEqual([labels.tolist() for labels in outputs.class_labels], expected_labels)
+                        self.assertEqual(len(outputs.pixel_values), len(expected_labels))
+                        for mask in outputs.mask_labels:
+                            self.assertTrue(torch.all(mask == 1))
+
+                        shared = processor(
+                            images=images,
+                            segmentation_maps=maps,
+                            instance_id_to_semantic_id={1: 7},
+                            **kwargs,
+                        )
+                        self.assertEqual(
+                            [labels.tolist() for labels in shared.class_labels], [[7]] * len(expected_labels)
+                        )
+                        for actual, reference in zip(outputs.pixel_values, shared.pixel_values):
+                            torch.testing.assert_close(torch.as_tensor(actual), torch.as_tensor(reference))
+
     @unittest.skip(reason="Not supported")
     def test_call_numpy_4_channels(self):
         pass
