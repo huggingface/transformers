@@ -221,6 +221,9 @@ class TokenizersV1Backend(PreTrainedTokenizerBase):
             text = self.clean_up_tokenization(text)
         return text
 
+    def train_new_from_iterator(self, *args, **kwargs):
+        raise NotImplementedError("Training is not supported with tokenizers>=1 yet.")
+
     def _save_pretrained(
         self,
         save_directory: str | os.PathLike,
