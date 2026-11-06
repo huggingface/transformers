@@ -343,6 +343,8 @@ def _dtensor_from_local_like(local_tensor: torch.Tensor, ref: DTensor) -> DTenso
 def _tied_params_are_equal(source: torch.Tensor, target: torch.Tensor) -> bool:
     """`torch.equal`, but two DTensors sharded alike agree across ranks with a SUM all-reduce: DTensor's own `equal`
     uses a MIN all-reduce, which some backends (e.g. TPU) cannot lower."""
+    if source.shape != target.shape:
+        return False
     if (
         not is_torch_distributed_available()
         or not isinstance(source, DTensor)
