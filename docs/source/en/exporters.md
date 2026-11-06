@@ -821,6 +821,41 @@ for (int64_t position = prompt_len; position < max_cache_len; ++position) {
 
 </details>
 
+## ONNX Runtime fusions
+
+Set `ort_fusions` to rewrite an ONNX export into ONNX Runtime's fused transformer ops before it's saved. ONNX Runtime
+runs the fused graph much faster than the plain one. The fusions cover RMS and layer norms, attention
+(`MultiHeadAttention`, or `GroupQueryAttention` when there's a key-value cache), rotary embeddings, GELU, and
+projections that share an input. Each fusion gives the same result as the ops it replaces.
+
+Set `ort_fusions` to the execution provider the graph will run on. Each provider gets the fused ops it supports. Two
+fusions are skipped for now because ONNX Runtime's kernel runs slower than the plain ops, and come back once that's
+fixed.
+
+```python
+config = OnnxConfig(ort_fusions="cpu")
+config = OnnxConfig(ort_fusions="cuda")
+config = OnnxConfig(ort_fusions="webgpu")
+```
+
+| | `"cpu"` | `"cuda"` | `"webgpu"` |
+|---|---|---|---|
+| Attention with a key-value cache | `GroupQueryAttention`, rotary included | `GroupQueryAttention` with its query and key norms; the prefill keeps `MultiHeadAttention` for now ([slower](https://github.com/microsoft/onnxruntime/issues/33869)) | `GroupQueryAttention`, rotary as its own `RotaryEmbedding` |
+| Other attention | plain ops for now ([slower](https://github.com/microsoft/onnxruntime/issues/33873)) | `MultiHeadAttention` | `MultiHeadAttention` |
+| Mixture of experts | unfused | `MoE` | unfused |
+| CUDA graphs | — | static exports can replay | — |
+| onnxruntime | any | 1.28 or later | any |
+
+A `"cuda"` graph with `MoE` doesn't run on CPU, since ONNX Runtime's `MoE` only exists for CUDA. A `"webgpu"` graph runs
+in the browser with onnxruntime-web, or natively with onnxruntime-webgpu.
+
+The fused ops aren't standard ONNX, so other ONNX consumers such as TensorRT or OpenVINO can't read them. The default
+is `ort_fusions=None`, which keeps the graph standard. If you need the model on several runtimes, export it once for
+each.
+
+The fusions run before [`~exporters.OnnxRuntimeQuantizer`] quantizes the graph, as ONNX Runtime recommends. They're
+skipped when the model is quantized before export, and they require `optimize=True` (the default).
+
 ## Quantization
 
 Every export config takes a `quantizer` that quantizes the model during the export, on the `torch.export` FX graph
@@ -840,6 +875,7 @@ if it's using something else.
 - `grouped_mm` traces fine through `DynamoExporter` and is auto-translated for `OnnxExporter`.
 For `ExecutorchExporter` with either XNNPACK or MLX, the exporter swaps MoE experts to
 `batched_mm` before export.
+- Sliding-window layers (Mistral, Gemma 3) export with a full key-value cache; the sliding mask still applies the window.
 
 ## Next steps
 
