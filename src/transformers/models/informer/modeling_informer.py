@@ -1017,7 +1017,7 @@ class InformerModel(InformerPreTrainedModel):
 
     @property
     def _past_length(self) -> int:
-        return self.config.context_length + max(self.config.lags_sequence)
+        return self.config.context_length + max(self.config.lags_sequence, default=0)
 
     def get_lagged_subsequences(
         self, sequence: torch.Tensor, subsequences_length: int, shift: int = 0
@@ -1035,6 +1035,9 @@ class InformerModel(InformerPreTrainedModel):
             shift: int
                 Shift the lags by this amount back.
         """
+        if not self.config.lags_sequence:
+            return sequence.new_empty((sequence.shape[0], subsequences_length, *sequence.shape[2:], 0))
+
         sequence_length = sequence.shape[1]
         indices = [lag - shift for lag in self.config.lags_sequence]
 
