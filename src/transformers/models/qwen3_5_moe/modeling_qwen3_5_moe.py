@@ -528,13 +528,13 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
         self.in_proj_b = nn.Linear(self.hidden_size, self.num_v_heads, bias=False)
         self.in_proj_a = nn.Linear(self.hidden_size, self.num_v_heads, bias=False)
 
-    def cache_states(self) -> list[tuple[tuple[int, ...], torch.dtype]]:
-        """The shape and dtype of the states continuous batching keeps per request for this layer: the last inputs of
-        the causal convolution, then the recurrent state."""
-        return [
-            ((self.conv_dim, self.conv_kernel_size - 1), self.conv1d.weight.dtype),
-            ((self.num_v_heads, self.head_k_dim, self.head_v_dim), torch.float32),
-        ]
+    def cache_states(self) -> dict[str, tuple[tuple[int, ...], torch.dtype | None]]:
+        """The shape and dtype (None for the cache dtype) of the states continuous batching keeps per request for this
+        layer: the last inputs of the causal convolution and the recurrent state."""
+        return {
+            "conv": ((self.conv_dim, self.conv_kernel_size - 1), None),
+            "recurrent": ((self.num_v_heads, self.head_k_dim, self.head_v_dim), torch.float32),
+        }
 
     @force_accelerate_hooks("conv1d")
     def forward(
@@ -553,7 +553,7 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
         paged_cache = kwargs.get("cache")
         # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
         if paged_cache is not None:
-            conv_state, recurrent_state = paged_cache.read_cache_states(self.layer_idx, kwargs)
+            conv_state, recurrent_state = paged_cache.read_cache_states(self.layer_idx, ("conv", "recurrent"), kwargs)
         elif cache_params is not None:
             conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
             recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
@@ -644,7 +644,9 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
                 use_qk_l2norm_in_kernel=True,
                 cu_seqlens=kwargs["cu_seq_lens_q"],
             )
-            paged_cache.write_cache_states(self.layer_idx, (conv_state, last_recurrent_state), kwargs)
+            paged_cache.write_cache_states(
+                self.layer_idx, {"conv": conv_state, "recurrent": last_recurrent_state}, kwargs
+            )
         elif recurrent_state is not None and seq_len == 1:
             core_attn_out, last_recurrent_state = torch_recurrent_gated_delta_rule(
                 query,
