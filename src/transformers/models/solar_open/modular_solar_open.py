@@ -23,9 +23,8 @@ from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeModel,
     Glm4MoeMoE,
     Glm4MoePreTrainedModel,
-    Glm4MoeRMSNorm,
 )
-from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer
+from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaRMSNorm
 
 
 logger = logging.get_logger(__name__)
@@ -87,7 +86,7 @@ class SolarOpenAttention(LlamaAttention):
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
 
 
-class SolarOpenRMSNorm(Glm4MoeRMSNorm):
+class SolarOpenRMSNorm(LlamaRMSNorm):
     pass
 
 

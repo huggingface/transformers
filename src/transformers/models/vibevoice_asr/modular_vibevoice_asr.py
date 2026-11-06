@@ -30,7 +30,7 @@ from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import AutoConfig, AutoModel
-from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..vibevoice_acoustic_tokenizer.modeling_vibevoice_acoustic_tokenizer import (
     VibeVoiceAcousticTokenizerPreTrainedModel,
 )
@@ -119,7 +119,7 @@ class VibeVoiceAsrConfig(PreTrainedConfig):
         self.acoustic_tokenizer_chunk_size = int(value) * hop_length
 
 
-class VibeVoiceAsrRMSNorm(Qwen2RMSNorm):
+class VibeVoiceAsrRMSNorm(LlamaRMSNorm):
     pass
 
 

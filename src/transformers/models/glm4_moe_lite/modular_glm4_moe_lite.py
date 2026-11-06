@@ -28,10 +28,10 @@ from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeModel,
     Glm4MoeMoE,
     Glm4MoePreTrainedModel,
-    Glm4MoeRMSNorm,
     Glm4MoeRotaryEmbedding,
     Glm4MoeTopkRouter,
 )
+from ..llama.modeling_llama import LlamaRMSNorm
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.5")
@@ -147,7 +147,7 @@ class Glm4MoeLiteTopkRouter(Glm4MoeTopkRouter):
     pass
 
 
-class Glm4MoeLiteRMSNorm(Glm4MoeRMSNorm):
+class Glm4MoeLiteRMSNorm(LlamaRMSNorm):
     pass
 
 

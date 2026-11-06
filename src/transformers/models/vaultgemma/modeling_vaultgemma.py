@@ -22,7 +22,7 @@
 from collections.abc import Callable
 
 import torch
-import torch.nn as nn
+from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN

@@ -32,8 +32,9 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub_with_fallback, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
-from ...utils import ModelOutput, auto_docstring
+from ...utils import auto_docstring
 from ...utils.import_utils import (
     is_mambapy_available,
     is_torch_greater_or_equal,

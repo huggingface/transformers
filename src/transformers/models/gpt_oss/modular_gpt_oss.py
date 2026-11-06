@@ -37,7 +37,6 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaPreTrainedModel,
-    LlamaRMSNorm,
     repeat_kv,
 )
 from ..mixtral.modeling_mixtral import (
@@ -46,6 +45,7 @@ from ..mixtral.modeling_mixtral import (
     MixtralForTokenClassification,
     MixtralModel,
 )
+from ..olmo2.modeling_olmo2 import Olmo2RMSNorm
 from ..qwen2.modeling_qwen2 import Qwen2Attention, Qwen2RotaryEmbedding
 from .configuration_gpt_oss import GptOssConfig
 
@@ -53,13 +53,8 @@ from .configuration_gpt_oss import GptOssConfig
 logger = logging.get_logger(__name__)
 
 
-class GptOssRMSNorm(LlamaRMSNorm):
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return (self.weight * hidden_states).to(input_dtype)  # main diff with Llama
+class GptOssRMSNorm(Olmo2RMSNorm):
+    pass
 
 
 @use_experts_implementation(is_concatenated=False, is_transposed=True, has_bias=True)
