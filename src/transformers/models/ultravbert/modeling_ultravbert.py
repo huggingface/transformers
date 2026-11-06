@@ -46,7 +46,7 @@ from .configuration_ultravbert import UltraVBertConfig
 @auto_docstring
 @dataclass
 class UltraVBertBaseModelOutput(BaseModelOutput):
-    r"""
+    """
     Base class for UltraVBert model's outputs.
     Args:
         last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
