@@ -72,7 +72,6 @@ jobs:
           base = "tests/models"
           dirs = sorted(d for d in os.listdir(base)
                         if os.path.isdir(os.path.join(base, d)) and not d.startswith("__"))
-          dirs = [d for d in dirs if d in {"bert", "gpt2", "whisper"}]  # TEMP: ramp-up subset
           N = 3                                          # 3 slices keeps each <=256
           per = math.ceil(len(dirs) / N)
           for i in range(N):
@@ -105,7 +104,7 @@ jobs:
     env:
       HF_HOME: /mnt/cache
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
-      RUN_SLOW: "1"
+      RUN_SLOW: "0"
       OMP_NUM_THREADS: "4"
     steps:
       - name: Test ${{ matrix.model }}
@@ -145,7 +144,7 @@ jobs:
     env:
       HF_HOME: /mnt/cache
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
-      RUN_SLOW: "1"
+      RUN_SLOW: "0"
       OMP_NUM_THREADS: "4"
     steps:
       - name: Test ${{ matrix.model }}
@@ -179,7 +178,7 @@ jobs:
     env:
       HF_HOME: /mnt/cache
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
-      RUN_SLOW: "1"
+      RUN_SLOW: "0"
       OMP_NUM_THREADS: "4"
     steps:
       - name: Test ${{ matrix.model }}
