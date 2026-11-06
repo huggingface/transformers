@@ -1658,11 +1658,6 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
                 "attention_mask": attention_mask,
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
-                "allow_is_causal_skip": isinstance(logits_to_keep, int)
-                and (
-                    logits_to_keep == 0
-                    or (logits_to_keep == 1 and not getattr(past_key_values, "is_compileable", False))
-                ),
             }
             # Create the masks
             causal_mask_mapping = {
@@ -1683,7 +1678,10 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
 
         # decoder layers
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            if i == self.first_kv_shared_layer_idx:
+            # Starting at `test_kv_shared_prefill_truncation`, we will always reuse k/v of previous layers. This means that we can
+            # drop the seq_len dimension according to `logits_to_keep` for all remaining layers since we do not look at the past
+            # anymore, which leads to much faster forward for large seq_len
+            if i == self.test_kv_shared_prefill_truncation:
                 hidden_states, per_layer_inputs, position_embeddings, causal_mask_mapping = (
                     self._maybe_slice_kv_shared_inputs(
                         hidden_states,
@@ -1807,48 +1805,38 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
         **kwargs,
     ):
         """
-        Slices sequence-length inputs to the `logits_to_keep` token positions before entering the
-        KV-shared layers. Because KV-shared layers reuse keys and values computed by earlier non-shared
-        layers and do not write to the KV cache, unselected prompt positions do not need to be computed
-        through these layers unless full-sequence intermediate states (e.g. `output_hidden_states`,
+        Slices sequence-length inputs to the `logits_to_keep` token positions before entering the KV-shared layers. Because KV-shared
+        layers reuse keys and values computed by earlier non-shared layers and do not write to the KV cache, unselected prompt
+        positions do not need to be computed through these layers unless full-sequence intermediate states (e.g. `output_hidden_states`,
         `output_attentions`, `output_router_logits`) are requested.
+        Note: to simplify, we only allow this optimization for integer `logits_to_keep`, i.e. what `generate` uses. This avoids a lot
+        of edge cases regarding masks, and it keeps this method simple.
         """
-        seq_len = hidden_states.shape[1]
+        batch_size, seq_len = hidden_states.shape[:1]
         record_keys = ("output_hidden_states", "output_attentions", "output_router_logits")
-        can_slice = (
-            0 < logits_to_keep < seq_len
-            if isinstance(logits_to_keep, int)
-            else logits_to_keep.dtype != torch.bool and 0 < logits_to_keep.shape[-1] < seq_len
-        )
-        masks_valid = all(
-            (m is None and isinstance(logits_to_keep, int) and logits_to_keep == 1)
-            or (isinstance(m, torch.Tensor) and m.ndim == 4)
-            for m in causal_mask_mapping.values()
-        )
+        can_optimize = True
+        # If the seq_len is already 1 (i.e. decoding), or we request any additional output, exit early
+        if seq_len == 1 or any(kwargs.get(k) or getattr(self.config, k, False) for k in record_keys):
+            can_optimize = False
+        # To keep it simple, as it's the usual case
+        elif not isinstance(logits_to_keep, int):
+            can_optimize = False
+        # In this case, we cannot rely on the `is_causal` attribute, as dropping some tokens will make us loose causality
+        elif logits_to_keep > 1 and any(mask is None for mask in causal_mask_mapping.values()):
+            can_optimize = False
 
-        if (
-            not can_slice
-            or not masks_valid
-            or any(kwargs.get(k) or getattr(self.config, k, False) for k in record_keys)
-        ):
+        # If we cannot optimize, return untouched inputs will the full seq_len
+        if not can_optimize:
             return hidden_states, per_layer_inputs, position_embeddings, causal_mask_mapping
 
-        batch_size = hidden_states.shape[0]
-        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
-        if per_layer_inputs is not None:
-            per_layer_inputs = slice_logits_to_keep(per_layer_inputs.flatten(2), logits_to_keep).unflatten(
-                2, per_layer_inputs.shape[2:]
-            )
+        logits_to_keep = slice(-logits_to_keep, None)
+        hidden_states = hidden_states[:, logits_to_keep, :]
+        per_layer_inputs = per_layer_inputs[:, logits_to_keep, :, :]
         position_embeddings = {
-            k: (
-                slice_logits_to_keep(cos.expand(batch_size, -1, -1), logits_to_keep),
-                slice_logits_to_keep(sin.expand(batch_size, -1, -1), logits_to_keep),
-            )
-            for k, (cos, sin) in position_embeddings.items()
+            k: (cos[:, logits_to_keep, :], sin[:, logits_to_keep, :]) for k, (cos, sin) in position_embeddings.items()
         }
         causal_mask_mapping = {
-            k: slice_logits_to_keep(v.squeeze(1), logits_to_keep).unsqueeze(1) if v is not None else None
-            for k, v in causal_mask_mapping.items()
+            k: v[:, :, logits_to_keep, :] if v is not None else None for k, v in causal_mask_mapping.items()
         }
 
         return hidden_states, per_layer_inputs, position_embeddings, causal_mask_mapping
