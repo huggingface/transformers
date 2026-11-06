@@ -19,7 +19,7 @@ deps = {
     "hf-doc-builder": "hf-doc-builder",
     "huggingface-hub": "huggingface-hub>=1.31.0,<3.0",
     "ipadic": "ipadic>=1.0.0,<2.0",
-    "jinja2": "jinja2>=3.1.0",
+    "jinja2": "jinja2>=3.1.6",
     "kenlm": "kenlm",
     "kernels": "kernels>=0.17.2,<0.18",
     "librosa": "librosa",
