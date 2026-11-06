@@ -16,8 +16,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass
-from enum import Enum
-from os import PathLike
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from ..utils import logging
@@ -30,7 +29,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-class ExportFormat(Enum):
+class ExportFormat(StrEnum):
     """Identifies the export backend. Stored in [`ExportConfigMixin`] for serialisation round-trips."""
 
     EXECUTORCH = "executorch"
@@ -49,7 +48,7 @@ class ExportConfigMixin:
     during deserialisation.
     """
 
-    export_format: ExportFormat
+    export_format: ExportFormat | str
 
     @classmethod
     def from_dict(cls, config_dict):
@@ -130,37 +129,19 @@ class OnnxConfig(DynamoConfig):
     `dynamic_shapes`, `prefer_deferred_runtime_asserts_over_guards`).
 
     Args:
-        output_path (`str` or `PathLike`, *optional*):
-            Output path for the `.onnx` file. When `None` (default) the
-            exported model is kept in memory as an `ONNXProgram` and not
-            written to disk.
         opset_version (`int`, *optional*):
             ONNX opset version to target. Defaults to the latest opset
             supported by the installed `onnxscript` version.
-        external_data (`bool`, *optional*, defaults to `True`):
-            Store large weight tensors in a separate `.onnx_data` sidecar
-            file instead of embedding them in the protobuf. Required for
-            models whose weights exceed the 2 GB protobuf limit.
         optimize (`bool`, *optional*, defaults to `True`):
             Run `onnxscript` optimisation passes (constant folding, dead-code
             elimination, …) on the exported graph. Disable for models that
             hit upstream `onnxscript` optimiser bugs.
-        export_params (`bool`, *optional*, defaults to `True`):
-            Embed model weights in the ONNX graph. Set to `False` to export
-            a weight-free graph (weights must be supplied at runtime).
-        keep_initializers_as_inputs (`bool`, *optional*, defaults to `False`):
-            Expose weight initializers as explicit graph inputs. Required by
-            some older ONNX runtimes (opset < 9).
     """
 
     export_format: ExportFormat = ExportFormat.ONNX
 
-    output_path: str | PathLike | None = None
     opset_version: int | None = None
-    external_data: bool = True
     optimize: bool = True
-    export_params: bool = True
-    keep_initializers_as_inputs: bool = False
 
 
 @dataclass
@@ -209,12 +190,9 @@ class OpenVINOConfig(DynamoConfig):
     `prefer_deferred_runtime_asserts_over_guards`).
 
     Args:
-        output_path (`str` or `PathLike`, *optional*):
-            Output path for the `.xml` file (the matching `.bin` is written alongside). When
-            `None` (default) the converted model is kept in memory as an ``openvino.Model``.
-        compress_to_fp16 (`bool`, *optional*, defaults to `True`):
-            Compress floating-point weights to FP16 when saving — halves on-disk size with
-            negligible accuracy impact on most models. Only applied when ``output_path`` is set.
+        compress_to_fp16 (`bool`, *optional*, defaults to `False`):
+            Compress the converted model's `float32` weights to `float16`, halving its size. Off by default
+            for the narrower range.
         stateful (`bool`, *optional*, defaults to `True`):
             Fold round-tripped state tensors (KV cache, SSM states, …) into internal OV
             variables (``ReadValue``/``Assign``). The runtime then carries state across
@@ -226,6 +204,5 @@ class OpenVINOConfig(DynamoConfig):
 
     export_format: ExportFormat = ExportFormat.OPENVINO
 
-    output_path: str | PathLike | None = None
-    compress_to_fp16: bool = True
+    compress_to_fp16: bool = False
     stateful: bool = True
