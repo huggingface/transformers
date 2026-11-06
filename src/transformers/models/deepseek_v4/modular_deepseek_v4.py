@@ -216,6 +216,13 @@ class DeepseekV4HCACache(DynamicSlidingWindowLayer):
         self.entry_count[name] += compressed.shape[1]
         return self.compressed_kv[name]
 
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        for states in (self.buffer_kv, self.buffer_gate, self.compressed_kv):
+            for name, tensor in states.items():
+                if tensor is not None:
+                    states[name] = tensor.index_select(0, beam_idx.to(tensor.device))
+
     def reset(self) -> None:
         super().reset()
         # Dropped rather than zeroed, as they grow by concatenation, like the main states
@@ -270,6 +277,13 @@ class DeepseekV4CSACache(DeepseekV4HCACache):
         self.overlap_kv[name] = chunk_kv[:, -1, :, :head_dim].clone()
         self.overlap_gate[name] = chunk_gate[:, -1, :, :head_dim].clone()
         return prior_kv, prior_gate
+
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        for states in (self.overlap_kv, self.overlap_gate):
+            for name, tensor in states.items():
+                if tensor is not None:
+                    states[name] = tensor.index_select(0, beam_idx.to(tensor.device))
 
     def reset(self) -> None:
         super().reset()
