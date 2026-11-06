@@ -1,14 +1,15 @@
 """
-Generate vLLM CI failure report files from a GitHub Actions workflow run.
+Generate CI failure report files from a GitHub Actions workflow run (e.g. the vLLM and SGLang
+integration workflows).
 
 Fetches job logs via the GitHub REST API (no gh CLI dependency — works inside
 Docker containers that don't have gh installed). Imports log-parsing functions
 from analyze_gh_wf_runs.py, which must be in the same directory.
 
 Usage:
-  python utils/analyze_vllm_ci.py --run-id <RUN_ID> [--token <TOKEN>]
-                             [--output-dir <DIR>] [--repo <OWNER/REPO>]
-                             [--workflow <WORKFLOW_FILE>] [--plugin vllm]
+  python utils/analyze_ci_report.py --run-id <RUN_ID> --workflow <WORKFLOW_FILE>
+                                    [--token <TOKEN>] [--output-dir <DIR>]
+                                    [--repo <OWNER/REPO>] [--plugin vllm]
 
   --token   GitHub token with actions:read scope.
             Defaults to GITHUB_TOKEN env var. Without a token, only public repos
@@ -74,7 +75,6 @@ from analyze_gh_wf_runs import (  # noqa: E402
 
 
 REPO = "huggingface/transformers"
-WORKFLOW_FILE = "vllm-ci-caller.yml"
 
 
 # ---------------------------------------------------------------------------
@@ -170,7 +170,7 @@ def fetch_job_log(job_id, repo=REPO, token=None):
         return ""
 
 
-def get_previous_run(current_run_id, repo=REPO, workflow=WORKFLOW_FILE, token=None):
+def get_previous_run(current_run_id, workflow, repo=REPO, token=None):
     """
     Return the most recent *completed* workflow run on the main branch that is
     not the current run. Returns the run dict or None if not found.
@@ -291,6 +291,9 @@ _PYDANTIC_VALUE_ERROR_RE = re.compile(r"Value error, (.*?)(?: \[type=.*)?$", re.
 # c10 log prefix: "[rank0]:[F825 10:33:04.650907418 cpu_wna16.cpp:308] " -> "[cpu_wna16.cpp:308] "
 _C10_PREFIX_RE = re.compile(r"(?:\[rank\d+\]:)?\[[IWEF]\d{3,4} [\d:.]+ ([^\]]+)\]")
 
+# Header a trace plugin prepends to the pytest trace, e.g. "[vllm plugin] Subprocess ERROR lines for ...".
+_PLUGIN_HEADER_RE = re.compile(r"\[\w+ plugin\]")
+
 _MAX_ROOT_CAUSE_LEN = 300
 
 
@@ -310,7 +313,7 @@ def root_cause_error(item):
     trace, short_error = item["trace"], item["short_error"]
     exc_type, message = None, ""
 
-    if trace.startswith("[vllm plugin]"):
+    if _PLUGIN_HEADER_RE.match(trace):
         subprocess_lines = trace.split("\n--- pytest trace ---\n", 1)[0]
         for line in subprocess_lines.splitlines():
             m = _EXC_LINE_RE.match(line.rstrip())
@@ -532,7 +535,7 @@ def write_reports(run_id, run_url, current_grouped, job_urls, previous_run, prev
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate vLLM CI failure report files from a GitHub Actions workflow run."
+        description="Generate CI failure report files from a GitHub Actions workflow run."
     )
     parser.add_argument("--run-id", required=True, help="GitHub Actions workflow run ID")
     parser.add_argument(
@@ -552,8 +555,8 @@ def main():
     )
     parser.add_argument(
         "--workflow",
-        default=WORKFLOW_FILE,
-        help=f"Workflow file name used to find the previous run (default: {WORKFLOW_FILE})",
+        required=True,
+        help="Workflow file name (e.g. vllm-ci-caller.yml), used to find the previous run on main",
     )
     parser.add_argument(
         "--plugin",
