@@ -33,6 +33,7 @@ from transformers import (
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator_memory,
+    require_torch_greater_or_equal,
     slow,
     torch_device,
 )
@@ -52,6 +53,7 @@ if is_torch_available():
 
     from transformers.models.minimax_m3_vl.configuration_minimax_m3_vl import MiniMaxM3VLVisionConfig
     from transformers.models.minimax_m3_vl.modeling_minimax_m3_vl import (
+        MiniMaxM3VLVisionModel,
         MiniMaxM3VLVisionRotaryEmbedding,
     )
     from transformers.vision_utils import get_vision_position_ids
@@ -352,6 +354,47 @@ class MiniMaxM3VLModelTest(VLMModelTest, unittest.TestCase):
                     pixel_values_videos=pixel_values_videos,
                     video_grid_thw=video_grid_thw,
                 )
+
+    @parameterized.expand([("images", 1), ("videos", 2), ("video_segments", 4)])
+    @slow
+    @require_torch_greater_or_equal("2.11")
+    def test_vision_export_preserves_outputs(self, name, num_frames):
+        from transformers.exporters.configs import DynamoConfig
+        from transformers.exporters.exporter_dynamo import DynamoExporter
+        from transformers.exporters.utils import prepare_for_export
+
+        config = MiniMaxM3VLVisionConfig(
+            hidden_size=64,
+            intermediate_size=128,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            image_size=8,
+            patch_size=2,
+            temporal_patch_size=2,
+            spatial_merge_size=2,
+            attn_implementation="sdpa",
+        )
+        model = MiniMaxM3VLVisionModel(config).to(torch_device).eval()
+        # Multiple spatial merge blocks expose position ordering errors; multiple frames
+        # must remain in the same attention segment and retain their temporal RoPE axis.
+        inputs = {
+            "pixel_values": torch.randn(2 * num_frames * 16, 24, device=torch_device),
+            "grid_thw": torch.tensor([[num_frames, 4, 4]] * 2, device=torch_device),
+        }
+        with torch.no_grad():
+            expected = model(**inputs).last_hidden_state
+            _, prepared_inputs, _ = prepare_for_export(model, inputs.copy())
+            torch.testing.assert_close(model(**prepared_inputs).last_hidden_state, expected)
+
+        original_forward = type(model.layers[0].self_attn).forward
+        for dynamic in (False, True):
+            with self.subTest(dynamic=dynamic):
+                export_inputs = inputs.copy()
+                exported = DynamoExporter().export(model, export_inputs, DynamoConfig(dynamic=dynamic))
+                with torch.no_grad():
+                    actual = exported.module()(**export_inputs).last_hidden_state
+                torch.testing.assert_close(actual, expected, atol=1e-5, rtol=1e-5)
+                self.assertIs(type(model.layers[0].self_attn).forward, original_forward)
 
     @parameterized.expand([(8, 2), (80, 26)])
     def test_three_axes_frequency_ladder(self, head_dim, axis_dim):
