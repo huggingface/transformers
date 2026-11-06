@@ -21,6 +21,8 @@ any of these show up):
   - Only the first "short test summary info" section is parsed, so a job that
     runs pytest more than once only reports the first run's failures.
   - Node ids containing spaces (e.g. a parametrize id with a space) are not matched.
+  - Collection errors ("ERROR <file.py> - ...", no test ran) are not reported; only
+    per-test FAILED / ERROR (setup/teardown) entries are.
   - Failure blocks are matched by name (the "____ name ____" header has no file
     path), so two tests with the same name in different files of one job both
     get the last block; if no block matches, the fuzzy fallback may return the
@@ -114,10 +116,10 @@ def _strip_timestamp(line):
     return re.sub(r"^\d{4}-\d{2}-\d{2}T[\d:.]+Z ", "", line)
 
 
-# A failing entry of pytest's short test summary: "FAILED <nodeid> - <message>" or "ERROR <nodeid> - <message>"
-# (ERROR = error in setup/teardown/collection). The node id must look like a test path, so that log lines such as
-# "ERROR 08-25 10:31:30 [file.py:12] ..." are not mistaken for test errors.
-_SUMMARY_ENTRY_RE = re.compile(r"(FAILED|ERROR)\s+(\S+\.py(?:::\S+)?)(?:\s+-\s+(.*))?$")
+# A failing test in pytest's short test summary: "FAILED <nodeid> - <message>" or "ERROR <nodeid> - <message>"
+# (ERROR = error in the test's setup/teardown). The node id must name a test ("file.py::..."): collection errors
+# ("ERROR file.py - ...") are not handled, and logger lines like "ERROR 08-25 10:31:30 [...] ..." don't match.
+_SUMMARY_ENTRY_RE = re.compile(r"(FAILED|ERROR)\s+(\S+\.py::\S+)(?:\s+-\s+(.*))?$")
 
 
 def extract_failures_with_errors(log):
@@ -186,7 +188,7 @@ def extract_failures(log):
 
 
 # Prefix of failure-block headers for errors outside the test call, e.g. "ERROR at setup of TestFoo.test_bar".
-_BLOCK_ERROR_PREFIX_RE = re.compile(r"^ERROR (?:at (?:setup|teardown) of|collecting) ")
+_BLOCK_ERROR_PREFIX_RE = re.compile(r"^ERROR at (?:setup|teardown) of ")
 
 
 def extract_all_failure_blocks(log):
