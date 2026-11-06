@@ -306,7 +306,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         )
 
         prompt = f"{self.user_token}What is the answer for 1+1? Explain it.{self.end_token}{self.assistant_token}"
-        inputs = self.processor(prompt, images=None, return_tensors="pt").to(torch_device)
+        inputs = self.processor(text=prompt, images=None, return_tensors="pt").to(torch_device)
 
         output = model.generate(
             **inputs,
@@ -326,7 +326,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         )
 
         prompt = f"{self.user_token}<|image|>What is shown in this image?{self.end_token}{self.assistant_token}"
-        inputs = self.processor(prompt, images=self.image, return_tensors="pt").to(torch_device)
+        inputs = self.processor(text=prompt, images=self.image, return_tensors="pt").to(torch_device)
 
         output = model.generate(
             **inputs,
@@ -360,7 +360,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
             placeholder += "<|image|>"
 
         prompt = f"{self.user_token}{placeholder}Summarize the deck of slides.{self.end_token}{self.assistant_token}"
-        inputs = self.processor(prompt, images, return_tensors="pt").to(torch_device)
+        inputs = self.processor(text=prompt, images=images, return_tensors="pt").to(torch_device)
 
         output = model.generate(
             **inputs,
@@ -380,7 +380,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         )
 
         prompt = f"{self.user_token}<|audio|>What is happening in this audio?{self.end_token}{self.assistant_token}"
-        inputs = self.processor(prompt, audio=self.audio, sampling_rate=self.sampling_rate, return_tensors="pt").to(
+        inputs = self.processor(text=prompt, audio=self.audio, sampling_rate=self.sampling_rate, return_tensors="pt").to(
             torch_device
         )
 
