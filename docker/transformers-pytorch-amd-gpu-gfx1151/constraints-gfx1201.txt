@@ -60,7 +60,7 @@ jsonschema-specifications==2025.9.1
 jsonschema==4.26.0
 jupyter_core==5.9.1
 kenlm==0.3.0
-kernels==0.17.2
+kernels==0.18.1
 kiwisolver==1.5.1
 lazy-loader==0.6
 libcst==1.9.0
