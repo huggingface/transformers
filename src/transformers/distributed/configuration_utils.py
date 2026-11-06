@@ -64,12 +64,21 @@ class DistributedConfig:
         ep_size (`int`, *optional*):
             Number of devices owning distinct expert shards. Defaults to 1. Set it explicitly to enable EP. Must be
             a multiple of `tp_size` and divide `fsdp_size * tp_size`. All-reduce expert plans require
-            `ep_size=tp_size`; token dispatch (`"ep_dispatch_experts"`) also allows `ep_size > tp_size`.
+            `ep_size=tp_size`; `"ep_dispatch_experts"` also allows `ep_size > tp_size`, with all-to-all token dispatch.
         ep_plan (`dict[str, str]`, *optional*):
             Expert parallel sharding plan. Leave as `None` to use the model's predefined `base_model_ep_plan`. Pass a
             dictionary to override individual rules of that plan; unspecified rules are kept. Applied only when
             `ep_size > 1`, and its rules take precedence over `tp_plan` rules for the same modules. An
-            `"ep_dispatch_experts"` rule selects all-to-all token dispatch instead of router masking and all-reduce.
+            `"ep_dispatch_experts"` rule lets `ep_implementation` pick how tokens reach the experts.
+        ep_implementation (`str`, *optional*, defaults to `"auto"`):
+            How an `"ep_dispatch_experts"` rule brings the experts their tokens. It names an `EPImplementation`
+            registered in `EpDispatchExpertsParallel.ep_implementations`:
+
+            - `"all_to_all"` exchanges the routed tokens with all-to-all collectives.
+            - `"all_reduce"` runs each rank's experts on the batch the EP group shares, and sums the outputs. It
+              requires `ep_size == tp_size`.
+            - `"auto"` runs `"all_reduce"` at inference when the EP group shares one batch, and `"all_to_all"`
+              otherwise.
     """
 
     tp_size: int | None = None
@@ -84,6 +93,7 @@ class DistributedConfig:
     pp_size: int | None = None
     ep_size: int | None = None
     ep_plan: dict[str, str] | None = None
+    ep_implementation: str = "auto"
 
     @property
     def efsdp_size(self) -> int:

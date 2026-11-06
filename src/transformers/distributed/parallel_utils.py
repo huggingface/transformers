@@ -117,6 +117,9 @@ if is_torch_distributed_available():
         ranks), but the backward gradient is partial (each rank has 1/tp_size from
         its expert shard). We need to sum the partial gradients without dividing by
         world_size, which is what DTensor's Replicate backward does incorrectly.
+
+        Apply it only when a gradient can flow (`torch.is_grad_enabled() and x.requires_grad`): at inference the
+        per-call overhead of an `autograd.Function` compounds across layers, e.g. in eager decode.
         """
 
         @staticmethod
