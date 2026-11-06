@@ -21,12 +21,7 @@ from __future__ import annotations
 
 import warnings
 
-from ..distributed.expert_parallel import (
-    EpRouterParallel,
-    MoEParamShard,
-    MoeTensorParalellMegaMoeExperts,
-    RouterParallelMegaMoe,
-)
+from ..distributed.expert_parallel import EpRouterParallel, MoEParamShard
 from ..distributed.parallel_utils import replace_layer_number_by_wildcard
 from ..distributed.tensor_parallel import (
     ALL_PARALLEL_STYLES,
@@ -79,12 +74,10 @@ __all__ = [
     "MoeExpertsParallel",
     "MoEParamShard",
     "MoeIdentityParallel",
-    "MoeTensorParalellMegaMoeExperts",
     "PackedColwiseParallel",
     "PackedRowwiseParallel",
     "ParallelInterface",
     "ReplicatedWithGradAllReduce",
-    "RouterParallelMegaMoe",
     "RowwiseParallel",
     "SequenceParallel",
     "TensorParallelLayer",
