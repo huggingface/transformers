@@ -742,6 +742,10 @@ class MiniMaxM3VLVisionEmbeddings(Qwen2_5_VisionPatchEmbed):
 class MiniMaxM3VLVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     """Partial 3D RoPE with equal frequency bands for temporal, height and width coordinates."""
 
+    @property
+    def axis_dim(self):
+        return 2 * self.inv_freq.shape[0]
+
     def compute_axial_rope_parameters(config: MiniMaxM3VLVisionConfig, device=None, **kwargs):
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -839,6 +843,8 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
 
     def __init__(self, config: MiniMaxM3VLVisionConfig):
         super().__init__(config)
+        self.spatial_merge_size = config.spatial_merge_size
+        self.merge_temporal = True
         self.embeddings = MiniMaxM3VLVisionEmbeddings(config)
         self.pre_layrnorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layers = nn.ModuleList([MiniMaxM3VLVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
@@ -857,11 +863,9 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
         """
         embeds = self.embeddings(pixel_values).to(self.pre_layrnorm.weight.dtype)
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(
-            grid_thw, self.config, merge_temporal=True, kwargs=kwargs
+            grid_thw, self.config, merge_temporal=self.merge_temporal, kwargs=kwargs
         )
-        position_ids = get_vision_position_ids(
-            grid_thw, self.config.spatial_merge_size, include_temporal=True, kwargs=kwargs
-        )
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, include_temporal=True, kwargs=kwargs)
         position_embeddings = self.rotary_emb(embeds, position_ids)
         hidden_states = self.pre_layrnorm(embeds).unsqueeze(0)
         for layer in self.layers:
