@@ -71,8 +71,9 @@ class DistributedConfig:
               requires `ep_size == tp_size`.
             - `"deepgemm_megamoe"` hands that batch to DeepGEMM Mega MoE, whose kernel exchanges the tokens itself.
               Loading with `experts_implementation="deepgemm_megamoe"` selects it.
-            - `"auto"` runs `"all_reduce"` at inference when the EP group shares one batch, and `"all_to_all"`
-              otherwise.
+            - `"deepep"` exchanges the routed tokens with DeepEP's kernels. It captures in a CUDA graph.
+            - `"auto"` runs `"all_reduce"` at inference when the EP group shares one batch. Otherwise it dispatches
+              tokens with `"deepep"` where DeepEP runs, and `"all_to_all"` elsewhere.
     """
 
     tp_size: int | None = None
