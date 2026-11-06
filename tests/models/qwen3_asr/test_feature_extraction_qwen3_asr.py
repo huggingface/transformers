@@ -164,6 +164,26 @@ class Qwen3ASRFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         per_sample_valid = out["attention_mask"].sum(-1).tolist()
         self.assertEqual(per_sample_valid, [200, 550])
 
+    def test_attention_mask_independent_of_batch_padding(self):
+        """A sample's valid frame count does not depend on the other samples in the batch."""
+        fe = Qwen3ASRFeatureExtractor()
+        audio = np.random.randn(160 * 400 + 16).astype(np.float32)
+        longer = np.random.randn(160 * 600 + 32).astype(np.float32)
+
+        def num_valid_frames(inputs):
+            out = fe(
+                inputs,
+                sampling_rate=16_000,
+                padding="longest",
+                truncation=False,
+                return_attention_mask=True,
+                return_tensors="np",
+            )
+            return out["attention_mask"].sum(-1).tolist()
+
+        self.assertEqual(num_valid_frames([audio]), [400])
+        self.assertEqual(num_valid_frames([audio, longer]), [400, 600])
+
     def test_mismatched_sampling_rate_raises(self):
         fe = Qwen3ASRFeatureExtractor(sampling_rate=16_000)
         audio = np.random.randn(16_000).astype(np.float32)
