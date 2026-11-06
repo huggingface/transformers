@@ -53,7 +53,7 @@ jobs:
 
   model-ci:
     name: Model CI
-    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@754b90f30a8f3ea80456cb98f370bb1d4114f543  # main
     with:
       job: run_models_gpu
       slack_report_channel: "#transformers-ci-daily-models"
@@ -66,7 +66,7 @@ jobs:
 
   torch-pipeline:
     name: Torch pipeline CI
-    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@754b90f30a8f3ea80456cb98f370bb1d4114f543  # main
     with:
       job: run_pipelines_torch_gpu
       slack_report_channel: "#transformers-ci-daily-pipeline-torch"
@@ -78,7 +78,7 @@ jobs:
 
   trainer-fsdp-ci:
     name: Trainer/FSDP CI
-    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@754b90f30a8f3ea80456cb98f370bb1d4114f543  # main
     with:
       job: run_trainer_and_fsdp_gpu
       slack_report_channel: "#transformers-ci-daily-training"
@@ -91,7 +91,7 @@ jobs:
 
   deepspeed-ci:
     name: DeepSpeed CI
-    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@754b90f30a8f3ea80456cb98f370bb1d4114f543  # main
     with:
       job: run_torch_cuda_extensions_gpu
       slack_report_channel: "#transformers-ci-daily-training"
@@ -104,7 +104,7 @@ jobs:
 
   quantization-ci:
     name: Quantization CI
-    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@754b90f30a8f3ea80456cb98f370bb1d4114f543  # main
     with:
       job: run_quantization_torch_gpu
       slack_report_channel: "#transformers-ci-daily-quantization"
@@ -116,7 +116,7 @@ jobs:
 
   kernels-ci:
     name: Kernels CI
-    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@754b90f30a8f3ea80456cb98f370bb1d4114f543  # main
     with:
       job: run_kernels_gpu
       slack_report_channel: "#transformers-ci-daily-kernels"
