@@ -27,6 +27,11 @@ from safetensors import safe_open
 from .cache_utils import Cache
 from .conversion_mapping import get_model_conversion_mapping
 from .core_model_loading import WeightRenaming, convert_and_load_state_dict_in_model
+from .integrations.heterogeneity import (
+    HeterogeneousModelingSpec,
+    LayerIdxFromArgument,
+    get_heterogeneous_modeling_specs,
+)
 from .masking_utils import LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING, create_causal_mask
 from .modeling_outputs import (
     BaseModelOutputWithPast,
@@ -358,6 +363,24 @@ class MtpLayer(nn.Module):
         return hidden_states
 
 
+def _get_mtp_heterogeneous_modeling_spec(
+    main_model: PreTrainedModel, mtp_config: PreTrainedConfig
+) -> HeterogeneousModelingSpec | None:
+    if not get_heterogeneous_modeling_specs(main_model):
+        return None
+
+    # MTP layers support per-layer attribute overrides but not `skip`, so the spec has no skip descriptors
+    skipping_layers = [
+        layer_idx for layer_idx, layer_config in enumerate(mtp_config.per_layer_config) if layer_config.skip
+    ]
+    if skipping_layers:
+        raise ValueError(
+            f"MTP layers don't support `skip`, but `mtp_per_layer_config` sets it for layers {skipping_layers}."
+        )
+
+    return HeterogeneousModelingSpec(layer_cls=MtpLayer, layer_idx_resolver=LayerIdxFromArgument("layer_idx"))
+
+
 class MtpModel(PreTrainedModel):
     # These act as dummy values, that are properly set on the upstream model (without it, instantiating this model would
     # fail on an existing model's config where the attn is already set to a custom value)
@@ -370,18 +393,27 @@ class MtpModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = ["shared_head.weight", "embed_tokens.weight"]
 
     def __init__(self, main_model: PreTrainedModel, num_mtp_layers: int):
-        super().__init__(main_model.config.get_mtp_config())
+        mtp_config = main_model.config.get_mtp_config()
+        if mtp_config.is_heterogeneous:
+            self._heterogeneous_modeling_spec = _get_mtp_heterogeneous_modeling_spec(main_model, mtp_config)
+        super().__init__(mtp_config)
         # Make sure we have the correct loss type in case of training
         self.loss_type = "ForCausalLM"
         self.num_mtp_layers = num_mtp_layers
         # Infer the type of the layers based on the main model
         base_model = main_model.get_decoder()
         layer_cls = type(base_model.layers[-1])
-        norm_cls = next(
-            type(module)
+        norm = next(
+            module
             for name, module in base_model.layers[-1].named_modules()  # type: ignore
             if "norm" in name
         )
+        norm_cls = type(norm)
+
+        # Support generic heterogeneous modeling
+        if hasattr(norm, "_heterogeneity_skipped_class"):
+            norm_cls = norm._heterogeneity_skipped_class
+
         # If the config contains the field, we never use per-layer post norm, but maybe a shared one
         self.use_post_norm = True
         self.use_shared_post_norm = False
