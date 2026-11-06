@@ -1509,10 +1509,10 @@ class Gemma4TextModel(Gemma3TextModel):
 
         # decoder layers
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            # Starting at `test_kv_shared_prefill_truncation`, we will always reuse k/v of previous layers. This means that we can
+            # Starting at `first_kv_shared_layer_idx`, we will always reuse k/v of previous layers. This means that we can
             # drop the seq_len dimension according to `logits_to_keep` for all remaining layers since we do not look at the past
             # anymore, which leads to much faster forward for large seq_len
-            if i == self.test_kv_shared_prefill_truncation:
+            if i == self.first_kv_shared_layer_idx:
                 hidden_states, per_layer_inputs, position_embeddings, causal_mask_mapping = (
                     self._maybe_slice_kv_shared_inputs(
                         hidden_states,
@@ -1572,7 +1572,7 @@ class Gemma4TextModel(Gemma3TextModel):
         elif not isinstance(logits_to_keep, int):
             can_optimize = False
         # In this case, we cannot rely on the `is_causal` attribute, as dropping some tokens will make us loose causality
-        elif logits_to_keep > 1 and any(mask is None for mask in causal_mask_mapping.values()):
+        elif logits_to_keep > 1 and any(mask is None or mask.dim() == 2 for mask in causal_mask_mapping.values()):
             can_optimize = False
 
         # If we cannot optimize, return untouched inputs will the full seq_len
