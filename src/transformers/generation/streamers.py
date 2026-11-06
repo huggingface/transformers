@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import unicodedata
 from queue import Queue
 from typing import TYPE_CHECKING, Any, cast
 
@@ -40,7 +41,7 @@ class BaseStreamer:
 
 class TextStreamer(BaseStreamer):
     """
-    Simple text streamer that prints the token(s) to stdout as soon as entire words are formed.
+    Simple text streamer that prints the token(s) to stdout as soon as they are decoded.
 
     Parameters:
         tokenizer (`AutoTokenizer`):
@@ -78,7 +79,7 @@ class TextStreamer(BaseStreamer):
 
     def put(self, value):
         """
-        Receives tokens, decodes them, and prints them to stdout as soon as they form entire words.
+        Receives tokens, decodes them, and prints them to stdout as soon as they are decoded.
         """
         if len(value.shape) > 1 and value.shape[0] > 1:
             raise ValueError("TextStreamer only supports batch size 1")
@@ -100,6 +101,12 @@ class TextStreamer(BaseStreamer):
             self.print_len = 0
         # If the last token is a CJK character, we print the characters.
         elif len(text) > 0 and self._is_chinese_char(ord(text[-1])):
+            printable_text = text[self.print_len :]
+            self.print_len += len(printable_text)
+        # Letters (with their combining marks), digits and spaces are printed right away, so text without spaces (long
+        # words, Thai) streams too. Symbols wait for the next space: they may start some formatting (`\n`, `<br>`) or
+        # be an incomplete character (`\ufffd`).
+        elif all(char.isspace() or unicodedata.category(char)[0] in "LMN" for char in text[self.print_len :]):
             printable_text = text[self.print_len :]
             self.print_len += len(printable_text)
         # Otherwise, prints until the last space char (simple heuristic to avoid printing incomplete words,
