@@ -57,10 +57,10 @@ from ..minimax_m2.modeling_minimax_m2 import (
     apply_rotary_pos_emb,
 )
 from ..mixtral.modeling_mixtral import MixtralDecoderLayer, load_balancing_loss_func
+from ..paddleocr_vl.modeling_paddleocr_vl import PaddleOCRVisionAttention
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VisionPatchEmbed, Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor, Qwen2VLProcessorKwargs
-from ..radio.modeling_radio import RadioAttention
 
 
 logger = logging.get_logger(__name__)
@@ -791,7 +791,7 @@ def apply_rotary_pos_emb_vision(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     # Only the first `rot_dim` head dims carry 3D RoPE; the tail passes through untouched.
     rot_dim = cos.shape[-1]
-    cos, sin = cos[None, :, None, :], sin[None, :, None, :]
+    cos, sin = cos[:, None, :], sin[:, None, :]
     q_rot, q_pass = q[..., :rot_dim], q[..., rot_dim:]
     k_rot, k_pass = k[..., :rot_dim], k[..., rot_dim:]
     q_rot = q_rot * cos + rotate_half(q_rot) * sin
@@ -799,57 +799,29 @@ def apply_rotary_pos_emb_vision(
     return torch.cat([q_rot, q_pass], dim=-1), torch.cat([k_rot, k_pass], dim=-1)
 
 
-class MiniMaxM3VLVisionAttention(RadioAttention):
+class MiniMaxM3VLVisionAttention(PaddleOCRVisionAttention):
     def __init__(self, config: MiniMaxM3VLVisionConfig):
-        nn.Module.__init__(self)
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_attention_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_attention_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
-        self.is_causal = False
-        self.num_key_value_groups = 1
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
-
-    @property
-    def o_proj(self):
-        return self.out_proj
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None = None,
-        cu_seqlens: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb_vision(
-            self.q_proj(hidden_states).view(*hidden_states.shape[:-1], -1, self.head_dim),
-            self.k_proj(hidden_states).view(*hidden_states.shape[:-1], -1, self.head_dim),
-            cos,
-            sin,
-        )
-        query_states, key_states = query_states.transpose(1, 2), key_states.transpose(1, 2)
-        super().forward(hidden_states, attention_mask, cu_seqlens, **kwargs)
-        del query_states
-        del key_states
+        super().__init__(config)
 
 
 class MiniMaxM3VLVisionMLP(CLIPMLP):
     pass
 
 
-# 3D-RoPE `position_embeddings` pass via `**kwargs` for simplicity
 class MiniMaxM3VLVisionEncoderLayer(CLIPEncoderLayer):
     def __init__(self, config: MiniMaxM3VLVisionConfig):
         super().__init__(config)
         self.self_attn = MiniMaxM3VLVisionAttention(config)
         self.mlp = MiniMaxM3VLVisionMLP(config)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        super().forward(hidden_states, attention_mask, **kwargs)
+        hidden_states, _ = self.self_attn(hidden_states.squeeze(0), **kwargs)
 
 
 @auto_docstring
@@ -895,7 +867,6 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
         for layer in self.layers:
             hidden_states = layer(
                 hidden_states,
-                attention_mask=None,
                 position_embeddings=position_embeddings,
                 cu_seqlens=cu_seqlens,
                 max_seqlen=max_seqlen,

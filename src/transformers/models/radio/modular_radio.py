@@ -217,10 +217,10 @@ class RadioAttention(Dinov2Attention):
             )
         else:
             # without a varlen kernel, attend within each image separately
-            lengths = kwargs.pop("segment_lengths", None)
-            if lengths is None:
-                lengths = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
-            splits = [torch.split(tensor, lengths, dim=2) for tensor in (query_states, key_states, value_states)]
+            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
+            splits = [
+                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
+            ]
             outputs = [
                 attention_interface(self, query, key, value, attention_mask=None, **attention_kwargs, **kwargs)
                 for query, key, value in zip(*splits)
@@ -228,7 +228,7 @@ class RadioAttention(Dinov2Attention):
             attn_output = torch.cat([output[0] for output in outputs], dim=1)
             attn_weights = None
             # eager returns per-image probabilities; lay them out block-diagonally over the packed sequence
-            if outputs[0][1] is not None and kwargs.get("output_attentions", self.config.output_attentions):
+            if outputs[0][1] is not None:
                 total_length = query_states.shape[2]
                 attn_weights = query_states.new_zeros(
                     query_states.shape[0], self.num_attention_heads, total_length, total_length

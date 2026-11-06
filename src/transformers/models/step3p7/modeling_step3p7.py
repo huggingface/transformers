@@ -35,14 +35,20 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    ModelOutput,
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check, torch_int
-from ...utils.generic import get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    torch_compilable_check,
+    torch_int,
+)
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_position_ids
 from .configuration_step3p7 import Step3p7Config, Step3p7TextConfig, Step3p7VisionConfig
@@ -123,18 +129,6 @@ class Step3p7VisionMLP(nn.Module):
         return hidden_states
 
 
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -167,6 +161,18 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
 def apply_rotary_pos_emb_vision(
     q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -182,101 +188,57 @@ def apply_rotary_pos_emb_vision(
 
 
 class Step3p7VisionAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
     def __init__(self, config: Step3p7VisionConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
-        self.num_attention_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_attention_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_heads
+        self.scale = self.head_dim**-0.5
+        self.dropout = config.attention_dropout
         self.is_causal = False
-        self.num_key_value_groups = 1
+
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.num_key_value_groups = 1
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
-        cu_seqlens: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        r"""
-        cu_seqlens (`torch.Tensor` of shape `(num_images + 1,)`, *optional*):
-            Boundaries of the image sequences packed into `hidden_states`; each image only attends to itself.
-        """
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb_vision(
-            self.q_proj(hidden_states).view(*hidden_states.shape[:-1], -1, self.head_dim),
-            self.k_proj(hidden_states).view(*hidden_states.shape[:-1], -1, self.head_dim),
-            cos,
-            sin,
-        )
-        query_states, key_states = query_states.transpose(1, 2), key_states.transpose(1, 2)
+        """Input shape: Batch x Time x Channel"""
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        queries = self.q_proj(hidden_states).view(hidden_shape)
+        keys = self.k_proj(hidden_states).view(hidden_shape)
+        values = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        queries, keys = apply_rotary_pos_emb_vision(queries, keys, cos, sin)
+        queries, keys = queries.transpose(1, 2), keys.transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-        attention_kwargs = {"dropout": 0.0 if not self.training else self.attention_dropout, "scaling": self.scaling}
-
-        if cu_seqlens is None:
-            attn_output, attn_weights = attention_interface(
-                self, query_states, key_states, value_states, attention_mask, **attention_kwargs, **kwargs
-            )
-        elif is_flash_attention_requested(self.config):
-            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs)
-            attn_output, attn_weights = attention_interface(
-                self,
-                query_states,
-                key_states,
-                value_states,
-                attention_mask=None,
-                cu_seq_lens_q=cu_seqlens,
-                cu_seq_lens_k=cu_seqlens,
-                max_length_q=max_seqlen,
-                max_length_k=max_seqlen,
-                **attention_kwargs,
-                **kwargs,
-            )
-        else:
-            # without a varlen kernel, attend within each image separately
-            lengths = kwargs.pop("segment_lengths", None)
-            if lengths is None:
-                lengths = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
-            splits = [torch.split(tensor, lengths, dim=2) for tensor in (query_states, key_states, value_states)]
-            outputs = [
-                attention_interface(self, query, key, value, attention_mask=None, **attention_kwargs, **kwargs)
-                for query, key, value in zip(*splits)
-            ]
-            attn_output = torch.cat([output[0] for output in outputs], dim=1)
-            attn_weights = None
-            # eager returns per-image probabilities; lay them out block-diagonally over the packed sequence
-            if outputs[0][1] is not None and kwargs.get("output_attentions", self.config.output_attentions):
-                total_length = query_states.shape[2]
-                attn_weights = query_states.new_zeros(
-                    query_states.shape[0], self.num_attention_heads, total_length, total_length
-                )
-                start = 0
-                for _, weights in outputs:
-                    end = start + weights.shape[-1]
-                    attn_weights[..., start:end, start:end] = weights
-                    start = end
-
+        attn_output, attn_weights = attention_interface(
+            self,
+            queries,
+            keys,
+            values,
+            attention_mask,
+            scaling=self.scale,
+            dropout=0.0 if not self.training else self.dropout,
+            **kwargs,
+        )
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-
-        return attn_output, attn_weights
-
-    @property
-    def o_proj(self):
-        return self.out_proj
+        return self.out_proj(attn_output), attn_weights
 
 
 class Step3p7VisionEncoderLayer(GradientCheckpointingLayer):

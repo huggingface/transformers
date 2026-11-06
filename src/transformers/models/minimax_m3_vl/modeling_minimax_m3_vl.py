@@ -1036,7 +1036,7 @@ def apply_rotary_pos_emb_vision(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     # Only the first `rot_dim` head dims carry 3D RoPE; the tail passes through untouched.
     rot_dim = cos.shape[-1]
-    cos, sin = cos[None, :, None, :], sin[None, :, None, :]
+    cos, sin = cos[:, None, :], sin[:, None, :]
     q_rot, q_pass = q[..., :rot_dim], q[..., rot_dim:]
     k_rot, k_pass = k[..., :rot_dim], k[..., rot_dim:]
     q_rot = q_rot * cos + rotate_half(q_rot) * sin
@@ -1045,101 +1045,109 @@ def apply_rotary_pos_emb_vision(
 
 
 class MiniMaxM3VLVisionAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
     def __init__(self, config: MiniMaxM3VLVisionConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
-        self.num_attention_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_attention_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_heads
+        if self.head_dim * self.num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
+            )
         self.is_causal = False
-        self.num_key_value_groups = 1
+
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.num_key_value_groups = 1
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
 
     def forward(
         self,
         hidden_states: torch.Tensor,
+        cu_seqlens: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None = None,
-        cu_seqlens: torch.Tensor | None = None,
+        max_seqlen: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        r"""
-        cu_seqlens (`torch.Tensor` of shape `(num_images + 1,)`, *optional*):
-            Boundaries of the image sequences packed into `hidden_states`; each image only attends to itself.
         """
+        Args:
+            hidden_states (`torch.Tensor`):
+                Input to the layer of shape `(seq_len, embed_dim)`.
+            cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
+                The cumulative sequence lengths of each image or video feature.
+            position_embeddings (`tuple(torch.Tensor, torch.Tensor)` of shape `(num_patches, head_dim // 2)`):
+                The cosine and sine position embeddings for vision attention.
+        """
+        seq_length = hidden_states.shape[0]
+        query_states = self.q_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
+        key_states = self.k_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
+        value_states = self.v_proj(hidden_states).view(seq_length, self.num_heads, self.head_dim)
+
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb_vision(
-            self.q_proj(hidden_states).view(*hidden_states.shape[:-1], -1, self.head_dim),
-            self.k_proj(hidden_states).view(*hidden_states.shape[:-1], -1, self.head_dim),
-            cos,
-            sin,
-        )
-        query_states, key_states = query_states.transpose(1, 2), key_states.transpose(1, 2)
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
+
+        query_states = query_states.transpose(0, 1).unsqueeze(0)
+        key_states = key_states.transpose(0, 1).unsqueeze(0)
+        value_states = value_states.transpose(0, 1).unsqueeze(0)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
-        attention_kwargs = {"dropout": 0.0 if not self.training else self.attention_dropout, "scaling": self.scaling}
 
-        if cu_seqlens is None:
-            attn_output, attn_weights = attention_interface(
-                self, query_states, key_states, value_states, attention_mask, **attention_kwargs, **kwargs
-            )
-        elif is_flash_attention_requested(self.config):
-            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs)
+        if is_flash_attention_requested(self.config):
+            # Flash Attention 2: Use cu_seqlens for variable length attention
+            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
             attn_output, attn_weights = attention_interface(
                 self,
                 query_states,
                 key_states,
                 value_states,
                 attention_mask=None,
+                scaling=self.scaling,
+                dropout=0.0 if not self.training else self.attention_dropout,
                 cu_seq_lens_q=cu_seqlens,
                 cu_seq_lens_k=cu_seqlens,
                 max_length_q=max_seqlen,
                 max_length_k=max_seqlen,
-                **attention_kwargs,
+                is_causal=False,
                 **kwargs,
             )
         else:
-            # without a varlen kernel, attend within each image separately
-            lengths = kwargs.pop("segment_lengths", None)
-            if lengths is None:
-                lengths = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
-            splits = [torch.split(tensor, lengths, dim=2) for tensor in (query_states, key_states, value_states)]
-            outputs = [
-                attention_interface(self, query, key, value, attention_mask=None, **attention_kwargs, **kwargs)
-                for query, key, value in zip(*splits)
+            # Other implementations: Process each chunk separately
+            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
+            splits = [
+                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
             ]
-            attn_output = torch.cat([output[0] for output in outputs], dim=1)
-            attn_weights = None
-            # eager returns per-image probabilities; lay them out block-diagonally over the packed sequence
-            if outputs[0][1] is not None and kwargs.get("output_attentions", self.config.output_attentions):
-                total_length = query_states.shape[2]
-                attn_weights = query_states.new_zeros(
-                    query_states.shape[0], self.num_attention_heads, total_length, total_length
-                )
-                start = 0
-                for _, weights in outputs:
-                    end = start + weights.shape[-1]
-                    attn_weights[..., start:end, start:end] = weights
-                    start = end
 
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
+            attn_outputs, attn_weights = [], []
+            for q, k, v in zip(*splits):
+                attn_output, attn_weight = attention_interface(
+                    self,
+                    q,
+                    k,
+                    v,
+                    attention_mask=None,
+                    scaling=self.scaling,
+                    dropout=0.0 if not self.training else self.attention_dropout,
+                    is_causal=False,
+                    **kwargs,
+                )
+                attn_outputs.append(attn_output)
+                attn_weights.append(attn_weight)
+
+            attn_output = torch.cat(attn_outputs, dim=1)
+
+        attn_output = attn_output.reshape(seq_length, -1).contiguous()
+        attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights
-
-    @property
-    def o_proj(self):
-        return self.out_proj
 
 
 class MiniMaxM3VLVisionMLP(nn.Module):
@@ -1169,17 +1177,13 @@ class MiniMaxM3VLVisionEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            **kwargs,
-        )
+        hidden_states, _ = self.self_attn(hidden_states.squeeze(0), **kwargs)
         hidden_states = residual + hidden_states
 
         residual = hidden_states
@@ -1233,7 +1237,6 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
         for layer in self.layers:
             hidden_states = layer(
                 hidden_states,
-                attention_mask=None,
                 position_embeddings=position_embeddings,
                 cu_seqlens=cu_seqlens,
                 max_seqlen=max_seqlen,
