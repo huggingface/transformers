@@ -267,9 +267,9 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         lengths after removing padding.
 
         Args:
-            waveforms (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            waveforms (`torch.Tensor` of shape `(batch_size, sequence_length)`):
                 The batched output waveforms from the [`UnivNetModel`].
-            waveform_lengths (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+            waveform_lengths (`torch.Tensor` of shape `(batch_size,)`, *optional*):
                 The batched lengths of each waveform before padding.
 
         Returns:

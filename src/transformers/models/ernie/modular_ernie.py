@@ -29,7 +29,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
@@ -75,7 +75,7 @@ class ErnieEmbeddings(BertEmbeddings):
         token_type_ids: torch.LongTensor | None = None,
         task_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         past_key_values_length: int = 0,
     ) -> torch.Tensor:
         if input_ids is not None:
@@ -149,7 +149,7 @@ class ErnieEncoder(BertEncoder):
 
 @auto_docstring
 class ErniePreTrainedModel(PreTrainedModel):
-    config_class = ErnieConfig
+    config: ErnieConfig
     base_model_prefix = "ernie"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
@@ -176,7 +176,7 @@ class ErniePreTrainedModel(PreTrainedModel):
 class ErnieModel(BertModel):
     _no_split_modules = ["ErnieLayer"]
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: ErnieConfig, add_pooling_layer=True):
         super().__init__(self, config)
         self.config = config
         self.gradient_checkpointing = False
@@ -403,9 +403,8 @@ class ErnieForCausalLM(BertLMHeadModel):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.cls(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.cls(hidden_states)
 
         loss = None
         if labels is not None:
@@ -660,7 +659,7 @@ class ErnieForMultipleChoice(BertForMultipleChoice):
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.

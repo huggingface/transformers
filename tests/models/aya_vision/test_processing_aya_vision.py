@@ -32,10 +32,6 @@ class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     tiny_model_id = "hf-internal-testing/tiny-processor-aya_vision"
 
     @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-
-    @classmethod
     def _setup_image_processor(cls):
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         return image_processor_class(

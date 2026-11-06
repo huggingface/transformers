@@ -276,7 +276,7 @@ class UperNetPreTrainedModel(PreTrainedModel):
     """
 )
 class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: UperNetConfig):
         super().__init__(config)
 
         self.backbone = load_backbone(config)

@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 # Kurulum
 
-Transformers, [PyTorch](https://pytorch.org/get-started/locally/) ile çalışır. Python 3.10+ ve PyTorch 2.4+ üzerinde test edilmiştir.
+Transformers, [PyTorch](https://pytorch.org/get-started/locally/) ile çalışır. Python 3.11+ ve PyTorch 2.4+ üzerinde test edilmiştir.
 
 ## Sanal ortam
 

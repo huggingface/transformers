@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -49,7 +49,7 @@ class Glm4vVisionConfig(PreTrainedConfig):
     model_type = "glm4v_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
-    attribute_map = {"num_attention_heads": "num_heads"}
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 24
     hidden_size: int = 1536
@@ -157,8 +157,8 @@ class Glm4vConfig(PreTrainedConfig):
 
     model_type = "glm4v"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Glm4vVisionConfig),
-        "text_config": SubConfigSpec(config_class=Glm4vTextConfig),
+        "vision_config": Glm4vVisionConfig,
+        "text_config": Glm4vTextConfig,
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 

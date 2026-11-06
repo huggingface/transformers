@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
 
@@ -53,6 +53,7 @@ class BltLocalEncoderConfig(PreTrainedConfig):
     hidden_act: str = "silu"
     intermediate_size: int | None = None
     initializer_range: float = 0.02
+    sliding_window: int | None = None
 
     def __post_init__(self, **kwargs):
         self.num_key_value_heads = self.num_key_value_heads or self.num_attention_heads
@@ -149,6 +150,7 @@ class BltPatcherConfig(PreTrainedConfig):
     rope_parameters: RopeParameters | dict | None = None
     initializer_range: float = 0.02
     tie_word_embeddings: bool = False
+    sliding_window: int | None = 512
 
     def __post_init__(self, **kwargs):
         self.num_key_value_heads = self.num_key_value_heads or self.num_attention_heads
@@ -176,6 +178,10 @@ class BltConfig(PreTrainedConfig):
         Batch size used during the patching process.
     max_patch_length (`int`, *optional*):
         Maximum length of patches that can be generated.
+    local_attention_window_len (`int`, *optional*, defaults to 512):
+        Size of the local attention window used by the local encoder and local decoder, matching
+        `local_attention_window_len` in the released checkpoints. Set to `None` to attend over the
+        full causal context instead.
     cross_attn_k (`int`, *optional*, defaults to 2):
         Number of cross-attention heads used in the model.
     encoder_hash_byte_group_size (`list`, *optional*):
@@ -207,10 +213,10 @@ class BltConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 500000.0
     sub_configs_defaults = {
-        "patcher_config": SubConfigSpec(config_class=BltPatcherConfig),
-        "encoder_config": SubConfigSpec(config_class=BltLocalEncoderConfig),
-        "decoder_config": SubConfigSpec(config_class=BltLocalDecoderConfig),
-        "global_config": SubConfigSpec(config_class=BltGlobalTransformerConfig),
+        "patcher_config": BltPatcherConfig,
+        "encoder_config": BltLocalEncoderConfig,
+        "decoder_config": BltLocalDecoderConfig,
+        "global_config": BltGlobalTransformerConfig,
     }
 
     vocab_size: int = 260
@@ -221,6 +227,7 @@ class BltConfig(PreTrainedConfig):
     patching_threshold: float | None = 1.335442066192627
     patching_batch_size: int | None = 1
     max_patch_length: int | None = None
+    local_attention_window_len: int | None = 512
     cross_attn_k: int | None = 2
     encoder_hash_byte_group_size: list[int] | None = None
     encoder_hash_byte_group_vocab: int | None = 500002
@@ -240,6 +247,8 @@ class BltConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         super().__post_init__(**kwargs)
         self.encoder_hash_byte_group_size = self.encoder_hash_byte_group_size or [3, 4, 5, 6, 7, 8]
+
+        self.encoder_config.sliding_window = self.local_attention_window_len
 
         # Determine if token embedding projection is needed based on dimension mismatch (7b)
         encoder_cross_output_size = self.encoder_config.hidden_size * self.cross_attn_k

@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 
 
@@ -81,7 +81,7 @@ class GitConfig(PreTrainedConfig):
 
     model_type = "git"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=GitVisionConfig),
+        "vision_config": GitVisionConfig,
     }
 
     vision_config: dict | GitVisionConfig | None = None

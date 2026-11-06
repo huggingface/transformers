@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import math
 
 import torch
@@ -157,10 +158,10 @@ class MMGroundingDinoContrastiveEmbedding(GroundingDinoContrastiveEmbedding):
 
     def forward(
         self,
-        vision_hidden_state: torch.FloatTensor,
-        text_hidden_state: torch.FloatTensor,
+        vision_hidden_state: torch.Tensor,
+        text_hidden_state: torch.Tensor,
         text_token_mask: torch.BoolTensor,
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         res = vision_hidden_state @ text_hidden_state.transpose(-1, -2)
         res = res / math.sqrt(vision_hidden_state.shape[-1])
         res = res + self.bias
@@ -285,8 +286,8 @@ class MMGroundingDinoForObjectDetection(GroundingDinoForObjectDetection, MMGroun
             ]
         )
         # Initialize weights and apply final processing
-        self.model.decoder.class_embed = self.class_embed
-        self.model.decoder.bbox_embed = self.bbox_embed
+        self.model.decoder.class_embed = copy.deepcopy(self.class_embed)
+        self.model.decoder.bbox_embed = copy.deepcopy(self.bbox_embed)
         self.post_init()
 
 

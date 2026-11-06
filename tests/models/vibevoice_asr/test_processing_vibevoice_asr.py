@@ -20,7 +20,6 @@ import numpy as np
 import torch
 
 from transformers import (
-    AutoProcessor,
     AutoTokenizer,
     VibeVoiceAcousticTokenizerFeatureExtractor,
     VibeVoiceAsrProcessor,
@@ -35,25 +34,6 @@ class VibeVoiceAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     audio_input_name = "input_values"
     # Tiny processor created with make_tiny_processor.py from "microsoft/VibeVoice-ASR-HF"
     tiny_model_id = "hf-internal-testing/tiny-processor-vibevoice_asr"
-
-    @classmethod
-    @require_torch
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        processor = VibeVoiceAsrProcessor.from_pretrained(cls.tiny_model_id)
-        processor.save_pretrained(cls.tmpdirname)
-
-    @require_torch
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    @require_torch
-    def get_feature_extractor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).feature_extractor
-
-    @require_torch
-    def get_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
     @classmethod
     def tearDownClass(cls):
@@ -109,6 +89,27 @@ class VibeVoiceAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         for key in ("input_ids", "attention_mask", "input_values", "padding_mask"):
             self.assertIn(key, helper_outputs)
             self.assertTrue(helper_outputs[key].equal(manual_outputs[key]))
+
+    @require_torch
+    def test_apply_transcription_request_untokenized(self):
+        processor = self.get_processor()
+        audio = np.zeros(24000, dtype=np.float32)
+
+        prompt = processor.apply_transcription_request(audio=audio, prompt="About VibeVoice", tokenize=False)
+        helper_outputs = processor.apply_transcription_request(audio=audio, prompt="About VibeVoice")
+        manual_outputs = processor(text=prompt, audio=audio, return_tensors="pt")
+
+        self.assertIsInstance(prompt, list)
+        for key in ("input_ids", "attention_mask", "input_values", "padding_mask"):
+            self.assertTrue(helper_outputs[key].equal(manual_outputs[key]))
+
+    def test_extract_speaker_dict_keeps_complete_segments_of_truncated_output(self):
+        processor = self.get_processor()
+        text = 'assistant\n[{"Start":0,"End":1.5,"Speaker":0,"Content":"Hello there."}, {"Start":1.62,"End":3,"Spea'
+
+        segments = processor.extract_speaker_dict(text)
+
+        self.assertEqual(segments, [{"Start": 0.0, "End": 1.5, "Speaker": 0, "Content": "Hello there."}])
 
     # Override: VibeVoice's chat template does not support `continue_final_message`.
     @require_torch

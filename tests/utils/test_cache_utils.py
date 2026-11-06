@@ -48,27 +48,43 @@ if is_torch_available():
         AutoModelForCausalLM,
         AutoTokenizer,
         Cache,
+        CLIPVisionConfig,
+        CTRLConfig,
+        CTRLLMHeadModel,
         DynamicCache,
+        Ernie4_5_VLMoeConfig,
+        Ernie4_5_VLMoeForConditionalGeneration,
         Gemma2Config,
+        Gemma3Config,
+        Gemma3ForConditionalGeneration,
+        Gemma3TextConfig,
+        Gemma4Config,
         Gemma4ForCausalLM,
+        Gemma4ForConditionalGeneration,
         Gemma4TextConfig,
+        Gemma4VisionConfig,
         GenerationConfig,
         LlamaConfig,
         LlamaForCausalLM,
+        LlavaConfig,
+        LlavaForConditionalGeneration,
         MixtralConfig,
         MixtralForCausalLM,
         PreTrainedConfig,
         QuantizedCache,
         Qwen3VLConfig,
         Qwen3VLForConditionalGeneration,
+        SiglipVisionConfig,
         StaticCache,
         convert_and_export_with_cache,
         pipeline,
     )
     from transformers.cache_utils import (
+        DummyLayer,
         DynamicIndexedLayer,
         DynamicLayer,
         DynamicSlidingWindowLayer,
+        Fp8QuantizedLayer,
         LinearAttentionAndFullAttentionLayer,
         LinearAttentionAndSlidingWindowAttentionLayer,
         LinearAttentionLayer,
@@ -185,16 +201,23 @@ class CacheTest(unittest.TestCase):
         cache = StaticCache(config=config, max_cache_len=8)
         self.assertEqual(cache.get_max_length(), 8)
 
-    @require_optimum_quanto
-    def test_quantized_layer_beam_reorder(self):
+    @parameterized.expand(["quanto", "fp8"])
+    def test_quantized_layer_beam_reorder(self, backend):
         """
         `reorder_cache` must reorder the quantized states as well, not only the residual cache. It used to index the
         (emptied) residual cache while guarding on the total sequence length, so it either raised or silently left
-        the quantized states in the previous beam order.
+        the quantized states in the previous beam order. FP8 has no residual cache, and reorders right away.
         """
-        layer = QuantoQuantizedLayer(nbits=4, q_group_size=16, residual_length=4)
-        # Row `i` of the states holds the constant `i + 1`, so the beam order can be read back off the cache
-        row_values = torch.arange(1, 5, dtype=torch.float32).view(4, 1, 1, 1)
+        if backend == "quanto":
+            if not is_optimum_quanto_available():
+                self.skipTest("Quanto is not available")
+            layer = QuantoQuantizedLayer(nbits=4, q_group_size=16, residual_length=4)
+            # Row `i` of the states holds the constant `i + 1`, so the beam order can be read back off the cache
+            row_values, atol = torch.arange(1, 5, dtype=torch.float32).view(4, 1, 1, 1), 1e-2
+        else:
+            layer = Fp8QuantizedLayer()
+            # Same, with constants exactly representable in `float8_e4m3fn` once divided by the calibrated scale
+            row_values, atol = torch.tensor([1.0, 2.0, 4.0, 8.0]).view(4, 1, 1, 1), 0
 
         def states(order, seq_len):
             # Row `i` is filled with the constant of the original row `order[i]`, as the model would produce it
@@ -212,8 +235,8 @@ class CacheTest(unittest.TestCase):
             keys, values = layer.update(states(order, 1), states(order, 1))
             # Every cached position of a row must hold that row's constant, whatever the beam shuffling
             expected = row_values.index_select(0, order).expand_as(keys)
-            torch.testing.assert_close(keys, expected, rtol=0, atol=1e-2)
-            torch.testing.assert_close(values, expected, rtol=0, atol=1e-2)
+            torch.testing.assert_close(keys, expected, rtol=0, atol=atol)
+            torch.testing.assert_close(values, expected, rtol=0, atol=atol)
 
     @parameterized.expand(
         [
@@ -243,19 +266,61 @@ class CacheTest(unittest.TestCase):
                 layer._dequantize(layer._quantized_keys).shape[-2], sequence_length - expected_residual_length
             )
 
-    @require_optimum_quanto
-    def test_quantized_layer_reset(self):
-        """`reset` must also drop the quantized states, which hold most of the cache."""
-        layer = QuantoQuantizedLayer(nbits=4, q_group_size=16, residual_length=4)
+    @parameterized.expand(["quanto", "fp8"])
+    def test_quantized_layer_reset(self, backend):
+        """`reset` must also drop the quantized states, which hold most of the cache, and any calibrated scale."""
+        if backend == "quanto":
+            if not is_optimum_quanto_available():
+                self.skipTest("Quanto is not available")
+            layer = QuantoQuantizedLayer(nbits=4, q_group_size=16, residual_length=4)
+        else:
+            layer = Fp8QuantizedLayer()
 
-        # 5 tokens for a residual length of 4: the first flush has happened, so most of the cache is quantized
-        layer.update(torch.rand(4, 2, 5, 8), torch.rand(4, 2, 5, 8))
+        # 5 tokens for a residual length of 4, so the first flush has happened and most of the cache is quantized.
+        # The large amplitude makes a stale FP8 scale obvious on the next calibration.
+        layer.update(torch.rand(4, 2, 5, 8) * 100, torch.rand(4, 2, 5, 8) * 100)
+        calibrated_scale = layer._quantized_keys[1].clone() if backend == "fp8" else None
         layer.reset()
 
         self.assertEqual(layer.get_seq_length(), 0)
+        self.assertIsNone(layer._quantized_keys)
+        self.assertIsNone(layer._quantized_values)
+
         keys, _ = layer.update(torch.rand(4, 2, 3, 8), torch.rand(4, 2, 3, 8))
         self.assertEqual(keys.shape[-2], 3)
         self.assertEqual(layer.get_seq_length(), 3)
+        if backend == "fp8":
+            self.assertLess(layer._quantized_keys[1].item(), calibrated_scale.item())
+
+    def test_fp8_quantized_layer(self):
+        """Tests that `Fp8QuantizedLayer` appends new tokens using the scale calibrated on the first `update`."""
+        layer = Fp8QuantizedLayer()
+
+        # As in the attention layer, the states come out of a transpose, so they are not contiguous
+        keys, values = torch.randn(1, 5, 2, 8).transpose(1, 2), torch.randn(1, 5, 2, 8).transpose(1, 2)
+        layer.update(keys, values)
+        quantized_keys, calibrated_scale = layer._quantized_keys
+        self.assertEqual(quantized_keys.dtype, torch.float8_e4m3fn)
+        self.assertEqual(quantized_keys.shape, keys.shape)
+        calibrated_scale = calibrated_scale.clone()
+
+        # Even states with a much larger amplitude do not change the scale, which is frozen after calibration
+        cached_keys, _ = layer.update(torch.randn(1, 2, 1, 8) * 100, torch.randn(1, 2, 1, 8))
+        self.assertEqual(cached_keys.shape, (1, 2, 6, 8))
+        self.assertEqual(cached_keys.dtype, keys.dtype)
+        quantized_keys, scale = layer._quantized_keys
+        self.assertTrue(torch.equal(scale, calibrated_scale))
+        self.assertEqual(quantized_keys.shape, (1, 2, 6, 8))
+
+    def test_fp8_quantized_cache_rejects_group_wise_options(self):
+        """Tests that the `fp8` backend, which quantizes per-tensor, does not silently drop the group-wise options."""
+        config = LlamaConfig(num_hidden_layers=2)
+        with self.assertRaisesRegex(ValueError, "does not support"):
+            QuantizedCache(backend="fp8", config=config, q_group_size=128, nbits=2)
+
+        layer = QuantizedCache(backend="fp8", config=config).layers[0]
+        self.assertIsInstance(layer, Fp8QuantizedLayer)
+        self.assertFalse(hasattr(layer, "q_group_size"))
 
     def test_dynamic_cache_uses_per_layer_sliding_windows(self):
         config = LlamaConfig(
@@ -519,6 +584,288 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(torch.equal(no_chunked_only_new_ids, chunked_only_new_ids))
         self.assertTrue(torch.equal(chunked_only_new_ids, chunked_full_ids[:, -chunked_only_new_ids.shape[-1] :]))
 
+    @staticmethod
+    def _get_tiny_llava():
+        set_seed(3)
+        config = LlavaConfig(
+            vision_config=CLIPVisionConfig(
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=1,
+                num_attention_heads=2,
+                image_size=8,
+                patch_size=4,
+                projection_dim=16,
+            ),
+            text_config=LlamaConfig(
+                vocab_size=64,
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=1,
+                num_attention_heads=2,
+                num_key_value_heads=2,
+                max_position_embeddings=64,
+                pad_token_id=0,
+            ),
+            image_token_index=63,
+            vision_feature_layer=-1,
+            vision_feature_select_strategy="full",
+        )
+        return LlavaForConditionalGeneration(config).to(torch_device).eval()
+
+    def test_chunked_prefill_keeps_image_inputs(self):
+        """
+        A chunked prefill must pass the image inputs to its first forward, as the unchunked prefill does. They were
+        dropped from every chunk, so a vision-language model generated without the image.
+        """
+        model = self._get_tiny_llava()
+        # 5 image tokens (4 patches + CLS) in the first chunk of 6, then 4 text tokens
+        input_ids = torch.tensor([[1] + [63] * 5 + [5, 6, 7, 8]], device=torch_device)
+        image_a = torch.randn(1, 3, 8, 8, device=torch_device)
+        image_b = torch.randn(1, 3, 8, 8, device=torch_device) * 5
+        generation_kwargs = {
+            "max_new_tokens": 6,
+            "do_sample": False,
+            "output_scores": True,
+            "return_dict_in_generate": True,
+        }
+
+        expected = model.generate(input_ids, pixel_values=image_a, **generation_kwargs)
+        out = model.generate(input_ids, pixel_values=image_a, **generation_kwargs, prefill_chunk_size=6)
+        out_b = model.generate(input_ids, pixel_values=image_b, **generation_kwargs, prefill_chunk_size=6)
+
+        self.assertTrue(torch.equal(out.sequences, expected.sequences))
+        torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores))
+        self.assertFalse(torch.equal(torch.stack(out.scores), torch.stack(out_b.scores)))
+
+    def test_chunked_prefill_splits_image_features(self):
+        """
+        A chunk boundary may fall inside a run of image tokens: each chunk must get the image features of its own image
+        tokens, so that any `prefill_chunk_size` gives the same output as the unchunked prefill.
+        """
+        model = self._get_tiny_llava()
+        generation_kwargs = {
+            "max_new_tokens": 6,
+            "do_sample": False,
+            "output_scores": True,
+            "return_dict_in_generate": True,
+        }
+        one_image = torch.tensor([[1] + [63] * 5 + [5, 6, 7, 8]], device=torch_device)
+        # Image runs at positions 1-5 and 8-12: chunks of 4 split both of them
+        two_images = torch.tensor([[1] + [63] * 5 + [5, 6] + [63] * 5 + [7, 8]], device=torch_device)
+        two_prompts = torch.tensor(
+            [[1] + [63] * 5 + [5, 6, 7, 8], [1, 9, 10] + [63] * 5 + [11, 12]], device=torch_device
+        )
+        cases = [
+            (one_image, torch.randn(1, 3, 8, 8, device=torch_device), [4, 2]),
+            (two_images, torch.randn(2, 3, 8, 8, device=torch_device), [4, 3]),
+            (two_prompts, torch.randn(2, 3, 8, 8, device=torch_device), [4]),
+        ]
+        for input_ids, pixel_values, chunk_sizes in cases:
+            expected = model.generate(input_ids, pixel_values=pixel_values, **generation_kwargs)
+            for chunk_size in chunk_sizes:
+                case = f"{pixel_values.shape[0]} images, batch {input_ids.shape[0]}, prefill_chunk_size={chunk_size}"
+                out = model.generate(
+                    input_ids, pixel_values=pixel_values, **generation_kwargs, prefill_chunk_size=chunk_size
+                )
+                self.assertTrue(torch.equal(out.sequences, expected.sequences), case)
+                torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores), msg=case)
+
+    def test_chunked_prefill_raises_on_raw_image_inputs(self):
+        """
+        Raw image inputs cannot be split into chunks: a model that does not pre-encode them must raise when the prefill
+        is split, and still work when the prefill fits in one chunk.
+        """
+        model = self._get_tiny_llava()
+        model._supports_mm_encoder_outputs = lambda: False
+        input_ids = torch.tensor([[1] + [63] * 5 + [5, 6, 7, 8]], device=torch_device)
+        pixel_values = torch.randn(1, 3, 8, 8, device=torch_device)
+        generation_kwargs = {
+            "max_new_tokens": 6,
+            "do_sample": False,
+            "output_scores": True,
+            "return_dict_in_generate": True,
+        }
+
+        with self.assertRaisesRegex(ValueError, "pixel_values"):
+            model.generate(input_ids, pixel_values=pixel_values, **generation_kwargs, prefill_chunk_size=6)
+
+        expected = model.generate(input_ids, pixel_values=pixel_values, **generation_kwargs)
+        out = model.generate(
+            input_ids, pixel_values=pixel_values, **generation_kwargs, prefill_chunk_size=input_ids.shape[1]
+        )
+        self.assertTrue(torch.equal(out.sequences, expected.sequences))
+        torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores))
+
+    def test_chunked_prefill_keeps_token_type_ids(self):
+        """
+        Gemma3 and Gemma4 build a bidirectional mask over each image run from `token_type_ids` and `mm_token_type_ids`.
+        Every chunk of a chunked prefill must get them, or the image tokens of a later chunk attend causally only and
+        the output differs from the unchunked prefill.
+        """
+        set_seed(3)
+        config = Gemma3Config(
+            vision_config=SiglipVisionConfig(
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=1,
+                num_attention_heads=2,
+                image_size=8,
+                patch_size=2,
+            ),
+            text_config=Gemma3TextConfig(
+                vocab_size=64,
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=2,
+                num_attention_heads=2,
+                num_key_value_heads=2,
+                head_dim=8,
+                max_position_embeddings=64,
+                sliding_window=16,
+                layer_types=["sliding_attention", "full_attention"],
+                pad_token_id=0,
+            ),
+            mm_tokens_per_image=4,
+            boi_token_index=61,
+            eoi_token_index=62,
+            image_token_index=63,
+        )
+        model = Gemma3ForConditionalGeneration(config).to(torch_device).eval()
+        generation_kwargs = {
+            "max_new_tokens": 6,
+            "do_sample": False,
+            "output_scores": True,
+            "return_dict_in_generate": True,
+        }
+        image = [61] + [63] * 4 + [62]
+        # Chunks of 4: the image run fills the second chunk
+        later_image = torch.tensor([[1, 2, 3] + image + [5, 6, 7]], device=torch_device)
+        # Chunks of 8: one image run in each chunk
+        two_images = torch.tensor([[1] + image + [5, 6] + image + [7]], device=torch_device)
+        cases = [
+            (later_image, torch.randn(1, 3, 8, 8, device=torch_device), 4),
+            (two_images, torch.randn(2, 3, 8, 8, device=torch_device), 8),
+        ]
+        for input_ids, pixel_values, chunk_size in cases:
+            inputs = {"pixel_values": pixel_values, "token_type_ids": (input_ids == 63).long()}
+            expected = model.generate(input_ids, **inputs, **generation_kwargs)
+            out = model.generate(input_ids, **inputs, **generation_kwargs, prefill_chunk_size=chunk_size)
+            case = f"{pixel_values.shape[0]} images, prefill_chunk_size={chunk_size}"
+            self.assertTrue(torch.equal(out.sequences, expected.sequences), case)
+            torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores), msg=case)
+
+        config = Gemma4Config(
+            vision_config=Gemma4VisionConfig(
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=1,
+                num_attention_heads=2,
+                num_key_value_heads=2,
+                head_dim=8,
+                patch_size=2,
+                pooling_kernel_size=2,
+                position_embedding_size=16,
+            ),
+            text_config=Gemma4TextConfig(
+                vocab_size=64,
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=2,
+                num_attention_heads=2,
+                num_key_value_heads=2,
+                head_dim=8,
+                max_position_embeddings=64,
+                sliding_window=16,
+                layer_types=["sliding_attention", "full_attention"],
+                vocab_size_per_layer_input=64,
+                hidden_size_per_layer_input=8,
+                use_bidirectional_attention="vision",
+                pad_token_id=0,
+            ),
+            boi_token_id=61,
+            eoi_token_id=62,
+            image_token_id=63,
+            video_token_id=60,
+            audio_token_id=59,
+        )
+        model = Gemma4ForConditionalGeneration(config).to(torch_device).eval()
+        # A 4x4 grid of patches, pooled 2x2 into the 4 image tokens of the second chunk
+        grid = torch.stack([torch.arange(4).repeat(4), torch.arange(4).repeat_interleave(4)], dim=-1)
+        inputs = {
+            "pixel_values": torch.randn(1, 16, 12, device=torch_device),
+            "image_position_ids": grid[None].to(torch_device),
+            "mm_token_type_ids": (later_image == 63).long(),
+        }
+        expected = model.generate(later_image, **inputs, **generation_kwargs)
+        out = model.generate(later_image, **inputs, **generation_kwargs, prefill_chunk_size=4)
+        self.assertTrue(torch.equal(out.sequences, expected.sequences))
+        torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores))
+
+    def test_chunked_prefill_slices_per_token_types(self):
+        """
+        Ernie4.5-VL-MoE routes each token by its `moe_mm_token_type_ids`, so every chunk of a chunked prefill must
+        get the types of its own tokens. CTRL drops `token_type_ids` in generation, so no chunk may get them back.
+        """
+        set_seed(3)
+        # Both layers route by type, so a wrong route of the first one reaches the later chunks through the cache
+        config = Ernie4_5_VLMoeConfig(
+            text_config={
+                "vocab_size": 64,
+                "hidden_size": 32,
+                "intermediate_size": 32,
+                "num_hidden_layers": 2,
+                "num_attention_heads": 2,
+                "num_key_value_heads": 1,
+                "rope_parameters": {"rope_type": "default", "rope_theta": 500_000.0, "mrope_section": [3, 3, 2]},
+                "moe_intermediate_size": [32, 32],
+                "mlp_layer_types": ["sparse", "sparse"],
+                "pad_token_id": 0,
+            },
+            vision_config={
+                "depth": 1,
+                "hidden_size": 32,
+                "intermediate_size": 32,
+                "num_heads": 2,
+                "spatial_merge_size": 1,
+            },
+            image_start_token_id=5,
+            image_end_token_id=6,
+            image_token_id=7,
+            video_start_token_id=3,
+            video_end_token_id=4,
+            video_token_id=8,
+        )
+        model = Ernie4_5_VLMoeForConditionalGeneration(config).to(torch_device).eval()
+        generation_kwargs = {
+            "max_new_tokens": 6,
+            "do_sample": False,
+            "output_scores": True,
+            "return_dict_in_generate": True,
+        }
+        # Chunks of 4: the 2x2 patches of the image fill the second chunk
+        input_ids = torch.tensor([[1, 9, 10, 5] + [7] * 4 + [6, 11, 12, 13]], device=torch_device)
+        inputs = {
+            "pixel_values": torch.randn(4, 3 * 14 * 14, device=torch_device),
+            "image_grid_thw": torch.tensor([[1, 2, 2]], device=torch_device),
+            "mm_token_type_ids": (input_ids == 7).long(),
+            "moe_mm_token_type_ids": torch.isin(input_ids, torch.tensor([5, 6, 7], device=torch_device)).long(),
+        }
+        expected = model.generate(input_ids, **inputs, **generation_kwargs)
+        out = model.generate(input_ids, **inputs, **generation_kwargs, prefill_chunk_size=4)
+        self.assertTrue(torch.equal(out.sequences, expected.sequences))
+        torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores))
+
+        set_seed(3)
+        config = CTRLConfig(vocab_size=64, n_embd=16, dff=32, n_layer=1, n_head=2, n_positions=64, pad_token_id=0)
+        model = CTRLLMHeadModel(config).to(torch_device).eval()
+        input_ids = torch.tensor([[1, 9, 10, 11, 12, 13, 14, 15, 16, 17]], device=torch_device)
+        token_type_ids = torch.tensor([[0, 0, 1, 1, 0, 0, 1, 1, 0, 0]], device=torch_device)
+        expected = model.generate(input_ids, token_type_ids=token_type_ids, **generation_kwargs)
+        out = model.generate(input_ids, token_type_ids=token_type_ids, **generation_kwargs, prefill_chunk_size=4)
+        self.assertTrue(torch.equal(out.sequences, expected.sequences))
+        torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores))
+
     def test_dynamic_layers_reset_drops_their_states(self):
         """
         Regression test: `reset` used to zero the dynamic layers' states in place, inherited from the static layers.
@@ -666,20 +1013,25 @@ class CacheIntegrationTest(unittest.TestCase):
         decoded = self.tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
 
-    @parameterized.expand([("quanto"), ("hqq")])
+    @parameterized.expand([("quanto"), ("hqq"), ("fp8")])
     def test_quantized_cache_generation(self, backend):
-        """Tests that QuantizedCache works as expected for both `quanto` and `hqq` backends."""
+        """Tests that QuantizedCache works as expected for the `quanto`, `hqq` and `fp8` backends."""
+        # The group-wise integer backends share the same options, while `fp8` quantizes per-tensor
+        cache_config = {"backend": backend, "nbits": 4, "q_group_size": 16, "residual_length": 4}
         if backend == "quanto":
             if not is_optimum_quanto_available():
                 self.skipTest("Quanto is not available")
-            axis_key, axis_value = 0, 0
+            cache_config.update({"axis_key": 0, "axis_value": 0})
             # This output is taken from a run with the same parameters, and is known to be correct
             expected_generation = ["The cat's whiskers are also a sign of anxiety."]
         elif backend == "hqq":
             if not is_hqq_available():
                 self.skipTest("HQQ is not available")
-            axis_key, axis_value = 1, 1
+            cache_config.update({"axis_key": 1, "axis_value": 1})
             # HQQ has slightly different numerics
+            expected_generation = ["The cat's whiskers are also a sign of anxiety."]
+        elif backend == "fp8":
+            cache_config = {"backend": backend}
             expected_generation = ["The cat's whiskers are also a sign of anxiety."]
         else:
             return
@@ -692,14 +1044,7 @@ class CacheIntegrationTest(unittest.TestCase):
             max_new_tokens=10,
             return_dict_in_generate=True,
             cache_implementation="quantized",
-            cache_config={
-                "backend": backend,
-                "nbits": 4,
-                "q_group_size": 16,
-                "residual_length": 4,
-                "axis_key": axis_key,
-                "axis_value": axis_value,
-            },
+            cache_config=cache_config,
             disable_compile=True,
         )
 
@@ -872,6 +1217,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
             max_new_tokens=10,
             do_sample=False,
             cache_implementation="static",
+            disable_compile=True,  # we don't care about it and faster without
             prefill_chunk_size=2,
             return_dict_in_generate=True,
         )
@@ -882,9 +1228,23 @@ class CacheHardIntegrationTest(unittest.TestCase):
 
         # Each layer must be allocated with its own `head_dim`, instead of all of them sharing a single one
         text_config = model.config.get_text_config(decoder=True)
-        expected_head_dims = [text_config.per_layer_config[layer].head_dim for layer in range(len(cache.layers))]
-        self.assertEqual([layer.keys.shape[-1] for layer in cache.layers], expected_head_dims)
+        expected_head_dims = [
+            text_config.per_layer_config[i].head_dim
+            for i, layer in enumerate(cache.layers)
+            if not isinstance(layer, DummyLayer)
+        ]
+        self.assertEqual(
+            [layer.keys.shape[-1] for layer in cache.layers if not isinstance(layer, DummyLayer)], expected_head_dims
+        )
         self.assertGreater(len(set(expected_head_dims)), 1)
+        # Make sure the dummy layers are expected to be there
+        self.assertTrue(
+            all(
+                text_config.kv_sharing_modes[i] == "reuse"
+                for i, layer in enumerate(cache.layers)
+                if isinstance(layer, DummyLayer)
+            )
+        )
 
     @require_torch_accelerator
     @slow

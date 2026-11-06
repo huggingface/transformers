@@ -216,6 +216,13 @@ class DeepseekV4HCACache(DynamicSlidingWindowLayer):
         self.entry_count[name] += compressed.shape[1]
         return self.compressed_kv[name]
 
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        for states in (self.buffer_kv, self.buffer_gate, self.compressed_kv):
+            for name, tensor in states.items():
+                if tensor is not None:
+                    states[name] = tensor.index_select(0, beam_idx.to(tensor.device))
+
     def reset(self) -> None:
         super().reset()
         # Dropped rather than zeroed, as they grow by concatenation, like the main states
@@ -270,6 +277,13 @@ class DeepseekV4CSACache(DeepseekV4HCACache):
         self.overlap_kv[name] = chunk_kv[:, -1, :, :head_dim].clone()
         self.overlap_gate[name] = chunk_gate[:, -1, :, :head_dim].clone()
         return prior_kv, prior_gate
+
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        for states in (self.overlap_kv, self.overlap_gate):
+            for name, tensor in states.items():
+                if tensor is not None:
+                    states[name] = tensor.index_select(0, beam_idx.to(tensor.device))
 
     def reset(self) -> None:
         super().reset()
@@ -1075,7 +1089,7 @@ class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
 
 
 class DeepseekV4PreTrainedModel(MixtralPreTrainedModel):
-    config_class = DeepseekV4Config
+    config: DeepseekV4Config
     base_model_prefix = "model"
     _no_split_modules = ["DeepseekV4DecoderLayer"]
     # V4 ships eager-only. The non-eager backends are off for the following reasons:
@@ -1197,7 +1211,7 @@ class DeepseekV4Model(LlamaModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
