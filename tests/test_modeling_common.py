@@ -873,6 +873,7 @@ class ModelTesterMixin(ExportTesterMixin):
             "BeitModelTest": 4,  # BeitForSemanticSegmentation requires config.out_indices to be a list of 4 integers
             "ZambaModelTest": 5,  # The minimum number to test beyond the initial ["mamba", "mamba", "hybrid"] in `ZambaConfig._layers_block_type`
             "Wav2Vec2BertModelTest": 4,
+            "Lfm3ModelTest": 3,  # One layer per operator type: ["full_attention", "sliding_attention", "conv"]
         }
         target_num_hidden_layers = exceptional_num_hidden_layers.get(type(self).__name__, 2)
 
@@ -6802,7 +6803,7 @@ def _set_config_rope_params(config: PreTrainedConfig, rope_params: dict) -> bool
     config.rope_parameters = copy.deepcopy(getattr(config, "rope_parameters", {}) or {})
 
     # Nested rope parameters per layer type, not all models with `layer-types` use different RoPE thus we check `issubset`
-    # Deepseekv4 has `layer_types` which are different from `_rope_type_labels`
+    # `_rope_type_labels` names the RoPE entries when they differ from `layer_types` (e.g. DeepSeek-V4, LFM3)
     layer_types = getattr(config, "_rope_type_labels", getattr(config, "layer_types", None))
     if layer_types is not None and set(config.rope_parameters.keys()).issubset(layer_types):
         for layer_type in layer_types:
