@@ -629,7 +629,7 @@ class DiffusionGemmaVisionText2TextModelTest(
         )
         self.assertEqual(mask_mapping["full_attention"].shape, expected_attention_mask_shape)
         self.assertEqual(mask_mapping["full_attention"].sum(), expected_non_zero)
-        self.assertEqual(mask_mapping["sliding_attention"].shape, expected_attention_mask_shape)
+        self.assertEqual(mask_mapping["sliding_attention"].shape, (batch_size, 1, canvas_length, concat_kv_length - 1))
         self.assertEqual(mask_mapping["sliding_attention"].sum(), expected_non_zero)
 
     def test_diffusion_decoder_mask_static_cache_beyond_sliding_window(self):
@@ -663,7 +663,7 @@ class DiffusionGemmaVisionText2TextModelTest(
             batch_size,
             1,
             canvas_length,
-            concat_kv_length_sliding + 1,
+            concat_kv_length_sliding,
         )
         # Double-check test assumption that left-padding should be past the sliding window
         self.assertTrue(prefill_length - left_padding_length > sliding_window_length)

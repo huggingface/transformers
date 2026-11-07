@@ -23,7 +23,6 @@ from ..cache_utils import (
     EncoderDecoderCache,
     StaticCache,
     StaticLayer,
-    StaticSlidingWindowLayer,
 )
 from ..configuration_utils import get_head_shapes
 from ..generation.configuration_utils import GenerationConfig
@@ -518,13 +517,9 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         # Initialize the static cache
         self.model = model
         self.static_cache = StaticCache(max_cache_len=max_cache_len, config=config)
-        # Since StaticSlidingWindow have dynamic control flow that cannot be avoided, we have to replace them here by
-        # simple StaticLayer... It means that any generation beyond the window is unfortunately unsupported
+        # KV-sharing consumers never read from their cache, so back them by an empty (0-length) StaticLayer
         for i, layer in enumerate(self.static_cache.layers):
-            if isinstance(layer, StaticSlidingWindowLayer):
-                self.static_cache.layers[i] = StaticLayer(max_cache_len)
-            # KV-sharing consumers never read from their cache, so back them by an empty (0-length) StaticLayer
-            elif isinstance(layer, DummyLayer):
+            if isinstance(layer, DummyLayer):
                 self.static_cache.layers[i] = StaticLayer(0)
         num_heads, head_dim = get_head_shapes(config)
         dtype = self.model.dtype
@@ -699,13 +694,9 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
 
         # Initialize the cache
         self.cache = StaticCache(config=config, max_cache_len=max_cache_len)
-        # Since StaticSlidingWindow have dynamic control flow that cannot be avoided, we have to replace them here by
-        # simple StaticLayer... It means that any generation beyond the window is unfortunately unsupported
+        # KV-sharing consumers never read from their cache, so back them by an empty (0-length) StaticLayer
         for i, layer in enumerate(self.cache.layers):
-            if isinstance(layer, StaticSlidingWindowLayer):
-                self.cache.layers[i] = StaticLayer(max_cache_len)
-            # KV-sharing consumers never read from their cache, so back them by an empty (0-length) StaticLayer
-            elif isinstance(layer, DummyLayer):
+            if isinstance(layer, DummyLayer):
                 self.cache.layers[i] = StaticLayer(0)
         num_heads, head_dim = get_head_shapes(config)
         dtype = self.model.dtype
@@ -836,13 +827,9 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
 
         # Initialize static cache for decoder and DynamicCache for encoder
         self.static_cache = StaticCache(config=self.config, max_cache_len=max_static_cache_length)
-        # Since StaticSlidingWindow have dynamic control flow that cannot be avoided, we have to replace them here by
-        # simple StaticLayer... It means that any generation beyond the window is unfortunately unsupported
+        # KV-sharing consumers never read from their cache, so back them by an empty (0-length) StaticLayer
         for i, layer in enumerate(self.static_cache.layers):
-            if isinstance(layer, StaticSlidingWindowLayer):
-                self.static_cache.layers[i] = StaticLayer(max_static_cache_length)
-            # KV-sharing consumers never read from their cache, so back them by an empty (0-length) StaticLayer
-            elif isinstance(layer, DummyLayer):
+            if isinstance(layer, DummyLayer):
                 self.static_cache.layers[i] = StaticLayer(0)
         num_heads, head_dim = get_head_shapes(self.config)
         self.static_cache.early_initialization(batch_size, num_heads, head_dim, torch.float32, model_device)
