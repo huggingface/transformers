@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch MiniMax model."""
 
+import copy
 import unittest
 
 from transformers import is_torch_available
@@ -30,6 +31,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        MiniMaxConfig,
         MiniMaxForCausalLM,
         MiniMaxModel,
     )
@@ -200,6 +202,47 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
                 self.assertEqual(attention.shape[-3:], (config.num_attention_heads, seq_len, seq_len))
             else:
                 self.assertEqual(attention.shape[-3:], (config.num_attention_heads, head_dim, head_dim))
+
+    def test_lightning_attention_bf16_decode_matches_fp32(self):
+        """In bf16, the per-step decay `exp(-slope_rate)` of the slowest heads rounds to exactly 1.0, so a bf16
+        decay recurrence never forgets and token-by-token decoding drifts away from fp32. The recurrence must run in
+        fp32 even when the model is in bf16."""
+        config = MiniMaxConfig(
+            hidden_size=64,
+            intermediate_size=64,
+            num_hidden_layers=4,
+            num_attention_heads=8,
+            num_key_value_heads=2,
+            head_dim=8,
+            vocab_size=128,
+            num_local_experts=2,
+            num_experts_per_tok=1,
+            block_size=256,
+            layer_types=["linear_attention"] * 4,
+        )
+        torch.manual_seed(0)
+        model_fp32 = MiniMaxForCausalLM(config).eval()
+        model_bf16 = copy.deepcopy(model_fp32).to(torch.bfloat16)
+        # sanity check: the bf16 decay of the slowest head in the last layer is exactly 1.0
+        self.assertEqual(torch.exp(-model_bf16.model.layers[-1].self_attn.slope_rate).max().item(), 1.0)
+
+        input_ids = torch.randint(0, config.vocab_size, (1, 500))
+
+        def last_hidden_state(model):
+            with torch.no_grad():
+                outputs = model(input_ids[:, :1], use_cache=True)
+                for t in range(1, input_ids.shape[1]):
+                    outputs = model(
+                        input_ids[:, t : t + 1],
+                        past_key_values=outputs.past_key_values,
+                        use_cache=True,
+                        output_hidden_states=True,
+                    )
+            return outputs.hidden_states[-1][0, -1].float()
+
+        reference = last_hidden_state(model_fp32)
+        relative_error = (last_hidden_state(model_bf16) - reference).norm() / reference.norm()
+        self.assertLess(relative_error.item(), 1e-2)
 
     @unittest.skip("MiniMax is special")
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
