@@ -802,6 +802,13 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         else:
             encodings = [encoding]
 
+        if return_special_tokens_mask:
+            # The Rust encoder only flags the special tokens added by the template (and padding). Special tokens typed
+            # in the text are matched by the added vocabulary, so their id is enough to flag them, whatever their
+            # `lstrip`/`rstrip`/`normalized` properties. The unk token is skipped: unknown words map to its id as well.
+            special_ids = set(self.all_special_ids)
+            special_ids.discard(self.unk_token_id)
+
         encoding_dict = defaultdict(list)
         for e in encodings:
             encoding_dict["input_ids"].append(e.ids)
@@ -811,7 +818,12 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             if return_attention_mask:
                 encoding_dict["attention_mask"].append(e.attention_mask)
             if return_special_tokens_mask:
-                encoding_dict["special_tokens_mask"].append(e.special_tokens_mask)
+                encoding_dict["special_tokens_mask"].append(
+                    [
+                        1 if flagged or token_id in special_ids else 0
+                        for flagged, token_id in zip(e.special_tokens_mask, e.ids)
+                    ]
+                )
             if return_offsets_mapping:
                 encoding_dict["offset_mapping"].append(e.offsets)
             if return_length:
