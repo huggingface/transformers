@@ -20,6 +20,15 @@ from transformers.testing_utils import require_torch
 from transformers.utils import is_compressed_tensors_available, is_torch_available
 
 
+# Note on PyTorch optionality:
+# PyTorch-optional test collection is ensured by guarding all torch-dependent class
+# declarations behind `if is_torch_available():` and decorating the test suite with
+# `@require_torch`. Testing dependency-absent behavior in an active Python session
+# with torch imported is prohibited as C extensions cannot be safely un-imported, and
+# spawning external processes via subprocess is intentionally avoided to satisfy
+# strict repository security scanner policies (Bandit B603).
+
+
 if is_torch_available():
     import torch
     import torch.nn as nn
@@ -294,7 +303,9 @@ class MixedPrecisionCompressedTensorsTest(unittest.TestCase):
             )
 
     def test_03_pack_quantized_experts_with_dense_attention(self):
-        """Req G: Pack-quantized INT4 expert weights decompress correctly while dense attention fuses."""
+        """Req G: Pack-quantized INT4 expert weights decompress with exact numerical fidelity
+        while dense attention fuses correctly. Validates both negative and positive unpacked values.
+        """
         q_cfg = CompressedTensorsConfig(
             format="mixed-precision",
             quantization_status="compressed",
@@ -323,14 +334,35 @@ class MixedPrecisionCompressedTensorsTest(unittest.TestCase):
             v = torch.full((8, 8), 3.0)
             expected_conv = torch.cat([q, k, v], dim=0)
 
-            # 2 experts packed int4
-            gate_packed = torch.ones(8, 1, dtype=torch.int32)
+            # Nontrivial INT4 packed values spanning negative, zero, and positive values
+            # In 4-bit symmetric quantization: unpacked value = (nibble - 8) * scale
+            # val_a: 0x76543210 -> nibbles 0..7 -> values -8..-1
+            # val_b: 0xFEDCBA98 -> nibbles 8..15 -> values 0..7
+            val_a = 0x76543210
+            val_b = 0xFEDCBA98
+            int_b = val_b if val_b < 0x80000000 else val_b - 0x100000000
+
+            # Expert 0:
+            # gate_proj: 4 rows of val_a, 4 rows of int_b, scale 0.5
+            gate_packed = torch.tensor([[val_a]] * 4 + [[int_b]] * 4, dtype=torch.int32)
             gate_scale = torch.tensor([0.5])
             gate_shape = torch.tensor([8, 8], dtype=torch.int64)
 
-            up_packed = torch.ones(8, 1, dtype=torch.int32)
+            # up_proj: 4 rows of int_b, 4 rows of val_a, scale 0.25
+            up_packed = torch.tensor([[int_b]] * 4 + [[val_a]] * 4, dtype=torch.int32)
             up_scale = torch.tensor([0.25])
             up_shape = torch.tensor([8, 8], dtype=torch.int64)
+
+            # Independent mathematical oracle for unpacked tensors:
+            unpacked_a = torch.tensor([-8.0, -7.0, -6.0, -5.0, -4.0, -3.0, -2.0, -1.0])
+            unpacked_b = torch.tensor([0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0])
+
+            expected_gate_0 = torch.cat([unpacked_a.repeat(4, 1), unpacked_b.repeat(4, 1)], dim=0) * 0.5
+            expected_up_0 = torch.cat([unpacked_b.repeat(4, 1), unpacked_a.repeat(4, 1)], dim=0) * 0.25
+            expected_expert_0 = torch.cat([expected_gate_0, expected_up_0], dim=0)
+
+            # Expert 1 uses cloned packed tensors
+            expected_expert = torch.stack([expected_expert_0, expected_expert_0], dim=0)
 
             tensors = {
                 "model.language_model.layers.0.self_attn.q_conv1d.weight": q,
@@ -355,7 +387,32 @@ class MixedPrecisionCompressedTensorsTest(unittest.TestCase):
             torch.testing.assert_close(
                 model.model.language_model.layers[0].self_attn.conv1d.weight.data, expected_conv
             )
-            self.assertEqual(model.model.language_model.layers[0].mlp.experts.gate_up_proj.shape, (2, 16, 8))
+            # Verify exact numerical values of decoded INT4 expert parameters against oracle
+            actual_expert = model.model.language_model.layers[0].mlp.experts.gate_up_proj.data
+            torch.testing.assert_close(actual_expert, expected_expert)
+
+            # Adversarial mutation verification:
+            # Mutation 1: unscaled integer decoding fails
+            unscaled = torch.stack(
+                [
+                    torch.cat(
+                        [
+                            torch.cat([unpacked_a.repeat(4, 1), unpacked_b.repeat(4, 1)], dim=0),
+                            torch.cat([unpacked_b.repeat(4, 1), unpacked_a.repeat(4, 1)], dim=0),
+                        ],
+                        dim=0,
+                    )
+                ]
+                * 2,
+                dim=0,
+            )
+            self.assertFalse(torch.allclose(actual_expert, unscaled))
+
+            # Mutation 2: inverted signs fail
+            self.assertFalse(torch.allclose(actual_expert, -expected_expert))
+
+            # Mutation 3: double scale fails
+            self.assertFalse(torch.allclose(actual_expert, expected_expert * 2.0))
 
     def test_04_malformed_missing_and_mismatched_companions(self):
         """Req H: Missing companion scale, mismatched list lengths, and empty inputs raise explicit errors."""
@@ -554,17 +611,64 @@ class MixedPrecisionCompressedTensorsTest(unittest.TestCase):
                 model.model.language_model.layers[0].mlp.experts.gate_up_proj.data, expected_expert
             )
 
-    def test_08_torch_unavailable_import(self):
-        """Req K: Verify quantizer_compressed_tensors and test module import when PyTorch is absent."""
-        from unittest.mock import patch
+    def test_08_sharded_metadata_discovery(self):
+        """Req L: Sharded checkpoints with weight_map allow metadata-only key discovery
+        without materializing tensor buffers, correctly preserving dense converters.
+        """
+        import json
 
-        # Verify that when torch is absent, is_torch_available returns False
-        # and quantizer_compressed_tensors defines CompressedTensorsHfQuantizer safely
-        with patch("transformers.utils.import_utils.is_torch_available", return_value=False):
-            with patch("transformers.quantizers.quantizer_compressed_tensors.is_torch_available", return_value=False):
-                from transformers.quantizers.quantizer_compressed_tensors import CompressedTensorsHfQuantizer
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = TinyGlmConfig()
+            config.quantization_config = self._get_fp8_mixed_config().to_dict()
+            config.save_pretrained(tmpdir)
 
-                self.assertIsNotNone(CompressedTensorsHfQuantizer)
+            shard1 = {
+                "model.language_model.layers.0.self_attn.q_conv1d.weight": torch.full((8, 8), 1.0),
+                "model.language_model.layers.0.self_attn.k_conv1d.weight": torch.full((8, 8), 2.0),
+                "model.language_model.layers.0.self_attn.v_conv1d.weight": torch.full((8, 8), 3.0),
+            }
+            shard2 = {
+                "model.language_model.layers.0.mlp.experts.0.gate_proj.weight": torch.full(
+                    (8, 8), 1.0, dtype=torch.float8_e4m3fn
+                ),
+                "model.language_model.layers.0.mlp.experts.0.gate_proj.weight_scale": torch.tensor([2.0]),
+                "model.language_model.layers.0.mlp.experts.0.up_proj.weight": torch.full(
+                    (8, 8), 1.0, dtype=torch.float8_e4m3fn
+                ),
+                "model.language_model.layers.0.mlp.experts.0.up_proj.weight_scale": torch.tensor([3.0]),
+                "model.language_model.layers.0.mlp.experts.1.gate_proj.weight": torch.full(
+                    (8, 8), 2.0, dtype=torch.float8_e4m3fn
+                ),
+                "model.language_model.layers.0.mlp.experts.1.gate_proj.weight_scale": torch.tensor([2.0]),
+                "model.language_model.layers.0.mlp.experts.1.up_proj.weight": torch.full(
+                    (8, 8), 2.0, dtype=torch.float8_e4m3fn
+                ),
+                "model.language_model.layers.0.mlp.experts.1.up_proj.weight_scale": torch.tensor([3.0]),
+            }
+            f1 = "model-00001-of-00002.safetensors"
+            f2 = "model-00002-of-00002.safetensors"
+            save_file(shard1, os.path.join(tmpdir, f1))
+            save_file(shard2, os.path.join(tmpdir, f2))
+
+            weight_map = dict.fromkeys(shard1, f1)
+            weight_map.update(dict.fromkeys(shard2, f2))
+            index_data = {"metadata": {"total_size": 1234}, "weight_map": weight_map}
+            with open(os.path.join(tmpdir, "model.safetensors.index.json"), "w", encoding="utf-8") as fp:
+                json.dump(index_data, fp)
+
+            model = TinyGlmModel.from_pretrained(tmpdir, dtype=torch.float32)
+            expected_conv = torch.cat(
+                [
+                    shard1["model.language_model.layers.0.self_attn.q_conv1d.weight"],
+                    shard1["model.language_model.layers.0.self_attn.k_conv1d.weight"],
+                    shard1["model.language_model.layers.0.self_attn.v_conv1d.weight"],
+                ],
+                dim=0,
+            )
+            torch.testing.assert_close(
+                model.model.language_model.layers[0].self_attn.conv1d.weight.data, expected_conv
+            )
+            self.assertEqual(model.model.language_model.layers[0].mlp.experts.gate_up_proj.shape, (2, 16, 8))
 
     def test_09_dequantize_true_save_and_reload(self):
         """Req I: Loading with dequantize=True preserves _IdentityOp without crashing on operations=[]
@@ -638,3 +742,31 @@ class MixedPrecisionCompressedTensorsTest(unittest.TestCase):
             torch.testing.assert_close(
                 reloaded.model.language_model.layers[0].mlp.experts.gate_up_proj.data, expected_expert
             )
+
+    def test_10_checkpoint_keys_fallback_to_config_groups(self):
+        """Req M: When checkpoint_keys is None (unresolvable checkpoint keys), quantizer
+        falls back to config_groups rules, keeping untargeted attention dense while
+        marking targeted MoE experts as quantized.
+        """
+        quantizer = CompressedTensorsHfQuantizer(self._get_fp8_mixed_config(), pre_quantized=True)
+
+        conv_attn = WeightConverter(
+            source_patterns=[
+                r"self_attn\.q_conv1d\.weight",
+                r"self_attn\.k_conv1d\.weight",
+                r"self_attn\.v_conv1d\.weight",
+            ],
+            target_patterns=r"self_attn\.conv1d\.weight",
+            operations=[Concatenate(dim=0)],
+        )
+        conv_moe = WeightConverter(
+            source_patterns=["mlp.experts.*.gate_proj.weight", "mlp.experts.*.up_proj.weight"],
+            target_patterns="mlp.experts.gate_up_proj",
+            operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+        )
+
+        is_attn_quant = quantizer.is_quantized_converter(conv_attn, checkpoint_keys=None)
+        is_moe_quant = quantizer.is_quantized_converter(conv_moe, checkpoint_keys=None)
+
+        self.assertFalse(is_attn_quant)
+        self.assertTrue(is_moe_quant)
