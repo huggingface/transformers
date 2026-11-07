@@ -47,7 +47,7 @@ if is_torch_distributed_available():
     from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
     from torch.distributed.tensor.placement_types import _StridedShard
 
-    from .parallel_utils import _AllReduceBackward, _AllReduceForward
+    from .parallel_utils import _all_reduce_backward, _AllReduceForward
 
 
 def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
@@ -183,9 +183,8 @@ class ColwiseParallel(TensorParallelLayer):
         # wrapping it as a DTensor. If its gradient is needed, synchronize the partial
         # input-gradient contributions explicitly.
         if is_local_input and getattr(module, "_hf_quantized_needs_local_tp", False):
-            if torch.is_grad_enabled() and x.requires_grad:
-                process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
-                x = _AllReduceBackward.apply(x, process_group)
+            process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+            x = _all_reduce_backward(x, process_group)
             return (x,) + args[1:], kwargs
 
         # DTensor path: handle regular training and layout redistribution.
@@ -439,7 +438,7 @@ class MlaKvAProjParallel(TensorParallelLayer):
             )
         rope_dim = module.config.qk_rope_head_dim
         pass_output, rope_output = output.split([output.shape[-1] - rope_dim, rope_dim], dim=-1)
-        rope_output = _AllReduceBackward.apply(rope_output, mesh.get_group())
+        rope_output = _all_reduce_backward(rope_output, mesh.get_group())
         return torch.cat([pass_output, rope_output], dim=-1)
 
 
@@ -559,14 +558,14 @@ class MoeExpertsParallel(TensorParallelLayer):
         tp_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
         if isinstance(hidden_states, DTensor):
             hidden_states = hidden_states.to_local()
-        hidden_states = _AllReduceBackward.apply(hidden_states, tp_group)
+        hidden_states = _all_reduce_backward(hidden_states, tp_group)
 
         if len(routing_args) >= 2:
             top_k_index, top_k_weights, *extra_args = routing_args
             if isinstance(top_k_weights, DTensor):
                 top_k_weights = top_k_weights.to_local()
             if not is_expert_parallel:
-                top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_group)
+                top_k_weights = _all_reduce_backward(top_k_weights, tp_group)
             routing_args = [top_k_index, top_k_weights, *extra_args]
 
         return (hidden_states, *routing_args), kwargs
