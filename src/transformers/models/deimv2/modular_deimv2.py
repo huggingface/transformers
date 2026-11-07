@@ -213,13 +213,13 @@ class Deimv2ModelOutput(DFineModelOutput):
 @dataclass
 class Deimv2EncoderOutput(ModelOutput):
     r"""
-    feature_maps (`list[torch.FloatTensor]`):
+    feature_maps (`list[torch.Tensor]`):
         List of multi-scale feature maps from the encoder, one per feature level.
     """
 
-    feature_maps: list[torch.FloatTensor] = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    feature_maps: list[torch.Tensor] = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 class Deimv2RMSNorm(LlamaRMSNorm):
@@ -618,7 +618,7 @@ class Deimv2HybridEncoder(DFineHybridEncoder):
     ) -> Deimv2EncoderOutput:
         r"""
         Args:
-            inputs_embeds (`list[torch.FloatTensor]`):
+            inputs_embeds (`list[torch.Tensor]`):
                 Multi-scale feature maps from the backbone (one tensor per feature level) passed to the encoder.
         """
         feature_maps = inputs_embeds
@@ -710,10 +710,10 @@ class Deimv2Model(DFineModel):
 
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         pixel_mask: torch.LongTensor | None = None,
-        encoder_outputs: torch.FloatTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        encoder_outputs: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
@@ -1099,6 +1099,4 @@ __all__ = [
     "Deimv2Model",
     "Deimv2PreTrainedModel",
     "Deimv2ForObjectDetection",
-    "Deimv2ForObjectDetectionCriterion",
-    "Deimv2Loss",
 ]
