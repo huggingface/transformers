@@ -403,6 +403,7 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
         max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
 
         # Chunk and process through CNN
+        input_features = input_features.masked_fill(~input_features_mask[:, None, :].bool(), 0)
         chunked = (
             input_features.view(batch_size, num_mel_bins, num_chunks, chunk_len)
             .permute(0, 2, 1, 3)
