@@ -44,6 +44,7 @@ class GlmgaImageProcessorKwargs(ImagesKwargs, total=False):
     patch_size: int
     temporal_patch_size: int
     merge_size: int
+
     patch_expand_factor: int
 
 
