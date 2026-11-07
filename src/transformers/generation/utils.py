@@ -205,6 +205,8 @@ class GenerateDecoderOnlyOutput(ModelOutput):
         past_key_values (`Cache`, *optional*, returned when `use_cache=True`):
             Returns the model cache, used to speed up decoding. Different models have a different cache format, check
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
+        accepted_tokens_per_round (`list[int]`, *optional*):
+            Accepted assistant-draft token counts for each verification round, when using assisted decoding.
     """
 
     sequences: torch.LongTensor
@@ -213,6 +215,7 @@ class GenerateDecoderOnlyOutput(ModelOutput):
     attentions: tuple[tuple[torch.Tensor]] | None = None
     hidden_states: tuple[tuple[torch.Tensor]] | None = None
     past_key_values: Cache | None = None
+    accepted_tokens_per_round: list[int] | None = None
 
 
 @dataclass
@@ -250,6 +253,8 @@ class GenerateEncoderDecoderOutput(ModelOutput):
         past_key_values (`Cache`, *optional*, returned when `use_cache=True`):
             Returns the model cache, used to speed up decoding. Different models have a different cache format, check
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
+        accepted_tokens_per_round (`list[int]`, *optional*):
+            Accepted assistant-draft token counts for each verification round, when using assisted decoding.
     """
 
     sequences: torch.LongTensor
@@ -261,6 +266,7 @@ class GenerateEncoderDecoderOutput(ModelOutput):
     cross_attentions: tuple[tuple[torch.Tensor]] | None = None
     decoder_hidden_states: tuple[tuple[torch.Tensor]] | None = None
     past_key_values: Cache | None = None
+    accepted_tokens_per_round: list[int] | None = None
 
 
 @dataclass
@@ -4009,6 +4015,9 @@ class GenerationMixin(ContinuousMixin):
         output_scores = generation_config.output_scores
         output_logits = generation_config.output_logits
         return_dict_in_generate = generation_config.return_dict_in_generate
+        accepted_tokens_per_round = (
+            [] if return_dict_in_generate and generation_config.output_accepted_tokens_per_round else None
+        )
 
         # init attention / hidden states / scores tuples
         scores = () if (return_dict_in_generate and output_scores) else None
@@ -4147,6 +4156,8 @@ class GenerationMixin(ContinuousMixin):
                 if eos_positions.numel() > 0:
                     num_drafted = eos_positions[0].item() + 1
                     valid_tokens = valid_tokens[:, :num_drafted]
+            if accepted_tokens_per_round is not None:
+                accepted_tokens_per_round.append(min(int(n_matches), valid_tokens.shape[1]))
             # Recompute how many matches we accepted if we just cropped above due to length/eos
             n_matches = valid_tokens.shape[1] - 1
 
@@ -4252,6 +4263,7 @@ class GenerationMixin(ContinuousMixin):
                     cross_attentions=cross_attentions,
                     decoder_hidden_states=decoder_hidden_states,
                     past_key_values=cache,
+                    accepted_tokens_per_round=accepted_tokens_per_round,
                 )
             else:
                 return GenerateDecoderOnlyOutput(
@@ -4261,6 +4273,7 @@ class GenerationMixin(ContinuousMixin):
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
                     past_key_values=cache,
+                    accepted_tokens_per_round=accepted_tokens_per_round,
                 )
         else:
             return input_ids
