@@ -590,10 +590,11 @@ class DeepGemmForwardTest(unittest.TestCase):
         top_k_index = torch.randint(0, 4, (num_tokens, num_top_k), dtype=torch.long, device=torch_device)
         top_k_weights = torch.rand(num_tokens, num_top_k, dtype=torch.float32, device=torch_device)
         pg = types.SimpleNamespace(size=lambda: 2)
+        symm_buffers = {}
 
         with self._bundle(is_sm100=True) as captured:
             deepgemm_fp8_fp4_megamoe_experts_forward(
-                module, hidden_states, top_k_index, top_k_weights, process_group=pg
+                module, hidden_states, top_k_index, top_k_weights, process_group=pg, symm_buffers=symm_buffers
             )
 
         # setup_megamoe_weights: SFs transformed with the UTCCP recipe (1, 32) at the right dims.
@@ -620,6 +621,7 @@ class DeepGemmForwardTest(unittest.TestCase):
         self.assertTrue(cast["use_ue8m0"] and cast["use_packed_ue8m0"])
         self.assertEqual(cast["gran_k"], 32)
         buf = captured["symm_buffer"]
+        self.assertEqual(list(symm_buffers.values()), [buf])  # cached in the caller's `symm_buffers`
         self.assertTrue(torch.equal(buf.topk_idx[:num_tokens], top_k_index))
         self.assertTrue(torch.allclose(buf.topk_weights[:num_tokens], top_k_weights))
 
@@ -647,6 +649,7 @@ class DeepGemmForwardTest(unittest.TestCase):
                     top_k_index,
                     top_k_weights,
                     process_group=types.SimpleNamespace(size=lambda: 1),
+                    symm_buffers={},
                 )
 
         # Missing process_group (EP group) is rejected — required for the symm-buffer rendezvous.
