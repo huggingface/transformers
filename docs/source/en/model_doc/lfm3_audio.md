@@ -55,7 +55,7 @@ conversation = [
     {"role": "user", "content": [{"type": "audio", "audio": "question.wav"}]},
     {"role": "assistant", "content": "<|mixed_start|>"},
 ]
-inputs = processor.apply_chat_template(conversation, continue_final_message=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device)
+inputs = processor.apply_chat_template(conversation, continue_final_message=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device, model.dtype)
 outputs = model.generate(**inputs, max_new_tokens=256)
 
 text = processor.decode(outputs.sequences[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
@@ -135,7 +135,7 @@ projected tokens to the language model as `inputs_embeds`, with the cache and at
 prefilled, then let `generate` continue from that cache once the clip ends.
 
 ```python
-features = processor.feature_extractor(audio, sampling_rate=16000, return_tensors="pt")["input_features"].to(model.device)
+features = processor.feature_extractor(audio, sampling_rate=16000, return_tensors="pt")["input_features"].to(model.device, model.dtype)
 cache, embeds = None, []
 for start in range(0, features.shape[-1], 96):
     chunk, cache = model.model.get_audio_features_stream(features[..., start : start + 96], cache, is_final=start + 96 >= features.shape[-1])
@@ -168,7 +168,7 @@ prompt = torch.tensor([prompt], device=model.device)
 suppress = tokenizer.convert_tokens_to_ids(["<|mixed_end|>", "<|endoftext|>"])
 stop = tokenizer.convert_tokens_to_ids(["<|endoftext|>", "<|im_start|>"])
 state, feature_cache, text = None, None, []
-mel = torch.empty((1, processor.feature_extractor.feature_size, 0), device=model.device)
+mel = torch.empty((1, processor.feature_extractor.feature_size, 0), device=model.device, dtype=model.dtype)
 
 
 def transcribe(frames, is_final=False):
@@ -188,12 +188,12 @@ def transcribe(frames, is_final=False):
 
 for chunk in waveform_chunks:  # mono float samples at 16 kHz, any size
     features, feature_cache = processor.feature_extractor.stream(chunk, feature_cache, sampling_rate=16000)
-    mel = torch.cat((mel, features.input_features.to(model.device)), dim=-1)
+    mel = torch.cat((mel, features.input_features.to(model.device, model.dtype)), dim=-1)
     while mel.shape[-1] >= chunk_frames:
         transcribe(mel[..., :chunk_frames])
         mel = mel[..., chunk_frames:]
 features, feature_cache = processor.feature_extractor.stream([], feature_cache, is_final=True, sampling_rate=16000)
-mel = torch.cat((mel, features.input_features.to(model.device)), dim=-1)
+mel = torch.cat((mel, features.input_features.to(model.device, model.dtype)), dim=-1)
 while mel.shape[-1] > chunk_frames:
     transcribe(mel[..., :chunk_frames])
     mel = mel[..., chunk_frames:]

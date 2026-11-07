@@ -134,16 +134,10 @@ class LiquidCodecConfig(PreTrainedConfig):
     stft_win_length: int = 1280
     stft_frame_stack: int = 6
     quantizer_dim: int = 256
-    fsq_levels: list[int] | None = None
+    fsq_levels: list[int] | tuple[int, ...] = (8, 7, 6, 6)
     n_q: int = 12
     sampling_rate: int = 24_000
     initializer_range: float = 0.02
-
-    def __post_init__(self, **kwargs):
-        if self.fsq_levels is None:
-            self.fsq_levels = [8, 7, 6, 6]
-        self.fsq_levels = list(self.fsq_levels)
-        super().__post_init__(**kwargs)
 
     @property
     def codebook_size(self) -> int:
@@ -261,14 +255,14 @@ class LiquidCodecFiniteScalarQuantization(Xcodec2FiniteScalarQuantization):
         self.project_out = nn.Linear(self.num_codebooks * self.codebook_dim, config.quantizer_dim)
 
     def encode(self, latents: torch.Tensor) -> torch.Tensor:
-        latents = self.project_in(latents.movedim(1, -1).contiguous()).float()
+        latents = self.project_in(latents.movedim(1, -1).contiguous())
         _, indices = self(latents.reshape(*latents.shape[:-1], self.num_codebooks, self.codebook_dim))
         return indices.long().transpose(1, 2)
 
     def decode(self, codes: torch.Tensor) -> torch.Tensor:
-        latents = self._indices_to_codes(codes.transpose(1, 2))
+        latents = self.codebook[codes.transpose(1, 2)]
         latents = latents.reshape(*latents.shape[:-2], self.num_codebooks * self.codebook_dim)
-        return self.project_out(latents.to(self.project_out.weight.dtype)).movedim(-1, 1)
+        return self.project_out(latents).movedim(-1, 1)
 
 
 class LiquidCodecISTFT(nn.Module):
@@ -315,7 +309,7 @@ class LiquidCodecISTFT(nn.Module):
             else:
                 overlap_cache.audio, overlap_cache.envelope = audio[:, -self.overlap :], envelope[-self.overlap :]
                 audio, envelope = audio[:, : -self.overlap], envelope[: -self.overlap]
-        return (audio / envelope).float()
+        return audio / envelope
 
 
 class LiquidCodecDecoder(nn.Module):
@@ -384,13 +378,12 @@ class LiquidCodecModel(PreTrainedAudioTokenizerBase):
             init.copy_(module.basis, basis)
             init.copy_(module.codebook, codebook)
 
+    @auto_docstring
     @can_return_tuple
-    def encode(self, input_values: torch.FloatTensor, *, return_dict: bool | None = None) -> LiquidCodecEncoderOutput:
+    def encode(self, input_values: torch.FloatTensor) -> LiquidCodecEncoderOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, num_samples)`):
             24 kHz audio. The tail is zero-padded to a whole codec frame of 1920 samples.
-        return_dict (`bool`, *optional*):
-            Whether to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         frame_size = self.config.frame_size
         num_samples = -(input_values.shape[-1] // -frame_size) * frame_size
@@ -399,6 +392,7 @@ class LiquidCodecModel(PreTrainedAudioTokenizerBase):
         latents = self.to_quantizer(self.encoder(inputs_embeds=hidden_states).last_hidden_state).mT
         return LiquidCodecEncoderOutput(audio_codes=self.quantizer.encode(latents))
 
+    @auto_docstring
     @can_return_tuple
     def decode(
         self,
@@ -407,8 +401,6 @@ class LiquidCodecModel(PreTrainedAudioTokenizerBase):
         overlap_cache: LiquidCodecOverlapAddCache | None = None,
         use_streaming: bool = False,
         finalize: bool = True,
-        *,
-        return_dict: bool | None = None,
     ) -> LiquidCodecDecoderOutput:
         r"""
         audio_codes (`torch.LongTensor` of shape `(batch_size, num_codebooks, num_frames)`):
@@ -423,8 +415,6 @@ class LiquidCodecModel(PreTrainedAudioTokenizerBase):
         finalize (`bool`, *optional*, defaults to `True`):
             Whether this is the last chunk of the stream. Until then the trailing samples that later frames still
             contribute to are held back in `overlap_cache`.
-        return_dict (`bool`, *optional*):
-            Whether to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         if use_streaming and decoder_past_key_values is None:
             decoder_past_key_values = DynamicCache(config=self.config.decoder_config)

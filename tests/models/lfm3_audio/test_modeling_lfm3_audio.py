@@ -39,9 +39,8 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
+from ...alm_tester import ALMModelTest, ALMModelTester
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
-from ...test_modeling_common import ModelTesterMixin
 
 
 if is_torch_available():
@@ -554,74 +553,90 @@ class Lfm3AudioModelTest(Lfm3AudioBehaviorTestMixin, unittest.TestCase):
                 self.assertEqual(outputs.audio_lengths.tolist(), [0])
 
 
-class Lfm3AudioModelTester:
-    def __init__(self, parent):
-        self.parent = parent
-        self.batch_size = 7
-        self.seq_length = 12
-        self.is_training = True
-        self.num_hidden_layers = 3
-        self.hidden_size = 32
-        self.num_attention_heads = 4
-        self.vocab_size = 256
+class Lfm3AudioModelTester(ALMModelTester):
+    config_class = Lfm3AudioConfig
+    base_model_class = Lfm3AudioModel
+    conditional_generation_class = Lfm3AudioForConditionalGeneration
+    audio_mask_key = "feature_attention_mask"
+
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("vocab_size", 256)
+        kwargs.setdefault("head_dim", 8)
+        kwargs.setdefault("num_key_value_heads", 1)
+        kwargs.setdefault("conv_L_cache", 3)
+        kwargs.setdefault("feat_seq_length", 40)
+        kwargs.setdefault("num_mel_bins", 16)
+        # a window past every prompt and every clip: the SDPA flash backend takes no explicit mask
+        kwargs.setdefault("sliding_window", 4096)
+        # two attention layers: the `num_hidden_layers` the common attention-output test expects
+        kwargs.setdefault("text_layer_types", ["conv", "sliding_attention", "full_attention"])
+        kwargs.setdefault("text_num_hidden_layers", 3)
+        kwargs.setdefault("expected_num_hidden_layers", 4)
+        kwargs.setdefault("audio_encoder_conv_channels", 8)
+        kwargs.setdefault("audio_encoder_text_hidden_size", 16)
+        kwargs.setdefault("audio_encoder_text_num_hidden_layers", 3)
+        kwargs.setdefault("audio_encoder_text_layer_types", ["conv", "sliding_attention", "conv"])
+        kwargs.setdefault("depth_hidden_size", 16)
+        kwargs.setdefault("depth_max_position_embeddings", NUM_CODEBOOKS)
+        kwargs.setdefault("depth_layer_types", ["full_attention"] * 2)
+        kwargs.setdefault(
+            "depth_rope_parameters",
+            {"full_attention": {"rope_type": "default", "rope_theta": 1e6, "partial_rotary_factor": 1.0}},
+        )
+        kwargs.setdefault("num_codebooks", NUM_CODEBOOKS)
+        kwargs.setdefault("codebook_size", CODEBOOK_SIZE)
+        kwargs.setdefault("audio_eos_code", CODEBOOK_SIZE - 1)
+        kwargs.setdefault("audio_token_id", AUDIO_TOKEN_ID)
+        kwargs.setdefault("audio_out_token_id", AUDIO_OUT_TOKEN_ID)
+        kwargs.setdefault("audio_start_token_id", AUDIO_START_ID)
+        kwargs.setdefault("text_end_token_id", TEXT_END_ID)
+        kwargs.setdefault("mixed_start_token_id", MIXED_START_ID)
+        super().__init__(parent, **kwargs)
+
+    @property
+    def _special_token_ids(self):
+        return super()._special_token_ids | {AUDIO_OUT_TOKEN_ID, AUDIO_START_ID, TEXT_END_ID, MIXED_START_ID}
+
+    def get_audio_embeds_mask(self, audio_mask):
+        lengths = -(audio_mask.sum(-1) // -8)
+        return (torch.arange(int(lengths.max()), device=audio_mask.device)[None] < lengths[:, None]).long()
 
     def get_config(self):
-        text_config = tiny_config().text_config.to_dict()
-        # a window past every prompt, as for the other sliding-window models
-        text_config.update(
-            num_hidden_layers=3,
-            layer_types=["conv", "sliding_attention", "full_attention"],
-            sliding_window=4096,
-            max_position_embeddings=512,
-        )
-        config = tiny_config().to_dict()
-        # the SDPA flash backend takes no explicit mask, so the encoder window covers every clip too
-        config["audio_encoder_config"]["text_config"]["sliding_window"] = 4096
-        return Lfm3AudioConfig(**{**config, "text_config": text_config})
-
-    def prepare_config_and_inputs_for_common(self):
-        # one clip and one prompt speech frame per row; the last clip is 24 of 40 frames (3 encoder tokens, not 5)
-        input_ids = torch.randint(3, 200, (self.batch_size, self.seq_length), device=torch_device)
-        input_ids[:, 0] = 1
-        input_ids[:, 2:7] = AUDIO_TOKEN_ID
-        input_ids[-1, 5:7] = 10
-        input_ids[:, 7] = AUDIO_OUT_TOKEN_ID
-        input_features = torch.randn(self.batch_size, 16, 40, device=torch_device)
-        feature_attention_mask = torch.ones(self.batch_size, 40, dtype=torch.long, device=torch_device)
-        feature_attention_mask[-1, 24:] = 0
-        audio_out_codes = torch.randint(0, CODEBOOK_SIZE - 1, (self.batch_size, NUM_CODEBOOKS), device=torch_device)
-        return self.get_config(), {
-            "input_ids": input_ids,
-            "attention_mask": torch.ones_like(input_ids),
-            "input_features": input_features,
-            "feature_attention_mask": feature_attention_mask,
-            "audio_out_codes": audio_out_codes,
-        }
+        config = super().get_config()
+        # the common audio-feature test reads the encoder width from `audio_config.hidden_size`
+        config.audio_encoder_config.hidden_size = config.audio_encoder_config.text_config.hidden_size
+        return config
 
 
 @require_torch
-class Lfm3AudioCommonTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Lfm3AudioCommonTest(ALMModelTest, unittest.TestCase):
     """The common model and generation tests; the text/speech mode machine is covered by the behaviour tests above."""
 
-    all_model_classes = (Lfm3AudioModel, Lfm3AudioForConditionalGeneration)
-    _is_composite = True
-    additional_model_inputs = ["input_features", "feature_attention_mask", "audio_out_codes"]
+    model_tester_class = Lfm3AudioModelTester
     test_resize_embeddings = False
 
     def setUp(self):
-        self.model_tester = Lfm3AudioModelTester(self)
+        super().setUp()
         # `generate` only runs greedy search or sampling, like Dia
         if any(mode in self._testMethodName for mode in ("beam", "assisted_decoding", "prompt_lookup")):
             self.skipTest("LFM3-Audio generates with greedy search or sampling only")
 
+    def test_config(self):
+        # `text_config` and `depth_config` are both LFM3 configs: `Lfm3Config.from_pretrained` reads back the first
+        with patch.object(self.config_tester, "create_and_test_config_from_and_save_pretrained_composite"):
+            self.config_tester.run_common_tests()
+
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
         if return_labels and model_class is Lfm3AudioForConditionalGeneration:
-            # end-of-audio frames: every codebook is masked, so the loss draws no random mask and stays deterministic
-            num_frames = int((inputs_dict["input_ids"] == AUDIO_OUT_TOKEN_ID).sum())
-            inputs_dict["audio_labels"] = torch.full(
-                (num_frames, NUM_CODEBOOKS), CODEBOOK_SIZE - 1, dtype=torch.long, device=torch_device
+            # one end-of-audio frame per row reaches the speech embeddings and the depth decoder; every codebook of
+            # such a frame is masked, so the loss draws no random mask and stays deterministic
+            inputs_dict["input_ids"] = inputs_dict["input_ids"].clone()
+            inputs_dict["input_ids"][:, -1] = AUDIO_OUT_TOKEN_ID
+            frames = torch.full(
+                (inputs_dict["input_ids"].shape[0], NUM_CODEBOOKS), CODEBOOK_SIZE - 1, device=torch_device
             )
+            inputs_dict.update(audio_out_codes=frames, audio_labels=frames)
         return inputs_dict
 
     def _get_conv_state_shape(self, batch_size: int, config):
@@ -629,22 +644,10 @@ class Lfm3AudioCommonTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         return (batch_size, text_config.hidden_size, text_config.conv_L_cache)
 
     def _audio_features_get_expected_num_attentions(self, model_tester=None):
-        layer_types = self.model_tester.get_config().audio_encoder_config.text_config.layer_types
-        return sum(layer_type != "conv" for layer_type in layer_types)
+        return self.model_tester.audio_encoder_text_layer_types.count("sliding_attention")
 
     def _audio_features_get_expected_num_hidden_states(self, model_tester=None):
-        return self.model_tester.get_config().audio_encoder_config.text_config.num_hidden_layers + 1
-
-    def _audio_features_prepare_config_and_inputs(self):
-        config = self.model_tester.get_config()
-        input_features = torch.randn(2, 16, 40, device=torch_device)
-        feature_attention_mask = torch.ones(2, 40, dtype=torch.long, device=torch_device)
-        feature_attention_mask[1, 24:] = 0
-        return config, {"input_features": input_features, "feature_attention_mask": feature_attention_mask}
-
-    @unittest.skip("the conv layers record no attention weights")
-    def test_attention_outputs(self):
-        pass
+        return self.model_tester.audio_encoder_text_num_hidden_layers + 1
 
     def test_reverse_loading_mapping(self):
         # the speech encoder and depth decoder renames live on the head's conversion mapping
@@ -680,7 +683,9 @@ class Lfm3AudioIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             {"role": "user", "content": [{"type": "audio"}]},
         ]
         text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
-        inputs = processor(text=text, audio=[self._clip()], sampling_rate=16000, return_tensors="pt").to(torch_device)
+        inputs = processor(text=text, audio=[self._clip()], sampling_rate=16000, return_tensors="pt").to(
+            torch_device, torch.bfloat16
+        )
         output = model.generate(
             **inputs,
             max_new_tokens=48,
@@ -807,7 +812,7 @@ class Lfm3AudioIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             waveform = torch.tensor(clip["audio"]["array"], dtype=torch.float32)
             self.assertEqual(clip["audio"]["sampling_rate"], 16000)
             state, feature_cache, texts = None, None, []
-            mel = torch.empty((1, processor.feature_extractor.feature_size, 0), device=model.device)
+            mel = torch.empty((1, processor.feature_extractor.feature_size, 0), device=model.device, dtype=model.dtype)
 
             def transcribe(frames, is_final=False):
                 nonlocal state
@@ -827,12 +832,12 @@ class Lfm3AudioIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 features, feature_cache = processor.feature_extractor.stream(
                     waveform[start : start + 1600], feature_cache
                 )
-                mel = torch.cat((mel, features.input_features.to(model.device)), dim=-1)
+                mel = torch.cat((mel, features.input_features.to(model.device, model.dtype)), dim=-1)
                 while mel.shape[-1] >= chunk_frames:
                     transcribe(mel[..., :chunk_frames])
                     mel = mel[..., chunk_frames:]
             features, feature_cache = processor.feature_extractor.stream([], feature_cache, is_final=True)
-            mel = torch.cat((mel, features.input_features.to(model.device)), dim=-1)
+            mel = torch.cat((mel, features.input_features.to(model.device, model.dtype)), dim=-1)
             while mel.shape[-1] > chunk_frames:
                 transcribe(mel[..., :chunk_frames])
                 mel = mel[..., chunk_frames:]

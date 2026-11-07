@@ -30,7 +30,9 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.import_utils import is_tracing
 from ..auto import AutoConfig, AutoModel
+from ..internvl.modeling_internvl import InternVLMultiModalProjector
 from ..lfm3.modeling_lfm3 import Lfm3PreTrainedModel
+from ..voxtral.modeling_voxtral import VoxtralModelOutputWithPast
 from .generation_lfm3_audio import Lfm3AudioGenerationMixin
 
 
@@ -106,6 +108,7 @@ class Lfm3AudioConfig(PreTrainedConfig):
     """
 
     model_type = "lfm3_audio"
+    attribute_map = {"audio_config": "audio_encoder_config"}
     sub_configs_defaults = {
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="lfm3"),
         "audio_encoder_config": SubConfigSpec(config_class=Lfm3AudioEncoderConfig),
@@ -156,10 +159,6 @@ class Lfm3AudioConfig(PreTrainedConfig):
             # the depth decoder consumes embeddings only; its token ids are placeholders
             self.depth_config = {"pad_token_id": None, "bos_token_id": None, "eos_token_id": None, **self.depth_config}
         super().__post_init__(**kwargs)
-
-    @property
-    def audio_config(self):
-        return self.audio_encoder_config
 
 
 class Lfm3AudioDownsampler(nn.Module):
@@ -240,7 +239,7 @@ class Lfm3AudioEncoder(nn.Module):
         """Encode complete stride-8 windows, with seven frames of lookahead and bounded left context."""
         if cache is None:
             cache = Lfm3AudioEncoderStreamingCache(self.config)
-        features = input_features.to(self.downsample.conv_in.weight.dtype)
+        features = input_features
         if cache.features is not None:
             features = torch.cat((cache.features, features), dim=-1)
         num_frames = cache.num_frames + input_features.shape[-1]
@@ -264,9 +263,9 @@ class Lfm3AudioEncoder(nn.Module):
         return encoded, cache
 
 
-class Lfm3AudioProjector(nn.Module):
+class Lfm3AudioProjector(InternVLMultiModalProjector):
     def __init__(self, config: Lfm3AudioConfig):
-        super().__init__()
+        nn.Module.__init__(self)
         encoder_config = config.audio_encoder_config
         in_features = encoder_config.text_config.hidden_size
         out_features = config.text_config.hidden_size
@@ -274,9 +273,6 @@ class Lfm3AudioProjector(nn.Module):
         self.linear_1 = nn.Linear(in_features, out_features)
         self.act = nn.GELU()
         self.linear_2 = nn.Linear(out_features, out_features)
-
-    def forward(self, audio_features: torch.Tensor) -> torch.Tensor:
-        return self.linear_2(self.act(self.linear_1(self.layer_norm(audio_features))))
 
 
 class Lfm3AudioCodebookNorm(nn.Module):
@@ -335,10 +331,9 @@ class Lfm3AudioDepthDecoder(nn.Module):
         """
         depth_in = self.depth_linear(hidden_states).unflatten(-1, (self.num_codebooks, self.hidden_size))
         code_embeds = self.embed_codes(codes)
-        depth_in = depth_in + torch.where(masked[..., None], self.mask_embedding.to(code_embeds.dtype), code_embeds)
+        depth_in = depth_in + torch.where(masked[..., None], self.mask_embedding, code_embeds)
         depth_out = self.codebook_norm(self.trunk(depth_in))
-        codebook_embedding = self.codebook_embedding.to(depth_out.dtype)
-        logits = torch.matmul(depth_out.transpose(0, 1), codebook_embedding.transpose(1, 2))
+        logits = torch.matmul(depth_out.transpose(0, 1), self.codebook_embedding.transpose(1, 2))
         return logits.transpose(0, 1)
 
     def trunk(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -369,20 +364,8 @@ class Lfm3AudioPreTrainedModel(Lfm3PreTrainedModel):
             init.ones_(module.weight)
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Lfm3Audio outputs, with hidden states and attentions.
-    """
-)
-@dataclass
-class Lfm3AudioModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    audio_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(num_audio_tokens, hidden_size)`.
-        audio_hidden_states of the model produced by the speech encoder and after projecting the last hidden state.
-    """
-
-    audio_hidden_states: torch.FloatTensor | None = None
+class Lfm3AudioModelOutputWithPast(VoxtralModelOutputWithPast):
+    pass
 
 
 @auto_docstring(
@@ -423,12 +406,6 @@ class Lfm3AudioModel(Lfm3AudioPreTrainedModel):
         self.depth_decoder = Lfm3AudioDepthDecoder(config)
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
     @can_return_tuple
     @auto_docstring
     def get_audio_features(
@@ -444,7 +421,6 @@ class Lfm3AudioModel(Lfm3AudioPreTrainedModel):
             The mask of the valid spectrogram frames of each clip.
         """
         feature_lengths = feature_attention_mask.sum(-1)
-        input_features = input_features.to(self.audio_encoder.downsample.conv_in.weight.dtype)
         encoder_outputs, encoded_lengths = self.audio_encoder(input_features, feature_lengths, **kwargs)
         encoded = encoder_outputs.last_hidden_state
         valid = torch.arange(encoded.shape[1], device=encoded.device)[None, :] < encoded_lengths[:, None].to(
@@ -585,15 +561,6 @@ class Lfm3AudioForConditionalGeneration(Lfm3AudioPreTrainedModel, Lfm3AudioGener
         self.model = Lfm3AudioModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
-    def get_output_embeddings(self) -> nn.Module:
-        return self.lm_head
 
     @auto_docstring
     def get_audio_features(

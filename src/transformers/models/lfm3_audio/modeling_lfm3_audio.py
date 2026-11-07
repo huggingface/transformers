@@ -115,7 +115,7 @@ class Lfm3AudioEncoder(nn.Module):
         """Encode complete stride-8 windows, with seven frames of lookahead and bounded left context."""
         if cache is None:
             cache = Lfm3AudioEncoderStreamingCache(self.config)
-        features = input_features.to(self.downsample.conv_in.weight.dtype)
+        features = input_features
         if cache.features is not None:
             features = torch.cat((cache.features, features), dim=-1)
         num_frames = cache.num_frames + input_features.shape[-1]
@@ -150,8 +150,12 @@ class Lfm3AudioProjector(nn.Module):
         self.act = nn.GELU()
         self.linear_2 = nn.Linear(out_features, out_features)
 
-    def forward(self, audio_features: torch.Tensor) -> torch.Tensor:
-        return self.linear_2(self.act(self.linear_1(self.layer_norm(audio_features))))
+    def forward(self, image_features):
+        hidden_states = self.layer_norm(image_features)
+        hidden_states = self.linear_1(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
 
 
 class Lfm3AudioCodebookNorm(nn.Module):
@@ -210,10 +214,9 @@ class Lfm3AudioDepthDecoder(nn.Module):
         """
         depth_in = self.depth_linear(hidden_states).unflatten(-1, (self.num_codebooks, self.hidden_size))
         code_embeds = self.embed_codes(codes)
-        depth_in = depth_in + torch.where(masked[..., None], self.mask_embedding.to(code_embeds.dtype), code_embeds)
+        depth_in = depth_in + torch.where(masked[..., None], self.mask_embedding, code_embeds)
         depth_out = self.codebook_norm(self.trunk(depth_in))
-        codebook_embedding = self.codebook_embedding.to(depth_out.dtype)
-        logits = torch.matmul(depth_out.transpose(0, 1), codebook_embedding.transpose(1, 2))
+        logits = torch.matmul(depth_out.transpose(0, 1), self.codebook_embedding.transpose(1, 2))
         return logits.transpose(0, 1)
 
     def trunk(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -259,12 +262,11 @@ class Lfm3AudioPreTrainedModel(PreTrainedModel):
 @dataclass
 class Lfm3AudioModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    audio_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(num_audio_tokens, hidden_size)`.
-        audio_hidden_states of the model produced by the speech encoder and after projecting the last hidden state.
+    audio_hidden_states (`torch.Tensor`, *optional*):
+        Projected audio hidden states.
     """
 
-    audio_hidden_states: torch.FloatTensor | None = None
+    audio_hidden_states: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -305,12 +307,6 @@ class Lfm3AudioModel(Lfm3AudioPreTrainedModel):
         self.depth_decoder = Lfm3AudioDepthDecoder(config)
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
     @can_return_tuple
     @auto_docstring
     def get_audio_features(
@@ -326,7 +322,6 @@ class Lfm3AudioModel(Lfm3AudioPreTrainedModel):
             The mask of the valid spectrogram frames of each clip.
         """
         feature_lengths = feature_attention_mask.sum(-1)
-        input_features = input_features.to(self.audio_encoder.downsample.conv_in.weight.dtype)
         encoder_outputs, encoded_lengths = self.audio_encoder(input_features, feature_lengths, **kwargs)
         encoded = encoder_outputs.last_hidden_state
         valid = torch.arange(encoded.shape[1], device=encoded.device)[None, :] < encoded_lengths[:, None].to(
@@ -467,15 +462,6 @@ class Lfm3AudioForConditionalGeneration(Lfm3AudioPreTrainedModel, Lfm3AudioGener
         self.model = Lfm3AudioModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
-    def get_output_embeddings(self) -> nn.Module:
-        return self.lm_head
 
     @auto_docstring
     def get_audio_features(

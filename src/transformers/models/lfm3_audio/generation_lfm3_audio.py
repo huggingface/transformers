@@ -470,7 +470,6 @@ class Lfm3AudioGenerationMixin(GenerationMixin):
             input_features, state.encoder_cache, is_final
         )
         embed_tokens = self.get_input_embeddings()
-        embeddings = embeddings.to(dtype=embed_tokens.weight.dtype)
         if input_ids is not None:
             state.past_key_values = DynamicCache(config=config.text_config)
             state.pending = embed_tokens(input_ids)

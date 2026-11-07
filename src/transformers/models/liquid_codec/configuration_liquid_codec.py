@@ -131,16 +131,10 @@ class LiquidCodecConfig(PreTrainedConfig):
     stft_win_length: int = 1280
     stft_frame_stack: int = 6
     quantizer_dim: int = 256
-    fsq_levels: list[int] | None = None
+    fsq_levels: list[int] | tuple[int, ...] = (8, 7, 6, 6)
     n_q: int = 12
     sampling_rate: int = 24_000
     initializer_range: float = 0.02
-
-    def __post_init__(self, **kwargs):
-        if self.fsq_levels is None:
-            self.fsq_levels = [8, 7, 6, 6]
-        self.fsq_levels = list(self.fsq_levels)
-        super().__post_init__(**kwargs)
 
     @property
     def codebook_size(self) -> int:

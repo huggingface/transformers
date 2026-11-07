@@ -96,6 +96,7 @@ class Lfm3AudioConfig(PreTrainedConfig):
     """
 
     model_type = "lfm3_audio"
+    attribute_map = {"audio_config": "audio_encoder_config"}
     sub_configs_defaults = {
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="lfm3"),
         "audio_encoder_config": SubConfigSpec(config_class=Lfm3AudioEncoderConfig),
@@ -146,10 +147,6 @@ class Lfm3AudioConfig(PreTrainedConfig):
             # the depth decoder consumes embeddings only; its token ids are placeholders
             self.depth_config = {"pad_token_id": None, "bos_token_id": None, "eos_token_id": None, **self.depth_config}
         super().__post_init__(**kwargs)
-
-    @property
-    def audio_config(self):
-        return self.audio_encoder_config
 
 
 __all__ = ["Lfm3AudioConfig", "Lfm3AudioEncoderConfig"]

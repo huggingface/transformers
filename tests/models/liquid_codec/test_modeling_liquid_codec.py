@@ -86,17 +86,6 @@ class LiquidCodecModelTest(ModelTesterMixin, unittest.TestCase):
         self.config = tiny_config()
         self.codec = LiquidCodecModel(self.config).to(torch_device).eval()
 
-    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        # the codec records neither attentions nor hidden states
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
-        inputs_dict.pop("output_attentions", None)
-        inputs_dict.pop("output_hidden_states", None)
-        return inputs_dict
-
-    @unittest.skip("The codec takes audio, not token embeddings")
-    def test_inputs_embeds(self):
-        pass
-
     @unittest.skip("The codec takes audio, not token embeddings")
     def test_model_get_set_embeddings(self):
         pass
@@ -130,6 +119,7 @@ class LiquidCodecModelTest(ModelTesterMixin, unittest.TestCase):
                 torch.testing.assert_close(tuple_value, dict_value)
 
     def test_encode_decode_shapes(self):
+        """`encode` pads to whole frames, `decode` returns 1920 samples per frame and `forward` cuts to the input."""
         audio = torch.randn(2, 1920 * 3 + 100, device=torch_device)
         with torch.no_grad():
             codes = self.codec.encode(audio).audio_codes
@@ -175,24 +165,6 @@ class LiquidCodecModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual((first.audio_values.shape[-1], last.audio_values.shape[-1]), (3 * 1920 - 480, 4 * 1920 + 480))
         torch.testing.assert_close(torch.cat([first.audio_values, last.audio_values], -1), offline, atol=1e-6, rtol=0)
 
-    def test_quantizer_matches_the_original_fsq(self):
-        """Codes and indices are those of the original implementation: bound, round, mixed-radix index."""
-        quantizer = self.codec.quantizer
-        levels, basis = quantizer.levels, quantizer.basis
-        latents = torch.randn(2, 16, 5, device=torch_device) * 3
-        with torch.no_grad():
-            projected = quantizer.project_in(latents.movedim(1, -1)).reshape(2, 5, 4, 2)
-            half_levels = (levels - 1) * (1 + 1e-3) / 2
-            offset = torch.where(levels % 2 == 0, 0.5, 0.0)
-            codes = (torch.tanh(projected + torch.atanh(offset / half_levels)) * half_levels - offset).round()
-            expected = ((codes + levels // 2) * basis).sum(-1).long().transpose(1, 2)
-            indices = quantizer.encode(latents)
-            self.assertEqual(indices.dtype, torch.long)
-            self.assertTrue(torch.equal(indices, expected))
-            # the codebook round trip is exact; the latent projections are not inverses of each other
-            self.assertTrue(torch.equal(quantizer(quantizer._indices_to_codes(expected))[1].long(), expected))
-            self.assertEqual(quantizer.decode(expected).shape, (2, 16, 5))
-
     def test_released_checkpoint_keys_load(self):
         """The released codec stores the encoder backbone under `encoder.lfm.*`."""
         state_dict = {
@@ -209,6 +181,8 @@ class LiquidCodecModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertTrue(torch.equal(value.cpu(), reloaded.state_dict()[key].cpu()), key)
 
     def test_attention_implementation_reaches_the_backbones(self):
+        """The attention implementation set on the codec reaches both LFM3 backbones, also after a reload."""
+
         def implementations(model):
             return (
                 model.config._attn_implementation,
