@@ -102,9 +102,9 @@ jobs:
           build-args: |
             REF=main
             PYTHON_VERSION=${{ steps.python.outputs.version }}
-            CUDA=cu130
-            PYTORCH=2.14.0
-            TORCHCODEC=0.16.0
+            CUDA=cu132
+            PYTORCH=2.15.0
+            TORCHCODEC=0.17.0
             FLASH_ATTN=yes
           push: true
           tags: huggingface/transformers-all-latest-gpu${{ inputs.image_postfix }}:flash-attn
