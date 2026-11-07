@@ -57,7 +57,7 @@ from .core_model_loading import (
 from .distributed import DistributedConfig
 from .distributed.checkpoint import _get_resolved_distributed_checkpoint_files, get_distributed_checkpoint_dir
 from .distributed.mixin import DistributedMixin
-from .distributed.sharding_utils import _dtensor_from_local_like
+from .distributed.sharding_utils import _dtensor_from_local_like, _tied_params_are_equal
 from .distributed.tensor_parallel import verify_tp_plan
 from .distributed.utils import is_local_dist_rank_0
 from .dynamic_module_utils import custom_object_save
@@ -1284,7 +1284,7 @@ class PreTrainedModel(
                 loss_type = None
         self.loss_type = loss_type
 
-        _CAN_RECORD_REGISTRY[str(self.__class__)] = self._can_record_outputs  # added for executorch support only
+        _CAN_RECORD_REGISTRY[self] = self._can_record_outputs  # added for executorch support only
 
     def post_init(self):
         """
@@ -2565,7 +2565,7 @@ class PreTrainedModel(
 
                     # If both are present, check if the weights are exactly similar, and only tie in this case
                     # This check is important, as torch `.bin` checkpoints always contain both keys, referencing the same storage
-                    if not torch.equal(source_param, target_param):
+                    if not _tied_params_are_equal(source_param, target_param):
                         logger.warning(
                             f"The tied weights mapping and config for this model specifies to tie {source_param_name} to "
                             f"{target_param_name}, but both are present in the checkpoints with different values, so we will NOT "
@@ -4508,12 +4508,14 @@ class PreTrainedModel(
 
         if is_deepspeed_zero3_enabled() and not is_quantized:
             if state_dict is None:
+                # Only rank 0 copies checkpoint values into the model, the other ranks only need the keys and shapes
+                map_location = "cpu" if torch.distributed.get_rank() == 0 else "meta"
                 merged_state_dict = {}
                 for ckpt_file in checkpoint_files:
                     merged_state_dict.update(
                         load_state_dict(
                             ckpt_file,
-                            map_location="cpu",
+                            map_location=map_location,
                             weights_only=load_config.weights_only,
                             disable_mmap=load_config.disable_mmap,
                         )
@@ -5075,22 +5077,24 @@ def is_accelerator_device(device: str | int | torch.device) -> bool:
 def slice_logits_to_keep(hidden_states: torch.Tensor, logits_to_keep: int | torch.Tensor) -> torch.Tensor:
     """
     Slice `hidden_states` according to `logits_to_keep`, before the `lm_head` projection, so logits are only
-    computed for the positions that are actually needed. `logits_to_keep` can be:
-        - an `int`: keep the last `logits_to_keep` positions (`0` keeps all of them), e.g. in `generate`'s prefill.
-        - a 1D tensor: keep these positions for every sample.
-        - a 2D tensor, either:
-            - integer `(batch_size, num_positions)`: keep these positions for each sample (same count for all).
-            - boolean `(batch_size, sequence_length)`: keep the `True` positions, the count can differ per sample
-              (e.g. packed training). The output is flattened to `(num_true, hidden_size)`.
-        - an `int`: keep the last `logits_to_keep` positions (`0` keeps all of them). E.g. in `generate`, we use `logits_to_keep=1` whenever possible to only project the last logit onto the (usually huge) vocab size dimension since we only care about the next token.
-        - a 1D tensor: keep these positions for every batch sample.
-        - a 2D tensor, either:
-            - integer `(batch_size, num_positions)`: keep these positions for each sample (same count for all).
-            - boolean `(batch_size, sequence_length)`: keep the `True` positions, the count can differ per sample
-              (e.g. packed training). The output is flattened to `(num_true, hidden_size)`.
-    Except for the boolean mask, the output has shape `(batch_size, num_positions, hidden_size)`.
+    computed for the positions that are actually needed.
 
-    NOTE: a 2D integer tensor holds positions, not a mask: so a valid mask casted to integer dtype would be understood as positions, not mask. To slice with a mask, the tensor really needs to be of dtype `bool`.
+    Args:
+        logits_to_keep (`int` or `torch.Tensor`):
+            - an `int`: keep the last `logits_to_keep` positions (`0` keeps all of them). E.g. in `generate`, we use `logits_to_keep=1`
+            whenever possible to only project the last logit onto the (usually huge) vocab size dimension since we only care about the
+            next token.
+            - a 1D tensor: keep these positions for every batch sample.
+            - a 2D tensor, either:
+                - integer `(batch_size, num_positions)`: keep these positions for each sample (same count for all).
+                - boolean `(batch_size, sequence_length)`: keep the `True` positions, the count can differ per sample
+                (e.g. packed training). The output is flattened to `(num_true, hidden_size)`.
+
+    Returns:
+        Except for the boolean mask, the output has shape `(batch_size, num_positions, hidden_size)`.
+
+    NOTE: a 2D integer tensor holds positions, not a mask: so a valid mask casted to integer dtype would be understood as positions,
+    not mask. To slice with a mask, the tensor really needs to be of dtype `bool`.
     """
     if isinstance(logits_to_keep, torch.Tensor) and logits_to_keep.ndim == 2:
         if logits_to_keep.dtype == torch.bool:

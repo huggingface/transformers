@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 from huggingface_hub import hf_hub_download
 
-from transformers import BitsAndBytesConfig, Emu3Config, Emu3TextConfig, is_torch_available, is_vision_available
+from transformers import BitsAndBytesConfig, Emu3Config, Emu3TextConfig, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -36,9 +36,6 @@ from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
-if is_vision_available():
-    pass
 
 if is_torch_available():
     import torch

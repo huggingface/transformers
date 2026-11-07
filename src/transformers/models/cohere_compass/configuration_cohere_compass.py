@@ -39,7 +39,7 @@ class CohereCompassVisionConfig(PreTrainedConfig):
     model_type = "cohere_compass_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
-    attribute_map = {"num_attention_heads": "num_heads"}
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 27
     hidden_size: int = 1152

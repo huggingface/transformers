@@ -1305,6 +1305,9 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "lfm3": [
+            WeightRenaming(source_patterns=r"\.self_attn\.gate_proj\.", target_patterns=".self_attn.g_proj."),
+        ],
         "lfm2_moe": [
             WeightConverter(
                 source_patterns=[

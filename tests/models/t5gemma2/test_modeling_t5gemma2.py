@@ -25,7 +25,6 @@ from transformers import (
     T5Gemma2EncoderConfig,
     T5Gemma2TextConfig,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.cache_utils import DynamicLayer, DynamicSlidingWindowLayer, EncoderDecoderCache
 from transformers.testing_utils import (
@@ -54,12 +53,10 @@ if is_torch_available():
         T5Gemma2Model,
     )
 
-if is_vision_available():
-    pass
-
 
 class T5Gemma2ModelTester:
     config_class = T5Gemma2Config
+
     text_config_class = T5Gemma2TextConfig
     encoder_config_class = T5Gemma2EncoderConfig
     decoder_config_class = T5Gemma2DecoderConfig

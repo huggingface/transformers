@@ -17,6 +17,7 @@ from collections.abc import Callable
 
 import torch
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
@@ -51,6 +52,8 @@ from ..mistral4.modeling_mistral4 import Mistral4Experts, Mistral4MoE, Mistral4T
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
+@auto_docstring(checkpoint="mistralai/Mistral-Large-4-1T-A52B")
+@strict
 class MistralLarge4TextConfig(GlmMoeDsaConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
@@ -73,9 +76,6 @@ class MistralLarge4TextConfig(GlmMoeDsaConfig):
         List with at least the same length as the number of layers in the model.
         A `1` at an index position indicates that the corresponding layer will use RoPE,
         while a `0` indicates that it's a NoPE layer.
-    no_rope_layer_interval (`int`, *optional*, defaults to 4):
-        Every `no_rope_layer_interval`-th layer is a NoPE layer (no rotary embedding in the attention nor in the
-        indexer). The other layers use RoPE.
     kv_source_layers (`list[int]`, *optional*):
         For each layer, the index of the layer whose latent KV cache it attends to. A layer whose entry is its own
         index computes and caches its own latent KV; a layer pointing at an earlier layer has no `kv_a_proj_with_mqa`
@@ -134,7 +134,6 @@ class MistralLarge4TextConfig(GlmMoeDsaConfig):
     index_n_heads: int = 32
     first_k_dense_replace: int = 1
     no_rope_layers: list[int] | None = None
-    no_rope_layer_interval: int = 4
     kv_source_layers: list[int] | None = None
     final_logit_softcapping: float = 30.0
 
@@ -156,8 +155,9 @@ class MistralLarge4TextConfig(GlmMoeDsaConfig):
             }
         # NoPE every `no_rope_layer_interval`-th layer (smollm3 convention: 1 == uses RoPE)
         if self.no_rope_layers is None:
+            no_rope_layer_interval = kwargs.pop("no_rope_layer_interval", 4)
             self.no_rope_layers = [
-                int((layer_idx + 1) % self.no_rope_layer_interval != 0) for layer_idx in range(self.num_hidden_layers)
+                int((layer_idx + 1) % no_rope_layer_interval != 0) for layer_idx in range(self.num_hidden_layers)
             ]
         # KV sharing: by default every layer owns its latent KV cache
         if self.kv_source_layers is None:
@@ -194,6 +194,8 @@ class MistralLarge4TextConfig(GlmMoeDsaConfig):
         return kv_sharing_modes
 
 
+@auto_docstring(checkpoint="mistralai/Mistral-Large-4-1T-A52B")
+@strict
 class MistralLarge4Config(Mistral3Config):
     model_type = "mistral_large4"
     sub_configs_defaults = {
@@ -623,6 +625,8 @@ class MistralLarge4PreTrainedModel(GlmMoeDsaPreTrainedModel):
 
 
 class MistralLarge4TextModel(MistralLarge4PreTrainedModel, GlmMoeDsaModel):
+    config: MistralLarge4TextConfig
+
     def __init__(self, config: MistralLarge4TextConfig):
         super().__init__(config)
         self.norm = MistralLarge4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)

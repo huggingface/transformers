@@ -28,7 +28,6 @@ from transformers import (
     VideoLlavaModel,
     VideoLlavaProcessor,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     cleanup,
@@ -47,9 +46,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    pass
 
 
 class VideoLlavaVisionText2TextModelTester:

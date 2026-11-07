@@ -20,8 +20,6 @@ from transformers import (
     DeepseekVLConfig,
     DeepseekVLForConditionalGeneration,
     DeepseekVLModel,
-    LlamaConfig,
-    SiglipVisionConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -37,14 +35,12 @@ from ...vlm_tester import VLMModelTest, VLMModelTester
 class DeepseekVLVisionText2TextModelTester(VLMModelTester):
     base_model_class = DeepseekVLModel
     config_class = DeepseekVLConfig
-    text_config_class = LlamaConfig
-    vision_config_class = SiglipVisionConfig
+
     conditional_generation_class = DeepseekVLForConditionalGeneration
 
-    def get_vision_config(self):
-        config = super().get_vision_config()
-        config.vision_use_head = False
-        return config
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("vision_use_head", False)
+        super().__init__(parent, **kwargs)
 
 
 @require_torch
