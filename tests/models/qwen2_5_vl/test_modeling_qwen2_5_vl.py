@@ -767,6 +767,9 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
                 ("xpu", None): [
                     'system\nYou are a helpful assistant.\nuser\nWhat is shown in this video?\nassistant\nThe video shows an indoor tennis court with a person standing on the service line, preparing to serve. The individual appears to be practicing or warming up,',
                 ],
+                ("xpu", 5): [
+                    'system\nYou are a helpful assistant.\nuser\nWhat is shown in this video?\nassistant\nThe video shows two individuals playing tennis on an indoor court. The player in the foreground, dressed in a white shirt and black shorts, is preparing to',
+                ],
             }
         ).get_expectation()  # fmt: skip
         self.assertEqual(

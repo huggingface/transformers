@@ -28,7 +28,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
@@ -329,15 +329,25 @@ class DeepseekV3ModelTest(
 
                 inputs = tokenizer(texts, return_tensors="pt", padding=True).to(torch_device)
 
-                res_eager = model_eager.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-                res_sdpa = model_sdpa.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+                res_eager = model_eager.generate(
+                    **inputs,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    return_dict_in_generate=True,
+                    output_scores=True,
+                )
+                res_sdpa = model_sdpa.generate(
+                    **inputs,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    return_dict_in_generate=True,
+                    output_scores=True,
+                )
 
                 with self.subTest(f"{padding_side}"):
-                    torch.testing.assert_close(
-                        res_eager,
-                        res_sdpa,
-                        msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
-                    )
+                    # This fp16 checkpoint produces exactly tied top-2 logits for one prompt, so argmax
+                    # tie-breaking is arbitrary; compare scores instead, with atol sized for fp16 (1 ULP).
+                    assert_similar_generate_outputs(res_eager, res_sdpa, atol=2e-2, rtol=1e-3)
         finally:
             del model_eager, model_sdpa
             cleanup(torch_device, gc_collect=True)
