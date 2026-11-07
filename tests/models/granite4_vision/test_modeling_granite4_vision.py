@@ -17,11 +17,9 @@ import unittest
 
 from transformers import (
     AutoProcessor,
-    CLIPVisionConfig,
     Granite4VisionConfig,
     Granite4VisionForConditionalGeneration,
     Granite4VisionModel,
-    GraniteConfig,
     is_torch_available,
 )
 from transformers.image_utils import load_image
@@ -47,8 +45,6 @@ class Granite4VisionModelTester(VLMModelTester):
     base_model_class = Granite4VisionModel
     config_class = Granite4VisionConfig
     conditional_generation_class = Granite4VisionForConditionalGeneration
-    text_config_class = GraniteConfig
-    vision_config_class = CLIPVisionConfig
 
     def __init__(self, parent, **kwargs):
         # Vision hidden_size must be divisible by 64 (QFormer num_attention_heads = hidden_size // 64)
@@ -66,7 +62,7 @@ class Granite4VisionModelTester(VLMModelTester):
         kwargs.setdefault("downsample_rate", "1/2")
         kwargs.setdefault("deepstack_layer_map", [[1, 0]])
         kwargs.setdefault("projector_dropout", 0.0)
-        kwargs.setdefault("image_token_index", kwargs.get("image_token_id", 3))
+        kwargs.setdefault("image_token_id", 3)
 
         # Compute num_image_tokens after downsampling:
         # image_side = image_size/patch_size = 4, ds 1/2 -> patches_h = patches_w = 2

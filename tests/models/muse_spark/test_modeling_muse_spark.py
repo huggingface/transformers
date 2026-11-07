@@ -63,7 +63,7 @@ class MuseSparkVision2TextModelTester(VLMModelTester):
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("image_token_id", 3)
         kwargs.setdefault("video_token_id", 4)
-        kwargs.setdefault("num_image_tokens", 1)
+        kwargs.setdefault("num_image_tokens", 4)
         kwargs.setdefault("patch_size", 2)
         kwargs.setdefault("patch_temporal", 2)
         kwargs.setdefault("merge_size", 1)
@@ -78,32 +78,23 @@ class MuseSparkVision2TextModelTester(VLMModelTester):
         kwargs.setdefault("num_local_experts", 8)
         kwargs.setdefault("audio_token_id", 5)
         kwargs.setdefault("num_audio_tokens", 1)
-        kwargs.setdefault(
-            "audio_config",
-            {
-                "patch_sizes": [2, 2],
-                "hidden_sizes": [8, 16],
-                "depths": [1, 1],
-                "num_hidden_layers": 2,
-                "mlp_ratio": 2.0,
-                "conv_kernel_size": 3,
-                "out_hidden_size": 32,
-            },
-        )
+
+        kwargs.setdefault("audio_patch_sizes", [2, 2])
+        kwargs.setdefault("audio_hidden_sizes", [8, 16])
+        kwargs.setdefault("audio_depths", [1, 1])
+        kwargs.setdefault("audio_num_hidden_layers", 2)
+        kwargs.setdefault("audio_mlp_ratio", 2.0)
+        kwargs.setdefault("audio_conv_kernel_size", 3)
+        kwargs.setdefault("audio_out_hidden_size", 32)
+        kwargs.setdefault("vision_layer_types", ["window_attention", "full_attention"])
+
         super().__init__(parent, **kwargs)
-        self.image_grid_thw = (1, 1, 1)
+        self.image_grid_thw = (1, 2, 2)
         self.out_hidden_size = self.hidden_size * self.merge_size**2
 
     @property
     def _special_token_ids(self):
         return super()._special_token_ids | {self.video_token_id, self.audio_token_id}
-
-    def get_vision_config(self):
-        # `layer_types` is shared with the text config by name, but the vision tower uses
-        # "window_attention" instead of "sliding_attention".
-        config = super().get_vision_config()
-        config.layer_types = ["window_attention"] * (config.num_hidden_layers - 1) + ["full_attention"]
-        return config
 
     def create_pixel_values(self, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size

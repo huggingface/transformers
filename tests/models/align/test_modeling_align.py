@@ -184,8 +184,8 @@ class AlignVisionModelTest(ModelTesterMixin, unittest.TestCase):
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
-            num_blocks = sum(config.num_block_repeats) * 4
-            self.assertEqual(len(hidden_states), num_blocks)
+            # One hidden state per block, plus the encoder's input
+            self.assertEqual(len(hidden_states), config.num_hidden_layers + 1)
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
