@@ -20,6 +20,7 @@ fill-in-the-middle text insertion.
 """
 
 import asyncio
+import json
 import time
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
@@ -151,7 +152,7 @@ class CompletionHandler(BaseHandler):
                             done = True
                             break
                         if isinstance(text, _StreamError):
-                            sse_parts.append(f'data: {{"error": "{text.msg}"}}\n\n')
+                            sse_parts.append(f"data: {json.dumps({'error': text.msg})}\n\n")
                             yield "".join(sse_parts)
                             return
 
