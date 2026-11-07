@@ -16,6 +16,8 @@ The Trainer class, to easily train a 🤗 Transformers from scratch or finetune 
 """
 
 import contextlib
+import copy
+import dataclasses
 import functools
 import glob
 import inspect
@@ -2366,6 +2368,12 @@ class Trainer:
             return type(data)({k: self._prepare_input(v) for k, v in data.items()})
         elif isinstance(data, (tuple, list)):
             return type(data)(self._prepare_input(v) for v in data)
+        elif dataclasses.is_dataclass(data) and not isinstance(data, type):
+            copied = copy.copy(data)
+            for f in dataclasses.fields(data):
+                if hasattr(data, f.name):
+                    object.__setattr__(copied, f.name, self._prepare_input(getattr(data, f.name)))
+            return copied
         elif isinstance(data, torch.Tensor):
             kwargs = {"device": self.args.device}
             if self.is_deepspeed_enabled and (torch.is_floating_point(data) or torch.is_complex(data)):
@@ -2382,7 +2390,12 @@ class Trainer:
         handling potential state.
         """
         inputs = self._prepare_input(inputs)
-        if len(inputs) == 0:
+        is_empty = (
+            len(inputs) == 0
+            if hasattr(inputs, "__len__")
+            else (len(dataclasses.fields(inputs)) == 0 if dataclasses.is_dataclass(inputs) else False)
+        )
+        if is_empty:
             raise ValueError(
                 "The batch received was empty, your model won't be able to train on it. Double-check that your "
                 f"training dataset contains keys expected by the model: {','.join(self._signature_columns)}."
