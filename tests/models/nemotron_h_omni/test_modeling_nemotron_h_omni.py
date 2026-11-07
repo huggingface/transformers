@@ -22,11 +22,8 @@ from parameterized import parameterized
 
 from transformers import (
     NemotronH_Omni_Reasoning_V3_Config,
-    NemotronHConfig,
-    ParakeetEncoderConfig,
     ParakeetFeatureExtractor,
     PreTrainedTokenizerFast,
-    RadioConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -40,7 +37,6 @@ from transformers.testing_utils import (
 from transformers.video_utils import load_video
 
 from ...alm_tester import ALMModelTest, ALMModelTester
-from ...multimodal_tester import MultiModalModelTester
 from ...test_modeling_common import floats_tensor, ids_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
 from ..nemotron_h import test_modeling_nemotron_h
@@ -57,79 +53,14 @@ if is_torch_available():
     )
 
 
-def get_tiny_text_config(tester) -> "NemotronHConfig":
-    return NemotronHConfig(
-        vocab_size=tester.vocab_size,
-        hidden_size=tester.hidden_size,
-        layers_block_type=["linear_attention", "moe", "full_attention", "moe"],
-        num_attention_heads=4,
-        num_key_value_heads=2,
-        head_dim=8,
-        intermediate_size=40,
-        moe_intermediate_size=40,
-        moe_shared_expert_intermediate_size=40,
-        mlp_hidden_act="relu2",
-        mamba_hidden_act="silu",
-        ssm_state_size=16,
-        mamba_num_heads=8,
-        mamba_n_groups=2,
-        mamba_head_dim=8,
-        mamba_d_conv=4,
-        mamba_expand=2,
-        mamba_chunk_size=8,
-        n_routed_experts=4,
-        num_experts_per_tok=2,
-        pad_token_id=tester.pad_token_id,
-        bos_token_id=tester.bos_token_id,
-        eos_token_id=tester.eos_token_id,
-    )
-
-
 TINY_VISION_LAYERS = 2
 TINY_AUDIO_LAYERS = 2
-
-
-def get_tiny_vision_config(tester) -> "RadioConfig":
-    return RadioConfig(
-        hidden_size=tester.vision_hidden_size,
-        num_hidden_layers=TINY_VISION_LAYERS,
-        num_attention_heads=4,
-        mlp_ratio=2.0,
-        patch_size=tester.patch_size,
-        image_size=tester.image_size,
-        max_img_size=64,
-        num_channels=3,
-        # >= 2 cls tokens so the default summary_idxs=[0, 1] is in-bounds
-        num_cls_tokens=2,
-        num_registers=1,
-        video_temporal_patch_size=tester.video_temporal_patch_size,
-    )
-
-
-def get_tiny_audio_config(tester) -> "ParakeetEncoderConfig":
-    return ParakeetEncoderConfig(
-        hidden_size=32,
-        num_attention_heads=2,
-        num_hidden_layers=TINY_AUDIO_LAYERS,
-        intermediate_size=64,
-        conv_kernel_size=9,
-        convolution_bias=False,
-        subsampling_conv_channels=16,
-        subsampling_conv_kernel_size=3,
-        subsampling_conv_stride=2,
-        subsampling_factor=tester.subsampling_factor,
-        num_mel_bins=tester.num_mel_bins,
-        attention_bias=False,
-        scale_input=False,
-        projection_hidden_size=64,
-        projection_bias=False,
-    )
 
 
 def set_omni_tester_defaults(kwargs):
     """Sizes shared by the vision and audio testers. Both build the full model (vision, audio and a tiny hybrid
     NemotronH language model); they only differ in which modality they feed."""
-    kwargs.setdefault("image_size", 32)
+    kwargs.setdefault("image_size", 64)
     kwargs.setdefault("patch_size", 16)
     kwargs.setdefault("downsample_ratio", 0.5)
     kwargs.setdefault("vision_hidden_size", 32)
@@ -142,34 +73,67 @@ def set_omni_tester_defaults(kwargs):
     # the length of the tiny NemotronH's `layers_block_type`
     kwargs.setdefault("num_hidden_layers", 4)
 
+    kwargs.setdefault("audio_hidden_size", 32)
+    kwargs.setdefault("audio_num_attention_heads", 2)
+    kwargs.setdefault("audio_num_hidden_layers", TINY_AUDIO_LAYERS)
+    kwargs.setdefault("audio_intermediate_size", 64)
+    kwargs.setdefault("audio_conv_kernel_size", 9)
+    kwargs.setdefault("audio_convolution_bias", False)
+    kwargs.setdefault("audio_subsampling_conv_channels", 16)
+    kwargs.setdefault("audio_subsampling_conv_kernel_size", 3)
+    kwargs.setdefault("audio_subsampling_conv_stride", 2)
+    kwargs.setdefault("audio_attention_bias", False)
+    kwargs.setdefault("audio_scale_input", False)
+
+    kwargs.setdefault("vision_num_hidden_layers", 2)
+    kwargs.setdefault("vision_mlp_ratio", 2.0)
+    kwargs.setdefault("max_img_size", 64)
+    # >= 2 cls tokens so the default summary_idxs=[0, 1] is in-bounds
+    kwargs.setdefault("num_cls_tokens", 2)
+    kwargs.setdefault("num_registers", 1)
+
+    kwargs.setdefault("layers_block_type", ["linear_attention", "moe", "full_attention", "moe"])
+    kwargs.setdefault("head_dim", 8)
+    kwargs.setdefault("intermediate_size", 40)
+    kwargs.setdefault("moe_intermediate_size", 40)
+    kwargs.setdefault("moe_shared_expert_intermediate_size", 40)
+    kwargs.setdefault("mlp_hidden_act", "relu2")
+    kwargs.setdefault("mamba_hidden_act", "silu")
+    kwargs.setdefault("ssm_state_size", 16)
+    kwargs.setdefault("mamba_num_heads", 8)
+    kwargs.setdefault("mamba_n_groups", 2)
+    kwargs.setdefault("mamba_head_dim", 8)
+    kwargs.setdefault("mamba_d_conv", 4)
+    kwargs.setdefault("mamba_expand", 2)
+    kwargs.setdefault("mamba_chunk_size", 8)
+    kwargs.setdefault("n_routed_experts", 4)
+    kwargs.setdefault("num_experts_per_tok", 2)
+
 
 class NemotronHOmniVision2TextModelTester(VLMModelTester):
     config_class = NemotronH_Omni_Reasoning_V3_Config
-    text_config_class = NemotronHConfig
-    vision_config_class = RadioConfig
+
     # the model is a single generative class with no separate base model
     base_model_class = None
     conditional_generation_class = NemotronH_Omni_Reasoning_V3
-    _required_attributes = MultiModalModelTester._required_attributes + ("vision_config_class",)
 
     def __init__(self, parent, **kwargs):
         set_omni_tester_defaults(kwargs)
-        # a (32 // 16) ** 2 patch grid pixel-shuffles 2x2 into a single image token
-        kwargs.setdefault("num_image_tokens", 1)
+        # a (64 // 16) ** 2 patch grid pixel-shuffles 2x2 into a single image token
+        kwargs.setdefault("num_image_tokens", 4)
         super().__init__(parent, **kwargs)
+
+    def _collect_kwargs(self, sig_keys, config_class, prefix=""):
+        # Audio config class has no such field but model expects it to be present
+        kwargs = super()._collect_kwargs(sig_keys, config_class, prefix)
+        if prefix == "audio":
+            kwargs["projection_hidden_size"] = 64
+            kwargs["projection_bias"] = False
+        return kwargs
 
     @property
     def pipeline_model_mapping(self):
         return {"image-text-to-text": self.conditional_generation_class}
-
-    def get_text_config(self):
-        return get_tiny_text_config(self)
-
-    def get_vision_config(self):
-        return get_tiny_vision_config(self)
-
-    def _build_modality_sub_configs(self):
-        return {**super()._build_modality_sub_configs(), "audio_config": get_tiny_audio_config(self)}
 
     def _prepare_modality_inputs(self, input_ids, config):
         grid_size = self.image_size // self.patch_size
@@ -181,8 +145,7 @@ class NemotronHOmniVision2TextModelTester(VLMModelTester):
 
 class NemotronHOmniAudio2TextModelTester(ALMModelTester):
     config_class = NemotronH_Omni_Reasoning_V3_Config
-    text_config_class = NemotronHConfig
-    audio_config_class = ParakeetEncoderConfig
+
     conditional_generation_class = NemotronH_Omni_Reasoning_V3
     audio_mask_key = "input_features_mask"
 
@@ -191,20 +154,18 @@ class NemotronHOmniAudio2TextModelTester(ALMModelTester):
         kwargs.setdefault("audio_token_id", 3)
         super().__init__(parent, **kwargs)
 
+    def _collect_kwargs(self, sig_keys, config_class, prefix=""):
+        # Audio config class has no such field but model expects it to be present
+        kwargs = super()._collect_kwargs(sig_keys, config_class, prefix)
+        if prefix == "audio":
+            kwargs["projection_hidden_size"] = 64
+            kwargs["projection_bias"] = False
+        return kwargs
+
     @property
     def pipeline_model_mapping(self):
         # the ALM tester has no audio-text-to-text pipeline test yet
         return {}
-
-    def get_text_config(self):
-        return get_tiny_text_config(self)
-
-    def get_audio_config(self):
-        return get_tiny_audio_config(self)
-
-    def _build_modality_sub_configs(self):
-        # the vision tower is always built, so keep it tiny
-        return {**super()._build_modality_sub_configs(), "vision_config": get_tiny_vision_config(self)}
 
     def create_audio_features(self, batch_size: int | None = None):
         # Parakeet takes `(batch, frames, mel_bins)`

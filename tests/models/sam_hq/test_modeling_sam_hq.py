@@ -27,7 +27,7 @@ from transformers import (
     pipeline,
 )
 from transformers.testing_utils import Expectations, cleanup, require_torch, slow, torch_device
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_image_processing_common import load_test_image
@@ -40,10 +40,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import SamHQModel, SamHQProcessor
-
-
-if is_vision_available():
-    pass
 
 
 class SamHQVisionModelTester:

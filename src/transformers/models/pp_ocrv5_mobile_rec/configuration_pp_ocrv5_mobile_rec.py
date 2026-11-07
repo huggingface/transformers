@@ -35,6 +35,7 @@ class PPOCRV5MobileRecConfig(PreTrainedConfig):
     """
 
     model_type = "pp_ocrv5_mobile_rec"
+    attribute_map = {"num_hidden_layers": "depth"}
     sub_configs_defaults = {
         "backbone_config": SubConfigSpec(
             config_class=AutoConfig,

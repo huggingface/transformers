@@ -54,7 +54,7 @@ class MetaClip2TextEmbeddings(nn.Module):
         self,
         input_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor:
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
         max_position_embedding = self.position_embedding.weight.shape[0]
@@ -141,7 +141,7 @@ class MetaClip2VisionEmbeddings(nn.Module):
 
         return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
-    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding=False) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
         if not interpolate_pos_encoding and (height != self.image_size or width != self.image_size):
             raise ValueError(
@@ -268,7 +268,7 @@ class MetaClip2EncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
@@ -506,14 +506,14 @@ class MetaClip2TextModel(MetaClip2PreTrainedModel):
 @dataclass
 class MetaClip2TextModelOutput(ModelOutput):
     r"""
-    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+    text_embeds (`torch.Tensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
         The text embeddings obtained by applying the projection layer to the pooler_output.
     """
 
-    text_embeds: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    text_embeds: torch.Tensor | None = None
+    last_hidden_state: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring
@@ -612,17 +612,17 @@ class MetaClip2TextModelWithProjection(MetaClip2PreTrainedModel):
 @dataclass
 class MetaClip2Output(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
         Contrastive loss for image-text similarity.
-    logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
+    logits_per_image (`torch.Tensor` of shape `(image_batch_size, text_batch_size)`):
         The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
         similarity scores.
-    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+    logits_per_text (`torch.Tensor` of shape `(text_batch_size, image_batch_size)`):
         The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
         similarity scores.
-    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+    text_embeds (`torch.Tensor` of shape `(batch_size, output_dim`):
         The text embeddings obtained by applying the projection layer to the pooled output of [`MetaClip2TextModel`].
-    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+    image_embeds (`torch.Tensor` of shape `(batch_size, output_dim`):
         The image embeddings obtained by applying the projection layer to the pooled output of [`MetaClip2VisionModel`].
     text_model_output (`BaseModelOutputWithPooling`):
         The output of the [`MetaClip2TextModel`].
@@ -630,11 +630,11 @@ class MetaClip2Output(ModelOutput):
         The output of the [`MetaClip2VisionModel`].
     """
 
-    loss: torch.FloatTensor | None = None
-    logits_per_image: torch.FloatTensor | None = None
-    logits_per_text: torch.FloatTensor | None = None
-    text_embeds: torch.FloatTensor | None = None
-    image_embeds: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits_per_image: torch.Tensor | None = None
+    logits_per_text: torch.Tensor | None = None
+    text_embeds: torch.Tensor | None = None
+    image_embeds: torch.Tensor | None = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
@@ -762,7 +762,7 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -802,7 +802,7 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         return_loss: bool | None = None,
@@ -941,7 +941,7 @@ class MetaClip2VisionModel(MetaClip2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
@@ -993,14 +993,14 @@ class MetaClip2VisionModel(MetaClip2PreTrainedModel):
 @dataclass
 class MetaClip2VisionModelOutput(ModelOutput):
     r"""
-    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+    image_embeds (`torch.Tensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
         The image embeddings obtained by applying the projection layer to the pooler_output.
     """
 
-    image_embeds: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    image_embeds: torch.Tensor | None = None
+    last_hidden_state: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring
@@ -1063,7 +1063,7 @@ class MetaClip2VisionModelWithProjection(MetaClip2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MetaClip2VisionModelOutput:

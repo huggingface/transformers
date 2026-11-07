@@ -27,7 +27,7 @@ from transformers import (
     Mistral3Config,
     Mistral3ForConditionalGeneration,
     Mistral4Config,
-    PixtralImageProcessorFast,
+    PixtralImageProcessor,
     PixtralProcessor,
     PixtralVisionConfig,
 )
@@ -560,7 +560,7 @@ def convert_and_write_processor_and_tokenizer(
 
     processor = PixtralProcessor(
         tokenizer=tokenizer,
-        image_processor=PixtralImageProcessorFast(
+        image_processor=PixtralImageProcessor(
             patch_size=ve["patch_size"], size={"longest_edge": ve["max_image_size"]}
         ),
         image_token="[IMG]",

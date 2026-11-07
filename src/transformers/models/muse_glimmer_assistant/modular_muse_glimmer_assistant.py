@@ -79,7 +79,7 @@ class MuseGlimmerAssistantAttention(Exaone4Attention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        context_hidden_states: torch.FloatTensor,
+        context_hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
         past_key_values: DFlashCache | None = None,
@@ -143,7 +143,7 @@ class MuseGlimmerAssistantDecoderLayer(Exaone4DecoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        context_hidden_states: torch.FloatTensor,
+        context_hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
         past_key_values: DFlashCache | None = None,
@@ -183,7 +183,7 @@ class MuseGlimmerAssistantContextProjection(nn.Module):
 
     def forward(self, context_hidden_states: torch.Tensor) -> torch.Tensor:
         """
-        context_hidden_states (`torch.FloatTensor` of shape `[batch_size, seq_length, dim * len(config.target_layer_ids)]`):
+        context_hidden_states (`torch.Tensor` of shape `[batch_size, seq_length, dim * len(config.target_layer_ids)]`):
             Context hidden states from target model's selected layer ids concatenated in the last dim.
         """
         context_hidden_states = self.fc(context_hidden_states)
@@ -205,8 +205,8 @@ class MuseGlimmerAssistantModel(Exaone4Model):
     @auto_docstring
     def forward(
         self,
-        noise_embeds: torch.FloatTensor,
-        context_hidden_states: torch.FloatTensor,
+        noise_embeds: torch.Tensor,
+        context_hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: DFlashCache | None = None,
@@ -214,9 +214,9 @@ class MuseGlimmerAssistantModel(Exaone4Model):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
-        noise_embeds (`torch.FloatTensor` of shape `[batch_size, config.block_size, dim]`):
+        noise_embeds (`torch.Tensor` of shape `[batch_size, config.block_size, dim]`):
             Input embedding for the last generated anchor token and mask tokens to be denoised.
-        context_hidden_states (`torch.FloatTensor` of shape `[batch_size, number_of_previous_accepted_tokens, dim * len(config.target_layer_ids)]`):
+        context_hidden_states (`torch.Tensor` of shape `[batch_size, number_of_previous_accepted_tokens, dim * len(config.target_layer_ids)]`):
             Context hidden states from target model's selected layer ids concatenated in the last dim.
         attention_mask (`torch.Tensor` of shape `[batch_size, number_of_previous_accepted_tokens + config.block_size]`):
             Similar to the usual attention_mask, but note that it has length `number_of_previous_accepted_tokens + config.block_size`,

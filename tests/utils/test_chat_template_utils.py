@@ -13,8 +13,12 @@
 # limitations under the License.
 
 import copy
+import dataclasses
 import unittest
+from enum import Enum
 from typing import Literal
+
+import numpy as np
 
 from transformers.testing_utils import require_jinja
 from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
@@ -785,3 +789,98 @@ class ReasoningFieldAliasTest(unittest.TestCase):
                     continue_final_message=message_field,
                 )
                 self.assertEqual(rendered[0], expected)
+
+
+@require_jinja
+class TemplateSandboxTest(unittest.TestCase):
+    def render(self, template, chat=None):
+        chat = chat if chat is not None else [{"role": "user", "content": "Hi"}]
+        rendered, _ = render_jinja_template([chat], chat_template=template)
+        return rendered[0]
+
+    def test_dict_global_is_not_a_type(self):
+        self.assertEqual(self.render("{{ dict(a=1) }}"), "{'a': 1}")
+        self.assertEqual(self.render("{{ dict.fromkeys(['a']) }}"), "{'a': None}")
+        # With the real `dict` type, this would build a `types.GenericAlias`
+        self.assertEqual(self.render("{{ dict[1] is defined }}"), "False")
+
+    def test_namespace_rejects_underscore_names(self):
+        from jinja2.exceptions import SecurityError
+
+        self.assertEqual(
+            self.render("{% set ns = namespace(a=1, self=2) %}{% set ns.b = 3 %}{{ ns.a }}{{ ns.self }}{{ ns.b }}"),
+            "123",
+        )
+        for template in (
+            "{% set ns = namespace(_a=1) %}",
+            "{% set ns = namespace({'__a': 1}) %}",
+            "{% set ns = namespace() %}{% set ns.__a = 1 %}",
+        ):
+            with self.subTest(template=template), self.assertRaises(SecurityError):
+                self.render(template)
+
+    def test_rich_objects_become_placeholders(self):
+        class Opaque:
+            def method(self):
+                pass
+
+        chat = [{"role": "user", "content": [{"type": "image", "image": Opaque()}, {"type": "text", "text": "Hi"}]}]
+        template = (
+            "{{ messages[0].content[0].image }} {{ messages[0].content[0].image.method is defined }} "
+            "{{ tools[0].obj }} {{ documents[0].obj }} {{ extra }}"
+        )
+        rendered, _ = render_jinja_template(
+            [chat], chat_template=template, tools=[{"obj": Opaque()}], documents=[{"obj": Opaque()}], extra=Opaque()
+        )
+        self.assertEqual(rendered[0], "<Opaque> False <Opaque> <Opaque> <Opaque>")
+        # The caller's chat keeps the real object, because processors still need it
+        self.assertIsInstance(chat[0]["content"][0]["image"], Opaque)
+
+    def test_scalar_subclasses_become_base_types(self):
+        class Role(str, Enum):
+            USER = "user"
+
+        rendered = self.render(
+            "{{ messages[0].role }} {{ messages[0].role.name is defined }}", [{"role": Role.USER, "content": "Hi"}]
+        )
+        self.assertEqual(rendered, "user False")
+
+    def test_message_objects_render_like_dicts(self):
+        @dataclasses.dataclass
+        class Message:
+            role: str
+            content: str
+
+        self.assertEqual(
+            self.render("{{ messages[0].role }}: {{ messages[0].content }}", [Message("user", "Hi")]), "user: Hi"
+        )
+
+    def test_opaque_messages_raise(self):
+        class Message:
+            role = "user"
+            content = "Hi"
+
+        with self.assertRaises(TypeError):
+            self.render("{{ messages[0].content }}", [Message()])
+
+    def test_numpy_scalars_keep_their_value(self):
+        template = "{{ 'on' if flag else 'off' }} {{ count + 1 }}"
+        rendered, _ = render_jinja_template(
+            [[{"role": "user", "content": "Hi"}]], chat_template=template, flag=np.bool_(False), count=np.int64(1)
+        )
+        # A placeholder string would be truthy and turn the flag on
+        self.assertEqual(rendered[0], "off 2")
+
+    def test_continue_final_message_does_not_modify_chat(self):
+        chat = [
+            {"role": "user", "content": [{"type": "text", "text": "Hi"}]},
+            {"role": "assistant", "content": [{"type": "text", "text": "Hello"}]},
+        ]
+        original_chat = copy.deepcopy(chat)
+        rendered, _ = render_jinja_template(
+            [chat],
+            chat_template="{% for m in messages %}{{ m.content[0].text }}|{% endfor %}",
+            continue_final_message=True,
+        )
+        self.assertEqual(rendered[0], "Hi|Hello")
+        self.assertEqual(chat, original_chat)

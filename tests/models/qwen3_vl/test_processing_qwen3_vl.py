@@ -36,11 +36,6 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     videos_text_kwargs_max_length = 870
     videos_text_kwargs_override_max_length = 870
 
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-        cls.video_token = processor.video_token
-
     @property
     def video_sampling_expectations(self):
         return [
@@ -63,6 +58,15 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue("num_image_patches" in output)
         self.assertEqual(len(output["num_image_patches"]), 3)
 
+    def test_return_metadata_false_is_refused(self):
+        processor = self.get_processor()
+        video = self.prepare_videos_inputs()
+        text = f"Video: {self.video_token}"
+        inputs = processor(text=text, videos=[video], do_sample_frames=False, return_metadata=True)
+        self.assertIn("video_metadata", inputs)
+        with self.assertRaisesRegex(ValueError, "return_metadata=False"):
+            processor(text=text, videos=[video], do_sample_frames=False, return_metadata=False)
+
     def test_model_input_names(self):
         processor = self.get_processor()
 
@@ -77,7 +81,7 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_kwargs_overrides_custom_image_processor_kwargs(self):
         processor = self.get_processor()
 
-        input_str = self.prepare_text_inputs()
+        input_str = self.prepare_text_inputs(modalities="image")
         image_input = self.prepare_images_inputs()
         inputs = processor(text=input_str, images=image_input, max_pixels=56 * 56 * 4, return_tensors="pt")
         self.assertEqual(inputs[self.images_input_name].shape[0], 612)

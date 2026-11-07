@@ -384,7 +384,7 @@ class Lfm2ShortConv(nn.Module):
 class Lfm2DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Lfm2Config, layer_idx: int):
         super().__init__()
-        self.is_attention_layer = config.layer_types[layer_idx] == "full_attention"
+        self.is_attention_layer = config.layer_types[layer_idx] != "conv"
 
         if self.is_attention_layer:
             self.self_attn = Lfm2Attention(config, layer_idx)
@@ -472,7 +472,7 @@ class Lfm2Model(Lfm2PreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -549,7 +549,7 @@ class Lfm2ForCausalLM(Lfm2PreTrainedModel, GenerationMixin):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,

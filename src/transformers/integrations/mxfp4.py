@@ -120,8 +120,10 @@ class Mxfp4Dequantize(ConversionOps):
             else:
                 param_data[f"{proj}_scales"] = input_dict[f"{proj}_scales"]
 
-        # Here we are dequantizing the weights
-        dequantized = dequantize_convertops(param_data[f"{proj}_blocks"], param_data[f"{proj}_scales"])
+        # Here we are dequantizing the weights, to the dtype of the parameter they load into
+        module, tensor_name = get_module_from_name(model, full_layer_name)
+        dtype = getattr(module, tensor_name).dtype
+        dequantized = dequantize_convertops(param_data[f"{proj}_blocks"], param_data[f"{proj}_scales"], dtype)
         return {full_layer_name: dequantized}
 
     @property
@@ -469,8 +471,8 @@ class Mxfp4GptOssMLP(nn.Module):
         return routed_out, router_logits
 
 
-def dequantize_convertops(blocks, scales):
-    dequantized = convert_moe_packed_tensors(blocks, scales)
+def dequantize_convertops(blocks, scales, dtype):
+    dequantized = convert_moe_packed_tensors(blocks, scales, dtype=dtype)
     return torch.nn.Parameter(dequantized)
 
 

@@ -16,16 +16,15 @@
 import tempfile
 import unittest
 from contextlib import contextmanager
+from unittest.mock import patch
 
 import pytest
 from parameterized import parameterized
 
 from transformers import (
     AutoTokenizer,
-    Gemma4AudioConfig,
     Gemma4Config,
     Gemma4TextConfig,
-    Gemma4VisionConfig,
     is_torch_available,
     logging,
     set_seed,
@@ -174,6 +173,39 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
         for attention in out.attentions:
             self.assertTrue((attention[..., :4, :4] != 0).all().item())
 
+    def test_kv_shared_prefill_truncation(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_hidden_layers = 4
+        config.layer_types = ["sliding_attention", "full_attention", "sliding_attention", "full_attention"]
+        config.num_kv_shared_layers = 2
+
+        model = Gemma4ForCausalLM(config)
+        model.eval()
+
+        input_ids = torch.randint(10, 60, (2, 14))
+        mask = torch.ones_like(input_ids)
+
+        COUNTER = 0
+
+        def new_slice(*args, **kwargs):
+            nonlocal COUNTER
+            COUNTER += 1
+            # slice 1:5 to absorb self
+            return args[1:5]
+
+        with torch.no_grad():
+            out_skipped = model(input_ids, mask, logits_to_keep=1)
+            with patch(
+                "transformers.models.gemma4.modeling_gemma4.Gemma4TextModel._maybe_slice_kv_shared_inputs", new_slice
+            ):
+                out_unskipped = model(input_ids, mask, logits_to_keep=1)
+
+        # Make sure we skipped correctly
+        self.assertEqual(COUNTER, 1)
+        # Make sure outputs are the same
+        torch.testing.assert_close(out_skipped.logits, out_unskipped.logits)
+        torch.testing.assert_close(out_skipped.shared_kv_states, out_unskipped.shared_kv_states)
+
     def test_model_training(self):
         pass
 
@@ -196,8 +228,8 @@ class Gemma4Audio2TextModelTester(ALMModelTester):
     base_model_class = Gemma4Model
     conditional_generation_class = Gemma4ForConditionalGeneration
     config_class = Gemma4Config
-    text_config_class = Gemma4TextConfig
-    audio_config_class = Gemma4AudioConfig
+
+    sub_configs_to_skip = ["vision_config"]
     audio_mask_key = "input_features_mask"
 
     def __init__(self, parent, **kwargs):
@@ -256,7 +288,13 @@ class Gemma4Audio2TextModelTester(ALMModelTester):
         return floats_tensor([batch_size, self.feat_seq_length, self.num_mel_bins])
 
     def create_audio_mask(self, batch_size: int | None = None):
-        return super().create_audio_mask(batch_size).bool()
+        # Keep the random lengths of the base mask, but right-pad (like the Gemma4 feature extractor). With left padding,
+        # the causal conv in `lconv1d` mixes the (all-zero) padded frames into the valid ones, and the gradients flowing
+        # back into those zero frames get amplified by each `Gemma4RMSNorm` (x 1/sqrt(eps)) until they overflow to NaN.
+        audio_mask = super().create_audio_mask(batch_size).bool()
+        lengths = audio_mask.sum(dim=-1, keepdim=True)
+        positions = torch.arange(audio_mask.shape[-1], device=audio_mask.device)[None, :]
+        return positions < lengths
 
     def get_audio_embeds_mask(self, audio_mask):
         # Each of the two stride-2 subsampling convs keeps every other mask position
@@ -355,8 +393,8 @@ class Gemma4Vision2TextModelTester(VLMModelTester):
     base_model_class = Gemma4Model
     conditional_generation_class = Gemma4ForConditionalGeneration
     config_class = Gemma4Config
-    text_config_class = Gemma4TextConfig
-    vision_config_class = Gemma4VisionConfig
+
+    sub_configs_to_skip = ["audio_config"]
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("image_token_id", 4)

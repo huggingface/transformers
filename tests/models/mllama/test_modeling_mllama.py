@@ -25,7 +25,6 @@ from transformers import (
     MllamaForConditionalGeneration,
     MllamaModel,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.cache_utils import Cache, StaticCache, StaticLayer
 from transformers.models.mllama.configuration_mllama import MllamaTextConfig
@@ -48,9 +47,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    pass
 
 
 class MllamaText2TextModelTester:
@@ -138,7 +134,7 @@ class MllamaVisionText2TextModelTester:
         self,
         parent,
         ignore_index=-100,
-        image_token_index=4,
+        image_token_id=4,
         seq_length=7,
         is_training=True,
         text_config={
@@ -177,7 +173,7 @@ class MllamaVisionText2TextModelTester:
         self.parent = parent
         self.is_training = is_training
         self.ignore_index = ignore_index
-        self.image_token_index = image_token_index
+        self.image_token_id = image_token_id
         self.text_config = text_config
         self.vision_config = vision_config
         self.seq_length = seq_length
@@ -199,7 +195,7 @@ class MllamaVisionText2TextModelTester:
         return MllamaConfig(
             text_config=self.text_config,
             vision_config=self.vision_config,
-            image_token_index=self.image_token_index,
+            image_token_id=self.image_token_id,
         )
 
     def prepare_config_and_inputs(self):
@@ -229,8 +225,8 @@ class MllamaVisionText2TextModelTester:
             (self.batch_size, self.seq_length, self.max_num_images, self.max_image_tiles), device=torch_device
         )
 
-        input_ids[input_ids == config.image_token_index] = self.pad_token_id
-        input_ids[:, 1] = config.image_token_index
+        input_ids[input_ids == config.image_token_id] = self.pad_token_id
+        input_ids[:, 1] = config.image_token_id
         inputs_dict = {
             "pixel_values": pixel_values,
             "aspect_ratio_ids": aspect_ratio_ids,
@@ -285,7 +281,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     def setUp(self):
         self.model_tester = MllamaVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=MllamaConfig, has_text_modality=False, common_properties=["image_token_index"]
+            self, config_class=MllamaConfig, has_text_modality=False, common_properties=["image_token_id"]
         )
 
     def test_config(self):

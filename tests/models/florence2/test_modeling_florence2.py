@@ -21,7 +21,6 @@ from transformers import (
     Florence2ForConditionalGeneration,
     Florence2Model,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     Expectations,
@@ -41,9 +40,6 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    pass
 
 
 class Florence2VisionText2TextModelTester:

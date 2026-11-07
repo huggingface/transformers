@@ -42,7 +42,6 @@ if is_torch_available():
         Qwen4ExpModel,
         Qwen4ExpTextConfig,
         Qwen4ExpTextModel,
-        Qwen4ExpVisionConfig,
         StaticCache,
     )
     from transformers.distributed.fsdp import ALL_FSDP_STYLES
@@ -151,6 +150,18 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
                 list(outputs.attentions[0].shape[-3:]),
                 [config.num_attention_heads, seq_len, seq_len],
             )
+
+    def test_eager_attention_with_left_padding(self):
+        """Regression for #49888: overlapping float masks must not cause NaNs for left-padding queries."""
+        config = self.model_tester.get_config()
+        model = Qwen4ExpTextModel._from_config(config, attn_implementation="eager").to(torch_device).eval()
+        input_ids = torch.tensor([[config.pad_token_id, config.pad_token_id, 5, 6, 7]], device=torch_device)
+        attention_mask = torch.tensor([[0, 0, 1, 1, 1]], device=torch_device)
+
+        with torch.no_grad():
+            outputs = model(input_ids, attention_mask=attention_mask, output_attentions=True, use_cache=False)
+
+        self.assertTrue(torch.isfinite(outputs.attentions[0]).all())
 
     def test_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -334,8 +345,7 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
 class Qwen4ExpVisionText2TextModelTester(VLMModelTester):
     base_model_class = Qwen4ExpModel
     config_class = Qwen4ExpConfig
-    text_config_class = Qwen4ExpTextConfig
-    vision_config_class = Qwen4ExpVisionConfig
+
     conditional_generation_class = Qwen4ExpForConditionalGeneration
 
     def __init__(self, parent, **kwargs):

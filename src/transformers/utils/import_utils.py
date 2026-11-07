@@ -34,7 +34,7 @@ from enum import Enum
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import packaging.version
 from packaging import version
@@ -174,8 +174,8 @@ TORCHAO_MIN_VERSION = "0.15.0"
 COMPRESSED_TENSORS_MIN_VERSION = "0.15.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
-KERNELS_MIN_VERSION = "0.17.2"
-KERNELS_MAX_VERSION = "0.18.0"
+KERNELS_MIN_VERSION = "0.18.0"
+KERNELS_MAX_VERSION = "0.19.0"
 MISTRAL_COMMON_MIN_VERSION = "1.11.5"
 
 
@@ -1070,6 +1070,21 @@ def is_openvino_available() -> bool:
 
 
 @lru_cache
+def is_openvino_greater_or_equal(library_version: str, accept_dev: bool = False) -> bool:
+    """
+    Accepts a library version and returns True if the current version of the library is greater than or equal to the
+    given version. If `accept_dev` is True, it will also accept development versions (e.g. 2026.5.0.dev20260901
+    matches 2026.5.0).
+    """
+    available, openvino_version = _is_package_available("openvino", return_version=True)
+    if not available:
+        return False
+    if accept_dev:
+        return version.parse(version.parse(openvino_version).base_version) >= version.parse(library_version)
+    return version.parse(openvino_version) >= version.parse(library_version)
+
+
+@lru_cache
 def is_nncf_available() -> bool:
     return _is_package_available("nncf")[0]
 
@@ -1199,6 +1214,47 @@ def is_torchcodec_available() -> bool:
 
 
 @lru_cache
+@_make_compile_constant
+def is_torchcodec_usable(decode: Literal["image", "audio", "video"]) -> bool:
+    """
+    Checks if torchcodec can decode the given modality: its native libraries must load (they must match the installed
+    torch, which pip doesn't enforce) and, for audio and video, it must have found FFmpeg.
+
+    Only use it when transformers picks torchcodec as a default backend (e.g. `load_audio(backend="auto")`), so a
+    broken install falls back to another backend instead of failing users who never asked for torchcodec. When
+    torchcodec is explicitly requested, import it directly to surface its own error.
+
+    Args:
+        decode (`str`):
+            The modality to decode, one of `"image"`, `"audio"` or `"video"`.
+    """
+    if not is_torchcodec_available():
+        return False
+
+    try:
+        import torchcodec
+    except Exception as error:
+        while error.__cause__ is not None:  # "Could not load this library" hides the missing library / symbol
+            error = error.__cause__
+        logger.warning_once(
+            f"torchcodec is installed but failed to load ({error}), so it will not be used. Check its requirements "
+            "(e.g. a build matching the installed torch): see "
+            "https://github.com/meta-pytorch/torchcodec#installing-torchcodec."
+        )
+        return False
+
+    # Since 0.16, torchcodec imports even when FFmpeg can't be loaded (its image decoders don't need it) and sets
+    # `ffmpeg_major_version` to None. Older versions fail to import instead.
+    if decode != "image" and is_torchcodec_greater_or_equal("0.16") and torchcodec.ffmpeg_major_version is None:
+        logger.warning_once(
+            "torchcodec loaded but could not load FFmpeg, so it will not be used to decode audio or video. Install a "
+            "supported FFmpeg: https://github.com/meta-pytorch/torchcodec#installing-torchcodec."
+        )
+        return False
+    return True
+
+
+@lru_cache
 def is_torchcodec_greater_or_equal(library_version: str) -> bool:
     if not is_torchcodec_available():
         return False
@@ -1228,6 +1284,22 @@ def is_bitsandbytes_available(min_version: str = BITSANDBYTES_MIN_VERSION) -> bo
     return is_available and version.parse(bitsandbytes_version) >= version.parse(min_version)
 
 
+def is_flash_attn_kernel_fallback_available(fa_version):
+    if is_kernels_available():
+        try:
+            from kernels import get_kernel
+
+            from transformers.integrations.hub_kernels import get_attn_kernel_version
+            from transformers.modeling_flash_attention_utils import FLASH_ATTN_KERNEL_FALLBACK
+
+            repo_id = FLASH_ATTN_KERNEL_FALLBACK[f"flash_attention_{fa_version}"]
+            get_kernel(repo_id, version=get_attn_kernel_version(repo_id))
+            return True
+        except Exception:  # noqa: S110  # we don't care about the Exception here: we just want to check availability
+            pass
+    return False
+
+
 @lru_cache
 @_make_compile_constant
 def is_flash_attn_2_available(kernels_fallback_ok: bool = False) -> bool:
@@ -1245,19 +1317,7 @@ def is_flash_attn_2_available(kernels_fallback_ok: bool = False) -> bool:
             return False
 
     # If the kernels fallback is allowed, check if it is available
-    if kernels_fallback_ok and is_kernels_available():
-        try:
-            from kernels import get_kernel
-
-            from transformers.integrations.hub_kernels import get_attn_kernel_version
-            from transformers.modeling_flash_attention_utils import FLASH_ATTN_KERNEL_FALLBACK
-
-            repo_id = FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"]
-            get_kernel(repo_id, version=get_attn_kernel_version(repo_id))
-            return True
-        except Exception:  # noqa: S110  # we don't care about the Exception here: we just want to check availability
-            pass
-    return False
+    return kernels_fallback_ok and is_flash_attn_kernel_fallback_available(fa_version=2)
 
 
 @lru_cache
@@ -1273,24 +1333,12 @@ def is_flash_attn_3_available(kernels_fallback_ok: bool = False) -> bool:
         return True
 
     # If the kernels fallback is allowed, check if it is available
-    if kernels_fallback_ok and is_kernels_available():
-        try:
-            from kernels import get_kernel
-
-            from transformers.integrations.hub_kernels import get_attn_kernel_version
-            from transformers.modeling_flash_attention_utils import FLASH_ATTN_KERNEL_FALLBACK
-
-            repo_id = FLASH_ATTN_KERNEL_FALLBACK["flash_attention_3"]
-            get_kernel(repo_id, version=get_attn_kernel_version(repo_id))
-            return True
-        except Exception:  # noqa: S110  # we don't care about the Exception here: we just want to check availability
-            pass
-    return False
+    return kernels_fallback_ok and is_flash_attn_kernel_fallback_available(fa_version=3)
 
 
 @lru_cache
 @_make_compile_constant
-def is_flash_attn_4_available() -> bool:
+def is_flash_attn_4_available(kernels_fallback_ok: bool = False) -> bool:
     is_available = _is_package_available("flash_attn")[0]
     # FA2 is also distributed under "flash_attn", hence we need to check the naming here
     # NOTE: FA2 seems to distribute the `cute` subdirectory even if only FA2 has been installed
@@ -1298,8 +1346,11 @@ def is_flash_attn_4_available() -> bool:
     is_available = is_available and "flash-attn-4" in [
         pkg.replace("_", "-") for pkg in _package_distribution_mapping().get("flash_attn", [])
     ]
+    if is_available and is_torch_cuda_available():
+        return True
 
-    return is_available and is_torch_cuda_available()
+    # If the kernels fallback is allowed, check if it is available
+    return kernels_fallback_ok and is_flash_attn_kernel_fallback_available(fa_version=4)
 
 
 @lru_cache
@@ -2022,10 +2073,7 @@ Please note that you may need to restart your runtime after installation.
 """
 
 TORCHCODEC_IMPORT_ERROR = """
-{0} requires the TorchCodec (https://github.com/pytorch/torchcodec) library, but it was not found in your environment. You can install it with:
-```
-pip install torchcodec
-```
+{0} requires the TorchCodec library, but it was not found in your environment. See https://github.com/meta-pytorch/torchcodec#installing-torchcodec to install it.
 Please note that you may need to restart your runtime after installation.
 """
 
