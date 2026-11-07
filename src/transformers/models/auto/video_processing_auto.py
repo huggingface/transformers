@@ -132,7 +132,9 @@ def _load_backend_class(video_processor_class_name: str, backend: str):
             mapping = mapping_dict
             break
 
-    if (processor_class := mapping.get(backend)) is not None:
+    if backend is not None and backend not in mapping:
+        logger.warning_once(f"Requested {backend} backend is not available. Falling back to torchvision backend.")
+    if (processor_class := mapping.get(backend, mapping.get("torchvision"))) is not None:
         if isinstance(processor_class, str):
             processor_class = video_processor_class_from_name(processor_class)
         return processor_class

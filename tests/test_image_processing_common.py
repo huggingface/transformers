@@ -242,8 +242,11 @@ class ImageProcessingTester:
                 {},
             )
         return {
-            backend_name: get_image_processor_class_from_name(class_name)
+            backend_name: image_processing_class
             for backend_name, class_name in image_processing_classes_names.items()
+            if not getattr(
+                image_processing_class := get_image_processor_class_from_name(class_name), "is_dummy", False
+            )
         }
 
     def _get_valid_images_kwargs_keys(self):

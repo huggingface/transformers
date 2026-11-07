@@ -12,11 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import base64
+import os
+import threading
 from collections.abc import Iterable
 from functools import lru_cache
 from typing import Any, Optional, Union
 
 import numpy as np
+from huggingface_hub.utils import httpx
 
 from .image_processing_base import BatchFeature
 from .image_processing_utils import BaseImageProcessor
@@ -56,6 +60,7 @@ from .image_utils import (
 from .processing_utils import ImagesKwargs, Unpack
 from .utils import (
     TensorType,
+    is_dali_available,
     is_torch_available,
     is_torchvision_available,
     is_vision_available,
@@ -78,8 +83,25 @@ else:
     pil_torch_interpolation_mapping = None
     torch_pil_interpolation_mapping = None
 
+if is_dali_available() and is_vision_available():
+    import nvidia.dali.experimental.dynamic as ndd
+    import nvidia.dali.types as dali_types
+
+    pil_dali_interpolation_mapping = {
+        PILImageResampling.NEAREST: dali_types.INTERP_NN,
+        PILImageResampling.BILINEAR: dali_types.INTERP_LINEAR,
+        PILImageResampling.BICUBIC: dali_types.INTERP_CUBIC,
+        PILImageResampling.LANCZOS: dali_types.INTERP_LANCZOS3,
+    }
+
 
 logger = logging.get_logger(__name__)
+
+
+@lru_cache
+def get_dali_eval_context(thread_id: int, device_id: int, stream_handle: int) -> "ndd.EvalContext":
+    """One DALI context per thread, device and torch stream: creating a context costs more than a whole batch."""
+    return ndd.EvalContext(device_id=device_id, cuda_stream=stream_handle)
 
 
 @requires(backends=("torch", "torchvision"))
@@ -690,6 +712,168 @@ class PilBackend(BaseImageProcessor):
         # Remove the "Pil" suffix from the image processor type
         if processor_dict.get("image_processor_type", "").endswith("Pil"):
             processor_dict["image_processor_type"] = processor_dict["image_processor_type"][:-3]
+        return processor_dict
+
+
+@requires(backends=("torch", "dali"))
+class DaliBackend(BaseImageProcessor):
+    """
+    NVIDIA DALI backend: decodes encoded images with nvJPEG and transforms them on GPU.
+
+    When downscaling a lot, border pixels can differ from PIL and torchvision by up to ~17 uint8 levels: DALI gives the
+    filter taps that fall outside the image the edge pixel value, PIL and torchvision drop them and renormalize.
+    """
+
+    def __init__(self, **kwargs: Unpack[ImagesKwargs]):
+        super().__init__(**kwargs)
+        self._set_attributes(**kwargs)
+
+    @property
+    def backend(self) -> str:
+        """
+        `str`: The backend used by this image processor.
+        """
+        return "dali"
+
+    def fetch_images(self, image_url_or_urls: str | list[str] | list[list[str]]):
+        """
+        Read URLs / paths as encoded 1D uint8 arrays, so that DALI decodes them on GPU.
+
+        Already-valid image objects (tensors, numpy arrays, PIL Images) are passed through unchanged.
+        """
+        if isinstance(image_url_or_urls, (list, tuple)):
+            return [self.fetch_images(x) for x in image_url_or_urls]
+        elif isinstance(image_url_or_urls, str):
+            if image_url_or_urls.startswith("http://") or image_url_or_urls.startswith("https://"):
+                raw = httpx.get(image_url_or_urls, follow_redirects=True).content
+            elif os.path.isfile(image_url_or_urls):
+                with open(image_url_or_urls, "rb") as file:
+                    raw = file.read()
+            else:
+                raw = base64.decodebytes(image_url_or_urls.split(",")[-1].encode())
+            return np.frombuffer(raw, dtype=np.uint8)
+        elif is_valid_image(image_url_or_urls):
+            return image_url_or_urls
+        else:
+            raise TypeError(f"only a single or a list of entries is supported but got type={type(image_url_or_urls)}")
+
+    def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> list:
+        images = self.fetch_images(images)
+        if not isinstance(images, (list, tuple)):
+            return [images]
+        return [image for item in images for image in self._prepare_images_structure(item, expected_ndims)]
+
+    convert_to_rgb = PilBackend.convert_to_rgb
+
+    def process_image(
+        self,
+        image: ImageInput,
+        do_convert_rgb: bool | None = None,
+        input_data_format: str | ChannelDimension | None = None,
+        **kwargs: Unpack[ImagesKwargs],
+    ) -> np.ndarray:
+        """Return encoded bytes unchanged, and decoded images as contiguous channel-last arrays."""
+        if isinstance(image, np.ndarray) and image.ndim == 1:
+            return image
+        if isinstance(image, torch.Tensor):
+            image = image.cpu()
+        image = PilBackend.process_image(
+            self, image, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format
+        )
+        return np.ascontiguousarray(np.moveaxis(image, 0, -1))
+
+    def eval_context(self) -> "ndd.EvalContext":
+        """Run DALI on the current torch device and stream, so DALI memory is allocated and freed in torch's order."""
+        stream = torch.cuda.current_stream()
+        return get_dali_eval_context(threading.get_ident(), stream.device.index, stream.cuda_stream)
+
+    def interpolation(self, resample: "PILImageResampling | tvF.InterpolationMode | int") -> int:
+        """Map a PIL or torchvision resampling filter to the DALI interpolation type."""
+        if torch_pil_interpolation_mapping is not None and resample in torch_pil_interpolation_mapping:
+            resample = torch_pil_interpolation_mapping[resample]
+        if resample not in pil_dali_interpolation_mapping:
+            raise ValueError(
+                f"The DALI backend does not support resample={resample}, supported: {list(pil_dali_interpolation_mapping)}"
+            )
+        return pil_dali_interpolation_mapping[resample]
+
+    def decode(self, images: list[np.ndarray]) -> "ndd.Batch":
+        """Decode encoded images with nvJPEG, or upload already decoded images, as one GPU batch."""
+        is_encoded = [image.ndim == 1 for image in images]
+        if all(is_encoded):
+            return ndd.decoders.image(ndd.batch(images), device="gpu")
+        if any(is_encoded):
+            raise ValueError("Mixing encoded bytes and decoded arrays in one call is not supported.")
+        return ndd.batch(images, device="gpu")
+
+    def rescale_and_normalize(
+        self,
+        batch: "ndd.Batch",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        crop_size: SizeDict | None = None,
+    ) -> "ndd.Batch":
+        """Fused center crop, rescale and normalize to float32 channel-first, in one DALI kernel."""
+        # crop_mirror_normalize computes (x - mean) / std on the uint8 range: (x * r - m) / s == (x - m / r) / (s / r)
+        scale = 1.0 / rescale_factor if do_rescale else 1.0
+        mean = (np.asarray(image_mean, dtype=np.float32) * scale).tolist() if do_normalize else 0.0
+        std = (np.asarray(image_std, dtype=np.float32) * scale).tolist() if do_normalize else scale
+        crop = {}
+        if crop_size is not None:
+            # torchvision pads before normalizing, so the padding takes the normalized value of a zero pixel
+            fill_values = (-np.asarray(mean, dtype=np.float32) / np.asarray(std, dtype=np.float32)).tolist()
+            crop = {
+                "crop": (crop_size.height, crop_size.width),
+                "out_of_bounds_policy": "pad",
+                "fill_values": fill_values,
+            }
+        return ndd.crop_mirror_normalize(batch, dtype=ndd.float32, mean=mean, std=std, output_layout="CHW", **crop)
+
+    def _preprocess(
+        self,
+        images: list[np.ndarray],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | tvF.InterpolationMode | int",
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        return_tensors: str | TensorType | None,
+        device: Optional["torch.device"] = None,
+        **kwargs,
+    ) -> BatchFeature:
+        """Preprocess using the DALI backend: decode, resize, center crop, rescale and normalize on GPU."""
+        if do_pad:
+            raise ValueError("The DALI backend does not support `do_pad=True`.")
+        with self.eval_context():
+            batch = self.decode(images)
+            if do_resize:
+                batch = ndd.resize(
+                    batch, size=[size.height, size.width], interp_type=self.interpolation(resample), antialias=True
+                )
+            batch = self.rescale_and_normalize(
+                batch,
+                do_rescale,
+                rescale_factor,
+                do_normalize,
+                image_mean,
+                image_std,
+                crop_size=crop_size if do_center_crop else None,
+            )
+            pixel_values = batch.torch().to(device if device is not None else "cpu")
+        return BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
+
+    def to_dict(self) -> dict[str, Any]:
+        processor_dict = super().to_dict()
+        processor_dict["image_processor_type"] = processor_dict["image_processor_type"].removesuffix("Dali")
         return processor_dict
 
 

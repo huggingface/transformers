@@ -30,6 +30,7 @@ from . import dependency_versions_check
 from .utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
+    is_dali_available,
     is_essentia_available,
     is_g2p_en_available,
     is_librosa_available,
@@ -331,6 +332,19 @@ else:
     _import_structure["image_processing_backends"] += ["TorchvisionBackend"]
     _import_structure["video_processing_utils"] = ["BaseVideoProcessor", "VideoProcessorMixin"]
 
+try:
+    if not (is_torch_available() and is_dali_available()):
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_dali_and_torch_objects
+
+    _import_structure["utils.dummy_dali_and_torch_objects"] = [
+        name for name in dir(dummy_dali_and_torch_objects) if not name.startswith("_")
+    ]
+else:
+    _import_structure.setdefault("image_processing_backends", [])
+    _import_structure["image_processing_backends"] += ["DaliBackend"]
+
 # PyTorch-backed objects
 try:
     if not is_torch_available():
@@ -570,6 +584,7 @@ if TYPE_CHECKING:
     from .generation import WatermarkLogitsProcessor as WatermarkLogitsProcessor
     from .generation import WhisperTimeStampLogitsProcessor as WhisperTimeStampLogitsProcessor
     from .hf_argparser import HfArgumentParser as HfArgumentParser
+    from .image_processing_backends import DaliBackend as DaliBackend
     from .image_processing_backends import PilBackend as PilBackend
     from .image_processing_backends import TorchvisionBackend as TorchvisionBackend
     from .image_processing_base import ImageProcessingMixin as ImageProcessingMixin

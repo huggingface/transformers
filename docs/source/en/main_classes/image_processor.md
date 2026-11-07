@@ -94,3 +94,7 @@ These benchmarks were run on an [AWS EC2 g5.2xlarge instance](https://aws.amazon
 ## PilBackend
 
 [[autodoc]] image_processing_backends.PilBackend
+
+## DaliBackend
+
+[[autodoc]] image_processing_backends.DaliBackend

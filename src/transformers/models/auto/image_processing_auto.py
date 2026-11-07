@@ -364,8 +364,8 @@ def _load_class_with_fallback(mapping, backend):
     """
     Load an image processor class from a backend-to-class mapping, with fallback.
 
-    Tries the requested backend first, then the opposite standard backend,
-    then any remaining backends. Works with both string class names and resolved class objects.
+    Tries the requested backend first, then torchvision, then any remaining backends.
+    Works with both string class names and resolved class objects.
 
     Unavailable backends are detected via DummyObject: classes whose required libraries are missing
     are represented as DummyObject subclasses (is_dummy=True). When the torchvision backend is
@@ -379,7 +379,7 @@ def _load_class_with_fallback(mapping, backend):
     Returns:
         The loaded class, or None if no class could be loaded.
     """
-    backends_to_try = [backend] + [k for k in mapping if k != backend]
+    backends_to_try = list(dict.fromkeys([backend, "torchvision", *mapping]))
 
     for b in backends_to_try:
         value = mapping.get(b)
