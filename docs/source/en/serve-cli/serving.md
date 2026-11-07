@@ -1790,22 +1790,108 @@ The file is loaded at startup and applies to `/v1/systemone` only. Omitted setti
 
 ## v1/audio/transcriptions
 
-The `v1/audio/transcriptions` endpoint transcribes audio using speech-to-text models. It follows the [Audio transcription API](https://platform.openai.com/docs/api-reference/audio/createTranscription) format.
+The `v1/audio/transcriptions` API is based on the [Audio transcription API](https://platform.openai.com/docs/api-reference/audio/createTranscription). It works with Whisper and with audio LLMs whose processor has `apply_transcription_request`, such as Qwen3-ASR, GLM-ASR, and Nemotron 3.5 Transcribe.
+
+<hfoptions id="transcription">
+<hfoption id="curl">
 
 ```shell
-curl -X POST http://localhost:8000/v1/audio/transcriptions \
-  -H "Content-Type: multipart/form-data" \
-  -F "file=@/path/to/audio.wav" \
-  -F "model=openai/whisper-large-v3"
+curl -L -o librispeech_mr_quilter.wav https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/librispeech_mr_quilter.wav
+curl http://localhost:8000/v1/audio/transcriptions \
+  -F file=@librispeech_mr_quilter.wav \
+  -F model=openai/whisper-large-v3
 ```
 
 The command returns the following response.
 
+```json
+{"text": "Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel."}
+```
+
+</hfoption>
+<hfoption id="openai">
+
+```python
+from huggingface_hub import hf_hub_download
+from openai import OpenAI
+
+audio_path = hf_hub_download("hf-internal-testing/dummy-audio-samples", "librispeech_mr_quilter.wav", repo_type="dataset")
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+
+with open(audio_path, "rb") as audio:
+    transcription = client.audio.transcriptions.create(model="openai/whisper-large-v3", file=audio)
+print(transcription.text)
+```
+
+The [OpenAI](https://platform.openai.com/docs/quickstart) client returns a printed string.
+
 ```shell
+Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.
+```
+
+</hfoption>
+</hfoptions>
+
+Audio can be of any length, in any of OpenAI's audio formats (m4a, mp4 and webm need [torchcodec](https://github.com/pytorch/torchcodec)). Audio longer than the window the model declares (30 s for Whisper and Qwen3-ASR) is cut at quiet points into chunks of that length, transcribed as one batch. For audio LLMs, `prompt` replaces the model's transcription instruction. Set `stream=true` to receive the text as it is generated, as [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events).
+
+### Word timestamps and speakers
+
+Models that time words, such as Nemotron 3.5 Transcribe, return word timestamps with `response_format=verbose_json` and `timestamp_granularities[]=word`, and speaker turns with `response_format=diarized_json`.
+
+<hfoptions id="transcription-diarized">
+<hfoption id="curl">
+
+```shell
+curl -L -o diarization_example.mp3 https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/diarization_example.mp3
+curl http://localhost:8000/v1/audio/transcriptions \
+  -F model=nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B \
+  -F file=@diarization_example.mp3 \
+  -F response_format=diarized_json
+```
+
+The command returns the following response.
+
+```json
 {
-  "text": "Transcribed text from the audio file",
+  "duration": 97.6,
+  "segments": [
+    {"id": "seg_0", "type": "transcript.text.segment", "start": 0.35, "end": 9.31, "speaker": "A", "text": "To celebrate the release of Nematron three Dierization, ... I'm Chris, the Nematron voice from NVIDIA."},
+    {"id": "seg_1", "type": "transcript.text.segment", "start": 9.15, "end": 13.81, "speaker": "B", "text": "Hi everybody, thanks for having me. I'm Jane, a pocket voice from Q-Tie. ..."},
+    ...
+  ],
+  "task": "transcribe",
+  "text": "To celebrate the release of Nematron three Dierization, ..."
 }
 ```
+
+</hfoption>
+<hfoption id="openai">
+
+```python
+from huggingface_hub import hf_hub_download
+from openai import OpenAI
+
+audio_path = hf_hub_download("hf-internal-testing/dummy-audio-samples", "diarization_example.mp3", repo_type="dataset")
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+
+with open(audio_path, "rb") as audio:
+    transcription = client.audio.transcriptions.create(
+        model="nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B", file=audio, response_format="diarized_json"
+    )
+for segment in transcription.segments:
+    print(f"{segment.speaker} {segment.start:.2f}-{segment.end:.2f} {segment.text}")
+```
+
+The [OpenAI](https://platform.openai.com/docs/quickstart) client returns a printed string.
+
+```shell
+A 0.35-9.31 To celebrate the release of Nematron three Dierization, ... I'm Chris, the Nematron voice from NVIDIA.
+B 9.15-13.81 Hi everybody, thanks for having me. I'm Jane, a pocket voice from Q-Tie. ...
+...
+```
+
+</hfoption>
+</hfoptions>
 
 ## v1/models
 
