@@ -72,6 +72,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("blt_local_decoder", "BltLocalDecoderConfig"),
         ("blt_local_encoder", "BltLocalEncoderConfig"),
         ("blt_patcher", "BltPatcherConfig"),
+        ("bolmo", "BolmoConfig"),
         ("bridgetower", "BridgeTowerConfig"),
         ("bridgetower_text_model", "BridgeTowerTextConfig"),
         ("bridgetower_vision_model", "BridgeTowerVisionConfig"),
