@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import os
-import subprocess
+import subprocess  # nosec B404
 import sys
 import tempfile
 import unittest
@@ -571,7 +571,7 @@ class MixedPrecisionCompressedTensorsTest(unittest.TestCase):
             "print('OK')\n"
         )
         cmd = [sys.executable, "-c", code]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True)  # nosec B603
         self.assertEqual(result.returncode, 0, msg=f"Import failed:\nSTDOUT: {result.stdout}\nSTDERR: {result.stderr}")
         self.assertIn("OK", result.stdout)
 
