@@ -821,7 +821,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         pass
 
     def flash_attn_from_config(self, attn_implementation, test_fwd_in_train=True):
-        """Overriden for additional input that is needed"""
+        """Overridden for additional input that is needed"""
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config = self._prepare_config_headdim(config, 16)
