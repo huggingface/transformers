@@ -794,6 +794,66 @@ class TrainerCheckpointRotationTest(TestCasePlus, TrainerIntegrationCommon):
             values = [int(re.match(f".*{PREFIX_CHECKPOINT_DIR}-([0-9]+)", d).groups()[0]) for d in sorted_cps]
             self.assertEqual(values, [5, 10, 15, 20, 25])
 
+    def test_checkpoint_rotation_ignores_non_checkpoint_directories(self):
+        for use_mtime in (False, True):
+            with self.subTest(use_mtime=use_mtime), tempfile.TemporaryDirectory() as tmp_dir:
+                checkpoints = ["checkpoint-1", "checkpoint-2"]
+                ignored = ["checkpoint-9.backup", "checkpoint-10.tmp", "checkpoint-unfinished"]
+
+                for index, name in enumerate(checkpoints + ignored):
+                    path = Path(tmp_dir) / name
+                    path.mkdir()
+                    timestamp = 1_600_000_000 + index * 100
+                    os.utime(path, (timestamp, timestamp))
+
+                sorted_checkpoints = [Path(path).name for path in sort_checkpoints(tmp_dir, use_mtime=use_mtime)]
+                self.assertEqual(sorted_checkpoints, checkpoints)
+
+                rotate_checkpoints(tmp_dir, save_total_limit=1, use_mtime=use_mtime)
+                self.assertSetEqual(
+                    {path.name for path in Path(tmp_dir).iterdir()},
+                    {"checkpoint-2"} | set(ignored),
+                )
+
+    def test_end_of_training_cleanup_ignores_backup_directory(self):
+        class CreateBackupCallback(TrainerCallback):
+            def on_save(self, args, state, control, **kwargs):
+                if state.global_step == 10:
+                    (Path(args.output_dir) / "checkpoint-10.backup").mkdir()
+
+        evaluation_count = 0
+
+        def compute_metrics(_):
+            nonlocal evaluation_count
+            evaluation_count += 1
+            return {"score": 2.0 if evaluation_count == 1 else 1.0}
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir,
+                max_steps=10,
+                save_steps=5,
+                eval_steps=5,
+                eval_strategy="steps",
+                save_total_limit=1,
+                load_best_model_at_end=True,
+                metric_for_best_model="score",
+                greater_is_better=True,
+                compute_metrics=compute_metrics,
+                report_to="none",
+                disable_tqdm=True,
+            )
+            trainer.add_callback(CreateBackupCallback())
+            trainer.train()
+
+            self.assertEqual(
+                Path(trainer.state.best_model_checkpoint),
+                Path(tmp_dir) / "checkpoint-5",
+            )
+            self.assertTrue((Path(tmp_dir) / "checkpoint-5").is_dir())
+            self.assertFalse((Path(tmp_dir) / "checkpoint-10").exists())
+            self.assertTrue((Path(tmp_dir) / "checkpoint-10.backup").is_dir())
+
     def check_checkpoint_deletion(self, trainer, output_dir, expected):
         # Make fake checkpoints
         for n in [5, 10, 15, 20, 25]:
