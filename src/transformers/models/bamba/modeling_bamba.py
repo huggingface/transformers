@@ -247,10 +247,11 @@ class BambaAttention(nn.Module):
 
 
 class BambaRMSNormGated(torch.nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps=1e-6, group_size=None):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
+        self.group_size = hidden_size if group_size is None else group_size
 
     def forward(self, hidden_states, gate=None):
         input_dtype = hidden_states.dtype
@@ -258,8 +259,10 @@ class BambaRMSNormGated(torch.nn.Module):
 
         if gate is not None:
             hidden_states = hidden_states * nn.functional.silu(gate.to(torch.float32))
+        hidden_states = hidden_states.unflatten(-1, (-1, self.group_size))
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        hidden_states = hidden_states.flatten(-2)
 
         return self.weight * hidden_states.to(input_dtype)
 

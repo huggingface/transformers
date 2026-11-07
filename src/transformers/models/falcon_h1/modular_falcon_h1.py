@@ -116,6 +116,7 @@ class FalconH1RMSNormGated(MambaRMSNormGated):
         super().__init__(hidden_size=hidden_size, eps=eps)
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
+        del self.group_size
         self.n_groups = n_groups
         self.norm_before_gate = norm_before_gate
 
