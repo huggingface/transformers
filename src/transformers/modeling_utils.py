@@ -4386,8 +4386,35 @@ class PreTrainedModel(
         # instantiated model, as the flags can be modified by instances sometimes)
         dtype_plan = model._get_dtype_plan(dtype)
 
+        # Extract checkpoint keys cheaply without materializing tensors into memory
+        checkpoint_keys = None
+        if hf_quantizer is not None:
+            if state_dict is not None:
+                checkpoint_keys = set(state_dict.keys())
+            elif sharded_metadata is not None and "weight_map" in sharded_metadata:
+                checkpoint_keys = set(sharded_metadata["weight_map"].keys())
+            elif checkpoint_files is not None:
+                checkpoint_keys = set()
+                for f in checkpoint_files:
+                    if f.endswith(".safetensors"):
+                        from safetensors import safe_open
+
+                        with safe_open(f, framework="pt") as handle:
+                            checkpoint_keys.update(handle.keys())
+                    elif f.endswith((".bin", ".pt")):
+                        try:
+                            meta_dict = torch.load(f, map_location="meta", weights_only=weights_only)
+                            if isinstance(meta_dict, dict):
+                                checkpoint_keys.update(meta_dict.keys())
+                        except Exception as err:
+                            logger.debug("Could not inspect checkpoint keys from %s: %s", f, err)
+                if not checkpoint_keys:
+                    checkpoint_keys = None
+
         # Obtain the weight conversion mapping for this model if any are registered and apply to all submodels recursively
-        weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
+        weight_conversions = get_model_conversion_mapping(
+            model, key_mapping, hf_quantizer, checkpoint_keys=checkpoint_keys
+        )
 
         if distributed_config is not None:
             model = cls.maybe_distribute_model(model, distributed_config, mesh_manager)

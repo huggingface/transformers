@@ -14,7 +14,9 @@
 
 from __future__ import annotations
 
+import inspect
 from collections import defaultdict
+from collections.abc import Iterable
 from copy import deepcopy
 from typing import TYPE_CHECKING
 
@@ -2458,6 +2460,7 @@ def get_model_conversion_mapping(
     key_mapping: dict[str, str] | None = None,
     hf_quantizer: HfQuantizer | None = None,
     add_legacy: bool = True,
+    checkpoint_keys: Iterable[str] | None = None,
 ) -> list[WeightTransform]:
     """
     Collect the ordered list of weight transforms for `model` (used during
@@ -2550,6 +2553,14 @@ def get_model_conversion_mapping(
         weight_conversions.extend(get_checkpoint_conversion_mapping("legacy"))
 
     if hf_quantizer is not None:
-        weight_conversions = hf_quantizer.update_weight_conversions(weight_conversions, model)
+        sig = inspect.signature(hf_quantizer.update_weight_conversions)
+        if "checkpoint_keys" in sig.parameters or any(
+            p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+        ):
+            weight_conversions = hf_quantizer.update_weight_conversions(
+                weight_conversions, model, checkpoint_keys=checkpoint_keys
+            )
+        else:
+            weight_conversions = hf_quantizer.update_weight_conversions(weight_conversions, model)
 
     return weight_conversions

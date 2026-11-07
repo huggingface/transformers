@@ -95,9 +95,12 @@ class CompressedTensorsDequantize(ConversionOps):
         quantization_scheme = self.scheme or get_experts_scheme(ct_quantization_config)
 
         weights_args = quantization_scheme.weights
+        format = quantization_scheme.format or ct_quantization_config.format
+        compressor = BaseCompressor.get_value_from_registry(format)
         if weights_args.type == "float" and weights_args.num_bits == 8:
-            # FP8 experts are plain (fp8 weight, scale) pairs — nothing is packed. Fold the
-            # scale into each per-expert weight so the downstream merge sees dense tensors.
+            # FP8 experts are plain (fp8 weight, scale) pairs — nothing is packed. Decompress each per-expert
+            # weight like a dense module (per-channel or per-group scales, e.g. MXFP8's ue8m0 per 32) so the
+            # downstream merge sees dense tensors.
             processed_out = {}
             for key, value in input_dict.items():
                 if "weight_scale" in key:
@@ -110,9 +113,17 @@ class CompressedTensorsDequantize(ConversionOps):
                 quantized = value if isinstance(value, list) else [value]
                 scales = input_dict[scale_key]
                 scales = scales if isinstance(scales, list) else [scales]
+                if not quantized:
+                    raise ValueError(f"Malformed compressed checkpoint: empty quantized tensor list for '{key}'.")
+                if len(quantized) != len(scales):
+                    raise ValueError(
+                        f"Malformed compressed checkpoint: tensor '{key}' has {len(quantized)} entries but companion "
+                        f"scale '{scale_key}' has {len(scales)} entries."
+                    )
                 output = None
                 for i, (quant, scale) in enumerate(zip(quantized, scales)):
-                    dense = (quant.to(torch.float32) * scale.to(torch.float32)).to(dtype)
+                    dense = compressor.decompress({"weight": quant, "weight_scale": scale}, quantization_scheme)
+                    dense = dense["weight"].to(dtype)
                     if output is None:
                         # Pre-allocate the stacked buffer (see the packed path below).
                         output = torch.empty((len(quantized), *dense.shape), dtype=dense.dtype, device=dense.device)
@@ -121,9 +132,6 @@ class CompressedTensorsDequantize(ConversionOps):
                 if output is not None:
                     processed_out[key] = output
             return processed_out
-
-        format = quantization_scheme.format or ct_quantization_config.format
-        compressor = BaseCompressor.get_value_from_registry(format)
 
         class DummyModule(nn.Module):
             def __init__(self, weight, scale, shape):
@@ -141,10 +149,56 @@ class CompressedTensorsDequantize(ConversionOps):
         # Per-expert compressed projections of size (input-dim; output-dim)
         processed_out = {}
         for key, value in input_dict.items():
-            if "weight_packed" not in key:
+            if any(
+                key.endswith(s) or f".{s}." in key
+                for s in ["weight_scale", "weight_shape", "weight_zero_point", "weight_global_scale"]
+            ):
                 continue
-            quantized = value
-            scales = input_dict[key.replace("weight_packed", "weight_scale")]
+            if "weight_packed" not in key:
+                scale_key = key.replace(".weight", ".weight_scale")
+                if scale_key in input_dict:
+                    quantized = value if isinstance(value, list) else [value]
+                    scales = input_dict[scale_key]
+                    scales = scales if isinstance(scales, list) else [scales]
+                    if not quantized:
+                        raise ValueError(f"Malformed compressed checkpoint: empty quantized tensor list for '{key}'.")
+                    if len(quantized) != len(scales):
+                        raise ValueError(
+                            f"Malformed compressed checkpoint: tensor '{key}' has {len(quantized)} entries but companion "
+                            f"scale '{scale_key}' has {len(scales)} entries."
+                        )
+                    output = None
+                    for i, (quant, scale) in enumerate(zip(quantized, scales)):
+                        dense = (quant.to(torch.float32) * scale.to(torch.float32)).to(dtype)
+                        if output is None:
+                            output = torch.empty(
+                                (len(quantized), *dense.shape), dtype=dense.dtype, device=dense.device
+                            )
+                        output[i].copy_(dense)
+                        del dense
+                    if output is not None:
+                        processed_out[key] = output
+                else:
+                    # Weights left dense pass through untouched
+                    processed_out[key] = value
+                continue
+
+            scale_key = key.replace("weight_packed", "weight_scale")
+            if scale_key not in input_dict:
+                raise ValueError(
+                    f"Malformed compressed checkpoint: packed tensor '{key}' is present but companion scale "
+                    f"tensor '{scale_key}' is missing."
+                )
+            quantized = value if isinstance(value, list) else [value]
+            scales = input_dict[scale_key]
+            scales = scales if isinstance(scales, list) else [scales]
+            if not quantized:
+                raise ValueError(f"Malformed compressed checkpoint: empty packed tensor list for '{key}'.")
+            if len(quantized) != len(scales):
+                raise ValueError(
+                    f"Malformed compressed checkpoint: packed tensor '{key}' has {len(quantized)} entries but companion "
+                    f"scale '{scale_key}' has {len(scales)} entries."
+                )
             shapes = input_dict.get(key.replace("weight_packed", "weight_shape"))
 
             # Pre-allocate the stacked output buffer to reduce cuda mem fragmentation
