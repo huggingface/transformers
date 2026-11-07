@@ -904,13 +904,16 @@ class ExportTesterMixin:
         for that shape variant on every backend, ``"generate.dynamic"`` for the multi-token decode path,
         ``"static-cache"`` for a variant whose ``generation_config`` requests a static cache,
         ``"<backend>"`` for that backend, and ``"<backend>.<variant>"`` (including
-        ``"<backend>.static-cache"``) for the more-specific intersections.
+        ``"<backend>.static-cache"``) for the more-specific intersections. ``"forward"`` is the counterpart of
+        ``"generate"`` for the other tests.
         """
         scopes = ["all"]
         if generate:
             scopes.append("generate")
             if dynamic:
                 scopes.append("generate.dynamic")
+        else:
+            scopes.append("forward")
         scopes.append("dynamic" if dynamic else "static")
         if static_cache:
             scopes.append("static-cache")
